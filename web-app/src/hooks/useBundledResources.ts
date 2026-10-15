@@ -17,6 +17,7 @@ export function useBundledResources(enabled = true) {
     let detach: (() => Promise<void>) | undefined
 
     const refresh = async () => {
+      if (disposed) return
       const current = ++generation
       try {
         const ready = await invoke<boolean>('bundled_resources_ready')

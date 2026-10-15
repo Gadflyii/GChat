@@ -68,7 +68,10 @@ describe('bundled resource preparation feedback', () => {
 
   it('makes no disabled calls and detaches a subscription that resolves after disabling', async () => {
     const registration = deferred<() => void>()
-    vi.mocked(listen).mockImplementationOnce(() => registration.promise)
+    vi.mocked(listen).mockImplementationOnce((_event, handler) => {
+      changed = handler as EventCallback<unknown>
+      return registration.promise
+    })
     const { result, rerender } = renderHook(
       ({ enabled }) => useBundledResources(enabled),
       { initialProps: { enabled: false } }
@@ -78,6 +81,7 @@ describe('bundled resource preparation feedback', () => {
     expect(invoke).not.toHaveBeenCalled()
     rerender({ enabled: true })
     rerender({ enabled: false })
+    act(notify)
     await act(async () => { registration.resolve(stop); await registration.promise })
     expect(stop).toHaveBeenCalledOnce()
     expect(invoke).not.toHaveBeenCalled()
