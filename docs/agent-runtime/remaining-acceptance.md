@@ -34,11 +34,28 @@ Native check, strict Clippy and full `make verify` pass, including both new
 regressions (2335 app, 114 extension and 852 Rust tests). Evidence:
 `out/studio-exit-durability-20261015/{result.json,summary.md}`.
 
-Native active-worker app-exit/restart acceptance remains pending: exit while a
-worker is active, relaunch with the same data and inspect its saved cancelled
-record and working state through ordinary Studio. Automatic continuation and
-crash recovery are unqualified. The original review-quality failure, full
-262144-token capacity, Hermes and Windows remain open; OI-068 remains PARTIAL.
+The native normal-exit gate also passes on source `105ee93cf`. An ordinary
+Standard Agent read `observation.txt` (harbor-7314), then awaited shell approval.
+Normal main-window Close at 16:23:47Z persisted cancelled record
+`ba5ce923-e94a-4427-8b5b-9ea871ee97fb`, run/session
+`8848fadf-9afd-4bc5-8b80-ef0c2205fe3b`. Same-data relaunch and ordinary Studio
+Runs reopening at 16:24:09Z showed that record and two steps. Independent audits
+confirm the original task/current goal, turn count 1, completed read, denied
+shell, working state, transcript and tool artifacts. The command never ran;
+Host logs show no inference replay after restart.
+
+The private native candidate reused accepted DEB resources and Qwen3.8-27b
+NVFP4-DFlash2 on S1 GPU1, C1/context 262144, speculation disabled, high reasoning,
+Auto output and default 25 steps. This was a functional gate, not a fresh install.
+Normal Host Stop reached stopped with zero requests and Forget removed the
+pairing. Exact owned processes and disposable stages were retired; GPU1 and
+local CPU bookings were returned early. Shared GPU0, model/profile donors and
+the user's desktop were untouched. UI, durable artifacts and cleanup receipts
+are consolidated in the result JSON above.
+
+Automatic continuation and crash recovery are unqualified. The original
+review-quality failure, full 262144-token capacity, Hermes and Windows remain
+open; OI-068 remains PARTIAL.
 
 ## Worker review guidance — October 15
 
