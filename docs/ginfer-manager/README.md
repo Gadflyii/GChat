@@ -46,11 +46,24 @@ Ready receipt then permits quote-derived explicit sizing with the same recipe.
 An explicit arena or shared placement requires known graph memory. No unknown
 graph allowance is treated as measured capacity.
 
-Source verification and native qualification of this candidate are pending.
-A quote samples free memory and planner allowances; it does not reserve VRAM,
-guarantee startup against other allocations or qualify full-context inference.
-The earlier near-full-context startup failures remain failures, with no Ready,
-token-count or inference acceptance claimed by this change.
+One native RTX 5090 startup passes with production Host `93143951d` and current
+Engine `5af502f1`: C1, context 262144, structured outputs on, unchanged
+524288000-byte headroom and a fresh 7004386304-byte effective KV arena. Saved
+state retains Automatic. Ready and normal Host Stop pass with zero active
+requests and no remaining engine child. The earlier historical-arena failures
+remain retained. No input count, inference or fresh-install acceptance is claimed;
+OI-068 remains PARTIAL. Ada 149069-context, structured-outputs-off startup and the
+final fresh-install package gate remain separate.
+
+Production source is unchanged by fixture corrections. `611fc26e9` passes all
+11 plugin tests; `7d92bad30` passes the complete Host suite, with 172 tests passed
+and 19 ignored. The composed Linux source gate passes using these full affected
+suite reruns and retained passing `make verify` targets from `93143951d`.
+This is a composed gate, not one final `make verify` invocation.
+The [runtime acceptance record](../agent-runtime/remaining-acceptance.md#oi-068-native-near-full-context-startup--october-15)
+links the startup, Stop, cleanup and verification evidence. A quote samples free
+memory and planner allowances; it does not reserve VRAM, guarantee startup
+against other allocations or qualify full-context inference.
 
 ## Shared first-run setup — October 15
 
