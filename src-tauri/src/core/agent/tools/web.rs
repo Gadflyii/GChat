@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{future::Future, time::Duration};
 
 use futures_util::StreamExt;
 use reqwest::header::{
@@ -6,8 +6,9 @@ use reqwest::header::{
 };
 use reqwest::Method;
 use serde_json::Value;
+use tokio_util::sync::CancellationToken;
 
-use super::http::request_guarded;
+use super::http::{request_guarded, validate_public_http_url};
 use super::web_exa::{self, ExaFailure, ExaFetchContent};
 use super::web_extract::{extract_web_content, ExtractMode};
 use super::web_search::{parse_duckduckgo_page, DuckDuckGoPage, WebSearchResult};
@@ -23,24 +24,75 @@ pub async fn execute(
     args: &Value,
     context: &ToolContext<'_>,
 ) -> Result<ToolOutcome, ToolOutcome> {
-    match tool {
-        "os.web.search" => search(args, context).await,
-        "os.web.fetch" => fetch(args, context).await,
-        _ => Err(ToolOutcome::error(format!("Unsupported web tool: {tool}"))),
+    cancellable(
+        async {
+            match tool {
+                "os.web.search" => search(args, context.cancellation).await,
+                "os.web.fetch" => fetch(args, context.cancellation).await,
+                _ => Err(ToolOutcome::error(format!("Unsupported web tool: {tool}"))),
+            }
+        },
+        context.cancellation,
+    )
+    .await
+}
+
+fn cancelled() -> ToolOutcome {
+    ToolOutcome {
+        status: ToolStatus::Cancelled,
+        summary: "Web tool call cancelled".into(),
+        details: None,
     }
 }
 
-async fn search(args: &Value, _context: &ToolContext<'_>) -> Result<ToolOutcome, ToolOutcome> {
+async fn cancellable(
+    operation: impl Future<Output = Result<ToolOutcome, ToolOutcome>>,
+    cancellation: &CancellationToken,
+) -> Result<ToolOutcome, ToolOutcome> {
+    tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err(cancelled()),
+        result = operation => {
+            if cancellation.is_cancelled() { Err(cancelled()) } else { result }
+        },
+    }
+}
+
+async fn with_fallback<F: Future<Output = Result<ToolOutcome, ToolOutcome>>>(
+    primary: impl Future<Output = Result<ToolOutcome, ExaFailure>>,
+    fallback: impl FnOnce() -> F,
+    provider: &'static str,
+    cancellation: &CancellationToken,
+) -> Result<ToolOutcome, ToolOutcome> {
+    let result = primary.await;
+    // Cancellation can occur inside the primary poll, before the outer select
+    // observes it. Never start another provider after that boundary.
+    if cancellation.is_cancelled() {
+        return Err(cancelled());
+    }
+    match result {
+        Ok(outcome) => Ok(outcome),
+        Err(error) => annotate_fallback(fallback().await, provider, error),
+    }
+}
+
+async fn search(
+    args: &Value,
+    cancellation: &CancellationToken,
+) -> Result<ToolOutcome, ToolOutcome> {
     let query = required_string(args, "query").map_err(ToolOutcome::error)?;
     let max_results = optional_usize(args, "maxResults", 8, 20);
-    match web_exa::search(&query, max_results).await {
-        Ok(results) => Ok(search_outcome(&query, results, "exa", None, false)),
-        Err(error) => annotate_fallback(
-            search_duckduckgo(&query, max_results).await,
-            "duckduckgo",
-            error,
-        ),
-    }
+    with_fallback(
+        async {
+            web_exa::search(&query, max_results)
+                .await
+                .map(|results| search_outcome(&query, results, "exa", None, false))
+        },
+        || search_duckduckgo(&query, max_results),
+        "duckduckgo",
+        cancellation,
+    )
+    .await
 }
 
 async fn search_duckduckgo(query: &str, max_results: usize) -> Result<ToolOutcome, ToolOutcome> {
@@ -100,8 +152,12 @@ async fn search_duckduckgo(query: &str, max_results: usize) -> Result<ToolOutcom
     }
 }
 
-async fn fetch(args: &Value, _context: &ToolContext<'_>) -> Result<ToolOutcome, ToolOutcome> {
+async fn fetch(args: &Value, cancellation: &CancellationToken) -> Result<ToolOutcome, ToolOutcome> {
     let url = required_string(args, "url").map_err(ToolOutcome::error)?;
+    // Reject unsafe targets before sharing the URL with the hosted provider.
+    let parsed = url::Url::parse(&url)
+        .map_err(|error| ToolOutcome::error(format!("Invalid URL: {error}")))?;
+    validate_public_http_url(parsed).await?;
     let max_chars = optional_usize(args, "maxChars", 50_000, 50_000);
     let extract_mode = match args
         .get("extractMode")
@@ -116,14 +172,17 @@ async fn fetch(args: &Value, _context: &ToolContext<'_>) -> Result<ToolOutcome, 
             )))
         }
     };
-    match web_exa::fetch(&url, max_chars).await {
-        Ok(content) => Ok(exa_fetch_outcome(&url, content, extract_mode)),
-        Err(error) => annotate_fallback(
-            fetch_direct(&url, max_chars, extract_mode).await,
-            "direct_http",
-            error,
-        ),
-    }
+    with_fallback(
+        async {
+            web_exa::fetch(&url, max_chars)
+                .await
+                .map(|content| exa_fetch_outcome(&url, content, extract_mode))
+        },
+        || fetch_direct(&url, max_chars, extract_mode),
+        "direct_http",
+        cancellation,
+    )
+    .await
 }
 
 async fn fetch_direct(
@@ -325,6 +384,131 @@ async fn read_body_limited(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn cancellation_drops_primary_without_starting_fallback() {
+        let cancellation = CancellationToken::new();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (hold, pending) = tokio::sync::oneshot::channel::<()>();
+        let operation = cancellable(
+            with_fallback(
+                async {
+                    started.send(()).unwrap();
+                    pending.await.unwrap();
+                    Err(ExaFailure::new("transport_error"))
+                },
+                || async { panic!("fallback must not start after Stop") },
+                "duckduckgo",
+                &cancellation,
+            ),
+            &cancellation,
+        );
+        let (result, ()) = tokio::join!(operation, async {
+            ready.await.unwrap();
+            cancellation.cancel();
+        });
+        assert_eq!(result.unwrap_err().status, ToolStatus::Cancelled);
+        assert!(hold.is_closed(), "pending primary request was not dropped");
+    }
+
+    #[tokio::test]
+    async fn cancellation_drops_an_active_fallback() {
+        let cancellation = CancellationToken::new();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let (hold, pending) = tokio::sync::oneshot::channel::<()>();
+        let operation = cancellable(
+            with_fallback(
+                async { Err(ExaFailure::new("http_error")) },
+                || async {
+                    started.send(()).unwrap();
+                    pending.await.unwrap();
+                    Ok(ToolOutcome::ok("late result"))
+                },
+                "direct_http",
+                &cancellation,
+            ),
+            &cancellation,
+        );
+        let (result, ()) = tokio::join!(operation, async {
+            ready.await.unwrap();
+            cancellation.cancel();
+        });
+        assert_eq!(result.unwrap_err().status, ToolStatus::Cancelled);
+        assert!(hold.is_closed(), "pending fallback request was not dropped");
+    }
+
+    #[tokio::test]
+    async fn cancellation_inside_primary_poll_wins_over_success_and_fallback() {
+        for succeeds in [false, true] {
+            let cancellation = CancellationToken::new();
+            let result = cancellable(
+                with_fallback(
+                    async {
+                        cancellation.cancel();
+                        if succeeds {
+                            Ok(ToolOutcome::ok("late primary result"))
+                        } else {
+                            Err(ExaFailure::new("mcp_error"))
+                        }
+                    },
+                    || async { panic!("fallback must not start after Stop") },
+                    "duckduckgo",
+                    &cancellation,
+                ),
+                &cancellation,
+            )
+            .await;
+            assert_eq!(result.unwrap_err().status, ToolStatus::Cancelled);
+        }
+    }
+
+    #[tokio::test]
+    async fn successful_primary_skips_fallback_and_failure_uses_it_once() {
+        let cancellation = CancellationToken::new();
+        let primary = with_fallback(
+            async { Ok(ToolOutcome::ok("primary result")) },
+            || async { panic!("successful primary must not invoke fallback") },
+            "duckduckgo",
+            &cancellation,
+        )
+        .await
+        .unwrap();
+        assert_eq!(primary.summary, "primary result");
+        for succeeds in [false, true] {
+            let calls = std::cell::Cell::new(0);
+            let result = with_fallback(
+                async { Err(ExaFailure::new("empty_results")) },
+                || {
+                    calls.set(calls.get() + 1);
+                    async {
+                        if succeeds {
+                            Ok(ToolOutcome::ok("fallback result"))
+                        } else {
+                            Err(ToolOutcome::error("fallback error"))
+                        }
+                    }
+                },
+                "duckduckgo",
+                &cancellation,
+            )
+            .await;
+            assert_eq!(calls.get(), 1);
+            let outcome = if succeeds {
+                result.unwrap()
+            } else {
+                result.unwrap_err()
+            };
+            assert_eq!(
+                outcome.status,
+                if succeeds {
+                    ToolStatus::Ok
+                } else {
+                    ToolStatus::Error
+                }
+            );
+            assert_eq!(outcome.details.unwrap()["fallbackReason"], "empty_results");
+        }
+    }
 
     #[test]
     fn annotates_successful_fallback_without_exposing_exa_payloads() {

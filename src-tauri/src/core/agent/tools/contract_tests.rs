@@ -201,6 +201,120 @@ async fn disabled_conversation_tool_remains_denied_inside_saved_agent() {
 }
 
 #[tokio::test]
+async fn web_tools_enforce_network_denial_and_conversation_exclusions() {
+    use super::super::capabilities::{catalog_from_mcp, NATIVE_SERVER};
+    use super::super::permissions::{Capability, DefinitionApproval, DisabledApproval, Permission};
+    use crate::core::mcp::models::McpToolsResponse;
+
+    let fixture = ToolFixture::denied();
+    let catalog = catalog_from_mcp(McpToolsResponse {
+        tools: vec![],
+        servers: vec![],
+    })
+    .unwrap();
+    for (tool, wire, args) in [
+        (
+            "os.web.search",
+            "os_web_search",
+            serde_json::json!({"query":"public documentation"}),
+        ),
+        (
+            "os.web.fetch",
+            "os_web_fetch",
+            serde_json::json!({"url":"https://example.com/"}),
+        ),
+    ] {
+        for (permission, prompts) in [(Permission::Deny, 0), (Permission::Ask, 1)] {
+            let permissions = [(Capability::Network, permission)].into_iter().collect();
+            let approval = DefinitionApproval {
+                permissions: &permissions,
+                inner: &fixture.approval,
+            };
+            let before = fixture.approval.requests().len();
+            let result = fixture
+                .call_with_approval(tool, args.clone(), &approval)
+                .await;
+            assert_eq!(result.status, ToolStatus::Denied);
+            assert_eq!(fixture.approval.requests().len() - before, prompts);
+        }
+        let disabled = [format!("{NATIVE_SERVER}::{wire}")].into_iter().collect();
+        let conversation = DisabledApproval {
+            disabled: &disabled,
+            catalog: &catalog,
+            inner: &fixture.approval,
+        };
+        let permissions = [(Capability::Network, Permission::Allow)]
+            .into_iter()
+            .collect();
+        let approval = DefinitionApproval {
+            permissions: &permissions,
+            inner: &conversation,
+        };
+        let result = fixture.call_with_approval(tool, args, &approval).await;
+        assert_eq!(result.status, ToolStatus::Denied, "{tool}");
+    }
+}
+
+#[tokio::test]
+async fn web_fetch_rejects_unsafe_targets_before_provider_fallback() {
+    let fixture = ToolFixture::allowed();
+    for url in [
+        "file:///etc/passwd",
+        "https://user:password@example.com/",
+        "http://localhost/",
+        "http://127.0.0.1/",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://192.168.1.1/",
+    ] {
+        let result = fixture
+            .call("os.web.fetch", serde_json::json!({"url": url}))
+            .await;
+        assert_eq!(result.status, ToolStatus::Error, "{url}");
+        assert!(
+            result.details.is_none(),
+            "rejection must precede provider/fallback: {url}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn web_cancellation_during_approval_does_not_begin_network_work() {
+    struct CancelApproval(CancellationToken);
+    #[async_trait::async_trait]
+    impl super::ApprovalHook for CancelApproval {
+        fn permission(&self, _: &str) -> super::super::permissions::Permission {
+            super::super::permissions::Permission::Ask
+        }
+        async fn is_allowed(&self, _: &str) -> bool {
+            false
+        }
+        async fn request(
+            &self,
+            _: super::super::types::ApprovalRequest,
+        ) -> Result<super::super::types::ApprovalDecision, String> {
+            self.0.cancel();
+            Ok(super::super::types::ApprovalDecision::AllowOnce)
+        }
+    }
+    for (tool, args) in [
+        (
+            "os.web.search",
+            serde_json::json!({"query":"public documentation"}),
+        ),
+        (
+            "os.web.fetch",
+            serde_json::json!({"url":"https://example.com/"}),
+        ),
+    ] {
+        let fixture = ToolFixture::allowed();
+        let approval = CancelApproval(fixture.cancellation.clone());
+        let result = fixture.call_with_approval(tool, args, &approval).await;
+        assert_eq!(result.status, ToolStatus::Cancelled, "{tool}");
+        assert!(result.details.is_none());
+    }
+}
+
+#[tokio::test]
 async fn memory_mutations_require_approval_with_the_complete_preview() {
     let fixture = ToolFixture::denied();
     let args =

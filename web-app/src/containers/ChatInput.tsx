@@ -188,6 +188,55 @@ const ChatInput = memo(function ChatInput({
   const defaultAssistantId = useAssistant((state) => state.defaultAssistantId)
   const selectedModel = useModelProvider((state) => state.selectedModel)
   const selectedProvider = useModelProvider((state) => state.selectedProvider)
+  const disabledToolKeys = useToolAvailable((state) =>
+    initialMessage || !currentThreadId
+      ? state.defaultDisabledTools
+      : (state.disabledTools[currentThreadId] ?? state.defaultDisabledTools)
+  )
+  const webTools = tools.filter(
+    (tool) =>
+      'origin' in tool && tool.origin === 'native' &&
+      'identity' in tool &&
+      (tool.identity === 'os.web.search' || tool.identity === 'os.web.fetch')
+  )
+  const hasWebTools = ['os.web.search', 'os.web.fetch'].every((identity) =>
+    webTools.some((tool) => 'identity' in tool && tool.identity === identity)
+  )
+  const enabledWebTools = webTools.filter(
+    (tool) => !disabledToolKeys.includes(`${tool.server}::${tool.name}`)
+  ).length
+  const webSearchPressed = enabledWebTools === 0
+    ? false
+    : enabledWebTools === webTools.length && hasWebTools ? true : 'mixed'
+  const webSearchUnavailable = !selectedModel?.capabilities?.includes('tools')
+    ? 'Select a model that supports tools to use web search.'
+    : !hasWebTools
+      ? 'Native web search and page reading tools are unavailable.'
+      : !initialMessage && !currentThreadId
+        ? 'Open a conversation to change web search.'
+        : ''
+  const webSearchDescription = webSearchUnavailable || (
+    webSearchPressed === 'mixed' ? 'Web search is partially enabled. Enable search and page reading.'
+      : webSearchPressed ? 'Web search and page reading are enabled.'
+        : 'Web search and page reading are disabled.'
+  )
+  const toggleWebSearch = () => {
+    if (webSearchUnavailable) return
+    const available = webSearchPressed !== true
+    const state = useToolAvailable.getState()
+    if (initialMessage) {
+      const webKeys = webTools.map((tool) => `${tool.server}::${tool.name}`)
+      const otherDisabled = state.defaultDisabledTools.filter((key) => !webKeys.includes(key))
+      state.setDefaultDisabledTools(available ? otherDisabled : [...otherDisabled, ...webKeys])
+    } else if (currentThreadId) {
+      state.initializeThreadTools(currentThreadId, tools)
+      webTools.forEach((tool) => {
+        if (state.isToolDisabled(currentThreadId, tool.server, tool.name) !== !available) {
+          state.setToolDisabledForThread(currentThreadId, tool.server, tool.name, available)
+        }
+      })
+    }
+  }
 
   const conversationKey = initialMessage ? TEMPORARY_CHAT_ID : (currentThreadId ?? TEMPORARY_CHAT_ID)
   const activeSkill = useConversationPolicy((state) => state.activeSkills[conversationKey])
@@ -2760,21 +2809,35 @@ const ChatInput = memo(function ChatInput({
 
                   <ReasoningToggle />
 
-                  {selectedModel?.capabilities?.includes('web_search') && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Button variant="ghost" size="icon-xs">
-                            <IconWorld
-                              size={18}
-                              className="text-muted-foreground"
-                            />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Web Search</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span>
+                        <Button
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label="Web search"
+                          aria-pressed={webSearchPressed}
+                          aria-description={webSearchDescription}
+                          title={webSearchDescription}
+                          disabled={Boolean(webSearchUnavailable)}
+                          onClick={toggleWebSearch}
+                        >
+                          <IconWorld
+                            size={18}
+                            className={cn(
+                              webSearchPressed === true && !webSearchUnavailable
+                                ? 'text-primary'
+                                : 'text-muted-foreground',
+                              webSearchPressed === 'mixed' && 'opacity-60'
+                            )}
+                          />
+                        </Button>
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{webSearchDescription}</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
 
