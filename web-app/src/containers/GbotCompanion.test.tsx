@@ -22,6 +22,10 @@ const mocks = vi.hoisted(() => ({
   listen: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
+  resources: { ready: true as boolean | null, error: '' },
+}))
+vi.mock('@/hooks/useBundledResources', () => ({
+  useBundledResources: () => mocks.resources,
 }))
 vi.mock('@tanstack/react-router', () => ({
   Link: ({
@@ -62,6 +66,8 @@ let tasks: Task[]
 const events = new Map<string, () => void>()
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.resources.ready = true
+  mocks.resources.error = ''
   useGbotCompanion.getState().reset()
   useGbotPage.setState({ page: null, sharing: null, requests: {} })
   useGeneralSetting.setState({ gbotEnabled: true })
@@ -128,6 +134,164 @@ async function mount() {
   fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
   return view
 }
+
+it('shows preparation and then service loading before deciding whether bots exist', async () => {
+  mocks.resources.ready = false
+  let finish!: (value: BotState) => void
+  mocks.call.mockImplementation(async (path: string) =>
+    path === 'state'
+      ? new Promise<BotState>((resolve) => {
+          finish = resolve
+        })
+      : []
+  )
+  const view = render(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Open Gbot companion' }))
+  await waitFor(() => expect(finish).toBeTypeOf('function'))
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Preparing and validating bundled resources'
+  )
+  expect(screen.getByRole('status')).toHaveTextContent('hide this pane')
+  expect(screen.queryByText(/Add a bot computer/)).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('link', { name: 'Open Gbot settings' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'View bot’s desktop' })
+  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Send' })).not.toBeInTheDocument()
+
+  mocks.resources.ready = true
+  view.rerender(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  expect(screen.getByRole('status')).toHaveTextContent('Loading your bots')
+  expect(screen.queryByText(/Add a bot computer/)).not.toBeInTheDocument()
+  await act(async () => finish(snapshot))
+  expect(screen.getByRole('heading', { name: 'Atlas' })).toBeInTheDocument()
+  expect(screen.queryByText(/Add a bot computer/)).not.toBeInTheDocument()
+  expect(screen.queryByText('Loading your bots…')).not.toBeInTheDocument()
+})
+
+it('offers setup guidance only after an authoritative empty service snapshot', async () => {
+  let finish!: (value: BotState) => void
+  mocks.call.mockImplementation(async (path: string) =>
+    path === 'state'
+      ? new Promise<BotState>((resolve) => {
+          finish = resolve
+        })
+      : []
+  )
+  render(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Open Gbot companion' }))
+  await waitFor(() => expect(finish).toBeTypeOf('function'))
+  expect(screen.getByRole('status')).toHaveTextContent('Loading your bots')
+  expect(screen.queryByText(/Add a bot computer/)).not.toBeInTheDocument()
+  await act(async () =>
+    finish({ workspaces: [], live_sessions: [], controls: [], assignments: [] })
+  )
+  expect(screen.getByText(/Add a bot computer/)).toBeInTheDocument()
+  expect(screen.queryByText('Loading your bots…')).not.toBeInTheDocument()
+})
+
+it('shows a preparation failure without treating unknown bots as missing configuration', async () => {
+  mocks.resources.ready = false
+  let fail!: (error: string) => void
+  mocks.call.mockImplementation(async (path: string) =>
+    path === 'state'
+      ? new Promise<BotState>((_, reject) => {
+          fail = reject
+        })
+      : []
+  )
+  const view = render(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Open Gbot companion' }))
+  await waitFor(() => expect(fail).toBeTypeOf('function'))
+  mocks.resources.error = 'Bundled resources are corrupt'
+  view.rerender(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  await act(async () => fail(mocks.resources.error))
+  expect(screen.getByRole('alert')).toHaveTextContent(mocks.resources.error)
+  expect(
+    screen.getByRole('heading', { name: 'Gbot unavailable' })
+  ).toBeInTheDocument()
+  expect(screen.queryByText(/Add a bot computer/)).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('link', { name: 'Open Gbot settings' })
+  ).not.toBeInTheDocument()
+})
+
+it('preserves a known name and draft through pending preparation and failure', async () => {
+  const view = render(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  await waitFor(() => expect(useGbotCompanion.getState().available).toBe(true))
+  fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message bot' }), {
+    target: { value: 'Keep my task draft' },
+  })
+  mocks.resources.ready = false
+  view.rerender(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  expect(screen.getByRole('heading', { name: 'Atlas' })).toBeInTheDocument()
+  expect(screen.getByRole('textbox', { name: 'Message bot' })).toHaveValue(
+    'Keep my task draft'
+  )
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Preparing and validating')
+  expect(
+    screen.queryByText(/Connect this bot and save its model/)
+  ).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+  expect(
+    screen.queryByRole('button', { name: 'View bot’s desktop' })
+  ).not.toBeInTheDocument()
+  mocks.resources.error = 'Bundled runtime digest mismatch'
+  view.rerender(
+    <>
+      <GbotAvatars />
+      <GbotCompanion />
+    </>
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(mocks.resources.error)
+  expect(screen.getByRole('alert')).toHaveTextContent('Restart GChat')
+  expect(
+    screen.queryByRole('button', { name: 'Retry connection' })
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Atlas' })).toBeInTheDocument()
+  expect(screen.queryByText(/Add a bot computer/)).not.toBeInTheDocument()
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+  expect(mocks.call).not.toHaveBeenCalledWith('view/open', expect.anything())
+})
 
 it('ends page sharing when switching bots or hiding the pane', async () => {
   await mount()
@@ -592,16 +756,24 @@ it('closes a desktop ticket arriving after failed hand back and waits for manual
   expect(mocks.call).not.toHaveBeenCalledWith('tasks/resume', expect.anything())
 })
 
-it('makes no service calls when disabled and removes subscriptions when disabled later', async () => {
+it('makes no service calls when disabled, including queued events after cleanup', async () => {
   useGeneralSetting.setState({ gbotEnabled: false })
   const view = render(<GbotCompanion />)
   expect(mocks.call).not.toHaveBeenCalled()
   expect(mocks.listen).not.toHaveBeenCalled()
   act(() => useGeneralSetting.setState({ gbotEnabled: true }))
   await waitFor(() => expect(events.size).toBe(2))
+  await waitFor(() => expect(useGbotCompanion.getState().available).toBe(true))
+  const queued = [...events.values()]
   act(() => useGeneralSetting.setState({ gbotEnabled: false }))
   await waitFor(() => expect(events.size).toBe(0))
+  mocks.call.mockClear()
+  await act(async () => queued.forEach((refresh) => refresh()))
+  expect(mocks.call).not.toHaveBeenCalled()
   expect(useGbotCompanion.getState().mode).toBe('hidden')
+  expect(useGbotCompanion.getState().snapshot.workspaces).toEqual([])
+  expect(useGbotCompanion.getState().available).toBe(false)
+  expect(useGbotCompanion.getState().loading).toBe(false)
   view.unmount()
 })
 

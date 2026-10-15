@@ -14,6 +14,7 @@ const TAURI_ROOT = join(REPO_ROOT, 'src-tauri')
 const PLUGINS_ROOT = join(TAURI_ROOT, 'plugins')
 
 const EXPECTED_DESKTOP_ONLY = new Set([
+  'bundled_resources_ready',
   'engine_hosts_command',
   'connector_accounts',
   'connector_configure',

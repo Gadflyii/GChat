@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
+import { useBundledResources } from '@/hooks/useBundledResources'
 import { route } from '@/constants/routes'
 import {
   gbot,
@@ -51,6 +52,7 @@ const tabs: { id: CompanionTab; label: string }[] = [
 
 export default function GbotCompanion() {
   const enabled = useGeneralSetting((s) => s.gbotEnabled)
+  const resources = useBundledResources(enabled)
   const state = useGbotCompanion()
   const pageState = useGbotPage()
   const [owner] = useState(gbotControlOwner)
@@ -88,8 +90,16 @@ export default function GbotCompanion() {
   const setupBlocked = Boolean(
     isKvm && (state.setups === undefined || (setup && setup.stage !== 'ready'))
   )
+  const preparing = resources.ready !== true && !resources.error
+  const loading =
+    !resources.error &&
+    !state.error &&
+    (!state.available || (state.loading && !bot))
+  const connectionError = resources.error || state.error
   const ready = Boolean(
-    state.available &&
+    resources.ready === true &&
+      !resources.error &&
+      state.available &&
       identity &&
       !setupBlocked &&
       !state.executorError &&
@@ -120,9 +130,11 @@ export default function GbotCompanion() {
       useGbotCompanion.getState().reset()
       return
     }
-    const refresh = () => void useGbotCompanion.getState().refresh()
-    // Subscribe before the first snapshot so an update cannot be lost during startup.
     let cancelled = false
+    const refresh = () => {
+      if (!cancelled) void useGbotCompanion.getState().refresh()
+    }
+    // Subscribe before the first snapshot so an update cannot be lost during startup.
     const subscriptions = ['gbot-task-update', 'gbot-setup-update'].map(
       (event) => listen(event, refresh)
     )
@@ -215,10 +227,21 @@ export default function GbotCompanion() {
         <GbotAvatar state={animation} size={36} decorative />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-semibold">
-            {bot?.name || 'Your bot'}
+            {bot?.name ||
+              (preparing || loading
+                ? 'Loading your bots'
+                : connectionError
+                  ? 'Gbot unavailable'
+                  : 'Your bot')}
           </h2>
           <p className="text-xs text-muted-foreground">
-            {avatarStatus[animation]}
+            {preparing
+              ? 'Preparing resources'
+              : loading
+                ? 'Loading your bots'
+                : connectionError
+                  ? 'Unavailable'
+                  : avatarStatus[animation]}
           </p>
         </div>
         <Button
@@ -300,29 +323,49 @@ export default function GbotCompanion() {
           </Button>
         ))}
       </nav>
-      {state.error && (
+      {!connectionError && (preparing || loading) && (
+        <div role="status" className="space-y-2 border-b p-4 text-sm">
+          <p>
+            {preparing
+              ? 'Preparing and validating bundled resources…'
+              : 'Loading your bots…'}
+          </p>
+          <p className="text-muted-foreground">
+            {preparing
+              ? 'This can take a few minutes. You can hide this pane and keep using GChat while preparation continues.'
+              : 'Saved bots will appear when the service responds. You can hide this pane and keep using GChat.'}
+          </p>
+        </div>
+      )}
+      {connectionError && (
         <div role="alert" className="space-y-2 border-b p-4 text-sm">
-          <p>{state.error}</p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void state.refresh()}
-          >
-            Retry connection
-          </Button>
+          <p>{connectionError}</p>
+          {resources.error ? (
+            <p>Restart GChat to try resource preparation again.</p>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void state.refresh()}
+            >
+              Retry connection
+            </Button>
+          )}
         </div>
       )}
       {!bot ? (
-        <div className="space-y-3 p-4 text-sm">
-          <p>Add a bot computer in Gbot settings to begin.</p>
-          <Link
-            to={route.gbot.index}
-            onClick={hide}
-            className="text-primary underline"
-          >
-            Open Gbot settings
-          </Link>
-        </div>
+        !preparing && !loading && !connectionError && (
+          <div className="space-y-3 p-4 text-sm">
+            <p>Add a bot computer in Gbot settings to begin.</p>
+            <Link
+              to={route.gbot.index}
+              onClick={hide}
+              className="text-primary underline"
+            >
+              Open Gbot settings
+            </Link>
+          </div>
+        )
       ) : (
         <>
           <section
@@ -470,7 +513,7 @@ export default function GbotCompanion() {
                   {state.executorError}
                 </p>
               )}
-              {!ready && (
+              {!ready && !preparing && !loading && !connectionError && (
                 <p className="text-sm text-muted-foreground">
                   {setupBlocked
                     ? 'Finish this bot’s computer setup in Gbot settings to run tasks.'
@@ -620,7 +663,11 @@ export default function GbotCompanion() {
             className="min-h-0 flex-1 overflow-y-auto p-4"
           >
             <div className="mx-auto max-w-5xl space-y-4">
-              {identity && !setupBlocked ? (
+              {resources.ready === true &&
+              !resources.error &&
+              state.available &&
+              identity &&
+              !setupBlocked ? (
                 <>
                   <div className="flex items-center gap-3">
                     <p className="flex-1 text-sm">
@@ -672,13 +719,13 @@ export default function GbotCompanion() {
                     control.
                   </p>
                 </>
-              ) : (
+              ) : !preparing && !loading && !connectionError ? (
                 <p className="text-sm text-muted-foreground">
                   {setupBlocked
                     ? 'Finish this bot’s computer setup in Gbot settings to view its desktop.'
                     : 'Connect this bot in Gbot settings to view its computer.'}
                 </p>
-              )}
+              ) : null}
             </div>
           </section>
         </>

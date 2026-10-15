@@ -42,6 +42,72 @@ beforeEach(() => {
 })
 
 describe('Gbot companion state', () => {
+  it('tracks pending refreshes while retaining known bot names and drafts', async () => {
+    await useGbotCompanion.getState().refresh()
+    useGbotCompanion.getState().open('a')
+    useGbotCompanion.getState().setDraft('a', 'Keep this draft')
+    let finish!: (value: BotState) => void
+    vi.mocked(gbot).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    const pending = useGbotCompanion.getState().refresh()
+    expect(useGbotCompanion.getState().loading).toBe(true)
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    expect(useGbotCompanion.getState()).toMatchObject({
+      selected: 'a',
+      snapshot: { workspaces: snapshot.workspaces },
+      drafts: { a: 'Keep this draft' },
+    })
+    finish(snapshot)
+    await pending
+    expect(useGbotCompanion.getState().loading).toBe(false)
+  })
+
+  it('settles loading on failure without dropping known bot identity or drafts', async () => {
+    await useGbotCompanion.getState().refresh()
+    useGbotCompanion.getState().open('a')
+    useGbotCompanion.getState().setDraft('a', 'Keep this draft')
+    vi.mocked(gbot).mockRejectedValueOnce('Resource preparation failed')
+    await useGbotCompanion.getState().refresh()
+    expect(useGbotCompanion.getState()).toMatchObject({
+      loading: false,
+      available: false,
+      error: 'Resource preparation failed',
+      snapshot: {
+        workspaces: snapshot.workspaces,
+        live_sessions: [],
+        controls: [],
+      },
+      drafts: { a: 'Keep this draft' },
+    })
+  })
+
+  it('keeps the newer refresh loading when an older request finishes', async () => {
+    const finish: ((value: BotState) => void)[] = []
+    vi.mocked(gbot).mockImplementation(async (path) =>
+      path === 'state'
+        ? new Promise<BotState>((resolve) => {
+            finish.push(resolve)
+          })
+        : []
+    )
+    const older = useGbotCompanion.getState().refresh()
+    await vi.waitFor(() => expect(finish).toHaveLength(1))
+    const newer = useGbotCompanion.getState().refresh()
+    await vi.waitFor(() => expect(finish).toHaveLength(2))
+    finish[0](snapshot)
+    await older
+    expect(useGbotCompanion.getState().loading).toBe(true)
+    expect(useGbotCompanion.getState().available).toBe(false)
+    finish[1](snapshot)
+    await newer
+    expect(useGbotCompanion.getState().loading).toBe(false)
+    expect(useGbotCompanion.getState().available).toBe(true)
+  })
+
   it('preserves per-bot drafts and tabs across all pane modes', async () => {
     await useGbotCompanion.getState().refresh()
     const s = useGbotCompanion.getState()
@@ -271,6 +337,7 @@ describe('Gbot companion state', () => {
     await pending
     expect(useGbotCompanion.getState().snapshot.workspaces).toEqual([])
     expect(useGbotCompanion.getState().available).toBe(false)
+    expect(useGbotCompanion.getState().loading).toBe(false)
   })
 
   it('clears the previous service context and drafts when the selected service changes', async () => {

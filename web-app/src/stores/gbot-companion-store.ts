@@ -32,6 +32,7 @@ type CompanionState = {
   tasks: Task[]
   approvals: Approval[]
   available: boolean
+  loading: boolean
   error: string
   executorError: string
   setups: KvmSetupRecord[] | undefined
@@ -73,6 +74,7 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
   tasks: [],
   approvals: [],
   available: false,
+  loading: false,
   error: '',
   executorError: '',
   setups: undefined,
@@ -114,6 +116,7 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
       tasks: [],
       approvals: [],
       available: false,
+      loading: false,
       error: '',
       executorError: '',
       setups: undefined,
@@ -122,13 +125,13 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
     })),
   refresh: async () => {
     const version = get().version + 1
-    set({ version })
+    set({ version, loading: true })
     try {
       const target = JSON.stringify(await getGbotServiceTarget())
       if (get().version !== version) return
       if (get().target && target !== get().target) {
         get().reset()
-        set({ version, target })
+        set({ version, target, loading: true })
       }
       const snapshot = await gbot<BotState>('state')
       if (get().version !== version) return
@@ -201,6 +204,8 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
           approvals: [],
           snapshot: { ...s.snapshot, live_sessions: [], controls: [] },
         }))
+    } finally {
+      if (get().version === version) set({ loading: false })
     }
   },
 }))

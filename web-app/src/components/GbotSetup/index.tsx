@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useBundledResources } from '@/hooks/useBundledResources'
 import KvmSetup from './KvmSetup'
 import LanSetup from './LanSetup'
 import CloudSetup from './CloudSetup'
@@ -96,6 +97,8 @@ export default function GbotSetup({
   const [connecting, setConnecting] = useState(false)
   const [service, setService] = useState<ServiceTarget>({ kind: 'local' })
   const [serviceReady, setServiceReady] = useState(false)
+  const resources = useBundledResources()
+  const preparingService = step === 1 && saving && resources.ready !== true
   useEffect(() => {
     let current = true
     void getGbotServiceTarget()
@@ -141,7 +144,7 @@ export default function GbotSetup({
     step === 0
       ? Boolean(connection.name.trim())
       : step === 1
-        ? serviceReady
+        ? serviceReady && !resources.error
         : step === 2
           ? ['lan', 'local', 'cloud', 'm365'].includes(computer)
           : step === 3
@@ -328,7 +331,28 @@ export default function GbotSetup({
           </p>
         </>
       )}
-      {error && (
+      {step === 1 && saving && !resources.error && (
+        <div role="status" className="space-y-1 text-sm text-muted-foreground">
+          <p>
+            {preparingService
+              ? 'Preparing and validating bundled resources…'
+              : 'Selecting Gbot service…'}
+          </p>
+          {preparingService && (
+            <p>
+              This can take a few minutes. You can keep using other parts of
+              GChat while preparation continues.
+            </p>
+          )}
+        </div>
+      )}
+      {step === 1 && resources.error && (
+        <div role="alert" className="space-y-1 text-sm text-destructive">
+          <p>{resources.error}</p>
+          <p>Restart GChat to try resource preparation again.</p>
+        </div>
+      )}
+      {error && !(step === 1 && error === resources.error) && (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
@@ -340,7 +364,15 @@ export default function GbotSetup({
           !guidedCloud
         ) && (
           <Button disabled={saving || connecting || !canContinue}>
-            {saving ? 'Saving…' : step === 4 ? 'Save bot' : 'Continue'}
+            {saving
+              ? step === 1
+                ? preparingService
+                  ? 'Preparing resources…'
+                  : 'Selecting service…'
+                : 'Saving…'
+              : step === 4
+                ? 'Save bot'
+                : 'Continue'}
           </Button>
         )}
         {step > 0 && !resume && !connection.workspaceId && (
