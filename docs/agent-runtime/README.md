@@ -16,8 +16,10 @@ unqualified.
 Inference-server hosted retrieval, `file_search`, `web_search` and MCP are
 unsupported. Unsupported tool, input-content and output-format declarations
 return an explicit error; adapters must not remove them and continue generation.
-GChat's client-side web search and document retrieval release scope remains
-under review in OI-055. The separate `MCP-CLIENT-QUALIFY` Linux release item covers
+GChat client tools execute separately from unsupported inference-server hosted
+tools; the following Linux qualifications define their accepted scope.
+
+The separate `MCP-CLIENT-QUALIFY` Linux release item covers
 trusted STDIO and HTTP/SSE connectors with static credentials. Linux native
 development GUI checks pass with real servers: discovery, approval and denial,
 disabled-tool enforcement, invocation, Stop cancellation and saved configuration
@@ -29,6 +31,19 @@ executor. STDIO servers run with the user's permissions, and saved environment
 variables and headers are plaintext configuration, not a credential vault.
 See the [MCP setup guide](../src/pages/docs/desktop/integrations/mcp-servers.mdx)
 for the current GUI and trust boundaries.
+
+The separate `WEB-SEARCH-QUALIFY` Linux item covers native `os.web.search` and
+`os.web.fetch` from ordinary Chat and saved Standard Agents. The globe controls
+both tools and persists their thread setting; availability reflects the selected
+model and native catalog. Real-network primary Exa search/page reading and an
+induced Exa transport failure with DuckDuckGo search/direct-HTTP page reading
+pass in both. A missing public page returns HTTP 404 and an honest Chat error.
+Agent Network Ask approval, denial, Network Block, public-address rejection
+and in-flight Stop are checked separately. Regression checks cover cancellation
+before fallback. Direct connections retain all validated DNS addresses. Initial fetch targets are validated before Exa; redirects
+followed by hosted extraction remain outside local visibility. These are native
+Linux development checks; Windows and installer qualification are separate.
+Evidence: `/ai/gchat/out/web-search-qualify-20261015/{result.json,summary.md}`.
 
 The separate `LOCAL-FILE-SEARCH-QUALIFY` Linux item covers client-side direct
 PDF/DOCX/spreadsheet text extraction and filename/text search through
