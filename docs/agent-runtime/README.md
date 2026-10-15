@@ -5,9 +5,9 @@ fixture covers inherited policy, result collection, independent cancellation
 and persisted reopening. Installed model-backed two-worker collection/reopen
 and the corrected October 15 targeted Stop replay qualify those transitions
 separately. The [acceptance record](remaining-acceptance.md#accepted-general-agent-dispatch-from-chat--october-15)
-closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has a separate Linux
-live-worker checkpoint-continuity pass below; restart recovery and a successful
-multi-file task after compaction remain unqualified.
+closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has separate Linux passes for live-worker checkpoint continuity and
+a correct eight-file task after compaction. The finished record also survives a
+normal app exit/restart. Active-worker restart recovery remains unqualified.
 
 ## Current worker review follow-up
 
@@ -18,17 +18,19 @@ and asks the worker to verify source conditions and return paths before stating
 behavior. This is general worker guidance; it supplies no task-specific answer.
 Prompt guidance alone does not establish the cause or correction of a model error.
 
-One native default-worker review used the same read-only eight-file task and
-unchanged normal model and worker settings. It finished in 11 decisions, inspected
-all eight files in order and made exactly one tool call per decision. The exact
-answer survived ordinary Studio navigation and saved-run reopening.
+One native default-worker review used the same read-only eight-file task with
+`qwen3.8-27b/nvfp4-dflash2-nvfp4` (`qwen38_27b_nvfp4_df2.ginfer`), C1,
+262144 context, speculation disabled, high reasoning, Auto output and the default
+25 steps. It finished in 11 decisions, inspected all eight files in order and made
+exactly one tool call per decision. The exact answer survived ordinary Studio
+navigation and saved-run reopening.
 
 The task still fails factual accuracy: the answer again says manual Compact does
 nothing whenever input fits, overlooking the earlier checkpoint attempt. It also
 misstates the cut indices. This guidance therefore qualifies sequential inspection
 in this run, not resolution of the review-quality defect. The row remains open;
-the shared first-run wizard takes priority next. No new checkpoint, restart or
-post-compaction task acceptance is claimed.
+model capability remains a possible cause. No new checkpoint, restart or
+post-compaction task acceptance is claimed by that review.
 
 Evidence: `/ai/gchat/out/worker-review-guidance-20261015/{result.json,summary.md}`.
 Full `make verify`, native check, strict Clippy and build pass. The candidate uses
@@ -37,6 +39,29 @@ a native functional gate, not a rebuilt installer gate. Normal Host Stop returne
 zero active requests, private credential removal passed and owned processes and
 S1 booking 1841 are released. The previous retention and checkpoint evidence
 remains valid at its recorded scope.
+
+## Correct multi-file task after compaction — October 15
+
+A native worker completed a read-only eight-file maintainer reference correctly
+with the same Qwen NVFP4 package and normal settings above. Ordinary UI Compact
+installed a checkpoint after step 5: counted input fell from 32584 to 17211 tokens
+and nine older entries were replaced. The same worker preserved its task,
+identity and reserve, then performed six more bounded source reads and Reply.
+Independent source review passed all eight rows; the run finished in 13 decisions
+with one tool call per decision.
+
+The exact answer reopened through ordinary Studio navigation. After completion,
+a normal native window close and app relaunch preserved the same finished record,
+working state and transcript without hash changes. The native Host instance then
+stopped with zero active requests, its pairing disappeared from the private app,
+and owned fixture processes and resource bookings were released.
+
+[Acceptance details](remaining-acceptance.md#oi-068-factual-multi-file-task-after-checkpoint--october-15)
+and evidence: `/ai/gchat/out/worker-post-compact-20261015/{result.json,summary.md}`.
+This qualifies successful post-compaction task execution and terminal-record
+persistence. The original harder review's factual accuracy, active-worker restart
+recovery, full 262144-token capacity, Hermes and Windows remain unqualified;
+OI-068 remains PARTIAL.
 
 ## Worker file-read ranges — October 15
 
