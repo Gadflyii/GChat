@@ -42,6 +42,8 @@ export type SetupIssue = {
 export type KvmSetupRecord = {
   id: string
   name: string
+  // Unknown payloads omit this; control recovery must stay blocked without it.
+  identity?: Identity
   stage: string
   issue: SetupIssue | null
 }

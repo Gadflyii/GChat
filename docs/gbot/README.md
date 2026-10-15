@@ -634,6 +634,16 @@ sleep and guest reboot each need an observed recovery case before qualification.
 
 ## Durable work and status
 
+A saved local computer may need setup checks again after service restart while
+human control remains paused. The original owner can choose **Hand back** when
+the saved setup and live control session match. Hand back closes human media and
+requires a fresh, journaled desktop observation; failed or ambiguous operations
+remain blocked. If setup has failed, choose **Resume setup** for the same computer.
+Hand back does not itself restart setup, mark it Ready or resume tasks; a readiness
+check already in progress may continue after control is released. Missing or
+foreign session and owner identities cannot use this recovery. See the
+[recovery decision](../decisions/2026-10-15-release-retained-gbot-control-before-setup-resume.md).
+
 Persist task identity, originating conversation, definition revision, selected
 computer/session, inference assignment, permissions, step/budget state, owned
 process IDs, results and pending approvals on the service PC. Guest workers

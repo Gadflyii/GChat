@@ -491,3 +491,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-15** — [Share Agent Studio drafts with the selected Gbot](2026-10-15-share-agent-studio-drafts-with-gbot.md)
 
 - **2026-10-15** — [Size Host KV with a fresh Engine quote](2026-10-15-size-host-kv-with-a-fresh-engine-quote.md)
+
+- **2026-10-15** — [Release retained Gbot control before setup resume](2026-10-15-release-retained-gbot-control-before-setup-resume.md)

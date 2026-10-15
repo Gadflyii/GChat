@@ -1192,7 +1192,9 @@ impl WorkspaceRuntime {
                 arguments: serde_json::json!({}),
             },
         };
-        let observation = self.request_owned(request.clone(), Some(owner)).await?;
+        // Recovery must release retained human control before setup can check readiness.
+        // This private path keeps the exact owner/session and observation admission checks.
+        let observation = self.execute_request(request.clone(), Some(owner)).await?;
         let valid = matches!(&observation.outcome,
             GuestOutcome::Success { result: GuestResult::Desktop { result } }
                 if result["isError"] != true

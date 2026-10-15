@@ -1061,3 +1061,264 @@ it('renders service session identities, holds unfinished KVM and admits actions 
     screen.getByRole('button', { name: 'View bot’s desktop' })
   ).toBeEnabled()
 })
+
+it.each(['human', 'paused'])(
+  'allows the retained %s owner to hand back before explicitly resuming saved setup',
+  async (controlState) => {
+    const identity = { workspace_id: 'owned-kvm', session_id: 'saved-session' }
+    const owner = 'retained-owner'
+    sessionStorage.setItem('gbot-control-owner', owner)
+    let control = {
+      identity,
+      owner: owner as string | null,
+      state: controlState,
+    }
+    let attempts = 0
+    const record: KvmSetupRecord = {
+      id: identity.workspace_id,
+      name: 'Writer',
+      identity,
+      stage: 'testing_desktop',
+      issue: {
+        code: 'guest_not_ready',
+        message:
+          'Readiness write failed: bot dispatch is paused for human control',
+        next_action: 'Resume the saved setup.',
+      },
+    }
+    mocks.listen.mockResolvedValue(() => {})
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'state')
+          return {
+            workspaces: [
+              {
+                id: identity.workspace_id,
+                name: 'Writer',
+                bot_pc: { kind: 'local_vm', hypervisor: 'kvm' },
+              },
+            ],
+            live_sessions: [identity],
+            controls: [control],
+            assignments: [
+              {
+                workspace_id: identity.workspace_id,
+                connection: { kind: 'endpoint', api_base: 'http://host/v1' },
+                model: 'qwen',
+                context_tokens: 262144,
+              },
+            ],
+          }
+        if (path === 'setup/kvm/status') return [record]
+        if (path === 'setup/kvm/preflight') return { ready: true, issues: [] }
+        if (path === 'setup/kvm/start') return record
+        if (path === 'tasks')
+          return [{ id: 'task', identity, state: 'paused', messages: [] }]
+        if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+        if (path === 'schedules') return { schedules: [], stopped: null }
+        if (path === 'control/hand-back') {
+          expect(body).toEqual({ identity, owner })
+          if (++attempts === 1)
+            throw new Error('Fresh desktop observation failed')
+          control = { identity, owner: null, state: 'bot' }
+        }
+        return []
+      }
+    )
+    render(<Page />)
+    await screen.findByText(record.issue!.message)
+    const assertSetupBlocked = () => {
+      expect(screen.getByText('Setup incomplete')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Disconnect' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Edit brain' })).toBeDisabled()
+      expect(
+        screen.getByRole('button', { name: 'Run', exact: true })
+      ).toBeDisabled()
+      expect(
+        screen.getByRole('button', { name: 'Resume', exact: true })
+      ).toBeDisabled()
+      expect(
+        screen.queryByRole('button', { name: 'View bot’s desktop' })
+      ).not.toBeInTheDocument()
+    }
+    assertSetupBlocked()
+    const handBack = screen.getByRole('button', { name: 'Hand back' })
+    expect(handBack).toBeEnabled()
+    expect(handBack.closest('fieldset')).toBeNull()
+    fireEvent.click(handBack)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+    )
+    expect(attempts).toBe(1)
+    assertSetupBlocked()
+    fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Hand back' })
+      ).not.toBeInTheDocument()
+    )
+    expect(attempts).toBe(2)
+    assertSetupBlocked()
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeDisabled()
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'setup/kvm/start',
+      expect.anything()
+    )
+    for (const path of [
+      'tasks/start',
+      'tasks/resume',
+      'view/open',
+      'control/take-over',
+    ])
+      expect(mocks.call).not.toHaveBeenCalledWith(path, expect.anything())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume setup' }))
+    const wizard = await screen.findByRole('form', { name: 'Set up Gbot' })
+    await waitFor(() =>
+      expect(
+        within(wizard).getByRole('button', { name: 'Resume setup' })
+      ).toBeEnabled()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'setup/kvm/start',
+      expect.anything()
+    )
+    fireEvent.click(
+      within(wizard).getByRole('button', { name: 'Resume setup' })
+    )
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith('setup/kvm/start', {
+        id: identity.workspace_id,
+        name: 'Writer',
+      })
+    )
+    expect(record.stage).toBe('testing_desktop')
+    for (const path of [
+      'tasks/start',
+      'tasks/resume',
+      'view/open',
+      'control/take-over',
+    ])
+      expect(mocks.call).not.toHaveBeenCalledWith(path, expect.anything())
+  }
+)
+
+it.each([
+  'unknown setup',
+  'missing setup identity',
+  'foreign setup workspace',
+  'different setup session',
+  'missing live identity',
+  'foreign live workspace',
+  'different live session',
+  'foreign control workspace',
+  'different control session',
+  'foreign owner',
+  'missing owner',
+  'bot control',
+])(
+  'keeps incomplete-setup control recovery blocked for %s',
+  async (scenario) => {
+    const identity = { workspace_id: 'owned-kvm', session_id: 'saved-session' }
+    const owner = 'retained-owner'
+    sessionStorage.setItem('gbot-control-owner', owner)
+    const liveIdentity =
+      scenario === 'foreign live workspace'
+        ? { ...identity, workspace_id: 'other-workspace' }
+        : scenario === 'different live session'
+          ? { ...identity, session_id: 'other-session' }
+          : identity
+    const controlIdentity =
+      scenario === 'foreign control workspace'
+        ? { ...identity, workspace_id: 'other-workspace' }
+        : scenario === 'different control session'
+          ? { ...identity, session_id: 'other-session' }
+          : identity
+    const setupIdentity =
+      scenario === 'missing setup identity'
+        ? undefined
+        : scenario === 'foreign setup workspace'
+          ? { ...identity, workspace_id: 'other-workspace' }
+          : scenario === 'different setup session'
+            ? { ...identity, session_id: 'other-session' }
+            : identity
+    mocks.listen.mockResolvedValue(() => {})
+    mocks.call.mockImplementation(async (path: string) => {
+      if (path === 'state')
+        return {
+          workspaces: [
+            {
+              id: identity.workspace_id,
+              name: 'Writer',
+              bot_pc: { kind: 'local_vm', hypervisor: 'kvm' },
+            },
+          ],
+          live_sessions:
+            scenario === 'missing live identity' ? [] : [liveIdentity],
+          controls: [
+            {
+              identity: controlIdentity,
+              state: scenario === 'bot control' ? 'bot' : 'paused',
+              owner:
+                scenario === 'foreign owner'
+                  ? 'other-owner'
+                  : scenario === 'missing owner'
+                    ? null
+                    : owner,
+            },
+          ],
+          assignments: [],
+        }
+      if (path === 'setup/kvm/status') {
+        if (scenario === 'unknown setup')
+          throw new Error('Setup status unavailable')
+        return [
+          {
+            id: identity.workspace_id,
+            name: 'Writer',
+            identity: setupIdentity,
+            stage: 'testing_desktop',
+            issue: null,
+          },
+        ]
+      }
+      if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'schedules') return { schedules: [], stopped: null }
+      return []
+    })
+    render(<Page />)
+    await screen.findByText('Computer setup is incomplete')
+    if (scenario === 'unknown setup')
+      await screen.findByText('Error: Setup status unavailable')
+    else await screen.findByRole('button', { name: 'Resume setup' })
+    for (const button of screen.queryAllByRole('button', {
+      name: /^(Hand back|Take over)$/,
+    })) {
+      expect(button).toBeDisabled()
+      fireEvent.click(button)
+    }
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'View bot’s desktop' })
+    ).not.toBeInTheDocument()
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'control/hand-back',
+      expect.anything()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'control/take-over',
+      expect.anything()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/start',
+      expect.anything()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/resume',
+      expect.anything()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith('view/open', expect.anything())
+  }
+)
