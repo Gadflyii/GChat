@@ -12,6 +12,54 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## Worker review guidance — October 15
+
+The retained default-worker review used `qwen3.8-27b/nvfp4-dflash2-nvfp4`,
+normal 262144 context, high reasoning, Auto output and the default 25-step limit.
+It finished in 11 decisions, inspected all eight requested files in order and
+made one tool call per decision. All ten source reads remain verbatim in the
+saved working state; ordinary Studio reopening preserved the exact answer.
+
+Factual accuracy still fails: the answer claims a fitting input makes manual
+Compact a no-op, but `src-tauri/src/core/agent/context.rs:196` bypasses checkpoint
+attempts only without a manual request; lines 200–293 try candidates before the
+fallback at line 295. Its first cut index is also wrong: lines 203–213 select
+`boundaries[len-3]`, then `boundaries[len-2]`, when available. These errors do not
+establish another product defect; model capability remains a possible cause.
+`GCHAT-WORKER-REVIEW-INSTRUCTION-FOLLOWING` stays open. This run had no compaction
+and adds no checkpoint, restart or post-compaction task acceptance.
+
+Evidence: `/ai/gchat/out/worker-review-guidance-20261015/{result.json,summary.md}`.
+
+## OI-068 factual multi-file task after checkpoint — October 15
+
+**PASS for a correct eight-file maintainer reference after live-worker
+compaction.** The Linux native worker used `qwen3.8-27b/nvfp4-dflash2-nvfp4`,
+C1, normal 262144 context, speculation disabled, high reasoning, Auto output
+and the unchanged default 25-step limit. This was a native functional gate,
+not a fresh installer gate.
+
+An ordinary UI Compact installed one checkpoint after step 5, reducing counted
+input from 32584 to 17211 tokens and replacing nine older entries. The same
+session `7ca4a260-5ed4-4ef9-9057-f64c0f37f17a` and context
+`9595d540-f2cd-4bd6-aec0-fe2c2d4ee1c6` preserved the verbatim task and
+20480-token reserve, then executed six more bounded source reads and Reply.
+The run finished in 13 decisions with one tool call per decision; first
+inspection followed all eight requested files in order. Independent source
+review found every requested reference row correct. The exact terminal reply
+survived ordinary Studio navigation and saved-run reopening.
+After completion, closing the native window normally and relaunching with the
+same data also preserved the exact terminal record; run history, working state
+and transcript hashes were unchanged.
+Normal Host Stop reached `stopped` with zero active requests. The native
+inventory no longer showed the private remote pairing; owned processes were
+retired and S1/local GPU bookings released.
+
+The original harder review's factual-accuracy row remains open. Active-worker
+app-exit/restart recovery, full 262144-token capacity, Hermes and Windows remain
+unqualified; OI-068 remains PARTIAL. Evidence:
+`/ai/gchat/out/worker-post-compact-20261015/{result.json,summary.md}`.
+
 ## OI-068 Linux live-worker checkpoint continuity — October 15
 
 **PASS for checkpoint installation and same-worker continuation; review task
@@ -530,7 +578,7 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint reduced12662→11567 and preserved same-worker tool execution/reopen. | Successful multi-file task after compaction (recorded review failed); active-worker app-exit/restart recovery; Windows/Hermes at release. Read-range defect tracked separately. Do not replay passing gates. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. | Active-worker app-exit/restart recovery; full 262144-token capacity; Windows/Hermes at release. The original harder review's factual accuracy remains open separately. Read-range defect tracked separately. Do not replay passing gates. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
 | GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |
