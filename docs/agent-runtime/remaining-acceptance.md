@@ -453,7 +453,7 @@ is part of this plan. The master list remains the sole issue-status authority.
 | OI-066 | Guard diagnosis is closed; fit-message correction `85bc3d087` is not in origin/dev/next. | Owning CPU/syntax fixtures pass; reviewed engine landing remains pending. Profile qualification is OI-072. |
 | OI-110 / GCHAT-UPDATER-SIGNATURE | Routing/metadata source is accepted; all 19 existing offline metadata cases PASS on S1. The live feed is not published. | Exact final-payload signature and signed artifact/feed acceptance at Ron's release gate. SectileLabs repo is artifacts only. |
 | GCHAT-GBENCH-MTP-SITE-CONTRACT | Ron's local site correction awaits upload confirmation. | Ron/site owner confirmation; no site edits or publication here. |
-| GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | RAG startup unconditionally probed VectorDB despite the disabled embedding feature. Main `8440b5f7a` removes that probe and awaits settings initialization. | Focused startup case and frontend types PASS; native installed check is not claimed. Explicit VectorDB diagnostics remain available. |
+| GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE | Closed: main `8440b5f7a` removes the unconditional VectorDB startup probe and awaits settings initialization. | Focused startup case/types and October 15 retained native DEB startup PASS: six extensions loaded, RAG settings initialized, welcome rendered, zero VectorDB/ANN startup probes. Explicit diagnostics remain available; embeddings are not qualified. |
 | GCHAT-LINUX-DRI3-STARTUP-WARNING / GCHAT-LINUX-APPINDICATOR-DEPRECATION | Recorded diagnostics; functional Linux acceptance passes. | Keep separate from functional failures; fix in the owning initialization/dependency only if actionable. |
 | OI-074 / GCHAT-BROWSER-BASELINE-DATA | Main `2e2edfc86` removes the size warning without changing language loading or the advisory limit. Browser-data advice remains separate. | Production/loading evidence above is accepted; no unrelated upgrades. |
 | GCHAT-WEB-TEST-DIAGNOSTICS | Main `b1502528b` incorporates `2c1bb9c41`, fixing fixture ownership and asynchronous settling; all 26 selected cases have passing evidence, with zero diagnostics in the final affected cases. Product code is unchanged. | Focused evidence `web-warning-note.md`; no full-suite or real Shiki/browser qualification claim. |
@@ -564,8 +564,6 @@ claimed for these changes. Schedules now belong to the independent service; inst
 passes; AppImage GUI-exit/resource/shutdown lifetime also passes. Sleep and live dispatch remain unqualified. KVM refuses missing
 host prerequisites/assets and does not install tools or substitute another PC.
 
-The disabled-embedding startup correction has one focused case and frontend types
-PASS (`ann-test.log` / `ann-types.log`). Explicit VectorDB diagnostics remain.
 The PTY geometry fixture passes (`pty-geometry-test.log`), without a native mouse
 or blank-TUI cause claim. First-wave agent worktrees are retired after main merge;
 second-wave source is merged and its owned trees can retire after live-use checks.
@@ -575,6 +573,31 @@ cleanup freed 1.35 GB apparent size from the first five trees and 0.55 GB
 allocated from the final two.
 Current closures, accepted packages and evidence remain. Inventory:
 `/ai/gchat/out/gchat-open-items-20261012/disk-cleanup.md`.
+
+### Disabled-embedding native startup — October 15
+
+`GCHAT-LINUX-ANN-STARTUP-UNAVAILABLE` is closed. The retained developer DEB
+`GChat_2.0.42+oi06820261014.38ff80e0c_amd64.deb` (desktop source `7e33222e8`,
+including fix `3afd4ea8a`; package SHA256
+`dd145b4f19faffe7665b8e3325ca4326f80d36087ccd3a8e5df7227b72e51169`)
+passes native startup at 10:01:12Z. The actual packaged RAG instance awaits
+`configure()` during `onLoad`, initializes its settings and joins all six
+registered extensions while the welcome screen renders. Native startup emits
+zero `[VectorDB]` messages, sqlite-vec path attempts or ANN-unavailable reports.
+The explicit VectorDB `getStatus` method remains available and was not invoked.
+Attachment configuration `enabled=true` does not qualify embeddings.
+
+This is an extracted native payload on WSLg X11 with empty private XDG data,
+private D-Bus and an unlocked private Secret Service, on booked CPUs 8–11.
+No package-manager installation, model/GPU workload, build or feature activation
+was performed. Existing DRI3/AppIndicator diagnostics, successful NVML fallback
+and the unpublished updater's HTTP 404 remain separate; this is not a clean-console,
+renderer-acceleration or release claim. The native window closed normally and
+completed app cleanup. Exact private helpers and 4.244 GiB of owned extraction/data
+were retired; the booking was returned and physical session/keyring left untouched.
+The startup-refreshed shared CLI has identical bytes. Evidence:
+`/ai/gchat/out/ann-startup-20261015/{result.json,summary.md}`. Reuse the passing
+focused case and frontend types (`ann-test.log` / `ann-types.log`); no repeat suite.
 
 ## Accepted Ubuntu Desktop packages — OI-057
 
