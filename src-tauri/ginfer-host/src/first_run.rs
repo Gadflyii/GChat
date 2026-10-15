@@ -684,7 +684,10 @@ impl Host {
                         p.concurrency,
                     )
                 });
-            let options = published.map(|p| p.options.clone()).unwrap_or_default();
+            let mut options = published.map(|p| p.options.clone()).unwrap_or_default();
+            // Published arena bytes describe historical hardware. Keep the
+            // recommendation automatic so actual starts quote the live runtime.
+            options.kv_arena_bytes = None;
             let max_context = options.validate_target(
                 &model.metadata.identity,
                 model.metadata.tp_size,
@@ -718,9 +721,8 @@ impl Host {
                 continue;
             }
             match self.quote_first_run(profile).await {
-                Ok((quote, budget)) => {
+                Ok(quote) => {
                     profile.quote = Some(quote);
-                    profile.request.options.kv_arena_bytes = Some(budget);
                 }
                 Err(error) => profile.error = Some(error),
             }
@@ -728,7 +730,7 @@ impl Host {
         self.store_first_run(progress).await
     }
 
-    async fn quote_first_run(&self, profile: &Startup) -> Result<(Value, u64), String> {
+    async fn quote_first_run(&self, profile: &Startup) -> Result<Value, String> {
         let launch = self.prepare_launch(&profile.request).await?;
         self.processes
             .lock()
@@ -762,8 +764,15 @@ impl Host {
             .map_err(|e| format!("Invalid Engine startup quote: {e}"))?;
         let quote: crate::engine_host::StartupQuote =
             serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
-        let budget = quote.kv_budget(&launch, profile.instance_count)?;
-        Ok((value, budget))
+        quote.validate(&launch)?;
+        if !(launch.model_id.starts_with("qwen3.8-flash-next/")
+            && profile.instance_count == 1
+            && launch.options.kv_arena_bytes.is_none()
+            && quote.unknown_graph_allowance())
+        {
+            quote.kv_budget(&launch, profile.instance_count)?;
+        }
+        Ok(value)
     }
 }
 
@@ -1125,7 +1134,44 @@ mod tests {
     async fn engine_quotes_gate_completion_and_saved_instances_restart_stopped() {
         use std::os::unix::fs::PermissionsExt;
         let directory = tempfile::tempdir().unwrap();
-        let (host, jobs) = installed_host(directory.path(), 1).await;
+        let (host, mut jobs) = installed_host(directory.path(), 1).await;
+        // Seed the installed download's actual published recommendation, not
+        // just the wizard's catalog. Its historical arena cannot fit this quote.
+        let release = &mut jobs[0].release;
+        release.launch_profiles.push(
+            serde_json::from_value(json!({
+                "id":"stale-first-run-arena", "name":"Synthetic published recommendation",
+                "platform":std::env::consts::OS, "identity":release.identity,
+                "artifact_sha256":release.sha256, "artifact_bytes":release.bytes,
+                "tp":1, "draft_tp":0, "gpu_name":"Fixture GPU", "compute_capability":"12.0",
+                "vram_tier_gib":32, "min_memory_mib_per_gpu":32768,
+                "max_context":65536, "concurrency":3,
+                "options":{"spec":"none", "kv_arena_bytes":1_u64 << 32},
+                "qualification":{"tier":"full-context-tested", "evidence":"synthetic fixture only",
+                    "engine_revision":"fixture", "free_bytes_per_gpu":1_u64 << 30,
+                    "full_context_requests":1}
+            }))
+            .unwrap(),
+        );
+        release.launch_profiles[0].validate().unwrap();
+        drop(host);
+        let persisted_jobs: std::collections::BTreeMap<_, _> =
+            jobs.iter().map(|job| (job.id, job.clone())).collect();
+        std::fs::write(
+            directory.path().join("model-downloads.json"),
+            serde_json::to_vec(&persisted_jobs).unwrap(),
+        )
+        .unwrap();
+        let host = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
         let quote = json!({"schema":"ginfer-startup-quote-v1","model_id":"muse-glimmer-30b","weights_id":"nvfp4",
             "tensor_parallel_size":1,"ranks":[{"rank":0,"free_bytes":1048576,"weights_bytes":8192,
                 "state_bytes":4096,"graph_allowance_bytes":4096,"minimum_kv_arena_bytes":4096,
@@ -1159,8 +1205,19 @@ mod tests {
         host.first_run_maintenance().await.unwrap();
         let status = host.first_run_status().await.unwrap();
         assert!(status["startup_profiles"][0]["quote"].is_object());
+        assert_eq!(status["startup_profiles"][0]["max_context"], 65536);
+        assert_eq!(status["startup_profiles"][0]["concurrency"], 3);
+        assert!(status["startup_profiles"][0]["kv_arena_bytes"].is_null());
         let args = std::fs::read_to_string(directory.path().join("quote-args")).unwrap();
         assert!(args.lines().any(|arg| arg == "--quote-only"));
+        assert!(!args.lines().any(|arg| arg == "--kv-arena-bytes"));
+        let args: Vec<_> = args.lines().collect();
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--max-context", "65536"]));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--max-concurrency", "3"]));
         assert!(!host.processes.lock().await.has_children());
         assert!(host
             .first_run_action(json!({"action":"startup","download_id":jobs[0].id,"concurrency":0}))
@@ -1200,7 +1257,9 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .all(|i| i["status"] == "stopped" && i["profile"]["qualified_profile_id"].is_null()));
+            .all(|i| i["status"] == "stopped"
+                && i["profile"]["qualified_profile_id"].is_null()
+                && i["profile"]["kv_arena_bytes"].is_null()));
         drop(host);
         let restored = Host::open(
             directory.path().to_owned(),

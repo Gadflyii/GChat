@@ -13,6 +13,45 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Fresh startup quotes — October 15
+
+Candidate `fix/gchat-host-fresh-kv-quotes`, based on `81bc9be62`, addresses
+`GINFER-HOST-PROFILE-DEFAULT-STARTUP-20261015`. Single-instance starts on idle
+GPUs and saved-instance Start, Restart and Reload previously bypassed the
+placement quote. Selecting a catalog profile could also retain historical KV
+bytes after the Host enabled structured outputs, changing startup memory needs.
+
+Every serving start now obtains `ginfer-serve --quote-only` from the selected
+runtime with the final GPU group, package, context, concurrency and startup
+options, including structured outputs and headroom. Replacements quote after
+the old instance stops. No quote is reused across starts, so an Engine build or
+settings change is accounted for on the next start. Catalog KV bytes are
+historical evidence, not a current allocation: profile selection uses Automatic
+unless the user explicitly supplies a byte budget.
+
+Automatic sizing derives an aligned explicit arena from the fresh quote and
+passes it only to that Engine launch. The saved request retains Automatic, so
+later starts quote and size again. A positive user budget retains its exact
+meaning; Host checks it against the fresh quote and refuses an oversized value
+before loading the model. Existing saved positive values have no provenance
+that distinguishes a user choice from an older derived value. If one no longer
+fits, select Custom settings and clear the GPU KV budget to return to Automatic.
+Host does not silently shrink an exact request. Changed runtime options do not
+inherit historical profile qualification.
+
+Flash with graphs enabled has one bootstrap exception. If a solo Automatic
+start has no matching graph-memory receipt, its quote reports an unknown graph
+allowance. Host leaves the arena automatic for that Engine start; a successful
+Ready receipt then permits quote-derived explicit sizing with the same recipe.
+An explicit arena or shared placement requires known graph memory. No unknown
+graph allowance is treated as measured capacity.
+
+Source verification and native qualification of this candidate are pending.
+A quote samples free memory and planner allowances; it does not reserve VRAM,
+guarantee startup against other allocations or qualify full-context inference.
+The earlier near-full-context startup failures remain failures, with no Ready,
+token-count or inference acceptance claimed by this change.
+
 ## Shared first-run setup — October 15
 
 `FIRST-RUN-WIZARD` and `MODEL-STORAGE-FASTEST-DISK` share one Host-owned workflow on branch
@@ -118,8 +157,8 @@ each with its own identity, port and per-instance concurrency. Existing instance
 retain their allocations. The Engine's `ginfer-serve --quote-only` owns the
 startup memory facts; Host reserves each remaining sibling's weights/state/graph
 requirement and headroom before splitting the remaining KV equally. Manager
-keeps that first equal share for the rest of the batch and Host checks every
-placement against a fresh quote. A user may instead enter
+keeps Automatic selected throughout the batch; Host freshly splits the current
+remaining capacity at each placement. A user may instead enter
 an explicit KV byte budget per new instance. Startup is serialized through Ready
 so the next quote sees the preceding allocation. A changed KV allocation is a
 custom deployment and does not inherit the profile's qualification claim.

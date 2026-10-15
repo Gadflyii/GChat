@@ -502,7 +502,7 @@ test('saved profiles are grouped by model then GPU with one recommendation per s
   assert.deepEqual(requests(app)[0].args.gpu_uuids, ['GPU-second'])
 })
 
-test('batch placement serializes shared-GPU instances and reports partial failure', async (t) => {
+test('batch placement preserves automatic sizing, serializes instances and reports partial failure', async (t) => {
   for (const kvBudget of ['', '8589934592']) {
     let release
     let fail = false
@@ -526,7 +526,8 @@ test('batch placement serializes shared-GPU instances and reports partial failur
       assert.equal(request.operation, 'profile_launch')
       assert.deepEqual(request.args.gpu_uuids, ['GPU-local'])
       assert.equal(request.args.remaining_instances, index < 3 ? 4 - index : undefined)
-      assert.equal(request.args.kv_arena_bytes, kvBudget ? Number(kvBudget) : index ? 4294967296 : undefined)
+      assert.equal(request.args.kv_arena_bytes, kvBudget ? Number(kvBudget) : undefined,
+        'each request preserves the chosen budget instead of copying an earlier live allocation')
       if (kvBudget && index === 2) fail = true
       release()
       if (fail) break

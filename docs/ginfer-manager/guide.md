@@ -152,13 +152,27 @@ the Host cache, and a positive value sets exact bytes. Reload preserves all thre
 choices. This control is separate from the GPU KV budget.
 
 Custom settings exposes **GPU KV budget (bytes, blank = automatic)**. Leave it
-blank for the Engine to size the pool from available memory after startup, or
-enter an exact positive byte count. Reload shows the saved budget; clearing it
-explicitly switches to automatic sizing without changing context or concurrency.
-Saved profiles retain their own budget and evidence. If an old profile reports
-that its explicit KV arena exceeds post-startup memory, use **Reload → Custom
-settings**, clear this budget, review the other settings and submit **Reload**.
-Automatic sizing does not establish a full-context capacity qualification.
+blank for Host to obtain a fresh Engine startup quote and derive the arena from
+current free memory, startup allocations and headroom, or enter an exact positive
+byte count. Host quotes every Start, Restart and Reload using the selected Engine
+and final settings. Selecting a saved catalog profile does not reuse its
+historical KV allocation. An automatic request stays automatic when saved and
+is sized again on its next start.
+
+Reload shows the saved budget; clearing it switches to automatic sizing without
+changing context or concurrency. An exact budget must fit the fresh quote; Host
+refuses an oversized request before loading the model instead of reducing it.
+If an older saved value no longer fits, use **Reload → Custom settings**, clear
+this budget, review the other settings and submit **Reload**. Existing instances
+keep their allocations when another instance is added. Automatic sizing and a
+successful startup do not establish full-context capacity qualification.
+
+For Flash with graphs enabled, a first solo automatic start can use the Engine's
+own automatic arena while it measures graph memory. Wait for Ready to retain
+that receipt before using an explicit GPU KV budget or adding instances with the
+same settings. Shared Flash placement also requires a per-instance weight
+residency budget. A quote is a current estimate; another process allocating GPU
+memory can still prevent startup.
 
 Use **Start** to start a saved stopped instance, **Stop** to drain requests and
 unload it, and **Reload** to change its configuration. If requests are active,

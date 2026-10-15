@@ -1026,6 +1026,31 @@ fn available_bytes_windows(path: &std::path::Path) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    fn write_sleeper_with_startup_quote(engine: &std::path::Path) {
+        std::fs::write(
+            engine,
+            r#"#!/usr/bin/env python3
+import json, sys, time
+args = sys.argv[1:]
+def arg(name):
+    return args[args.index(name) + 1]
+if '--quote-only' in args:
+    model, weights = arg('--model-id').split('/', 1)
+    print(json.dumps(dict(schema='ginfer-startup-quote-v1', model_id=model,
+        weights_id=weights, tensor_parallel_size=1, ranks=[dict(rank=0,
+        free_bytes=4294967296, weights_bytes=8192, state_bytes=2048,
+        graph_allowance_bytes=1024, minimum_kv_arena_bytes=1024,
+        kv_arena_alignment_bytes=256,
+        headroom_bytes=int(arg('--kv-arena-headroom-bytes')),
+        startup_peak_bytes=12288)])))
+    sys.exit(0)
+time.sleep(60)
+"#,
+        )
+        .unwrap();
+    }
+
     pub(super) fn fixture() -> (Release, Vec<u8>) {
         let identity = ArtifactIdentity {
             model_id: "muse-glimmer-30b".into(),
@@ -1840,7 +1865,7 @@ mod tests {
         let provider = directory.path().join("ginfer");
         let engine = provider.join("bin/ginfer-serve");
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
-        std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        write_sleeper_with_startup_quote(&engine);
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
         std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
         let hardware = crate::hardware_profile::group_profile_path(
@@ -1938,7 +1963,7 @@ mod tests {
         let provider = directory.path().join("ginfer");
         let engine = provider.join("bin/ginfer-serve");
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
-        std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        write_sleeper_with_startup_quote(&engine);
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
         std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
         let hardware = crate::hardware_profile::group_profile_path(
@@ -2099,7 +2124,7 @@ mod tests {
         let provider = directory.path().join("ginfer");
         let engine = provider.join("bin/ginfer-serve");
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
-        std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+        write_sleeper_with_startup_quote(&engine);
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
         std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
         let hardware = crate::hardware_profile::group_profile_path(
