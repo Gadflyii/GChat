@@ -240,7 +240,13 @@ accounts**. Its mail/calendar/drive and other existing accounts are explicitly
 linked by account ID; credentials stay with the shared native account vault.
 It never automatically inherits the user's GChat connector selection. Agent,
 skill and tool definitions remain shared. The merged account picker and
-scoped executor boundary are implemented; live OAuth still needs app registration.
+scoped executor boundary are implemented. Two full local mock OAuth lifecycles
+qualify the Google/Microsoft source flow through native callback, refresh,
+scope reduction, isolation and disconnect; credentials are synthetic and the
+provider override is test-only. Source scope is complete; **live provider consent
+is Ron's release gate**, using existing approved registrations/accounts. See
+[connector qualification](../workspace-connectors/README.md#local-mock-oauth-qualification--october-15)
+and `/ai/gchat/out/gbot-mock-oauth-20261015/result.json`.
 
 Gbot appears in the left menu **above Work**, only when Gbot integration is
 enabled in GChat. Its switch lives under **Native Integrations** in Settings
