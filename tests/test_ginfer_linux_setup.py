@@ -29,6 +29,16 @@ class LinuxSetup(unittest.TestCase):
                 shutil.copy2('/usr/bin/true', target)
                 files.append({'path': name, 'bytes': target.stat().st_size,
                               'sha256': hashlib.sha256(target.read_bytes()).hexdigest()})
+            docs = ('README.md', 'VERSION', 'docs/cli.md', 'docs/serving.md',
+                    'docs/release-names/README.md')
+            documents = (*docs, 'licenses/llguidance-crates/ahash/LICENSE-APACHE',
+                         'licenses/ubuntu-packages/libcurl4t64/copyright')
+            for name in documents:
+                member = bundle / 'runtime' / name
+                member.parent.mkdir(parents=True, exist_ok=True)
+                member.write_text(f'Bundled operator documentation: {name}\n')
+                files.append({'path': name, 'bytes': member.stat().st_size,
+                              'sha256': hashlib.sha256(member.read_bytes()).hexdigest()})
             (bundle / 'runtime/runtime-manifest.json').write_text(json.dumps({
                 'schema': 'ginfer-linux-runtime-v1', 'platform': 'linux-x64', 'files': files}))
             target, provider, config, links = [root / name for name in ('install', 'provider', 'config', 'links')]
@@ -60,6 +70,9 @@ class LinuxSetup(unittest.TestCase):
             self.assertEqual(launch['desktop']['provider'], str(provider))
             self.assertFalse(provider.exists())
             self.assertEqual((target / 'bin/launch-profiles.json').read_text(), catalog)
+            for name in documents:
+                self.assertEqual((target / name).read_bytes(), (bundle / 'runtime' / name).read_bytes())
+                self.assertEqual((target / name).stat().st_mode & 0o777, 0o644)
             with self.assertRaisesRegex(ValueError, 'already exists'):
                 setup.install(bundle, target, provider, config, links, True)
             locator = config / 'ginfer/local-host.json'
@@ -106,6 +119,19 @@ class LinuxSetup(unittest.TestCase):
                     setup.install(bundle, interrupted, provider, config, root / 'failed-links', True)
             self.assertTrue((interrupted / 'bin/ginfer').is_file())
             self.assertEqual(json.loads(locator.read_text()), record)
+            manifest = bundle / 'runtime/runtime-manifest.json'
+            valid_manifest = manifest.read_text()
+            invalid_manifest = json.loads(valid_manifest)
+            invalid_manifest['files'].insert(0, {
+                'path': 'licenses/../README.md', 'bytes': 0, 'sha256': '0' * 64})
+            manifest.write_text(json.dumps(invalid_manifest))
+            with mock.patch.object(setup.subprocess, 'run') as run:
+                with self.assertRaisesRegex(ValueError, 'unexpected or duplicate runtime member'):
+                    setup.install(bundle, root / 'traversal', provider, config,
+                                  root / 'traversal-links', True)
+                run.assert_not_called()
+            self.assertFalse((root / 'traversal').exists())
+            manifest.write_text(valid_manifest)
             (bundle / 'runtime/bin/ginfer').write_bytes(b'corrupted')
             with mock.patch.object(setup.subprocess, 'run') as run:
                 with self.assertRaisesRegex(ValueError, 'integrity mismatch'):

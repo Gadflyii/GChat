@@ -43,7 +43,8 @@ def runtime_entries(directory, target):
         path = Path(name)
         if path.is_absolute() or '\\' in name or '..' in path.parts or ':' in name:
             raise ValueError('invalid runtime member path')
-        if name in seen or not (name in ('LICENSE', 'README.md') or
+        if name in seen or not (name in ('LICENSE', 'README.md', 'VERSION', 'docs/cli.md',
+                                        'docs/serving.md', 'docs/release-names/README.md') or
                 (path.parent == Path('bin') and path.suffix.lower() in ('.exe', '.dll')) or
                 (not windows and name in ('bin/ginfer', 'bin/ginfer-serve')) or
                 (not windows and path.parent == Path('lib') and '.so.' in path.name) or
