@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-15** — [Preserve WebKit display with shared-memory buffers](2026-10-15-preserve-webkit-display-with-shared-memory-buffers.md)
+
 - **2026-10-15** — [Expose retained bundled resource readiness](2026-10-15-expose-retained-bundled-resource-readiness.md)
 - **2026-10-15** — [Reject unsupported native request capabilities](2026-10-15-reject-unsupported-native-request-capabilities.md)
 

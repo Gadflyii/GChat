@@ -3,8 +3,11 @@
 
 fn main() -> std::process::ExitCode {
     #[cfg(target_os = "linux")]
-    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    // Keep WebKit's shared display available to video decoders without requiring DMA-BUF.
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+        && std::env::var_os("WEBKIT_DMABUF_RENDERER_FORCE_SHM").is_none()
+    {
+        std::env::set_var("WEBKIT_DMABUF_RENDERER_FORCE_SHM", "1");
     }
 
     let _ = fix_path_env::fix();
