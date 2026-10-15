@@ -1020,13 +1020,12 @@ pub(crate) async fn resolve_external_roots(
 
 #[tauri::command]
 pub async fn agent_cancel_turn(state: State<'_, AppState>, run_id: String) -> Result<(), String> {
-    let sender = state
-        .tool_call_cancellations
-        .lock()
-        .await
-        .remove(&run_id)
-        .ok_or_else(|| format!("Agent run '{run_id}' is not active"))?;
-    let _ = sender.send(());
+    // Parent Stop can abort the capability and explicitly stop its worker.
+    // An inactive run already satisfies Stop, including a completion race.
+    let sender = state.tool_call_cancellations.lock().await.remove(&run_id);
+    if let Some(sender) = sender {
+        let _ = sender.send(());
+    }
     clear_pending_approvals_for_run(&state, &run_id).await;
     clear_pending_folder_access_for_run(&state, &run_id).await;
     Ok(())
@@ -1261,6 +1260,59 @@ mod tests {
 
     use super::*;
     use crate::core::agent::test_support::TestWorkspace;
+
+    #[tokio::test]
+    async fn repeated_stop_clears_pending_prompts_and_preserves_other_runs() {
+        use crate::core::state::{PendingAgentApproval, PendingAgentFolderAccess};
+
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        let state = app.state::<AppState>();
+        let (cancel_tx, mut cancel_rx) = oneshot::channel();
+        let (other_tx, mut other_rx) = oneshot::channel();
+        state.tool_call_cancellations.lock().await.extend([
+            ("worker".into(), cancel_tx),
+            ("other-worker".into(), other_tx),
+        ]);
+        let (approval_tx, mut approval_rx) = oneshot::channel();
+        state.agent_pending_approvals.lock().await.insert(
+            "approval".into(),
+            PendingAgentApproval {
+                run_id: "worker".into(),
+                fingerprint: "test-approval".into(),
+                can_remember: false,
+                sender: approval_tx,
+            },
+        );
+        let (folder_tx, mut folder_rx) = oneshot::channel();
+        state.agent_pending_folder_access.lock().await.insert(
+            "folder".into(),
+            PendingAgentFolderAccess {
+                run_id: "worker".into(),
+                sender: folder_tx,
+            },
+        );
+
+        let (first, duplicate) = tokio::join!(
+            agent_cancel_turn(app.state(), "worker".into()),
+            agent_cancel_turn(app.state(), "worker".into()),
+        );
+        first.expect("first Stop succeeds");
+        duplicate.expect("duplicate Stop succeeds");
+        cancel_rx.try_recv().expect("worker receives cancellation");
+        assert_eq!(approval_rx.try_recv().unwrap(), ApprovalDecision::Deny);
+        assert!(!folder_rx.try_recv().unwrap());
+        assert!(state.agent_pending_approvals.lock().await.is_empty());
+        assert!(state.agent_pending_folder_access.lock().await.is_empty());
+
+        agent_cancel_turn(app.state(), "worker".into())
+            .await
+            .expect("late Stop succeeds after cancellation");
+        let cancellations = state.tool_call_cancellations.lock().await;
+        assert!(!cancellations.contains_key("worker"));
+        assert!(cancellations.contains_key("other-worker"));
+        assert_eq!(other_rx.try_recv(), Err(oneshot::error::TryRecvError::Empty));
+    }
 
     #[cfg(windows)]
     fn create_junction(link: &Path, target: &Path) {

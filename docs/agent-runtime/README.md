@@ -13,6 +13,23 @@ Owned app/Host/Engine/profile jobs are absent; bookings and canonical build/GPU 
 [Remaining acceptance and prepared checks](remaining-acceptance.md) records physical
 prerequisites and distinguishes saved source evidence from installed replay.
 
+## Current worker Stop correction
+
+`GCHAT-WORKER-CANCEL-FALSE-ERROR`: parent Stop aborts outstanding capability
+calls and explicitly cancels the active workers. Both paths can send
+`agent_cancel_turn` for the same run. The first consumes its cancellation sender;
+the second previously returned an inactive-run error that could trigger the failure
+toast. A worker finishing before its Stop request has the same inactive-run race.
+
+Native Stop is idempotent: it signals an active run once, clears its pending
+prompts and accepts a run that is already inactive. An unrelated active run is preserved.
+The new native regression passes duplicate and late Stop requests, prompt cleanup
+and preservation of an unrelated active run. The existing real-worker preflight
+cancellation and delegated cancellation/reopen regressions also pass in the 631-case
+Chat library suite (seven ignored); `cargo check` and strict Clippy pass. This source
+diagnosis does not establish which race caused the retained single-click OI-068
+toast; a new installed-app replay has not been performed.
+
 GCHAT-CLI-FEATURE-CLIPPY is fixed: desktop startup helpers compile only for
 the desktop feature; shared headless installation and completion remain available.
 The three existing bundled-resource fixtures and strict CLI/desktop Clippy pass.
