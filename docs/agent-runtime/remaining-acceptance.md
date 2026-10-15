@@ -12,6 +12,34 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## OI-068 Studio worker exit persistence — October 15
+
+Direct Studio turns were absent from the Chat delegation and Code task shutdown
+maps. Their cancellation senders and terminal events also did not establish that
+run-history and semantic-session writes had finished. The shared turn registry
+now covers preflight through persistence and pending-request cleanup. Normal app
+exit closes admission, cancels tracked turns and waits alongside Chat and Code
+shutdown for up to 15 seconds before model teardown. Closed UI event delivery
+during shutdown no longer turns cancellation into failed history.
+
+The existing mock app, TestFleet and scripted engine fixture checks a direct
+Studio turn that reads a real file and then waits for shell approval. It closes
+the event sink and requires cancelled history, the same task/session and retained
+file content on disk before shutdown returns. It also checks cleared pending
+requests, no shell side effect, rejection of a late run and fresh-app history
+reopening without replay. A missing-definition preflight regression checks that
+an early error releases shutdown tracking without creating history.
+
+Native check, strict Clippy and full `make verify` pass, including both new
+regressions (2335 app, 114 extension and 852 Rust tests). Evidence:
+`out/studio-exit-durability-20261015/{result.json,summary.md}`.
+
+Native active-worker app-exit/restart acceptance remains pending: exit while a
+worker is active, relaunch with the same data and inspect its saved cancelled
+record and working state through ordinary Studio. Automatic continuation and
+crash recovery are unqualified. The original review-quality failure, full
+262144-token capacity, Hermes and Windows remain open; OI-068 remains PARTIAL.
+
 ## Worker review guidance — October 15
 
 The retained default-worker review used `qwen3.8-27b/nvfp4-dflash2-nvfp4`,
