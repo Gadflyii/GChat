@@ -9,6 +9,24 @@ closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has a separate Linux
 live-worker checkpoint-continuity pass below; restart recovery and a successful
 multi-file task after compaction remain unqualified.
 
+## Worker file-read ranges — October 15
+
+`GCHAT-WORKER-FILE-READ-STRING-RANGE`: `os.fs.read` now accepts unsigned JSON
+numbers and decimal strings for byte offset and limit. Missing, invalid or zero
+limits retain the existing default; the 16000-byte cap remains. Other tools'
+numeric argument handling is unchanged. The real filesystem-tool regression
+reproduces the old fallback and checks the requested nonzero chunk, numeric
+arguments, defaults and the cap.
+
+This worktree's Yarn state and core archive are rebuilt, the extension lockfile
+matches that archive, and the ReasoningToggle test supplies the browser observer
+required by its real tooltip. [Fresh-worktree setup](../../CONTRIBUTING.md#testing)
+records the preparation. Verification:
+`/ai/gchat/out/worker-read-range-20261015/{result.json,summary.md}`.
+The composed `make verify` gate, `cargo check` and strict Clippy pass.
+The failed eight-file review remains separate work
+under `GCHAT-WORKER-UNSUPPORTED-REPLY-MARKUP`.
+
 ## OI-068 live-worker checkpoint continuity — October 15
 
 The retained Linux developer DEB (desktop/CLI/Host `7e33222e8`, Engine
