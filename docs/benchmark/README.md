@@ -59,7 +59,9 @@ Persisted/user v1 runs retain historical rendering and their external v1 submiss
 contract. Native v2 cannot be converted or submitted to the public v1 board. The next
 unresolved product decision is the public site's report/scoring contract for v2, including
 its metric meanings; this task does not select a conversion, change the site or publish.
-The site's MTP whitelist remains a separate row. Publishing remains disabled.
+The separate MTP whitelist/upload blocker is closed: the site now admits `mtp`,
+and Bubbs confirmed Ron uploaded the correction on October 15. This does not
+qualify a live submission. Publishing remains disabled.
 
 The native-v2 implementation is merged in GChat main `ca4346ba2`. Its accepted
 focused gate passed eight owning Rust cases, strict library Clippy, 34 affected
@@ -101,7 +103,16 @@ submission changed. Evidence: `/ai/gchat/out/gbench-native-v2-saved-20261014/res
 Next action: reviewed merge; retire the candidate after merge. Retained data is
 the 54 KB real report fixture and concise verification evidence.
 
-## Previous Max Perf gate evidence
+## Accepted Max Perf policy and session guard
+
+`GCHAT-GBENCH-MAX-PERF-PROFILE` is closed for the versioned launch policy and
+Standard session/configuration guard. Tested product `b5cf154b3` and final
+acceptance record `d1b7325f1` are ancestors of reviewed main `1825d964e`.
+The retained focused gates below qualify that implementation; no fresh physical
+benchmark or performance result is claimed. The later saved native-v2 C4 report
+gate also verifies rejection of its Vision-off configuration against the
+Vision-on Max Perf policy. Public native-v2 schema/scoring remains a separate
+site-owner decision.
 
 On October 11 the focused CPU gate passed eight Rust cases and twenty frontend
 cases: four-class selection, launch argv/restart/persistence, stale-session and
@@ -121,8 +132,11 @@ passing results name actual execution. Evidence and limitations are in
 CPU booking 511 ended early at the gate's actual completion; owned containers
 are absent and the canonical build guard was reacquired and released. The shared
 cache remains; no model, Engine, user profile or public-board state was touched.
-That Max Perf candidate remains prior evidence. Current native v2 support is described
-above; site MTP acceptance and release qualification remain separate open rows.
+Current native-v2 reader integration and the closed site MTP whitelist/upload
+blocker are described above. Physical GPU/model qualification, a successful
+Standard C1/C4/C8 run and release/publication acceptance are separate from these
+policy, refusal and report-consumption checks. Passing evidence is reused;
+no model, benchmark or signing/network action was repeated for this closure.
 
 Exact settings authority:
 `/ai/coordination/flash-next/gbench-standard-settings.md`.
