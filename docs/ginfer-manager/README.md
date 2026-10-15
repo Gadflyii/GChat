@@ -418,6 +418,16 @@ groups; Resume continues them. Reader rejection is matched to the launched
 group's actual profile path. Profiling status is separate from model-capacity
 qualification.
 
+The October 15 [fresh Linux acceptance](../agent-runtime/remaining-acceptance.md)
+uses the retained DEB's native first launch with empty managed data. Automatic
+runtime installation hands off to a live Host and returns `idle` until an exact
+GPU group is selected, consistent with this contract. The booked local 5090 was
+then selected through the packaged native preparation command. Its first
+Host-owned job completed and published schema v2 in 725.317 seconds, with no
+error or pending/stale groups. The private fixture and booking were retired.
+This qualifies the native payload handoff and CLI selection path; desktop
+GPU-picker interaction and system package-manager installation remain separate.
+
 Focused frontend checks pass: five hardware-profile UI cases, one picker guard,
 six typed IPC cases, four Manager cases and one Linux installer fixture. A
 Manager expression syntax error and a Vitest hook returning its IPC mock were
