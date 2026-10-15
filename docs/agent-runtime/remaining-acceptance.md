@@ -12,6 +12,28 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## OI-068 Linux Hermes home override — October 15
+
+The shared Hermes resolver ignored a nonempty `HERMES_HOME` on Linux even though
+the child inherited it. Configuration, reset, readiness, skin installation and
+update paths could therefore disagree with the actual Hermes home. The fix
+honors the process override before the Linux default `~/.hermes`, preserving
+the absent/empty fallback and existing Windows registry precedence.
+
+The existing Rust suite adds a child-process regression for an override path
+containing spaces, an absent override and an empty override. It configures and
+clears the selected home, checks the local provider contract and retained settings,
+and requires the other home's configuration and environment files to remain
+untouched. The fixture changes only its child environment. Native `cargo check`,
+strict Clippy and `make verify` pass: 2,335 app tests, 114 extension tests and
+853 Rust tests, with 6 app tests skipped and 25 Rust tests ignored. The shared
+resolver establishes the readiness and skin path change; live Hermes acceptance
+remains deferred.
+
+Actual Hermes reply, tool use and continuation remain deferred pending the
+installed runtime prerequisite. No Hermes provisioning or inference gate is
+claimed, and OI-068 remains PARTIAL.
+
 ## OI-068 Studio worker exit persistence — October 15
 
 Direct Studio turns were absent from the Chat delegation and Code task shutdown
@@ -623,7 +645,7 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. | Active-worker app-exit/restart recovery; full 262144-token capacity; Windows/Hermes at release. The original harder review's factual accuracy remains open separately. Read-range defect tracked separately. Do not replay passing gates. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. | Automatic continuation and crash recovery; full 262144-token capacity; Windows/Hermes at release. The original harder review's factual accuracy remains open separately. Read-range defect tracked separately. Do not replay passing gates. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
 | GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |

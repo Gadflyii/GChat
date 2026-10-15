@@ -11,6 +11,21 @@ normal app exit/restart. Active-worker cancellation, durable state and ordinary
 Studio reopening also pass after normal exit; broader restart recovery remains
 unqualified.
 
+## Linux Hermes home override — October 15
+
+GChat previously ignored a nonempty `HERMES_HOME` on Linux while the Hermes
+child inherited it. Setup, reset, readiness, skins and updates could therefore
+use `~/.hermes` while Hermes used the selected home. The shared resolver now
+honors that override; absent or empty overrides retain the existing default,
+and Windows registry precedence is unchanged.
+
+The regression checks configure and clear against the selected home, preserving
+the other home's files, with child-only environment settings. Native checking,
+strict Clippy and `make verify` pass, including that regression. Actual Hermes
+inference, tools and continuation remain deferred;
+this change does not provision Hermes or qualify its installed walkthrough.
+[Scope and remaining acceptance](remaining-acceptance.md#oi-068-linux-hermes-home-override--october-15).
+
 ## Studio worker exit persistence — October 15
 
 Normal app exit now tracks direct Studio turns alongside Chat and Code workers,
