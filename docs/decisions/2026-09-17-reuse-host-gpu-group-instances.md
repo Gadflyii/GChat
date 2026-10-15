@@ -5,6 +5,8 @@ title: "Reuse server instances across launches"
 
 # 2026-09-17 — Reuse server instances across launches
 
+Superseded by [Place independent instances on shared GPUs](2026-10-15-place-independent-instances-on-shared-gpus.md).
+
 - **Context:** Unspecified instance IDs created a persistent record for every desktop
   model load. The host screen exposed this launch history as configured servers,
   confusing reusable hardware/model profiles with actual server instances.
