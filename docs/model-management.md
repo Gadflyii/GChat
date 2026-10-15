@@ -377,12 +377,15 @@ The GInfer CLI opens the host menu when invoked with no arguments. The installed
 `ginfer-host --menu --data-dir /absolute/host/state --host-url https://127.0.0.1:7443`.
 The menu rejects redirected stdin rather than hanging unattended commands.
 
-Desktop CLI installation adds `desktop: { provider, engine }` to that
+Explicit **Settings → General → GChat CLI → Install** adds `desktop: { provider, engine }` to that
 configuration, using absolute paths. The menu reconnects or starts the provider's
 independent local host before displaying hardware and profiles, even if the engine
 has not been installed yet. It does not start inference automatically. Omitting
 `desktop` selects an already installed service; the menu does not replace service
 management. Explicit `--data-dir` menu commands likewise connect without bootstrap.
+Starting or upgrading the desktop app leaves shared CLI files and launcher
+configuration untouched. To replace a desktop CLI installation, choose
+**Uninstall**, then **Install** in Settings.
 Windows desktop CLI files live in `%LOCALAPPDATA%\GChat\bin`, independently of
 the desktop installation directory, so launcher configuration does not require
 administrator access. This directory is added to the user's PATH. Updating an

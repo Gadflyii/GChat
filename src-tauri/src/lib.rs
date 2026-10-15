@@ -626,8 +626,6 @@ pub fn run() {
             }
 
             setup_mcp(app);
-            #[cfg(desktop)]
-            setup::setup_jan_cli(app.handle().clone(), stored_version != app_version);
             setup::setup_theme_listener(app)?;
 
             // Keep the Windows window hidden until synchronous setup is
