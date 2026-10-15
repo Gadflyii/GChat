@@ -76,7 +76,8 @@ interface Track {
   stats: AudioTrackStats;
 }
 
-const WORKLET_URL = new URL("./audioWorklet.js", import.meta.url);
+// Native CSP permits packaged scripts; Vite must not inline this as a data URL.
+const WORKLET_URL = new URL("./audioWorklet.js?no-inline", import.meta.url);
 
 export class AudioPlayer {
   private context: AudioContext | null = null;
