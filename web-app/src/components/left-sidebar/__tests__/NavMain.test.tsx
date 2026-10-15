@@ -5,6 +5,7 @@ import { NavMain } from '../NavMain'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useAgentRun } from '@/hooks/useAgentRun'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
+import { useGbotCompanion } from '@/stores/gbot-companion-store'
 
 const codeState = vi.hoisted(() => ({ enabled: true }))
 const hermesState = vi.hoisted(() => ({ enabled: true }))
@@ -91,6 +92,7 @@ describe('NavMain', () => {
     codeState.enabled = true
     hermesState.enabled = true
     generalState.gbotEnabled = false
+    useGbotCompanion.getState().reset()
     useConversationPolicy.getState().clearAll()
     useAgentRun.getState().clearAll()
     actions.navigate.mockReset()
@@ -143,6 +145,21 @@ describe('NavMain', () => {
     vi.mocked(useLocation).mockReturnValue({ pathname: '/code/' } as never)
     render(<NavMain />)
     expect(screen.getByText('common:code').closest('[data-active]')).toHaveAttribute('data-active', 'true')
+  })
+
+  it('opens the avatar above Work without navigating away from Code and retains the Gbot settings link', () => {
+    generalState.gbotEnabled = true
+    useGbotCompanion.setState({ available: true, snapshot: {
+      workspaces: [{ id: 'atlas', name: 'Atlas' }], live_sessions: [], controls: [], assignments: [],
+    } })
+    vi.mocked(useLocation).mockReturnValue({ pathname: '/code/' } as never)
+    render(<NavMain />)
+    const avatar = screen.getByRole('button', { name: 'Open Atlas · Resting' })
+    expect(avatar.compareDocumentPosition(screen.getByText('Work')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(avatar)
+    expect(useGbotCompanion.getState()).toMatchObject({ mode: 'compact', selected: 'atlas' })
+    expect(actions.navigate).not.toHaveBeenCalled()
+    expect(screen.getByText('Gbot').closest('a')).toHaveAttribute('href', '/gbot/')
   })
 
   it('shows Agent Studio directly after Code', () => {

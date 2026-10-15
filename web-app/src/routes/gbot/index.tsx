@@ -4,6 +4,8 @@ import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
+import HumanHelp from '@/components/GbotHumanHelp'
+import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import GbotConnectors from '@/components/GbotConnectors'
 import GbotSchedules from '@/components/GbotSchedules'
 import GbotSetup, {
@@ -20,6 +22,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   gbot,
+  gbotControlOwner,
   messageText,
   quitGbotService,
   startGbotService,
@@ -31,7 +34,6 @@ import {
   emptyPairedConnection,
   validBrainConnection,
   type BotState,
-  type HelpRequest,
   type Identity,
   type KvmSetupRecord,
   type CloudReview,
@@ -41,76 +43,12 @@ import {
 
 export const Route = createFileRoute('/gbot/')({ component: GbotPage })
 
-function HumanHelp({
-  request,
-  busy,
-  reply,
-}: {
-  request: HelpRequest
-  busy: boolean
-  reply: (response: string | null) => void
-}) {
-  const [answer, setAnswer] = useState('')
-  return (
-    <div className="space-y-2 rounded-md border bg-muted/30 p-3">
-      <p className="text-sm font-medium">Asking you for help</p>
-      <p className="whitespace-pre-wrap text-sm">{request.question}</p>
-      {request.status === 'pending' ? (
-        <form
-          className="space-y-2"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (answer.trim()) reply(answer)
-          }}
-        >
-          <textarea
-            aria-label="Your reply"
-            className="min-h-20 w-full rounded-md border bg-background p-2 text-sm"
-            value={answer}
-            disabled={busy}
-            onChange={(event) => setAnswer(event.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            Your reply continues this task. Other actions still need their own
-            approval.
-          </p>
-          <div className="flex gap-2">
-            <Button disabled={busy || !answer.trim()}>Send reply</Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => reply(null)}
-            >
-              Decline
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-          {request.status === 'completed'
-            ? `Your reply: ${request.response}`
-            : request.status === 'declined'
-              ? 'Request declined'
-              : 'Request cancelled'}
-        </p>
-      )}
-    </div>
-  )
-}
-
 function GbotPage() {
   const [state, setState] = useState<BotState>()
   const [tasks, setTasks] = useState<Task[]>([])
   const [approvals, setApprovals] = useState<Approval[]>([])
   const [selected, setSelected] = useState('')
-  const [owner] = useState(() => {
-    const saved = sessionStorage.getItem('gbot-control-owner')
-    if (saved) return saved
-    const id = crypto.randomUUID()
-    sessionStorage.setItem('gbot-control-owner', id)
-    return id
-  })
+  const [owner] = useState(gbotControlOwner)
   const desktop = useRef<DesktopViewHandle>(null)
   const [busy, setBusy] = useState(false)
   const [serviceStopped, setServiceStopped] = useState(false)
@@ -215,6 +153,9 @@ function GbotPage() {
     } catch (cause) {
       if (stopped.current || version !== refreshVersion.current) return
       setError(String(cause))
+    } finally {
+      if (!stopped.current && version === refreshVersion.current)
+        void useGbotCompanion.getState().refresh()
     }
   }, [])
   useEffect(() => {
@@ -249,6 +190,7 @@ function GbotPage() {
       toast.error(String(cause))
     } finally {
       setBusy(false)
+      void useGbotCompanion.getState().refresh()
     }
   }
   const chooseService = async () => {
