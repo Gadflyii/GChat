@@ -756,16 +756,24 @@ it('closes a desktop ticket arriving after failed hand back and waits for manual
   expect(mocks.call).not.toHaveBeenCalledWith('tasks/resume', expect.anything())
 })
 
-it('makes no service calls when disabled and removes subscriptions when disabled later', async () => {
+it('makes no service calls when disabled, including queued events after cleanup', async () => {
   useGeneralSetting.setState({ gbotEnabled: false })
   const view = render(<GbotCompanion />)
   expect(mocks.call).not.toHaveBeenCalled()
   expect(mocks.listen).not.toHaveBeenCalled()
   act(() => useGeneralSetting.setState({ gbotEnabled: true }))
   await waitFor(() => expect(events.size).toBe(2))
+  await waitFor(() => expect(useGbotCompanion.getState().available).toBe(true))
+  const queued = [...events.values()]
   act(() => useGeneralSetting.setState({ gbotEnabled: false }))
   await waitFor(() => expect(events.size).toBe(0))
+  mocks.call.mockClear()
+  await act(async () => queued.forEach((refresh) => refresh()))
+  expect(mocks.call).not.toHaveBeenCalled()
   expect(useGbotCompanion.getState().mode).toBe('hidden')
+  expect(useGbotCompanion.getState().snapshot.workspaces).toEqual([])
+  expect(useGbotCompanion.getState().available).toBe(false)
+  expect(useGbotCompanion.getState().loading).toBe(false)
   view.unmount()
 })
 

@@ -31,6 +31,7 @@ const GINFER_RUNTIME_MANIFEST: &str = "runtime-manifest.json";
 mod gbot_assets;
 
 const BUNDLED_EXTENSIONS_FINGERPRINT: &str = ".bundled-extensions.sha256";
+#[cfg(not(feature = "cli"))]
 pub(crate) const BUNDLED_RESOURCES_UPDATE: &str = "bundled-resources-update";
 type InstallationResult = Option<Result<(), String>>;
 

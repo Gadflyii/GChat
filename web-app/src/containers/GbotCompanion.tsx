@@ -130,9 +130,11 @@ export default function GbotCompanion() {
       useGbotCompanion.getState().reset()
       return
     }
-    const refresh = () => void useGbotCompanion.getState().refresh()
-    // Subscribe before the first snapshot so an update cannot be lost during startup.
     let cancelled = false
+    const refresh = () => {
+      if (!cancelled) void useGbotCompanion.getState().refresh()
+    }
+    // Subscribe before the first snapshot so an update cannot be lost during startup.
     const subscriptions = ['gbot-task-update', 'gbot-setup-update'].map(
       (event) => listen(event, refresh)
     )
