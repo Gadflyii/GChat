@@ -185,6 +185,20 @@ make dev
 
 ## Testing
 
+Prepare each fresh checkout or worktree before verification. Yarn's install
+state and the core archive are local build outputs and are not shared between
+worktrees:
+
+```bash
+yarn install --immutable
+yarn build:core
+yarn --cwd extensions install --immutable
+```
+
+The extension lockfile must match the archive produced by the current core
+sources. If core changes, refresh that lockfile with the normal extension
+install and review its local archive entries before committing.
+
 ```bash
 make test-all   # Exhaustive: artefacts, verify, live registries/sidecars/cloud
 make verify     # Required local gate: lint, guards, coverage floors, all Rust tests

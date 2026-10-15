@@ -706,6 +706,38 @@ async fn destructive_filesystem_calls_reject_invalid_args_before_approval() {
 }
 
 #[tokio::test]
+async fn filesystem_read_honors_numeric_and_string_byte_ranges() {
+    let fixture = ToolFixture::allowed();
+    let content = format!(
+        "{}{}{}",
+        "a".repeat(2400),
+        "b".repeat(2400),
+        "c".repeat(16000)
+    );
+    fixture.workspace.write("chunks.txt", &content);
+
+    for args in [
+        serde_json::json!({"path":"chunks.txt", "offset":2400, "limit":2400}),
+        serde_json::json!({"path":"chunks.txt", "offset":"2400", "limit":"2400"}),
+    ] {
+        let outcome = fixture.call("os.fs.read", args).await;
+        assert_eq!(outcome.status, ToolStatus::Ok);
+        assert_eq!(outcome.summary.len(), 2400);
+        assert_eq!(outcome.summary, "b".repeat(2400));
+    }
+
+    for args in [
+        serde_json::json!({"path":"chunks.txt"}),
+        serde_json::json!({"path":"chunks.txt", "offset":"0", "limit":"0"}),
+        serde_json::json!({"path":"chunks.txt", "offset":"0", "limit":"50000"}),
+    ] {
+        let outcome = fixture.call("os.fs.read", args).await;
+        assert_eq!(outcome.status, ToolStatus::Ok);
+        assert_eq!(outcome.summary, &content[..MAX_TOOL_OUTPUT_CHARS]);
+    }
+}
+
+#[tokio::test]
 async fn filesystem_read_document_extracts_docx_and_honors_character_cap() {
     let fixture = ToolFixture::allowed();
     let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));

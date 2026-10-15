@@ -1,9 +1,17 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, expect, it, vi } from 'vitest'
 import ReasoningToggle from '../ReasoningToggle'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 
+beforeAll(() => {
+  vi.stubGlobal('ResizeObserver', class {
+    observe = vi.fn()
+    unobserve = vi.fn()
+    disconnect = vi.fn()
+  })
+})
+afterAll(() => vi.unstubAllGlobals())
 afterEach(cleanup)
 
 it('selects effort and restores high when reasoning is re-enabled after Off', async () => {

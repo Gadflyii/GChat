@@ -46,8 +46,12 @@ async fn read(args: &Value, context: &ToolContext<'_>) -> Result<ToolOutcome, To
         context.working_dir,
         &required_string(args, "path").map_err(ToolOutcome::error)?,
     );
-    let offset = args.get("offset").and_then(Value::as_u64).unwrap_or(0);
-    let limit = optional_usize(args, "limit", MAX_TOOL_OUTPUT_CHARS, MAX_TOOL_OUTPUT_CHARS);
+    let offset = read_range_arg(args, "offset").unwrap_or(0);
+    let limit = read_range_arg(args, "limit")
+        .and_then(|value| usize::try_from(value).ok())
+        .filter(|value| *value > 0)
+        .unwrap_or(MAX_TOOL_OUTPUT_CHARS)
+        .min(MAX_TOOL_OUTPUT_CHARS);
     let mut file = tokio::fs::File::open(&path)
         .await
         .map_err(|error| ToolOutcome::error(format!("{}: {error}", path.display())))?;
@@ -63,6 +67,13 @@ async fn read(args: &Value, context: &ToolContext<'_>) -> Result<ToolOutcome, To
     let text = String::from_utf8(buffer)
         .map_err(|_| ToolOutcome::error("File is not valid UTF-8 text"))?;
     Ok(ToolOutcome::ok(text))
+}
+
+fn read_range_arg(args: &Value, key: &str) -> Option<u64> {
+    let value = args.get(key)?;
+    value
+        .as_u64()
+        .or_else(|| value.as_str()?.parse::<u64>().ok())
 }
 
 async fn read_document(
