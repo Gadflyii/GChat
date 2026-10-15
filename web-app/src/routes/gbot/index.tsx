@@ -331,34 +331,38 @@ function GbotPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <HeaderPage>
-        <span>Gbot</span>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => {
-            setServiceDraft(serviceTarget)
-            setServiceReady(serviceTarget.kind === 'local')
-            setServiceError('')
-            setChoosingService(true)
-          }}
-        >
-          Service computer
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          onClick={() => void changeService(serviceStopped || Boolean(error))}
-        >
-          {serviceTarget.kind === 'paired_host'
-            ? serviceStopped || error
-              ? 'Connect Gbot service'
-              : 'Disconnect Gbot service'
-            : serviceStopped || error
-              ? 'Start Gbot service'
-              : 'Quit Gbot service'}
-        </Button>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 pr-4">
+          <span className="truncate">Gbot</span>
+          <div className="flex items-center justify-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                setServiceDraft(serviceTarget)
+                setServiceReady(serviceTarget.kind === 'local')
+                setServiceError('')
+                setChoosingService(true)
+              }}
+            >
+              Service computer
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => void changeService(serviceStopped || Boolean(error))}
+            >
+              {serviceTarget.kind === 'paired_host'
+                ? serviceStopped || error
+                  ? 'Connect Gbot service'
+                  : 'Disconnect Gbot service'
+                : serviceStopped || error
+                  ? 'Start Gbot service'
+                  : 'Quit Gbot service'}
+            </Button>
+          </div>
+        </div>
       </HeaderPage>
       {choosingService && (
         <section
