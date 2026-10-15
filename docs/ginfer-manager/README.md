@@ -78,26 +78,35 @@ Host workflow, storage and managed-move tests pass on S1, including move
 cancellation and inventory identity across restart. The existing CPU-only Engine
 `hardware_profile_reader` CTest passes from source `09aadd9c5`.
 
-Both opt-in Linux native tests pass against the same saved profile after one
-disk-only refresh from merged Engine `265514f0a`. Its two distinct live filesystems
-have genuine saved direct-I/O read rates: NVMe 7,257,700,420 bytes/second and RAID
-1,178,819,146 bytes/second. Live identity, free-space and write checks select the
+Both opt-in Linux native tests pass against the same saved profile after the
+authorized disk-only refresh from merged Engine `16e5aca45`, which contains the
+tested warning-preservation fix `38b8dce5d`. Its two distinct live filesystems have
+genuine saved direct-I/O read rates: NVMe 7,252,739,669 bytes/second and RAID
+1,178,470,152 bytes/second. Live identity, free-space and write checks select the
 eligible NVMe disk; the recommendation API retains exact override paths on both
 filesystems without creating directories. One actual Host storage override leaves
 the existing model untouched until an explicit move. The cross-filesystem move
 verifies a valid 4,096-byte package and retains its inventory UUID and saved stopped
 instance references across Host restart. These tests execute no model or GPU work;
-the rates are storage-policy inputs under recorded concurrency, not an inference
-performance comparison.
+the rates are storage-policy inputs under recorded background build and C1
+activity, with no isolated performance or inference speed comparison claimed.
 
-The original donor profile remains unchanged. CPU, GPU, NUMA, calibration and
-fingerprint fields are exact after refresh; disk timing metadata changes as
-expected. Full non-disk equality does not pass: the Engine also adds the diagnostic
-`CPU/NUMA traffic path unknown or different; dependent costs require live-path validation or explicit installation refresh`.
-Codex 5 owns this producer warning issue; no manual profile edit or second refresh
-was used. Evidence, including that preservation limitation, is retained under
-`/ai/gchat/out/first-run-wizard-20261015/`. Windows shares this implementation's
-source; no new Windows binary or runtime acceptance is claimed.
+The protected donor remains unchanged. Strict non-disk equality passes: only disk
+rows, the exact `disk_elapsed_seconds` and `disk_timestamp_utc` source stamps, and
+the exact obsolete `/mnt/ssd2` unmeasured-disk warning are excluded. Every other
+field and saved warning value, order and count remains exact, including CPU, GPU,
+NUMA, calibration and fingerprint data. The passive CPU/NUMA diagnostic remains
+visible in producer output without being added to saved warnings. Both Host tests
+leave the refreshed profile unchanged.
+
+The earlier Engine `265514f0a` capture remains historical: both functional tests
+passed, while strict warning preservation failed because an additional CPU/NUMA
+diagnostic was saved. That capture is retained unchanged beside the newly
+authorized corrected-source result; no profile was manually edited. New evidence
+uses `warning-fix-*` receipts under
+`/ai/gchat/out/first-run-wizard-20261015/`. Linux acceptance passes and the GChat
+candidate awaits merge. Windows shares this implementation's source; no new
+Windows binary or runtime acceptance is claimed.
 
 ## Multiple instances on one GPU — October 15
 
