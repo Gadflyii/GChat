@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -8,6 +9,14 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import GbotSetup from './index'
 import { gbot, getGbotServiceTarget, selectGbotService } from '@/services/gbot'
+
+const resources = vi.hoisted(() => ({
+  ready: true as boolean | null,
+  error: '',
+}))
+vi.mock('@/hooks/useBundledResources', () => ({
+  useBundledResources: () => resources,
+}))
 
 vi.mock('@/stores/engine-hosts-store', () => ({
   useEngineHosts: (select: (state: unknown) => unknown) =>
@@ -21,6 +30,8 @@ vi.mock('@/services/gbot', () => ({
   gbotControlGrant: vi.fn(),
 }))
 beforeEach(() => {
+  resources.ready = true
+  resources.error = ''
   vi.mocked(getGbotServiceTarget).mockResolvedValue({ kind: 'local' })
   vi.mocked(selectGbotService).mockResolvedValue(undefined)
 })
@@ -204,6 +215,86 @@ it('asks separately where the service runs and where the bot computer lives', as
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(cancel).toHaveBeenCalledOnce()
   expect(save).not.toHaveBeenCalled()
+})
+
+it.each([null, false])(
+  'explains resource preparation without advancing the pending service selection (%s)',
+  async (ready) => {
+    resources.ready = ready
+    let finish!: () => void
+    vi.mocked(selectGbotService).mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
+    const props = { save: vi.fn(), localReady: vi.fn(), cancel: vi.fn() }
+    const view = render(<GbotSetup {...props} />)
+    fireEvent.change(screen.getByLabelText('Bot name'), {
+      target: { value: 'Writer' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Preparing and validating bundled resources'
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('a few minutes')
+    expect(
+      screen.getByRole('button', { name: 'Preparing resources…' })
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Preparing resources…' }))
+    expect(selectGbotService).toHaveBeenCalledOnce()
+    expect(props.save).not.toHaveBeenCalled()
+
+    resources.ready = true
+    view.rerender(<GbotSetup {...props} />)
+    expect(screen.getByRole('status')).toHaveTextContent('Selecting Gbot service')
+    expect(
+      screen.getByRole('button', { name: 'Selecting service…' })
+    ).toBeDisabled()
+    expect(screen.getByText('Step 2 of 5 · Service')).toBeInTheDocument()
+    await act(async () => finish())
+    expect(screen.getByText('Step 3 of 5 · Computer')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByLabelText('Bot name')).toHaveValue('Writer')
+  }
+)
+
+it('retains the resource failure and directs restart without offering another selection', async () => {
+  resources.ready = false
+  let fail!: (error: string) => void
+  vi.mocked(selectGbotService).mockImplementationOnce(
+    () =>
+      new Promise<void>((_, reject) => {
+        fail = reject
+      })
+  )
+  const props = { save: vi.fn(), localReady: vi.fn(), cancel: vi.fn() }
+  const view = render(<GbotSetup {...props} />)
+  fireEvent.change(screen.getByLabelText('Bot name'), {
+    target: { value: 'Writer' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  resources.error = 'Bundled runtime digest mismatch'
+  view.rerender(<GbotSetup {...props} />)
+  await act(async () => fail(resources.error))
+  expect(screen.getByRole('alert')).toHaveTextContent(resources.error)
+  expect(screen.getByRole('alert')).toHaveTextContent('Restart GChat')
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  expect(selectGbotService).toHaveBeenCalledOnce()
+  expect(props.save).not.toHaveBeenCalled()
 })
 
 it('reviews a valid LAN connection without showing secrets and saves only on confirmation', async () => {

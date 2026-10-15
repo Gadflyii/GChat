@@ -22,6 +22,29 @@ instructions for those compositions. Worker/stage structure and other GChat
 pages remain follow-up. See the
 [draft-sharing decision](../decisions/2026-10-15-share-agent-studio-drafts-with-gbot.md).
 
+During setup or reopening, Gbot distinguishes **Preparing and validating bundled
+resources** from connecting to its service and loading saved bots. Validation also
+runs when installed files are current. Other parts of GChat remain usable while
+this work continues; hiding the companion does not cancel preparation. An unread
+bot list is a loading state, not evidence that setup or saved identity is missing.
+The companion preserves already loaded bot names during a refresh of the same
+service and offers setup guidance only after a successful empty response.
+
+The desktop command `bundled_resources_ready` reads the existing retained
+installation result without waiting: `false` means pending, `true` means the
+shared resource gate passed, and rejection carries its retained failure cause.
+Subscribe to `bundled-resources-update` before reading the snapshot so completion
+cannot be missed; its empty payload signals a fresh read. Resource readiness does
+not establish service connectivity, guest readiness or task readiness. A fatal
+resource error remains visible with **Restart GChat** guidance; reconnecting does
+not rerun the installer. Connection failures retain their separate retry action.
+There is no percentage, estimated completion time or installer retry control.
+The worker, validation and atomic publication, optional guest-asset preflight,
+and all existing waits before Host/model/Gbot startup remain unchanged. See the
+[readiness decision](../decisions/2026-10-15-expose-retained-bundled-resource-readiness.md).
+For `GBOT-FIRST-RUN-RESOURCE-FEEDBACK-20261015`, implementation is in progress;
+source checks and installed acceptance are pending.
+
 Gbot bootstrap now reports a child's exit status and log path promptly when no
 concurrent service owns the data folder. Concurrent-owner waiting remains intact.
 Two focused Host cases, compilation and strict all-target Clippy pass on

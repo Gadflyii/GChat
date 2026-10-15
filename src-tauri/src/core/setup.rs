@@ -31,6 +31,7 @@ const GINFER_RUNTIME_MANIFEST: &str = "runtime-manifest.json";
 mod gbot_assets;
 
 const BUNDLED_EXTENSIONS_FINGERPRINT: &str = ".bundled-extensions.sha256";
+pub(crate) const BUNDLED_RESOURCES_UPDATE: &str = "bundled-resources-update";
 type InstallationResult = Option<Result<(), String>>;
 
 #[derive(Clone)]
@@ -48,6 +49,25 @@ impl BundledResources {
         (Self { result }, completion)
     }
 
+    pub(crate) fn ready(&self) -> Result<bool, String> {
+        if let Some(completed) = self.result.borrow().clone() {
+            return completed.map(|()| true);
+        }
+        if self.result.has_changed().is_err() {
+            // Completion may have been published between the snapshot and the
+            // closed-channel check. Retain that result even after worker exit.
+            return self
+                .result
+                .borrow()
+                .clone()
+                .unwrap_or_else(|| {
+                    Err("Bundled resource installation ended without a result".to_string())
+                })
+                .map(|()| true);
+        }
+        Ok(false)
+    }
+
     pub(crate) async fn wait(&self) -> Result<(), String> {
         let mut result = self.result.clone();
         loop {
@@ -59,6 +79,14 @@ impl BundledResources {
             })?;
         }
     }
+}
+
+#[tauri::command]
+pub fn bundled_resources_ready<R: Runtime>(app: tauri::AppHandle<R>) -> Result<bool, String> {
+    app.try_state::<BundledResources>()
+        .ok_or("Bundled resource installation was not initialized")?
+        .inner()
+        .ready()
 }
 
 pub(crate) async fn wait_for_bundled_resources<R: Runtime>(
@@ -205,6 +233,7 @@ pub(crate) fn start_bundled_ginfer_linux<R: Runtime>(
             let data_folder = get_jan_data_folder_path(installer_app);
             install_linux_resources_from(&resource_directory, &data_folder).map_err(|e| e.to_string())
         }).await;
+        let _ = app.emit(BUNDLED_RESOURCES_UPDATE, ());
         match result {
             Ok(true) => {
                 log::info!("Installed the bundled GInfer Linux runtimes");
@@ -1152,6 +1181,7 @@ mod tests {
     #[tokio::test]
     async fn bundled_resources_wait_without_blocking_or_canceling_installation() {
         let (resources, completion) = BundledResources::pending();
+        assert_eq!(resources.ready(), Ok(false));
         let (started, started_rx) = tokio::sync::oneshot::channel();
         let (release, release_rx) = tokio::sync::oneshot::channel();
         let installer = tokio::spawn(install_bundled_resources(completion, move || {
@@ -1160,6 +1190,7 @@ mod tests {
             Ok(true)
         }));
         started_rx.await.unwrap();
+        assert_eq!(resources.ready(), Ok(false));
         let first = resources.clone();
         let mut waiter = tokio::spawn(async move { first.wait().await });
         tokio::select! {
@@ -1170,22 +1201,28 @@ mod tests {
         waiter.abort();
         assert!(waiter.await.unwrap_err().is_cancelled());
         assert!(!installer.is_finished());
+        assert_eq!(resources.ready(), Ok(false));
         release.send(()).unwrap();
         assert_eq!(resources.wait().await, Ok(()));
         assert_eq!(installer.await.unwrap(), Ok(true));
+        assert_eq!(resources.ready(), Ok(true));
         assert_eq!(resources.wait().await, Ok(()));
+        assert_eq!(resources.ready(), Ok(true));
     }
 
     #[tokio::test]
     async fn bundled_resources_retain_installation_failure_for_every_waiter() {
         let (resources, completion) = BundledResources::pending();
+        assert_eq!(resources.ready(), Ok(false));
         let installer = tokio::spawn(install_bundled_resources(completion, || {
             Err("runtime digest mismatch".into())
         }));
         let expected = "runtime digest mismatch";
         assert_eq!(resources.wait().await.unwrap_err(), expected);
         assert_eq!(installer.await.unwrap().unwrap_err(), expected);
+        assert_eq!(resources.ready().unwrap_err(), expected);
         assert_eq!(resources.wait().await.unwrap_err(), expected);
+        assert_eq!(resources.ready().unwrap_err(), expected);
     }
 
     #[tokio::test]
@@ -1193,10 +1230,15 @@ mod tests {
         let (resources, completion) = BundledResources::pending();
         let result = install_bundled_resources(completion, || panic!("installer panic")).await;
         assert!(result.unwrap_err().contains("installer panic"));
-        assert!(resources.wait().await.unwrap_err().contains("installer panic"));
+        let error = resources.wait().await.unwrap_err();
+        assert!(error.contains("installer panic"));
+        assert_eq!(resources.ready().unwrap_err(), error);
         let (resources, completion) = BundledResources::pending();
+        assert_eq!(resources.ready(), Ok(false));
         drop(completion);
-        assert!(resources.wait().await.unwrap_err().contains("without a result"));
+        let error = resources.wait().await.unwrap_err();
+        assert!(error.contains("without a result"));
+        assert_eq!(resources.ready().unwrap_err(), error);
     }
 
     fn write_runtime(root: &Path, manifest: &str, server: &str) {

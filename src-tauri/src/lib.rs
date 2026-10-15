@@ -88,6 +88,7 @@ pub fn run() {
     // Desktop: include updater commands
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let app_builder = app_builder.invoke_handler(tauri::generate_handler![
+        core::setup::bundled_resources_ready,
         core::gbot::gbot_command,
         core::gbot::gbot_service_quit,
         core::gbot::gbot_service_start,
@@ -516,6 +517,7 @@ pub fn run() {
                     log::info!("Bundled GInfer Windows runtime is already current");
                 }
                 resource_completion.send_replace(Some(Ok(())));
+                let _ = app.emit(setup::BUNDLED_RESOURCES_UPDATE, ());
             }
 
             #[cfg(target_os = "linux")]
@@ -524,7 +526,10 @@ pub fn run() {
             }
 
             #[cfg(not(any(target_os = "windows", target_os = "linux")))]
-            resource_completion.send_replace(Some(Ok(())));
+            {
+                resource_completion.send_replace(Some(Ok(())));
+                let _ = app.emit(setup::BUNDLED_RESOURCES_UPDATE, ());
+            }
 
             #[cfg(target_os = "windows")]
             {
