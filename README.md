@@ -210,6 +210,9 @@ OpenAI request and streaming behavior is treated as an external compatibility co
 ## Command-line client
 
 `gchat-cli` uses the same model directory and engine integration as the desktop application.
+Install it explicitly through **Settings → General → GChat CLI → Install**.
+To replace an installed desktop CLI, choose **Uninstall**, then **Install**.
+Starting or upgrading the desktop app does not rewrite shared CLI files or launcher configuration.
 
 ```bash
 # List installed chat packages.
