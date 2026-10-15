@@ -42,8 +42,16 @@ There is no percentage, estimated completion time or installer retry control.
 The worker, validation and atomic publication, optional guest-asset preflight,
 and all existing waits before Host/model/Gbot startup remain unchanged. See the
 [readiness decision](../decisions/2026-10-15-expose-retained-bundled-resource-readiness.md).
-For `GBOT-FIRST-RUN-RESOURCE-FEEDBACK-20261015`, implementation is in progress;
-source checks and installed acceptance are pending.
+For `GBOT-FIRST-RUN-RESOURCE-FEEDBACK-20261015`, full `make verify` passes on
+source `42db8f21c` (2,358 frontend and 869 Rust cases), as do supported desktop
+and CLI compilation and strict Clippy. A native Linux candidate using the
+verified installed Engine `5af502f1e` payload shows preparation in setup and
+the companion, then advances to computer setup after actual publication and
+local-service selection. A real SSH computer was saved through the normal UI;
+reopening its companion preserved the bot name and identity.
+Evidence: `/ai/gchat/out/gbot-first-run-resource-feedback-20261015/`.
+The retained `00068f2a8` DEB and AppImage do not include this change; this is
+candidate desktop acceptance, with no new package or Windows qualification.
 
 Gbot bootstrap now reports a child's exit status and log path promptly when no
 concurrent service owns the data folder. Concurrent-owner waiting remains intact.
