@@ -53,7 +53,7 @@ same data also preserved the exact terminal record; run history, working state
 and transcript hashes were unchanged.
 Normal Host Stop reached `stopped` with zero active requests. The native
 inventory no longer showed the private remote pairing; owned processes were
-retired and S1/local GPU bookings released.
+retired, and S1 GPU/CPU plus local CPU bookings were released.
 
 The original harder review's factual-accuracy row remains open. Active-worker
 app-exit/restart recovery, full 262144-token capacity, Hermes and Windows remain
