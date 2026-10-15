@@ -7,6 +7,35 @@ const document = createDocumentAttachment({ name: 'Budget.xlsx', path: '/Desktop
 const extractor = { name: 'os_fs_read_document', server: 'gchat-native' }
 
 describe('shared conversation document intake', () => {
+  it('keeps the exact local path in auto mode without parsing or indexing when native reading is enabled', async () => {
+    const attachment = createDocumentAttachment({
+      name: 'Quarterly budget Ω.xlsx',
+      path: '/Desktop/Quarterly budget Ω.xlsx',
+      fileType: 'xlsx',
+    })
+    const parseDocumentMock = vi.fn()
+    const ingestFileAttachment = vi.fn()
+    const serviceHub = seedServiceHub({
+      rag: { parseDocument: parseDocumentMock } as never,
+      uploads: { ingestFileAttachment } as never,
+    })
+
+    const result = await processAttachmentsForSend({
+      attachments: [attachment],
+      threadId: 'ordinary',
+      serviceHub,
+      parsePreference: 'auto',
+      documentAccess: conversationDocumentAccess(true, [extractor], []),
+    })
+
+    expect(result.processedAttachments).toEqual([
+      { ...attachment, processing: false, nativeDocumentReference: true },
+    ])
+    expect(result.hasEmbeddedDocuments).toBe(false)
+    expect(parseDocumentMock).not.toHaveBeenCalled()
+    expect(ingestFileAttachment).not.toHaveBeenCalled()
+  })
+
   it.each([
     { reason: 'disabled tool', modelSupportsTools: true, tools: [extractor], disabled: ['gchat-native::os_fs_read_document'] },
     { reason: 'unavailable tool', modelSupportsTools: true, tools: [{ ...extractor, available: false }], disabled: [] },

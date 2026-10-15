@@ -1,40 +1,49 @@
 ---
 title: File Upload
-description: Upload images and documents to chat with Jan
-keywords:
-  [
-    Jan,
-    file upload,
-    image upload,
-    PDF,
-    document,
-    vision,
-    local AI,
-  ]
+description: Attach local documents and use GChat's file reading and search tools
+keywords: [GChat, file upload, PDF, DOCX, spreadsheet, file search, local AI]
 ---
 
 # File Upload
 
-Jan lets you upload images and documents directly in the chat. Click the **+** button in the message input to add files.
+GChat can attach local documents to a conversation and read them with its native file tools. This is direct file access: attaching a document does not create a searchable vector index. Embedding-based RAG and project-document indexing are unavailable until GInfer provides embeddings.
 
-![File Upload](./_assets/file-upload.png)
+## Add documents
 
-## Supported File Types
+1. Select a model that supports tools.
+2. Click **+** in the chat input and choose **Add documents or files**, or drag files into the conversation.
+3. Select the documents and ask your question.
+4. In **Available Tools**, keep the native document reader enabled if you want the model to read files as needed.
 
-- **Images** — Share screenshots, photos, or diagrams for the model to analyze
-- **Documents & Files** — Upload PDFs or other files for the model to read and reason about
+With **Auto** document handling and native reading enabled, GChat keeps the file's local path as a reference. It does not parse or index the file before sending the message. The model can request its contents through `os_fs_read_document` in the `gchat-native` tool group. A saved reference still points to the original file, so moving or deleting that file can prevent a later read.
 
-## How to Upload
+If native reading is disabled, unavailable, or unsupported by the selected model, Auto can extract a selected attachment's text inline instead. Explicit inline handling also extracts the text before sending. **Disabling the native tool blocks its invocation; it does not block inline extraction of a file you select.** Explicit embedding-based handling does not fall back to native reading and is unavailable with the current GInfer backend.
 
-1. Click the **+** button at the bottom left of the chat input
-2. Choose **Add Images** or **Add documents or files**
-3. Select your file — it will be attached to your next message
-4. Type your question and send
+## Read and search local files
 
-### Vision Model Required for Images
+The native tools provide different ways to inspect documents:
 
-If your current model does not support vision, Jan will automatically prompt you to download **Jan V2 VL** — the recommended vision model (~5GB). Click **Download** to install it, then you'll be ready to chat with images.
+- `os_fs_read_document` extracts text from a document at a local path.
+- `os_fs_glob` finds paths by filename pattern within a directory.
+- `os_fs_grep` searches text files with a regular expression. It follows ignore rules, does not follow directory symlinks, and skips individual files that are unreadable, non-text, or larger than 1 MiB during recursive searches. Searching such a file directly returns an error. It does not search the extracted contents of PDFs, Word documents, or spreadsheets; read those documents first.
 
-![Vision Model Prompt](./_assets/file-upload-vision-prompt.png)
+These tools use the conversation or Agent workspace and its folder permissions. Attaching a file does not automatically grant access to its parent directory. A request outside the allowed folders can show a folder-access dialog: **Deny** rejects the request, while **Allow** adds the displayed folder with **CAN EDIT** access. Reads already permitted by the workspace policy do not necessarily show a separate approval dialog.
 
-All files are processed locally on your machine. When using a local model such as Jan's built-in models, your files never leave your device — inference happens entirely on your own hardware with full privacy. If you use a cloud model provider (e.g. OpenAI, Anthropic), files are sent to that provider's API as part of the request.
+**Available Tools** lets you disable individual tools. When an approval dialog is required, it shows the requested operation and arguments so you can approve or deny it. **Stop generation** can cancel a request waiting for permission. In-progress document parsing does not currently observe cancellation immediately.
+
+## Supported document formats
+
+The document parser supports:
+
+- Text-based **PDF**. Scanned or image-only PDFs with no extractable text require OCR, which is not supported.
+- **DOCX** Word documents and **PPTX** PowerPoint presentations.
+- **XLSX**, **XLS**, and **ODS** spreadsheets, with sheet names and cell values extracted as text, plus **CSV** files.
+- **HTML**, plain text, Markdown, and supported source-code or configuration files.
+
+Extraction returns plain text. Native document reads limit extracted text to 16,000 characters by default; a request can set `maxChars` up to 50,000. A shortened result includes a truncation marker. File searches also have bounded output, so refine the path or pattern when a result is truncated. A missing, unreadable, or unparseable file returns an error. These are output limits: the parser still reads the complete document before truncating its text.
+
+## Images and privacy
+
+Use **Add Images** with a model that supports vision for screenshots or pictures. Document text extraction does not perform image recognition or OCR.
+
+File parsing and native file searches run locally. Extracted text and tool results can become part of the conversation sent to the selected model provider. Check the selected provider before sharing sensitive documents.

@@ -464,6 +464,71 @@ async fn filesystem_grep_is_recursive_bounded_and_skips_non_text_files() {
     assert!(bounded.summary.chars().count() <= MAX_TOOL_OUTPUT_CHARS + 12);
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn filesystem_search_reports_unreadable_directory_instead_of_partial_results() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Root can traverse mode-000 directories; qualify this boundary as the normal Linux user.
+    let uid = Command::new("id")
+        .arg("-u")
+        .output()
+        .expect("read test uid");
+    assert!(uid.status.success(), "read test uid: {}", uid.status);
+    if uid.stdout == b"0\n" {
+        return;
+    }
+
+    struct RestorePermissions(std::path::PathBuf, std::fs::Permissions);
+    impl Drop for RestorePermissions {
+        fn drop(&mut self) {
+            std::fs::set_permissions(&self.0, self.1.clone())
+                .expect("restore restricted fixture permissions");
+        }
+    }
+
+    let fixture = ToolFixture::allowed();
+    fixture.workspace.write("visible.txt", "needle visible");
+    fixture
+        .workspace
+        .write("restricted/hidden.txt", "needle hidden");
+    let restricted = fixture.workspace.path().join("restricted");
+    let original = std::fs::metadata(&restricted).unwrap().permissions();
+    let restore = RestorePermissions(restricted.clone(), original);
+    std::fs::set_permissions(&restricted, std::fs::Permissions::from_mode(0)).unwrap();
+    assert_eq!(
+        std::fs::read_dir(&restricted).unwrap_err().kind(),
+        std::io::ErrorKind::PermissionDenied
+    );
+
+    let glob = fixture
+        .call("os.fs.glob", serde_json::json!({"pattern": "**/*.txt"}))
+        .await;
+    let grep = fixture
+        .call(
+            "os.fs.grep",
+            serde_json::json!({"pattern": "needle", "path": "."}),
+        )
+        .await;
+    drop(restore);
+
+    for (outcome, operation) in [(glob, "Glob"), (grep, "Grep")] {
+        assert_eq!(outcome.status, ToolStatus::Error, "{}", outcome.summary);
+        assert!(
+            outcome
+                .summary
+                .contains(&format!("{operation} traversal failed")),
+            "{}",
+            outcome.summary
+        );
+        assert!(
+            outcome.summary.contains("restricted"),
+            "{}",
+            outcome.summary
+        );
+    }
+}
+
 #[tokio::test]
 async fn filesystem_diff_is_unified_and_rejects_non_text_files() {
     let fixture = ToolFixture::allowed();
@@ -770,6 +835,150 @@ async fn filesystem_read_document_extracts_docx_and_honors_character_cap() {
             .and_then(serde_json::Value::as_bool),
         Some(true)
     );
+}
+
+#[tokio::test]
+async fn filesystem_read_document_accepts_short_pdf_and_reports_textless_pdf() {
+    let fixture = ToolFixture::allowed();
+    for (name, text) in [("short.pdf", "Harbor 7314"), ("textless.pdf", "")] {
+        let stream = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET\n");
+        let objects = [
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>".to_string(),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+        ];
+        let mut pdf = String::from("%PDF-1.4\n");
+        let mut offsets = Vec::new();
+        for (index, object) in objects.iter().enumerate() {
+            offsets.push(pdf.len());
+            pdf.push_str(&format!("{} 0 obj\n{object}\nendobj\n", index + 1));
+        }
+        let xref_offset = pdf.len();
+        pdf.push_str("xref\n0 6\n0000000000 65535 f \n");
+        for offset in offsets {
+            pdf.push_str(&format!("{offset:010} 00000 n \n"));
+        }
+        pdf.push_str(&format!(
+            "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n"
+        ));
+        fixture.workspace.write(name, pdf);
+    }
+
+    let short = fixture
+        .call(
+            "os.fs.read_document",
+            serde_json::json!({"path": "short.pdf"}),
+        )
+        .await;
+    assert_eq!(short.status, ToolStatus::Ok, "{}", short.summary);
+    assert!(short.summary.contains("Harbor 7314"), "{}", short.summary);
+
+    let textless = fixture
+        .call(
+            "os.fs.read_document",
+            serde_json::json!({"path": "textless.pdf"}),
+        )
+        .await;
+    assert_eq!(textless.status, ToolStatus::Error);
+    assert!(textless.summary.contains("no extractable text"));
+    assert!(textless.summary.contains("OCR"));
+}
+
+#[tokio::test]
+async fn filesystem_read_document_rejects_malformed_docx_instead_of_partial_text() {
+    let fixture = ToolFixture::allowed();
+    for (name, xml) in [
+        (
+            "invalid-entity.docx",
+            r#"<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Visible</w:t><w:t>&missing;</w:t></w:r></w:p></w:body></w:document>"#,
+        ),
+        (
+            "truncated.docx",
+            r#"<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Visible</w:t>"#,
+        ),
+        (
+            "mismatched.docx",
+            r#"<w:document xmlns:w="w"><w:body><w:p><w:r><w:t>Visible</w:r></w:p></w:body></w:document>"#,
+        ),
+    ] {
+        create_zip(&fixture.workspace, name, &[("word/document.xml", xml)]);
+        let outcome = fixture
+            .call("os.fs.read_document", serde_json::json!({"path": name}))
+            .await;
+        assert_eq!(
+            outcome.status,
+            ToolStatus::Error,
+            "{name}: {}",
+            outcome.summary
+        );
+        assert!(outcome.summary.contains("DOCX XML"), "{}", outcome.summary);
+    }
+}
+
+#[tokio::test]
+async fn filesystem_read_document_reports_failed_sheet_instead_of_partial_workbook() {
+    let fixture = ToolFixture::allowed();
+    let content_types = r#"<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>"#;
+    let worksheet = r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:B1"/><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Revenue</t></is></c><c r="B1"><v>42000</v></c></row></sheetData></worksheet>"#;
+    for (name, broken_sheet) in [("budget.xlsx", false), ("partial.xlsx", true)] {
+        let workbook = format!(
+            r#"<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Budget" sheetId="1" r:id="rId1"/>{}</sheets></workbook>"#,
+            if broken_sheet {
+                r#"<sheet name="Unreadable" sheetId="2" r:id="rId2"/>"#
+            } else {
+                ""
+            }
+        );
+        let relationships = format!(
+            r#"<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>{}</Relationships>"#,
+            if broken_sheet {
+                r#"<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/missing.xml"/>"#
+            } else {
+                ""
+            }
+        );
+        create_zip(
+            &fixture.workspace,
+            name,
+            &[
+                ("[Content_Types].xml", content_types),
+                ("xl/workbook.xml", &workbook),
+                ("xl/_rels/workbook.xml.rels", &relationships),
+                ("xl/worksheets/sheet1.xml", worksheet),
+            ],
+        );
+    }
+
+    let valid = fixture
+        .call(
+            "os.fs.read_document",
+            serde_json::json!({"path": "budget.xlsx"}),
+        )
+        .await;
+    assert_eq!(valid.status, ToolStatus::Ok, "{}", valid.summary);
+    assert!(
+        valid.summary.contains("Revenue\t42000"),
+        "{}",
+        valid.summary
+    );
+
+    let partial = fixture
+        .call(
+            "os.fs.read_document",
+            serde_json::json!({"path": "partial.xlsx"}),
+        )
+        .await;
+    assert_eq!(partial.status, ToolStatus::Error);
+    assert!(
+        partial
+            .summary
+            .contains("Could not read worksheet 'Unreadable'"),
+        "{}",
+        partial.summary
+    );
+    assert!(!partial.summary.contains("Revenue\t42000"));
 }
 
 #[tokio::test]
