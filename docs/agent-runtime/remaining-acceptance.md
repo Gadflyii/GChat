@@ -44,8 +44,12 @@ passed with zero requests. Private pairing credential removal passed; exact owne
 processes, private keyring/state and 7467851941 bytes of disposable copies are
 retired, and local booking 715 is returned. The physical desktop keyring was not
 used. Evidence: `/ai/gchat/out/worker-compaction-20261015/{result.json,summary.md}`.
-The unchanged CLI hash is retained there. `make verify` remains blocked before
-checks by the previously recorded missing Yarn dependency state. No Windows,
+The unchanged CLI hash is retained there. This replay's `make verify` was blocked
+before checks by missing Yarn dependency state. The follow-up source
+`2072528cf` documents fresh-worktree dependency/core/extension preparation and
+refreshes the local core archive lock references; the full corrected-worktree
+`make verify` now passes (2295 root, 114 extension and 846 Rust tests;
+25 Rust tests ignored). See [current preparation evidence](README.md#worker-file-read-ranges--october-15). No Windows,
 Hermes, app-exit/restart recovery, full 262144-token capacity, signing or publication
 acceptance is claimed. OI-068 stays PARTIAL.
 

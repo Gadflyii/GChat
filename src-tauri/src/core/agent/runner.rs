@@ -911,6 +911,7 @@ async fn repair_tool_calls(
 fn recover_plain_text_reply(content: &str) -> Option<ParsedToolCalls> {
     let text = content.trim();
     if text.is_empty()
+        || text.starts_with(['<', '`'])
         || text.contains('{')
         || text.contains('[')
         || looks_like_atem_tool_calls(text)

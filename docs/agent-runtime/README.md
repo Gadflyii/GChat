@@ -27,6 +27,36 @@ The composed `make verify` gate, `cargo check` and strict Clippy pass.
 The failed eight-file review remains separate work
 under `GCHAT-WORKER-UNSUPPORTED-REPLY-MARKUP`.
 
+## Worker repair markup — October 15
+
+`GCHAT-WORKER-UNSUPPORTED-REPLY-MARKUP`: the retained eight-file review's first
+invalid tool completion was followed by another unsupported XML tool call in
+repair. The ordinary-worker plain-text fallback accepted that markup as Reply,
+so the failed task was recorded as finished. The fallback now rejects text
+beginning with a markup tag or code fence, matching the existing authoring
+boundary; it does not execute unsupported XML calls.
+
+The regression uses the exact recorded repair and checks a failed tool-call
+status, no published answer and one repair request. It fails before the change
+and passes after it; genuine plain-text repair remains covered. Full
+`make verify` passes (2295 root and 114 extension tests; 846 Rust tests,
+25 ignored). Native desktop check, strict Clippy, production frontend and build
+also pass.
+
+One native default-worker eight-file review ended as `finished` / `reply` after
+16 decisions and survived ordinary Studio reopening. It did not emit repair
+markup, so the exact rejection is established by the regression. The review
+task still failed: it batched reads despite the one-call-per-decision instruction
+and incorrectly claimed a fixed 30000-token automatic-compaction threshold.
+Fresh reads and archive rereads reached the prompt as 400-character summaries;
+`GCHAT-WORKER-FRESH-READ-COMPRESSION` owns that separate observed defect. No
+successful multi-file task or new checkpoint acceptance is claimed.
+
+Evidence: `/ai/gchat/out/worker-reply-markup-20261015/{result.json,summary.md}`.
+Normal Host Stop passed with zero requests; private pairing and owned processes
+are retired, and booking 717 is returned. The earlier checkpoint-continuity
+pass remains accepted at its recorded scope.
+
 ## OI-068 live-worker checkpoint continuity — October 15
 
 The retained Linux developer DEB (desktop/CLI/Host `7e33222e8`, Engine
