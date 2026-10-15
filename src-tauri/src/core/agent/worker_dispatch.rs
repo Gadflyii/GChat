@@ -17,6 +17,7 @@ pub struct Dispatcher<R: Runtime> {
     aliases: std::collections::BTreeMap<String, String>,
     fleet_targets: Vec<String>,
     pub fleet_revision: Option<u64>,
+    coordinator: Option<uuid::Uuid>,
     current: String,
     images: bool,
     affinity: Mutex<HashMap<String, (String, String)>>,
@@ -307,12 +308,14 @@ mod tests {
         )
         .await
         .unwrap();
-        let selected = direct
+        // A known pooled instance also needs coordinator admission when chosen
+        // directly: going offline must not bypass the shared capacity ceiling.
+        let error = direct
             .select("agent", "scripted-test-model", &cancellation)
             .await
+            .err()
             .unwrap();
-        assert_eq!(selected.route.instance_id, canonical);
-        drop(selected);
+        assert!(error.contains(&fleet.origin));
         app.state::<GinferState>()
             .ginfer_process
             .lock()
@@ -378,6 +381,7 @@ impl<R: Runtime> Dispatcher<R> {
             aliases: catalog.aliases,
             fleet_targets: catalog.fleet_targets,
             fleet_revision: catalog.fleet.revision,
+            coordinator: catalog.fleet.authority_id,
             current,
             images,
             affinity: Mutex::new(HashMap::new()),
@@ -500,8 +504,8 @@ impl<R: Runtime> WorkerDispatcher for Dispatcher<R> {
                 {
                     return Err(format!("Worker `{role}` lost its assigned model session. The run will not silently move or replay its tools."));
                 }
-                // An instance's lowest configured pool limit is a process-wide
-                // ceiling, even when multiple pools reference it.
+                // Local usage respects the instance ceiling; the coordinator
+                // also admits it atomically across independent clients.
                 let worker_limit = self
                     .pools
                     .iter()
@@ -543,13 +547,32 @@ impl<R: Runtime> WorkerDispatcher for Dispatcher<R> {
                     }),
                 );
             }
-            if let Some(lease) = self.allocator.try_acquire(
+            while let Some(mut lease) = self.allocator.try_acquire(
                 &candidates,
                 &requirement,
                 affinity
                     .as_ref()
                     .map(|(id, session)| (id.as_str(), session.as_str())),
             ) {
+                if let Some(coordinator) = self.coordinator.filter(|_| {
+                    self.pools
+                        .iter()
+                        .flat_map(|pool| &pool.members)
+                        .any(|member| {
+                            self.aliases
+                                .get(&member.instance_id)
+                                .unwrap_or(&member.instance_id)
+                                == &lease.candidate.instance_id
+                        })
+                }) {
+                    let client = worker_pools::client_for(&self.app).await?;
+                    if !lease.admit(&client, coordinator, cancellation).await? {
+                        candidates.retain(|candidate| {
+                            candidate.instance_id != lease.candidate.instance_id
+                        });
+                        continue;
+                    }
+                }
                 let route = routes
                     .remove(&lease.candidate.instance_id)
                     .ok_or("Selected worker route missing")?;

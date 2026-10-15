@@ -1,4 +1,4 @@
-//! Agent worker placement and process-wide slot accounting.
+//! Agent worker placement, local usage, and coordinator slot admission.
 //! A pool never loads models and never owns a remote workspace.
 use ginfer_host::{
     fleet::{
@@ -652,7 +652,7 @@ pub async fn remove<R: Runtime>(
     Ok(())
 }
 
-async fn client_for<R: Runtime>(
+pub(super) async fn client_for<R: Runtime>(
     app: &AppHandle<R>,
 ) -> Result<Arc<ginfer_host::client::Client>, String> {
     #[cfg(test)]
@@ -682,10 +682,14 @@ pub struct Allocator {
 pub struct WorkerLease {
     allocator: Arc<Allocator>,
     pub candidate: Candidate,
+    coordinator: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl Drop for WorkerLease {
     fn drop(&mut self) {
+        if let Some(task) = self.coordinator.take() {
+            task.abort();
+        }
         if let Ok(mut active) = self.allocator.active.lock() {
             if let Some(count) = active.get_mut(&self.candidate.instance_id) {
                 *count = count.saturating_sub(1);
@@ -695,6 +699,55 @@ impl Drop for WorkerLease {
             }
         }
         self.allocator.changed.notify_waiters();
+    }
+}
+
+impl WorkerLease {
+    pub async fn admit(
+        &mut self,
+        client: &ginfer_host::client::Client,
+        coordinator: Uuid,
+        cancellation: &tokio_util::sync::CancellationToken,
+    ) -> Result<bool, String> {
+        let instance = crate::core::engine_hosts::parse_alias(&self.candidate.instance_id)?;
+        let body = serde_json::to_value(instance).map_err(|error| error.to_string())?;
+        let request = client.request(
+            coordinator,
+            reqwest::Method::POST,
+            "/host/v1/fleet/worker-slot",
+            Some(&body),
+        );
+        let response = tokio::select! {
+            _ = cancellation.cancelled() => return Err("Agent run was cancelled while waiting for worker capacity".into()),
+            response = tokio::time::timeout(std::time::Duration::from_secs(10), request) =>
+                response.map_err(|_| "Fleet worker admission timed out")?.map_err(|error| error.to_string())?,
+        };
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            return Ok(false);
+        }
+        let mut response = response
+            .error_for_status()
+            .map_err(|error| format!("Fleet worker admission failed: {error}"))?;
+        // Read the acknowledgement before allowing tools or model work.
+        match tokio::time::timeout(std::time::Duration::from_secs(5), response.chunk()).await {
+            Ok(Ok(Some(_))) => (),
+            _ => return Err("Fleet worker admission connection was lost".into()),
+        }
+        let cancellation = cancellation.clone();
+        self.coordinator = Some(tokio::spawn(async move {
+            loop {
+                match tokio::time::timeout(std::time::Duration::from_secs(5), response.chunk())
+                    .await
+                {
+                    Ok(Ok(Some(_))) => (),
+                    _ => {
+                        cancellation.cancel();
+                        break;
+                    }
+                }
+            }
+        }));
+        Ok(true)
     }
 }
 
@@ -739,6 +792,7 @@ impl Allocator {
         Some(WorkerLease {
             allocator: self.clone(),
             candidate,
+            coordinator: None,
         })
     }
 }

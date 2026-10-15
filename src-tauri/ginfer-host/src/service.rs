@@ -145,6 +145,7 @@ pub struct Host {
     lifecycle: Mutex<()>,
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
+    worker_slots: Arc<std::sync::Mutex<BTreeMap<crate::engine_registry::InstanceRef, u32>>>,
 }
 /// An authenticated HTTP caller, not a persistent desktop connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -171,6 +172,23 @@ struct RequestLease {
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     id: Uuid,
 }
+// A live coordinator response owns one slot, independently of client grants.
+struct WorkerSlot {
+    slots: Arc<std::sync::Mutex<BTreeMap<crate::engine_registry::InstanceRef, u32>>>,
+    instance: crate::engine_registry::InstanceRef,
+}
+impl Drop for WorkerSlot {
+    fn drop(&mut self) {
+        let mut slots = self.slots.lock().unwrap();
+        if let Some(used) = slots.get_mut(&self.instance) {
+            *used = used.saturating_sub(1);
+            if *used == 0 {
+                slots.remove(&self.instance);
+            }
+        }
+    }
+}
+
 struct DrainGuard {
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     id: Uuid,
@@ -410,6 +428,7 @@ impl Host {
             lifecycle: Mutex::new(()),
             traffic: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             activity: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
+            worker_slots: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
         });
         host.scan().await?;
         Ok(host)
@@ -1394,6 +1413,68 @@ impl Host {
                 StatusCode::OK,
                 serde_json::to_value(fleet).map_err(|error| error.to_string())?,
             ));
+        }
+        if path == "/host/v1/fleet/worker-slot" && req.method() == hyper::Method::POST {
+            let instance: crate::engine_registry::InstanceRef =
+                serde_json::from_value(body_json(req).await?).map_err(|error| error.to_string())?;
+            let data = self.data.lock().await;
+            let crate::fleet::FleetView::Coordinator { fleet } = &data.fleet else {
+                return Ok(json(
+                    StatusCode::CONFLICT,
+                    serde_json::json!({"error":"Worker admission requires the fleet coordinator"}),
+                ));
+            };
+            // The lowest configured limit belongs to the instance, across every
+            // pool and every caller. A client never supplies or multiplies it.
+            let limit = fleet
+                .pools
+                .iter()
+                .flat_map(|pool| &pool.members)
+                .filter(|member| member.instance == instance)
+                .map(|member| member.worker_limit)
+                .min()
+                .ok_or("Instance is not a configured fleet pool member")?;
+            let mut slots = self.worker_slots.lock().unwrap();
+            let used = slots.entry(instance.clone()).or_default();
+            if *used >= limit {
+                return Ok(json(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    serde_json::json!({"error":"Instance worker capacity is full"}),
+                ));
+            }
+            *used += 1;
+            let slot = WorkerSlot {
+                slots: self.worker_slots.clone(),
+                instance,
+            };
+            drop(slots);
+            drop(data);
+            let (mut sender, body) = Body::channel();
+            let host = self.clone();
+            tokio::spawn(async move {
+                let _slot = slot;
+                loop {
+                    // A revoked grant or changed authority ends the lease, and
+                    // its desktop cancels work when the stream ends.
+                    let data = host.data.lock().await;
+                    let valid = matches!(&data.fleet, crate::fleet::FleetView::Coordinator { .. })
+                        && match principal {
+                            Principal::LocalAdministrator => true,
+                            Principal::Client(id) => data.clients.contains_key(&id),
+                        };
+                    drop(data);
+                    if !valid || sender.send_data("slot\n".into()).await.is_err() {
+                        break;
+                    }
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                }
+            });
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "application/octet-stream")
+                .header("cache-control", "no-store")
+                .body(body)
+                .map_err(|error| error.to_string());
         }
         if path == "/host/v1/fleet/membership" && req.method() == hyper::Method::GET {
             let data = self.data.lock().await;

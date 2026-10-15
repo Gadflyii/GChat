@@ -13,6 +13,24 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Shared pool capacity
+
+A pool member's `worker_limit` caps the aggregate workers using that instance
+across all GChat clients. Issuing another client grant adds no capacity. When
+multiple pools reference an instance, its lowest configured limit applies.
+The coordinator admits each worker before tools or inference; a full instance
+queues the caller. Completion, cancellation or client disconnect releases the
+admission, and losing its live connection cancels the worker. See the
+[coordinator admission decision](../decisions/2026-10-15-admit-pool-workers-at-the-coordinator.md).
+
+The October 15 OI-069 native Linux gate passes on two independent workstations
+with distinct grants: one shared slot, cross-client queuing, queued cancellation,
+release and both final replies. The served instance retained concurrency 3;
+its pool worker limit was 1. The focused two-client TLS test, Rust check,
+strict Clippy and rebuilt desktop/Host also pass. See the
+[acceptance record](../agent-runtime/remaining-acceptance.md#accepted-oi-069-independent-workstation-capacity)
+for producer hashes, evidence and full-suite limitations.
+
 ## Idle draft-width calibration
 
 `GCHAT-DRAFT-WIDTH-SETUP`: Host queues native calibration for saved AUTO DFlash deployments after their exact GPU group has a complete hardware profile.
