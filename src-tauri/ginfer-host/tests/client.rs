@@ -431,7 +431,27 @@ async fn inference_usage_releases_on_completion_cancellation_and_rejection() {
     use std::os::unix::fs::PermissionsExt;
     let root = tempfile::tempdir().unwrap();
     let engine = root.path().join("ginfer-serve");
-    std::fs::write(&engine, "#!/bin/sh\nexec sleep 60\n").unwrap();
+    std::fs::write(
+        &engine,
+        r#"#!/usr/bin/env python3
+import json, sys, time
+args = sys.argv[1:]
+def arg(name):
+    return args[args.index(name) + 1]
+if '--quote-only' in args:
+    model, weights = arg('--model-id').split('/', 1)
+    print(json.dumps(dict(schema='ginfer-startup-quote-v1', model_id=model,
+        weights_id=weights, tensor_parallel_size=int(arg('--tp')), ranks=[dict(rank=0,
+        free_bytes=4294967296, weights_bytes=8192, state_bytes=2048,
+        graph_allowance_bytes=1024, graph_allowance_source='planner',
+        minimum_kv_arena_bytes=1024, kv_arena_alignment_bytes=256,
+        headroom_bytes=int(arg('--kv-arena-headroom-bytes')),
+        startup_peak_bytes=12288)])))
+    sys.exit(0)
+time.sleep(60)
+"#,
+    )
+    .unwrap();
     std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
     std::fs::write(root.path().join("ginfer"), b"fixture profiling CLI").unwrap();
     let hardware = ginfer_host::hardware_profile::group_profile_path(
