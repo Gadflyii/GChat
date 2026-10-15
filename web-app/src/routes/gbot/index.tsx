@@ -663,7 +663,9 @@ function GbotPage() {
                         : identity
                           ? control?.state === 'human'
                             ? 'Bot paused · you have control'
-                            : 'Connected'
+                            : control?.state === 'paused'
+                              ? 'Bot paused'
+                              : 'Connected'
                           : 'Disconnected'}
                     </span>
                     {!identity &&
