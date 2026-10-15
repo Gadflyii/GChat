@@ -391,10 +391,11 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         h('div', { class: 'grid' }, specField, draftPolicy),
         h('div', { class: 'grid' }, widthField,
           select('KV cache', 'kv_dtype', [['auto', 'Automatic'], ['bf16', 'BF16'], ['int8', 'INT8'], ['nvfp4', 'NVFP4']], previous.kv_dtype || 'auto')),
-        field('GPU KV budget (bytes, blank = automatic)', 'kv_arena_bytes', previous.kv_arena_bytes ?? '', 'number', { min: 1, max: Number.MAX_SAFE_INTEGER }),
         field('Host KV cache (bytes, blank = automatic, 0 = disabled)', 'host_kv_cache_bytes', previous.host_kv_cache_bytes ?? '', 'number', { min: 0, max: Number.MAX_SAFE_INTEGER }),
+        field('Flash per-rank weight residency budget (bytes, blank = automatic)', 'vram_budget_bytes', previous.vram_budget_bytes ?? '', 'number', { min: 1, max: Number.MAX_SAFE_INTEGER }),
+        note('Flash sharing needs an explicit weight residency budget and one successful startup with those settings to measure graph memory. KV and startup state use additional memory.'),
         note('Host KV cache is automatic when blank; zero disables it and a positive value sets its exact size.'),
-        note('Automatic sizing uses available GPU memory after startup. Context and concurrent request settings stay as entered.'),
+        note('Context and concurrent request settings stay as entered. Each instance owns its weights, state and KV cache.'),
         note('Automatic speculation uses width 0. DFlash2 and MTP require a positive width. The host validates the exact model, GPU group and settings before starting or replacing an instance.'))
       const updateWidth = () => {
         const spec = specField.querySelector('select').value
@@ -417,28 +418,63 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     fill()
     dialog(instance ? 'Reload instance' : 'Start a model',
       instance ? 'The host validates the replacement first. Current requests drain unless you explicitly choose to interrupt them.' : 'Choose an installed model and exact GPU group. No model starts until you submit this form.',
-      [radios, structuredField, content, ...(instance?.active_requests > 0 ? [h('label', { class: 'check' },
+      [radios, structuredField, content,
+        ...(!instance ? [field('Instances', 'instance_count', 1, 'number', { required: '', min: 1, max: 4294967295 })] : []),
+        field('GPU KV budget per instance (bytes, blank = automatic)', 'kv_arena_bytes', previous.kv_arena_bytes ?? '', 'number', { min: 1, max: Number.MAX_SAFE_INTEGER }),
+        note('When sharing a GPU, the Host uses the Engine startup quote and splits the remaining KV memory equally across the new instances. Enter a byte budget to choose their share. Instances start one at a time with separate ports; existing instances keep their allocations.'),
+        ...(instance?.active_requests > 0 ? [h('label', { class: 'check' },
         h('input', { type: 'checkbox', name: 'force' }), `Interrupt ${instance.active_requests} active request(s)`)] : [])],
-      instance ? 'Reload' : 'Start', (form) => {
+      instance ? 'Reload' : 'Start', async (form) => {
         const latest = observation().hosts.get(host.host_id)
         if (!online(latest) || profiling(latest)) throw new Error('Wait until the Host is online and hardware profiling has stopped before launching a model.')
         const guard = instance ? { instance_id: instance.instance_id, expected_session_id: instance.session_id ?? null, force: checked(form, 'force') } : {}
+        const count = instance ? 1 : Number(fieldValue(form, 'instance_count'))
+        if (!Number.isInteger(count) || count < 1 || count > 4294967295) throw new Error('Instances must be a positive whole number below 4294967296')
+        const kvBytes = fieldValue(form, 'kv_arena_bytes') === '' ? null : Number(fieldValue(form, 'kv_arena_bytes'))
+        if (kvBytes !== null && (!Number.isSafeInteger(kvBytes) || kvBytes < 1)) {
+          throw new Error('GPU KV budget must be a positive whole number of bytes, or blank for automatic sizing')
+        }
+        const place = async (operation, args) => {
+          let result
+          let started = 0
+          let placement = args
+          try {
+            for (let remaining = count; remaining > 0; remaining--) {
+              result = await run(hostRequest(host, operation, { ...placement,
+                ...(remaining > 1 ? { remaining_instances: remaining } : {}) }),
+              count > 1 ? `${started + 1} of ${count} instances ready` : instance ? 'Instance reloaded' : 'Model starting')
+              // Keep the first equal share for the batch. Every subsequent
+              // placement still checks the Engine's current free-memory quote.
+              if (started === 0 && count > 1 && kvBytes === null && result?.kv_arena_bytes != null) {
+                placement = { ...placement, kv_arena_bytes: result.kv_arena_bytes }
+              }
+              started++
+            }
+          } catch (error) {
+            // A successful earlier launch remains independently manageable.
+            if (count > 1) throw new Error(`${started} of ${count} instances started. ${error}`)
+            throw error
+          }
+          return result
+        }
         if (mode === 'profile') {
           const choice = profiles[Number(fieldValue(form, 'profile_choice'))]
           if (!choice) throw new Error('Choose a saved profile')
-          return run(hostRequest(host, 'profile_launch', { ...guard, profile_id: choice.entry.profile.id,
-            model_id: choice.entry.model_id, gpu_uuids: choice.group, structured_outputs: checked(form, 'structured_outputs') }), instance ? 'Instance reloaded' : 'Model starting')
+          return place('profile_launch', { ...guard, profile_id: choice.entry.profile.id,
+            model_id: choice.entry.model_id, gpu_uuids: choice.group, structured_outputs: checked(form, 'structured_outputs'),
+            ...(kvBytes !== null ? { kv_arena_bytes: kvBytes } : {}) })
         }
         const configuration = { ...previous, instance_id: instance?.instance_id || null, qualified_profile_id: null,
           model_id: fieldValue(form, 'model_id'), gpu_uuids: checkedValues(form, 'gpu'),
           max_context: Number(fieldValue(form, 'max_context')), concurrency: Number(fieldValue(form, 'concurrency')),
           vision: checked(form, 'vision'), structured_outputs: checked(form, 'structured_outputs'), spec: fieldValue(form, 'spec'), draft_policy: fieldValue(form, 'draft_policy'),
           draft_tokens: Number(fieldValue(form, 'draft_tokens')), kv_dtype: fieldValue(form, 'kv_dtype'),
-          kv_arena_bytes: fieldValue(form, 'kv_arena_bytes') === '' ? null : Number(fieldValue(form, 'kv_arena_bytes')),
+          kv_arena_bytes: kvBytes,
+          vram_budget_bytes: fieldValue(form, 'vram_budget_bytes') === '' ? null : Number(fieldValue(form, 'vram_budget_bytes')),
           host_kv_cache_bytes: fieldValue(form, 'host_kv_cache_bytes') === '' ? null : Number(fieldValue(form, 'host_kv_cache_bytes')) }
         if (!configuration.gpu_uuids.length) throw new Error('Choose the exact GPU group')
-        if (configuration.kv_arena_bytes !== null && (!Number.isSafeInteger(configuration.kv_arena_bytes) || configuration.kv_arena_bytes < 1)) {
-          throw new Error('GPU KV budget must be a positive whole number of bytes, or blank for automatic sizing')
+        if (configuration.vram_budget_bytes !== null && (!Number.isSafeInteger(configuration.vram_budget_bytes) || configuration.vram_budget_bytes < 1)) {
+          throw new Error('Flash weight residency budget must be a positive whole number of bytes, or blank for automatic sizing')
         }
         if (configuration.host_kv_cache_bytes !== null && (!Number.isSafeInteger(configuration.host_kv_cache_bytes) || configuration.host_kv_cache_bytes < 0)) {
           throw new Error('Host KV cache must be a nonnegative whole number of bytes, or blank for automatic sizing')
@@ -448,8 +484,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         if (configuration.spec === 'dflash' && (width < 1 || width > 15)) throw new Error('DFlash2 requires a draft width from 1 to 15; the host checks the exact model limit')
         if (configuration.spec === 'mtp' && (width < 1 || width >= 4294967295)) throw new Error('MTP requires a positive draft width below 4294967295')
         if (['auto', 'none'].includes(configuration.spec) && width !== 0) throw new Error('Automatic or disabled speculation uses draft width 0')
-        return run(hostRequest(host, instance ? 'instance' : 'launch', instance ? { ...guard, operation: 'reload', configuration } : configuration),
-          instance ? 'Instance reloaded' : 'Model starting')
+        return place(instance ? 'instance' : 'launch', instance ? { ...guard, operation: 'reload', configuration } : configuration)
       })
   }
 

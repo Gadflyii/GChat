@@ -13,6 +13,58 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Multiple instances on one GPU — October 15
+
+Active `MULTI-INSTANCE`, Gchat, deadline 17:00Z. Candidate
+`/ai/gchat-worktrees/manager-multi-instance-c8d`, branch
+`feat/gchat-manager-multi-instance-c8d`, starts from main `9a25287a4`.
+Manager must place N copies of an installed package on the selected GPU group,
+each with its own identity, port and per-instance concurrency. Existing instances
+retain their allocations. The Engine's `ginfer-serve --quote-only` owns the
+startup memory facts; Host reserves each remaining sibling's weights/state/graph
+requirement and headroom before splitting the remaining KV equally. Manager
+keeps that first equal share for the rest of the batch and Host checks every
+placement against a fresh quote. A user may instead enter
+an explicit KV byte budget per new instance. Startup is serialized through Ready
+so the next quote sees the preceding allocation. A changed KV allocation is a
+custom deployment and does not inherit the profile's qualification claim.
+
+For Flash, Custom settings also expose the Engine's per-rank weight residency
+budget in bytes; this covers dense/expert weights, with KV, state and graphs
+accounted separately. Shared placement requires that explicit budget and a
+matching graph-memory receipt. Start the package once by itself with the same
+GPU group and settings, wait for Ready, then place instances with those settings.
+Host retains the maximum graph allocation reported per rank and persists the
+maximum across ranks only after Ready. Changing the startup recipe or the
+artifact/runtime/hardware-profile file metadata invalidates the receipt. An
+unknown graph allowance produces an actionable error before a shared launch.
+Flash quotes are supported by this contract; Flash native acceptance remains
+separate from the Qwen gate below.
+
+The replaced restrictions are `service.rs::prepare_launch` (GPU group reused as
+instance identity), startup duplicate consolidation, and
+`engine_host.rs::validate_launch` (GPU overlap refused along with port overlap).
+New starts receive fresh identities; explicit existing IDs select lifecycle
+operations, and live instance/port conflicts remain errors. Package publication
+qualification is evidence rather than a package/GPU admission rule: INT and SMOL
+are selectable on every supported family; NVFP4 requires Blackwell sm_120.
+The [shared-GPU instance decision](../decisions/2026-10-15-place-independent-instances-on-shared-gpus.md)
+supersedes the September one-instance-per-GPU-group decision.
+
+Focused Host process/HTTP placement and Flash receipt tests, all 39 Manager DOM
+cases, strict Host/Manager Clippy and full `make verify` pass on this candidate.
+The full gate passes 2,309 root tests, 114 extension tests and 849 Rust tests
+(6 JavaScript skips and 25 Rust ignores). The two old Host assertions
+about spawn argument order and occupied catalog groups were corrected in this
+candidate. Native acceptance is pending. Local CPUs 16–31 are booked to
+16:30Z; S1 PRO GPU 0 / CPUs 32–63 are booked 13:45–16:45Z. The acceptance is four
+Qwen INT C4 instances started from Manager on that single PRO, all Ready, then
+one concurrent GBench C4 per instance. Codex 1 owns the Engine quote prerequisite.
+Reuse the shared Rust build cache under its lock and existing model artifacts;
+no model copy, new harness, Windows build, signing or publication is allocated.
+Keep the resulting receipts and short summary under `out/`; retire only this
+candidate's temporary native state/processes after acceptance.
+
 ## Shared pool capacity
 
 A pool member's `worker_limit` caps the aggregate workers using that instance

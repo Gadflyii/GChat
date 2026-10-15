@@ -63,12 +63,7 @@ impl Release {
     pub fn compatible_group(&self, gpus: &[crate::service::Gpu]) -> Option<Vec<String>> {
         let mut groups = BTreeMap::<_, Vec<String>>::new();
         for gpu in gpus {
-            if gpu.memory_mib >= self.min_vram_mib_per_gpu
-                && gpu
-                    .compute_capability
-                    .as_ref()
-                    .is_some_and(|sm| self.qualified_sm.contains(sm))
-            {
+            if self.identity.supports_gpu(gpu.compute_capability.as_deref()) {
                 groups
                     .entry((&gpu.name, &gpu.compute_capability))
                     .or_default()
@@ -783,6 +778,27 @@ mod tests {
         })).unwrap());
         (release, bytes)
     }
+    #[test]
+    fn package_admission_uses_architecture_support_rather_than_qualification_or_vram_tiers() {
+        let (mut release, _) = fixture();
+        release.min_vram_mib_per_gpu = 98304;
+        for weights in ["groupwise-int", "smol-q2g64", "nvfp4"] {
+            release.identity.weights_id = weights.into();
+            for architecture in ["8.0", "8.6", "8.9", "12.0", "9.0"] {
+                let gpu = crate::service::Gpu { uuid: "GPU-choice".into(), name: "User GPU".into(),
+                    display_name: None, memory_mib: 24576, compute_capability: Some(architecture.into()) };
+                let expected = architecture != "9.0" && (weights != "nvfp4" || architecture == "12.0");
+                assert_eq!(release.compatible_group(std::slice::from_ref(&gpu)).is_some(), expected, "{weights} on {architecture}");
+                release.tp = 2;
+                assert!(release.compatible_group(std::slice::from_ref(&gpu)).is_none());
+                let mut second = gpu.clone();
+                second.uuid = "GPU-second".into();
+                assert_eq!(release.compatible_group(&[gpu, second]).is_some(), expected);
+                release.tp = 1;
+            }
+        }
+    }
+
     #[test]
     fn release_profiles_reject_other_artifacts_and_duplicate_ids() {
         let (mut release, _) = fixture();

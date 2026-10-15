@@ -828,12 +828,16 @@ impl Client {
             .ok_or("host is not registered")?;
         let token = self.secret(host.client_id).await?;
         let client = self.pinned_transport(&host).await?;
+        // Worker leases stream for the worker lifetime. Placement waits for
+        // Engine quote/startup stages, each bounded by Host, and may first wait
+        // for another instance's startup; a single-stage client timeout can
+        // otherwise lose a successful placement's response.
+        let placement = method == reqwest::Method::POST
+            && matches!(path, "/host/v1/instances" | "/host/v1/profile-launch");
         let mut req = client
             .request(method, format!("{}{}", host.base_url, path))
             .bearer_auth(token);
-        // Worker leases stream for the worker lifetime. Their caller bounds
-        // header acquisition and each heartbeat instead of the entire request.
-        if path != "/host/v1/fleet/worker-slot" {
+        if path != "/host/v1/fleet/worker-slot" && !placement {
             req = req.timeout(std::time::Duration::from_secs(600));
         }
         if let Some(body) = body {

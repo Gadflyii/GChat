@@ -32,6 +32,31 @@ const DIAGNOSTIC_TAIL_BYTES: usize = 16_384;
 type Diagnostics = Arc<Mutex<VecDeque<u8>>>;
 
 #[derive(Default)]
+struct GraphReceipt {
+    ranks: BTreeMap<u32, u64>,
+    partial: Vec<u8>,
+}
+impl GraphReceipt {
+    fn observe(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            if byte == b'\n' {
+                let line = String::from_utf8_lossy(&self.partial);
+                if line.starts_with("Flash startup phase=graph-capacity ") {
+                    let value = |key: &str| line.split_whitespace().find_map(|field| field.strip_prefix(key));
+                    if let (Some(rank), Some(bytes)) = (value("rank=").and_then(|v| v.parse::<u32>().ok()),
+                        value("admission_graph_bytes=").and_then(|v| v.parse::<u64>().ok())) {
+                        self.ranks.entry(rank).and_modify(|old| *old = (*old).max(bytes)).or_insert(bytes);
+                    }
+                }
+                self.partial.clear();
+            } else if self.partial.len() < DIAGNOSTIC_TAIL_BYTES {
+                self.partial.push(byte);
+            }
+        }
+    }
+}
+
+#[derive(Default)]
 struct OutputReaders(Vec<Option<tokio::task::JoinHandle<()>>>);
 impl Drop for OutputReaders {
     fn drop(&mut self) {
@@ -98,6 +123,14 @@ pub(crate) fn capture_output(
     reader: impl AsyncRead + Unpin + Send + 'static,
     diagnostics: Diagnostics,
 ) -> tokio::task::JoinHandle<()> {
+    capture_engine_output(reader, diagnostics, None)
+}
+
+fn capture_engine_output(
+    reader: impl AsyncRead + Unpin + Send + 'static,
+    diagnostics: Diagnostics,
+    receipt: Option<Arc<Mutex<GraphReceipt>>>,
+) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut reader = reader;
         let mut chunk = [0u8; 4096];
@@ -106,6 +139,9 @@ pub(crate) fn capture_output(
                 break;
             }
             eprint!("{}", String::from_utf8_lossy(&chunk[..count]));
+            if let Some(receipt) = &receipt {
+                receipt.lock().unwrap_or_else(|e| e.into_inner()).observe(&chunk[..count]);
+            }
             let mut tail = diagnostics.lock().unwrap_or_else(|e| e.into_inner());
             let excess = (tail.len() + count).saturating_sub(DIAGNOSTIC_TAIL_BYTES);
             tail.drain(..excess);
@@ -126,6 +162,8 @@ pub struct LaunchOptions {
     pub draft_tp: u32,
     pub kv_dtype: String,
     pub kv_arena_bytes: Option<u64>,
+    /// Flash weight residency only; KV and startup state are additional.
+    pub vram_budget_bytes: Option<u64>,
     pub kv_arena_headroom_bytes: u64,
     /// None uses AUTO; Some(0) disables the Host prefix pool.
     pub host_kv_cache_bytes: Option<u64>,
@@ -144,6 +182,7 @@ impl Default for LaunchOptions {
             draft_tp: 0,
             kv_dtype: "auto".into(),
             kv_arena_bytes: None,
+            vram_budget_bytes: None,
             kv_arena_headroom_bytes: crate::launch_profiles::HEADROOM_BYTES,
             host_kv_cache_bytes: None,
             prefill_chunk: 0,
@@ -153,6 +192,9 @@ impl Default for LaunchOptions {
 }
 impl LaunchOptions {
     pub fn validate(&self, tp: u32) -> Result<(), String> {
+        if self.vram_budget_bytes == Some(0) {
+            return Err("Flash weight residency budget must be positive".into());
+        }
         if !matches!(self.spec.as_str(), "auto" | "none" | "dflash" | "mtp") {
             return Err("spec must be auto, none, dflash, or mtp".into());
         }
@@ -279,6 +321,9 @@ impl LaunchOptions {
         if let Some(bytes) = self.kv_arena_bytes {
             args.extend(["--kv-arena-bytes".into(), bytes.to_string()]);
         }
+        if let Some(bytes) = self.vram_budget_bytes {
+            args.extend(["--vram-budget-bytes".into(), bytes.to_string()]);
+        }
         if let Some(bytes) = self.host_kv_cache_bytes {
             args.extend(["--host-kv-cache-bytes".into(), bytes.to_string()]);
         }
@@ -325,6 +370,73 @@ pub struct ManagedInstance {
     output_readers: OutputReaders,
     pending_exit: Option<Arc<PendingExit>>,
     hardware_profile_path: Option<PathBuf>,
+    graph_receipt: Arc<Mutex<GraphReceipt>>,
+    graph_receipt_key: Option<String>,
+}
+
+/// Engine-owned pre-load facts, emitted by ginfer-serve --quote-only.
+#[derive(serde::Deserialize)]
+pub(crate) struct StartupQuote {
+    schema: String,
+    model_id: String,
+    weights_id: String,
+    tensor_parallel_size: u32,
+    ranks: Vec<StartupQuoteRank>,
+}
+#[derive(serde::Deserialize)]
+struct StartupQuoteRank {
+    rank: u32,
+    free_bytes: u64,
+    weights_bytes: u64,
+    state_bytes: u64,
+    graph_allowance_bytes: u64,
+    #[serde(default)]
+    graph_allowance_source: Option<String>,
+    minimum_kv_arena_bytes: u64,
+    kv_arena_alignment_bytes: u64,
+    headroom_bytes: u64,
+    startup_peak_bytes: u64,
+}
+impl StartupQuote {
+    pub(crate) fn kv_budget(&self, launch: &EngineLaunch, remaining: u32) -> Result<u64, String> {
+        if remaining == 0 || self.schema != "ginfer-startup-quote-v1"
+            || self.tensor_parallel_size != launch.tp || self.ranks.len() != launch.tp as usize
+            || format!("{}/{}", self.model_id, self.weights_id) != launch.model_id
+        {
+            return Err("Engine startup quote does not match this launch; update the Engine runtime".into());
+        }
+        let mut budget = u64::MAX;
+        for (index, rank) in self.ranks.iter().enumerate() {
+            if rank.graph_allowance_source.as_deref() == Some("unknown")
+                || (launch.model_id.starts_with("qwen3.8-flash-next/")
+                    && !matches!(rank.graph_allowance_source.as_deref(), Some("planner" | "receipt"))) {
+                return Err("Flash graph memory is unknown: start this package once by itself with the same GPU and settings, wait for Ready, then add instances using its saved startup receipt".into());
+            }
+            let invalid = || "Engine startup quote has invalid or overflowing memory facts".to_owned();
+            let non_kv = rank.weights_bytes.checked_add(rank.state_bytes)
+                .and_then(|n| n.checked_add(rank.graph_allowance_bytes)).ok_or_else(invalid)?;
+            if rank.rank as usize != index || rank.minimum_kv_arena_bytes == 0
+                || rank.kv_arena_alignment_bytes == 0
+                || non_kv.checked_add(rank.minimum_kv_arena_bytes) != Some(rank.startup_peak_bytes)
+            { return Err(invalid()); }
+            let reserved = non_kv.checked_add(rank.headroom_bytes)
+                .and_then(|n| n.checked_mul(u64::from(remaining))).ok_or_else(invalid)?;
+            let available = rank.free_bytes.saturating_sub(reserved) / u64::from(remaining);
+            let aligned = available - available % rank.kv_arena_alignment_bytes;
+            let chosen = launch.options.kv_arena_bytes.unwrap_or(aligned);
+            if chosen < rank.minimum_kv_arena_bytes || chosen > available || reserved > rank.free_bytes {
+                return Err(format!("GPU rank {} cannot fit {remaining} new instance(s): Engine quotes {} free bytes, {non_kv} non-KV bytes and {} headroom bytes per instance; KV needs at least {} bytes per instance, with {aligned} bytes available per instance{}",
+                    rank.rank, rank.free_bytes, rank.headroom_bytes, rank.minimum_kv_arena_bytes,
+                    launch.options.kv_arena_bytes.map(|n| format!(", requested {n}")).unwrap_or_default()));
+            }
+            budget = budget.min(chosen);
+        }
+        // A TP launch has one arena cap; it must fit every rank's minimum.
+        if self.ranks.iter().any(|rank| budget < rank.minimum_kv_arena_bytes) {
+            return Err("Engine quotes no common KV budget that fits all selected GPU ranks".into());
+        }
+        Ok(budget)
+    }
 }
 
 pub struct HostProcesses {
@@ -599,12 +711,9 @@ impl HostProcesses {
             .instances
             .values()
             .filter(|i| i.child.is_some() && !(replacing && i.instance_id == launch.instance_id))
-            .any(|i| {
-                i.launch.port == launch.port
-                    || i.launch.gpu_uuids.iter().any(|g| selected.contains(g))
-            })
+            .any(|i| i.launch.port == launch.port)
         {
-            return Err("selected GPU or port is reserved by another instance".into());
+            return Err("selected port is reserved by another instance".into());
         }
         if launch.port == 0
             || !(1..=8).contains(&launch.concurrency)
@@ -622,8 +731,7 @@ impl HostProcesses {
         Ok(())
     }
 
-    fn spawn(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
-        let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+    fn command(&self, launch: &EngineLaunch) -> Result<Command, String> {
         let executable = self.executable_for(&launch.gpu_uuids)?;
         let mut command = Command::new(executable);
         let hardware_profile_path = self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()?;
@@ -653,15 +761,12 @@ impl HostProcesses {
             command.arg(&launch.artifact);
         }
         if let Some(path) = &hardware_profile_path { command.arg("--hardware-profile").arg(path); }
-        let mut child = command
+        command
             .args([
-                "--exit-on-stdin-close",
                 "--host",
                 "127.0.0.1",
                 "--port",
                 &launch.port.to_string(),
-                "--api-key",
-                &api_key,
                 "--model-id",
                 &launch.model_id,
                 "--tp",
@@ -672,7 +777,63 @@ impl HostProcesses {
                 &launch.concurrency.to_string(),
             ])
             .env("CUDA_VISIBLE_DEVICES", launch.gpu_uuids.join(","))
-            .args(launch.options.args())
+            .args(launch.options.args());
+        Ok(command)
+    }
+
+    // A receipt is bound to the actual artifact/runtime/profile files' metadata
+    // stamps and startup recipe. Ports, identities and the KV share are not
+    // graph topology inputs. Changing a producer or recipe invalidates reuse.
+    pub(crate) fn graph_receipt_key(&self, launch: &EngineLaunch) -> Result<String, String> {
+        use sha2::{Digest, Sha256};
+        let mut recipe = launch.clone();
+        recipe.instance_id = Uuid::nil();
+        recipe.port = 0;
+        recipe.benchmark_profile = None;
+        recipe.options.kv_arena_bytes = None;
+        let mut files = launch.artifact_dependencies.clone();
+        files.push(launch.artifact.clone());
+        files.push(self.executable_for(&launch.gpu_uuids)?.to_owned());
+        if let Some(job) = &self.hardware_profile {
+            files.push(job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids)?.profile_path);
+        }
+        let stamps = files.iter().map(|path| {
+            let metadata = std::fs::metadata(path).map_err(|e| e.to_string())?;
+            let modified = metadata.modified().map_err(|e| e.to_string())?
+                .duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?;
+            Ok(serde_json::json!([path, metadata.len(), modified.as_secs(), modified.subsec_nanos()]))
+        }).collect::<Result<Vec<_>, String>>()?;
+        Ok(hex::encode(Sha256::digest(serde_json::to_vec(&(recipe, stamps)).map_err(|e| e.to_string())?)))
+    }
+
+    pub(crate) fn ready_graph_receipts(&self) -> Vec<(String, u64)> {
+        self.instances.values().filter_map(|instance| {
+            if instance.status != InstanceStatus::Ready { return None; }
+            let key = instance.graph_receipt_key.as_ref()?;
+            let receipt = instance.graph_receipt.lock().unwrap_or_else(|e| e.into_inner());
+            if receipt.ranks.len() != instance.launch.tp as usize
+                || !(0..instance.launch.tp).all(|rank| receipt.ranks.contains_key(&rank)) { return None; }
+            Some((key.clone(), *receipt.ranks.values().max()?))
+        }).collect()
+    }
+
+    pub(crate) fn startup_quote_command(&self, launch: &EngineLaunch, graph_allowance: Option<u64>) -> Result<Command, String> {
+        let mut command = self.command(launch)?;
+        if let Some(bytes) = graph_allowance {
+            command.arg("--graph-allowance-bytes").arg(bytes.to_string());
+        }
+        command.arg("--quote-only").stdin(std::process::Stdio::null()).kill_on_drop(true);
+        Ok(command)
+    }
+
+    fn spawn(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
+        let graph_receipt_key = launch.model_id.starts_with("qwen3.8-flash-next/")
+            .then(|| self.graph_receipt_key(&launch)).transpose()?;
+        let graph_receipt = Arc::new(Mutex::new(GraphReceipt::default()));
+        let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+        let hardware_profile_path = self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()?;
+        let mut child = self.command(&launch)?
+            .args(["--exit-on-stdin-close", "--api-key", &api_key])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -685,9 +846,10 @@ impl HostProcesses {
                 child.stdout.take().expect("piped stdout"),
                 diagnostics.clone(),
             )),
-            Some(capture_output(
+            Some(capture_engine_output(
                 child.stderr.take().expect("piped stderr"),
                 diagnostics.clone(),
+                graph_receipt_key.as_ref().map(|_| graph_receipt.clone()),
             )),
         ]);
         let session_id = Uuid::new_v4();
@@ -708,6 +870,8 @@ impl HostProcesses {
                 output_readers,
                 pending_exit: None,
                 hardware_profile_path,
+                graph_receipt,
+                graph_receipt_key,
             },
         );
         self.activity.notify_one();
@@ -1012,7 +1176,7 @@ mod tests {
                 };
                 assert_eq!(&args[..expected.len()], expected.as_slice());
                 assert_eq!(args.iter().filter(|arg| **arg == "--hardware-profile").count(), 1);
-                assert_eq!(args[expected.len()], "--exit-on-stdin-close");
+                assert_eq!(args.iter().filter(|arg| **arg == "--exit-on-stdin-close").count(), 1);
                 assert_eq!(args.iter().filter(|arg| **arg == "--structured-outputs").count(), usize::from(enabled));
                 let cache_flag = args.iter().position(|arg| *arg == "--host-kv-cache-bytes");
                 if let Some(bytes) = cache_bytes {
@@ -1360,7 +1524,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn owned_process_reserves_gpu_until_stopped_then_relaunches_with_new_session() {
+    async fn shared_gpu_instances_keep_independent_ports_sessions_and_lifetimes() {
         let dir = tempfile::tempdir().unwrap();
         let executable = dir.path().join("engine");
         // A controlled child that stays alive without creating descendants.
@@ -1374,8 +1538,8 @@ mod tests {
             Duration::from_secs(10),
         )
         .unwrap();
-        let id = Uuid::new_v4();
-        let launch = |id| EngineLaunch {
+        let ids: Vec<_> = (0..4).map(|_| Uuid::new_v4()).collect();
+        let launch = |id, port| EngineLaunch {
             benchmark_profile: None,
             instance_id: id,
             artifact: artifact.clone(),
@@ -1384,43 +1548,50 @@ mod tests {
             model_id: "muse".into(),
             gpu_uuids: vec!["GPU-test".into()],
             tp: 1,
-            port: 40111,
+            port,
             max_context: 4096,
-            concurrency: 1,
-            options: LaunchOptions::default(),
+            concurrency: 4,
+            options: LaunchOptions { kv_arena_bytes: Some(4096), ..Default::default() },
         };
-        let first = host.launch(launch(id)).unwrap();
+        let mut sessions = BTreeSet::new();
+        let mut keys = BTreeSet::new();
+        for (index, id) in ids.iter().enumerate() {
+            sessions.insert(host.launch(launch(*id, 40111 + index as u16)).unwrap());
+            keys.insert(host.instances[id].api_key.clone());
+        }
+        assert_eq!(sessions.len(), 4);
+        assert_eq!(keys.len(), 4);
+        assert_eq!(host.instances().filter(|instance| instance.child.is_some()).count(), 4);
+        assert!(host.launch(launch(Uuid::new_v4(), 40111)).unwrap_err().contains("port"));
+        assert!(host.launch(launch(ids[0], 40200)).is_err());
         host.configure_executable(executable.clone()).unwrap();
         let replacement = dir.path().join("replacement-engine");
         std::fs::copy(&executable, &replacement).unwrap();
         assert!(host.configure_executable(replacement.clone()).is_err());
-        assert_eq!(host.instances().next().unwrap().session_id, first);
-        assert!(host.launch(launch(Uuid::new_v4())).is_err());
-        host.stop(id).await.unwrap();
+        let first = host.instances[&ids[0]].session_id;
+        host.stop(ids[0]).await.unwrap();
+        assert_eq!(host.instances().filter(|instance| instance.child.is_some()).count(), 3);
+        let second = host.launch(launch(ids[0], 40111)).unwrap();
+        assert_ne!(first, second);
+        host.shutdown().await.unwrap();
         assert!(host.configure_executable(dir.path().join("missing-engine")).is_err());
         host.configure_executable(replacement).unwrap();
-        assert_eq!(
-            host.instances().next().unwrap().status,
-            InstanceStatus::Stopped
-        );
-        let second = host.launch(launch(id)).unwrap();
-        assert_ne!(first, second);
-        host.stop(id).await.unwrap();
 
-        // A startup timeout must reap the owned child before the GPU is reused.
+        // A timed-out child is reaped without changing its live GPU peer.
+        host.startup_timeout = Duration::from_secs(10);
+        host.launch(launch(ids[1], 40112)).unwrap();
+        host.instances.get_mut(&ids[1]).unwrap().status = InstanceStatus::Ready;
         host.startup_timeout = Duration::ZERO;
-        host.launch(launch(id)).unwrap();
+        host.launch(launch(ids[0], 40111)).unwrap();
         host.pending_readiness().await.unwrap();
-        let failed = host.instances().next().unwrap();
+        let failed = &host.instances[&ids[0]];
         assert_eq!(failed.status, InstanceStatus::Failed);
-        assert_eq!(
-            failed.last_error.as_deref(),
-            Some("engine startup timed out")
-        );
+        assert_eq!(failed.last_error.as_deref(), Some("engine startup timed out"));
         assert!(failed.child.is_none());
-        host.launch(launch(Uuid::new_v4())).unwrap();
+        assert!(host.instances[&ids[1]].child.is_some());
+        host.launch(launch(Uuid::new_v4(), 40111)).unwrap();
         host.shutdown().await.unwrap();
-        assert!(host.instances().all(|i| i.child.is_none()));
+        assert!(host.instances().all(|instance| instance.child.is_none()));
     }
 }
 
