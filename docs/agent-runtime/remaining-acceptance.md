@@ -12,6 +12,43 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## OI-068 Linux live-worker checkpoint continuity — October 15
+
+**PASS for checkpoint installation and same-worker continuation; review task
+FAILED.** The retained developer DEB uses desktop/CLI/Host `7e33222e8` and
+Engine `38ff80e0c`; the relevant context/session/runner/Studio paths match
+current main. Normal Qwen 262144 reached Ready using the existing exact
+115 GiB, CPU 0–31 hardware profile; no build or calibration was repeated.
+
+One ordinary Standard Agent used default 25 steps, high reasoning, no output
+limit override and a read-only eight-file review task. The early UI Compact
+request returned `nothing_to_compact`: its candidates were larger than the
+short history. A later UI request installed one durable checkpoint before
+step 11, reducing exact counted input from 12662 to 11567 and removing 19
+older entries. Session `b467f358-81bc-47f1-b2b1-6381489226d8`, context
+`5ca524c1-fea1-4572-af1c-4c15c2d8e11b`, task, workspace, recent exchanges and
+20480-token reserve were preserved. Sixteen non-reply tool executions plus
+Reply followed in the same worker. All 28 full tool records were present at
+termination; transcript, checkpoint, working states and records are consolidated
+in the retained result JSON.
+
+The run ended after 22 decisions as `finished` / `reply`, but returned unsupported
+tool markup and never completed the eight-file review. This is not accepted task
+completion. Recorded string `limit: "2400"` returned the default 16000-byte excerpt;
+string `offset` likewise takes the numeric default. The native read schema leaves
+parameter types unspecified, while its handler accepts numeric JSON values only.
+`GCHAT-WORKER-FILE-READ-STRING-RANGE` owns that reproduced read-range defect.
+
+The exact terminal record reopened in Studio. Normal Host Stop at 10:44:53Z
+passed with zero requests. Private pairing credential removal passed; exact owned
+processes, private keyring/state and 7467851941 bytes of disposable copies are
+retired, and local booking 715 is returned. The physical desktop keyring was not
+used. Evidence: `/ai/gchat/out/worker-compaction-20261015/{result.json,summary.md}`.
+The unchanged CLI hash is retained there. `make verify` remains blocked before
+checks by the previously recorded missing Yarn dependency state. No Windows,
+Hermes, app-exit/restart recovery, full 262144-token capacity, signing or publication
+acceptance is claimed. OI-068 stays PARTIAL.
+
 ## Accepted General Agent dispatch from Chat — October 15
 
 `GCHAT-CHAT-GENERAL-AGENT-DISPATCH` is closed for Linux dispatch, result
@@ -489,7 +526,7 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; repeat-save, definition refresh and persisted tool errors corrected; two workers collected/reopened; active first-step cancellation, parent completion, cancelled-record reopen and nine-step new-run continuation/reopen. | Broader active-worker compaction/checkpoint resume; Windows/Hermes at release. False cancellation toast tracked separately. Do not replay passing gates. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint reduced12662→11567 and preserved same-worker tool execution/reopen. | Successful multi-file task after compaction (recorded review failed); active-worker app-exit/restart recovery; Windows/Hermes at release. Read-range defect tracked separately. Do not replay passing gates. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
 | GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |

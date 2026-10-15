@@ -5,8 +5,35 @@ fixture covers inherited policy, result collection, independent cancellation
 and persisted reopening. Installed model-backed two-worker collection/reopen
 and the corrected October 15 targeted Stop replay qualify those transitions
 separately. The [acceptance record](remaining-acceptance.md#accepted-general-agent-dispatch-from-chat--october-15)
-closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`; active-worker restart recovery and
-compaction/checkpoint resume remain under OI-068.
+closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has a separate Linux
+live-worker checkpoint-continuity pass below; restart recovery and a successful
+multi-file task after compaction remain unqualified.
+
+## OI-068 live-worker checkpoint continuity — October 15
+
+The retained Linux developer DEB (desktop/CLI/Host `7e33222e8`, Engine
+`38ff80e0c`) reached Ready with unchanged normal Qwen 262144 configuration.
+An ordinary live-run **Compact** request installed a checkpoint at the next
+safe boundary: input fell from 12662 to 11567 tokens and 19 older entries
+were replaced. The task, session/context identity, default 25-step limit,
+high reasoning and 20480-token reserve were preserved. The same worker then
+executed 16 further non-reply tools and Reply; full tool outputs and transcript
+remained archived. Its terminal record survived ordinary Studio reopening.
+
+This qualifies live-worker checkpoint installation and continuation, not task
+success. The requested eight-file review failed: the worker repeatedly read the
+first document and ended after 22 decisions as `finished` / `reply`, returning
+unsupported tool markup. String-valued `limit` / `offset` silently took numeric
+defaults; `GCHAT-WORKER-FILE-READ-STRING-RANGE` tracks that reproduced defect.
+The first, earlier Compact request returned `nothing_to_compact` and is not
+counted as a checkpoint. No app-exit/restart recovery or full-context capacity
+claim is made; broader OI-068 remains PARTIAL.
+
+Evidence: `/ai/gchat/out/worker-compaction-20261015/{result.json,summary.md}`.
+The prior accepted hardware profile was reused without calibration or a build.
+Normal Host Stop passed with zero requests; the private credential, processes
+and 7.47 GB of disposable state are retired, and booking 715 is returned.
+The physical desktop keyring and retained package/model/profile are unchanged.
 
 ## OI-068 live-worker cancellation and new-run continuation — accepted
 
@@ -48,7 +75,8 @@ toast appeared. The cancelled record and exact Chat history survived reopening,
 and Studio displayed the saved cancelled run. Normal Host Stop passed with zero
 active requests. This is functional worker Stop acceptance, not a full 262144-token
 capacity qualification or a rebuilt installer gate. Broader OI-068 remains partial;
-Windows, Hermes and active-worker compaction/checkpoint resume remain owed.
+Windows and Hermes remain owed. The separate live-worker checkpoint result
+above supersedes this replay's compaction exclusion without repeating Stop.
 
 Evidence: `/ai/gchat-worktrees/worker-replay-22ae/out/worker-acceptance-20261015/{result.json,summary.md}`.
 Owned desktop/Host/Engine/Gbot processes are stopped; CPU/GPU bookings and canonical
