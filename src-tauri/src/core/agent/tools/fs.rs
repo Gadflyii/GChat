@@ -148,7 +148,9 @@ async fn glob_paths(args: &Value, context: &ToolContext<'_>) -> Result<ToolOutco
     let absolute_pattern = base.join(pattern).to_string_lossy().to_string();
     let paths = glob::glob(&absolute_pattern)
         .map_err(|error| ToolOutcome::error(error.to_string()))?
-        .filter_map(Result::ok)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| ToolOutcome::error(format!("Glob traversal failed: {error}")))?
+        .into_iter()
         .map(|path| display_relative_path(path.strip_prefix(&base).unwrap_or(&path)))
         .collect::<Vec<_>>();
     Ok(ToolOutcome::ok(truncate(
@@ -181,7 +183,9 @@ fn grep_sync(pattern: &str, path: &Path, working_dir: &Path) -> Result<String, S
             .follow_links(false)
             .standard_filters(true)
             .build()
-            .filter_map(Result::ok)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Grep traversal failed: {error}"))?
+            .into_iter()
             .filter(|entry| entry.file_type().is_some_and(|kind| kind.is_file()))
             .map(|entry| entry.into_path())
             .collect::<Vec<_>>()

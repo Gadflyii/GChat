@@ -750,6 +750,13 @@ fn safe_preview(call: &ToolCallPayload) -> Value {
         }
     }
     match call.tool.as_str() {
+        "os.fs.read" | "os.fs.read_document" | "os.fs.glob" | "os.fs.grep" => {
+            for key in ["pattern", "maxChars", "offset", "limit"] {
+                if let Some(value) = call.args.get(key) {
+                    preview.insert(key.into(), value.clone());
+                }
+            }
+        }
         "os.fs.trash" => {
             let paths = call
                 .args
@@ -1881,6 +1888,32 @@ mod tests {
             }),
         });
         assert_eq!(http["url"], "https://example.com/path");
+    }
+
+    #[test]
+    fn approval_preview_shows_file_search_and_read_selection_without_document_content() {
+        let search = safe_preview(&ToolCallPayload {
+            tool: "os.fs.grep".into(),
+            args: serde_json::json!({
+                "path": "/workspace/reports",
+                "pattern": "invoice-[0-9]+",
+                "content": "private document body"
+            }),
+        });
+        assert_eq!(search["path"], "/workspace/reports");
+        assert_eq!(search["pattern"], "invoice-[0-9]+");
+        assert!(search.get("content").is_none());
+        let read = safe_preview(&ToolCallPayload {
+            tool: "os.fs.read".into(),
+            args: serde_json::json!({"path": "report.txt", "offset": 400, "limit": 80}),
+        });
+        assert_eq!(read["offset"], 400);
+        assert_eq!(read["limit"], 80);
+        let document = safe_preview(&ToolCallPayload {
+            tool: "os.fs.read_document".into(),
+            args: serde_json::json!({"path": "report.pdf", "maxChars": 120}),
+        });
+        assert_eq!(document["maxChars"], 120);
     }
 
     #[test]

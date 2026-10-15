@@ -30,6 +30,20 @@ variables and headers are plaintext configuration, not a credential vault.
 See the [MCP setup guide](../src/pages/docs/desktop/integrations/mcp-servers.mdx)
 for the current GUI and trust boundaries.
 
+The separate `LOCAL-FILE-SEARCH-QUALIFY` Linux item covers client-side direct
+PDF/DOCX/spreadsheet text extraction and filename/text search through
+`gchat-native` tools. It uses the shared Chat/Agent executor and workspace folder
+permissions; an outside-folder Allow grants the displayed folder **CAN EDIT**
+access. Short text PDFs are valid; textless PDFs explicitly require unsupported
+OCR. Malformed DOCX and unreadable worksheets or directory traversal return
+errors rather than silently reporting partial success. Native reads cap returned
+text, but document parsing still reads the full input and does not immediately
+observe cancellation. Pending permission requests can be cancelled with Stop.
+Semantic indexed retrieval remains unavailable without embeddings. See the
+[file guide](../src/pages/docs/desktop/file-upload.mdx) for Auto references,
+inline fallback, disabled tools and privacy boundaries. Model-led answers and
+installer qualification are separate from model-free native GUI checks.
+
 The Host checks unsupported hosted-tool and output declarations for Manager,
 standalone and registered GChat instances. Native engine validation owns the
 supported protocol schemas and structured-output settings. Legacy Responses

@@ -33,15 +33,9 @@ pub fn parse_pdf(file_path: &str) -> Result<String, RagError> {
         }
     };
 
-    // Validate that the PDF has extractable text (not image-based/scanned)
-    // Count meaningful characters (excluding whitespace)
-    let meaningful_chars = text.chars().filter(|c| !c.is_whitespace()).count();
-
-    // Require at least 50 non-whitespace characters to consider it a text PDF
-    // This threshold filters out PDFs that are purely images or scanned documents
-    if meaningful_chars < 50 {
+    if !text.chars().any(|c| !c.is_whitespace()) {
         return Err(RagError::ParseError(
-            "PDF appears to be image-based or scanned. OCR is not supported yet. Please use a text-based PDF.".to_string()
+            "PDF contains no extractable text. Scanned or image-based PDFs require OCR, which is not supported yet.".to_string()
         ));
     }
 
@@ -138,10 +132,12 @@ fn parse_docx(file_path: &str) -> Result<String, RagError> {
     let mut buf = Vec::new();
     let mut result = String::new();
     let mut in_text = false;
+    let mut element_depth = 0usize;
 
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) => {
+                element_depth += 1;
                 let name: String = reader
                     .decoder()
                     .decode(e.name().as_ref())
@@ -152,6 +148,9 @@ fn parse_docx(file_path: &str) -> Result<String, RagError> {
                 }
             }
             Ok(Event::End(e)) => {
+                element_depth = element_depth.checked_sub(1).ok_or_else(|| {
+                    RagError::ParseError("DOCX XML has an unexpected closing element".into())
+                })?;
                 let name: String = reader
                     .decoder()
                     .decode(e.name().as_ref())
@@ -168,12 +167,19 @@ fn parse_docx(file_path: &str) -> Result<String, RagError> {
             }
             Ok(Event::Text(t)) => {
                 if in_text {
-                    let text = t.unescape().unwrap_or_default();
+                    let text = t.unescape().map_err(|error| {
+                        RagError::ParseError(format!("DOCX XML text error: {error}"))
+                    })?;
                     result.push_str(&text);
                 }
             }
+            Ok(Event::Eof) if element_depth != 0 => {
+                return Err(RagError::ParseError(
+                    "DOCX XML ended before all elements were closed".into(),
+                ));
+            }
             Ok(Event::Eof) => break,
-            Err(e) => return Err(RagError::ParseError(e.to_string())),
+            Err(e) => return Err(RagError::ParseError(format!("DOCX XML parse error: {e}"))),
             _ => {}
         }
     }
@@ -208,27 +214,28 @@ fn parse_spreadsheet(file_path: &str) -> Result<String, RagError> {
         open_workbook_auto(file_path).map_err(|e| RagError::ParseError(e.to_string()))?;
     let mut out = String::new();
     for sheet_name in workbook.sheet_names().to_owned() {
-        if let Ok(range) = workbook.worksheet_range(&sheet_name) {
-            out.push_str(&format!("# Sheet: {}\n", sheet_name));
-            for row in range.rows() {
-                let cells = row
-                    .iter()
-                    .map(|c| match c {
-                        DataType::Empty => "".to_string(),
-                        DataType::String(s) => s.to_string(),
-                        DataType::Float(f) => format!("{}", f),
-                        DataType::Int(i) => i.to_string(),
-                        DataType::Bool(b) => b.to_string(),
-                        DataType::DateTime(f) => format!("{}", f),
-                        other => other.to_string(),
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\t");
-                out.push_str(&cells);
-                out.push('\n');
-            }
+        let range = workbook.worksheet_range(&sheet_name).map_err(|error| {
+            RagError::ParseError(format!("Could not read worksheet '{sheet_name}': {error}"))
+        })?;
+        out.push_str(&format!("# Sheet: {}\n", sheet_name));
+        for row in range.rows() {
+            let cells = row
+                .iter()
+                .map(|c| match c {
+                    DataType::Empty => "".to_string(),
+                    DataType::String(s) => s.to_string(),
+                    DataType::Float(f) => format!("{}", f),
+                    DataType::Int(i) => i.to_string(),
+                    DataType::Bool(b) => b.to_string(),
+                    DataType::DateTime(f) => format!("{}", f),
+                    other => other.to_string(),
+                })
+                .collect::<Vec<_>>()
+                .join("\t");
+            out.push_str(&cells);
             out.push('\n');
         }
+        out.push('\n');
     }
     Ok(out)
 }
