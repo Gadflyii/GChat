@@ -39,6 +39,12 @@ fits, select Custom settings and clear the GPU KV budget to return to Automatic.
 Host does not silently shrink an exact request. Changed runtime options do not
 inherit historical profile qualification.
 
+Resolving Automatic to a fresh byte budget preserves a selected Max Perf recipe
+and its Max Perf profile identity, including after Restart and reopening Host. The saved
+request stays Automatic; Standard GBench can still validate the selected recipe
+against the current session. An explicit custom KV budget clears the Max Perf
+marker. This identity does not imply a measured performance result.
+
 Flash with graphs enabled has one bootstrap exception. If a solo Automatic
 start has no matching graph-memory receipt, its quote reports an unknown graph
 allowance. Host leaves the arena automatic for that Engine start; a successful

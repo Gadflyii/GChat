@@ -1195,8 +1195,7 @@ impl Host {
         }
         if request.options.kv_arena_bytes != launch.options.kv_arena_bytes {
             request.qualified_profile_id = None;
-            request.benchmark_profile = None;
-            launch.benchmark_profile = None;
+            // Resolving AUTO changes capacity, not the selected Max Perf recipe.
         }
         let id = launch.instance_id;
         self.processes.lock().await.launch(launch)?;
@@ -3933,6 +3932,16 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
 
     #[tokio::test]
     async fn max_perf_profile_selection_persists_and_refuses_modified_or_stale_session() {
+        for (model_id, weights_id, draft_tp) in [
+            ("qwen3.8-flash-next", "smol-q2g64", 0),
+            ("qwen3.8-27b", "groupwise-int-dflash2-q4", 1),
+        ] {
+            assert_max_perf_profile_session(model_id, weights_id, draft_tp).await;
+        }
+    }
+
+    async fn assert_max_perf_profile_session(model_id: &str, weights_id: &str, draft_tp: u8) {
+        let dense = draft_tp == 1;
         let dir = tempfile::tempdir().unwrap();
         let state = dir.path().join("state");
         let models = dir.path().join("models");
@@ -3943,8 +3952,8 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let hardware = crate::hardware_profile::group_profile_path(&state, &["GPU-test".into()]);
         std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
         std::fs::write(hardware, br#"{"schema_version":2}"#).unwrap();
-        let metadata = serde_json::json!({"identity":{"model_id":"qwen3.8-flash-next","weights_id":"smol-q2g64"},
-            "tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
+        let metadata = serde_json::json!({"identity":{"model_id":model_id,"weights_id":weights_id},
+            "tp_size":1,"draft_tp":draft_tp,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
         let mut artifact = b"NINFER\0\x03".to_vec();
         artifact.extend((metadata.len() as u64).to_le_bytes());
         artifact.extend(metadata.as_bytes());
@@ -3975,6 +3984,8 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         assert_eq!(instance["configuration"]["benchmark_profile"], reference);
         assert_eq!(instance["profile"]["benchmark_profile"], reference);
         assert!(instance["profile"]["qualified_profile_id"].is_null());
+        assert!(instance["profile"]["kv_arena_bytes"].is_null());
+        assert_eq!(instance["configuration"]["kv_arena_bytes"].as_u64().is_some_and(|bytes| bytes > 0), dense);
         tokio::time::timeout(Duration::from_secs(2), async {
             while !dir.path().join("argv-ready").is_file() { tokio::time::sleep(Duration::from_millis(10)).await; }
         }).await.unwrap();
@@ -3982,10 +3993,12 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let argv: Vec<_> = argv.lines().collect();
         assert_eq!(argv[0], artifact_path.to_str().unwrap());
         for pair in [["--max-context","8181"],["--max-concurrency","8"],["--tp","1"],
-            ["--spec","mtp"],["--draft-policy","fixed"],["--draft-tokens","3"],["--kv-dtype","int8"]] {
+            ["--spec",if dense { "dflash" } else { "mtp" }],["--draft-policy","fixed"],
+            ["--draft-tokens",if dense { "7" } else { "3" }],["--kv-dtype","int8"]] {
             assert!(argv.windows(2).any(|actual| actual == pair));
         }
-        for flag in ["--kv-arena-bytes","--host-kv-cache-bytes","--prefill-chunk","--no-cuda-graph"] {
+        assert_eq!(argv.contains(&"--kv-arena-bytes"), dense);
+        for flag in ["--host-kv-cache-bytes","--prefill-chunk","--no-cuda-graph"] {
             assert!(!argv.contains(&flag));
         }
         assert!(argv.contains(&"--vision") && argv.contains(&"--structured-outputs"));
@@ -4011,8 +4024,11 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let restarted = host.snapshot().await;
         assert_ne!(restarted["instances"][0]["session_id"], instance["session_id"]);
         assert_eq!(restarted["instances"][0]["configuration"]["benchmark_profile"], reference);
+        assert!(restarted["instances"][0]["profile"]["kv_arena_bytes"].is_null());
+        assert_eq!(restarted["instances"][0]["configuration"]["kv_arena_bytes"].as_u64().is_some_and(|bytes| bytes > 0), dense);
         let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(state.join("host.json")).unwrap()).unwrap();
         assert_eq!(saved["profiles"][id.to_string()]["benchmark_profile"], reference);
+        assert!(saved["profiles"][id.to_string()]["kv_arena_bytes"].is_null());
         let response = host.clone().route(Request::post(format!("/host/v1/instances/{id}/stop"))
             .header("authorization",format!("Bearer {token}"))
             .body(Body::from("{}")).unwrap()).await.unwrap();
@@ -4023,6 +4039,21 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let snapshot = reopened.snapshot().await;
         assert_eq!(snapshot["instances"][0]["status"], "stopped");
         assert_eq!(snapshot["instances"][0]["profile"]["benchmark_profile"], reference);
+        if dense {
+            // An explicit custom arena clears the Max Perf session marker.
+            let mut custom = selection.clone();
+            custom["instance_id"] = id.to_string().into();
+            custom["kv_arena_bytes"] = 4096.into();
+            let response = reopened.clone().route(Request::post("/host/v1/profile-launch")
+                .header("authorization",format!("Bearer {token}"))
+                .body(Body::from(custom.to_string())).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let custom = reopened.snapshot().await;
+            assert!(custom["instances"][0]["configuration"]["benchmark_profile"].is_null());
+            assert!(custom["instances"][0]["profile"]["benchmark_profile"].is_null());
+            assert_eq!(custom["instances"][0]["configuration"]["kv_arena_bytes"], 4096);
+            reopened.processes.lock().await.shutdown().await.unwrap();
+        }
         reopened.shutdown_hardware_profile().await.unwrap();
     }
 
