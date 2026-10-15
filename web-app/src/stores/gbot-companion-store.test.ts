@@ -210,12 +210,17 @@ describe('Gbot companion state', () => {
     expect(useGbotCompanion.getState().unread.a).toBe(true)
   })
 
-  it.each(['tasks', 'tasks/approvals'])(
+  it.each(['tasks', 'tasks/approvals', 'state', 'service target'])(
     'preserves read reply history when %s fails without losing genuinely new replies',
     async (failedEndpoint) => {
       let tasks = [replyTask('Read reply')]
       let failing = false
       const animation = () => botAvatarState(useGbotCompanion.getState(), 'a')
+      vi.mocked(getGbotServiceTarget).mockImplementation(async () => {
+        if (failing && failedEndpoint === 'service target')
+          throw new Error('Temporary executor failure')
+        return { kind: 'local' }
+      })
       vi.mocked(gbot).mockImplementation(async (path) => {
         if (failing && path === failedEndpoint)
           throw new Error('Temporary executor failure')
@@ -227,11 +232,14 @@ describe('Gbot companion state', () => {
 
       failing = true
       await useGbotCompanion.getState().refresh()
+      const serviceFailure =
+        failedEndpoint === 'state' || failedEndpoint === 'service target'
       expect(useGbotCompanion.getState()).toMatchObject({
-        available: true,
+        available: !serviceFailure,
         tasks: [],
         approvals: [],
-        executorError: 'Error: Temporary executor failure',
+        error: serviceFailure ? 'Error: Temporary executor failure' : '',
+        executorError: serviceFailure ? '' : 'Error: Temporary executor failure',
         unread: { a: false },
       })
       expect(animation()).toBe('sleeping')
