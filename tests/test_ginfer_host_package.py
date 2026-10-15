@@ -79,6 +79,41 @@ class LinuxRuntimeSet(unittest.TestCase):
 
 
 class HostPackage(unittest.TestCase):
+    def test_linux_bundle_keeps_manifest_docs_and_rejects_other_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / 'runtime'
+            files = []
+            docs = ('README.md', 'VERSION', 'docs/cli.md', 'docs/serving.md',
+                    'docs/release-names/README.md',
+                    'licenses/llguidance-crates/ahash/LICENSE-APACHE',
+                    'licenses/ubuntu-packages/libcurl4t64/copyright')
+            for name in ('bin/ginfer', 'bin/ginfer-serve', *docs):
+                member = runtime / name
+                member.parent.mkdir(parents=True, exist_ok=True)
+                if name.startswith('bin/'):
+                    member.write_bytes(Path('/usr/bin/true').read_bytes())
+                else:
+                    member.write_text(f'Operator documentation: {name}\n')
+                files.append({'path': name, 'bytes': member.stat().st_size,
+                              'sha256': hashlib.sha256(member.read_bytes()).hexdigest()})
+            manifest = {'schema': 'ginfer-linux-runtime-v1', 'platform': 'linux-x64',
+                        'files': files}
+            manifest_path = runtime / 'runtime-manifest.json'
+            manifest_path.write_text(json.dumps(manifest))
+            result = package.package(Path('/usr/bin/true'), 'linux-x86_64', root / 'out', runtime)
+            with tarfile.open(result) as archive:
+                members = {m.name.split('/', 1)[1]: m for m in archive.getmembers()}
+                for name in docs:
+                    member = members[f'runtime/{name}']
+                    self.assertEqual(archive.extractfile(member).read(), (runtime / name).read_bytes())
+                    self.assertEqual(member.mode, 0o644)
+            for forbidden in ('docs/private.md', '../README.md', 'licenses/../README.md'):
+                manifest['files'] = files + [{'path': forbidden, 'bytes': 0, 'sha256': ''}]
+                manifest_path.write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, 'runtime member'):
+                    package.runtime_entries(runtime, 'linux-x86_64')
+
     def test_catalogs_keep_values_and_reject_cross_platform_or_duplicate_profiles(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'profiles.json'

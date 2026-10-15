@@ -26,8 +26,10 @@ def install(bundle, destination, provider, config_root, link_dir, apply=False, g
     members = {}
     for entry in manifest['files']:
         name = entry['path']
-        if name in members or not re.fullmatch(
-                r'(bin/ginfer(?:-serve)?|lib/lib[\w+.-]+\.so\.[\w.-]+|licenses/[\w.-]+\.txt|LICENSE|README\.md)', name):
+        if name in members or '..' in Path(name).parts or not re.fullmatch(
+                r'(bin/ginfer(?:-serve)?|lib/lib[\w+.-]+\.so\.[\w.-]+|'
+                r'licenses/(?:[\w+.-]+/)*[\w+.-]+|'
+                r'LICENSE|README\.md|VERSION|docs/(?:cli\.md|serving\.md|release-names/README\.md))', name):
             raise ValueError(f'unexpected or duplicate runtime member: {name}')
         source = runtime / name
         with source.open('rb') as stream:
