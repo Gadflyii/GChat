@@ -26,9 +26,25 @@ prompts and accepts a run that is already inactive. An unrelated active run is p
 The new native regression passes duplicate and late Stop requests, prompt cleanup
 and preservation of an unrelated active run. The existing real-worker preflight
 cancellation and delegated cancellation/reopen regressions also pass in the 631-case
-Chat library suite (seven ignored); `cargo check` and strict Clippy pass. This source
-diagnosis does not establish which race caused the retained single-click OI-068
-toast; a new installed-app replay has not been performed.
+Chat library suite (seven ignored); `cargo check` and strict Clippy pass. The
+correction and test-quality fixes are merged in `22ae47c0b`. This source diagnosis
+does not establish which race caused the retained single-click OI-068 toast.
+
+The October 15 native Linux replay passes on production desktop source
+`22ae47c0b`, built into a private extracted AppImage resource closure with accepted
+CLI/Host `7e33222e8` and Engine `38ff80e0c`. Fresh profiling of the actual 115 GiB
+host and CPU grant 8–31 completed in 752.9 seconds. The unchanged saved 262144
+configuration reached Ready. One Stop click at 07:09:17Z cancelled the actively
+generating worker's Engine request; the parent completed normally and no failure
+toast appeared. The cancelled record and exact Chat history survived reopening,
+and Studio displayed the saved cancelled run. Normal Host Stop passed with zero
+active requests. This is functional worker Stop acceptance, not a full 262144-token
+capacity qualification or a rebuilt installer gate. Broader OI-068 remains partial;
+Windows, Hermes and active-worker compaction/checkpoint resume remain owed.
+
+Evidence: `/ai/gchat-worktrees/worker-replay-22ae/out/worker-acceptance-20261015/{result.json,summary.md}`.
+Owned desktop/Host/Engine/Gbot processes are stopped; CPU/GPU bookings and canonical
+guards are released. No Windows build, signing or publication was performed.
 
 GCHAT-CLI-FEATURE-CLIPPY is fixed: desktop startup helpers compile only for
 the desktop feature; shared headless installation and completion remain available.
