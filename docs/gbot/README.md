@@ -6,6 +6,8 @@ compact and expanded states preserve the main workspace; each bot retains its
 Conversation/Agents/Desktop selection and unsent conversation draft. Agents
 shows the assigned model and reported task/tool activity. Hiding the pane or
 leaving Desktop closes its media and input leases without cancelling tasks.
+The companion stays within the window over tall Settings pages; the underlying
+route and each companion tab scroll independently, keeping its controls visible.
 A bot paused for human takeover stays paused until explicit Hand back.
 All seven supplied avatar animations now have activity mappings, with the
 existing light/dark and reduced-motion styles. See the

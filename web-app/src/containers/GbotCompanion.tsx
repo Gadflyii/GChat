@@ -219,7 +219,7 @@ export default function GbotCompanion() {
           hide()
         }
       }}
-      className={`absolute inset-y-0 right-0 z-40 flex flex-col border-l bg-background shadow-2xl outline-none transition-[transform,width,visibility] duration-200 motion-reduce:transition-none ${
+      className={`absolute inset-y-0 right-0 z-40 flex min-h-0 flex-col overflow-hidden border-l bg-background shadow-2xl outline-none transition-[transform,width,visibility] duration-200 motion-reduce:transition-none ${
         state.mode === 'expanded' ? 'w-full' : 'w-[min(30rem,100%)]'
       } ${visible ? 'visible translate-x-0' : 'invisible translate-x-full'}`}
     >

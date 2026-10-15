@@ -63,7 +63,7 @@ const AppLayout = () => {
   useTrayStatusSync()
 
   return (
-    <div className="bg-background size-full relative">
+    <div className="bg-background relative h-svh w-full overflow-hidden">
       <SidebarProvider
         open={isLeftPanelOpen}
         onOpenChange={setLeftPanel}
@@ -78,8 +78,8 @@ const AppLayout = () => {
         <StudioActivity />
         <LeftSidebar />
         <SidebarInset>
-          <div className="relative bg-background size-full overflow-hidden">
-            <div className="size-full" inert={botExpanded}>
+          <div className="relative min-h-0 flex-1 bg-background overflow-hidden">
+            <div className="size-full overflow-x-hidden overflow-y-auto" inert={botExpanded}>
               <Outlet />
               <Suspense fallback={null}>
                 {(codeVisible || codeVisited) && <CodeTerminalHost visible={codeVisible} />}
