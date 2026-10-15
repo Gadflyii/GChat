@@ -535,10 +535,14 @@ must demonstrate this contract rather than just showing any desktop.
 | --- | --- |
 | View | Read-only. Opening a panel does not grant mouse, keyboard, clipboard or file-transfer input. |
 | Take over | Service revokes bot input, the worker acknowledges that queued input is drained/cancelled, then human input is enabled. One owner controls this desktop. |
-| Hand back | Human input ends; obtain a fresh frame/geometry and reconcile state before resuming the bot. |
+| Hand back | Human input ends; obtain a fresh frame/geometry and reconcile state before resuming the bot. Failed observation keeps the bot paused; a stopped viewer offers Reconnect view. |
 | Connection loss | Disable input, show Offline, retain the task. Loss during takeover leaves it paused; do not silently hand the desktop back. |
 | Close view | Close the viewer/tunnel without stopping the task, VM or service. Active human takeover requires explicit hand-back or remains paused. |
 | Stop task | Stop its owned command processes and desktop input; preserve artifacts and report uncertain external actions. Do not stop other tasks' shared inference instance. |
+
+Reconnecting a stopped view opens a new media lease with the service's current
+input ownership. A stopped view closes late tickets and ignores late status callbacks.
+Reconnecting does not resume the task or retry Hand back.
 
 Only one actor owns GUI input per desktop, including different clients and agents.
 Independent shell/file tasks can run concurrently; concurrent GUI tasks need
