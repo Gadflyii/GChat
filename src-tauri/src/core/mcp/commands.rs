@@ -1,9 +1,15 @@
-use rmcp::model::{CallToolRequestParam, CallToolResult};
-use rmcp::{service::Peer, RoleClient};
+use rmcp::model::{
+    CallToolRequest, CallToolRequestParam, CallToolResult, ClientRequest, ListToolsRequest,
+    PaginatedRequestParam, ServerResult, Tool,
+};
+use rmcp::{
+    service::{Peer, PeerRequestOptions},
+    RoleClient,
+};
 use serde_json::{json, Map, Value};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tokio::sync::oneshot;
-use tokio::time::timeout;
+use tokio::time::{timeout, timeout_at, Instant};
 use tokio_util::sync::CancellationToken;
 
 use super::{
@@ -11,7 +17,10 @@ use super::{
         default_filesystem_root, default_mcp_config, filesystem_mcp_pinned_spec,
         DEFAULT_MCP_TOOL_LIST_TIMEOUT_SECS, FILESYSTEM_MCP_PACKAGE, LEGACY_FILESYSTEM_PLACEHOLDER,
     },
-    helpers::{kill_process_tree_by_pid, restart_active_mcp_servers, start_mcp_server},
+    helpers::{
+        kill_process_tree_by_pid, redact_mcp_config_values, restart_active_mcp_servers,
+        start_mcp_server, validate_mcp_config,
+    },
 };
 use crate::core::{
     app::commands::get_jan_data_folder_path,
@@ -21,10 +30,6 @@ use crate::core::{
     state::{AppState, RunningServiceEnum, SharedMcpServers},
 };
 use std::{collections::BTreeSet, fs, time::Duration};
-
-async fn tool_call_timeout(state: &State<'_, AppState>) -> Duration {
-    state.mcp_settings.lock().await.tool_call_timeout_duration()
-}
 
 /// Exact-server dispatch for the shared capability runtime. Clone the peer before
 /// any network I/O; cancellation belongs to the owning Agent/Chat run rather
@@ -36,29 +41,194 @@ pub async fn call_tool_exact(
     arguments: Map<String, Value>,
     cancellation: &CancellationToken,
 ) -> Result<CallToolResult, String> {
-    let peer = state
-        .mcp_servers
-        .lock()
-        .await
-        .get(server)
-        .map(|service| service.peer())
-        .ok_or_else(|| format!("MCP server `{server}` is not connected"))?;
-    let deadline = state.mcp_settings.lock().await.tool_call_timeout_duration();
-    let call = async {
-        let tools = peer.list_all_tools().await.map_err(|error| error.to_string())?;
-        if !tools.iter().any(|candidate| candidate.name == tool) {
-            return Err(format!("MCP tool `{tool}` is unavailable on `{server}`"));
-        }
-        peer.call_tool(CallToolRequestParam {
-            name: tool.to_owned().into(),
-            arguments: Some(arguments),
-        })
-        .await
-        .map_err(|error| error.to_string())
+    let (peer, config) = {
+        let servers = state.mcp_servers.lock().await;
+        let peer = servers
+            .get(server)
+            .map(|service| service.peer())
+            .ok_or_else(|| format!("MCP server `{server}` is not connected"))?;
+        let config = state.mcp_active_servers.lock().await.get(server).cloned();
+        (peer, config)
     };
-    tokio::select! {
-        _ = cancellation.cancelled() => Err("MCP tool call cancelled".into()),
-        result = timeout(deadline, call) => result.map_err(|_| format!("MCP tool `{tool}` timed out after {} seconds", deadline.as_secs()))?,
+    let deadline = Instant::now() + state.mcp_settings.lock().await.tool_call_timeout_duration();
+    let result = call_tool_on_peer(&peer, tool, Some(arguments), cancellation, deadline).await;
+    redact_tool_result(config.as_ref(), result)
+}
+
+fn redact_server_result<T>(config: Option<&Value>, result: Result<T, String>) -> Result<T, String> {
+    result.map_err(|error| match config {
+        Some(config) => redact_mcp_config_values(&error, config),
+        None => error,
+    })
+}
+
+fn redact_tool_result(
+    config: Option<&Value>,
+    result: Result<CallToolResult, String>,
+) -> Result<CallToolResult, String> {
+    let mut result = redact_server_result(config, result)?;
+    if result.is_error != Some(true) {
+        return Ok(result);
+    }
+    let Some(config) = config else {
+        return Ok(result);
+    };
+    fn redact_strings(value: &mut Value, config: &Value) {
+        match value {
+            Value::String(text) => *text = redact_mcp_config_values(text, config),
+            Value::Array(values) => {
+                for value in values {
+                    redact_strings(value, config);
+                }
+            }
+            Value::Object(values) => {
+                for value in values.values_mut() {
+                    redact_strings(value, config);
+                }
+            }
+            _ => {}
+        }
+    }
+    // Only redact diagnostic payloads, never protocol tags such as `type`.
+    // A configured credential may itself be a valid tag (for example `text`).
+    for content in &mut result.content {
+        match &mut content.raw {
+            rmcp::model::RawContent::Text(text) => {
+                text.text = redact_mcp_config_values(&text.text, config);
+                if let Some(meta) = &mut text.meta {
+                    for value in meta.0.values_mut() {
+                        redact_strings(value, config);
+                    }
+                }
+            }
+            rmcp::model::RawContent::Resource(resource) => {
+                if let rmcp::model::ResourceContents::TextResourceContents { text, .. } =
+                    &mut resource.resource
+                {
+                    *text = redact_mcp_config_values(text, config);
+                }
+            }
+            _ => {}
+        }
+    }
+    if let Some(value) = &mut result.structured_content {
+        redact_strings(value, config);
+    }
+    if let Some(meta) = &mut result.meta {
+        for value in meta.0.values_mut() {
+            redact_strings(value, config);
+        }
+    }
+    Ok(result)
+}
+
+/// Dropping rmcp's response future does not cancel the remote request. Retain
+/// its request id and explicitly notify the peer on Stop or deadline expiry.
+async fn request_with_cancellation(
+    peer: &Peer<RoleClient>,
+    request: ClientRequest,
+    cancellation: &CancellationToken,
+    deadline: Instant,
+) -> Result<ServerResult, String> {
+    let method = request.method();
+    if Instant::now() >= deadline {
+        return Err(format!("MCP {method} timed out"));
+    }
+    let mut handle = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => return Err("MCP tool call cancelled".into()),
+        result = timeout_at(deadline, peer.send_cancellable_request(request, PeerRequestOptions::no_options())) => {
+            result.map_err(|_| format!("MCP {method} timed out"))?
+                .map_err(|error| error.to_string())?
+        }
+    };
+    let error = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => "MCP tool call cancelled".to_owned(),
+        result = timeout_at(deadline, &mut handle.rx) => match result {
+            Ok(Ok(result)) => return result.map_err(|error| error.to_string()),
+            Ok(Err(_)) => return Err("MCP transport closed".into()),
+            Err(_) => format!("MCP {method} timed out"),
+        }
+    };
+    // Sending a cancellation is best effort and must itself remain bounded if
+    // the transport has stopped accepting outbound messages.
+    let _ = timeout(
+        Duration::from_millis(100),
+        handle.cancel(Some(error.clone())),
+    )
+    .await;
+    Err(error)
+}
+
+async fn list_tools_with_cancellation(
+    peer: &Peer<RoleClient>,
+    cancellation: &CancellationToken,
+    deadline: Instant,
+) -> Result<Vec<Tool>, String> {
+    let mut tools = Vec::new();
+    let mut cursor = None;
+    loop {
+        let result = request_with_cancellation(
+            peer,
+            ClientRequest::ListToolsRequest(ListToolsRequest {
+                method: Default::default(),
+                params: Some(PaginatedRequestParam { cursor }),
+                extensions: Default::default(),
+            }),
+            cancellation,
+            deadline,
+        )
+        .await?;
+        let ServerResult::ListToolsResult(result) = result else {
+            return Err("Unexpected MCP tools/list response".into());
+        };
+        tools.extend(result.tools);
+        cursor = result.next_cursor;
+        if cursor.is_none() {
+            return Ok(tools);
+        }
+    }
+}
+
+async fn call_tool_on_peer(
+    peer: &Peer<RoleClient>,
+    tool: &str,
+    arguments: Option<Map<String, Value>>,
+    cancellation: &CancellationToken,
+    deadline: Instant,
+) -> Result<CallToolResult, String> {
+    let tools = list_tools_with_cancellation(peer, cancellation, deadline).await?;
+    if !tools.iter().any(|candidate| candidate.name == tool) {
+        return Err(format!("MCP tool `{tool}` is unavailable"));
+    }
+    invoke_tool_on_peer(peer, tool, arguments, cancellation, deadline).await
+}
+
+async fn invoke_tool_on_peer(
+    peer: &Peer<RoleClient>,
+    tool: &str,
+    arguments: Option<Map<String, Value>>,
+    cancellation: &CancellationToken,
+    deadline: Instant,
+) -> Result<CallToolResult, String> {
+    let result = request_with_cancellation(
+        peer,
+        ClientRequest::CallToolRequest(CallToolRequest {
+            method: Default::default(),
+            params: CallToolRequestParam {
+                name: tool.to_owned().into(),
+                arguments,
+            },
+            extensions: Default::default(),
+        }),
+        cancellation,
+        deadline,
+    )
+    .await?;
+    match result {
+        ServerResult::CallToolResult(result) => Ok(result),
+        _ => Err("Unexpected MCP tools/call response".into()),
     }
 }
 
@@ -97,18 +267,13 @@ pub async fn deactivate_mcp_server<R: Runtime>(
         None
     };
 
-    // First, mark server as manually deactivated
-    // Remove from active servers list
-    {
-        let mut active_servers = state.mcp_active_servers.lock().await;
-        active_servers.remove(&name);
-        log::info!("Removed MCP server {name} from active servers list");
-    }
-    // Now remove and stop the server
+    // Remove the peer and its credential configuration under the same lock used
+    // by call/discovery snapshots before stopping the transport outside it.
     let servers = state.mcp_servers.clone();
     let mut servers_map = servers.lock().await;
 
     let service = servers_map.remove(&name);
+    state.mcp_active_servers.lock().await.remove(&name);
     let mut start_generations = state.mcp_start_generations.lock().await;
     let start_generation = start_generations.entry(name.clone()).or_default();
     *start_generation = start_generation.wrapping_add(1);
@@ -198,12 +363,37 @@ pub async fn restart_mcp_servers<R: Runtime>(
 ) -> Result<(), String> {
     use super::helpers::{stop_mcp_servers_with_context, ShutdownContext};
 
+    // Read and validate the desired configuration before disrupting any live
+    // connection. Saving does not mutate the running peers' credential state.
+    let path = get_jan_data_folder_path(app.clone()).join("mcp_config.json");
+    let content =
+        fs::read_to_string(path).map_err(|error| format!("Failed to read MCP config: {error}"))?;
+    let config: Value =
+        serde_json::from_str(&content).map_err(|error| format!("Invalid MCP config: {error}"))?;
+    validate_mcp_config(&config)?;
+    let desired_servers = config
+        .get("mcpServers")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, config)| super::helpers::extract_active_status(config) != Some(false))
+        .map(|(name, config)| (name.clone(), config.clone()))
+        .collect();
+    let settings = parse_mcp_settings(config.get("mcpSettings"));
     let servers = state.mcp_servers.clone();
 
     stop_mcp_servers_with_context(&app, &state, ShutdownContext::ManualRestart).await?;
 
-    // Restart only previously active servers (like cortex)
-    restart_active_mcp_servers(&app, servers).await?;
+    // Retire deleted/disabled configurations only after their peers are stopped.
+    // This includes the hidden Browser connector: its saved active flag follows
+    // the same policy as the browser toggle, without resurrecting an old peer.
+    {
+        let _peers = servers.lock().await;
+        state.mcp_active_servers.lock().await.clear();
+        state.mcp_server_errors.lock().await.clear();
+        *state.mcp_settings.lock().await = settings;
+    }
+    restart_active_mcp_servers(&app, servers, desired_servers).await?;
 
     app.emit("mcp-update", "MCP servers updated")
         .map_err(|e| format!("Failed to emit event: {e}"))?;
@@ -252,8 +442,9 @@ pub async fn get_tools(
     // that needs the map — chat send, model-switch re-init, the tools UI. With
     // the lock dropped here, listing runs entirely outside the critical section
     // (ATO-271).
-    let handles: Vec<(String, u64, Peer<RoleClient>)> = {
+    let handles: Vec<(String, u64, Peer<RoleClient>, Option<Value>)> = {
         let servers = state.mcp_servers.lock().await;
+        let configs = state.mcp_active_servers.lock().await;
         let generations = state.mcp_server_generations.lock().await;
         servers
             .iter()
@@ -262,6 +453,7 @@ pub async fn get_tools(
                     name.clone(),
                     generations.get(name).copied().unwrap_or_default(),
                     service.peer(),
+                    configs.get(name).cloned(),
                 )
             })
             .collect()
@@ -270,23 +462,28 @@ pub async fn get_tools(
     // List every server concurrently, each capped by its own short timeout, so
     // one slow/dead server delays only itself — total latency is bounded by
     // `list_timeout`, not the sum across servers.
-    let per_server = handles
-        .into_iter()
-        .map(|(server_name, generation, peer)| async move {
-            match timeout(list_timeout, peer.list_all_tools()).await {
-                Ok(Ok(tools)) => (server_name, generation, Ok(tools)),
-                Ok(Err(e)) => {
-                    let error = format!("Failed to list tools: {e}");
-                    log::warn!("MCP server {server_name} {error}");
-                    (server_name, generation, Err(error))
+    let per_server =
+        handles
+            .into_iter()
+            .map(|(server_name, generation, peer, config)| async move {
+                let result = list_tools_with_cancellation(
+                    &peer,
+                    &CancellationToken::new(),
+                    Instant::now() + list_timeout,
+                )
+                .await;
+                match redact_server_result(config.as_ref(), result) {
+                    Ok(tools) => (server_name, generation, Ok(tools)),
+                    Err(error) => {
+                        log::warn!("MCP server {server_name}: tool listing failed");
+                        (
+                            server_name,
+                            generation,
+                            Err(format!("Failed to list tools: {error}")),
+                        )
+                    }
                 }
-                Err(_) => {
-                    let error = format!("Tool listing timed out after {}s", list_timeout.as_secs());
-                    log::warn!("MCP server {server_name}: {error}");
-                    (server_name, generation, Err(error))
-                }
-            }
-        });
+            });
 
     let results = futures_util::future::join_all(per_server).await;
     let mut all_tools: Vec<ToolWithServer> = Vec::new();
@@ -393,110 +590,95 @@ pub async fn call_tool(
     arguments: Option<Map<String, Value>>,
     cancellation_token: Option<String>,
 ) -> Result<CallToolResult, String> {
-    let timeout_duration = tool_call_timeout(&state).await;
-    match server_name.as_deref() {
-        Some(server) => log::info!(
-            "MCP server {server}: calling tool {tool_name} (timeout {}s)",
-            timeout_duration.as_secs()
-        ),
-        None => log::info!(
-            "MCP: calling tool {tool_name} (server unspecified, timeout {}s)",
-            timeout_duration.as_secs()
-        ),
-    }
+    call_tool_inner(
+        &state,
+        tool_name,
+        server_name,
+        arguments,
+        cancellation_token,
+    )
+    .await
+}
 
+pub(super) async fn call_tool_inner(
+    state: &AppState,
+    tool_name: String,
+    server_name: Option<String>,
+    arguments: Option<Map<String, Value>>,
+    cancellation_token: Option<String>,
+) -> Result<CallToolResult, String> {
+    let duration = state.mcp_settings.lock().await.tool_call_timeout_duration();
+    let deadline = Instant::now() + duration;
     let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
-
     if let Some(token) = &cancellation_token {
         let mut cancellations = state.tool_call_cancellations.lock().await;
+        if cancellations.contains_key(token) {
+            return Err("MCP cancellation token is already in use".into());
+        }
         cancellations.insert(token.clone(), cancel_tx);
     }
-
-    let servers = state.mcp_servers.lock().await;
-
-    // If server_name is provided, only check that specific server
-    let servers_to_check: Vec<(&String, &crate::core::state::RunningServiceEnum)> =
-        if let Some(ref server) = server_name {
-            servers.iter().filter(|(name, _)| *name == server).collect()
-        } else {
-            servers.iter().collect()
-        };
-
-    if servers_to_check.is_empty() {
-        if let Some(server) = server_name {
-            log::error!("MCP server {server} not connected, cannot call tool {tool_name}");
-            return Err(format!("Server '{server}' not found"));
+    let cancellation = CancellationToken::new();
+    let cancellation_for_task = cancellation.clone();
+    let cancellation_task = tokio::spawn(async move {
+        // A dropped sender without a user Stop is not cancellation.
+        if cancel_rx.await.is_ok() {
+            cancellation_for_task.cancel();
         }
-    }
-
-    // Iterate through servers and find the one that contains the tool
-    for (srv_name, service) in servers_to_check.iter() {
-        let tools = match service.list_all_tools().await {
-            Ok(tools) => tools,
-            Err(e) => {
-                log::warn!(
-                    "MCP server {srv_name}: failed to list tools while resolving {tool_name}: {e}"
-                );
+    });
+    let result = async {
+        let peers: Vec<_> = {
+            let servers = state.mcp_servers.lock().await;
+            let configs = state.mcp_active_servers.lock().await;
+            servers
+                .iter()
+                .filter(|(name, _)| server_name.as_ref().map_or(true, |server| *name == server))
+                .map(|(name, service)| (name.clone(), service.peer(), configs.get(name).cloned()))
+                .collect()
+        };
+        if peers.is_empty() {
+            return Err(match server_name {
+                Some(server) => format!("MCP server `{server}` is not connected"),
+                None => "No MCP servers are connected".into(),
+            });
+        }
+        let mut discovery_error = None;
+        for (name, peer, config) in peers {
+            let listing = list_tools_with_cancellation(&peer, &cancellation, deadline).await;
+            let tools = match redact_server_result(config.as_ref(), listing) {
+                Ok(tools) => tools,
+                Err(error) => {
+                    if cancellation.is_cancelled() || Instant::now() >= deadline {
+                        return Err(error);
+                    }
+                    discovery_error = Some(error);
+                    continue;
+                }
+            };
+            if !tools.iter().any(|tool| tool.name == tool_name) {
                 continue;
             }
-        };
-
-        if !tools.iter().any(|t| t.name == tool_name) {
-            continue;
+            log::info!("MCP server {name}: dispatching tool {tool_name}");
+            let result =
+                invoke_tool_on_peer(&peer, &tool_name, arguments, &cancellation, deadline).await;
+            return redact_tool_result(config.as_ref(), result);
         }
-
-        log::info!("MCP server {srv_name}: dispatching tool {tool_name}");
-
-        let tool_call = service.call_tool(CallToolRequestParam {
-            name: tool_name.clone().into(),
-            arguments,
-        });
-
-        // Race between timeout, tool call, and cancellation
-        let result = if cancellation_token.is_some() {
-            tokio::select! {
-                result = timeout(timeout_duration, tool_call) => {
-                    match result {
-                        Ok(call_result) => call_result.map_err(|e| e.to_string()),
-                        Err(_) => Err(format!(
-                            "Tool call '{tool_name}' timed out after {} seconds",
-                            timeout_duration.as_secs()
-                        )),
-                    }
-                }
-                _ = cancel_rx => {
-                    Err(format!("Tool call '{tool_name}' was cancelled"))
-                }
-            }
-        } else {
-            match timeout(timeout_duration, tool_call).await {
-                Ok(call_result) => call_result.map_err(|e| e.to_string()),
-                Err(_) => Err(format!(
-                    "Tool call '{tool_name}' timed out after {} seconds",
-                    timeout_duration.as_secs()
-                )),
-            }
-        };
-
-        if let Some(token) = &cancellation_token {
-            let mut cancellations = state.tool_call_cancellations.lock().await;
+        Err(discovery_error.unwrap_or_else(|| format!("MCP tool `{tool_name}` not found")))
+    }
+    .await;
+    cancellation_task.abort();
+    let _ = cancellation_task.await;
+    if let Some(token) = &cancellation_token {
+        let mut cancellations = state.tool_call_cancellations.lock().await;
+        // Stop removes its sender immediately. If that token has since been
+        // reused, its new live receiver belongs to a different call.
+        if cancellations
+            .get(token)
+            .is_some_and(oneshot::Sender::is_closed)
+        {
             cancellations.remove(token);
         }
-
-        match &result {
-            Ok(_) => {
-                log::info!("MCP server {srv_name}: tool {tool_name} completed");
-            }
-            Err(e) => {
-                log::error!("MCP server {srv_name}: tool {tool_name} failed: {e}");
-            }
-        }
-
-        return result;
     }
-
-    log::warn!("MCP: tool {tool_name} not found on any connected server");
-    Err(format!("Tool {tool_name} not found"))
+    result
 }
 
 /// Cancels a running tool call by its cancellation token
@@ -547,15 +729,11 @@ pub async fn get_mcp_configs<R: Runtime>(app: AppHandle<R>) -> Result<String, St
     let mut config_value: Value = if config_string.trim().is_empty() {
         json!({})
     } else {
-        serde_json::from_str(&config_string).unwrap_or_else(|error| {
-            log::error!("Failed to parse existing MCP config, regenerating defaults: {error}");
-            json!({})
-        })
+        serde_json::from_str(&config_string)
+            .map_err(|error| format!("Invalid existing MCP config: {error}"))?
     };
 
-    if !config_value.is_object() {
-        config_value = json!({});
-    }
+    validate_mcp_config(&config_value)?;
 
     let mut mutated = false;
     let config_object = config_value.as_object_mut().unwrap();
@@ -831,6 +1009,7 @@ pub async fn save_mcp_configs<R: Runtime>(
         return Err("MCP config must be a JSON object".to_string());
     }
 
+    validate_mcp_config(&config_value)?;
     let config_object = config_value.as_object_mut().unwrap();
     let settings = parse_mcp_settings(config_object.get("mcpSettings"));
 

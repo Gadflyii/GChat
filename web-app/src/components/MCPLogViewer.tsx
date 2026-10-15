@@ -9,7 +9,7 @@ const LOG_EVENT_NAME = 'log://log'
 // Note: per-server filtering relies on a substring match of `serverName`
 // against the log message body. Rust MCP code embeds server names directly
 // in log messages (e.g. "Starting MCP server {name}"), but some shared
-// lifecycle logs (port cleanup, full server_map dump) do not — those will
+// lifecycle logs (port cleanup and aggregate status updates) do not — those will
 // only be visible when no server filter is applied.
 interface Props {
   serverName?: string

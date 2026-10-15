@@ -16,9 +16,19 @@ unqualified.
 Inference-server hosted retrieval, `file_search`, `web_search` and MCP are
 unsupported. Unsupported tool, input-content and output-format declarations
 return an explicit error; adapters must not remove them and continue generation.
-GChat's client-side web search, document retrieval and MCP release scope remains
-under review in OI-055. Configured GChat MCP connectors execute client function
-tools through the shared executor.
+GChat's client-side web search and document retrieval release scope remains
+under review in OI-055. The separate `MCP-CLIENT-QUALIFY` Linux release item covers
+trusted STDIO and HTTP/SSE connectors with static credentials. Linux native
+development GUI checks pass with real servers: discovery, approval and denial,
+disabled-tool enforcement, invocation, Stop cancellation and saved configuration
+across normal app restart. The shared Chat executor drives these model-free
+checks; model-led tool selection and installer qualification are separate.
+OAuth is outside scope. Configured connectors
+execute client function tools through the shared approval and cancellation
+executor. STDIO servers run with the user's permissions, and saved environment
+variables and headers are plaintext configuration, not a credential vault.
+See the [MCP setup guide](../src/pages/docs/desktop/integrations/mcp-servers.mdx)
+for the current GUI and trust boundaries.
 
 The Host checks unsupported hosted-tool and output declarations for Manager,
 standalone and registered GChat instances. Native engine validation owns the

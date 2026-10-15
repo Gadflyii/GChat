@@ -15,7 +15,7 @@ import {
   IconGripVertical,
   IconCodeDots,
 } from '@tabler/icons-react'
-import { MCPServerConfig } from '@/hooks/useMCPServers'
+import { MCPServerConfig, MCPServers } from '@/hooks/useMCPServers'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import {
   DndContext,
@@ -106,7 +106,7 @@ interface AddEditMCPServerProps {
   onOpenChange: (open: boolean) => void
   editingKey: string | null
   initialData?: MCPServerConfig
-  onSave: (name: string, config: MCPServerConfig) => void
+  onSave: (servers: MCPServers) => Promise<void>
 }
 
 export default function AddEditMCPServer({
@@ -132,6 +132,7 @@ export default function AddEditMCPServer({
   const [isToggled, setIsToggled] = useState(false)
   const [jsonContent, setJsonContent] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   // Reset form when modal opens/closes or editing key changes
   useEffect(() => {
@@ -275,103 +276,124 @@ export default function AddEditMCPServer({
     setHeaderValues(newValues)
   }
 
-  const handleSave = () => {
-    // Handle JSON mode
-    if (isToggled) {
-      try {
-        const parsedData = JSON.parse(jsonContent)
-        // Validate that it's an object with server configurations
-        if (typeof parsedData !== 'object' || parsedData === null) {
-          setError(t('mcp-servers:editJson.errorFormat'))
-          return
-        }
-        // Check if this looks like a server config object instead of the expected format
-        if (parsedData.command || parsedData.url) {
-          setError(t('mcp-servers:editJson.errorMissingServerNameKey'))
-          return
-        }
-
-        // For each server in the JSON, validate serverName and config
-        for (const [serverName, config] of Object.entries(parsedData)) {
-          const trimmedServerName = serverName.trim()
-          if (!trimmedServerName) {
-            setError(t('mcp-servers:editJson.errorServerName'))
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      // Handle JSON mode
+      if (isToggled) {
+        try {
+          const parsedData = JSON.parse(jsonContent)
+          // Validate that it's an object with server configurations
+          if (typeof parsedData !== 'object' || parsedData === null || Array.isArray(parsedData)) {
+            setError(t('mcp-servers:editJson.errorFormat'))
+            return
+          }
+          // Check if this looks like a server config object instead of the expected format
+          if (parsedData.command || parsedData.url) {
+            setError(t('mcp-servers:editJson.errorMissingServerNameKey'))
             return
           }
 
-          // Validate the config object
-          const serverConfig = config as MCPServerConfig
+          const servers: MCPServers = Object.create(null)
+          // Submit the complete edit once so native validation cannot leave
+          // earlier entries installed when a later entry is invalid.
+          for (const [serverName, config] of Object.entries(parsedData)) {
+            const trimmedServerName = serverName.trim()
+            if (!trimmedServerName) {
+              setError(t('mcp-servers:editJson.errorServerName'))
+              return
+            }
 
-          // Validate type field if present
-          if (
-            serverConfig.type &&
-            !['stdio', 'http', 'sse'].includes(serverConfig.type)
-          ) {
-            setError(
-              t('mcp-servers:editJson.errorInvalidType', {
-                serverName: trimmedServerName,
-                type: serverConfig.type,
-              })
-            )
-            return
+            // Validate the config object
+            if (!config || typeof config !== 'object' || Array.isArray(config)) {
+              setError(t('mcp-servers:editJson.errorFormat'))
+              return
+            }
+            const serverConfig = config as MCPServerConfig
+
+            // Validate type field if present
+            if (
+              serverConfig.type &&
+              !['stdio', 'http', 'sse'].includes(serverConfig.type)
+            ) {
+              setError(
+                t('mcp-servers:editJson.errorInvalidType', {
+                  serverName: trimmedServerName,
+                  type: serverConfig.type,
+                })
+              )
+              return
+            }
+
+            if (Object.prototype.hasOwnProperty.call(servers, trimmedServerName)) {
+              setError(t('mcp-servers:editJson.errorServerName'))
+              return
+            }
+            servers[trimmedServerName] = serverConfig
           }
-
-          onSave(trimmedServerName, serverConfig as MCPServerConfig)
+          await onSave(servers)
+          onOpenChange(false)
+          resetForm()
+          setError(null)
+          return
+        } catch (error) {
+          setError(error instanceof SyntaxError
+            ? t('mcp-servers:editJson.errorFormat')
+            : String(error))
+          return
         }
+      }
+
+      // Handle form mode
+      // Convert env arrays to object
+      const envObj: Record<string, string> = Object.create(null)
+      envKeys.forEach((key, index) => {
+        const keyName = key.trim()
+        if (keyName !== '') {
+          envObj[keyName] = envValues[index]?.trim() || ''
+        }
+      })
+
+      // Convert headers arrays to object
+      const headersObj: Record<string, string> = Object.create(null)
+      headerKeys.forEach((key, index) => {
+        const keyName = key.trim()
+        if (keyName !== '') {
+          headersObj[keyName] = headerValues[index]?.trim() || ''
+        }
+      })
+
+      // Filter out empty args
+      const filteredArgs = args.map((arg) => arg.trim()).filter((arg) => arg)
+
+      const config: MCPServerConfig = {
+        ...(initialData || {}),
+        command: transportType === 'stdio' ? command.trim() : '',
+        args: transportType === 'stdio' ? filteredArgs : [],
+        env: transportType === 'stdio' ? envObj : {},
+        type: transportType,
+        url: transportType === 'stdio' ? undefined : url.trim(),
+        headers: transportType === 'stdio' || Object.keys(headersObj).length === 0
+          ? undefined : headersObj,
+        timeout: timeout.trim() !== '' ? Number(timeout) : undefined,
+        cwd: transportType === 'stdio' ? initialData?.cwd : undefined,
+      }
+
+      if (serverName.trim() !== '') {
+        await onSave({ [serverName.trim()]: config })
         onOpenChange(false)
         resetForm()
-        setError(null)
-        return
-      } catch {
-        setError(t('mcp-servers:editJson.errorFormat'))
-        return
       }
-    }
-
-    // Handle form mode
-    // Convert env arrays to object
-    const envObj: Record<string, string> = {}
-    envKeys.forEach((key, index) => {
-      const keyName = key.trim()
-      if (keyName !== '') {
-        envObj[keyName] = envValues[index]?.trim() || ''
-      }
-    })
-
-    // Convert headers arrays to object
-    const headersObj: Record<string, string> = {}
-    headerKeys.forEach((key, index) => {
-      const keyName = key.trim()
-      if (keyName !== '') {
-        headersObj[keyName] = headerValues[index]?.trim() || ''
-      }
-    })
-
-    // Filter out empty args
-    const filteredArgs = args.map((arg) => arg.trim()).filter((arg) => arg)
-
-    const config: MCPServerConfig = {
-      ...(initialData || {}),
-      command: transportType === 'stdio' ? command.trim() : '',
-      args: transportType === 'stdio' ? filteredArgs : [],
-      env: transportType === 'stdio' ? envObj : {},
-      type: transportType,
-      ...(transportType !== 'stdio' && {
-        url: url.trim(),
-        headers: Object.keys(headersObj).length > 0 ? headersObj : undefined,
-        timeout: timeout.trim() !== '' ? parseInt(timeout) : undefined,
-      }),
-    }
-
-    if (serverName.trim() !== '') {
-      onSave(serverName.trim(), config)
-      onOpenChange(false)
-      resetForm()
+    } catch (error) {
+      setError(String(error))
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!saving) onOpenChange(nextOpen) }}>
       <DialogContent
         showCloseButton={false}
         onInteractOutside={(e) => {
@@ -430,7 +452,6 @@ export default function AddEditMCPServer({
                   className="w-full text-sm! min-h-[300px] font-mono!"
                 />
               </div>
-              {error && <div className="text-destructive text-sm">{error}</div>}
             </div>
           </div>
         ) : (
@@ -663,14 +684,15 @@ export default function AddEditMCPServer({
           </div>
         )}
 
+        {error && <div role="alert" className="text-destructive text-sm">{error}</div>}
         <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" size="sm" disabled={saving} onClick={() => onOpenChange(false)}>
             {t('common:cancel')}
           </Button>
           <Button
             onClick={handleSave}
             size="sm"
-            disabled={!isToggled && serverName.trim() === ''}
+            disabled={saving || (!isToggled && serverName.trim() === '')}
           >
             {t('mcp-servers:save')}
           </Button>
