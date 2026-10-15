@@ -84,6 +84,7 @@ pub async fn run_mcp_commands<R: Runtime>(
 
     let mcp_servers: serde_json::Value = serde_json::from_str(&config_content)
         .map_err(|e| format!("Failed to parse config: {e}"))?;
+    validate_mcp_config(&mcp_servers)?;
 
     // Update runtime MCP settings from config
     {
@@ -102,7 +103,7 @@ pub async fn run_mcp_commands<R: Runtime>(
         .and_then(Value::as_object)
         .ok_or("No mcpServers found in config")?;
 
-    log::trace!("MCP Servers: {server_map:#?}");
+    log::trace!("Loaded {} MCP server configurations", server_map.len());
 
     // Collect handles for initial server startup
     let mut startup_handles = Vec::new();
@@ -188,15 +189,53 @@ pub async fn start_mcp_server<R: Runtime>(
         ));
     }
 
-    // Store active server config for restart purposes
-    store_active_server_config(&active_servers_state, &name, &config).await;
-    let start_generation = {
+    extract_command_args(&config)
+        .map_err(|error| format!("Invalid MCP configuration for {name}: {error}"))?;
+
+    // Retire the old peer before changing its credential configuration. Callers
+    // snapshot both under the peer-map lock, so even a failed replacement cannot
+    // leave the old peer callable with the new configuration's redactor.
+    let (retired_service, retired_pids, start_generation) = {
+        let mut servers = servers_state.lock().await;
+        let retired_service = servers.remove(&name);
+        store_active_server_config(&active_servers_state, &name, &config).await;
         let mut generations = app_state.mcp_start_generations.lock().await;
         let generation = generations.entry(name.clone()).or_default();
         *generation = generation.wrapping_add(1);
-        *generation
+        let start_generation = *generation;
+        let mut server_generations = app_state.mcp_server_generations.lock().await;
+        let generation = server_generations.entry(name.clone()).or_default();
+        *generation = generation.wrapping_add(1);
+        let retired_pids = app_state
+            .mcp_server_pids
+            .lock()
+            .await
+            .remove(&name)
+            .map(|pids| pids.into_values().collect::<Vec<_>>())
+            .unwrap_or_default();
+        (retired_service, retired_pids, start_generation)
     };
     drop(shutdown_in_progress);
+
+    if let Some(service) = retired_service {
+        let cancel = async {
+            match service {
+                RunningServiceEnum::NoInit(service) => service.cancel().await,
+                RunningServiceEnum::WithInit(service) => service.cancel().await,
+            }
+        };
+        if !matches!(
+            timeout(ShutdownContext::ManualRestart.per_server_timeout(), cancel).await,
+            Ok(Ok(_))
+        ) {
+            log::warn!("MCP server {name} replacement could not finish retiring its old peer");
+        }
+    }
+    for pid in retired_pids {
+        if let Err(error) = kill_process_tree_by_pid(pid).await {
+            log::warn!("Failed to clean up replaced MCP server {name} process tree: {error}");
+        }
+    }
 
     // Try the first start attempt and return its result
     log::info!("Starting MCP server {name} (Initial attempt)");
@@ -313,14 +352,13 @@ fn build_remote_http_client(
 ) -> Result<reqwest::Client, String> {
     let mut headers = reqwest::header::HeaderMap::new();
     for (key, value) in &config.headers {
-        if let Some(value) = value.as_str() {
-            if let (Ok(name), Ok(value)) = (
-                reqwest::header::HeaderName::from_bytes(key.as_bytes()),
-                reqwest::header::HeaderValue::from_str(value),
-            ) {
-                headers.insert(name, value);
-            }
-        }
+        let value = value.as_str().ok_or("MCP header values must be strings")?;
+        let name = reqwest::header::HeaderName::from_bytes(key.as_bytes())
+            .map_err(|_| "MCP header names must be valid HTTP header names")?;
+        let mut value = reqwest::header::HeaderValue::from_str(value)
+            .map_err(|_| "MCP header values must be valid HTTP header values")?;
+        value.set_sensitive(true);
+        headers.insert(name, value);
     }
 
     reqwest::Client::builder()
@@ -411,7 +449,7 @@ async fn schedule_mcp_start_task<R: Runtime>(
         .to_path_buf();
 
     let config_params = extract_command_args(&config)
-        .ok_or_else(|| format!("Failed to extract command args from config for {name}"))?;
+        .map_err(|error| format!("Invalid MCP configuration for {name}: {error}"))?;
 
     if matches!(
         config_params.transport_type.as_deref(),
@@ -424,7 +462,10 @@ async fn schedule_mcp_start_task<R: Runtime>(
             "http"
         };
 
-        let client = match connect_remote_mcp(&config_params, primary_transport).await {
+        let client = match connect_remote_mcp(&config_params, primary_transport)
+            .await
+            .map_err(|error| redact_mcp_config_values(&error, &config))
+        {
             Ok(client) => {
                 log::info!("MCP server {name} connected using {primary_transport} transport");
                 client
@@ -434,7 +475,10 @@ async fn schedule_mcp_start_task<R: Runtime>(
                     "MCP server {name} failed using {primary_transport} transport: \
                      {primary_error}; retrying with {fallback_transport}"
                 );
-                match connect_remote_mcp(&config_params, fallback_transport).await {
+                match connect_remote_mcp(&config_params, fallback_transport)
+                    .await
+                    .map_err(|error| redact_mcp_config_values(&error, &config))
+                {
                     Ok(client) => {
                         log::info!(
                             "MCP server {name} connected using fallback \
@@ -453,7 +497,7 @@ async fn schedule_mcp_start_task<R: Runtime>(
             }
         };
 
-        log::info!("Connected to server: {:?}", client.peer_info());
+        log::info!("MCP server {name} initialization completed");
         if !store_running_server(
             &app,
             &servers,
@@ -624,10 +668,6 @@ async fn schedule_mcp_start_task<R: Runtime>(
                 match stderr.read(&mut chunk).await {
                     Ok(0) => break,
                     Ok(size) => {
-                        log::info!(
-                            "MCP server {stderr_server_name} stderr: {}",
-                            String::from_utf8_lossy(&chunk[..size]).trim_end()
-                        );
                         let mut captured = stderr_context_for_task.lock().await;
                         append_bounded_stderr(&mut captured, &chunk[..size]);
                     }
@@ -655,7 +695,7 @@ async fn schedule_mcp_start_task<R: Runtime>(
 
         match service {
             Ok(server) => {
-                log::trace!("Connected to server: {:#?}", server.peer_info());
+                log::trace!("MCP server {name} initialization completed");
                 if !store_running_server(
                     &app,
                     &servers,
@@ -684,7 +724,10 @@ async fn schedule_mcp_start_task<R: Runtime>(
                     .copied()
                     .collect::<Vec<_>>();
                 let stderr_context = String::from_utf8_lossy(&stderr_bytes);
-                let error = format_mcp_start_error(&service_error, &stderr_context);
+                let error = redact_mcp_config_values(
+                    &format_mcp_start_error(&service_error, &stderr_context),
+                    &config,
+                );
                 if let Some(pid) = process_pid {
                     if let Err(kill_error) = kill_process_tree_by_pid(pid).await {
                         log::warn!(
@@ -754,40 +797,107 @@ fn emit_mcp_status_update_event<R: Runtime>(app: &AppHandle<R>, name: &str) {
     }
 }
 
-pub fn extract_command_args(config: &Value) -> Option<McpServerConfig> {
-    let obj = config.as_object()?;
-    let command = obj
-        .get("command")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
-    let args = obj
-        .get("args")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let url = obj.get("url").and_then(|u| u.as_str()).map(String::from);
-    let transport_type = obj.get("type").and_then(|t| t.as_str()).map(String::from);
+/// Validate every configured field before it can be persisted or started. Error
+/// messages describe the field, never its potentially credential-bearing value.
+pub fn extract_command_args(config: &Value) -> Result<McpServerConfig, String> {
+    let obj = config
+        .as_object()
+        .ok_or("MCP server configuration must be an object")?;
+    let string = |field: &str| -> Result<Option<String>, String> {
+        obj.get(field)
+            .map(|value| {
+                value
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| format!("MCP {field} must be a string"))
+            })
+            .transpose()
+    };
+    let command = string("command")?.unwrap_or_default();
+    let transport_type = string("type")?;
+    if !matches!(
+        transport_type.as_deref(),
+        None | Some("stdio" | "http" | "sse")
+    ) {
+        return Err("MCP type must be stdio, http, or sse".into());
+    }
+    let url = string("url")?;
+    let cwd = string("cwd")?.filter(|value| !value.is_empty());
+    if cwd.as_deref().is_some_and(|value| value.contains('\0')) {
+        return Err("MCP cwd must not contain NUL bytes".into());
+    }
+    let args = match obj.get("args") {
+        None => Vec::new(),
+        Some(Value::Array(args))
+            if args
+                .iter()
+                .all(|arg| arg.as_str().is_some_and(|arg| !arg.contains('\0'))) =>
+        {
+            args.clone()
+        }
+        Some(_) => return Err("MCP args must be an array of strings without NUL bytes".into()),
+    };
+    let object = |field: &str| -> Result<serde_json::Map<String, Value>, String> {
+        match obj.get(field) {
+            None => Ok(serde_json::Map::new()),
+            Some(Value::Object(values)) if values.values().all(Value::is_string) => {
+                Ok(values.clone())
+            }
+            Some(_) => Err(format!("MCP {field} must be an object of string values")),
+        }
+    };
+    let envs = object("env")?;
+    if envs.iter().any(|(name, value)| {
+        name.is_empty()
+            || name.contains(['=', '\0'])
+            || value.as_str().is_some_and(|value| value.contains('\0'))
+    }) {
+        return Err(
+            "MCP env must contain valid environment names and values without NUL bytes".into(),
+        );
+    }
+    let headers = object("headers")?;
+    for (key, value) in &headers {
+        reqwest::header::HeaderName::from_bytes(key.as_bytes())
+            .map_err(|_| "MCP headers contain an invalid HTTP header name")?;
+        reqwest::header::HeaderValue::from_str(value.as_str().unwrap())
+            .map_err(|_| "MCP headers contain an invalid HTTP header value")?;
+    }
     let timeout = obj
         .get("timeout")
-        .and_then(|t| t.as_u64())
-        .map(Duration::from_secs);
-    let headers = obj
-        .get("headers")
-        .unwrap_or(&Value::Object(serde_json::Map::new()))
-        .as_object()?
-        .clone();
-    let envs = obj
-        .get("env")
-        .unwrap_or(&Value::Object(serde_json::Map::new()))
-        .as_object()?
-        .clone();
-    let cwd = obj
-        .get("cwd")
-        .and_then(|c| c.as_str())
-        .filter(|s| !s.is_empty())
-        .map(String::from);
-    Some(McpServerConfig {
+        .map(|value| {
+            value
+                .as_u64()
+                .filter(|seconds| *seconds > 0)
+                .map(Duration::from_secs)
+                .filter(|duration| std::time::Instant::now().checked_add(*duration).is_some())
+                .ok_or("MCP timeout must be a positive integer within the supported clock range")
+        })
+        .transpose()?;
+    if obj.get("active").is_some_and(|value| !value.is_boolean()) {
+        return Err("MCP active must be a boolean".into());
+    }
+    if matches!(transport_type.as_deref(), Some("http" | "sse")) {
+        let parsed = reqwest::Url::parse(url.as_deref().unwrap_or_default())
+            .map_err(|_| "MCP remote url must be an absolute HTTP or HTTPS URL")?;
+        if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+            return Err("MCP remote url must be an absolute HTTP or HTTPS URL".into());
+        }
+        if !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err("MCP remote url must not contain user information or a fragment; use headers for credentials".into());
+        }
+    } else {
+        if command.trim().is_empty() || command.contains('\0') {
+            return Err("MCP stdio command must be a nonempty string without NUL bytes".into());
+        }
+        if url.is_some() {
+            return Err("MCP url requires type http or sse".into());
+        }
+    }
+    Ok(McpServerConfig {
         timeout,
         transport_type,
         url,
@@ -799,22 +909,99 @@ pub fn extract_command_args(config: &Value) -> Option<McpServerConfig> {
     })
 }
 
+pub(crate) fn validate_mcp_config(config: &Value) -> Result<(), String> {
+    let obj = config
+        .as_object()
+        .ok_or("MCP config must be a JSON object")?;
+    if let Some(settings) = obj.get("mcpSettings") {
+        let parsed = serde_json::from_value::<McpSettings>(settings.clone()).map_err(|_| {
+            "MCP mcpSettings must contain a positive integer toolCallTimeoutSeconds"
+        })?;
+        if std::time::Instant::now()
+            .checked_add(Duration::from_secs(parsed.tool_call_timeout_seconds))
+            .is_none()
+        {
+            return Err("MCP toolCallTimeoutSeconds exceeds the supported clock range".into());
+        }
+        if parsed.tool_call_timeout_seconds == 0 {
+            return Err("MCP toolCallTimeoutSeconds must be positive".into());
+        }
+    }
+    if let Some(servers) = obj.get("mcpServers") {
+        let servers = servers
+            .as_object()
+            .ok_or("MCP mcpServers must be an object")?;
+        for (name, server) in servers {
+            if name.trim().is_empty() {
+                return Err("MCP server names must not be empty".into());
+            }
+            extract_command_args(server)
+                .map_err(|error| format!("Invalid MCP server {name}: {error}"))?;
+        }
+    }
+    Ok(())
+}
+
+/// Strip configured credentials from startup diagnostics, including credentials
+/// echoed by a child across stderr chunks. Raw config and stderr are not logged.
+pub(crate) fn redact_mcp_config_values(text: &str, config: &Value) -> String {
+    let mut values = Vec::new();
+    for field in ["env", "headers"] {
+        if let Some(object) = config.get(field).and_then(Value::as_object) {
+            values.extend(
+                object
+                    .values()
+                    .filter_map(Value::as_str)
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_owned),
+            );
+            if field == "headers" {
+                for (name, value) in object {
+                    if name.eq_ignore_ascii_case("authorization") {
+                        if let Some((_, credential)) =
+                            value.as_str().and_then(|value| value.split_once(' '))
+                        {
+                            if !credential.is_empty() {
+                                values.push(credential.to_owned());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if let Some(url) = config.get("url").and_then(Value::as_str) {
+        if !url.is_empty() {
+            values.push(url.to_owned());
+        }
+        if let Ok(url) = reqwest::Url::parse(url) {
+            values.extend(
+                url.query_pairs()
+                    .map(|(_, value)| value.into_owned())
+                    .filter(|value| !value.is_empty()),
+            );
+        }
+    }
+    values.sort_by_key(|value| std::cmp::Reverse(value.len()));
+    values.into_iter().fold(text.to_owned(), |text, value| {
+        text.replace(&value, "[redacted]")
+    })
+}
+
 pub fn extract_active_status(config: &Value) -> Option<bool> {
     let obj = config.as_object()?;
     let active = obj.get("active")?.as_bool()?;
     Some(active)
 }
 
-/// Restart only servers that were previously active (like cortex restart behavior)
+/// Start the validated, saved active-server snapshot selected by Restart.
 pub async fn restart_active_mcp_servers<R: Runtime>(
     app: &AppHandle<R>,
     servers_state: SharedMcpServers,
+    active_servers: HashMap<String, Value>,
 ) -> Result<(), String> {
-    let app_state = app.state::<AppState>();
-    let active_servers = app_state.mcp_active_servers.lock().await;
-
     log::info!(
-        "Restarting {} previously active MCP servers",
+        "Restarting {} saved active MCP servers",
         active_servers.len()
     );
 
@@ -1274,6 +1461,7 @@ pub fn add_server_config_with_path<R: Runtime>(
     server_value: Value,
     config_filename: Option<&str>,
 ) -> Result<(), String> {
+    extract_command_args(&server_value)?;
     let config_filename = config_filename.unwrap_or("mcp_config.json");
     let config_path = get_jan_data_folder_path(app_handle).join(config_filename);
 

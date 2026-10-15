@@ -28,6 +28,37 @@ describe('useMCPServers', () => {
     })
   })
 
+  it('validates the complete edit before replacing configuration or restarting connectors', async () => {
+    const original = { old: { command: 'node', args: ['old.js'], env: {}, active: true } }
+    const replacement = { renamed: { command: 'node', args: ['new.js'], env: {}, active: true } }
+    useMCPServers.setState({ mcpServers: original })
+    let persisted!: () => void
+    mockUpdateMCPConfig.mockImplementationOnce(() => new Promise<void>((resolve) => { persisted = resolve }))
+    const saving = useMCPServers.getState().saveServers(replacement)
+
+    expect(JSON.parse(mockUpdateMCPConfig.mock.calls[0][0])).toEqual({
+      mcpServers: replacement, mcpSettings: DEFAULT_MCP_SETTINGS,
+    })
+    expect(useMCPServers.getState().mcpServers).toEqual(original)
+    expect(mockRestartMCPServers).not.toHaveBeenCalled()
+    persisted()
+    await saving
+    expect(useMCPServers.getState().mcpServers).toEqual(replacement)
+    expect(mockRestartMCPServers).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the original configuration and connection when native validation rejects an edit', async () => {
+    const original = { working: { command: 'node', args: ['server.js'], env: {}, active: true } }
+    useMCPServers.setState({ mcpServers: original })
+    mockUpdateMCPConfig.mockRejectedValueOnce(new Error('Invalid MCP header name'))
+
+    await expect(useMCPServers.getState().saveServers({
+      broken: { command: '', args: [], env: {}, type: 'http', url: 'http://localhost:3001/mcp', headers: { 'invalid name': 'value' } },
+    })).rejects.toThrow('Invalid MCP header name')
+    expect(useMCPServers.getState().mcpServers).toEqual(original)
+    expect(mockRestartMCPServers).not.toHaveBeenCalled()
+  })
+
   it('should initialize with default values', () => {
     const { result } = renderHook(() => useMCPServers())
 

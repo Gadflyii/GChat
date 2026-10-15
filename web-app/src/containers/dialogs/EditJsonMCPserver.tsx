@@ -25,7 +25,7 @@ interface EditJsonMCPserverProps {
   onOpenChange: (open: boolean) => void
   serverName: string | null // null means editing all servers
   initialData: MCPConfigJson
-  onSave: (data: MCPConfigJson) => void
+  onSave: (data: MCPConfigJson) => Promise<void>
 }
 
 export default function EditJsonMCPserver({
@@ -38,6 +38,7 @@ export default function EditJsonMCPserver({
   const { t } = useTranslation()
   const [jsonContent, setJsonContent] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   // Initialize the editor with the provided data
   useEffect(() => {
@@ -56,19 +57,24 @@ export default function EditJsonMCPserver({
     setError(null)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    setSaving(true)
     try {
       const parsedData = JSON.parse(jsonContent) as MCPConfigJson
-      onSave(parsedData)
+      await onSave(parsedData)
       onOpenChange(false)
       setError(null)
-    } catch {
-      setError(t('mcp-servers:editJson.errorFormat'))
+    } catch (error) {
+      setError(error instanceof SyntaxError
+        ? t('mcp-servers:editJson.errorFormat')
+        : String(error))
+    } finally {
+      setSaving(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!saving) onOpenChange(nextOpen) }}>
       <DialogContent
         onInteractOutside={(e) => {
           e.preventDefault()
@@ -109,11 +115,11 @@ export default function EditJsonMCPserver({
               className="w-full text-sm! overflow-hidden break-all! font-mono!"
             />
           </div>
-          {error && <div className="text-destructive text-sm">{error}</div>}
+          {error && <div role="alert" className="text-destructive text-sm">{error}</div>}
         </div>
 
         <DialogFooter>
-          <Button size="sm" onClick={handleSave}>{t('mcp-servers:editJson.save')}</Button>
+          <Button size="sm" disabled={saving} onClick={handleSave}>{t('mcp-servers:editJson.save')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

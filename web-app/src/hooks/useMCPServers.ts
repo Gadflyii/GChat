@@ -51,6 +51,7 @@ type MCPServerStoreState = {
   updateSettings: (partial: Partial<MCPSettings>) => void
   syncServers: () => Promise<void>
   syncServersAndRestart: () => Promise<void>
+  saveServers: (servers: MCPServers, settings?: MCPSettings) => Promise<void>
 }
 
 export const useMCPServers = create<MCPServerStoreState>()((set, get) => ({
@@ -156,5 +157,16 @@ export const useMCPServers = create<MCPServerStoreState>()((set, get) => ({
         mcpSettings: settings,
       })
     ).then(() => getServiceHub().mcp().restartMCPServers())
+  },
+  saveServers: async (servers, settings = get().settings) => {
+    const mcp = getServiceHub().mcp()
+    // Validate/persist the complete configuration before stopping live servers
+    // or replacing the visible configuration. Invalid edits remain editable.
+    await mcp.updateMCPConfig(JSON.stringify({
+      mcpServers: servers,
+      mcpSettings: settings,
+    }))
+    set({ mcpServers: servers, settings })
+    await mcp.restartMCPServers()
   },
 }))

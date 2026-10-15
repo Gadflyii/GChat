@@ -1,48 +1,97 @@
 ---
 title: MCP Servers
-description: Extend Jan with Model Context Protocol servers
-keywords: [Jan, MCP, Model Context Protocol, tools, integrations, agents]
+description: Configure trusted MCP tools in GChat
+keywords: [GChat, MCP, Model Context Protocol, tools, integrations, agents]
 ---
-
-import { Steps, Callout } from 'nextra/components'
 
 # MCP Servers
 
-Jan supports the [Model Context Protocol](https://modelcontextprotocol.io), letting you connect any MCP-compatible server to extend what your AI can do — web search, browser control, code execution, databases, and more.
+Use **Settings → MCP Servers** to connect trusted tool servers. GChat supports
+local **STDIO**, **HTTP** (Streamable HTTP) and **SSE** connections. The Linux
+release scope uses static credentials; OAuth sign-in and token refresh are not
+supported.
 
-![MCP Servers Settings](../_assets/mcp-server-settings.png)
+## Add and connect a server
 
-## Settings
+1. Open **Settings → MCP Servers** and choose **Add MCP Server**.
+2. Enter a unique **Server Name** and choose the **Transport Type**.
+3. Fill in the fields for that transport:
 
-- **Allow All MCP Tool Permissions** — When enabled, all MCP tool calls are automatically approved without showing permission dialogs. Applies globally to all conversations.
-- **Tool call timeout** — Maximum time (in seconds) to wait for an MCP tool response before timing out. Default is 30 seconds.
+   | Transport | Configuration |
+   | --- | --- |
+   | STDIO | **Command**, one argument per **Arguments** entry, and any **Environment Variables** required by the server. Use a trusted installed executable or the server's documented launcher. |
+   | HTTP | The Streamable HTTP **URL**, optional static **Headers**, and optional connection **Timeout (seconds)**. |
+   | SSE | The server's SSE **URL**, optional static **Headers**, and optional connection **Timeout (seconds)**. |
 
-## Add an MCP Server
+4. Choose **Save**, then enable the server's switch if it is off.
+5. Check the connection status and available tools before sending a task.
+   An enabled switch alone does not establish a successful connection.
 
-<Steps>
+For a remote service using a static bearer token, add its documented
+`Authorization` header with the value `Bearer YOUR_TOKEN`. GChat does not
+obtain or refresh that token for you. Use the endpoint and credentials supplied
+by the server operator.
 
-### Open Settings
+The JSON editor supports server configuration for users who already have a
+configuration supplied by their server. Review commands, arguments, environment
+variables and URLs before saving it.
 
-Go to **Settings** → **MCP Servers**.
+## Choose tools and permissions
 
-### Add server
+Connected servers publish tools to the Chat and Agent tool catalog. Enable the
+tools needed for the task in the conversation's tool selector. Disabling a tool
+for the conversation prevents its execution; disabling the server disconnects it
+and removes its tools from discovery.
 
-Click **+ Add MCP Server** in the top right corner.
+With **Manually approve** selected, inspect the requested server and action.
+The current MCP approval preview does not display arbitrary tool arguments;
+use servers and tools you trust with the task's inputs.
 
-### Configure
+- **Deny** rejects that action.
+- **Approve once** permits that action once.
+- **Always allow this action**, when offered, remembers the specific tool and
+  arguments across restarts. It does not approve every action from that server.
 
-Enter the server details:
-- **Transport**: `STDIO` (local process), `HTTP` (Streamable HTTP), or `SSE` (Server-Sent Events)
-- **Command / URL**: the command to run or the server endpoint
-- **Args**: any arguments to pass
-- **Env**: environment variables (e.g. API keys)
+**Skip all approvals** runs actions without those prompts. The approval control
+is shared with other Chat and Agent tools.
 
-### Enable
+## Cancellation, timeouts and restart
 
-Toggle the server on. It will appear in the list with a green indicator when active.
+Use the normal **Stop** control to cancel pending execution. Cancellation cannot
+undo changes a server has already made.
 
-</Steps>
+**Tool call timeout (seconds)** in MCP Settings limits how long GChat waits for
+a tool response; its default is 30 seconds. The remote server's
+**Timeout (seconds)** field controls connection and initialization, separately
+from the tool-call timeout.
 
-<Callout type="info">
-Find more MCP servers at [mcp.so](https://mcp.so).
-</Callout>
+Saved enabled servers reconnect when GChat starts. To retry a failed connection,
+check its configuration, switch it off and on, and inspect its status again.
+Disabled servers remain disabled after restart.
+
+## Errors and logs
+
+A failed connection appears in the server's status and error message. Open
+**Logs** and filter by server to inspect startup and transport errors. If no tools
+appear, check the server's connection status before changing the model.
+
+For STDIO, verify the executable exists, required dependencies are installed,
+and arguments and environment variables match the server's instructions. A
+command may download and execute software when started; inspect it before
+enabling the server.
+
+For HTTP or SSE, verify the endpoint, transport and static headers. A server
+requiring OAuth is outside this client's supported authentication scope.
+Changing the tool-call timeout does not fix invalid credentials or a failed
+connection.
+
+## Trust and credentials
+
+STDIO servers run with your user account's permissions. GChat's working
+directory and workspace controls do not sandbox an external MCP process.
+Remote servers receive the arguments passed to their tools.
+
+Environment variables and headers are saved in `mcp_config.json` in GChat's
+data folder, rather than an encrypted credential store. Keep configuration
+exports, screenshots and shared logs free of credentials. See
+[Model Context Protocol](/docs/desktop/mcp) for the trust and approval boundaries.

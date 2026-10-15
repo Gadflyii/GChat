@@ -99,14 +99,10 @@ function MCPServersDesktop() {
   const {
     mcpServers,
     settings,
-    addServer,
     editServer,
-    renameServer,
-    deleteServer,
     syncServers,
-    syncServersAndRestart,
+    saveServers,
     getServerConfig,
-    setSettings,
     updateSettings,
   } = useMCPServers()
 
@@ -182,28 +178,16 @@ function MCPServersDesktop() {
     setOpen(true)
   }
 
-  const handleSaveServer = async (name: string, config: MCPServerConfig) => {
-    if (editingKey) {
-      // If server name changed, rename it while preserving position
-      if (editingKey !== name) {
-        toggleServer(editingKey, false)
-        renameServer(editingKey, name, config)
-        toggleServer(name, true)
-        // Restart servers to update tool references with new server name
-        syncServersAndRestart()
-      } else {
-        toggleServer(editingKey, false)
-        editServer(editingKey, config)
-        toggleServer(editingKey, true)
-        syncServers()
-      }
-    } else {
-      // Add new server
-      toggleServer(name, false)
-      addServer(name, config)
-      toggleServer(name, true)
-      syncServers()
+  const handleSaveServer = async (servers: Record<string, MCPServerConfig>) => {
+    const nextServers: Record<string, MCPServerConfig> = Object.assign(
+      Object.create(null), useMCPServers.getState().mcpServers
+    )
+    if (editingKey && !Object.prototype.hasOwnProperty.call(servers, editingKey)) delete nextServers[editingKey]
+    for (const [name, config] of Object.entries(servers)) {
+      nextServers[name] = { ...config, active: true }
     }
+    await saveServers(nextServers)
+    setServerStatuses(await serviceHub.mcp().getMCPServerStatuses())
   }
 
   const handleEdit = (serverKey: string) => {
@@ -217,19 +201,19 @@ function MCPServersDesktop() {
 
   const handleConfirmDelete = async () => {
     if (serverToDelete) {
-      // Stop the server before deletion
+      const nextServers = { ...useMCPServers.getState().mcpServers }
+      delete nextServers[serverToDelete]
       try {
-        await serviceHub.mcp().deactivateMCPServer(serverToDelete)
+        await saveServers(nextServers)
+        setServerStatuses(await serviceHub.mcp().getMCPServerStatuses())
       } catch (error) {
-        console.error('Error stopping server before deletion:', error)
+        setErrorMessage({ message: String(error), subtitle: t('mcp-servers:checkParams') })
+        return
       }
-
-      deleteServer(serverToDelete)
       toast.success(
         t('mcp-servers:deleteServer.success', { serverName: serverToDelete })
       )
       setServerToDelete(null)
-      syncServersAndRestart()
     }
   }
 
@@ -258,15 +242,14 @@ function MCPServersDesktop() {
           mcpSettings?: MCPSettings
         }
   ) => {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('MCP configuration must be an object')
+    }
     if (jsonServerName) {
-      try {
-        toggleServer(jsonServerName, false)
-      } catch (error) {
-        console.error('Error deactivating server:', error)
-      }
-      // Save single server
-      editServer(jsonServerName, data as MCPServerConfig)
-      toggleServer(jsonServerName, (data as MCPServerConfig).active || false)
+      await saveServers({
+        ...useMCPServers.getState().mcpServers,
+        [jsonServerName]: data as MCPServerConfig,
+      })
     } else {
       // Save all servers
       let nextServers: Record<string, MCPServerConfig> = {}
@@ -285,29 +268,9 @@ function MCPServersDesktop() {
         }
       }
 
-      if (nextSettings) {
-        setSettings({
-          toolCallTimeoutSeconds:
-            typeof nextSettings.toolCallTimeoutSeconds === 'number'
-              ? nextSettings.toolCallTimeoutSeconds
-              : DEFAULT_MCP_SETTINGS.toolCallTimeoutSeconds,
-        })
-      }
-
-      // Clear existing servers first
-      Object.keys(mcpServers).forEach((serverKey) => {
-        toggleServer(serverKey, false)
-        deleteServer(serverKey)
-      })
-
-      // Add all servers from the JSON
-      Object.entries(nextServers).forEach(([key, config]) => {
-        addServer(key, config)
-        toggleServer(key, config.active || false)
-      })
-
-      await syncServers()
+      await saveServers(nextServers, nextSettings)
     }
+    setServerStatuses(await serviceHub.mcp().getMCPServerStatuses())
   }
 
   const toggleServer = (serverKey: string, active: boolean) => {
