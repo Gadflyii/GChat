@@ -37,11 +37,33 @@ Ready was observed at 17:58:39.677Z with an effective 7004386304-byte KV arena a
 saved `kv_arena_bytes: null` (Automatic). C1, context 262144, structured outputs
 on and headroom 524288000 bytes were retained. Normal Host Stop at 17:58:52.799Z
 was observed stopped at 17:59:32.324Z, with zero active requests and the engine
-child absent. No input count or inference ran. This Host-only replacement is
-separate from the final fresh-install package gate and Ada 149069-context,
-structured-outputs-off retest.
+child absent. No input count or inference ran.
 
-Production source remains `93143951d`. Fixture-only correction `611fc26e9`
+The source change is merged on `16a338aff`. One merged-Host retest (SHA
+`d4863c80b3013ceac78cd4bc3680d97b4dffaa52c02409acb47966506f34d71c`)
+used the same Engine `5af502f1`, model, GPU and settings through the standalone
+native Host/Manager API. One profile launch at 18:32:10.207Z returned an effective
+7080309760-byte KV arena; saved `kv_arena_bytes` and `qualified_profile_id` remain
+null. The observed quote has no explicit arena, and quote/serving arguments match
+apart from the effective allocation and transport/lifecycle flags. Ready was
+observed at 18:39:16.227Z. The engine startup log reports maximum request context
+261632 tokens despite configured context 262144. Normal Stop with the matching
+session ID and `force: false` returned stopped with zero active requests. Both
+owned engine processes, Host and guard are absent, no guard kill occurred and
+both resource locks are released. This qualifies API startup and normal Stop,
+not a desktop UI or installer walkthrough. Raw quote stdout was not retained.
+
+Ada separately passes the installed UI startup with production Host `93143951d`
+(SHA `66caef75…`), Engine `5af502f1` and the frozen installed DEB with isolated
+Host/runtime replacements. One ordinary catalog reselection started C1/context
+149069 with structured outputs off, headroom 314572800 bytes and a fresh
+4695700992-byte KV arena; saved desired KV is null. UI Ready and normal UI Stop
+pass, and owned engine, Host, guard and resource release are recorded. The engine
+startup maximum request context is 132096 tokens, below configured 149069.
+There were no inference requests; this does not qualify full-context capacity
+or the final fresh-install package gate.
+
+Production implementation remains `93143951d`. Fixture-only correction `611fc26e9`
 passes all 11 plugin tests. After a further quote-unaware client sleeper is
 corrected in `7d92bad30`, the full Host suite passes: 172 tests, 19 ignored,
 including 144 library, 5 main, 11 client, 11 fleet and 1 pairing test. The stale
@@ -67,6 +89,11 @@ tokens, the correct three-code Reply and zero compactions. Ready at 262144 alone
 does not qualify it. OI-068 remains PARTIAL. Evidence:
 `/ai/gchat/out/native-full-context-20261015/{result.json,summary.md}` and
 `/ai/gchat/out/host-fresh-kv-quotes-20261015/{ready.json,stopped.json,cleanup.json,result.json,summary.md}`.
+Merged retest receipts:
+`/ai/gchat/out/host-fresh-kv-quotes-20261015/merged-16a338aff/{recipe.json,host-process.json,preflight.json,launch.json,ready.json,stop.json,stopped.json,guard.json,release.json,host.log}`.
+Ada receipt (SHA-256
+`8a709c152a3b2aa2e1b6bcab844ec50b9324b907de44bb7797b40883323a5980`):
+`/ai/gchat/out/gbot-linux-walkthrough-20261014/current-source-20261015/host-fresh-quote-check.json`.
 
 ## OI-068 Linux Hermes home override — October 15
 
