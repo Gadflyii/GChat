@@ -173,7 +173,10 @@ export default function M365Setup({
       </Button>
       {view && !configured && (
         <p role="alert">
-          Microsoft app registration is missing. Configure it in{' '}
+          Microsoft sign-in is not configured in this GChat release yet. You do
+          not need to find or enter a client ID. Use an updated release when
+          sign-in is available. If your organization already has an approved
+          Microsoft app, use Advanced in{' '}
           {remote ? (
             'Settings → Workspace connections on the service computer'
           ) : (
@@ -181,7 +184,7 @@ export default function M365Setup({
               Settings → Workspace connections
             </a>
           )}
-          , then refresh accounts.
+          , then refresh Microsoft accounts here.
         </p>
       )}
       {view && (
@@ -226,13 +229,16 @@ export default function M365Setup({
               {account.needs_reconnect
                 ? 'Reconnect this Microsoft account.'
                 : 'Cloud PC read permission is missing.'}{' '}
-              Allow read-only Cloud PC access below. Your tenant may require
-              administrator consent.
+              Allow read-only Cloud PC access below. Your organization may
+              require administrator approval.
             </p>
           )}
           <p className="text-muted-foreground">
-            Sign-in requests read-only CloudPC.Read.All. Microsoft handles MFA
-            and tenant policy; tokens stay with GChat’s existing account vault.
+            Sign in with your Microsoft work or school account in your browser.
+            GChat requests read-only access to find your assigned Cloud PCs.
+            Microsoft may ask for multifactor authentication (MFA) or your
+            organization’s administrator approval. Account tokens stay in
+            GChat’s existing account vault.
           </p>
           <Button
             type="button"

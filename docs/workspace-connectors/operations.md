@@ -7,9 +7,11 @@ installed application does not yet contain these connectors. See
 
 ## Connect an account
 
-Open **Settings → Workspace connections**, configure the provider registration,
-choose the services and read-only or read/write access, then sign in through the
-system browser. Select the account to use by default. Multiple connected accounts
+Open **Settings → Workspace connections**, choose the services and read-only or
+read/write access, then sign in through the system browser. Microsoft uses the
+release's public app identity when available; an existing saved registration
+continues to take precedence. Google still requires its Desktop registration.
+Select the account to use by default. Multiple connected accounts
 can be addressed by their public account IDs; email addresses are not account IDs.
 
 Google needs a Desktop application OAuth client and the selected service APIs
@@ -19,13 +21,37 @@ that Desktop client; GChat stores it in the OS vault. Test users, consent status
 and organization policy must admit the account and requested scopes.
 [Google native-app authorization](https://developers.google.com/identity/protocols/oauth2/native-app).
 
-Microsoft needs a public desktop/native application registration with delegated
-Graph permissions and reply URI `http://localhost/oauth/callback`. GChat uses a
-temporary localhost port. Choose an account audience matching the registration;
-an omitted tenant uses `common`. No Microsoft client secret is used. Some service
-permissions need tenant administrator consent.
+For Microsoft, select **Sign in with Microsoft**. In Gbot Cloud PC setup, use the
+work or school account with an assigned Windows 365 Cloud PC, complete browser
+sign-in and any MFA or administrator approval, then explicitly choose the account
+and Cloud PC. GChat requests read-only Cloud PC discovery; signing in does not
+select a PC or grant bot control.
+
+If Microsoft sign-in is not configured in the release, GChat explains this and
+disables sign-in. Users do not need to find or create an app ID. Ron must supply
+the approved release registration before the default flow can be released.
+
+Organizations with an existing approved registration can expand **Advanced: use
+your organization's Microsoft app** in Settings. Copy its Application (client) ID
+from Microsoft Entra, confirm the Mobile and desktop applications reply URI is
+`http://localhost/oauth/callback`, and supply a directory (tenant) ID if required
+by the administrator. Save, choose services, then sign in. GChat uses a temporary
+localhost port. The advanced form retains the existing `common` default for an
+omitted tenant; the release identity defaults to `organizations`. No Microsoft
+client secret is used. Some service permissions need tenant administrator consent.
 [Microsoft authorization flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow),
 [localhost reply URI rules](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url).
+
+Release maintainers compile the approved public identity with
+`GCHAT_MICROSOFT_CLIENT_ID` and, if required, `GCHAT_MICROSOFT_TENANT`. A missing,
+invalid or nil client UUID, or an invalid tenant, leaves default sign-in
+unavailable. These are public application identifiers, never client secrets.
+The native account owner applies the default only when no Microsoft registration
+is saved, without startup vault access or a configuration-file write. A later
+ordinary metadata save may retain that identity; future upgrades preserve saved
+registrations and their account bindings. Changing a saved registration remains
+an explicit advanced action requiring account reconnection. No release identity
+is fabricated; tests use synthetic identifiers only.
 
 The provider consent screen controls actual grants. Settings displays the granted
 scopes and reconnect status. Changing registration or expired consent requires

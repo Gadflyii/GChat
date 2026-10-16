@@ -167,7 +167,7 @@ it('requires explicit account, assigned PC, route and dedicated desktop confirma
   ).toBe(true)
 })
 
-it('directs a missing Microsoft registration to Settings without starting sign-in', async () => {
+it('explains a release without Microsoft sign-in and offers Advanced without an ID form', async () => {
   vi.mocked(connectorAccounts).mockResolvedValue({ ...accounts(), configs: [] })
   mount()
   expect(
@@ -175,6 +175,16 @@ it('directs a missing Microsoft registration to Settings without starting sign-i
       name: 'Settings → Workspace connections',
     })
   ).toHaveAttribute('href', '/settings/workspace-connections')
+  expect(
+    screen.getByText(/Microsoft sign-in is not configured in this GChat release/)
+  ).toHaveTextContent('You do not need to find or enter a client ID.')
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Use an updated release when sign-in is available.'
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'If your organization already has an approved Microsoft app, use Advanced'
+  )
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   expect(
     screen.getByRole('button', { name: 'Sign in with Microsoft' })
   ).toBeDisabled()
@@ -262,6 +272,19 @@ it('keeps a newly signed-in account unselected and supports manual cancellation'
   })
   mount()
   await screen.findByLabelText('Microsoft account')
+  expect(
+    screen.getByRole('button', { name: 'Sign in with Microsoft' })
+  ).toBeEnabled()
+  expect(
+    screen.getByText(/Sign in with your Microsoft work or school account/)
+  ).toHaveTextContent('in your browser')
+  expect(
+    screen.getByText(/GChat requests read-only access/)
+  ).toHaveTextContent('multifactor authentication (MFA)')
+  expect(
+    screen.getByText(/GChat requests read-only access/)
+  ).toHaveTextContent('administrator approval')
+  expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   fireEvent.click(
     screen.getByRole('button', { name: 'Sign in with Microsoft' })
   )
@@ -445,5 +468,23 @@ it('uses Microsoft accounts on the selected LAN service and keeps sign-in there'
   expect(
     screen.getByRole('button', { name: /Sign in with Microsoft/ })
   ).toBeDisabled()
+  expect(
+    screen.getByText(/These accounts belong to the service computer/)
+  ).toHaveTextContent(
+    'Sign-in and Microsoft’s desktop client run on the service computer.'
+  )
+  expect(
+    screen.getByRole('button', { name: 'Open Microsoft client' })
+  ).toBeDisabled()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+  )
+  await waitFor(() => expect(gbot).toHaveBeenCalledTimes(2))
+  expect(vi.mocked(gbot).mock.calls).toEqual([
+    ['setup/m365/accounts'],
+    ['setup/m365/accounts'],
+  ])
+  expect(connectorAccounts).not.toHaveBeenCalled()
   expect(beginConnectorAuth).not.toHaveBeenCalled()
+  expect(opener).not.toHaveBeenCalled()
 })

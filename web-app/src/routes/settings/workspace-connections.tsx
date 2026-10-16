@@ -129,17 +129,55 @@ function ProviderCard({
     <Card title={providerNames[provider]}>
       <details className="mb-4">
         <summary className="cursor-pointer text-foreground">
-          App registration
+          {provider === 'microsoft'
+            ? 'Advanced: use your organization’s Microsoft app'
+            : 'App registration'}
         </summary>
-        <p className="my-2 text-sm">
-          Use your app registration’s client ID. Sign-in opens your system
-          browser.
-        </p>
-        <p className="mb-3 text-sm">
-          {provider === 'google'
-            ? 'Create a Google Desktop app registration.'
-            : 'Use a Microsoft mobile or desktop app registration with http://localhost/oauth/callback as its redirect URI.'}
-        </p>
+        {provider === 'microsoft' ? (
+          <div className="my-3 space-y-2 text-sm">
+            <p>
+              Only use this option if your organization has an approved app
+              registration. Ask your Microsoft administrator for these details.
+              Changing the app requires reconnecting existing accounts.
+            </p>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>
+                In Microsoft Entra → App registrations, open the approved app
+                and copy its Application (client) ID into Client ID below.
+              </li>
+              <li>
+                Confirm its Mobile and desktop applications redirect URI is{' '}
+                <code>http://localhost/oauth/callback</code>. A client secret
+                is not needed.
+              </li>
+              <li>
+                Enter the directory (tenant) ID if your administrator requires
+                one. Otherwise leave Tenant blank to use the app’s supported
+                account audience.
+              </li>
+              <li>
+                Save the registration, choose the services you need, then
+                select Sign in with Microsoft. Complete sign-in and any
+                permission approval in your browser.
+              </li>
+            </ol>
+            <p>
+              Cloud PCs require a work or school account with an assigned
+              Windows 365 Cloud PC. Your organization may require administrator
+              approval.
+            </p>
+          </div>
+        ) : (
+          <>
+            <p className="my-2 text-sm">
+              Use your app registration’s client ID. Sign-in opens your system
+              browser.
+            </p>
+            <p className="mb-3 text-sm">
+              Create a Google Desktop app registration.
+            </p>
+          </>
+        )}
         <form
           className="space-y-3"
           onSubmit={(event) => {
@@ -204,7 +242,13 @@ function ProviderCard({
           </Button>
         </form>
       </details>
-      {!config?.client_id && (
+      {provider === 'microsoft' ? (
+        <p className="mb-3 text-sm">
+          {config?.client_id
+            ? 'Choose the services you need, then sign in with Microsoft in your browser. You do not need to enter an app ID.'
+            : 'Microsoft sign-in is not configured in this GChat release yet. You do not need to find or create an app ID. Use an updated release when sign-in is available, or use the advanced option if your organization already has an approved app.'}
+        </p>
+      ) : !config?.client_id && (
         <p className="mb-3 text-sm">
           Save a client ID in App registration before connecting.
         </p>
@@ -268,7 +312,9 @@ function ProviderCard({
             void onConnect({ provider, services: selectedServices, access })
           }
         >
-          Connect {providerNames[provider]}
+          {provider === 'microsoft'
+            ? 'Sign in with Microsoft'
+            : `Connect ${providerNames[provider]}`}
         </Button>
       </fieldset>
       <div className="mt-5 border-t border-border pt-3">

@@ -15,6 +15,15 @@ the source flow; live provider consent is a release gate for Ron. See
 User-connected SaaS accounts are integrations,
 not an expansion of GChat LAN host/workspace management or paid Arbitor features.
 
+Microsoft sign-in uses an approved public release app identity when supplied at
+build time, while retaining any saved organization registration. Gbot Cloud PC
+setup guides browser sign-in and explicit account/PC choice. Without a release
+identity, it explains the missing release setup without asking novices for a
+client ID; custom registration stays in an advanced Settings option with steps.
+Ron owns the release Entra registration and live-consent gate. See
+[setup and release configuration](operations.md) and the
+[decision](../decisions/2026-10-16-guide-microsoft-sign-in-with-release-identity.md).
+
 Google services: Gmail, Calendar, Drive, Docs, Sheets, Slides, People contacts and
 Tasks. Microsoft Graph services: Outlook mail/calendar/contacts, OneDrive,
 SharePoint, Teams, To Do, OneNote and Excel. Cover practical service operations
