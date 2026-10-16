@@ -82,8 +82,11 @@ The retained `00068f2a8` DEB and AppImage do not include this change; this is
 candidate desktop acceptance, with no new package or Windows qualification.
 
 If the dedicated setup document window does not match after the existing readiness
-polls, setup retains bounded title-match/PID/window-ID metadata and exact-unit
-systemd status plus recent journal output in its existing issue. The diagnostic
+polls, setup retains bounded actual titles and application names alongside
+title-match/PID/window-ID metadata, exact-unit systemd status (including MainPID)
+and recent journal output in its existing issue. At most six windows are included;
+titles and application names use JSON-escaped prefixes bounded to 160 and 64 bytes.
+Matching still uses the full original title. The diagnostic
 uses the same private setup transport, limits guest commands and output, and
 keeps the computer in Testing Desktop. Successful command submission alone does
 not prove the editor opened. A missing diagnostic result stays an explicit
