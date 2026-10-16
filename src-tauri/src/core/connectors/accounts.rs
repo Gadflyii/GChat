@@ -680,7 +680,7 @@ impl AccountsState {
         tokio::spawn(async move {
             let code = tokio::time::timeout(
                 Duration::from_secs(300),
-                callback_code(listener, &state, &cancellation),
+                callback_code(listener, &state, request.provider, &cancellation),
             )
             .await
             .map_err(|_| "Sign-in timed out; reconnect from Settings".to_string())
@@ -951,19 +951,34 @@ impl AccountsState {
         let endpoint = self.oauth_endpoint(endpoint, "token");
         let response = tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), response = self.http_client()?.post(endpoint).form(&form).send() => response.map_err(|_| "Provider token connection failed")? };
         let status = response.status();
-        let response: Value = tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), response = response.json() => response.map_err(|_| "Invalid provider token response")? };
         if !status.is_success() {
+            let response: Value = if config.provider == Provider::Microsoft {
+                bounded_microsoft_error(response, cancellation, cancellation)
+                    .await?
+                    .unwrap_or(Value::Null)
+            } else {
+                tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), response = response.json() => response.map_err(|_| "Invalid provider token response")? }
+            };
             if matches!(
                 response.get("error").and_then(Value::as_str),
                 Some("invalid_grant" | "invalid_client" | "unauthorized_client")
             ) {
                 return Err(RECONNECT_REQUIRED.into());
             }
+            if config.provider == Provider::Microsoft && matches!(status.as_u16(), 400 | 401 | 403) {
+                if let Some(message) = microsoft_oauth_error(
+                    response.get("error").and_then(Value::as_str),
+                    response.get("suberror").and_then(Value::as_str),
+                ) {
+                    return Err(message.into());
+                }
+            }
             return Err(format!(
                 "Provider token authorization failed (HTTP {})",
                 status.as_u16()
             ));
         }
+        let response: Value = tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), response = response.json() => response.map_err(|_| "Invalid provider token response")? };
         let token: TokenResponse =
             serde_json::from_value(response).map_err(|_| "Invalid provider token response")?;
         if token.access_token.is_empty()
@@ -1168,6 +1183,7 @@ impl AccountsState {
             request = request.body(body);
         }
         let mut response = tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), _ = lease.cancelled() => return Err("Workspace account disconnected".into()), result = request.send() => result.map_err(|_| "Provider API connection failed")? };
+        let mut graph_response = provider == Provider::Microsoft;
         if provider == Provider::Microsoft
             && method == Method::GET
             && graph_drive_content(&url)
@@ -1182,15 +1198,24 @@ impl AccountsState {
             let target = validate_download_url(target)?;
             // Graph's storage URL is preauthenticated. Never forward the account bearer.
             response = tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), _ = lease.cancelled() => return Err("Workspace account disconnected".into()), result = client.get(target).send() => result.map_err(|_| "Provider download connection failed")? };
+            graph_response = false;
         }
         if response.status() == reqwest::StatusCode::UNAUTHORIZED {
             self.invalidate_account(&id)?;
             return Err("Provider API request failed (HTTP 401); credentials will refresh on the next request".into());
         }
         if !response.status().is_success() {
+            let status = response.status().as_u16();
+            if graph_response && matches!(status, 400 | 403) {
+                if let Some(error) = bounded_microsoft_error(response, cancellation, &lease).await? {
+                    if let Some(message) = microsoft_graph_error(status, service, &error) {
+                        return Err(message.into());
+                    }
+                }
+            }
             return Err(format!(
                 "Provider API request failed (HTTP {})",
-                response.status().as_u16()
+                status
             ));
         }
         tokio::select! { _ = cancellation.cancelled() => Err("Workspace request cancelled".into()), _ = lease.cancelled() => Err("Workspace account disconnected".into()), result = response.bytes() => result.map(|bytes| bytes.to_vec()).map_err(|_| "Provider response could not be read".into()) }
@@ -1287,7 +1312,7 @@ fn apply_release_microsoft_registration(
     else {
         return;
     };
-    let Ok(tenant) = validate_tenant(tenant.unwrap_or("organizations")) else {
+    let Ok(tenant) = validate_tenant(tenant.unwrap_or("common")) else {
         return;
     };
     // Loading a public release registration does not touch the vault or metadata file.
@@ -1609,9 +1634,94 @@ fn is_mutation(provider: Provider, method: &Method, url: &Url) -> bool {
     true
 }
 
+// Provider descriptions and messages can contain private details and are not stable codes.
+// Read only a bounded error document, and never return its text to a caller.
+async fn bounded_microsoft_error(
+    mut response: reqwest::Response,
+    cancellation: &CancellationToken,
+    lease: &CancellationToken,
+) -> Result<Option<Value>, String> {
+    const MAX_BYTES: usize = 16 * 1024;
+    if cancellation.is_cancelled() || lease.is_cancelled() {
+        return Err("Workspace request cancelled or account disconnected".into());
+    }
+    if response
+        .content_length()
+        .is_some_and(|size| size > MAX_BYTES as u64)
+    {
+        return Ok(None);
+    }
+    let read = async {
+        let mut bytes = Vec::new();
+        loop {
+            let chunk = tokio::select! {
+                _ = cancellation.cancelled() => return Err("Workspace request cancelled or account disconnected".into()),
+                _ = lease.cancelled() => return Err("Workspace request cancelled or account disconnected".into()),
+                chunk = response.chunk() => chunk,
+            };
+            match chunk {
+                Ok(Some(chunk)) if chunk.len() <= MAX_BYTES - bytes.len() => {
+                    bytes.extend_from_slice(&chunk);
+                }
+                Ok(Some(_)) | Err(_) => return Ok(None),
+                Ok(None) => return Ok(serde_json::from_slice(&bytes).ok()),
+            }
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(5), read)
+        .await
+        .unwrap_or(Ok(None))
+}
+
+fn microsoft_oauth_error(error: Option<&str>, suberror: Option<&str>) -> Option<&'static str> {
+    match (error, suberror) {
+        (Some("consent_required"), _)
+        | (Some("interaction_required"), Some("consent_required")) => Some(
+            "Microsoft needs permission approval. Sign in again and review the requested permissions. If your organization requires administrator approval, ask its administrator to approve GChat.",
+        ),
+        (Some("interaction_required" | "login_required"), _) => Some(
+            "Microsoft needs you to finish signing in. Try again in your browser and complete any security or multi-factor sign-in steps.",
+        ),
+        (Some("access_denied"), _) => Some(
+            "Microsoft sign-in was not approved. Try again in your browser. If your organization requires administrator approval, ask its administrator to approve GChat.",
+        ),
+        _ => None,
+    }
+}
+
+fn microsoft_graph_error(status: u16, service: &str, document: &Value) -> Option<&'static str> {
+    if !matches!(status, 400 | 403) {
+        return None;
+    }
+    let mut error = document.get("error")?;
+    let mut recognized = None;
+    // Prefer the most detailed code that we understand, with a fixed nesting bound.
+    for _ in 0..8 {
+        match error.get("code").and_then(Value::as_str) {
+            Some("insufficient_claims") => {
+                recognized = Some("Microsoft requires additional sign-in security. Sign in again in your browser and complete your organization's security or multi-factor steps.");
+            }
+            Some("accessDenied" | "ErrorAccessDenied" | "Authorization_RequestDenied") => {
+                recognized = Some(if matches!(service, "cloud_pc" | "sharepoint" | "teams") {
+                    "This needs a work or school account. If you already use one, ask your organization's administrator to check this service's permissions and license and approve GChat if required."
+                } else {
+                    "Microsoft did not allow this operation. Check the account's permissions for this service. If you use a work or school account, ask your organization's administrator to approve GChat if required."
+                });
+            }
+            _ => {}
+        }
+        let Some(inner) = error.get("innerError").or_else(|| error.get("innererror")) else {
+            break;
+        };
+        error = inner;
+    }
+    recognized
+}
+
 async fn callback_code(
     listener: TcpListener,
     expected: &str,
+    provider: Provider,
     cancellation: &CancellationToken,
 ) -> Result<String, String> {
     loop {
@@ -1659,6 +1769,26 @@ async fn callback_code(
         let _ = stream.write_all(reply.as_bytes()).await;
         let _ = stream.write_all(message).await;
         if parsed.query_pairs().any(|(key, _)| key == "error") {
+            if provider == Provider::Microsoft {
+                let errors = parsed
+                    .query_pairs()
+                    .filter(|(key, _)| key == "error")
+                    .map(|(_, value)| value.into_owned())
+                    .collect::<Vec<_>>();
+                let suberrors = parsed
+                    .query_pairs()
+                    .filter(|(key, _)| key == "suberror")
+                    .map(|(_, value)| value.into_owned())
+                    .collect::<Vec<_>>();
+                if errors.len() == 1 && suberrors.len() <= 1 {
+                    if let Some(message) = microsoft_oauth_error(
+                        Some(&errors[0]),
+                        suberrors.first().map(String::as_str),
+                    ) {
+                        return Err(message.into());
+                    }
+                }
+            }
             return Err("Provider sign-in was denied or cancelled".into());
         }
         let codes = parsed
@@ -1831,9 +1961,9 @@ mod tests {
     }
 
     #[test]
-    fn release_registration_is_public_in_memory_and_defaults_to_work_school() {
+    fn release_registration_is_public_in_memory_and_defaults_to_common() {
         for (tenant, expected) in [
-            (None, "organizations"),
+            (None, "common"),
             (Some("example.org"), "example.org"),
         ] {
             let directory = tempfile::tempdir().unwrap();
@@ -1940,7 +2070,7 @@ mod tests {
             .unwrap();
         let config = upgraded.view().unwrap().configs.remove(0);
         assert_eq!(config.client_id, RELEASE_CLIENT);
-        assert_eq!(config.tenant.as_deref(), Some("organizations"));
+        assert_eq!(config.tenant.as_deref(), Some("common"));
         assert_eq!(
             upgraded
                 .resolve_account_id(Provider::Microsoft, "", "cloud_pc", false)
@@ -1988,7 +2118,7 @@ mod tests {
         let (flow, url) = configured.begin_auth(request).await.unwrap();
         let url = Url::parse(&url).unwrap();
         assert_eq!(url.host_str(), Some("login.microsoftonline.com"));
-        assert_eq!(url.path(), "/organizations/oauth2/v2.0/authorize");
+        assert_eq!(url.path(), "/common/oauth2/v2.0/authorize");
         let query = url.query_pairs().collect::<BTreeMap<_, _>>();
         assert_eq!(
             query.get("client_id").map(|value| value.as_ref()),
@@ -2506,7 +2636,13 @@ mod tests {
             .is_success());
         let denied = settled_auth(&state, &flow).await;
         assert_eq!(denied.status, "failed");
-        assert!(denied.error.unwrap().contains("denied or cancelled"));
+        assert_eq!(
+            denied.error.as_deref(),
+            Some(match provider {
+                Provider::Google => "Provider sign-in was denied or cancelled",
+                Provider::Microsoft => "Microsoft sign-in was not approved. Try again in your browser. If your organization requires administrator approval, ask its administrator to approve GChat.",
+            })
+        );
         let (flow, _) = state.begin_auth(request).await.unwrap();
         assert_eq!(
             state.cancel_auth(&flow.flow_id).await.unwrap().status,
@@ -2698,7 +2834,7 @@ mod tests {
         let address = listener.local_addr().unwrap();
         let cancellation = CancellationToken::new();
         let worker = tokio::spawn(async move {
-            callback_code(listener, "bound-state", &cancellation)
+            callback_code(listener, "bound-state", Provider::Google, &cancellation)
                 .await
                 .unwrap()
         });
@@ -2721,6 +2857,189 @@ mod tests {
                 .unwrap(),
             "right"
         );
+    }
+
+    #[tokio::test]
+    async fn microsoft_callback_requires_bound_state_and_never_exports_provider_description() {
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let address = listener.local_addr().unwrap();
+        let cancellation = CancellationToken::new();
+        let worker = tokio::spawn(async move {
+            callback_code(listener, "bound-state", Provider::Microsoft, &cancellation).await
+        });
+        let mut wrong = tokio::net::TcpStream::connect(address).await.unwrap();
+        wrong.write_all(b"GET /oauth/callback?state=foreign&error=consent_required HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut response = Vec::new();
+        wrong.read_to_end(&mut response).await.unwrap();
+        assert!(response.starts_with(b"HTTP/1.1 400"));
+        let mut correct = tokio::net::TcpStream::connect(address).await.unwrap();
+        correct.write_all(b"GET /oauth/callback?state=bound-state&error=interaction_required&suberror=consent_required&error_description=private-provider-detail HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let error = tokio::time::timeout(Duration::from_secs(5), worker)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap_err();
+        assert!(error.contains("permission approval"));
+        assert!(error.contains("administrator"));
+        assert!(!error.contains("private-provider-detail"));
+        assert!(!error.contains("interaction_required"));
+    }
+
+    #[test]
+    fn microsoft_errors_use_known_codes_without_inferring_account_kind() {
+        let denied = json!({"error": {
+            "code": "Authorization_RequestDenied",
+            "message": "private mailbox and tenant detail",
+        }});
+        for service in ["cloud_pc", "sharepoint", "teams"] {
+            let message = microsoft_graph_error(403, service, &denied).unwrap();
+            assert!(message.starts_with("This needs a work or school account."));
+            assert!(message.contains("If you already use one"));
+            assert!(!message.contains("private mailbox"));
+        }
+        for service in ["outlook", "onedrive"] {
+            let message = microsoft_graph_error(403, service, &denied).unwrap();
+            assert!(message.contains("Check the account's permissions"));
+            assert!(!message.contains("This needs a work or school account"));
+        }
+        let security = json!({"error": {
+            "code": "accessDenied",
+            "innerError": {"code": "insufficient_claims"},
+        }});
+        assert!(microsoft_graph_error(403, "cloud_pc", &security)
+            .unwrap()
+            .contains("additional sign-in security"));
+        let unknown = json!({"error": {
+            "code": "unrelated_error",
+            "message": "consent_required Authorization_RequestDenied",
+        }});
+        assert!(microsoft_graph_error(403, "cloud_pc", &unknown).is_none());
+        for status in [401, 404, 429, 500, 503] {
+            assert!(microsoft_graph_error(status, "cloud_pc", &denied).is_none());
+        }
+        assert!(microsoft_oauth_error(Some("interaction_required"), None)
+            .unwrap()
+            .contains("security or multi-factor"));
+        for error in ["AADSTS65001", "temporarily_unavailable", "unknown"] {
+            assert!(microsoft_oauth_error(Some(error), None).is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn microsoft_error_body_is_bounded_even_without_content_length_and_honors_disconnect() {
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for body in [
+                json!({"error":{"code":"ErrorAccessDenied"}}).to_string(),
+                json!({"error":{"code":"ErrorAccessDenied","message":"x".repeat(17 * 1024)}}).to_string(),
+                "not json".into(),
+                "{}".into(),
+            ] {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = [0u8; 2048];
+                assert!(stream.read(&mut request).await.unwrap() > 0);
+                let response = format!("HTTP/1.1 403 Fixture\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n{body}\r\n0\r\n\r\n", body.len());
+                let _ = stream.write_all(response.as_bytes()).await;
+            }
+        });
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        let cancellation = CancellationToken::new();
+        let lease = CancellationToken::new();
+        let response = client.get(&url).send().await.unwrap();
+        let document = bounded_microsoft_error(response, &cancellation, &lease)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(microsoft_graph_error(403, "cloud_pc", &document)
+            .unwrap()
+            .starts_with("This needs a work or school account."));
+        for _ in 0..2 {
+            let response = client.get(&url).send().await.unwrap();
+            assert!(bounded_microsoft_error(response, &cancellation, &lease)
+                .await
+                .unwrap()
+                .is_none());
+        }
+        let response = client.get(&url).send().await.unwrap();
+        lease.cancel();
+        assert_eq!(
+            bounded_microsoft_error(response, &cancellation, &lease)
+                .await
+                .unwrap_err(),
+            "Workspace request cancelled or account disconnected"
+        );
+        server.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn microsoft_token_errors_preserve_rate_server_and_reconnect_semantics() {
+        let (_directory, mut state, _vault) = fixture();
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        Arc::get_mut(&mut state).unwrap().oauth_base_override =
+            Some(format!("http://{}", listener.local_addr().unwrap()));
+        let server = tokio::spawn(async move {
+            for (status, error) in [
+                (400, "consent_required"),
+                (429, "consent_required"),
+                (503, "consent_required"),
+                (400, "invalid_grant"),
+            ] {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                loop {
+                    let mut buffer = [0u8; 1024];
+                    let count = stream.read(&mut buffer).await.unwrap();
+                    assert!(count > 0);
+                    request.extend_from_slice(&buffer[..count]);
+                    if let Some(end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+                        let headers = String::from_utf8_lossy(&request[..end]);
+                        let length = headers.lines().find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .and_then(|length| length.trim().parse::<usize>().ok())
+                        }).unwrap_or(0);
+                        if request.len() >= end + 4 + length {
+                            break;
+                        }
+                    }
+                }
+                let body = json!({"error":error,"error_description":"private-provider-detail"}).to_string();
+                let response = format!("HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                stream.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        let config = ProviderConfig {
+            provider: Provider::Microsoft,
+            client_id: RELEASE_CLIENT.into(),
+            tenant: Some("common".into()),
+            has_client_secret: false,
+        };
+        let cancellation = CancellationToken::new();
+        let approval = state
+            .exchange(&config, vec![], &cancellation)
+            .await
+            .err()
+            .unwrap();
+        assert!(approval.contains("permission approval"));
+        assert!(!approval.contains("private-provider-detail"));
+        for status in [429, 503] {
+            assert_eq!(
+                state.exchange(&config, vec![], &cancellation).await.err().unwrap(),
+                format!("Provider token authorization failed (HTTP {status})")
+            );
+        }
+        assert_eq!(
+            state.exchange(&config, vec![], &cancellation).await.err().unwrap(),
+            RECONNECT_REQUIRED
+        );
+        server.await.unwrap();
     }
 
     #[test]

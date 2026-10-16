@@ -21,37 +21,61 @@ that Desktop client; GChat stores it in the OS vault. Test users, consent status
 and organization policy must admit the account and requested scopes.
 [Google native-app authorization](https://developers.google.com/identity/protocols/oauth2/native-app).
 
-For Microsoft, select **Sign in with Microsoft**. In Gbot Cloud PC setup, use the
-work or school account with an assigned Windows 365 Cloud PC, complete browser
-sign-in and any MFA or administrator approval, then explicitly choose the account
-and Cloud PC. GChat requests read-only Cloud PC discovery; signing in does not
-select a PC or grant bot control.
+For Microsoft, select **Sign in with Microsoft**. The release registration uses
+the `common` tenant and accepts work, school and personal Microsoft accounts,
+including Outlook.com, Hotmail and personal OneDrive. Available services still
+depend on the account. SharePoint and Windows 365 Cloud PC need a work or school
+account; GChat explains that requirement when those services are selected or the
+provider reports an unsupported account. It does not guess account type from an
+email address or treat every permission failure as a personal account.
+
+In Gbot Cloud PC setup, use the work or school account with an assigned Windows
+365 Cloud PC, complete browser sign-in and any MFA or administrator approval,
+then explicitly choose the account and Cloud PC. GChat requests read-only Cloud
+PC discovery; signing in does not select a PC or grant bot control. If the
+organization requires approval, ask its administrator to approve the requested
+permissions, then retry. Permission and license failures remain distinct from
+network, throttling and server failures.
 
 If Microsoft sign-in is not configured in the release, GChat explains this and
-disables sign-in. Users do not need to find or create an app ID. Ron must supply
-the approved release registration before the default flow can be released.
+disables sign-in. Users do not need to find or create an app ID. This remains
+useful for development or explicitly unconfigured builds.
 
 Organizations with an existing approved registration can expand **Advanced: use
 your organization's Microsoft app** in Settings. Copy its Application (client) ID
 from Microsoft Entra, confirm the Mobile and desktop applications reply URI is
 `http://localhost/oauth/callback`, and supply a directory (tenant) ID if required
 by the administrator. Save, choose services, then sign in. GChat uses a temporary
-localhost port. The advanced form retains the existing `common` default for an
-omitted tenant; the release identity defaults to `organizations`. No Microsoft
+localhost port. Both the release identity and an omitted advanced tenant default
+to `common`. A directory tenant ID intentionally restricts the advanced app to
+that directory; the release does not use Ron's directory tenant ID. No Microsoft
 client secret is used. Some service permissions need tenant administrator consent.
 [Microsoft authorization flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow),
 [localhost reply URI rules](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url).
 
-Release maintainers compile the approved public identity with
-`GCHAT_MICROSOFT_CLIENT_ID` and, if required, `GCHAT_MICROSOFT_TENANT`. A missing,
-invalid or nil client UUID, or an invalid tenant, leaves default sign-in
-unavailable. These are public application identifiers, never client secrets.
+Release builds compile the registered public client ID
+`e618bfb1-eb1d-4112-ad84-e3ff963f585c` with tenant `common` through the shared
+native build configuration on Linux and Windows. Build-time
+`GCHAT_MICROSOFT_CLIENT_ID` and `GCHAT_MICROSOFT_TENANT` override those defaults;
+an explicitly empty client ID disables default sign-in. Non-release builds do
+not assume a registration. A missing, invalid or nil client UUID, or an invalid
+tenant, leaves default sign-in unavailable. These are public application
+identifiers, never client secrets.
 The native account owner applies the default only when no Microsoft registration
 is saved, without startup vault access or a configuration-file write. A later
 ordinary metadata save may retain that identity; future upgrades preserve saved
 registrations and their account bindings. Changing a saved registration remains
-an explicit advanced action requiring account reconnection. No release identity
-is fabricated; tests use synthetic identifiers only.
+an explicit advanced action requiring account reconnection. Tests use synthetic
+identifiers and local mocks; they do not sign in using the release app.
+
+Ron must confirm the portal configuration: **Microsoft Entra → App registrations
+→ GChat → Authentication → Mobile and desktop applications** must contain exactly
+`http://localhost/oauth/callback`. The native callback uses this path on a
+temporary localhost port, following Microsoft's loopback-port matching rules.
+**Supported account types** must be **Accounts in any organizational directory
+and personal Microsoft accounts**. The repository confirms the requested URL
+and audience, but cannot verify the portal's saved redirect configuration.
+No Microsoft client secret is required. Live consent remains Ron's release gate.
 
 The provider consent screen controls actual grants. Settings displays the granted
 scopes and reconnect status. Changing registration or expired consent requires
