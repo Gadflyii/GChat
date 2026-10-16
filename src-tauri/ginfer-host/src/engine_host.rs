@@ -550,6 +550,9 @@ impl HostProcesses {
         }
         self.runtimes = runtimes;
         self.gpu_architectures = gpu_architectures;
+        if let Some(job) = &self.hardware_profile {
+            job.invalidate_runtime_acceptance();
+        }
         Ok(())
     }
 
@@ -679,6 +682,11 @@ impl HostProcesses {
             );
         }
         self.executable = path;
+        // Even a reasserted path may now contain an upgraded runtime. Durable
+        // measurements remain seeds; this owner must obtain native acceptance again.
+        if let Some(job) = &self.hardware_profile {
+            job.invalidate_runtime_acceptance();
+        }
         Ok(())
     }
 

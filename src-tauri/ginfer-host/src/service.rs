@@ -541,7 +541,31 @@ impl Host {
             recipes.push(recipe);
         }
         self.draft_width.reconcile(&recipes)?;
-        self.draft_width.start_next(&recipes)
+        self.draft_width.start_next(&recipes)?;
+        if self.draft_width.busy() || self.first_run_pending().await {
+            return Ok(());
+        }
+        if self.downloads.list().await.iter().any(|download|
+            matches!(download.status.as_str(), "queued" | "downloading" | "pausing" | "verifying")) {
+            return Ok(());
+        }
+        // Selected-model readiness is already established. Extend the same
+        // native profile only while the Host has no foreground work. A later
+        // Start/quote cancels and reaps this process under lifecycle first.
+        if let Some(gpus) = job.deferred_groups().into_iter().next() {
+            let cli = self.processes.lock().await.profiling_cli(&gpus);
+            job.start_remaining_formats(cli, gpus)?;
+        }
+        Ok(())
+    }
+    // Call with lifecycle held, without holding processes across the wait.
+    // Only idle completion is preempted; foreground calibration remains busy.
+    pub(crate) async fn stop_background_profile(&self) -> Result<(), String> {
+        let job = self.processes.lock().await.hardware_profile.clone();
+        if let Some(job) = job {
+            job.cancel_background_and_wait().await?;
+        }
+        Ok(())
     }
     pub(crate) async fn set_model_storage(&self, root: PathBuf) -> Result<PathBuf, String> {
         let _lifecycle = self.lifecycle.lock().await;
@@ -1221,6 +1245,47 @@ impl Host {
             options,
         })
     }
+    /// Resolve the same validated TP payload as serving. Browser callers never
+    /// supply artifact paths, directory identities or package-verification claims.
+    pub(crate) async fn selected_profile_intent(
+        &self,
+        request: &LaunchRequest,
+    ) -> Result<crate::hardware_profile::ArtifactProfileIntent, String> {
+        let launch = self.prepare_launch(request).await?;
+        let artifact = launch.artifact.clone();
+        let artifact_set = launch.artifact_set;
+        let tp = launch.tp;
+        let (path, directory_sha256) = tokio::task::spawn_blocking(move || {
+            let path = if artifact_set {
+                artifact_set_members(&artifact)?.into_iter()
+                    .find(|(_, metadata)| metadata.tp_size == tp)
+                    .map(|(path, _)| path)
+                    .ok_or("artifact set no longer declares selected degree")?
+            } else {
+                artifact.canonicalize().map_err(|error| error.to_string())?
+            };
+            let (_, directory_sha256) = crate::engine_inventory::inspect_artifact_directory(&path)?;
+            Ok::<_, String>((path, directory_sha256))
+        }).await.map_err(|error| error.to_string())??;
+        let mut package_sha256 = None;
+        for download in self.downloads.list().await {
+            if download.status != "installed" { continue; }
+            let Some(installed) = download.path else { continue; };
+            if tokio::fs::canonicalize(installed).await.ok().as_ref() == Some(&path) {
+                package_sha256 = Some(download.release.sha256);
+                break;
+            }
+        }
+        Ok(crate::hardware_profile::ArtifactProfileIntent {
+            path,
+            directory_sha256,
+            package_sha256,
+            tp: launch.tp,
+            draft_tp: launch.options.draft_tp,
+            spec: launch.options.spec,
+            draft_tokens: (launch.options.draft_tokens != 0).then_some(launch.options.draft_tokens),
+        })
+    }
     pub async fn launch(&self, request: LaunchRequest) -> Result<Uuid, String> {
         self.place(request, 1).await
     }
@@ -1234,6 +1299,7 @@ impl Host {
     async fn start_placement(&self, request: LaunchRequest, launch: EngineLaunch, remaining: u32) -> Result<Uuid, String> {
         use crate::engine_registry::InstanceStatus;
         if remaining == 0 { return Err("remaining instances must be positive".into()); }
+        self.stop_background_profile().await?;
         self.processes.lock().await.validate_launch(&launch, false)?;
         let sharing = self.processes.lock().await.reserved_gpus(None)
             .iter().any(|gpu| launch.gpu_uuids.contains(gpu));
@@ -1266,6 +1332,7 @@ impl Host {
         if (sharing || remaining > 1) && launch.model_id.starts_with("qwen3.8-flash-next/") && launch.options.vram_budget_bytes.is_none() {
             return Err("Flash sharing needs a per-instance weight residency budget: set it in Custom settings, start the package once by itself with that budget and wait for Ready to save its graph-memory receipt, then add instances with the same settings".into());
         }
+        self.stop_background_profile().await?;
         self.draft_width.cancel().await?;
         loop {
             self.refresh_processes().await?;
@@ -1307,12 +1374,13 @@ impl Host {
     }
     async fn quote(&self, request: LaunchRequest, remaining: u32) -> Result<serde_json::Value, String> {
         let _lifecycle = self.lifecycle.lock().await;
-        // Idle maintenance also owns lifecycle when starting calibration.
-        // A preview preserves that work rather than cancelling it like Start.
+        // Preserve draft-width calibration during previews. Deferred hardware
+        // formats yield to both previews and Start under this lifecycle fence.
         if self.draft_width.busy() {
             return Err("Draft-width calibration is running; wait for it to finish before requesting a startup quote".into());
         }
         let launch = self.prepare_launch(&request).await?;
+        self.stop_background_profile().await?;
         self.processes.lock().await.validate_launch(&launch, false)?;
         let (quote, kv_arena_bytes) = self.quote_prepared(&launch, remaining).await?;
         Ok(serde_json::json!({
@@ -1926,6 +1994,7 @@ impl Host {
                             };
                         profile.instance_id = Some(id);
                         let launch = self.prepare_launch(&profile).await?;
+                        self.stop_background_profile().await?;
                         self.processes
                             .lock()
                             .await
@@ -2002,6 +2071,7 @@ impl Host {
                 let request: crate::hardware_profile::HardwareProfileRequest =
                     serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
                 let _lifecycle = self.lifecycle.lock().await;
+                self.stop_background_profile().await?;
                 self.draft_width.cancel().await?;
                 let saved = self
                     .data
@@ -2197,6 +2267,7 @@ impl Host {
                 }
                 request.options.kv_arena_bytes = selection.kv_arena_bytes;
                 launch.options.kv_arena_bytes = selection.kv_arena_bytes;
+                self.stop_background_profile().await?;
                 self.processes
                     .lock()
                     .await
@@ -2360,18 +2431,9 @@ impl Host {
                 let _lifecycle = self.lifecycle.lock().await;
                 self.draft_width.cancel().await?;
                 self.scan().await?;
-                let groups = self
-                    .data
-                    .lock()
-                    .await
-                    .profiles
-                    .values()
-                    .map(|profile| profile.gpu_uuids.clone())
-                    .collect();
-                self.processes
-                    .lock()
-                    .await
-                    .ensure_hardware_if_idle(groups)?;
+                // Discovery does not reserve the Host for an all-format
+                // calibration. First-run selects its verified artifact first;
+                // deferred formats are extended by idle maintenance.
                 self.processes.lock().await.activity_notification().notify_one();
                 Ok(json(StatusCode::OK, self.snapshot().await))
             }
@@ -3073,6 +3135,118 @@ time.sleep(60)
             options: LaunchOptions::default(),
         };
         (dir, host, request)
+    }
+
+    #[tokio::test]
+    async fn selected_profile_intent_uses_local_payload_and_exact_startup_options() {
+        let (dir, host, mut request) = fixture().await;
+        request.options.spec = "none".into();
+        let intent = host.selected_profile_intent(&request).await.unwrap();
+        let path = dir.path().join("models/model.ginfer").canonicalize().unwrap();
+        assert_eq!(intent.path, path);
+        assert_eq!(intent.tp, 1);
+        assert_eq!(intent.draft_tp, 0);
+        assert_eq!(intent.spec, "none");
+        assert_eq!(intent.draft_tokens, None);
+        assert_eq!(intent.package_sha256, None);
+        assert_eq!(intent.directory_sha256,
+            crate::engine_inventory::inspect_artifact_directory(&path).unwrap().1);
+        request.options.spec = "auto".into();
+        assert_eq!(host.selected_profile_intent(&request).await.unwrap().spec, "auto");
+        let mut bytes = std::fs::read(&path).unwrap();
+        bytes[32] ^= 1;
+        std::fs::write(&path, bytes).unwrap();
+        assert!(host.selected_profile_intent(&request).await.is_err());
+        assert!(!host.processes.lock().await.has_children());
+        assert!(host.data.lock().await.profiles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn selected_profile_intent_resolves_the_selected_artifact_set_degree() {
+        let (dir, host, mut request) = fixture().await;
+        let models = dir.path().join("models");
+        let mut declarations = Vec::new();
+        for tp in [1, 2] {
+            let name = format!("model-tp{tp}.ginfer");
+            let directory = serde_json::to_vec(&serde_json::json!({
+                "identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},
+                "tp_size":tp,"draft_tp":0,
+                "objects":[{"kind":"tensor","rank":"all","name":"fixture"}],
+            })).unwrap();
+            let mut bytes = b"NINFER\0\x03".to_vec();
+            bytes.extend((directory.len() as u64).to_le_bytes());
+            bytes.extend(directory);
+            bytes.resize(4096, 0);
+            std::fs::write(models.join(&name), bytes).unwrap();
+            declarations.push(serde_json::json!({
+                "tp":tp,"draft_tp":0,"path":name,"bytes":4096,"sha256":"a".repeat(64),
+            }));
+        }
+        let descriptor = models.join("model-set.json");
+        std::fs::write(&descriptor, serde_json::to_vec(&serde_json::json!({
+            "schema":"ginfer-artifact-set-v1",
+            "identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4","family_id":"b".repeat(64)},
+            "canonical_reconstructed_target_sha256":"c".repeat(64),
+            "canonical_reconstructed_draft_sha256":null,"artifacts":declarations,
+        })).unwrap()).unwrap();
+        let executable = dir.path().join("engine");
+        let gpus = host.gpus.clone();
+        drop(host);
+        let host = Host::open(dir.path().join("state"), "Ignored".into(), executable,
+            vec![], vec![descriptor.clone()], gpus).await.unwrap();
+        request.model_id = host.inventory.read().await.iter()
+            .find(|model| model.artifact_set && model.metadata.tp_size == 2).unwrap().id;
+        request.gpu_uuids.push("GPU-fixture-1".into());
+        request.options.spec = "none".into();
+        let intent = host.selected_profile_intent(&request).await.unwrap();
+        let payload = models.join("model-tp2.ginfer").canonicalize().unwrap();
+        assert_eq!(intent.path, payload);
+        assert_ne!(intent.path, descriptor);
+        assert_eq!(intent.tp, 2);
+        assert_eq!(intent.directory_sha256,
+            crate::engine_inventory::inspect_artifact_directory(&payload).unwrap().1);
+        assert_eq!(intent.package_sha256, None);
+        assert!(!host.processes.lock().await.has_children());
+    }
+
+    #[tokio::test]
+    async fn foreground_quote_reaps_deferred_profile_before_starting_native_quote() {
+        let (dir, host, mut request) = fixture().await;
+        request.options.spec = "none".into();
+        let engine = dir.path().join("ginfer-serve");
+        std::fs::copy(dir.path().join("engine"), &engine).unwrap();
+        host.processes.lock().await.configure_executable(engine.clone()).unwrap();
+        let cli = dir.path().join("ginfer");
+        let pid_path = dir.path().join("profile-pid");
+        std::fs::write(&cli, format!(
+            "#!/bin/sh\nprintf '%s' \"$$\" > '{}'\nexec /bin/sleep 600\n", pid_path.display()
+        )).unwrap();
+        std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let configuration = job.configuration(Some(cli.clone()), &request.gpu_uuids).unwrap();
+        std::fs::create_dir_all(configuration.profile_path.parent().unwrap()).unwrap();
+        std::fs::write(&configuration.profile_path, r#"{"schema_version":2}"#).unwrap();
+        job.start_remaining_formats(Some(cli), request.gpu_uuids.clone()).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !pid_path.is_file() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.unwrap();
+        let pid = std::fs::read_to_string(&pid_path).unwrap();
+        assert!(job.busy());
+        let source = std::fs::read_to_string(&engine).unwrap();
+        // The quote itself verifies reaping; checking only after quote returns
+        // would miss a transient overlap of the two native processes.
+        std::fs::write(&engine, source.replace(
+            "if '--quote-only' in args:",
+            &format!("if '--quote-only' in args:\n    import os\n    try: os.kill({pid}, 0)\n    except ProcessLookupError: pass\n    else: raise AssertionError('profile still alive at quote')"),
+        )).unwrap();
+        let quote = tokio::time::timeout(Duration::from_secs(3), host.quote(request, 1))
+            .await.unwrap().unwrap();
+        assert_eq!(quote["instance_count"], 1);
+        assert!(!job.busy());
+        assert!(!host.processes.lock().await.has_children());
+        assert!(host.data.lock().await.profiles.is_empty());
     }
 
     #[tokio::test]

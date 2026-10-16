@@ -1,6 +1,6 @@
 //! One durable first-run workflow, driven by every installed client.
 use crate::{
-    hardware_profile::{HardwareProfileAction, HardwareProfileRequest},
+    hardware_profile::{ArtifactProfileIntent, HardwareProfileAction, HardwareProfileStatus},
     model_downloads::{Download, Release},
     service::{write_private, Gpu, Host, LaunchRequest},
 };
@@ -44,9 +44,6 @@ fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str
     if progress.gpu_uuids.is_empty() {
         return "gpu";
     }
-    if !profiled {
-        return "profiling";
-    }
     if !progress.storage_accepted {
         return "storage";
     }
@@ -70,6 +67,9 @@ fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str
         .any(|id| !jobs.iter().any(|j| j.id == *id && j.status == "installed"))
     {
         return "downloads";
+    }
+    if !profiled {
+        return "profiling";
     }
     "startup"
 }
@@ -97,24 +97,38 @@ fn needs_maintenance(progress: &Progress, jobs: &[Download]) -> bool {
     }
     if progress.download_error.is_none()
         && progress.selected_release_ids.iter().any(|sha| {
-            !progress
-                .download_ids
-                .iter()
-                .any(|id| jobs.iter().any(|job| job.id == *id && job.release.sha256 == *sha))
+            !progress.download_ids.iter().any(|id| {
+                jobs.iter()
+                    .any(|job| job.id == *id && job.release.sha256 == *sha)
+            })
         })
     {
         return true;
     }
     !progress.download_ids.is_empty()
-        && progress
-            .download_ids
-            .iter()
-            .all(|id| jobs.iter().any(|job| job.id == *id && job.status == "installed"))
+        && progress.download_ids.iter().all(|id| {
+            jobs.iter()
+                .any(|job| job.id == *id && job.status == "installed")
+        })
         && (progress.startup_profiles.len() != progress.download_ids.len()
             || progress
                 .startup_profiles
                 .iter()
                 .any(|profile| profile.quote.is_none() && profile.error.is_none()))
+}
+
+fn selected_scope_needs_resume(
+    status: &HardwareProfileStatus,
+    gpus: &[String],
+    intent: &ArtifactProfileIntent,
+) -> bool {
+    crate::hardware_profile::group_key(&status.gpu_uuids)
+        == crate::hardware_profile::group_key(gpus)
+        && status.selected_artifact.as_ref() == Some(intent)
+        && matches!(
+            status.status.as_str(),
+            "failed" | "interrupted" | "cancelled"
+        )
 }
 
 fn validate_group(gpus: &[Gpu], selected: &[String]) -> Result<(), String> {
@@ -162,23 +176,23 @@ fn recommendations(
     releases: &[Release],
     gpus: &[Gpu],
     selected: &[String],
-    profile: &Value,
     free: u64,
 ) -> Vec<Value> {
-    let capacity = measured_capacity(profile, selected);
+    let capacity = selected
+        .iter()
+        .map(|id| gpus.iter().find(|g| &g.uuid == id).map(|g| g.memory_mib))
+        .collect::<Option<Vec<_>>>()
+        .and_then(|memory| memory.into_iter().min());
     let mut choices: Vec<_> = releases.iter().filter(|release| release.tp as usize == selected.len()
         && selected.iter().all(|id| gpus.iter().any(|g| &g.uuid == id
             && release.identity.supports_gpu(g.compute_capability.as_deref())))).map(|release| {
-        let fits = capacity.is_some_and(|(vram, ram)|
-            vram / (1024 * 1024) >= release.min_vram_mib_per_gpu
-                && release.bytes <= ram.saturating_add(vram.saturating_mul(release.tp.into()))
+        let fits = capacity.is_some_and(|vram| vram >= release.min_vram_mib_per_gpu
                 && release.bytes <= free);
         let reason = match capacity {
-            None => "Hardware profiling must finish before checking memory and disk capacity",
-            Some((vram, _)) if vram / (1024 * 1024) < release.min_vram_mib_per_gpu => "Below the published per-GPU VRAM requirement",
+            None => "GPU memory guidance is unavailable; selected-artifact profiling is still required",
+            Some(vram) if vram < release.min_vram_mib_per_gpu => "Below the published per-GPU VRAM requirement",
             _ if release.bytes > free => "Not enough live free space in the selected folder",
-            _ if !fits => "Package exceeds saved usable RAM plus VRAM capacity",
-            _ => "Fits saved RAM/VRAM and live disk capacity; startup still requires an Engine quote",
+            _ => "Meets published GPU VRAM and live disk guidance; selected-artifact profiling and an Engine quote are still required",
         };
         (release, fits, reason)
     }).collect();
@@ -203,6 +217,44 @@ fn recommendations(
 }
 
 impl Host {
+    async fn first_run_profile_busy(&self) -> bool {
+        self.processes
+            .lock()
+            .await
+            .hardware_profile
+            .as_ref()
+            .is_some_and(|job| job.busy())
+    }
+
+    async fn first_run_selected_ready(&self, progress: &Progress) -> bool {
+        if progress.download_ids.is_empty()
+            || progress.startup_profiles.len() != progress.download_ids.len()
+            || progress.download_ids.iter().any(|id| {
+                !progress
+                    .startup_profiles
+                    .iter()
+                    .any(|profile| profile.download_id == *id)
+            })
+        {
+            return false;
+        }
+        let Some(job) = self.processes.lock().await.hardware_profile.clone() else {
+            return false;
+        };
+        if job.busy() {
+            return false;
+        }
+        for profile in &progress.startup_profiles {
+            let Ok(intent) = self.selected_profile_intent(&profile.request).await else {
+                return false;
+            };
+            if !job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
+                return false;
+            }
+        }
+        true
+    }
+
     async fn first_run_profile(&self, progress: &Progress) -> Option<Value> {
         if progress.gpu_uuids.is_empty() {
             return None;
@@ -253,18 +305,13 @@ impl Host {
             .cloned()
             .collect();
         let root = self.downloads.root();
-        let free = if profile.is_some() {
-            crate::model_downloads::available_bytes(root.clone())
-                .await
-                .ok()
-        } else {
-            None
-        };
+        let free = crate::model_downloads::available_bytes(root.clone())
+            .await
+            .ok();
         let models = recommendations(
             &progress.releases,
             &self.gpus,
             &progress.gpu_uuids,
-            profile.as_ref().unwrap_or(&Value::Null),
             free.unwrap_or(0),
         );
         let required = progress
@@ -311,12 +358,29 @@ impl Host {
             "quote":p.quote,"error":p.error,"instance_ids":p.instance_ids,
             "qualification":"Engine startup estimate; full-context validation is separate"
         })).collect();
-        Ok(
-            json!({"step":stage(&progress,profile.is_some(),&jobs),"gpu_uuids":progress.gpu_uuids,
+        let step = stage(
+            &progress,
+            self.first_run_selected_ready(&progress).await,
+            &jobs,
+        );
+        let error = progress
+            .download_error
+            .clone()
+            .or(progress.catalog_error.clone())
+            .or_else(|| {
+                (step == "profiling")
+                    .then(|| {
+                        progress
+                            .startup_profiles
+                            .iter()
+                            .find_map(|p| p.error.clone())
+                    })
+                    .flatten()
+            });
+        Ok(json!({"step":step,"gpu_uuids":progress.gpu_uuids,
             "hardware_profile":hardware.map(|h|json!(h)).unwrap_or_else(||json!({"status":"unavailable","error":"Hardware profiling is not configured"})),
-            "storage":storage,"models":models,"selected_release_ids":progress.selected_release_ids,"catalog_loaded":progress.catalog_loaded,"error":progress.download_error.or(progress.catalog_error),
-            "selected_downloads":selected,"startup_profiles":startup}),
-        )
+            "storage":storage,"models":models,"selected_release_ids":progress.selected_release_ids,"catalog_loaded":progress.catalog_loaded,"error":error,
+            "selected_downloads":selected,"startup_profiles":startup}))
     }
 
     pub async fn first_run_action(
@@ -343,7 +407,7 @@ impl Host {
         let _operation = self.first_run_operation.lock().await;
         let mut progress = self.data.lock().await.first_run.clone();
         let jobs = self.downloads.list().await;
-        let profiled = self.first_run_profile(&progress).await.is_some();
+        let profiled = self.first_run_selected_ready(&progress).await;
         let step = stage(&progress, profiled, &jobs);
         match body["action"].as_str().ok_or("first-run action required")? {
             "profile" => {
@@ -359,15 +423,8 @@ impl Host {
                 if progress.gpu_uuids != selected && !progress.download_ids.is_empty() {
                     return Err("Finish the current setup before changing its GPU group".into());
                 }
-                let _lifecycle = self.lifecycle.lock().await;
-                self.draft_width.cancel().await?;
-                self.processes
-                    .lock()
-                    .await
-                    .hardware_profile_action(HardwareProfileRequest {
-                        action: HardwareProfileAction::Ensure,
-                        gpu_uuids: Some(selected.clone()),
-                    })?;
+                // Selecting GPUs is durable intent, not permission to calibrate
+                // every format before the selected artifact is installed.
                 if progress.gpu_uuids != selected {
                     progress = Progress {
                         gpu_uuids: selected,
@@ -393,9 +450,7 @@ impl Host {
                 progress.storage_error = None;
                 progress.download_error = None;
                 self.store_first_run(progress.clone()).await?;
-                if profiled {
-                    self.apply_first_run_storage(&mut progress).await?;
-                }
+                self.apply_first_run_storage(&mut progress).await?;
             }
             "refresh_catalog" => {
                 if progress.gpu_uuids.is_empty()
@@ -455,27 +510,66 @@ impl Host {
                 progress.selected_release_ids = ids.into_iter().collect();
                 progress.download_error = None;
                 self.store_first_run(progress.clone()).await?;
-                if profiled && progress.storage_accepted {
+                if progress.storage_accepted && !self.first_run_profile_busy().await {
                     self.admit_first_run_downloads(&mut progress).await?;
                 }
             }
             "resume" => match step {
                 "profiling" => {
                     let _lifecycle = self.lifecycle.lock().await;
+                    self.stop_background_profile().await?;
+                    if self.processes.lock().await.has_children() {
+                        return Err(
+                            "Stop active model instances before resuming selected profiling".into(),
+                        );
+                    }
                     self.draft_width.cancel().await?;
-                    self.processes.lock().await.hardware_profile_action(
-                        HardwareProfileRequest {
-                            action: HardwareProfileAction::Resume,
-                            gpu_uuids: Some(progress.gpu_uuids.clone()),
-                        },
-                    )?;
+                    let (job, cli) = {
+                        let processes = self.processes.lock().await;
+                        (
+                            processes
+                                .hardware_profile
+                                .clone()
+                                .ok_or("Hardware profiling is not configured")?,
+                            processes.profiling_cli(&progress.gpu_uuids),
+                        )
+                    };
+                    let status = job.status(cli.clone());
+                    let mut resumed = false;
+                    for profile in &progress.startup_profiles {
+                        let intent = self.selected_profile_intent(&profile.request).await?;
+                        if selected_scope_needs_resume(&status, &progress.gpu_uuids, &intent) {
+                            job.start_scoped(
+                                HardwareProfileAction::Resume,
+                                cli,
+                                progress.gpu_uuids.clone(),
+                                intent,
+                            )?;
+                            resumed = true;
+                            break;
+                        }
+                    }
+                    if !resumed
+                        && matches!(
+                            status.status.as_str(),
+                            "failed" | "interrupted" | "cancelled"
+                        )
+                    {
+                        return Err("Resolve the interrupted hardware profiling job in Hardware settings before selected-artifact profiling can continue".into());
+                    }
+                    for profile in &mut progress.startup_profiles {
+                        profile.error = None;
+                        profile.quote = None;
+                    }
                 }
                 "downloads" => {
                     progress.download_error = None;
                     self.admit_first_run_downloads(&mut progress).await?;
                     let _lifecycle = self.lifecycle.lock().await;
-                    if self.first_run_profile(&progress).await.is_none() {
-                        return Err("Complete hardware profiling before resuming downloads".into());
+                    if self.first_run_profile_busy().await {
+                        return Err(
+                            "Wait for active hardware profiling before resuming downloads".into(),
+                        );
                     }
                     for job in &jobs {
                         if progress.download_ids.contains(&job.id)
@@ -542,6 +636,13 @@ impl Host {
                         .any(|p| p.quote.is_none() || p.error.is_some())
                 {
                     return Err("Every selected download needs a successful Engine startup quote before setup can finish".into());
+                }
+                let _lifecycle = self.lifecycle.lock().await;
+                if !self.first_run_selected_ready(&progress).await {
+                    return Err(
+                        "Complete current selected-artifact profiling before setup can finish"
+                            .into(),
+                    );
                 }
                 let mut data = self.data.lock().await;
                 let previous = data.profiles.clone();
@@ -654,7 +755,50 @@ impl Host {
 
     pub async fn first_run_pending(&self) -> bool {
         let progress = self.data.lock().await.first_run.clone();
-        needs_maintenance(&progress, &self.downloads.list().await)
+        let jobs = self.downloads.list().await;
+        if progress.complete
+            || !progress.catalog_loaded
+            || stage(&progress, true, &jobs) != "startup"
+            || progress.startup_profiles.len() != progress.download_ids.len()
+            || progress.download_ids.iter().any(|id| {
+                !progress
+                    .startup_profiles
+                    .iter()
+                    .any(|profile| profile.download_id == *id)
+            })
+        {
+            return needs_maintenance(&progress, &jobs);
+        }
+        // Retained quotes cannot authorize this process or a replacement runtime.
+        // Follow maintenance's first-unaccepted-scope barrier so an interrupted
+        // scope parks until Resume instead of polling or hiding later work.
+        let (job, cli) = {
+            let processes = self.processes.lock().await;
+            (
+                processes.hardware_profile.clone(),
+                processes.profiling_cli(&progress.gpu_uuids),
+            )
+        };
+        let Some(job) = job else {
+            return needs_maintenance(&progress, &jobs);
+        };
+        if job.busy() {
+            return true;
+        }
+        for profile in &progress.startup_profiles {
+            let Ok(intent) = self.selected_profile_intent(&profile.request).await else {
+                return profile.error.is_none();
+            };
+            if job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
+                continue;
+            }
+            return profile.error.is_none()
+                && !selected_scope_needs_resume(&job.status(cli), &progress.gpu_uuids, &intent);
+        }
+        progress
+            .startup_profiles
+            .iter()
+            .any(|profile| profile.quote.is_none() && profile.error.is_none())
     }
 
     async fn apply_first_run_storage(&self, progress: &mut Progress) -> Result<(), String> {
@@ -665,11 +809,12 @@ impl Host {
             return Ok(());
         };
         let _lifecycle = self.lifecycle.lock().await;
-        if self.first_run_profile(progress).await.is_none() {
+        self.stop_background_profile().await?;
+        if self.first_run_profile_busy().await {
             return Ok(());
         }
-        // Saving a path during calibration is metadata only. Filesystem/native
-        // storage validation is deferred until its matching profile is usable.
+        // Validate storage before downloading the selected artifact, while
+        // retaining the lifecycle fence against any active calibration.
         match self.set_model_storage_locked(path).await {
             Ok(root) => {
                 progress.requested_storage = Some(root);
@@ -688,9 +833,10 @@ impl Host {
         // Profile starts share this lock. Recheck after any storage probe so
         // queued choices cannot admit heavy work while calibration is active.
         let _lifecycle = self.lifecycle.lock().await;
-        if !progress.storage_accepted || self.first_run_profile(progress).await.is_none() {
+        if !progress.storage_accepted || self.first_run_profile_busy().await {
             return Err(
-                "Complete hardware profiling and validate storage before downloading models".into(),
+                "Wait for active hardware profiling and validate storage before downloading models"
+                    .into(),
             );
         }
         let jobs = self.downloads.list().await;
@@ -769,7 +915,6 @@ impl Host {
         }
         let _operation = self.first_run_operation.lock().await;
         let mut progress = self.data.lock().await.first_run.clone();
-        let profiled = self.first_run_profile(&progress).await.is_some();
         // The published catalog is metadata; it can load while calibration
         // runs without starting package downloads or validating storage.
         if !progress.catalog_loaded {
@@ -783,8 +928,12 @@ impl Host {
             progress.catalog_loaded = true;
             self.store_first_run(progress.clone()).await?;
         }
-        if !profiled {
-            return Ok(());
+        {
+            let _lifecycle = self.lifecycle.lock().await;
+            self.stop_background_profile().await?;
+            if self.first_run_profile_busy().await {
+                return Ok(());
+            }
         }
         self.apply_first_run_storage(&mut progress).await?;
         if progress.storage_accepted
@@ -794,19 +943,14 @@ impl Host {
             self.admit_first_run_downloads(&mut progress).await?;
         }
         let jobs = self.downloads.list().await;
-        if stage(&progress, profiled, &jobs) != "startup" {
-            return Ok(());
-        }
-        if progress.startup_profiles.len() == progress.download_ids.len()
-            && progress
-                .startup_profiles
-                .iter()
-                .all(|p| p.quote.is_some() || p.error.is_some())
-        {
+        // This ignores profiling only to test that every selected download is
+        // installed. Actual readiness below is exact artifact acceptance.
+        if stage(&progress, true, &jobs) != "startup" {
             return Ok(());
         }
         let _lifecycle = self.lifecycle.lock().await;
-        if self.processes.lock().await.has_children() {
+        self.stop_background_profile().await?;
+        if self.first_run_profile_busy().await || self.processes.lock().await.has_children() {
             return Ok(());
         }
         self.draft_width.cancel().await?;
@@ -879,6 +1023,56 @@ impl Host {
             });
         }
         self.store_first_run(progress.clone()).await?;
+        let (job, cli) = {
+            let processes = self.processes.lock().await;
+            (
+                processes
+                    .hardware_profile
+                    .clone()
+                    .ok_or("Hardware profiling is not configured")?,
+                processes.profiling_cli(&progress.gpu_uuids),
+            )
+        };
+        for index in 0..progress.startup_profiles.len() {
+            let intent = match self
+                .selected_profile_intent(&progress.startup_profiles[index].request)
+                .await
+            {
+                Ok(intent) => intent,
+                Err(error) => {
+                    progress.startup_profiles[index].error = Some(error);
+                    self.store_first_run(progress).await?;
+                    return Ok(());
+                }
+            };
+            if job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
+                continue;
+            }
+            // Acceptance is deliberately process-local. Quotes retained across
+            // restart cannot authorize completion before current-runtime Ensure.
+            for profile in &mut progress.startup_profiles {
+                profile.quote = None;
+            }
+            let status = job.status(cli.clone());
+            if selected_scope_needs_resume(&status, &progress.gpu_uuids, &intent)
+                || progress.startup_profiles[index].error.is_some()
+            {
+                self.store_first_run(progress).await?;
+                return Ok(());
+            }
+            if let Err(error) = job.start_scoped(
+                HardwareProfileAction::Ensure,
+                cli.clone(),
+                progress.gpu_uuids.clone(),
+                intent.clone(),
+            ) {
+                progress.startup_profiles[index].error = Some(error);
+            } else if !job.busy() && !job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
+                progress.startup_profiles[index].error = Some("Resolve the interrupted hardware profiling job before selected-artifact profiling can continue".into());
+            }
+            self.store_first_run(progress).await?;
+            return Ok(());
+        }
         for profile in &mut progress.startup_profiles {
             if profile.quote.is_some() || profile.error.is_some() {
                 continue;
@@ -1054,6 +1248,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn blocked_first_scope_parks_later_unquoted_selections() {
+        use std::{future::Future, task::Poll};
+
+        let directory = tempfile::tempdir().unwrap();
+        let (host, jobs) = installed_host(directory.path(), 2).await;
+        let inventory = host.inventory.read().await.clone();
+        let mut progress = Progress {
+            gpu_uuids: vec![gpu().uuid],
+            storage_accepted: true,
+            catalog_loaded: true,
+            releases: jobs.iter().map(|job| job.release.clone()).collect(),
+            download_ids: jobs.iter().map(|job| job.id).collect(),
+            startup_profiles: jobs
+                .iter()
+                .map(|job| {
+                    let model = inventory
+                        .iter()
+                        .find(|model| Some(&model.path) == job.path.as_ref())
+                        .unwrap();
+                    Startup {
+                        download_id: job.id,
+                        model_id: "fixture".into(),
+                        request: LaunchRequest {
+                            instance_id: None,
+                            qualified_profile_id: None,
+                            benchmark_profile: None,
+                            model_id: model.id,
+                            gpu_uuids: vec![gpu().uuid],
+                            max_context: 4096,
+                            concurrency: 1,
+                            options: Default::default(),
+                        },
+                        instance_count: 1,
+                        instance_ids: vec![],
+                        quote: None,
+                        error: None,
+                    }
+                })
+                .collect(),
+            ..Default::default()
+        };
+        // A later unquoted draft cannot bypass the first profiling failure.
+        progress.startup_profiles[0].error = Some("correct this selection".into());
+        host.store_first_run(progress.clone()).await.unwrap();
+        assert!(!host.first_run_pending().await);
+        {
+            let _operation = host.first_run_operation.lock().await;
+            let mut maintenance = std::pin::pin!(host.first_run_maintenance());
+            std::future::poll_fn(|cx| {
+                assert!(matches!(maintenance.as_mut().poll(cx), Poll::Ready(Ok(()))));
+                Poll::Ready(())
+            })
+            .await;
+        }
+        progress.startup_profiles[0].error = None;
+        host.store_first_run(progress).await.unwrap();
+        assert!(host.first_run_pending().await);
+        assert!(!host.processes.lock().await.has_children());
+    }
+
+    #[tokio::test]
     async fn admitted_downloads_keep_monitoring_until_work_settles() {
         let directory = tempfile::tempdir().unwrap();
         let (_, mut jobs) = installed_host(directory.path(), 2).await;
@@ -1092,13 +1347,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pending_profile_retains_choices_across_restart_without_storage_or_admission() {
+    async fn verified_download_choices_precede_selected_profiling_and_survive_restart() {
         let directory = tempfile::tempdir().unwrap();
         let (host, jobs) = installed_host(directory.path(), 1).await;
         let profile_path =
             crate::hardware_profile::group_profile_path(directory.path(), &[gpu().uuid.clone()]);
-        let accepted_profile = std::fs::read(&profile_path).unwrap();
-        // A profile for another GPU cannot validate this group's saved choices.
+        // Download intent does not depend on a prior all-formats profile.
         std::fs::write(
             &profile_path,
             serde_json::to_vec(&json!({
@@ -1116,8 +1370,7 @@ mod tests {
         })
         .await
         .unwrap();
-        let original_root = host.downloads.root();
-        let selected_root = directory.path().join("chosen-after-calibration");
+        let selected_root = directory.path().join("chosen-before-selected-profiling");
         host.first_run_action(json!({"action":"storage","path":selected_root}))
             .await
             .unwrap();
@@ -1129,8 +1382,9 @@ mod tests {
             .unwrap();
         assert_eq!(saved["step"], "profiling");
         assert_eq!(saved["storage"]["requested_path"], json!(selected_root));
-        assert_eq!(saved["storage"]["accepted"], false);
-        assert!(saved["selected_downloads"].as_array().unwrap().is_empty());
+        assert_eq!(saved["storage"]["accepted"], true);
+        assert_eq!(saved["selected_downloads"][0]["id"], json!(jobs[0].id));
+        assert!(!host.first_run_profile_busy().await);
         drop(host);
         let restored = Host::open(
             directory.path().to_owned(),
@@ -1143,20 +1397,25 @@ mod tests {
         .await
         .unwrap();
         assert!(restored.first_run_pending().await);
-        restored.first_run_maintenance().await.unwrap();
         let mut progress = restored.data.lock().await.first_run.clone();
+        assert_eq!(progress.gpu_uuids, vec![gpu().uuid]);
         assert_eq!(progress.requested_storage, Some(selected_root.clone()));
         assert_eq!(
             progress.selected_release_ids,
             vec![jobs[0].release.sha256.clone()]
         );
-        assert!(!progress.storage_accepted);
-        assert!(progress.download_ids.is_empty());
-        assert_eq!(restored.downloads.root(), original_root);
-        assert!(!selected_root.exists());
+        assert!(progress.storage_accepted);
+        assert_eq!(progress.download_ids, vec![jobs[0].id]);
+        assert_eq!(
+            restored.downloads.root(),
+            selected_root.canonicalize().unwrap()
+        );
+        assert_eq!(
+            restored.first_run_status().await.unwrap()["step"],
+            "profiling"
+        );
+        assert!(!restored.first_run_profile_busy().await);
         assert_eq!(restored.downloads.list().await.len(), 1);
-
-        std::fs::write(profile_path, accepted_profile).unwrap();
         restored
             .apply_first_run_storage(&mut progress)
             .await
@@ -1353,11 +1612,11 @@ mod tests {
         job.shutdown().await.unwrap();
         assert!(busy);
         validation_result.unwrap();
-        assert_eq!(storage.unwrap()["step"], "profiling");
-        assert_eq!(choices.unwrap()["step"], "profiling");
+        assert_eq!(storage.unwrap()["step"], "storage");
+        assert_eq!(choices.unwrap()["step"], "storage");
         assert!(admission
             .unwrap_err()
-            .contains("Complete hardware profiling"));
+            .contains("Wait for active hardware profiling"));
         assert!(progress.download_ids.is_empty());
         assert_eq!(final_root, original_root);
         assert!(!pending_root.exists());
@@ -1407,7 +1666,7 @@ mod tests {
         assert_eq!(restored.downloads.list().await.len(), 2);
         assert_eq!(
             restored.first_run_status().await.unwrap()["step"],
-            "startup"
+            "profiling"
         );
         assert!(restored.first_run_pending().await);
         assert!(restored
@@ -1643,7 +1902,44 @@ mod tests {
             .unwrap(),
         );
         release.launch_profiles[0].validate().unwrap();
+        jobs[0].status = "paused".into();
         drop(host);
+        let persisted_jobs: std::collections::BTreeMap<_, _> =
+            jobs.iter().map(|job| (job.id, job.clone())).collect();
+        std::fs::write(
+            directory.path().join("model-downloads.json"),
+            serde_json::to_vec(&persisted_jobs).unwrap(),
+        )
+        .unwrap();
+        let host = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
+        host.store_first_run(Progress {
+            gpu_uuids: vec![gpu().uuid],
+            storage_accepted: true,
+            catalog_loaded: true,
+            releases: vec![jobs[0].release.clone()],
+            download_ids: vec![jobs[0].id],
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        host.first_run_maintenance().await.unwrap();
+        let pending = host.first_run_status().await.unwrap();
+        assert_eq!(pending["step"], "downloads");
+        assert_eq!(pending["startup_profiles"], json!([]));
+        assert_eq!(pending["hardware_profile"]["status"], "idle");
+        assert!(!directory.path().join("quote-args").exists());
+        assert!(!directory.path().join("profile-args").exists());
+        drop(host);
+        jobs[0].status = "installed".into();
         let persisted_jobs: std::collections::BTreeMap<_, _> =
             jobs.iter().map(|job| (job.id, job.clone())).collect();
         std::fs::write(
@@ -1672,11 +1968,50 @@ mod tests {
             directory.path().join("quote-args").display(),
             quote
         );
-        for name in ["ginfer-serve", "ginfer"] {
-            let path = directory.path().join(name);
-            std::fs::write(&path, &script).unwrap();
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
+        let path = directory.path().join("ginfer-serve");
+        std::fs::write(&path, &script).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let model_id = host.inventory.read().await[0].id;
+        let mut options = jobs[0].release.launch_profiles[0].options.clone();
+        options.kv_arena_bytes = None;
+        let intent = host
+            .selected_profile_intent(&LaunchRequest {
+                instance_id: None,
+                qualified_profile_id: None,
+                benchmark_profile: None,
+                model_id,
+                gpu_uuids: vec![gpu().uuid],
+                max_context: 65536,
+                concurrency: 3,
+                options,
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            intent.package_sha256.as_deref(),
+            Some(jobs[0].release.sha256.as_str())
+        );
+        // This separate profiling fixture accepts only the verified selected
+        // artifact; unrelated all-format coverage remains explicitly deferred.
+        // Native output resolves the omitted non-speculative draft width to 0.
+        assert_eq!(intent.spec, "none");
+        assert_eq!(intent.draft_tokens, None);
+        let result = json!({"schema_version":2,"mode":"ensure","scope":"artifact",
+            "hardware_profile":"__OUTPUT__","state":"loaded","complete":true,
+            "base_complete":true,"all_formats_complete":false,"missing_rows":[],
+            "artifact":{"path":intent.path,"directory_sha256":intent.directory_sha256,
+                "tp":intent.tp,"draft_tp":intent.draft_tp,"spec":intent.spec,
+                "draft_tokens":0}});
+        let result = serde_json::to_string(&result).unwrap();
+        let (prefix, suffix) = result.split_once("__OUTPUT__").unwrap();
+        let shell_quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+        let path = directory.path().join("ginfer");
+        std::fs::write(&path, format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nprintf '%s' '{{\"schema_version\":2,\"accepted\":\"scoped\"}}' > \"$3\"\nprintf '%s%s%s\\n' {} \"$3\" {}\n",
+            shell_quote(directory.path().join("profile-args").to_str().unwrap()),
+            shell_quote(prefix), shell_quote(suffix)
+        )).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
         host.store_first_run(Progress {
             gpu_uuids: vec![gpu().uuid],
             storage_accepted: true,
@@ -1692,6 +2027,37 @@ mod tests {
             .await
             .is_err());
         assert!(host.first_run_pending().await);
+        host.first_run_maintenance().await.unwrap();
+        let worker = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while worker.busy() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
+        assert_eq!(worker.status(None).all_formats_complete, Some(false));
+        let profile_args = std::fs::read_to_string(directory.path().join("profile-args")).unwrap();
+        let profile_args: Vec<_> = profile_args.lines().collect();
+        let tp = intent.tp.to_string();
+        assert!(profile_args
+            .windows(2)
+            .any(|pair| pair == ["--model", intent.path.to_str().unwrap()]));
+        assert!(profile_args
+            .windows(2)
+            .any(|pair| pair == ["--tp", tp.as_str()]));
+        assert!(profile_args
+            .windows(2)
+            .any(|pair| pair == ["--spec", intent.spec.as_str()]));
+        assert!(profile_args.contains(&"--json"));
+        assert!(!profile_args.contains(&"--complete-remaining-formats"));
         host.first_run_maintenance().await.unwrap();
         let status = host.first_run_status().await.unwrap();
         assert!(status["startup_profiles"][0]["quote"].is_object());
@@ -1710,6 +2076,157 @@ mod tests {
             .windows(2)
             .any(|pair| pair == ["--max-concurrency", "3"]));
         assert!(!host.processes.lock().await.has_children());
+        // Retained quotes must wake selected-artifact validation after restart
+        // and either runtime reconfiguration path, then park once accepted.
+        drop(host);
+        let host = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
+        for runtime in ["reopened", "executable", "runtimes"] {
+            {
+                let mut processes = host.processes.lock().await;
+                match runtime {
+                    "executable" => processes
+                        .configure_executable(directory.path().join("ginfer-serve"))
+                        .unwrap(),
+                    "runtimes" => processes
+                        .configure_runtimes(
+                            std::collections::BTreeMap::from([(
+                                "12.0".into(),
+                                directory.path().join("ginfer-serve"),
+                            )]),
+                            std::collections::BTreeMap::from([(gpu().uuid, "12.0".into())]),
+                        )
+                        .unwrap(),
+                    _ => {}
+                }
+            }
+            let saved = host.data.lock().await.first_run.clone();
+            assert!(saved.startup_profiles[0].quote.is_some(), "{runtime}");
+            assert!(host.first_run_pending().await, "{runtime}");
+            host.first_run_maintenance().await.unwrap();
+            let worker = host
+                .processes
+                .lock()
+                .await
+                .hardware_profile
+                .clone()
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while worker.busy() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert!(
+                worker.artifact_is_accepted(&[gpu().uuid], &intent),
+                "{runtime}"
+            );
+            host.first_run_maintenance().await.unwrap();
+            assert!(!host.first_run_pending().await, "{runtime}");
+        }
+        // Recover a real running scoped journal: interruption needs explicit
+        // Resume even though its startup draft still has no quote or error.
+        let cli = directory.path().join("ginfer");
+        let valid_cli = std::fs::read(&cli).unwrap();
+        let begun = directory.path().join("interrupted-profile-begun");
+        std::fs::write(
+            &cli,
+            format!(
+                "#!/bin/sh\nprintf ready > {}\nexec /bin/sleep 60\n",
+                shell_quote(begun.to_str().unwrap())
+            ),
+        )
+        .unwrap();
+        let mut progress = host.data.lock().await.first_run.clone();
+        progress.startup_profiles[0].quote = None;
+        host.store_first_run(progress).await.unwrap();
+        let worker = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        worker
+            .start_scoped(
+                HardwareProfileAction::Ensure,
+                Some(cli.clone()),
+                vec![gpu().uuid],
+                intent.clone(),
+            )
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !begun.exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let journal = directory.path().join("hardware-profile-job.json");
+        let interrupted = std::fs::read(&journal).unwrap();
+        worker.shutdown().await.unwrap();
+        drop(worker);
+        drop(host);
+        std::fs::write(&journal, interrupted).unwrap();
+        std::fs::write(&cli, valid_cli).unwrap();
+        let host = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
+        let worker = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        assert_eq!(worker.status(None).status, "interrupted");
+        assert!(!worker.busy());
+        {
+            let data = host.data.lock().await;
+            assert!(data.first_run.startup_profiles[0].quote.is_none());
+            assert!(data.first_run.startup_profiles[0].error.is_none());
+        }
+        assert!(!host.first_run_pending().await);
+        {
+            use std::{future::Future, task::Poll};
+            let _operation = host.first_run_operation.lock().await;
+            let mut maintenance = std::pin::pin!(host.first_run_maintenance());
+            std::future::poll_fn(|cx| {
+                assert!(matches!(maintenance.as_mut().poll(cx), Poll::Ready(Ok(()))));
+                Poll::Ready(())
+            })
+            .await;
+        }
+        host.first_run_action(json!({"action":"resume"}))
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while worker.busy() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
+        assert!(host.first_run_pending().await);
+        host.first_run_maintenance().await.unwrap();
+        assert!(!host.first_run_pending().await);
         assert!(host
             .first_run_action(json!({"action":"startup","download_id":jobs[0].id,"concurrency":0}))
             .await
@@ -1787,24 +2304,20 @@ mod tests {
         let mut smol = int.clone();
         smol.identity.weights_id = "smol".into();
         smol.sha256 = "c".repeat(64);
-        let profile =
-            json!({"ram_bytes":128_u64<<30,"gpus":[{"uuid":gpu().uuid,"vram_bytes":32_u64<<30}]});
         let releases = [nvfp4, int, smol];
-        let blackwell = recommendations(&releases, &[gpu()], &[gpu().uuid], &profile, u64::MAX);
+        let blackwell = recommendations(&releases, &[gpu()], &[gpu().uuid], u64::MAX);
         assert_eq!(blackwell.len(), 3);
         assert_eq!(blackwell[0]["release"]["identity"]["weights_id"], "nvfp4");
         let mut ampere = gpu();
         ampere.compute_capability = Some("8.6".into());
-        let choices = recommendations(&releases, &[ampere], &[gpu().uuid], &profile, u64::MAX);
+        let choices = recommendations(&releases, &[ampere], &[gpu().uuid], u64::MAX);
         assert_eq!(choices.len(), 2);
         assert!(choices
             .iter()
             .all(|r| r["release"]["identity"]["weights_id"] != "nvfp4"));
-        assert!(
-            recommendations(&releases, &[gpu()], &[gpu().uuid], &profile, 0)
-                .iter()
-                .all(|r| r["recommended"] == false)
-        );
+        assert!(recommendations(&releases, &[gpu()], &[gpu().uuid], 0)
+            .iter()
+            .all(|r| r["recommended"] == false));
     }
 
     #[test]
@@ -1829,13 +2342,11 @@ mod tests {
         qwen.bytes = 15_u64 << 30;
         qwen.min_vram_mib_per_gpu = 16 * 1024;
         // Synthetic capacity thresholds exercise fit policy, not measured Engine requirements.
-        let mut profile =
-            json!({"ram_bytes":128_u64<<30,"gpus":[{"uuid":gpu().uuid,"vram_bytes":32_u64<<30}]});
+        let mut selected_gpu = gpu();
         let choices = recommendations(
             &[mix.clone(), int.clone()],
-            &[gpu()],
+            &[selected_gpu.clone()],
             &[gpu().uuid],
-            &profile,
             u64::MAX,
         );
         assert_eq!(choices.len(), 2);
@@ -1844,12 +2355,11 @@ mod tests {
         assert_eq!(choices[1]["release_id"], mix.sha256);
         assert_eq!(choices[1]["recommended"], false);
 
-        profile["gpus"][0]["vram_bytes"] = json!(16_u64 << 30);
+        selected_gpu.memory_mib = 16 * 1024;
         let choices = recommendations(
             &[mix.clone(), int.clone(), qwen.clone()],
-            &[gpu()],
+            &[selected_gpu],
             &[gpu().uuid],
-            &profile,
             u64::MAX,
         );
         assert_eq!(choices.len(), 3);
@@ -1884,7 +2394,7 @@ mod tests {
         let mut p = Progress::default();
         assert_eq!(stage(&p, false, &[]), "gpu");
         p.gpu_uuids = vec!["a".into()];
-        assert_eq!(stage(&p, false, &[]), "profiling");
+        assert_eq!(stage(&p, false, &[]), "storage");
         assert_eq!(stage(&p, true, &[]), "storage");
         p.storage_accepted = true;
         assert_eq!(stage(&p, true, &[]), "models");

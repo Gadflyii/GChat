@@ -65,21 +65,25 @@ installer continuation use the same Host-owned setup, so you can close a client
 and continue later without discarding progress.
 
 1. Select a compatible group of 1, 2 or 4 supported GPUs, then choose **Use
-   selected GPUs and profile**. The Host selects no GPU automatically. Stop active
-   models before profiling and allow the native job to finish.
-2. Review **Choose model storage**. The recommendation uses saved measured read
-   speeds from the hardware profile, matched to the disks currently present, plus
-   current free space and write access. Candidates without a usable measurement
-   or enough space explain why. Keep the recommendation or enter another native
-   writable folder, then choose **Use this folder**.
+   selected GPUs**. The Host selects no GPU automatically. This saves the group
+   without starting calibration.
+2. Review **Choose model storage**. When usable saved measurements exist, the
+   recommendation matches their read speeds to the disks currently present. Live
+   free space and write access still apply. Candidates explain missing measurements
+   or insufficient space. Keep the recommendation or enter another native writable
+   folder, then choose **Use this folder**.
 3. Select one or more compatible published packages and choose **Download selected
-   models**. Capacity suggestions use this computer's saved memory facts and live
+   models**. Suggestions use the selected GPUs, published memory guidance and live
    storage capacity. Progress survives closing Manager or restarting the Host.
-4. Under **Review startup defaults**, review each package's context, concurrency,
+4. After each selected download is verified, the Host prepares the measurements
+   required by that artifact and its startup settings. Other formats can remain
+   deferred. The first-run panel shows the reported phase and elapsed time, with
+   completion time unknown for this selected scope. No model starts during this step.
+5. Under **Review startup defaults**, review each package's context, concurrency,
    instance count and optional GPU KV budget. The Engine supplies a fresh startup
    estimate for that package. It does not prove that every selected package fits
    together or that full context is qualified.
-5. Choose **Finish local setup**. The Host saves stopped instances. Use **Start**
+6. Choose **Finish local setup**. The Host saves stopped instances. Use **Start**
    when you want to load a model.
 
 Choosing a storage folder does not relocate existing models. For an installed
@@ -109,10 +113,11 @@ remains an input to the deployment's GPU visibility and ranks; changing order
 does not create a different profile identity. The panel shows the current job's
 GPU group and Engine, plus pending saved deployment groups.
 
-Recent complete installs took 22–73 minutes, varying by hardware. The panel
-shows elapsed time, an indeterminate progress indicator and **Profiling log**;
-it does not promise an end time or percentage. One Host-owned job processes
-saved groups serially and holds model launches until the queue stops. Closing
+Manual all-format preparation can take much longer than selected-artifact
+preparation. Its separate Hardware profile panel shows elapsed time and
+**Profiling log**, with the previous group duration or a 22–73-minute historical
+range as a hint. It does not show a native-phase percentage. One Host-owned job
+processes saved groups serially and holds model launches until the queue stops. Closing
 GChat or Manager leaves it running. Installation waits for file setup and Host
 handoff, not for the long measurements to finish.
 
@@ -126,15 +131,17 @@ published a complete hardware profile, not model or full-context qualification.
 Interrupted or failed work retains the accepted profile; incomplete measurements
 are not installed as a complete profile.
 
-Installation and an explicit authenticated **Scan** ensure only saved deployment
-groups, reusing matching complete profiles where possible. Ordinary **Refresh**,
-snapshot updates and Engine startup remain read-only; they do not detect hardware
-changes or start calibration. If the native Engine reader rejects a group's
+Installation, **Scan**, ordinary **Refresh** and snapshot updates do not start
+calibration. First-run setup prepares the selected artifacts after verified
+download; explicit **Prepare hardware profile** requests all-format preparation
+for the saved deployment group. Engine startup reads and validates its profile
+without starting calibration. If the native Engine reader rejects a group's
 fingerprint, its exact profile appears as **Hardware changed — re-profile**.
 Click **Select group to re-profile**, then **Refresh hardware profile** (or
 **Prepare hardware profile** if no job has been started). Selecting the group
-alone starts nothing. The duration hint uses that group's previous measured
-duration when available, otherwise the 22–73-minute range. An unrelated startup
+alone starts nothing. The manual panel's duration hint uses that group's previous
+measured duration when available, otherwise the historical range above. The
+first-run selected-artifact panel does not use this hint. An unrelated startup
 error does not establish a hardware change.
 
 ## Run models
@@ -190,9 +197,8 @@ DFlash2 or MTP requires a positive supported draft width. Flash uses MTP; Qwen
 custom configuration is not proof of GPU qualification; use its measured profile
 when one is available.
 
-Under Models, **Scan** refreshes inventory and ensures hardware profiles for
-saved deployment groups as described above. **Add local model…** registers an
-existing local `.ginfer`, and **Storage…** chooses managed download storage.
+Under Models, **Scan** refreshes inventory without starting calibration.
+**Add local model…** registers an existing local `.ginfer`, and **Storage…** chooses managed download storage.
 **Show available downloads** lists compatible published packages. Download
 progress supports pause/resume. Existing source-model locations remain in place.
 
