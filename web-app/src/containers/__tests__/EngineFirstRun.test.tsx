@@ -13,7 +13,7 @@ beforeEach(() => {
   mocks.refresh.mockReset().mockResolvedValue(undefined)
   mocks.state = { hosts: [{ host_id: 'local', local: true }], snapshots: { local: { gpus: [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768, compute_capability: '12.0' }] } }, errors: {}, refresh: mocks.refresh }
 })
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 it('requires explicit GPU selection and retains the Host profiling job', async () => {
   mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('profiling', { gpu_uuids: ['GPU-one'] }) : flow('gpu')))
@@ -92,6 +92,110 @@ it('preserves a typed storage override when the shared catalog finishes loading'
   await waitFor(() => expect(mocks.command).toHaveBeenLastCalledWith('first_run', {
     host_id: 'local', action: 'storage', path: '/my-selected-disk',
   }))
+})
+
+it('saves folder and model choices during profiling and restores them after reopening', async () => {
+  let saved = flow('profiling', {
+    gpu_uuids: ['GPU-one'], catalog_loaded: true,
+    models: [{ release, recommended: false, reason: 'Capacity checks wait for profiling' }],
+  })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'storage') saved = flow('profiling', { ...saved, storage: { ...saved.storage, requested_path: args.path, accepted: false } })
+    if (args.action === 'models') saved = flow('profiling', { ...saved, selected_release_ids: args.release_ids })
+    return Promise.resolve(saved)
+  })
+  const view = render(<EngineFirstRun />)
+  const folder = await screen.findByLabelText('Model download folder')
+  expect(screen.getByRole('checkbox', { name: /Muse/ })).not.toBeChecked()
+  fireEvent.change(folder, { target: { value: '/queued-models' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save folder choice' }))
+  expect(await screen.findByText('Saved folder choice: /queued-models')).toBeInTheDocument()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Save folder choice' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('checkbox', { name: /Muse/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save model choices' }))
+  expect(await screen.findByText('Model choices saved. Downloads wait for hardware profiling and validated storage.')).toBeInTheDocument()
+  expect(screen.getByText('Hardware profiling: running')).toBeInTheDocument()
+  expect(screen.queryByText('Downloading models')).not.toBeInTheDocument()
+  expect(mocks.command.mock.calls.map(([, args]) => args.action).filter(Boolean)).toEqual(['storage', 'models'])
+  expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'models', release_ids: [release.sha256] })
+  view.unmount()
+  render(<EngineFirstRun />)
+  await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/queued-models'))
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: /Muse/ })).toBeChecked())
+  expect(screen.getByText('Hardware profiling: running')).toBeInTheDocument()
+  expect(screen.queryByText('Downloading models')).not.toBeInTheDocument()
+})
+
+it('keeps edited folder and package choices when a pending profile completes', async () => {
+  let reads = 0
+  mocks.command.mockImplementation(() => {
+    const ready = ++reads > 1
+    return Promise.resolve(flow(ready ? 'models' : 'profiling', {
+      gpu_uuids: ['GPU-one'],
+      storage: { path: '/accepted', recommended_path: ready ? '/new-recommendation' : '/fast', available_bytes: ready ? 1024 ** 4 : null },
+      selected_release_ids: ready ? [release.sha256] : [],
+      models: [{ release, recommended: true, reason: ready ? 'Fits measured memory' : 'Capacity checks wait for profiling' }],
+    }))
+  })
+  render(<EngineFirstRun />)
+  const folder = await screen.findByLabelText('Model download folder')
+  const choice = screen.getByRole('checkbox', { name: /Muse/ })
+  await waitFor(() => expect(choice).toBeChecked())
+  fireEvent.change(folder, { target: { value: '/my-edited-folder' } })
+  fireEvent.click(choice)
+  expect(choice).not.toBeChecked()
+  await screen.findByRole('button', { name: 'Download selected models' }, { timeout: 3000 })
+  expect(screen.getByText('Recommended: /new-recommendation')).toBeInTheDocument()
+  expect(folder).toHaveValue('/my-edited-folder')
+  expect(choice).not.toBeChecked()
+  expect(screen.getByRole('button', { name: 'Download selected models' })).toBeDisabled()
+  expect(mocks.command.mock.calls.every(([, args]) => !args.action)).toBe(true)
+})
+
+it.each([-3_600_000, 3_600_000])('uses reported elapsed despite Host clock offset %i ms and keeps honest history guidance', async (clockOffset) => {
+  const now = 2_000_000
+  vi.spyOn(Date, 'now').mockReturnValue(now)
+  let updates = 0
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'refresh_catalog') updates++
+    return Promise.resolve(flow('profiling', {
+      gpu_uuids: ['GPU-one'],
+      hardware_profile: {
+        status: 'running', phase: 'cpu_experts', phase_detail: 'Completed node 0, FP16 grid',
+        started_unix_ms: now + clockOffset, elapsed_ms: 180_000,
+        ...(updates === 1 ? { expected_duration_ms: 600_000, remaining_ms: 420_000, duration_source: 'measured_history' } : {}),
+        ...(updates >= 2 ? { expected_duration_ms: 120_000, remaining_ms: null, duration_source: 'measured_history' } : {}),
+      },
+    }))
+  })
+  render(<EngineFirstRun />)
+  expect(await screen.findByText('CPU expert calibration · Last reported elapsed: 3 min')).toBeInTheDocument()
+  expect(screen.getByText('Completed node 0, FP16 grid')).toBeInTheDocument()
+  expect(screen.getByText(/Completion time is unknown for this GPU group/)).toBeInTheDocument()
+  expect(screen.queryByText(/remaining, based on/)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh model catalog' }))
+  expect(await screen.findByText(/About 7 min remaining, based on a previous full profile of this GPU group; CPU resources may differ/)).toBeInTheDocument()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh model catalog' })).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh model catalog' }))
+  expect(await screen.findByText(/taking longer than the previous full profile; completion time is unknown/)).toBeInTheDocument()
+  expect(screen.queryByText(/About 0 min remaining/)).not.toBeInTheDocument()
+})
+
+it('does not derive elapsed or a history estimate from Host timestamps when reported elapsed is absent', async () => {
+  const now = 2_000_000
+  vi.spyOn(Date, 'now').mockReturnValue(now)
+  mocks.command.mockResolvedValue(flow('profiling', {
+    hardware_profile: {
+      status: 'running', phase: 'cpu_experts', started_unix_ms: now - 3_600_000,
+      expected_duration_ms: 600_000, duration_source: 'measured_history',
+    },
+  }))
+  render(<EngineFirstRun />)
+  expect(await screen.findByText('CPU expert calibration')).toBeInTheDocument()
+  expect(screen.queryByText(/Last reported elapsed:/)).not.toBeInTheDocument()
+  expect(screen.getByText(/Completion time is unknown for this GPU group/)).toBeInTheDocument()
+  expect(screen.queryByText(/remaining, based on/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/taking longer than the previous full profile/)).not.toBeInTheDocument()
 })
 
 it('shows pending work before the Host returns initial startup profiles', async () => {

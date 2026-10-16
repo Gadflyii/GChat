@@ -1371,6 +1371,20 @@ mod tests {
         let model = data.join("ginfer/models/model.ginfer");
         fs::create_dir_all(model.parent().unwrap()).unwrap();
         fs::write(&model, "model").unwrap();
+        let retained_host_files = [
+            ("hardware-profiles/group.json", "accepted-profile"),
+            ("hardware-profile-job.json", "resumable-job"),
+            (
+                "hardware-profiles/group.json.install-job.json.install-state.json",
+                "native-checkpoint",
+            ),
+            ("host.json", "saved-first-run-choices"),
+        ];
+        for (relative_path, contents) in retained_host_files {
+            let path = data.join("ginfer/host").join(relative_path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, contents).unwrap();
+        }
         let resource_bin = resources.join("resources/bin");
         fs::create_dir_all(&resource_bin).unwrap();
         fs::write(resource_bin.join("ginfer-host"), "host-v1").unwrap();
@@ -1452,6 +1466,12 @@ mod tests {
             assert_eq!(fs::read_to_string(data.join("ginfer/linux").join(directory).join("bin/ginfer-serve")).unwrap(), format!("{directory}-version-two"));
         }
         assert_eq!(fs::read_to_string(model).unwrap(), "model");
+        for (relative_path, contents) in retained_host_files {
+            assert_eq!(
+                fs::read_to_string(data.join("ginfer/host").join(relative_path)).unwrap(),
+                contents
+            );
+        }
         assert_eq!(fs::read(&host_override).unwrap(), host_override_bytes);
         assert_eq!(fs::read(&hardware_profile).unwrap(), hardware_profile_bytes);
     }
