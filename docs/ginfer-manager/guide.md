@@ -1,8 +1,8 @@
 # GInfer Server Manager
 
 GInfer Server Manager controls this computer's GInfer host and hosts paired over
-the LAN. It runs independently of GChat. On Windows, exiting Manager stops its
-own idle desktop Host cleanly. A Host with loaded models, downloads or setup work
+the LAN. It runs independently of GChat. On Windows, exiting Manager requests a
+normal Stop of its own idle desktop Host. A Host with loaded models, downloads or setup work
 stays running; use **Stop** on an instance to unload its model first. Linux and
 service-owned Hosts keep their existing lifetime.
 
