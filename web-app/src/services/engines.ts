@@ -28,6 +28,11 @@ export type EngineLaunchProfile = EngineLaunchOptions & {
   benchmark_profile?: BenchmarkProfileReference | null;
   instance_id?: string; model_id: string; gpu_uuids: string[]; max_context: number; concurrency: number;
 }
+export type EngineStartupQuote = {
+  instance_count: number
+  kv_arena_bytes: number | null
+  model_identity: { model_id: string; weights_id: string }
+}
 export type BenchmarkModelClass = 'qwen27-int-dflash-q4' | 'qwen27-nvfp4-dflash-q4' | 'flash-smol-mtp' | 'flash-int-mtp'
 export type BenchmarkProfileReference = {
   id: 'gbench-max-perf'; version: 1; model_class: BenchmarkModelClass
@@ -91,7 +96,7 @@ export type EngineSnapshot = {
       options: Partial<EngineLaunchOptions> & { vision: boolean };
       qualification: { tier: 'full-context-tested' | 'calculated-startup-smoke' | 'calculated-pending-validation'; engine_revision: string } } }[];
   profile_error?: string | null;
-  host_id: string; display_name: string; revision: number;
+  host_id: string; display_name: string; revision: number; boot_id?: string;
   gpus: import('@/lib/model-release').ModelGpu[];
   models: EngineModel[]; instances: EngineInstance[]
   inventory_errors?: { path: string; error: string }[]
