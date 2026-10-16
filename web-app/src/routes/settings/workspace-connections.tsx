@@ -243,11 +243,18 @@ function ProviderCard({
         </form>
       </details>
       {provider === 'microsoft' ? (
-        <p className="mb-3 text-sm">
-          {config?.client_id
-            ? 'Choose the services you need, then sign in with Microsoft in your browser. You do not need to enter an app ID.'
-            : 'Microsoft sign-in is not configured in this GChat release yet. You do not need to find or create an app ID. Use an updated release when sign-in is available, or use the advanced option if your organization already has an approved app.'}
-        </p>
+        <>
+          <p className="mb-3 text-sm">
+            {config?.client_id
+              ? 'Choose the services you need, then sign in with Microsoft in your browser. You do not need to enter an app ID.'
+              : 'Microsoft sign-in is not configured in this GChat release yet. You do not need to find or create an app ID. Use an updated release when sign-in is available, or use the advanced option if your organization already has an approved app.'}
+          </p>
+          <p className="mb-3 text-sm">
+            Connect a work, school or personal Microsoft account, including
+            Outlook.com, Hotmail and personal OneDrive. Available services
+            depend on your account.
+          </p>
+        </>
       ) : !config?.client_id && (
         <p className="mb-3 text-sm">
           Save a client ID in App registration before connecting.
@@ -275,6 +282,16 @@ function ProviderCard({
             </label>
           ))}
         </div>
+        {provider === 'microsoft' &&
+          selectedServices.some((service) =>
+            ['sharepoint', 'teams', 'cloud_pc'].includes(service)
+          ) && (
+            <p className="text-sm">
+              This needs a work or school account. SharePoint, Teams and
+              Windows 365 Cloud PCs are organization services. Your
+              organization may also need to approve access or assign a license.
+            </p>
+          )}
         <label className="flex items-center gap-3 text-sm">
           Access
           <select

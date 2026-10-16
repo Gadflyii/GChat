@@ -277,6 +277,90 @@ describe('Workspace connections', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('offers personal Outlook and OneDrive through the common registration without app setup', async () => {
+    const view = initialView()
+    view.services.microsoft = [
+      {
+        id: 'outlook',
+        read_scopes: ['Mail.Read'],
+        write_scopes: ['Mail.ReadWrite'],
+      },
+      {
+        id: 'onedrive',
+        read_scopes: ['Files.Read'],
+        write_scopes: ['Files.ReadWrite'],
+      },
+    ]
+    api.connectorAccounts.mockResolvedValue(view)
+    api.beginConnectorAuth.mockResolvedValue({
+      ...waiting,
+      provider: 'microsoft',
+      flow_id: 'personal-sign-in',
+    })
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    expect(
+      microsoft.getByText(/Outlook.com, Hotmail and personal OneDrive/)
+    ).toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(microsoft.getByLabelText('Outlook mail'))
+    await user.click(microsoft.getByLabelText('OneDrive'))
+    await user.click(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    )
+    await waitFor(() =>
+      expect(api.beginConnectorAuth).toHaveBeenCalledExactlyOnceWith({
+        provider: 'microsoft',
+        services: ['outlook', 'onedrive'],
+        access: 'read_only',
+      })
+    )
+    expect(api.configureConnector).not.toHaveBeenCalled()
+    expect(
+      microsoft.queryByText(/This needs a work or school account/)
+    ).not.toBeInTheDocument()
+  })
+
+  it('explains work-only services and keeps administrator approval failures actionable', async () => {
+    const view = initialView()
+    view.services.microsoft = [
+      {
+        id: 'sharepoint',
+        read_scopes: ['Sites.Read.All'],
+        write_scopes: ['Sites.ReadWrite.All'],
+      },
+    ]
+    api.connectorAccounts.mockResolvedValue(view)
+    const approvalMessage =
+      'Your organization needs to approve this connection. Ask its administrator to approve the requested permissions, then try again.'
+    api.beginConnectorAuth.mockResolvedValue({
+      flow_id: 'approval-needed',
+      provider: 'microsoft',
+      status: 'failed',
+      error: approvalMessage,
+    })
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    const user = userEvent.setup()
+    await user.click(microsoft.getByLabelText('SharePoint'))
+    expect(
+      microsoft.getByText(/This needs a work or school account/)
+    ).toBeInTheDocument()
+    await user.click(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    )
+    expect(await screen.findByText(approvalMessage)).toBeInTheDocument()
+    expect(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    ).toBeEnabled()
+    expect(api.configureConnector).not.toHaveBeenCalled()
+    expect(api.selectConnectorAccount).not.toHaveBeenCalled()
+  })
+
   it('shows actual broader Excel provider consent for a read-only connection', async () => {
     await ready()
     const user = userEvent.setup()
