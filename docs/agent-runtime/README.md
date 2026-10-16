@@ -401,6 +401,13 @@ The three existing bundled-resource fixtures and strict CLI/desktop Clippy pass.
 Evidence: `/ai/gchat/out/gchat-cli-feature-clippy/result.json`. The candidate
 `fix/gchat-cli-setup-ownership-357c` awaits reviewed merge; retire its tree afterwards.
 
+GCHAT-WINDOWS-FIRST-RENDER-RESOURCES now schedules Windows desktop runtime
+installation through the existing retained background resource gate. The
+manifest-verifying installer and resource/data paths are unchanged; consumers
+still wait for completion and receive retained installation failures. This is
+source-only: Linux startup is unchanged, Linux Rust gates are pending, and no
+native Windows build, run or first-render validation has been performed.
+
 GCHAT-LINUX-DRI3-STARTUP-WARNING is an external Mesa/Xwayland diagnostic.
 Mesa's X11 EGL device-open failure emits the retained warning; current WSLg
 `:0` advertises no DRI3. Retained native TUI rendering and typed input pass.
