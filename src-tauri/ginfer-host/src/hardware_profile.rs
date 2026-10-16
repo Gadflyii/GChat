@@ -30,6 +30,74 @@ pub struct HardwareProfileRequest {
     #[serde(default)]
     pub gpu_uuids: Option<Vec<String>>,
 }
+/// Constructed by Host launch preparation after artifact verification, never from
+/// a browser-supplied profile request. The directory and package hashes differ.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArtifactProfileIntent {
+    pub path: PathBuf,
+    pub directory_sha256: String,
+    pub package_sha256: Option<String>,
+    pub tp: u32,
+    /// Zero leaves draft placement to the native artifact resolver.
+    pub draft_tp: u32,
+    pub spec: String,
+    pub draft_tokens: Option<u32>,
+}
+impl ArtifactProfileIntent {
+    fn validate(&self, gpus: &[String]) -> Result<(), String> {
+        let hash = |value: &str| value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit());
+        if !self.path.is_absolute()
+            || !self.path.is_file()
+            || !hash(&self.directory_sha256)
+            || self
+                .package_sha256
+                .as_deref()
+                .is_some_and(|value| !hash(value))
+            || !matches!(self.tp, 1 | 2 | 4)
+            || self.tp as usize != gpus.len()
+            || !matches!(self.draft_tp, 0 | 1 | 2 | 4)
+            || self.draft_tp > self.tp
+            || !matches!(self.spec.as_str(), "auto" | "none" | "dflash" | "mtp")
+            || match self.spec.as_str() {
+                "auto" | "none" => self.draft_tokens.unwrap_or(0) != 0,
+                "dflash" => !matches!(self.draft_tokens, Some(1..=15)),
+                "mtp" => self.draft_tokens.unwrap_or(0) == 0,
+                _ => true,
+            }
+        {
+            return Err(
+                "Selected profiling requires a verified artifact and matching launch intent".into(),
+            );
+        }
+        Ok(())
+    }
+}
+fn all_formats_scope() -> String {
+    "all_formats".into()
+}
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+enum ProfileScope {
+    #[default]
+    AllFormats,
+    Artifact(ArtifactProfileIntent),
+    CompleteRemainingFormats,
+}
+impl ProfileScope {
+    fn name(&self) -> &str {
+        match self {
+            Self::AllFormats => "all_formats",
+            Self::Artifact(_) => "artifact",
+            Self::CompleteRemainingFormats => "complete_remaining_formats",
+        }
+    }
+    fn artifact(&self) -> Option<ArtifactProfileIntent> {
+        match self {
+            Self::Artifact(intent) => Some(intent.clone()),
+            _ => None,
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HardwareProfileStatus {
     pub status: String,
@@ -50,6 +118,16 @@ pub struct HardwareProfileStatus {
     pub remaining_ms: Option<u64>,
     #[serde(default)]
     pub duration_source: Option<String>,
+    #[serde(default = "all_formats_scope")]
+    pub scope: String,
+    #[serde(default)]
+    pub selected_artifact: Option<ArtifactProfileIntent>,
+    #[serde(default)]
+    pub scope_complete: Option<bool>,
+    #[serde(default)]
+    pub base_complete: Option<bool>,
+    #[serde(default)]
+    pub all_formats_complete: Option<bool>,
     pub profile_path: PathBuf,
     pub checkpoint_available: bool,
     pub diagnostic_tail: String,
@@ -86,11 +164,15 @@ struct Record {
     measured_work: bool,
     #[serde(default)]
     duration_history_valid: bool,
+    #[serde(default)]
+    scope: ProfileScope,
 }
 struct State {
     record: Record,
     cancel: Option<watch::Sender<bool>>,
     reap_error: Option<String>,
+    // Process-local acceptance only: a new Host must native-revalidate its seeds.
+    accepted_artifacts: std::collections::BTreeMap<String, Vec<ArtifactProfileIntent>>,
 }
 pub struct HardwareProfiles {
     directory: PathBuf,
@@ -123,6 +205,92 @@ fn completed_output(output: &Path) -> Result<Vec<u8>, String> {
         return Err("Native profiling output requires schema_version 2".into());
     }
     Ok(bytes)
+}
+#[derive(Default)]
+struct NativeJson {
+    bytes: Vec<u8>,
+    complete: bool,
+    error: Option<String>,
+}
+fn validate_native_result(
+    scope: &ProfileScope,
+    output: &Path,
+    captured: &NativeJson,
+) -> Result<Option<serde_json::Value>, String> {
+    if *scope == ProfileScope::AllFormats {
+        return Ok(None);
+    }
+    if let Some(error) = &captured.error {
+        return Err(error.clone());
+    }
+    if !captured.complete {
+        return Err("Native scoped profiling JSON was not completely received".into());
+    }
+    let value: serde_json::Value = serde_json::from_slice(&captured.bytes)
+        .map_err(|error| format!("Native scoped profiling result is not JSON: {error}"))?;
+    let expected_mode = if *scope == ProfileScope::CompleteRemainingFormats {
+        "complete_remaining_formats"
+    } else {
+        "ensure"
+    };
+    let expected_scope = if matches!(scope, ProfileScope::Artifact(_)) {
+        "artifact"
+    } else {
+        "all_formats"
+    };
+    if value["schema_version"].as_u64() != Some(2)
+        || value["mode"].as_str() != Some(expected_mode)
+        || value["scope"].as_str() != Some(expected_scope)
+        || value["hardware_profile"].as_str().map(Path::new) != Some(output)
+        || value["state"].as_str() != Some("loaded")
+        || value["complete"].as_bool() != Some(true)
+        || value["base_complete"].as_bool() != Some(true)
+        || value["all_formats_complete"].as_bool().is_none()
+        || value["missing_rows"]
+            .as_array()
+            .is_none_or(|rows| !rows.is_empty())
+    {
+        return Err("Native profiling did not admit the requested complete scope".into());
+    }
+    match scope {
+        ProfileScope::Artifact(intent) => {
+            let artifact = &value["artifact"];
+            let draft_tp = artifact["draft_tp"].as_u64();
+            let spec = artifact["spec"].as_str();
+            let tokens = artifact["draft_tokens"].as_u64();
+            if artifact["path"].as_str().map(Path::new) != Some(intent.path.as_path())
+                || artifact["directory_sha256"].as_str() != Some(intent.directory_sha256.as_str())
+                || artifact["tp"].as_u64() != Some(u64::from(intent.tp))
+                || !draft_tp
+                    .is_some_and(|tp| matches!(tp, 0 | 1 | 2 | 4) && tp <= u64::from(intent.tp))
+                || (intent.draft_tp != 0 && draft_tp != Some(u64::from(intent.draft_tp)))
+                || !spec.is_some_and(|spec| matches!(spec, "auto" | "none" | "dflash" | "mtp"))
+                || (intent.spec != "auto" && spec != Some(intent.spec.as_str()))
+                || match spec {
+                    Some("auto" | "none") => tokens != Some(0),
+                    Some("dflash") => !tokens.is_some_and(|tokens| (1..=15).contains(&tokens)),
+                    Some("mtp") => !tokens.is_some_and(|tokens| tokens > 0),
+                    _ => true,
+                }
+                || (intent.spec != "auto"
+                    && intent
+                        .draft_tokens
+                        .is_some_and(|expected| tokens != Some(u64::from(expected))))
+            {
+                return Err(
+                    "Native profiling artifact does not match the verified launch intent".into(),
+                );
+            }
+        }
+        ProfileScope::CompleteRemainingFormats => {
+            if value["all_formats_complete"].as_bool() != Some(true) || !value["artifact"].is_null()
+            {
+                return Err("Native remaining-format completion is incomplete".into());
+            }
+        }
+        ProfileScope::AllFormats => unreachable!(),
+    }
+    Ok(Some(value))
 }
 fn sample_elapsed(record: &mut Record) {
     record.view.elapsed_ms = record.view.started_unix_ms.map(|started| {
@@ -289,6 +457,7 @@ impl HardwareProfiles {
                 measured_fresh: false,
                 measured_work: false,
                 duration_history_valid: true,
+                scope: ProfileScope::AllFormats,
                 view: HardwareProfileStatus {
                     status: "idle".into(),
                     job_id: None,
@@ -302,6 +471,11 @@ impl HardwareProfiles {
                     expected_duration_ms: None,
                     remaining_ms: None,
                     duration_source: None,
+                    scope: all_formats_scope(),
+                    selected_artifact: None,
+                    scope_complete: None,
+                    base_complete: None,
+                    all_formats_complete: None,
                     profile_path: directory.join("hardware-profiles"),
                     checkpoint_available: false,
                     diagnostic_tail: String::new(),
@@ -345,6 +519,7 @@ impl HardwareProfiles {
                 record,
                 cancel: None,
                 reap_error: None,
+                accepted_artifacts: Default::default(),
             }),
             idle: Notify::new(),
             revision,
@@ -445,6 +620,7 @@ impl HardwareProfiles {
                 profile_path: profile.to_path_buf(),
                 expected_duration_ms,
             });
+        state.accepted_artifacts.remove(&key);
         let _ = self.save(&state.record);
         self.revision.fetch_add(1, Ordering::SeqCst);
     }
@@ -504,7 +680,13 @@ impl HardwareProfiles {
             .iter()
             .map(|config| config.gpu_uuids.clone())
             .collect();
-        self.launch_locked(&mut state, first.clone(), false, None)
+        self.launch_locked(
+            &mut state,
+            first.clone(),
+            false,
+            None,
+            ProfileScope::AllFormats,
+        )
     }
     pub(crate) fn is_stale(&self, gpus: &[String]) -> bool {
         let key = group_key(gpus);
@@ -567,7 +749,64 @@ impl HardwareProfiles {
         fallback: Option<PathBuf>,
         gpus: Vec<String>,
     ) -> Result<(), String> {
+        self.start_with_scope(action, fallback, gpus, None)
+    }
+    /// The caller resolves this intent through verified Host launch preparation.
+    pub fn start_scoped(
+        self: &Arc<Self>,
+        action: HardwareProfileAction,
+        fallback: Option<PathBuf>,
+        gpus: Vec<String>,
+        intent: ArtifactProfileIntent,
+    ) -> Result<(), String> {
+        intent.validate(&gpus)?;
+        self.start_with_scope(action, fallback, gpus, Some(ProfileScope::Artifact(intent)))
+    }
+    /// Explicit idle work, with its own private output/checkpoint and cancellation owner.
+    pub fn start_remaining_formats(
+        self: &Arc<Self>,
+        fallback: Option<PathBuf>,
+        gpus: Vec<String>,
+    ) -> Result<(), String> {
+        self.start_with_scope(
+            HardwareProfileAction::Ensure,
+            fallback,
+            gpus,
+            Some(ProfileScope::CompleteRemainingFormats),
+        )
+    }
+    /// This is deliberately not restored from disk: each Host process revalidates
+    /// selected artifacts with its current runtime before relying on acceptance.
+    pub fn artifact_is_accepted(&self, gpus: &[String], intent: &ArtifactProfileIntent) -> bool {
+        self.state
+            .lock()
+            .unwrap()
+            .accepted_artifacts
+            .get(&group_key(gpus))
+            .is_some_and(|accepted| accepted.contains(intent))
+    }
+    fn start_with_scope(
+        self: &Arc<Self>,
+        action: HardwareProfileAction,
+        fallback: Option<PathBuf>,
+        gpus: Vec<String>,
+        requested_scope: Option<ProfileScope>,
+    ) -> Result<(), String> {
         let mut state = self.state.lock().unwrap();
+        let scope = if matches!(
+            action,
+            HardwareProfileAction::Resume | HardwareProfileAction::Cancel
+        ) {
+            if requested_scope
+                .as_ref()
+                .is_some_and(|scope| scope != &state.record.scope)
+            {
+                return Err("Resume and cancel retain the original artifact scope".into());
+            }
+            state.record.scope.clone()
+        } else {
+            requested_scope.unwrap_or_default()
+        };
         if state.cancel.is_some() && group_key(&state.record.view.gpu_uuids) != group_key(&gpus) {
             return Err("The active profiler owns a different GPU group".into());
         }
@@ -580,6 +819,9 @@ impl HardwareProfiles {
             return Err("Resume and cancel retain the original GPU group".into());
         }
         if let Some(cancel) = &state.cancel {
+            if action != HardwareProfileAction::Cancel && scope != state.record.scope {
+                return Err("The active profiler owns a different artifact scope".into());
+            }
             if action == HardwareProfileAction::Refresh {
                 return Err("Hardware profiling is already running".into());
             }
@@ -595,6 +837,8 @@ impl HardwareProfiles {
             return Ok(());
         }
         if action == HardwareProfileAction::Ensure
+            && !(state.record.scope == ProfileScope::CompleteRemainingFormats
+                && scope != ProfileScope::CompleteRemainingFormats)
             && (matches!(
                 state.record.view.status.as_str(),
                 "interrupted" | "cancelled"
@@ -647,7 +891,7 @@ impl HardwareProfiles {
         if action != HardwareProfileAction::Resume {
             state.record.pending.clear();
         }
-        self.launch_locked(&mut state, configuration, reprofile, reused)
+        self.launch_locked(&mut state, configuration, reprofile, reused, scope)
     }
     fn launch_locked(
         self: &Arc<Self>,
@@ -655,10 +899,13 @@ impl HardwareProfiles {
         configuration: Configuration,
         reprofile: bool,
         reused: Option<PathBuf>,
+        scope: ProfileScope,
     ) -> Result<(), String> {
         // A seed can make even --reprofile a cache hit or a partial repair. Only
         // an unseeded invocation can supply comparable full-run history.
-        let measured_fresh = reused.is_none() && !configuration.profile_path.exists();
+        let measured_fresh = scope == ProfileScope::AllFormats
+            && reused.is_none()
+            && !configuration.profile_path.exists();
         let output_path = if let Some(output) = reused {
             output
         } else {
@@ -692,6 +939,7 @@ impl HardwareProfiles {
             measured_fresh,
             measured_work: false,
             duration_history_valid: true,
+            scope: scope.clone(),
             configuration: Some(configuration.clone()),
             output_path: Some(output_path.clone()),
             view: HardwareProfileStatus {
@@ -707,6 +955,11 @@ impl HardwareProfiles {
                 expected_duration_ms,
                 remaining_ms: expected_duration_ms.filter(|expected| *expected > 0),
                 duration_source: expected_duration_ms.map(|_| "measured_history".into()),
+                scope: scope.name().into(),
+                selected_artifact: scope.artifact(),
+                scope_complete: None,
+                base_complete: None,
+                all_formats_complete: None,
                 profile_path: configuration.profile_path.clone(),
                 checkpoint_available: checkpoint(&output_path).is_file(),
                 diagnostic_tail: String::new(),
@@ -726,6 +979,16 @@ impl HardwareProfiles {
             state.record = previous;
             return Err(error);
         }
+        // Revalidation must not leave an earlier selected acceptance usable if
+        // this invocation fails. Other already verified artifacts remain usable.
+        if let ProfileScope::Artifact(intent) = &scope {
+            if let Some(accepted) = state
+                .accepted_artifacts
+                .get_mut(&group_key(&configuration.gpu_uuids))
+            {
+                accepted.retain(|previous| previous != intent);
+            }
+        }
         self.revision.fetch_add(1, Ordering::SeqCst);
         let mut command = Command::new(&configuration.engine);
         command.env("CUDA_VISIBLE_DEVICES", configuration.gpu_uuids.join(","));
@@ -735,6 +998,28 @@ impl HardwareProfiles {
             .arg(&output_path);
         if reprofile {
             command.arg("--reprofile");
+        }
+        match &scope {
+            ProfileScope::Artifact(intent) => {
+                command
+                    .arg("--model")
+                    .arg(&intent.path)
+                    .arg("--tp")
+                    .arg(intent.tp.to_string())
+                    .arg("--spec")
+                    .arg(&intent.spec)
+                    .arg("--json");
+                if intent.draft_tp != 0 {
+                    command.arg("--draft-tp").arg(intent.draft_tp.to_string());
+                }
+                if let Some(tokens) = intent.draft_tokens {
+                    command.arg("--draft-tokens").arg(tokens.to_string());
+                }
+            }
+            ProfileScope::CompleteRemainingFormats => {
+                command.arg("--complete-remaining-formats").arg("--json");
+            }
+            ProfileScope::AllFormats => {}
         }
         if let Some(directory) = configuration.engine.parent() {
             let variable = if cfg!(windows) {
@@ -810,9 +1095,10 @@ impl HardwareProfiles {
         let stdout = child.take_stdout().expect("piped stdout");
         #[cfg(windows)]
         let stderr = child.take_stderr().expect("piped stderr");
+        let captured = Arc::new(Mutex::new(NativeJson::default()));
         let readers = Readers(vec![
-            read_tail(stdout, owner.clone()),
-            read_tail(stderr, owner.clone()),
+            read_tail(stdout, owner.clone(), Some(captured.clone())),
+            read_tail(stderr, owner.clone(), None),
         ]);
         let request_error = preparation_error.clone();
         tokio::spawn(async move {
@@ -864,7 +1150,22 @@ impl HardwareProfiles {
                 }
                 Ok(exit) if exit.success() => {
                     let publication =
-                        owner.publish_completed(&mut state, &configuration, &output_path);
+                        validate_native_result(&scope, &output_path, &captured.lock().unwrap())
+                            .and_then(|result| {
+                                owner.publish_completed(
+                                    &mut state,
+                                    &configuration,
+                                    &output_path,
+                                )?;
+                                if let Some(result) = result {
+                                    state.record.view.scope_complete = result["complete"].as_bool();
+                                    state.record.view.base_complete =
+                                        result["base_complete"].as_bool();
+                                    state.record.view.all_formats_complete =
+                                        result["all_formats_complete"].as_bool();
+                                }
+                                Ok(())
+                            });
                     match publication {
                         Ok(()) => {
                             state.record.view.status = "completed".into();
@@ -905,7 +1206,13 @@ impl HardwareProfiles {
                 let next = state.record.pending.remove(0);
                 // The lock prevents model admission while replacing the reaped child's reservation.
                 state.cancel = None;
-                if let Err(error) = owner.launch_locked(&mut state, next.clone(), false, None) {
+                if let Err(error) = owner.launch_locked(
+                    &mut state,
+                    next.clone(),
+                    false,
+                    None,
+                    ProfileScope::AllFormats,
+                ) {
                     // A post-spawn error already has an owning kill/reap task and reservation.
                     if state.cancel.is_none() {
                         if state.record.configuration.as_ref() != Some(&next) {
@@ -928,6 +1235,17 @@ impl HardwareProfiles {
             } else {
                 state.cancel = None;
             }
+            if state.record.view.status == "completed" {
+                if let ProfileScope::Artifact(intent) = &scope {
+                    let accepted = state
+                        .accepted_artifacts
+                        .entry(group_key(&configuration.gpu_uuids))
+                        .or_default();
+                    if !accepted.contains(intent) {
+                        accepted.push(intent.clone());
+                    }
+                }
+            }
             drop(state);
             owner.idle.notify_waiters();
             if let Some(activity) = &*owner.activity.lock().unwrap() {
@@ -935,6 +1253,30 @@ impl HardwareProfiles {
             }
         });
         request_error.map_or(Ok(()), Err)
+    }
+    /// Reap idle completion before the caller acquires foreground lifecycle locks.
+    /// A failed wait keeps the reservation and blocks admission.
+    pub async fn cancel_background_and_wait(&self) -> Result<(), String> {
+        loop {
+            let idle = self.idle.notified();
+            tokio::pin!(idle);
+            idle.as_mut().enable();
+            {
+                let mut state = self.state.lock().unwrap();
+                if state.record.scope != ProfileScope::CompleteRemainingFormats
+                    || state.cancel.is_none()
+                {
+                    return Ok(());
+                }
+                state.record.pending.clear();
+                state.record.view.pending_gpu_groups.clear();
+                state.cancel.as_ref().unwrap().send_replace(true);
+                if let Some(error) = &state.reap_error {
+                    return Err(error.clone());
+                }
+            }
+            idle.await;
+        }
     }
     pub async fn shutdown(&self) -> Result<(), String> {
         loop {
@@ -981,14 +1323,36 @@ impl Drop for Readers {
 fn read_tail(
     reader: impl AsyncRead + Unpin + Send + 'static,
     owner: Arc<HardwareProfiles>,
+    captured: Option<Arc<Mutex<NativeJson>>>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::spawn(async move {
         let mut reader = reader;
         let mut bytes = [0u8; 4096];
         let mut pending = Vec::new();
-        while let Ok(count) = reader.read(&mut bytes).await {
+        loop {
+            let count = match reader.read(&mut bytes).await {
+                Ok(count) => count,
+                Err(error) => {
+                    if let Some(captured) = &captured {
+                        captured.lock().unwrap().error =
+                            Some(format!("Cannot read native profiling JSON: {error}"));
+                    }
+                    break;
+                }
+            };
             if count == 0 {
+                if let Some(captured) = &captured {
+                    captured.lock().unwrap().complete = true;
+                }
                 break;
+            }
+            if let Some(captured) = &captured {
+                let mut captured = captured.lock().unwrap();
+                if captured.bytes.len() + count <= 1_048_576 && captured.error.is_none() {
+                    captured.bytes.extend_from_slice(&bytes[..count]);
+                } else {
+                    captured.error = Some("Native profiling JSON exceeds the 1 MiB limit".into());
+                }
             }
             let mut state = owner.state.lock().unwrap();
             pending.extend_from_slice(&bytes[..count]);
@@ -1132,6 +1496,270 @@ mod tests {
         })
         .await
         .unwrap()
+    }
+    fn selected_intent(directory: &Path) -> ArtifactProfileIntent {
+        let path = directory.join("selected.ginfer");
+        std::fs::write(&path, b"verified artifact fixture").unwrap();
+        ArtifactProfileIntent {
+            path,
+            directory_sha256: "a".repeat(64),
+            package_sha256: Some("b".repeat(64)),
+            tp: 1,
+            draft_tp: 0,
+            spec: "mtp".into(),
+            draft_tokens: Some(3),
+        }
+    }
+    fn selected_result(intent: &ArtifactProfileIntent) -> serde_json::Value {
+        serde_json::json!({
+            "schema_version": 2,
+            "mode": "ensure",
+            "scope": "artifact",
+            "hardware_profile": "__OUTPUT__",
+            "state": "loaded",
+            "complete": true,
+            "base_complete": true,
+            "all_formats_complete": false,
+            "missing_rows": [],
+            "artifact": {
+                "path": intent.path,
+                "directory_sha256": intent.directory_sha256,
+                "tp": 1,
+                "draft_tp": 0,
+                "spec": "mtp",
+                "draft_tokens": 3
+            }
+        })
+    }
+    fn scoped_cli(directory: &Path, arguments: &Path, result: &serde_json::Value) {
+        let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+        let result = serde_json::to_string(result).unwrap();
+        let (prefix, suffix) = result.split_once("__OUTPUT__").unwrap();
+        std::fs::write(directory.join("ginfer"), format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nprintf '%s' '{{\"schema_version\":2,\"accepted\":\"scoped\"}}' > \"$3\"\nprintf '%s%s%s\\n' {} \"$3\" {}\n",
+            quote(arguments.to_str().unwrap()), quote(prefix), quote(suffix)
+        )).unwrap();
+    }
+    #[test]
+    fn hardware_profile_scoped_json_rejects_unqualified_or_mismatched_results() {
+        let directory = tempfile::tempdir().unwrap();
+        let intent = selected_intent(directory.path());
+        let scope = ProfileScope::Artifact(intent.clone());
+        let output = directory.path().join("output.json");
+        let mut valid = selected_result(&intent);
+        valid["hardware_profile"] = serde_json::json!(output);
+        let captured = |value: &serde_json::Value| NativeJson {
+            bytes: serde_json::to_vec(value).unwrap(),
+            complete: true,
+            error: None,
+        };
+        assert!(validate_native_result(&scope, &output, &captured(&valid)).is_ok());
+        let mut automatic_intent = intent.clone();
+        automatic_intent.spec = "auto".into();
+        automatic_intent.draft_tokens = Some(0);
+        let automatic_scope = ProfileScope::Artifact(automatic_intent);
+        // Dense targets retain auto; Flash may resolve the same request to MTP.
+        assert!(validate_native_result(&automatic_scope, &output, &captured(&valid)).is_ok());
+        let mut automatic_result = valid.clone();
+        automatic_result["artifact"]["spec"] = serde_json::json!("auto");
+        automatic_result["artifact"]["draft_tokens"] = serde_json::json!(0);
+        assert!(
+            validate_native_result(&automatic_scope, &output, &captured(&automatic_result)).is_ok()
+        );
+        for (field, value) in [
+            ("complete", serde_json::json!(false)),
+            ("base_complete", serde_json::json!(false)),
+            ("scope", serde_json::json!("all_formats")),
+            ("mode", serde_json::json!("check")),
+            (
+                "missing_rows",
+                serde_json::json!(["selected format missing"]),
+            ),
+        ] {
+            let mut rejected = valid.clone();
+            rejected[field] = value;
+            assert!(
+                validate_native_result(&scope, &output, &captured(&rejected)).is_err(),
+                "{field}"
+            );
+        }
+        for (field, value) in [
+            ("directory_sha256", serde_json::json!(intent.package_sha256)),
+            (
+                "path",
+                serde_json::json!(directory.path().join("another.ginfer")),
+            ),
+            ("tp", serde_json::json!(2)),
+            ("draft_tp", serde_json::json!(2)),
+            ("spec", serde_json::json!("auto")),
+            ("draft_tokens", serde_json::json!(4)),
+        ] {
+            let mut rejected = valid.clone();
+            rejected["artifact"][field] = value;
+            assert!(
+                validate_native_result(&scope, &output, &captured(&rejected)).is_err(),
+                "artifact.{field}"
+            );
+        }
+        let mut incomplete = captured(&valid);
+        incomplete.complete = false;
+        assert!(validate_native_result(&scope, &output, &incomplete).is_err());
+        incomplete.complete = true;
+        incomplete.error = Some("bounded capture failed".into());
+        assert_eq!(
+            validate_native_result(&scope, &output, &incomplete).unwrap_err(),
+            "bounded capture failed"
+        );
+    }
+    #[tokio::test]
+    async fn hardware_profile_selected_ensure_accepts_exact_scope_without_all_format_eta() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let intent = selected_intent(directory.path());
+        scoped_cli(directory.path(), &arguments, &selected_result(&intent));
+        let gpus = vec!["GPU-fixture".into()];
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            Some(directory.path().join("ginfer")),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        let done = observed(&job, |view| view.status == "completed").await;
+        assert_eq!(done.scope, "artifact");
+        assert_eq!(done.selected_artifact, Some(intent.clone()));
+        assert_eq!(done.scope_complete, Some(true));
+        assert_eq!(done.base_complete, Some(true));
+        assert_eq!(done.all_formats_complete, Some(false));
+        assert_eq!(done.expected_duration_ms, None);
+        assert_eq!(done.duration_source, None);
+        assert!(job.artifact_is_accepted(&gpus, &intent));
+        let mut different = intent.clone();
+        different.package_sha256 = Some("c".repeat(64));
+        assert!(!job.artifact_is_accepted(&gpus, &different));
+        let argv: Vec<String> = std::fs::read_to_string(&arguments)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(&argv[..2], &["profile-hardware", "--hardware-profile"]);
+        assert!(argv
+            .windows(2)
+            .any(|pair| pair == ["--model", intent.path.to_str().unwrap()]));
+        assert!(argv.windows(2).any(|pair| pair == ["--spec", "mtp"]));
+        assert!(argv.windows(2).any(|pair| pair == ["--draft-tokens", "3"]));
+        assert!(argv.iter().any(|arg| arg == "--json"));
+        assert!(!argv.iter().any(|arg| arg == "--draft-tp"));
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(
+                &std::fs::read(&done.profile_path).unwrap()
+            )
+            .unwrap()["accepted"],
+            "scoped"
+        );
+        let reopened =
+            HardwareProfiles::open(directory.path().join("host"), Arc::new(AtomicU64::new(0)))
+                .unwrap();
+        assert!(!reopened.artifact_is_accepted(&gpus, &intent));
+
+        let mut rejected = selected_result(&intent);
+        rejected["artifact"]["directory_sha256"] = serde_json::json!("c".repeat(64));
+        scoped_cli(directory.path(), &arguments, &rejected);
+        let canonical = std::fs::read(&done.profile_path).unwrap();
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            Some(directory.path().join("ginfer")),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        let failed = observed(&job, |view| view.status == "failed").await;
+        assert!(failed.error.unwrap().contains("verified launch intent"));
+        assert_eq!(std::fs::read(&done.profile_path).unwrap(), canonical);
+        assert!(!job.artifact_is_accepted(&gpus, &intent));
+    }
+    #[tokio::test]
+    async fn hardware_profile_background_completion_is_reaped_before_selected_ensure() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let gpus = vec!["GPU-fixture".into()];
+        let cli = directory.path().join("ginfer");
+        job.start_remaining_formats(Some(cli.clone()), gpus.clone())
+            .unwrap();
+        begun(&arguments).await;
+        let running = job.status(None);
+        assert_eq!(running.scope, "complete_remaining_formats");
+        assert!(running.pid.is_some());
+        let first_args = std::fs::read_to_string(&arguments).unwrap();
+        assert!(first_args
+            .lines()
+            .any(|arg| arg == "--complete-remaining-formats"));
+        assert!(!first_args.lines().any(|arg| arg == "--model"));
+        let background_output = PathBuf::from(first_args.lines().nth(2).unwrap());
+        observed(&job, |view| view.checkpoint_available).await;
+        assert!(checkpoint(&background_output).is_file());
+        let intent = selected_intent(directory.path());
+        assert!(job
+            .start_scoped(
+                HardwareProfileAction::Ensure,
+                Some(cli.clone()),
+                gpus.clone(),
+                intent.clone()
+            )
+            .unwrap_err()
+            .contains("different artifact scope"));
+        tokio::time::timeout(Duration::from_secs(2), job.cancel_background_and_wait())
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!job.busy());
+        assert_eq!(job.status(None).status, "cancelled");
+        assert!(checkpoint(&background_output).is_file());
+        scoped_cli(directory.path(), &arguments, &selected_result(&intent));
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            Some(cli.clone()),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        let selected = observed(&job, |view| view.status == "completed").await;
+        assert_ne!(running.job_id, selected.job_id);
+        assert!(job.artifact_is_accepted(&gpus, &intent));
+        let selected_args = std::fs::read_to_string(&arguments).unwrap();
+        assert_ne!(selected_args.lines().nth(2), background_output.to_str());
+
+        let mut complete = selected_result(&intent);
+        complete["mode"] = serde_json::json!("complete_remaining_formats");
+        complete["scope"] = serde_json::json!("all_formats");
+        complete["all_formats_complete"] = serde_json::json!(true);
+        complete["artifact"] = serde_json::Value::Null;
+        scoped_cli(directory.path(), &arguments, &complete);
+        job.start_remaining_formats(Some(cli), gpus.clone())
+            .unwrap();
+        let done = observed(&job, |view| view.status == "completed").await;
+        assert_ne!(selected.job_id, done.job_id);
+        assert_eq!(done.scope, "complete_remaining_formats");
+        assert_eq!(done.all_formats_complete, Some(true));
+        assert_eq!(done.expected_duration_ms, None);
+        assert!(job.artifact_is_accepted(&gpus, &intent));
+        let record: Record = serde_json::from_slice(
+            &std::fs::read(directory.path().join("host/hardware-profile-job.json")).unwrap(),
+        )
+        .unwrap();
+        assert!(record.accepted_durations.is_empty());
     }
     #[tokio::test]
     async fn hardware_profile_cold_ensure_reports_completed_phases_and_records_measured_history() {

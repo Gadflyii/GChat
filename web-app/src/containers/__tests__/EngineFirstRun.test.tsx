@@ -15,29 +15,26 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
-it('requires explicit GPU selection and retains the Host profiling job', async () => {
-  mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('profiling', { gpu_uuids: ['GPU-one'] }) : flow('gpu')))
-  const view = render(<EngineFirstRun />)
-  const start = await screen.findByRole('button', { name: 'Use selected GPUs and profile' })
+it('saves explicit GPU selection before choosing storage without starting profiling', async () => {
+  mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('storage', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } }) : flow('gpu')))
+  render(<EngineFirstRun />)
+  const start = await screen.findByRole('button', { name: 'Use selected GPUs' })
   expect(start).toBeDisabled()
   expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
   fireEvent.click(screen.getByRole('checkbox'))
   await waitFor(() => expect(start).toBeEnabled())
   fireEvent.click(start)
-  expect(await screen.findByText('Hardware profiling: running')).toBeInTheDocument()
+  expect(await screen.findByLabelText('Model download folder')).toBeInTheDocument()
+  expect(screen.queryByText('Hardware profiling: running')).not.toBeInTheDocument()
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'profile', gpu_uuids: ['GPU-one'] })
-  view.unmount()
-  mocks.command.mockClear().mockResolvedValue(flow('profiling', { gpu_uuids: ['GPU-one'] }))
-  render(<EngineFirstRun />)
-  expect(await screen.findByText('Hardware profiling: running')).toBeInTheDocument()
-  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+  expect(screen.getByText(/Selected-model profiling and Engine memory checks are still required/)).toBeInTheDocument()
 })
 
 it('uses chosen storage, retries the shared catalog and resumes saved downloads', async () => {
   let saved = flow('storage', { storage: { path: '/models', recommended_path: '/fast', available_bytes: null, error: 'Disk measurement unavailable', candidates: [{ path: '/full', available_bytes: 0, eligible: false, reason: 'Not enough free space' }] } })
   mocks.command.mockImplementation((_operation, args) => {
     if (args.action === 'storage') saved = flow('models', { catalog_loaded: false })
-    if (args.action === 'refresh_catalog') saved = flow('models', { catalog_loaded: true, models: [{ release, recommended: true, reason: 'Fits measured memory' }] })
+    if (args.action === 'refresh_catalog') saved = flow('models', { catalog_loaded: true, models: [{ release, recommended: true, reason: 'Published for this GPU group' }] })
     if (args.action === 'models') saved = flow('downloads', { selected_downloads: [{ id: 'download', release, status: 'failed', received: 1024, bytes_per_second: 0, error: 'Connection interrupted' }] })
     if (args.action === 'resume') saved = flow('downloads', { selected_downloads: [{ id: 'download', release, status: 'downloading', received: 2048, bytes_per_second: 1024 ** 2 }] })
     return Promise.resolve(saved)
@@ -57,15 +54,58 @@ it('uses chosen storage, retries the shared catalog and resumes saved downloads'
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'models', release_ids: [release.sha256] })
   fireEvent.click(screen.getByRole('button', { name: 'Resume downloads' }))
   await screen.findByText(/Muse · downloading/)
+  expect(screen.getByText(/Selected-model profiling begins after the downloads are verified/)).toBeInTheDocument()
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'resume' })
+})
+
+it('observes verified downloads before selected profiling and retains its retry across reopening', async () => {
+  const installed = { id: 'download', release, status: 'installed', received: release.bytes, bytes_per_second: 0 }
+  let saved = flow('downloads', {
+    gpu_uuids: ['GPU-one'], selected_downloads: [{ ...installed, status: 'verifying' }],
+    hardware_profile: { status: 'idle' },
+  })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'resume') saved = flow('profiling', {
+      ...saved, hardware_profile: {
+        status: 'running', scope: 'artifact', scope_complete: false, all_formats_complete: false,
+        elapsed_ms: 180_000, expected_duration_ms: 600_000, duration_source: 'measured_history',
+      },
+    })
+    return Promise.resolve(saved)
+  })
+  const view = render(<EngineFirstRun />)
+  expect(await screen.findByText(/Muse · verifying/)).toBeInTheDocument()
+  expect(screen.queryByText(/Selected-model profiling:/)).not.toBeInTheDocument()
+  saved = flow('profiling', {
+    gpu_uuids: ['GPU-one'], selected_downloads: [installed],
+    hardware_profile: { status: 'failed', scope: 'artifact', scope_complete: false, all_formats_complete: false, error: 'Selected profile interrupted' },
+  })
+  expect(await screen.findByText('Selected profile interrupted', {}, { timeout: 3000 })).toBeInTheDocument()
+  expect(screen.getByText('Selected-model profiling: failed')).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Resume hardware profiling' }))
+  expect(await screen.findByText('Selected-model profiling: running')).toBeInTheDocument()
+  expect(screen.getByText(/Broader model-format coverage is deferred/)).toBeInTheDocument()
+  expect(screen.getByText(/Completion time is unknown for this GPU group/)).toBeInTheDocument()
+  expect(screen.queryByText(/remaining, based on/)).not.toBeInTheDocument()
+  view.unmount()
+  mocks.command.mockClear()
+  render(<EngineFirstRun />)
+  expect(await screen.findByText('Selected-model profiling: running')).toBeInTheDocument()
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+  expect(screen.queryByRole('button', { name: 'Finish local setup' })).not.toBeInTheDocument()
 })
 
 it('requires an Engine quote and saves approved startup overrides without launching', async () => {
   const onComplete = vi.fn()
-  mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action === 'complete' ? flow('complete') : flow('startup', { startup_profiles: [{ ...profile, ...(args.action === 'startup' ? { concurrency: 2, quote: { fits: true } } : {}) }] })))
+  mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action === 'complete' ? flow('complete') : flow('startup', {
+    hardware_profile: { status: 'completed', scope: 'artifact', scope_complete: true, base_complete: true, all_formats_complete: false },
+    startup_profiles: [{ ...profile, ...(args.action === 'startup' ? { concurrency: 2, quote: { fits: true } } : {}) }],
+  })))
   render(<EngineFirstRun onComplete={onComplete} />)
   const finish = await screen.findByRole('button', { name: 'Finish local setup' })
   expect(finish).toBeDisabled()
+  expect(screen.getByText(/Selected-model profiling is complete/)).toBeInTheDocument()
+  expect(screen.getByText(/Broader model-format coverage is deferred/)).toBeInTheDocument()
   expect(screen.getByText('Checking these settings with the Engine…')).toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('muse concurrent requests'), { target: { value: '2' } })
   fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
@@ -210,7 +250,7 @@ it('surfaces unsupported and unavailable hosts with an actionable state', async 
   mocks.command.mockResolvedValue(flow('gpu'))
   const view = render(<EngineFirstRun />)
   expect(await screen.findByText(/No supported NVIDIA GPUs detected/)).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Use selected GPUs and profile' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Use selected GPUs' })).toBeDisabled()
   view.unmount()
   mocks.state = { ...mocks.state, hosts: [] }
   render(<EngineFirstRun />)
