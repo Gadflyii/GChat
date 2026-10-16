@@ -255,4 +255,13 @@ describe('GInfer library model context and names', () => {
     await expect(extension.delete('custom')).rejects.toBe(failure)
     expect(fs.rm).not.toHaveBeenCalled()
   })
+  it('forwards an explicit installed Load GPU choice to native admission', async () => {
+    config.locations = [{ modelId: 'custom', modelDir: '/linux/models/custom', manifestPath: '/linux/models/custom/model.yml' }]
+    config.value = { model_path: '/linux/models/custom/model.ginfer', name: 'Selected GPU' }
+    await new GinferExtension().load('custom', { gpu_uuids: ['GPU-one'] })
+    expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ gpu_uuids: ['GPU-one'] }),
+    }))
+  })
+
 })

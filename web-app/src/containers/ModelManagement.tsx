@@ -33,6 +33,8 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const refreshHosts = useEngineHosts(s => s.refresh)
   const hardware = useHardware(s => s.hardwareData)
   const hardwareReady = useHardware(s => s.hardwareReady)
+  const selectedGpuUuids = useHardware(s => s.selectedGpuUuids)
+  const setSelectedGpuUuids = useHardware(s => s.setSelectedGpuUuids)
   const providers = useModelProvider(s => s.providers)
   const activeModels = useAppState(s => s.activeModels)
   const catalog = useModelCatalogStore(s => s.catalog)
@@ -54,6 +56,8 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const gpus: ModelGpu[] = useMemo(() => local ? (hardwareReady ? hardware.gpus : []).map(g => ({
     uuid: g.uuid, name: g.name, memory_mib: g.total_memory, compute_capability: g.nvidia_info?.compute_capability,
   })) : snapshot?.gpus ?? [], [local, hardwareReady, hardware.gpus, snapshot?.gpus])
+  const invalidGpuSelection = !hardwareReady || (selectedGpuUuids !== null &&
+    (!selectedGpuUuids.length || selectedGpuUuids.some(id => !gpus.some(g => g.uuid === id))))
   const downloads = local ? localDownloads : snapshot?.model_management?.downloads ?? []
   const managementAvailable = local || snapshot?.model_management?.version === 1
   const localModels = providers.find(p => p.provider === 'ginfer')?.models ?? []
@@ -90,10 +94,12 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
     engineCommand(local ? 'local_model_download_action' : 'download_action', local ?
       { id: job.id, operation: action } : { host_id: destination, body: { id: job.id, action } }))
   const loadLocal = (modelId: string) => act(async () => {
+    if (invalidGpuSelection) throw new Error('Choose available GPUs before loading this model.')
     const active = await service.models().getActiveModels('ginfer')
     if (active.some(id => id !== modelId) && !window.confirm('Switch the local model? This may interrupt chats and agent runs using the current model.')) return
     useModelProvider.getState().selectModelProvider('ginfer', modelId)
-    await switchToModel({ modelId, providerName: 'ginfer', serviceHub: service })
+    await switchToModel({ modelId, providerName: 'ginfer', serviceHub: service,
+      ...(selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
   })
   const stopLocal = (modelId: string) => act(async () => {
     const result = await service.models().stopModel(modelId, 'ginfer')
@@ -132,8 +138,14 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
       {local && localDownloadError && <p role="alert" className="text-sm text-destructive">{localDownloadError}</p>}
       {(tab === 'Recommended' || (tab === 'Installed' && local)) && <Input aria-label="Search models" placeholder="Find a model…" value={query} onChange={e => setQuery(e.target.value)} />}
       {tab === 'Installed' && <>
+        {local && <fieldset className="space-y-2 rounded border p-3"><legend>GPUs for Load model</legend>
+          <label className="flex items-center gap-2"><input type="checkbox" checked={selectedGpuUuids === null} onChange={e => setSelectedGpuUuids(e.target.checked ? null : [])} />Automatic (visible GPUs only)</label>
+          {gpus.map(g => <label key={g.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedGpuUuids?.includes(g.uuid) ?? false} onChange={e => setSelectedGpuUuids(e.target.checked ? [...(selectedGpuUuids ?? []), g.uuid] : (selectedGpuUuids ?? []).filter(id => id !== g.uuid))} />{g.name} · {g.uuid}</label>)}
+          <p className="text-sm text-muted-foreground">Select the GPUs required by the model's TP size. CUDA_VISIBLE_DEVICES is also enforced when loading.</p>
+          {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Choose available GPUs. A saved GPU may no longer be connected.' : 'Waiting for fresh GPU information.'}</p>}
+        </fieldset>}
         {local ? <>{!filteredModels.length && <div className="rounded-xl border p-8 text-center"><p>No installed models found.</p><Button className="mt-3" onClick={() => setTab('Recommended')}>Find a recommended model</Button></div>}
-          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{m.displayName ?? m.id}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) ? 'Running' : 'Installed'} · {m.capabilities?.join(' · ') || 'GInfer model'} · Engine defaults unless overridden</p></div><div className="flex gap-2"><Button disabled={busy || activeModels.includes(m.id)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !activeModels.includes(m.id)} onClick={() => void stopLocal(m.id)}>Stop</Button><DeleteModelAction modelId={m.id} provider="ginfer" /></div></section>)}</>
+          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{m.displayName ?? m.id}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) ? 'Running' : 'Installed'} · {m.capabilities?.join(' · ') || 'GInfer model'} · Engine defaults unless overridden</p></div><div className="flex gap-2"><Button disabled={busy || invalidGpuSelection || activeModels.includes(m.id)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !activeModels.includes(m.id)} onClick={() => void stopLocal(m.id)}>Stop</Button><DeleteModelAction modelId={m.id} provider="ginfer" /></div></section>)}</>
           : host ? <HostCard key={host.host_id} host={host} snapshot={snapshot} error={hostErrors[destination]} /> : <p>Select a paired host in GInfer Hosts.</p>}
         {!local && snapshot?.model_management && <details><summary className="cursor-pointer text-sm">Managed storage and removal</summary><p className="my-2 text-sm text-muted-foreground">External model roots are read-only. Stop instances before removing a managed package.</p>{snapshot.models.filter(m => downloads.some(j => j.status === 'installed' && j.path === m.path)).map(m => <div key={m.id} className="flex items-center justify-between gap-3 border-b py-2"><span>{m.metadata.identity.model_id} · {formatModelBytes(m.metadata.size_bytes)}</span><Button variant="outline" disabled={busy || offline} onClick={() => { if (window.confirm(`Remove ${m.metadata.identity.model_id} from ${host?.name}? The package will need downloading again.`)) void act(() => engineCommand('remove_model', { host_id: destination, body: { model_id: m.id } })) }}>Remove package</Button></div>)}</details>}
       </>}

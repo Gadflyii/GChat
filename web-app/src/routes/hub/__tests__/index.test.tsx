@@ -6,6 +6,7 @@ import type { ModelRelease } from '@/lib/model-release'
 const mocks = vi.hoisted(() => ({
   command: vi.fn(async () => []), refresh: vi.fn(async () => {}),
   switchModel: vi.fn(async () => {}),
+  selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
   providers: [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally' }] }],
   catalog: [] as unknown[], errors: {} as Record<string, string>,
 }))
@@ -22,6 +23,7 @@ vi.mock('@/hooks/useModelProvider', () => {
   return { useModelProvider: hook }
 })
 vi.mock('@/hooks/useHardware', () => ({ useHardware: (selector: (s: unknown) => unknown) => selector({
+  selectedGpuUuids: mocks.selectedGpuUuids, setSelectedGpuUuids: mocks.setSelectedGpuUuids,
   hardwareReady: true, hardwareData: { gpus: [{ uuid: 'local-gpu', name: 'Local GPU', total_memory: 16384, nvidia_info: { compute_capability: '8.6' } }] },
 }) }))
 vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog }) }))
@@ -34,7 +36,7 @@ const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: '
   tp: 1, qualified_sm: ['12.0'], min_vram_mib_per_gpu: 32768, capabilities: ['tools'] }
 describe('host-scoped Models', () => {
   beforeEach(() => {
-    vi.clearAllMocks(); mocks.errors = {}
+    vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null
     mocks.command.mockResolvedValue([])
     mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [release] }]
   })
@@ -67,6 +69,22 @@ describe('host-scoped Models', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
     expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('Connection lost')
+  })
+  it('forwards the explicit installed GPU choice when loading', async () => {
+    mocks.selectedGpuUuids = ['local-gpu']
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({
+      modelId: 'local-model', providerName: 'ginfer', gpuUuids: ['local-gpu'],
+    })))
+    vi.restoreAllMocks()
+  })
+  it.each([{ selection: [] }, { selection: ['missing-gpu'] }])('disables Load for unavailable explicit selection $selection', ({ selection }) => {
+    mocks.selectedGpuUuids = selection
+    render(<ModelManagement />)
+    expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
+    expect(mocks.switchModel).not.toHaveBeenCalled()
   })
   it('does not switch away from another local model without confirmation', async () => {
     vi.spyOn(window, 'confirm').mockReturnValueOnce(false)

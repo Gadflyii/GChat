@@ -122,6 +122,26 @@ describe('switchToModel', () => {
     } as typeof window.core
   })
 
+  it('forwards the selected GPU even when the same model is already serving', async () => {
+    const failure = new Error('selected GPU rejected by native admission')
+    const models = {
+      getActiveModels: vi.fn().mockResolvedValue(['broken-model']),
+      stopAllModels: vi.fn().mockResolvedValue(undefined),
+      startModel: vi.fn().mockRejectedValue(failure),
+    }
+    const serviceHub = {
+      app: () => ({ getServerStatus: vi.fn().mockResolvedValue(true) }),
+      models: () => models,
+    } as unknown as ServiceHub
+    await expect(switchToModel({
+      modelId: 'broken-model', providerName: 'ginfer', serviceHub,
+      gpuUuids: ['GPU-one'],
+    })).rejects.toBe(failure)
+    expect(models.startModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'ginfer' }), 'broken-model', true, ['GPU-one']
+    )
+  })
+
   it('restores a previously running API server after model load failure', async () => {
     const models = {
       getActiveModels: vi.fn().mockResolvedValue([]),

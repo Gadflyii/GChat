@@ -12,6 +12,26 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
 use uuid::Uuid;
 
+/// Resolve CUDA visibility against the physical inventory, preserving mask order.
+/// Unknown, ambiguous and duplicate entries fail closed instead of widening access.
+pub fn visible_gpu_uuids(inventory: &[String], mask: Option<&str>) -> Result<Vec<String>, String> {
+    let Some(mask) = mask else { return Ok(inventory.to_vec()); };
+    if mask.trim().is_empty() || mask.trim() == "-1" { return Ok(vec![]); }
+    let mut visible = Vec::new();
+    for token in mask.split(',').map(str::trim) {
+        let id = if !token.is_empty() && token.bytes().all(|c| c.is_ascii_digit()) {
+            token.parse::<usize>().ok().and_then(|index| inventory.get(index)).cloned()
+        } else if token.starts_with("GPU-") {
+            let matches: Vec<_> = inventory.iter().filter(|id| id.starts_with(token)).collect();
+            if matches.len() == 1 { Some(matches[0].clone()) } else { None }
+        } else { None };
+        let id = id.ok_or("CUDA_VISIBLE_DEVICES contains an unavailable or ambiguous GPU")?;
+        if visible.contains(&id) { return Err("CUDA_VISIBLE_DEVICES contains a duplicate GPU".into()); }
+        visible.push(id);
+    }
+    Ok(visible)
+}
+
 pub fn validate_runtimes(runtimes: &BTreeMap<String, PathBuf>) -> Result<(), String> {
     for (architecture, path) in runtimes {
         if !matches!(architecture.as_str(), "8.0" | "8.6" | "8.9" | "12.0") {
@@ -1620,6 +1640,22 @@ mod tests {
 #[cfg(test)]
 mod launch_options_tests {
     use super::*;
+
+    #[test]
+    fn cuda_visibility_preserves_mask_order_and_fails_closed() {
+        let inventory = vec!["GPU-zero".into(), "GPU-one".into()];
+        assert_eq!(visible_gpu_uuids(&inventory, None).unwrap(), inventory);
+        assert_eq!(visible_gpu_uuids(&inventory, Some("1")).unwrap(), vec!["GPU-one"]);
+        assert_eq!(visible_gpu_uuids(&inventory, Some("1,0")).unwrap(), vec!["GPU-one", "GPU-zero"]);
+        assert_eq!(visible_gpu_uuids(&inventory, Some("GPU-one")).unwrap(), vec!["GPU-one"]);
+        assert_eq!(visible_gpu_uuids(&inventory, Some("GPU-o")).unwrap(), vec!["GPU-one"]);
+        for mask in ["", "  ", "-1"] {
+            assert!(visible_gpu_uuids(&inventory, Some(mask)).unwrap().is_empty());
+        }
+        for mask in ["2", "0,0", "GPU-", "GPU-missing", "0,", "-1,0", "MIG-device", "abc"] {
+            assert!(visible_gpu_uuids(&inventory, Some(mask)).is_err(), "{mask}");
+        }
+    }
 
     #[test]
     fn automatic_speculation_keeps_engine_defaults_and_omits_zero_drafts() {

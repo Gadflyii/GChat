@@ -105,6 +105,8 @@ export type GinferConfig = {
   /** Valid range 1..8; 0 leaves the server default. */
   max_concurrency: number
   no_cuda_graph: boolean
+  /** Ordered physical GPU UUIDs selected by the user; omitted means automatic. */
+  gpu_uuids?: string[]
 }
 
 export type GinferLoadRequest = {

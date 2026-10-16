@@ -446,4 +446,17 @@ describe('useHardware', () => {
       expect(result.current.hardwareData.gpus[0].activated).toBe(true)
     })
   })
+  it('retains an explicit GPU choice when the hardware inventory changes', () => {
+    const selected = ['GPU-one']
+    useHardware.getState().setSelectedGpuUuids(selected)
+    selected.push('GPU-zero')
+    useHardware.getState().setHardwareData({
+      ...useHardware.getState().hardwareData,
+      gpus: [],
+    })
+    expect(useHardware.getState().selectedGpuUuids).toEqual(['GPU-one'])
+    useHardware.getState().setSelectedGpuUuids(null)
+    expect(useHardware.getState().selectedGpuUuids).toBeNull()
+  })
+
 })

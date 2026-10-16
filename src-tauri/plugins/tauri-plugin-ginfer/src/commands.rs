@@ -23,6 +23,7 @@ pub struct GinferConfig {
     pub prefill_chunk: u32,
     pub max_concurrency: u32,
     pub no_cuda_graph: bool,
+    pub gpu_uuids: Option<Vec<String>>,
 }
 impl Default for GinferConfig {
     fn default() -> Self {
@@ -37,6 +38,7 @@ impl Default for GinferConfig {
             prefill_chunk: 0,
             max_concurrency: 0,
             no_cuda_graph: false,
+            gpu_uuids: None,
         }
     }
 }

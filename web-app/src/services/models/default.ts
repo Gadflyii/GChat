@@ -374,13 +374,14 @@ export class DefaultModelsService implements ModelsService {
   async startModel(
     provider: ProviderObject,
     model: string,
-    bypassAutoUnload: boolean = false
+    bypassAutoUnload: boolean = false,
+    gpuUuids?: string[]
   ): Promise<SessionInfo | undefined> {
     const engine = this.getEngine(provider.provider)
     if (!engine) return undefined
 
     const loadedModels = await engine.getLoadedModels()
-    if (loadedModels.includes(model)) return undefined
+    if (gpuUuids === undefined && loadedModels.includes(model)) return undefined
 
     const modelConfig = provider.models.find((m) => m.id === model)
 
@@ -403,8 +404,13 @@ export class DefaultModelsService implements ModelsService {
           ? configuredContext
           : declaredMaximum
       const settings =
-        Number.isFinite(maxContext) && maxContext > 0
-          ? { max_context: maxContext }
+        (Number.isFinite(maxContext) && maxContext > 0) || gpuUuids !== undefined
+          ? {
+              ...(Number.isFinite(maxContext) && maxContext > 0
+                ? { max_context: maxContext }
+                : {}),
+              ...(gpuUuids === undefined ? {} : { gpu_uuids: [...gpuUuids] }),
+            }
           : undefined
 
       return engine

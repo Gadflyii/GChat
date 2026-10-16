@@ -116,6 +116,7 @@ pub struct Host {
     pub inventory_errors: RwLock<Vec<serde_json::Value>>,
     inventory_dirty: AtomicBool,
     pub gpus: Vec<Gpu>,
+    pub cuda_visible_gpu_uuids: Vec<String>,
     pub boot_id: Uuid,
     pub revision: Arc<AtomicU64>,
     pub directory: PathBuf,
@@ -349,9 +350,16 @@ impl Host {
             &path,
             &serde_json::to_vec(&data).map_err(|e| e.to_string())?,
         )?;
+        let mask = std::env::var("CUDA_VISIBLE_DEVICES").map(Some).or_else(|error| {
+            if matches!(error, std::env::VarError::NotPresent) { Ok(None) }
+            else { Err("CUDA_VISIBLE_DEVICES must be valid Unicode".to_string()) }
+        })?;
+        let cuda_visible_gpu_uuids = crate::engine_host::visible_gpu_uuids(
+            &gpus.iter().map(|gpu| gpu.uuid.clone()).collect::<Vec<_>>(), mask.as_deref(),
+        )?;
         let mut processes = HostProcesses::new(
             engine,
-            gpus.iter().map(|g| g.uuid.clone()).collect(),
+            cuda_visible_gpu_uuids.iter().cloned().collect(),
             Duration::from_secs(600),
         )?;
         processes.configure_runtimes(
@@ -407,6 +415,7 @@ impl Host {
             inventory: RwLock::new(vec![]),
             inventory_errors: RwLock::new(vec![]),
             inventory_dirty: AtomicBool::new(false),
+            cuda_visible_gpu_uuids,
             gpus,
             boot_id: Uuid::new_v4(),
             revision,
@@ -1050,7 +1059,7 @@ impl Host {
             "hardware_profile":hardware_profile,
             "first_run":{"complete":first_run_complete},
             "draft_width_calibrations":self.draft_width.status(),
-            "gpus":self.gpus,"models":models,
+            "gpus":self.gpus,"cuda_visible_gpu_uuids":self.cuda_visible_gpu_uuids,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
             "profile_error":*self.profile_error.read().await,
             "model_management":{"version":1,"downloads":self.downloads.list().await,
