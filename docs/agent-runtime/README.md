@@ -63,6 +63,13 @@ Semantic indexed retrieval/RAG is post-release and remains unavailable without e
 inline fallback, disabled tools and privacy boundaries. Model-led answers and
 installer qualification are separate from model-free native GUI checks.
 
+Native tool discovery does not wait for Gbot's bundled-resource installation.
+While installation is pending, the catalog includes native tools and available
+MCP tools; Google Workspace and Microsoft 365 connector tools remain withheld.
+Installation completion refreshes the catalog so connected-account tools become
+available without restarting the app. Resource failures remain explicit, and
+connector execution still checks service readiness and account authorization.
+
 The Host checks unsupported hosted-tool and output declarations for Manager,
 standalone and registered GChat instances. Native engine validation owns the
 supported protocol schemas and structured-output settings. Legacy Responses

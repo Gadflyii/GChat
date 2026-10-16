@@ -1292,6 +1292,69 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ipc_catalog_lists_native_tools_while_gbot_resources_remain_pending() {
+        let root = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::core::gbot::GbotState::default());
+        app.manage(crate::test_support::TestDataRoot(root.path().join("data")));
+        let (resources, completion) = crate::core::setup::BundledResources::pending();
+        app.manage(resources.clone());
+
+        let catalog = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            capability_list(app.handle().clone()),
+        )
+        .await
+        .expect("native tool discovery must not await Gbot resource installation")
+        .unwrap();
+        assert!(catalog
+            .tools
+            .iter()
+            .any(|tool| tool.identity == "os.fs.read" && tool.server == NATIVE_SERVER));
+        assert!(catalog
+            .tools
+            .iter()
+            .all(|tool| tool.server != "google" && tool.server != "microsoft"));
+        assert_eq!(resources.ready(), Ok(false));
+        assert!(!completion.is_closed());
+    }
+
+    #[tokio::test]
+    async fn ipc_catalog_preserves_gbot_resource_initialization_errors() {
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::core::gbot::GbotState::default());
+        assert_eq!(
+            capability_list(app.handle().clone()).await.err().unwrap(),
+            "Bundled resource installation was not initialized"
+        );
+
+        let (resources, completion) = crate::core::setup::BundledResources::pending();
+        app.manage(resources);
+        completion
+            .send(Some(Err("runtime digest mismatch".into())))
+            .unwrap();
+        for _ in 0..2 {
+            assert_eq!(
+                capability_list(app.handle().clone()).await.err().unwrap(),
+                "runtime digest mismatch"
+            );
+        }
+
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::core::gbot::GbotState::default());
+        let (resources, completion) = crate::core::setup::BundledResources::pending();
+        app.manage(resources);
+        drop(completion);
+        assert_eq!(
+            capability_list(app.handle().clone()).await.err().unwrap(),
+            "Bundled resource installation ended without a result"
+        );
+    }
+
+    #[tokio::test]
     async fn ipc_catalog_and_native_read_share_policy_and_terminal_events() {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("note.txt"), "visible result").unwrap();
