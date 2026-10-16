@@ -3,7 +3,7 @@ use crate::{
     state::{GinferSession, SessionInfo, SessionOwner},
 };
 use ginfer_host::{
-    engine_host::{visible_gpu_uuids, LaunchOptions}, launch_profiles::LaunchProfile, local_host::LocalHost,
+    engine_host::{GpuDeviceOrders, LaunchOptions}, launch_profiles::LaunchProfile, local_host::LocalHost,
     service::LaunchRequest,
 };
 use serde_json::Value;
@@ -39,7 +39,12 @@ fn options(config: &GinferConfig) -> Result<LaunchOptions, String> {
     })
 }
 
-fn visible_selection(snapshot: &Value, config: &GinferConfig, mask: Option<&str>) -> Result<Vec<String>, String> {
+fn visible_selection(
+    snapshot: &Value,
+    config: &GinferConfig,
+    mask: Option<&str>,
+    device_order: Option<&str>,
+) -> Result<Vec<String>, String> {
     let inventory: Vec<String> = serde_json::from_value(
         Value::Array(snapshot["gpus"].as_array().ok_or("Host GPU inventory is unavailable")?
             .iter().map(|gpu| gpu["uuid"].clone()).collect()))
@@ -48,11 +53,14 @@ fn visible_selection(snapshot: &Value, config: &GinferConfig, mask: Option<&str>
         Some(value) => serde_json::from_value(value.clone()).map_err(|_| "Host GPU visibility is invalid")?,
         None => inventory.clone(),
     };
-    let visible: Vec<String> = if mask.is_some() {
-        visible_gpu_uuids(&inventory, mask)?.into_iter().filter(|id| host_visible.contains(id)).collect()
-    } else {
-        host_visible.into_iter().filter(|id| inventory.contains(id)).collect()
+    let orders: GpuDeviceOrders = match snapshot.get("gpu_device_orders") {
+        Some(value) => serde_json::from_value(value.clone()).map_err(|_| "Host GPU enumeration order is invalid")?,
+        None => GpuDeviceOrders::default(),
     };
+    // The desktop's order may differ from the Host's; the Host grant bounds access,
+    // while the desktop resolves its own inherited ordinal mask and rank order.
+    let visible: Vec<String> = orders.resolve(&inventory, mask, device_order)?
+        .into_iter().filter(|id| host_visible.contains(id)).collect();
     if let Some(selected) = &config.gpu_uuids {
         if selected.is_empty() || selected.iter().collect::<BTreeSet<_>>().len() != selected.len()
             || selected.iter().any(|id| !visible.contains(id)) {
@@ -208,7 +216,11 @@ async fn load_on_host(
         if matches!(error, std::env::VarError::NotPresent) { Ok(None) }
         else { Err("CUDA_VISIBLE_DEVICES must be valid Unicode".to_string()) }
     })?;
-    let visible = visible_selection(&snapshot, &config, mask.as_deref())?;
+    let device_order = std::env::var("CUDA_DEVICE_ORDER").map(Some).or_else(|error| {
+        if matches!(error, std::env::VarError::NotPresent) { Ok(None) }
+        else { Err("CUDA_DEVICE_ORDER must be valid Unicode".to_string()) }
+    })?;
+    let visible = visible_selection(&snapshot, &config, mask.as_deref(), device_order.as_deref())?;
     let residents: Vec<_> = snapshot["instances"]
         .as_array()
         .into_iter()
@@ -436,21 +448,60 @@ mod tests {
     use hyper::{Body, Response};
     use std::{convert::Infallible, os::unix::fs::PermissionsExt};
 
+    fn ordered_snapshot() -> Value {
+        serde_json::json!({
+            "gpus":[{"uuid":"GPU-zero"},{"uuid":"GPU-one"}],
+            "cuda_visible_gpu_uuids":["GPU-zero","GPU-one"],
+            "gpu_device_orders": {
+                "pci_bus_id":["GPU-zero","GPU-one"],
+                "fastest_first": {
+                    "cuda_device_uuids":["GPU-one","GPU-zero"],
+                    "cuda_device_order":"FASTEST_FIRST",
+                    "effective_cuda_device_order":"FASTEST_FIRST"
+                }
+            }
+        })
+    }
+
     #[test]
     fn installed_load_intersects_visibility_and_rejects_missing_saved_gpu() {
+        let snapshot = ordered_snapshot();
+        let mut config = GinferConfig::default();
+        assert_eq!(visible_selection(&snapshot, &config, Some("1"), Some("PCI_BUS_ID")).unwrap(), vec!["GPU-one"]);
+        assert_eq!(visible_selection(&snapshot, &config, Some("1,0"), Some("PCI_BUS_ID")).unwrap(), vec!["GPU-one", "GPU-zero"]);
+        config.gpu_uuids = Some(vec!["GPU-zero".into()]);
+        assert!(visible_selection(&snapshot, &config, Some("1"), Some("PCI_BUS_ID")).unwrap_err().contains("excluded"));
+        config.gpu_uuids = Some(vec!["GPU-gone".into()]);
+        assert!(visible_selection(&snapshot, &config, None, None).is_err());
+        config.gpu_uuids = None;
+        let mut restricted = snapshot.clone();
+        restricted["cuda_visible_gpu_uuids"] = serde_json::json!(["GPU-one"]);
+        assert!(visible_selection(&restricted, &config, Some("0"), Some("PCI_BUS_ID")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn desktop_uses_its_own_order_and_intersects_a_differently_ordered_host_grant() {
+        let snapshot = ordered_snapshot();
+        let config = GinferConfig::default();
+        assert_eq!(visible_selection(&snapshot, &config, Some("0"), None).unwrap(), vec!["GPU-one"]);
+        assert_eq!(visible_selection(&snapshot, &config, Some("0"), Some("PCI_BUS_ID")).unwrap(), vec!["GPU-zero"]);
+        assert_eq!(visible_selection(&snapshot, &config, Some("1,0"), None).unwrap(), vec!["GPU-zero", "GPU-one"]);
+        assert_eq!(visible_selection(&snapshot, &config, None, None).unwrap(), vec!["GPU-one", "GPU-zero"]);
+        let mut restricted = snapshot;
+        restricted["cuda_visible_gpu_uuids"] = serde_json::json!(["GPU-zero"]);
+        assert!(visible_selection(&restricted, &config, Some("0"), None).unwrap().is_empty());
+        assert_eq!(visible_selection(&restricted, &config, Some("0"), Some("PCI_BUS_ID")).unwrap(), vec!["GPU-zero"]);
+    }
+
+    #[test]
+    fn old_host_without_authoritative_order_allows_uuid_but_rejects_numeric_masks() {
         let snapshot = serde_json::json!({"gpus":[{"uuid":"GPU-zero"},{"uuid":"GPU-one"}],
             "cuda_visible_gpu_uuids":["GPU-zero","GPU-one"]});
-        let mut config = GinferConfig::default();
-        assert_eq!(visible_selection(&snapshot, &config, Some("1")).unwrap(), vec!["GPU-one"]);
-        assert_eq!(visible_selection(&snapshot, &config, Some("1,0")).unwrap(), vec!["GPU-one", "GPU-zero"]);
-        config.gpu_uuids = Some(vec!["GPU-zero".into()]);
-        assert!(visible_selection(&snapshot, &config, Some("1")).unwrap_err().contains("excluded"));
-        config.gpu_uuids = Some(vec!["GPU-gone".into()]);
-        assert!(visible_selection(&snapshot, &config, None).is_err());
-        config.gpu_uuids = None;
-        let restricted = serde_json::json!({"gpus":[{"uuid":"GPU-zero"},{"uuid":"GPU-one"}],
-            "cuda_visible_gpu_uuids":["GPU-one"]});
-        assert!(visible_selection(&restricted, &config, Some("0")).unwrap().is_empty());
+        let config = GinferConfig::default();
+        assert_eq!(visible_selection(&snapshot, &config, Some("GPU-one,GPU-zero"), None).unwrap(), vec!["GPU-one", "GPU-zero"]);
+        assert!(visible_selection(&snapshot, &config, Some("0"), None).unwrap_err().contains("authoritative"));
+        assert!(visible_selection(&snapshot, &config, Some("0"), Some("PCI_BUS_ID")).is_err());
+        assert!(visible_selection(&snapshot, &config, None, Some("invalid")).is_err());
     }
 
     #[test]

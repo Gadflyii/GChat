@@ -1,5 +1,5 @@
 use crate::{
-    engine_host::{EngineLaunch, HostProcesses, LaunchOptions},
+    engine_host::{EngineLaunch, GpuDeviceOrders, HostProcesses, LaunchOptions},
     engine_inventory::{artifact_set_members, inspect_artifact, ArtifactMetadata},
     transport::HostCertificate,
 };
@@ -29,6 +29,11 @@ pub struct Gpu {
     #[serde(default)]
     pub compute_capability: Option<String>,
 }
+pub struct GpuInventory {
+    pub gpus: Vec<Gpu>,
+    pub device_orders: GpuDeviceOrders,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ModelEntry {
     pub id: Uuid,
@@ -117,6 +122,7 @@ pub struct Host {
     inventory_dirty: AtomicBool,
     pub gpus: Vec<Gpu>,
     pub cuda_visible_gpu_uuids: Vec<String>,
+    pub gpu_device_orders: GpuDeviceOrders,
     pub boot_id: Uuid,
     pub revision: Arc<AtomicU64>,
     pub directory: PathBuf,
@@ -275,6 +281,23 @@ impl Host {
         gpus: Vec<Gpu>,
         desktop_provider: Option<PathBuf>,
     ) -> Result<Arc<Self>, String> {
+        Self::open_with_gpu_inventory(
+            directory, name, engine, model_dirs, artifact_sets,
+            GpuInventory { gpus, device_orders: GpuDeviceOrders::default() },
+            desktop_provider,
+        ).await
+    }
+
+    pub async fn open_with_gpu_inventory(
+        directory: PathBuf,
+        name: String,
+        engine: PathBuf,
+        model_dirs: Vec<PathBuf>,
+        artifact_sets: Vec<PathBuf>,
+        inventory: GpuInventory,
+        desktop_provider: Option<PathBuf>,
+    ) -> Result<Arc<Self>, String> {
+        let GpuInventory { gpus, device_orders } = inventory;
         if desktop_provider
             .as_ref()
             .is_some_and(|provider| !provider.is_absolute() || directory != provider.join("host"))
@@ -354,8 +377,13 @@ impl Host {
             if matches!(error, std::env::VarError::NotPresent) { Ok(None) }
             else { Err("CUDA_VISIBLE_DEVICES must be valid Unicode".to_string()) }
         })?;
-        let cuda_visible_gpu_uuids = crate::engine_host::visible_gpu_uuids(
-            &gpus.iter().map(|gpu| gpu.uuid.clone()).collect::<Vec<_>>(), mask.as_deref(),
+        let device_order = std::env::var("CUDA_DEVICE_ORDER").map(Some).or_else(|error| {
+            if matches!(error, std::env::VarError::NotPresent) { Ok(None) }
+            else { Err("CUDA_DEVICE_ORDER must be valid Unicode".to_string()) }
+        })?;
+        let cuda_visible_gpu_uuids = device_orders.resolve(
+            &gpus.iter().map(|gpu| gpu.uuid.clone()).collect::<Vec<_>>(),
+            mask.as_deref(), device_order.as_deref(),
         )?;
         let mut processes = HostProcesses::new(
             engine,
@@ -416,6 +444,7 @@ impl Host {
             inventory_errors: RwLock::new(vec![]),
             inventory_dirty: AtomicBool::new(false),
             cuda_visible_gpu_uuids,
+            gpu_device_orders: device_orders,
             gpus,
             boot_id: Uuid::new_v4(),
             revision,
@@ -1059,7 +1088,7 @@ impl Host {
             "hardware_profile":hardware_profile,
             "first_run":{"complete":first_run_complete},
             "draft_width_calibrations":self.draft_width.status(),
-            "gpus":self.gpus,"cuda_visible_gpu_uuids":self.cuda_visible_gpu_uuids,"models":models,
+            "gpus":self.gpus,"cuda_visible_gpu_uuids":self.cuda_visible_gpu_uuids,"gpu_device_orders":self.gpu_device_orders,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
             "profile_error":*self.profile_error.read().await,
             "model_management":{"version":1,"downloads":self.downloads.list().await,

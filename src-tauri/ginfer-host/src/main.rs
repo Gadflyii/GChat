@@ -1,7 +1,8 @@
 use clap::Parser;
 use ginfer_host::{
     discovery::advertise,
-    service::{Gpu, Host},
+    engine_host::{gpu_uuids_in_pci_bus_order, probe_cuda_device_order, GpuDeviceOrders},
+    service::{Gpu, GpuInventory, Host},
 };
 use std::{path::PathBuf, sync::atomic::Ordering, time::Duration};
 
@@ -465,7 +466,7 @@ async fn run(
     #[cfg(windows)]
     inventory.creation_flags(0x08000000);
     let output = inventory.args([
-            "--query-gpu=uuid,name,memory.total,compute_cap,pci.device_id",
+            "--query-gpu=uuid,name,memory.total,compute_cap,pci.device_id,pci.bus_id",
             "--format=csv,noheader,nounits",
         ])
         .output()
@@ -475,11 +476,13 @@ async fn run(
         return Err(String::from_utf8_lossy(&output.stderr).into_owned());
     }
     let mut gpus = Vec::new();
+    let mut pci_inventory = Vec::new();
     for line in String::from_utf8_lossy(&output.stdout).lines() {
         let values: Vec<_> = line.split(',').map(str::trim).collect();
-        if values.len() != 5 {
+        if values.len() != 6 {
             return Err("unrecognized NVIDIA inventory row".into());
         }
+        pci_inventory.push((values[0].to_string(), values[5].to_string()));
         gpus.push(Gpu {
             uuid: values[0].into(),
             name: values[1].into(),
@@ -488,13 +491,26 @@ async fn run(
             compute_capability: values[3].parse::<f32>().ok().map(|_| values[3].to_string()),
         });
     }
-    let host = Host::open_with_model_storage(
+    let engine = args.engine.ok_or("engine is required")?;
+    let pci_bus_id = Some(gpu_uuids_in_pci_bus_order(&pci_inventory)?);
+    let physical_uuids: Vec<_> = gpus.iter().map(|gpu| gpu.uuid.clone()).collect();
+    let cli_name = if cfg!(windows) { "ginfer.exe" } else { "ginfer" };
+    // Query the installed CLI once, independently of this process's visibility/order.
+    // Older Engines may lack the passive command; UUID masks remain available.
+    let fastest_first = match probe_cuda_device_order(&engine.with_file_name(cli_name), &physical_uuids).await {
+        Ok(order) => Some(order),
+        Err(error) => {
+            eprintln!("{error}; numeric FASTEST_FIRST GPU masks are unavailable");
+            None
+        }
+    };
+    let host = Host::open_with_gpu_inventory(
         data_dir.clone(),
         args.name,
-        args.engine.ok_or("engine is required")?,
+        engine,
         args.models,
         args.artifact_set,
-        gpus,
+        GpuInventory { gpus, device_orders: GpuDeviceOrders { pci_bus_id, fastest_first } },
         args.desktop_provider,
     )
     .await?;

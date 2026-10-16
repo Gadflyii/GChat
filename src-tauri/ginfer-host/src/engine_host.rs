@@ -5,22 +5,146 @@ use super::engine_registry::InstanceStatus;
 use std::sync::{Arc, Mutex};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
-    path::PathBuf,
+    path::{Path, PathBuf},
+    process::Stdio,
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::{Child, Command};
 use uuid::Uuid;
 
-/// Resolve CUDA visibility against the physical inventory, preserving mask order.
+/// The passive Engine probe is run unmasked with FASTEST_FIRST explicitly set.
+/// Retain its provenance so consumers cannot mistake masked profile rows for ordinals.
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct CudaDeviceOrder {
+    pub cuda_device_uuids: Vec<String>,
+    pub cuda_device_order: Option<String>,
+    pub effective_cuda_device_order: String,
+}
+
+#[derive(Clone, Debug, Default, serde::Deserialize, serde::Serialize)]
+pub struct GpuDeviceOrders {
+    #[serde(default)]
+    pub pci_bus_id: Option<Vec<String>>,
+    #[serde(default)]
+    pub fastest_first: Option<CudaDeviceOrder>,
+}
+
+impl GpuDeviceOrders {
+    pub fn resolve(
+        &self,
+        inventory: &[String],
+        mask: Option<&str>,
+        device_order: Option<&str>,
+    ) -> Result<Vec<String>, String> {
+        let order = match device_order.unwrap_or("FASTEST_FIRST") {
+            "PCI_BUS_ID" => self.pci_bus_id.as_deref(),
+            "FASTEST_FIRST" => match &self.fastest_first {
+                Some(probe) => {
+                    probe.validate(inventory)?;
+                    Some(probe.cuda_device_uuids.as_slice())
+                }
+                None => None,
+            },
+            _ => return Err("CUDA_DEVICE_ORDER must be FASTEST_FIRST or PCI_BUS_ID".into()),
+        };
+        visible_gpu_uuids_with_order(inventory, mask, order)
+    }
+}
+
+impl CudaDeviceOrder {
+    fn validate(&self, inventory: &[String]) -> Result<(), String> {
+        if self.cuda_device_order.as_deref() != Some("FASTEST_FIRST")
+            || self.effective_cuda_device_order != "FASTEST_FIRST"
+        {
+            return Err("Engine GPU enumeration did not confirm unmasked FASTEST_FIRST order".into());
+        }
+        visible_gpu_uuids_with_order(inventory, None, Some(&self.cuda_device_uuids))?;
+        Ok(())
+    }
+}
+
+/// This passive probe never inherits a visibility mask and never calibrates hardware.
+/// An older Engine can reject the flag; callers retain UUID-mask support in that case.
+pub async fn probe_cuda_device_order(
+    cli: &Path,
+    inventory: &[String],
+) -> Result<CudaDeviceOrder, String> {
+    const MAX_BYTES: u64 = 65_536;
+    let mut command = Command::new(cli);
+    command
+        .args(["profile-hardware", "--cuda-device-order", "--json"])
+        .env_remove("CUDA_VISIBLE_DEVICES")
+        .env("CUDA_DEVICE_ORDER", "FASTEST_FIRST")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    #[cfg(windows)]
+    command.creation_flags(0x08000000);
+    let mut child = command.spawn().map_err(|error| format!("Engine GPU enumeration failed: {error}"))?;
+    let result = tokio::time::timeout(Duration::from_secs(10), async {
+        let stdout = child.stdout.take().ok_or("Engine GPU enumeration has no output pipe")?;
+        let mut bytes = Vec::new();
+        stdout.take(MAX_BYTES + 1).read_to_end(&mut bytes).await
+            .map_err(|_| "Could not read Engine GPU enumeration")?;
+        if bytes.len() as u64 > MAX_BYTES {
+            return Err("Engine GPU enumeration output exceeds its limit".to_string());
+        }
+        let status = child.wait().await.map_err(|_| "Could not reap Engine GPU enumeration")?;
+        if !status.success() {
+            return Err("Engine does not provide an authoritative CUDA device order".to_string());
+        }
+        let order: CudaDeviceOrder = serde_json::from_slice(&bytes)
+            .map_err(|_| "Engine GPU enumeration returned invalid JSON")?;
+        order.validate(inventory)?;
+        Ok(order)
+    }).await;
+    match result {
+        Ok(Ok(order)) => Ok(order),
+        failure => {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            match failure {
+                Ok(Err(error)) => Err(error),
+                Err(_) => Err("Engine GPU enumeration timed out".into()),
+                Ok(Ok(_)) => unreachable!(),
+            }
+        }
+    }
+}
+
+/// Resolve visibility using an explicitly obtained, complete CUDA or PCI order.
+/// UUID masks need only physical membership; numeric masks require the order.
 /// Unknown, ambiguous and duplicate entries fail closed instead of widening access.
-pub fn visible_gpu_uuids(inventory: &[String], mask: Option<&str>) -> Result<Vec<String>, String> {
-    let Some(mask) = mask else { return Ok(inventory.to_vec()); };
-    if mask.trim().is_empty() || mask.trim() == "-1" { return Ok(vec![]); }
+pub fn visible_gpu_uuids_with_order(
+    inventory: &[String],
+    mask: Option<&str>,
+    authoritative_order: Option<&[String]>,
+) -> Result<Vec<String>, String> {
+    let physical: BTreeSet<_> = inventory.iter().collect();
+    if physical.len() != inventory.len() || inventory.iter().any(String::is_empty) {
+        return Err("NVIDIA inventory contains an empty or duplicate GPU UUID".into());
+    }
+    if let Some(order) = authoritative_order {
+        let ordered: BTreeSet<_> = order.iter().collect();
+        if order.len() != inventory.len() || ordered.len() != order.len() || ordered != physical {
+            return Err("GPU enumeration order does not match the complete physical inventory".into());
+        }
+    }
+    let Some(mask) = mask else {
+        return Ok(authoritative_order.unwrap_or(inventory).to_vec());
+    };
+    if mask.trim().is_empty() || mask.trim() == "-1" {
+        return Ok(vec![]);
+    }
     let mut visible = Vec::new();
     for token in mask.split(',').map(str::trim) {
         let id = if !token.is_empty() && token.bytes().all(|c| c.is_ascii_digit()) {
-            token.parse::<usize>().ok().and_then(|index| inventory.get(index)).cloned()
+            let order = authoritative_order.ok_or(
+                "Numeric CUDA_VISIBLE_DEVICES requires an authoritative GPU enumeration order",
+            )?;
+            token.parse::<usize>().ok().and_then(|index| order.get(index)).cloned()
         } else if token.starts_with("GPU-") {
             let matches: Vec<_> = inventory.iter().filter(|id| id.starts_with(token)).collect();
             if matches.len() == 1 { Some(matches[0].clone()) } else { None }
@@ -30,6 +154,41 @@ pub fn visible_gpu_uuids(inventory: &[String], mask: Option<&str>) -> Result<Vec
         visible.push(id);
     }
     Ok(visible)
+}
+
+/// Build PCI_BUS_ID order from UUID/bus-id pairs returned by the NVIDIA inventory.
+/// Parse addresses numerically rather than depending on query row or text order.
+pub fn gpu_uuids_in_pci_bus_order(inventory: &[(String, String)]) -> Result<Vec<String>, String> {
+    let mut uuids = BTreeSet::new();
+    let mut addresses = BTreeSet::new();
+    let mut ordered = Vec::new();
+    for (uuid, address) in inventory {
+        let invalid = || "NVIDIA inventory contains an invalid or duplicate PCI bus address".to_string();
+        let fields: Vec<_> = address.split([':', '.']).collect();
+        if fields.len() != 4
+            || !matches!(fields[0].len(), 4 | 8)
+            || fields[1].len() != 2
+            || fields[2].len() != 2
+            || fields[3].len() != 1
+            || fields.iter().any(|field| !field.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        {
+            return Err(invalid());
+        }
+        let domain = u32::from_str_radix(fields[0], 16).map_err(|_| invalid())?;
+        let bus = u8::from_str_radix(fields[1], 16).map_err(|_| invalid())?;
+        let device = u8::from_str_radix(fields[2], 16).map_err(|_| invalid())?;
+        let function = u8::from_str_radix(fields[3], 16).map_err(|_| invalid())?;
+        let key = (domain, bus, device, function);
+        if device > 31 || function > 7 || !addresses.insert(key) {
+            return Err(invalid());
+        }
+        if uuid.is_empty() || !uuids.insert(uuid) {
+            return Err("NVIDIA inventory contains an empty or duplicate GPU UUID".into());
+        }
+        ordered.push((key, uuid.clone()));
+    }
+    ordered.sort_by_key(|(key, _)| *key);
+    Ok(ordered.into_iter().map(|(_, uuid)| uuid).collect())
 }
 
 pub fn validate_runtimes(runtimes: &BTreeMap<String, PathBuf>) -> Result<(), String> {
@@ -1121,6 +1280,52 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
+    #[tokio::test]
+    async fn passive_cuda_order_probe_is_unmasked_and_validates_provenance_and_inventory() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("ginfer");
+        let response = directory.path().join("response.json");
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\n[ \"$#\" -eq 3 ] && [ \"$1\" = profile-hardware ] && [ \"$2\" = --cuda-device-order ] && [ \"$3\" = --json ] || exit 21\n[ \"${CUDA_VISIBLE_DEVICES+x}\" != x ] && [ \"$CUDA_DEVICE_ORDER\" = FASTEST_FIRST ] || exit 22\ncat \"$(dirname \"$0\")/response.json\"\n",
+        ).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let inventory = vec!["GPU-first".to_owned(), "GPU-second".to_owned()];
+        let valid = serde_json::json!({
+            "cuda_device_uuids": ["GPU-second", "GPU-first"],
+            "cuda_device_order": "FASTEST_FIRST",
+            "effective_cuda_device_order": "FASTEST_FIRST"
+        });
+        std::fs::write(&response, serde_json::to_vec(&valid).unwrap()).unwrap();
+        let order = probe_cuda_device_order(&executable, &inventory).await.unwrap();
+        assert_eq!(order.cuda_device_uuids, ["GPU-second", "GPU-first"]);
+
+        for field in ["cuda_device_order", "effective_cuda_device_order"] {
+            let mut invalid = valid.clone();
+            invalid[field] = serde_json::json!("PCI_BUS_ID");
+            std::fs::write(&response, serde_json::to_vec(&invalid).unwrap()).unwrap();
+            assert!(probe_cuda_device_order(&executable, &inventory).await.unwrap_err()
+                .contains("FASTEST_FIRST"));
+        }
+        for uuids in [
+            serde_json::json!(["GPU-first"]),
+            serde_json::json!(["GPU-first", "GPU-first"]),
+            serde_json::json!(["GPU-first", "GPU-unknown"]),
+        ] {
+            let mut invalid = valid.clone();
+            invalid["cuda_device_uuids"] = uuids;
+            std::fs::write(&response, serde_json::to_vec(&invalid).unwrap()).unwrap();
+            assert!(probe_cuda_device_order(&executable, &inventory).await.unwrap_err()
+                .contains("complete physical inventory"));
+        }
+        std::fs::write(&response, vec![b' '; 65_537]).unwrap();
+        assert!(probe_cuda_device_order(&executable, &inventory).await.unwrap_err()
+            .contains("exceeds its limit"));
+        std::fs::write(&executable, "#!/bin/sh\nexit 2\n").unwrap();
+        assert!(probe_cuda_device_order(&executable, &inventory).await.unwrap_err()
+            .contains("authoritative CUDA device order"));
+    }
+
     fn fixture_launch(artifact: &std::path::Path, instance_id: Uuid) -> EngineLaunch {
         EngineLaunch {
             benchmark_profile: None,
@@ -1644,17 +1849,83 @@ mod launch_options_tests {
     #[test]
     fn cuda_visibility_preserves_mask_order_and_fails_closed() {
         let inventory = vec!["GPU-zero".into(), "GPU-one".into()];
-        assert_eq!(visible_gpu_uuids(&inventory, None).unwrap(), inventory);
-        assert_eq!(visible_gpu_uuids(&inventory, Some("1")).unwrap(), vec!["GPU-one"]);
-        assert_eq!(visible_gpu_uuids(&inventory, Some("1,0")).unwrap(), vec!["GPU-one", "GPU-zero"]);
-        assert_eq!(visible_gpu_uuids(&inventory, Some("GPU-one")).unwrap(), vec!["GPU-one"]);
-        assert_eq!(visible_gpu_uuids(&inventory, Some("GPU-o")).unwrap(), vec!["GPU-one"]);
+        assert_eq!(visible_gpu_uuids_with_order(&inventory, None, Some(&inventory)).unwrap(), inventory);
+        assert_eq!(visible_gpu_uuids_with_order(&inventory, Some("1"), Some(&inventory)).unwrap(), vec!["GPU-one"]);
+        assert_eq!(visible_gpu_uuids_with_order(&inventory, Some("1,0"), Some(&inventory)).unwrap(), vec!["GPU-one", "GPU-zero"]);
+        assert_eq!(visible_gpu_uuids_with_order(&inventory, Some("GPU-one"), Some(&inventory)).unwrap(), vec!["GPU-one"]);
+        assert_eq!(visible_gpu_uuids_with_order(&inventory, Some("GPU-o"), Some(&inventory)).unwrap(), vec!["GPU-one"]);
         for mask in ["", "  ", "-1"] {
-            assert!(visible_gpu_uuids(&inventory, Some(mask)).unwrap().is_empty());
+            assert!(visible_gpu_uuids_with_order(&inventory, Some(mask), Some(&inventory)).unwrap().is_empty());
         }
         for mask in ["2", "0,0", "GPU-", "GPU-missing", "0,", "-1,0", "MIG-device", "abc"] {
-            assert!(visible_gpu_uuids(&inventory, Some(mask)).is_err(), "{mask}");
+            assert!(visible_gpu_uuids_with_order(&inventory, Some(mask), Some(&inventory)).is_err(), "{mask}");
         }
+    }
+
+    #[test]
+    fn numeric_visibility_uses_explicit_cuda_or_pci_order_and_keeps_mask_order() {
+        let inventory = vec!["GPU-A".to_string(), "GPU-B".to_string()];
+        let cuda_order = vec!["GPU-B".to_string(), "GPU-A".to_string()];
+        let pci_order = gpu_uuids_in_pci_bus_order(&[
+            ("GPU-B".into(), "00000000:65:00.0".into()),
+            ("GPU-A".into(), "00000000:01:00.0".into()),
+        ]).unwrap();
+        assert_eq!(pci_order, inventory);
+        assert_eq!(
+            visible_gpu_uuids_with_order(&inventory, Some("0"), Some(&cuda_order)).unwrap(),
+            vec!["GPU-B"],
+        );
+        assert_eq!(
+            visible_gpu_uuids_with_order(&inventory, Some("0"), Some(&pci_order)).unwrap(),
+            vec!["GPU-A"],
+        );
+        assert_eq!(
+            visible_gpu_uuids_with_order(&inventory, Some("1,0"), Some(&cuda_order)).unwrap(),
+            vec!["GPU-A", "GPU-B"],
+        );
+        assert_eq!(
+            visible_gpu_uuids_with_order(&inventory, Some("1,0"), Some(&pci_order)).unwrap(),
+            vec!["GPU-B", "GPU-A"],
+        );
+        assert_eq!(
+            visible_gpu_uuids_with_order(&inventory, None, Some(&cuda_order)).unwrap(),
+            cuda_order,
+        );
+        assert_eq!(
+            visible_gpu_uuids_with_order(&inventory, Some("GPU-B,GPU-A"), None).unwrap(),
+            vec!["GPU-B", "GPU-A"],
+        );
+        assert!(visible_gpu_uuids_with_order(&inventory, Some("0"), None).is_err());
+        assert!(visible_gpu_uuids_with_order(&inventory, Some("GPU-A,0"), Some(&pci_order)).is_err());
+        for order in [
+            vec!["GPU-A".into()],
+            vec!["GPU-A".into(), "GPU-A".into()],
+            vec!["GPU-A".into(), "GPU-foreign".into()],
+            vec!["GPU-A".into(), "GPU-B".into(), "GPU-C".into()],
+        ] {
+            assert!(visible_gpu_uuids_with_order(&inventory, Some("0"), Some(&order)).is_err());
+        }
+    }
+
+    #[test]
+    fn pci_visibility_order_is_numeric_and_rejects_invalid_inventory() {
+        let pairs = [
+            ("GPU-C".into(), "00000001:00:00.0".into()),
+            ("GPU-B".into(), "00000000:0a:00.0".into()),
+            ("GPU-A".into(), "0000:09:00.0".into()),
+        ];
+        assert_eq!(gpu_uuids_in_pci_bus_order(&pairs).unwrap(), vec!["GPU-A", "GPU-B", "GPU-C"]);
+        for address in ["", "0:01:00.0", "0000:1:00.0", "0000:01:20.0", "0000:01:00.8", "0000:gg:00.0"] {
+            assert!(gpu_uuids_in_pci_bus_order(&[("GPU-A".into(), address.into())]).is_err(), "{address}");
+        }
+        assert!(gpu_uuids_in_pci_bus_order(&[
+            ("GPU-A".into(), "0000:01:00.0".into()),
+            ("GPU-B".into(), "00000000:01:00.0".into()),
+        ]).is_err());
+        assert!(gpu_uuids_in_pci_bus_order(&[
+            ("GPU-A".into(), "0000:01:00.0".into()),
+            ("GPU-A".into(), "0000:02:00.0".into()),
+        ]).is_err());
     }
 
     #[test]
