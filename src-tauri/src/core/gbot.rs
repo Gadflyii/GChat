@@ -22,6 +22,24 @@ use ginfer_host::gbot_login as login;
 #[cfg(windows)]
 use login_windows as login;
 
+pub(crate) fn with_relocated_startup<T>(
+    current: &Path,
+    destination: &Path,
+    resources: &Path,
+    commit: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    #[cfg(windows)]
+    {
+        let updated = ginfer_host::gbot_bootstrap::Bootstrap::capture(destination, resources)?;
+        login_windows::relocate(current, &updated, commit)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (current, destination, resources);
+        commit()
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ServiceTarget {
@@ -416,12 +434,17 @@ impl GbotState {
         app: &AppHandle<R>,
         target: ServiceTarget,
     ) -> Result<(), String> {
+        #[cfg(not(windows))]
         let root = self.root(app).await?;
         if let ServiceTarget::PairedHost { host_id } = &target {
             let hosts = crate::core::engine_hosts::shared_client().await?;
             hosts.gbot_grant(*host_id, "claim").await?;
             hosts.gbot_call(*host_id, "/v1/state", Value::Null).await?;
         }
+        #[cfg(windows)]
+        let _data_folder = crate::core::engine_hosts::data_folder_access().read().await;
+        #[cfg(windows)]
+        let root = self.root(app).await?;
         let mut connection = self.connection.lock().await;
         #[cfg(any(target_os = "linux", windows))]
         {
@@ -505,6 +528,8 @@ pub async fn gbot_service_set_enabled<R: Runtime>(
 ) -> Result<(), String> {
     #[cfg(any(target_os = "linux", windows))]
     {
+        #[cfg(windows)]
+        let _data_folder = crate::core::engine_hosts::data_folder_access().read().await;
         let root = state.root(&app).await?;
         let _connection = state.connection.lock().await;
         let bootstrap = ginfer_host::gbot_bootstrap::Bootstrap::capture(

@@ -26,6 +26,52 @@ pub(super) fn reconcile(bootstrap: &Bootstrap, run: bool) -> Result<(), String> 
     reconcile_with(bootstrap, run, &NativeRunKey).map(|_| ())
 }
 
+#[cfg(windows)]
+pub(super) fn relocate<T>(
+    current: &Path,
+    updated: &Bootstrap,
+    commit: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    relocate_with(current, updated, &NativeRunKey, commit)
+}
+
+// App Data and the local Host locator commit together in the caller. Keep the
+// old sign-in entry recoverable until that commit succeeds as well.
+fn relocate_with<T>(
+    current: &Path,
+    updated: &Bootstrap,
+    registry: &impl RunKey,
+    commit: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    let old_name = entry_name(current)?;
+    let new_name = entry_name(&updated.data_folder)?;
+    if old_name == new_name {
+        return commit();
+    }
+    let old_command = registry.get(&old_name)?;
+    let new_command = registry.get(&new_name)?;
+    if new_command.is_some() {
+        return Err("The new App Data folder already has a Gbot sign-in registration; choose another folder so that registration is not overwritten".into());
+    }
+    // Paired/disabled startup has no local entry to move. Preserve that state
+    // without validating or enabling a new startup command.
+    if old_command.is_none() {
+        return commit();
+    }
+    let desired = command_line(updated)?;
+    let restore = |error| {
+        let error = rollback(registry, &old_name, old_command.as_deref(), error);
+        rollback(registry, &new_name, new_command.as_deref(), error)
+    };
+    if let Err(error) = set_verified(registry, &new_name, Some(&desired)) {
+        return Err(restore(error));
+    }
+    if let Err(error) = set_verified(registry, &old_name, None) {
+        return Err(restore(error));
+    }
+    commit().map_err(restore)
+}
+
 fn configure_with(
     bootstrap: &Bootstrap,
     enabled: bool,
@@ -206,6 +252,7 @@ mod tests {
         fail: std::cell::Cell<bool>,
         fail_read: std::cell::Cell<bool>,
         ignore_write: std::cell::Cell<bool>,
+        fail_remove_once: std::cell::Cell<bool>,
     }
     impl RunKey for FakeRunKey {
         fn get(&self, name: &str) -> Result<Option<String>, String> {
@@ -220,6 +267,9 @@ mod tests {
             }
             if self.ignore_write.get() {
                 return Ok(());
+            }
+            if command.is_none() && self.fail_remove_once.replace(false) {
+                return Err("removal denied".into());
             }
             let mut entries = self.entries.borrow_mut();
             if let Some(command) = command {
@@ -352,6 +402,78 @@ mod tests {
             registry.get(&name).unwrap().as_deref(),
             Some("previous installation command")
         );
+    }
+
+    #[test]
+    fn data_folder_move_transfers_enabled_startup_then_disables_without_duplicate() {
+        let directory = tempfile::tempdir().unwrap();
+        let original = bootstrap(directory.path());
+        let mut updated = original.clone();
+        updated.data_folder = directory.path().join("new data folder");
+        let registry = FakeRunKey::default();
+        let other = entry_name(&directory.path().join("another installation")).unwrap();
+        registry.entries.borrow_mut().insert(other.clone(), "keep".into());
+        configure_with(&original, true, true, &registry).unwrap();
+        // The ordinary App Data copy retains the desired startup preference.
+        write_private(&updated.data_folder.join("gbot-login.json"), b"true").unwrap();
+        let old_name = entry_name(&original.data_folder).unwrap();
+        let new_name = entry_name(&updated.data_folder).unwrap();
+        relocate_with(&original.data_folder, &updated, &registry, || {
+            assert_eq!(registry.get(&old_name).unwrap(), None);
+            assert_eq!(registry.get(&new_name).unwrap(), Some(command_line(&updated).unwrap()));
+            assert!(enabled(&updated.data_folder).unwrap());
+            Ok(())
+        }).unwrap();
+        assert_eq!(registry.entries.borrow().len(), 2);
+        configure_with(&updated, false, true, &registry).unwrap();
+        assert_eq!(registry.get(&old_name).unwrap(), None);
+        assert_eq!(registry.get(&new_name).unwrap(), None);
+        assert_eq!(registry.get(&other).unwrap().as_deref(), Some("keep"));
+        assert!(!enabled(&updated.data_folder).unwrap());
+        // Moving an inactive local registration must not turn startup on.
+        relocate_with(&original.data_folder, &updated, &registry, || Ok(())).unwrap();
+        assert_eq!(registry.get(&old_name).unwrap(), None);
+        assert_eq!(registry.get(&new_name).unwrap(), None);
+    }
+
+    #[test]
+    fn data_folder_move_registration_and_commit_failures_restore_old_startup() {
+        let directory = tempfile::tempdir().unwrap();
+        let original = bootstrap(directory.path());
+        let mut updated = original.clone();
+        updated.data_folder = directory.path().join("new data folder");
+        let old_name = entry_name(&original.data_folder).unwrap();
+        let new_name = entry_name(&updated.data_folder).unwrap();
+        for phase in ["registration", "removal", "commit"] {
+            let registry = FakeRunKey::default();
+            configure_with(&original, true, true, &registry).unwrap();
+            let old_command = registry.get(&old_name).unwrap();
+            registry.ignore_write.set(phase == "registration");
+            registry.fail_remove_once.set(phase == "removal");
+            let committed = std::cell::Cell::new(false);
+            let failure = relocate_with(&original.data_folder, &updated, &registry, || {
+                committed.set(true);
+                Err::<(), _>("configuration or Host locator commit denied".into())
+            }).unwrap_err();
+            assert_eq!(committed.get(), phase == "commit");
+            assert_eq!(registry.get(&old_name).unwrap(), old_command);
+            assert_eq!(registry.get(&new_name).unwrap(), None);
+            let expected = match phase {
+                "registration" => "did not retain",
+                "removal" => "removal denied",
+                _ => "configuration or Host locator commit denied",
+            };
+            assert!(failure.contains(expected), "{failure}");
+        }
+        let registry = FakeRunKey::default();
+        configure_with(&original, true, true, &registry).unwrap();
+        let old_command = registry.get(&old_name).unwrap();
+        registry.entries.borrow_mut().insert(new_name.clone(), "another registration".into());
+        assert!(relocate_with(&original.data_folder, &updated, &registry, || -> Result<(), String> {
+            panic!("an occupied destination must not commit App Data")
+        }).unwrap_err().contains("not overwritten"));
+        assert_eq!(registry.get(&old_name).unwrap(), old_command);
+        assert_eq!(registry.get(&new_name).unwrap().as_deref(), Some("another registration"));
     }
 
     #[test]

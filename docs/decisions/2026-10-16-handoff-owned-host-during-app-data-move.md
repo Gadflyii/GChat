@@ -20,7 +20,11 @@ title: "Hand off the owned Host during an App Data move"
   excluding the exact `ginfer/host/host.lock` file. Verify the copied Host UUID
   and certificate, save the new App Data configuration, then compare-and-switch
   discovery only while it still names the old desktop owner. Preserve a foreign
-  desktop or service registration. Release both roots before any restart.
+  desktop or service registration. On Windows, move this root's existing Gbot
+  sign-in entry under the same fence: verify the new entry before removing the
+  old one, then commit configuration and discovery. Restore both entries if any
+  part of that handoff fails. A disabled entry stays disabled, and an occupied
+  destination entry refuses the move. Release both roots before any restart.
 - **Consequences:** A precommit copy/configuration/registration failure keeps or
   restores the old selection and restarts the old Host only if this transaction
   stopped it. Rollback or recovery failures are explicit. Once committed, a Host

@@ -69,7 +69,7 @@ fn client() -> &'static Arc<Client> {
 
 // A bootstrap must read the selected root and attach under the same fence as a
 // Settings move. Otherwise a waiter could restart the old root after cutover.
-fn data_folder_access() -> &'static tokio::sync::RwLock<()> {
+pub(crate) fn data_folder_access() -> &'static tokio::sync::RwLock<()> {
     static ACCESS: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
     &ACCESS
 }
@@ -138,7 +138,14 @@ where
     S: Fn(ginfer_host::local_host::LocalHost) -> F,
     F: std::future::Future<Output = Result<(), String>>,
 {
+    // Windows startup registration hashes the exact saved path, not its
+    // canonical spelling. Keep it until the reversible cutover is complete.
+    let configured_current = current.to_path_buf();
     let (current, destination) = validate_data_folder_move(current, destination)?;
+    #[cfg(windows)]
+    let rollback_current = &configured_current;
+    #[cfg(not(windows))]
+    let rollback_current = &current;
     let old_local = relocation_desktop_host(&current, resources)?;
     let guard = client.prepare_local_relocation(&old_local.directory, &destination.join("ginfer/host")).await?;
     let was_running = guard.had_running_host();
@@ -149,7 +156,6 @@ where
             &[".uvx", ".npx", "openclaw"], &[old_local.directory.join("host.lock")])
             .map_err(|e| format!("Failed to copy App Data: {e}"))?;
         let updated = relocation_desktop_host(&destination, resources)?;
-        persist(&destination)?;
         Ok::<_, String>(updated)
     })();
     let updated = match prepared {
@@ -164,10 +170,19 @@ where
             return Err(error);
         }
     };
-    if let Err(error) = guard.commit(updated.clone()) {
-        if let Err(rollback) = persist(&current) {
-            return Err(format!("Host root handoff failed: {error}. Restoring App Data configuration also failed: {rollback}; restart GChat after checking Settings"));
-        }
+    let committed = crate::core::gbot::with_relocated_startup(
+        &configured_current, &destination, resources, || {
+            persist(&destination)?;
+            if let Err(error) = guard.commit(updated.clone()) {
+                if let Err(rollback) = persist(rollback_current) {
+                    return Err(format!("Host root handoff failed: {error}. Restoring App Data configuration also failed: {rollback}; restart GChat after checking Settings"));
+                }
+                return Err(error);
+            }
+            Ok(())
+        },
+    );
+    if let Err(error) = committed {
         if was_running {
             if let Err(recovery) = restart(old_local).await {
                 return Err(format!("{error}. App Data remains at {}; restarting its Host also failed: {recovery}", current.display()));
