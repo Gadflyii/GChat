@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { engineCommand, hardwareProfileBusy, type EngineHost, type EngineSnapshot, type EngineLaunchOptions } from '@/services/engines'
+import { engineCommand, hardwareProfileBusy, type EngineHost, type EngineSnapshot, type EngineLaunchOptions, type EngineStartupQuote } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { EngineHostSharing } from '@/containers/EngineHostSharing'
 import { EngineGbotControl } from '@/containers/EngineGbotControl'
@@ -18,6 +18,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [gpus, setGpus] = useState<string[]>([])
   const [context, setContext] = useState(0)
   const [concurrency, setConcurrency] = useState(1)
+  const [instanceCount, setInstanceCount] = useState(1)
+  const [startupQuote, setStartupQuote] = useState<{ key: string; result?: EngineStartupQuote; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const profiling = hardwareProfileBusy(snapshot?.hardware_profile)
   const [activeId, setActiveId] = useState('')
@@ -36,13 +38,24 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [editingSession, setEditingSession] = useState<string | null>(null)
   const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false })
   const selected = snapshot?.models.find((m) => m.id === modelId)
+  const configuration = { ...options, model_id: modelId, gpu_uuids: gpus, max_context: context, concurrency }
+  const quoteKey = JSON.stringify([host.host_id, host.base_url, host.certificate_sha256, error, snapshot?.boot_id, snapshot?.revision,
+    selected, snapshot?.gpus, snapshot?.hardware_profile, snapshot?.instances.map(instance => [instance.instance_id, instance.status, instance.configuration]),
+    configuration, instanceCount, editing])
+  const quoteRevision = useRef(0)
+  useEffect(() => {
+    quoteRevision.current++
+    setStartupQuote(null)
+  }, [quoteKey])
+  const currentQuote = startupQuote?.key === quoteKey ? startupQuote : null
   const invalidNumbers = !Number.isSafeInteger(context) || context < 1 ||
     !Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 8 ||
+    (!editing && (!Number.isInteger(instanceCount) || instanceCount < 1 || instanceCount > 4294967295)) ||
     [options.draft_tokens, options.draft_tp, options.prefill_chunk]
       .some((value) => !Number.isSafeInteger(value) || value < 0) ||
     (options.host_kv_cache_bytes !== null && (!Number.isSafeInteger(options.host_kv_cache_bytes) || options.host_kv_cache_bytes < 0)) ||
     (options.kv_arena_bytes !== null && (!Number.isSafeInteger(options.kv_arena_bytes) || options.kv_arena_bytes < 1))
-  const launchError = invalidNumbers ? 'Use whole numbers: positive context, 1–8 concurrent requests, and nonnegative advanced settings. GPU KV budget must be positive or blank.'
+  const launchError = invalidNumbers ? 'Use whole numbers: positive context and instance count, 1–8 concurrent requests, and nonnegative advanced settings. GPU KV budget must be positive or blank.'
     : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
       ? 'This artifact lacks NVFP4 KV calibration. Install a calibrated artifact or select INT8/BF16 KV.' : null
   const act = async (action: string, args: Record<string, unknown> = {}) => {
@@ -122,7 +135,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       {editingInstance && <p className="text-sm text-muted-foreground">Editing {hostInstanceLabel(editingInstance, snapshot)}. Apply below to save and reload.</p>}
       <h3 className="font-medium">Installed models</h3>
       {!!snapshot.inventory_errors?.length && <div role="alert" className="rounded border border-destructive/40 p-3 text-sm"><p className="font-medium">Some inventory paths could not be loaded</p>{snapshot.inventory_errors.map((item, index) => <p key={`${item.path}-${index}`} className="mt-1 break-all">{item.path}: {item.error}</p>)}<Button variant="outline" disabled={busy || !!error} onClick={() => void act('scan')}>Rescan models</Button></div>}
-      <p className="text-sm text-muted-foreground">Select a model and its GPU group. The engine verifies compatibility when loading. GPU selections are exclusive to this host service.</p>
+      <p className="text-sm text-muted-foreground">Select an installed model and its GPU group. Check startup settings to verify its artifact identity and memory requirements before loading.</p>
       <label className="block text-sm">Custom model<select className="mt-1 w-full rounded border bg-background p-2" value={modelId} onChange={(e) => {
         setModelId(e.target.value)
         const model = snapshot.models.find(m => m.id === e.target.value)
@@ -140,6 +153,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       <div className="flex flex-wrap gap-4">
         <label className="text-sm">Context tokens<Input type="number" min={1} value={context || ''} onChange={(e) => setContext(Number(e.target.value))} /></label>
         <label className="text-sm">Concurrent requests<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
+        {!editing && <label className="text-sm">Instances<Input type="number" min={1} max={4294967295} value={instanceCount} onChange={(e) => setInstanceCount(Number(e.target.value))} /></label>}
       </div>
       {snapshot.model_management?.engine_presets_available === false && <p className="text-sm text-muted-foreground">No qualified profiles are installed for these models. The controls below use custom launch settings. Reload drains this instance’s tracked requests before applying changes.</p>}
       <div className="flex flex-wrap gap-4">
@@ -157,10 +171,31 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Disable CUDA Graphs</label>
         </div>
       </details>
+      {!editing && <>
+        <p className="text-sm text-muted-foreground">The check does not load a model or reserve memory. For multiple instances, Automatic divides the remaining GPU KV memory equally. Startup checks the available memory again.</p>
+        <Button variant="outline" disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
+          const key = quoteKey
+          const revision = quoteRevision.current
+          setBusy(true); setStartupQuote(null)
+          void engineCommand<EngineStartupQuote>('quote', { host_id: host.host_id, body: { ...configuration, remaining_instances: instanceCount } })
+            .then(result => { if (quoteRevision.current === revision) setStartupQuote({ key, result }) })
+            .catch(error => { if (quoteRevision.current === revision) setStartupQuote({ key, error: String(error) }) })
+            .finally(() => setBusy(false))
+        }}>Check startup settings</Button>
+        {currentQuote?.result && <p role="status" className="text-sm">Verified artifact: {currentQuote.result.model_identity.model_id} / {currentQuote.result.model_identity.weights_id}. {currentQuote.result.instance_count} instance(s). {currentQuote.result.kv_arena_bytes === null ? 'Automatic KV; a solo startup must measure graph memory before sharing.' : `${currentQuote.result.kv_arena_bytes.toLocaleString()} bytes GPU KV per instance.`} This check did not start a model.</p>}
+        {currentQuote?.error && <p role="alert" className="text-sm text-destructive">{currentQuote.error}</p>}
+      </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
-        const configuration = { ...options, model_id: modelId, gpu_uuids: gpus, max_context: context, concurrency }
         if (editing && !window.confirm('Apply these model and launch settings? This restarts the selected instance after its current requests drain.')) return
-        void act(editing ? 'reload' : 'launch', editing ? { instance_id: editing, body: { configuration, expected_session_id: editingSession } } : { body: configuration })
+        if (editing) void act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })
+        else void (async () => {
+          for (let remaining = instanceCount; remaining > 0; remaining--) {
+            if (!await act('launch', { body: { ...configuration, remaining_instances: remaining } })) {
+              if (remaining < instanceCount) toast.warning(`${instanceCount - remaining} of ${instanceCount} instances started. Manage these instances separately.`)
+              break
+            }
+          }
+        })()
       }}>{editing ? 'Apply settings and reload' : 'Load model'}</Button>
         {editing && <Button variant="outline" onClick={() => { setEditing(null); setSettingsOpen(false) }}>Cancel editing</Button>}
       </div>

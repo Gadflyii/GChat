@@ -929,11 +929,14 @@ impl Client {
         let token = if passive { self.session_secret(&host).await? } else { self.authorize(&host).await? };
         let client = self.pinned_transport(&host).await?;
         // Worker leases stream for the worker lifetime. Placement waits for
-        // Engine quote/startup stages, each bounded by Host, and may first wait
-        // for another instance's startup; a single-stage client timeout can
-        // otherwise lose a successful placement's response.
+        // Engine quote/startup stages, each bounded by Host, and previews may
+        // first wait for another instance's startup; a single-stage client
+        // timeout can otherwise lose a successful response.
         let placement = method == reqwest::Method::POST
-            && matches!(path, "/host/v1/instances" | "/host/v1/profile-launch");
+            && matches!(
+                path,
+                "/host/v1/instances" | "/host/v1/profile-launch" | "/host/v1/startup-quote"
+            );
         let mut req = client
             .request(method, format!("{}{}", host.base_url, path))
             .bearer_auth(token);
@@ -1226,13 +1229,14 @@ impl Client {
                 serde_json::to_value(status).map_err(|error| error.to_string())
             }
             "gbot_grant" | "host_name" | "lan_sharing" | "remove_model" | "download" | "download_action"
-            | "profile_launch" | "launch" | "start" | "stop" | "restart" | "reload" | "scan" => {
+            | "profile_launch" | "launch" | "quote" | "start" | "stop" | "restart" | "reload" | "scan" => {
                 let id = argument_id(&args, "host_id")?;
                 let path = match action {
                     "gbot_grant" => "/host/v1/gbot/grant".into(),
                     "host_name" => "/host/v1/name".into(),
                     "lan_sharing" => "/host/v1/lan-sharing".into(),
                     "launch" => "/host/v1/instances".into(),
+                    "quote" => "/host/v1/startup-quote".into(),
                     "profile_launch" => "/host/v1/profile-launch".into(),
                     "scan" => "/host/v1/scan".into(),
                     "download" => "/host/v1/downloads".into(),

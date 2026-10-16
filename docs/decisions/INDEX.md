@@ -509,3 +509,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-16** — [Persist interrupted Studio run history](2026-10-16-persist-interrupted-studio-run-history.md)
 - **2026-10-16** — [Open secure storage only for explicit connections](2026-10-16-open-secure-storage-only-for-explicit-connections.md)
 - **2026-10-16** — [Renew idle Gbot setup after a proven desktop restart](2026-10-16-renew-idle-gbot-setup-after-proven-desktop-restart.md)
+- **2026-10-16** — [Quote installed models without a catalog](2026-10-16-quote-installed-models-without-a-catalog.md)

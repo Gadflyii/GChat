@@ -28,6 +28,17 @@ and [data-folder behavior](../../DEVELOP.md#custom-data-folder).
 
 ## Fresh startup quotes — October 15
 
+Installed and imported local models can use **Check startup settings** without
+a published catalog or download job. In Manager, choose **Start a model → Custom
+settings**; in GChat, open **Server details → Custom server settings**. Select the
+installed model, GPUs, context, concurrent requests and instance count, then
+check the settings. Host reopens the artifact metadata, validates its registered
+identity and asks the selected Engine runtime for a fresh quote with those exact
+options. Automatic KV sizing uses the same per-instance calculation as placement.
+The check displays the verified identity and KV budget or a clear error; it
+does not start or save an instance, reserve memory, or hash the entire model.
+Changing the form invalidates the displayed result. Actual Start quotes again.
+
 Merged source `16a338aff` addresses
 `GINFER-HOST-PROFILE-DEFAULT-STARTUP-20261015`. Single-instance starts on idle
 GPUs and saved-instance Start, Restart and Reload previously bypassed the
