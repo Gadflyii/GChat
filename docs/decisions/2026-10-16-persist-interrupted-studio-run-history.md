@@ -27,7 +27,7 @@ title: "Persist interrupted Studio run history"
   identities and keeps the verify-before-acting warning. A zero finish time
   means completion was not recorded; the history view labels progress as unknown
   rather than showing zero steps or a measured duration.
-- **Verification scope:** The pending model-free regression drops a scripted
+- **Verification scope:** The passing model-free regression drops a scripted
   invocation after a completed file read and an unapproved shell request, then
   reopens the same data with fresh application state. This targets invocation
   loss and durable-history discoverability; process-global live-monitor cleanup

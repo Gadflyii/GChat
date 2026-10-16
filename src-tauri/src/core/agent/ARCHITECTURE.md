@@ -158,8 +158,8 @@ external side effect was observed. Continue as new run creates fresh run and
 session identities. It does not replay execution, restore pending approvals or
 import interrupted session working state.
 
-The planned scripted regression covers invocation loss followed by fresh-state
-reopening and is pending verification. Native unexpected-process exit and
+The scripted regression passes for invocation loss followed by fresh-state
+reopening. Native unexpected-process exit and
 power-loss acceptance remain unqualified. See the
 [decision](../../../../docs/decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 

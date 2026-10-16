@@ -9,7 +9,7 @@ closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has separate Linux passes
 a correct eight-file task after compaction. The finished record also survives a
 normal app exit/restart. Active-worker cancellation, durable state and ordinary
 Studio reopening also pass after normal exit. Interrupted-run history now has a
-[bounded invocation-loss regression pending verification](#interrupted-studio-run-history--october-16);
+[passing bounded invocation-loss regression](#interrupted-studio-run-history--october-16);
 native unexpected-process exit and power-loss recovery remain unqualified.
 
 ## Native request capability errors — release scope
@@ -168,7 +168,9 @@ interrupted session working state are not restored automatically.
 The history view labels completion and progress as not recorded instead of
 presenting zero steps or a zero duration as measured results.
 
-The new model-free regression is pending verification. It drops the invocation
+The model-free invocation-loss regression passes. Library-only checking and
+strict Clippy, followed by full `make verify`, also pass at `2b7fae9a2`.
+The regression drops the invocation
 future after a completed file read and a pending, unapproved shell request, then
 reopens the same data with fresh application state. Its scope is invocation loss
 and durable-history discoverability. This same-process regression does not
