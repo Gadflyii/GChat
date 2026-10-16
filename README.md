@@ -120,6 +120,16 @@ Regular conversations stream through the same local engine used by the API and a
 GChat preserves reasoning content, supports image input on qualified model routes, renders tool
 activity, manages MCP connections, and provides artifact previews for generated HTML and code.
 
+The Linux release includes these client tools:
+
+- [MCP servers](docs/src/pages/docs/desktop/integrations/mcp-servers.mdx): trusted stdio and HTTP/SSE servers with static credentials.
+- Web search and page fetching from Chat and saved Standard Agents.
+- [Local file search](docs/src/pages/docs/desktop/file-upload.mdx): direct PDF, DOCX and spreadsheet reads, filename globbing and raw-text grep.
+
+OAuth MCP and semantic indexed RAG are post-release. Inference-server hosted tools return
+explicit unsupported-capability errors. See the [runtime guide](docs/agent-runtime/README.md#client-tools-and-native-request-capability-errors--release-scope)
+for the Linux qualifications and their limits.
+
 ## Agent workflows
 
 The in-process agent is a separate bounded execution route with a grammar-constrained tool
