@@ -123,6 +123,51 @@ function submit(app) {
   return form
 }
 
+test('Host Stop requires the local desktop capability and confirms the terminal action', async (t) => {
+  const view = fixture()
+  view.hosts[1].snapshot.can_stop_host = true
+  const app = await manager(t, view, request => {
+    assert.deepEqual(request, { action: 'host', host_id: localId, operation: 'stop_host', args: {} })
+    return { stopping: true }
+  })
+  assert.equal([...app.document.querySelectorAll('button')].some(item => item.textContent === 'Stop Host and Quit'), false)
+  const enabled = structuredClone(view)
+  enabled.hosts[0].snapshot.can_stop_host = true
+  await app.publish(enabled)
+  button(app.document, 'Stop Host and Quit').click()
+  assert.match(app.document.querySelector('[role="dialog"]').textContent, /wait for setup work to finish/)
+  assert.deepEqual(requests(app), [], 'opening the confirmation must not stop anything')
+  button(app.document.querySelector('[role="dialog"]'), 'Cancel').click()
+  assert.deepEqual(requests(app), [], 'Cancel preserves the Host')
+  button(app.document, 'Stop Host and Quit').click()
+  submit(app)
+  await completed(app, entries => entries.length === 1)
+  const remote = [...app.document.querySelectorAll('.host-button')].find(item => item.textContent.includes('GPU server'))
+  remote.click()
+  assert.equal([...app.document.querySelectorAll('button')].some(item => item.textContent === 'Stop Host and Quit'), false,
+    'a remote capability must never expose local Host shutdown')
+})
+
+test('busy Host Stop leaves Manager open and reports the refusal', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.can_stop_host = true
+  const app = await manager(t, view, request => {
+    assert.equal(request.operation, 'stop_host')
+    throw new Error('409 Host is busy: stop models and wait for hardware profiling')
+  })
+  button(app.document, 'Stop Host and Quit').click()
+  submit(app)
+  await waitFor(() => app.document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes('Host is busy'),
+    'the authoritative busy error must stay visible')
+  assert.equal(requests(app).length, 1)
+  assert.equal(button(app.document.querySelector('[role="dialog"]'), 'Stop Host and Quit').disabled, false,
+    'busy is retryable after the user stops the models')
+  assert.equal(app.calls.filter(call => call.command === 'manager_snapshot').length, 1,
+    'a busy Stop must not trigger a fleet-conflict refresh')
+  assert.ok(app.document.querySelector('main'), 'Manager remains open after refusal')
+  assert.equal(view.hosts[0].snapshot.instances[0].status, 'ready', 'Stop Host must not unload a running model')
+})
+
 test('a saved remote host connects only after the explicit Connect action', async (t) => {
   const view = fixture()
   const remoteSnapshot = view.hosts[1].snapshot

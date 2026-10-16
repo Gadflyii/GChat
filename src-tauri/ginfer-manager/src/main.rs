@@ -202,6 +202,7 @@ enum ManagerRequest {
 #[serde(rename_all = "snake_case")]
 enum HostOperation {
     Snapshot,
+    StopHost,
     Scan,
     HardwareProfile,
     FirstRun,
@@ -267,6 +268,24 @@ impl ManagerState {
     }
 
     async fn execute(&self, request: ManagerRequest) -> Result<Value, String> {
+        // Stop must use the owner already attached by this client. Initializing or
+        // rediscovering here could launch a Host or select a different install.
+        if let ManagerRequest::Host {
+            host_id,
+            operation: HostOperation::StopHost,
+            ..
+        } = &request
+        {
+            return if self
+                .client
+                .stop_selected_local_host_if_idle(Some(*host_id))
+                .await?
+            {
+                Ok(json!({"stopping":true}))
+            } else {
+                Err("No owned desktop Host is attached".into())
+            };
+        }
         if let ManagerRequest::SecureStorage {
             operation,
             passphrase,
@@ -313,6 +332,7 @@ impl ManagerState {
             } => {
                 // Keep inference and credentials outside the Manager UI.
                 let (method, path) = match operation {
+                    HostOperation::StopHost => unreachable!(),
                     HostOperation::Snapshot => {
                         return self.client.connect(host_id).await.map_err(String::from)
                     }
@@ -437,7 +457,18 @@ async fn manager_request(
     app: tauri::AppHandle,
     request: ManagerRequest,
 ) -> Result<ManagerResponse, String> {
+    let stop_host = matches!(
+        &request,
+        ManagerRequest::Host { operation: HostOperation::StopHost, .. }
+    );
     let result = app.state::<ManagerState>().execute(request).await?;
+    if stop_host {
+        // Do not publish/list after Stop: this terminal action must not bootstrap
+        // the local Host again while the application is exiting.
+        let view = app.state::<ManagerState>().view.lock().await.clone();
+        app.exit(0);
+        return Ok(ManagerResponse { result, view });
+    }
     // Keep tray state and visible controls on the same host-owned account.
     let view = match publish(&app).await {
         Ok(view) => view,
@@ -635,6 +666,26 @@ fn main() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("GInfer Server Manager desktop runtime");
+        .build(tauri::generate_context!())
+        .expect("GInfer Server Manager desktop runtime")
+        .run(|app, event| {
+            #[cfg(not(windows))]
+            let _ = (app, event);
+            #[cfg(windows)]
+            if let tauri::RunEvent::Exit = event {
+                let client = app.state::<ManagerState>().client.clone();
+                tauri::async_runtime::block_on(async {
+                    match tokio::time::timeout(
+                        std::time::Duration::from_secs(8),
+                        client.stop_selected_local_host_if_idle(None),
+                    )
+                    .await
+                    {
+                        Ok(Ok(_)) => {}
+                        Ok(Err(error)) => eprintln!("Manager Host normal Stop was not confirmed: {error}"),
+                        Err(_) => eprintln!("Manager Host idle-stop timed out; no forced stop"),
+                    }
+                });
+            }
+        });
 }

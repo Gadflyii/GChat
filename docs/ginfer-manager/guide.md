@@ -1,8 +1,10 @@
 # GInfer Server Manager
 
 GInfer Server Manager controls this computer's GInfer host and hosts paired over
-the LAN. It runs independently of GChat. Closing or exiting Manager leaves hosts
-and their loaded models running; use **Stop** on an instance to unload its model.
+the LAN. It runs independently of GChat. On Windows, exiting Manager requests a
+normal Stop of its own idle desktop Host. A Host with loaded models, downloads or setup work
+stays running; use **Stop** on an instance to unload its model first. Linux and
+service-owned Hosts keep their existing lifetime.
 
 ## Open the application
 
@@ -29,7 +31,10 @@ Linux requires an X11 desktop and the Tauri GTK/WebKit runtime libraries. The
 window stays visible when the desktop has no supported tray. Windows requires
 Microsoft Edge WebView2 Runtime and uses the
 system tray; closing its window hides it there. **Open Server Manager** restores
-the window, and **Exit Manager** exits only this application. `--window` opens
+the window, and **Exit Manager** exits the application and requests an idle Stop
+of its own desktop Host. **Stop Host and Quit** explicitly requests the same Stop
+and keeps Manager open if the Host is busy. It appears only for a local Windows
+desktop Host that supports this control. `--window` opens
 the window explicitly; `--no-tray` uses a window without a tray.
 
 ## Pair and share
