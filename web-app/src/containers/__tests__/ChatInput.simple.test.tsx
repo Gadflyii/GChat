@@ -16,6 +16,9 @@ import { useInitialMessage } from '@/hooks/useInitialMessage'
 import { createDocumentAttachment } from '@/types/attachment'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import type { CapabilityTool } from '@/services/capabilities/types'
+import { fs } from '@gchat/core'
+import { useAttachments } from '@/hooks/useAttachments'
+import { useAttachmentIngestionPrompt } from '@/hooks/useAttachmentIngestionPrompt'
 
 const webTools: CapabilityTool[] = [
   { name: 'native_search', identity: 'os.web.search', origin: 'native', server: 'GChat', description: 'Search the web', inputSchema: {} },
@@ -162,7 +165,7 @@ describe('ChatInput', () => {
     useChatAttachments.setState({ attachmentsByThread: {} })
     useThreads.setState({ threads: {}, currentThreadId: undefined })
     useInitialMessage.setState({ byThread: {} })
-    useAppState.setState({ tools: [] })
+    useAppState.setState({ tools: [], activeModels: [] })
     useToolAvailable.setState({ disabledTools: {}, defaultDisabledTools: [], defaultsInitialized: false })
     agentDefinitions.value = []
     agentDefinitions.loading = false
@@ -210,6 +213,78 @@ describe('ChatInput', () => {
     expect(useInitialMessage.getState().consume(threadId)).toMatchObject({ text: 'Review the attached spreadsheet', agentDefinitionId: 'reviewer', documents: [workbookAttachment] })
     expect(ingestFileAttachment).not.toHaveBeenCalled()
     expect(parseDocumentMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { change: 'catalog arrives and reader is re-enabled', initiallyReady: false, initiallyDisabled: true, ready: true, disabled: false, nativeReference: true },
+    { change: 'reader disappears', initiallyReady: true, initiallyDisabled: false, ready: false, disabled: false, nativeReference: false },
+    { change: 'reader is disabled', initiallyReady: true, initiallyDisabled: false, ready: true, disabled: true, nativeReference: false },
+    { change: 'catalog arrives while reader stays disabled', initiallyReady: false, initiallyDisabled: true, ready: true, disabled: true, nativeReference: false },
+  ])('uses current document access when $change during the picker', async ({ initiallyReady, initiallyDisabled, ready, disabled, nativeReference }) => {
+    const threadId = 'attachment-thread'
+    const reader: CapabilityTool = {
+      name: 'os_fs_read_document', identity: 'os.fs.read_document', origin: 'native',
+      server: 'gchat-native', description: 'Read a document', inputSchema: {},
+    }
+    const readerKey = `${reader.server}::${reader.name}`
+    let finishPicker!: (paths: string[]) => void
+    const open = vi.fn(() => new Promise<string[]>((resolve) => { finishPicker = resolve }))
+    const parseDocument = vi.fn().mockResolvedValue('Selected file text')
+    const ingestFileAttachment = vi.fn()
+    const getTokensCount = vi.fn().mockResolvedValue(16)
+    seedServiceHub({
+      dialog: { open } as never,
+      rag: { parseDocument } as never,
+      uploads: { ingestFileAttachment } as never,
+      models: { getTokensCount } as never,
+    })
+    useThreads.setState({ currentThreadId: threadId })
+    useAttachments.setState({ enabled: true, parseMode: 'auto', maxFileSizeMB: 20 })
+    useAppState.setState({ tools: initiallyReady ? [reader] : [], activeModels: ['test-model'] })
+    useToolAvailable.setState({
+      defaultDisabledTools: [readerKey],
+      disabledTools: { [threadId]: initiallyDisabled ? [readerKey] : [] },
+    })
+    useModelProvider.setState((state) => ({ selectedModel: {
+      ...state.selectedModel!, capabilities: ['tools'],
+      settings: { ctx_len: {
+        key: 'ctx_len', title: 'Context length', description: 'Model context limit',
+        controller_type: 'input', controller_props: { value: 4096 },
+      } },
+    } }))
+    const fileStat = vi.spyOn(fs, 'fileStat').mockResolvedValue(undefined)
+    const showPrompt = vi.spyOn(useAttachmentIngestionPrompt.getState(), 'showPrompt')
+    try {
+      const { container } = render(<ChatInput />)
+      fireEvent.keyDown(container.querySelector('button[aria-haspopup="menu"]')!, { key: 'ArrowDown' })
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Add documents or files' }))
+      await waitFor(() => expect(open).toHaveBeenCalledOnce())
+      act(() => {
+        useAppState.setState({ tools: ready ? [reader] : [] })
+        useToolAvailable.setState({ disabledTools: { [threadId]: disabled ? [readerKey] : [] } })
+      })
+      await act(async () => { finishPicker(['/documents/short.pdf']) })
+      await waitFor(() => expect(useChatAttachments.getState().getAttachments(threadId)).toHaveLength(1))
+      const attachment = useChatAttachments.getState().getAttachments(threadId)[0]
+      expect(attachment).toMatchObject({ path: '/documents/short.pdf', parseMode: 'auto' })
+      if (nativeReference) {
+        expect(attachment.processed).toBeUndefined()
+        expect(attachment.inlineContent).toBeUndefined()
+        expect(attachment.injectionMode).toBeUndefined()
+        expect(parseDocument).not.toHaveBeenCalled()
+        expect(getTokensCount).not.toHaveBeenCalled()
+      } else {
+        await waitFor(() => expect(useChatAttachments.getState().getAttachments(threadId)[0]).toMatchObject({
+          processed: true, injectionMode: 'inline', inlineContent: 'Selected file text',
+        }))
+        expect(parseDocument).toHaveBeenCalledWith('/documents/short.pdf', 'pdf')
+      }
+      expect(showPrompt).not.toHaveBeenCalled()
+      expect(ingestFileAttachment).not.toHaveBeenCalled()
+    } finally {
+      fileStat.mockRestore()
+      showPrompt.mockRestore()
+    }
   })
 
   it('renders the production input with its translated placeholder', () => {
