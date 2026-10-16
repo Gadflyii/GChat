@@ -350,6 +350,38 @@ impl ControlRecovery<'_> {
     }
 }
 
+/// Hold the exact ownership/operation fence through saved-setup session renewal.
+#[cfg(target_os = "linux")]
+pub(crate) struct SetupSessionRenewal<'a> {
+    service: &'a Service,
+    state: OwnedMutexGuard<RuntimeState>,
+    previous: SessionIdentity,
+}
+
+#[cfg(target_os = "linux")]
+impl SetupSessionRenewal<'_> {
+    pub(crate) async fn commit(self, hello: GuestHello) -> Result<(), ServiceError> {
+        let identity = hello.identity;
+        if identity.workspace_id != self.previous.workspace_id
+            || identity.session_id == self.previous.session_id
+        {
+            return Err(ServiceError::SessionMismatch);
+        }
+        hello.validate(&identity).map_err(ServiceError::Contract)?;
+        let mut next = self.state.durable.clone();
+        if let Some(control) = next
+            .controls
+            .iter_mut()
+            .find(|control| control.identity.workspace_id == self.previous.workspace_id)
+        {
+            control.identity = identity;
+        }
+        let mut state = self.service.commit(self.state, next).await?;
+        state.sessions.insert(identity.workspace_id, hello);
+        Ok(())
+    }
+}
+
 pub(crate) struct OwnedWorkspaceRemoval<'a> {
     service: &'a Service,
     state: OwnedMutexGuard<RuntimeState>,
@@ -836,6 +868,51 @@ impl Service {
             service: self,
             state,
             id,
+        })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn begin_setup_session_renewal(
+        &self,
+        previous: SessionIdentity,
+    ) -> Result<SetupSessionRenewal<'_>, ServiceError> {
+        let mut state = self.state.clone().lock_owned().await;
+        if !state
+            .durable
+            .workspaces
+            .iter()
+            .any(|workspace| workspace.id == previous.workspace_id)
+        {
+            return Err(ServiceError::WorkspaceNotFound);
+        }
+        if state
+            .sessions
+            .get(&previous.workspace_id)
+            .is_some_and(|hello| hello.identity != previous)
+            || state.durable.controls.iter().any(|control| {
+                control.identity.workspace_id == previous.workspace_id
+                    && (control.identity != previous
+                        || control.state != SessionControlState::Bot
+                        || control.owner.is_some())
+            })
+        {
+            return Err(ServiceError::ControlOwner);
+        }
+        if state.durable.operations.iter().any(|operation| {
+            operation.identity.workspace_id == previous.workspace_id
+                && matches!(
+                    operation.state,
+                    OperationState::InFlight | OperationState::NeedsReview { .. }
+                )
+        }) {
+            return Err(ServiceError::OperationState);
+        }
+        // No dispatch may keep using the old hello, even if saving/reconnecting fails.
+        state.sessions.remove(&previous.workspace_id);
+        Ok(SetupSessionRenewal {
+            service: self,
+            state,
+            previous,
         })
     }
 
@@ -1382,6 +1459,160 @@ mod tests {
             .find(|record| record.id == id)
             .unwrap()
             .state
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn setup_session_renewal_preserves_completed_history_and_exact_bot_owner() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = Service::open(directory.path().join("state.json"))
+            .await
+            .unwrap();
+        let config = workspace();
+        let identity = SessionIdentity {
+            workspace_id: config.id,
+            session_id: SessionId::new(),
+        };
+        service.register_workspace(config.clone()).await.unwrap();
+        service
+            .register_session(identity, hello(identity))
+            .await
+            .unwrap();
+        let request = exec(identity);
+        service.begin_operation(&request).await.unwrap();
+        service
+            .finish_operation(
+                request.operation_id,
+                identity,
+                OperationCompletion::Completed,
+            )
+            .await
+            .unwrap();
+        service
+            .state
+            .lock()
+            .await
+            .durable
+            .controls
+            .push(SessionControl {
+                identity,
+                owner: None,
+                state: SessionControlState::Bot,
+            });
+        let before = service.snapshot().await;
+        let replacement = SessionIdentity {
+            session_id: SessionId::new(),
+            ..identity
+        };
+        let renewal = service.begin_setup_session_renewal(identity).await.unwrap();
+        // The state lock fences a competing operation while the new setup is saved/verified.
+        assert!(service.state.try_lock().is_err());
+        renewal.commit(hello(replacement)).await.unwrap();
+        let after = service.snapshot().await;
+        assert_eq!(after.workspaces, before.workspaces);
+        assert_eq!(after.operations, before.operations);
+        assert_eq!(after.assignments, before.assignments);
+        assert_eq!(
+            after.controls,
+            vec![SessionControl {
+                identity: replacement,
+                owner: None,
+                state: SessionControlState::Bot,
+            }]
+        );
+        assert_eq!(
+            service.state.lock().await.sessions[&config.id].identity,
+            replacement
+        );
+        assert_eq!(
+            service.begin_operation(&exec(identity)).await,
+            Err(ServiceError::SessionMismatch)
+        );
+    }
+
+    #[tokio::test]
+    #[cfg(target_os = "linux")]
+    async fn setup_session_renewal_refuses_human_paused_foreign_and_unresolved_state() {
+        for control in [
+            SessionControlState::Human,
+            SessionControlState::Pausing,
+            SessionControlState::Paused,
+            SessionControlState::Bot,
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let service = Service::open(directory.path().join("state.json"))
+                .await
+                .unwrap();
+            let config = workspace();
+            let identity = SessionIdentity {
+                workspace_id: config.id,
+                session_id: SessionId::new(),
+            };
+            service.register_workspace(config).await.unwrap();
+            service
+                .register_session(identity, hello(identity))
+                .await
+                .unwrap();
+            service
+                .state
+                .lock()
+                .await
+                .durable
+                .controls
+                .push(SessionControl {
+                    identity,
+                    owner: Some(Uuid::new_v4()),
+                    state: control,
+                });
+            let before = service.snapshot().await;
+            assert!(matches!(
+                service.begin_setup_session_renewal(identity).await,
+                Err(ServiceError::ControlOwner)
+            ));
+            assert_eq!(service.snapshot().await, before);
+            assert_eq!(
+                service.state.lock().await.sessions[&identity.workspace_id].identity,
+                identity
+            );
+        }
+        for operation_state in [
+            OperationState::InFlight,
+            OperationState::NeedsReview {
+                reason: ReviewReason::OutcomeUnknown,
+            },
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let service = Service::open(directory.path().join("state.json"))
+                .await
+                .unwrap();
+            let config = workspace();
+            let identity = SessionIdentity {
+                workspace_id: config.id,
+                session_id: SessionId::new(),
+            };
+            service.register_workspace(config).await.unwrap();
+            service
+                .register_session(identity, hello(identity))
+                .await
+                .unwrap();
+            let request = exec(identity);
+            service.begin_operation(&request).await.unwrap();
+            service.state.lock().await.durable.operations[0].state = operation_state;
+            let before = service.snapshot().await;
+            assert!(matches!(
+                service.begin_setup_session_renewal(identity).await,
+                Err(ServiceError::OperationState)
+            ));
+            assert_eq!(service.snapshot().await, before);
+            let wrong = SessionIdentity {
+                session_id: SessionId::new(),
+                ..identity
+            };
+            assert!(matches!(
+                service.begin_setup_session_renewal(wrong).await,
+                Err(ServiceError::ControlOwner)
+            ));
+        }
     }
 
     #[tokio::test]

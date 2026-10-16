@@ -78,6 +78,12 @@ pub enum SshError {
     Protocol,
     Closed,
     CleanupUnproven,
+    /// Authenticated read-only proof that this guest desktop outlived its binding.
+    DesktopRestarted {
+        saved_invocation_id: uuid::Uuid,
+        current_invocation_id: uuid::Uuid,
+        display: u16,
+    },
     /// Some request bytes may have reached the guest. Reconcile, never replay.
     UncertainOutcome {
         operation_id: OperationId,
@@ -103,6 +109,9 @@ impl fmt::Display for SshError {
             Self::Protocol => f.write_str("Guest transport did not return the expected protocol message"),
             Self::Closed => f.write_str("Guest SSH connection is closed"),
             Self::CleanupUnproven => f.write_str("Guest SSH transport cleanup could not be confirmed"),
+            Self::DesktopRestarted { saved_invocation_id, current_invocation_id, display } => write!(f,
+                "Guest desktop restarted on :{display} (saved invocation {}, current invocation {})",
+                saved_invocation_id.simple(), current_invocation_id.simple()),
             Self::UncertainOutcome { .. } => f.write_str("Guest operation outcome is unknown; inspect its operation identity before retrying"),
         }
     }
@@ -762,6 +771,17 @@ impl SshSession {
     pub async fn request(&self, request: GuestRequest) -> Result<GuestReply, SshError> {
         request.validate(&self.hello)?;
         self.guest_request(&request).await
+    }
+
+    /// Revalidate a cached session before setup creates any durable operation.
+    pub(crate) async fn check_session(&self) -> Result<(), SshError> {
+        let client = self.client()?;
+        tokio::time::timeout(
+            self.policy.connect_timeout,
+            guest::check_session(&client, self.hello.identity),
+        )
+        .await
+        .map_err(|_| SshError::TimedOut)?
     }
 
     pub async fn ping(&self) -> Result<(), SshError> {

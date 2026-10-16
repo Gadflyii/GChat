@@ -334,11 +334,16 @@ impl Api {
         root: std::path::PathBuf,
         processes: ExecutorProcesses,
     ) -> Result<Self, ApiError> {
-        self.tasks = Some(Arc::new(
+        let tasks = Arc::new(
             TaskRunner::new(root, self.runtime.clone(), processes)
                 .await
                 .map_err(ApiError::Tasks)?,
-        ));
+        );
+        #[cfg(target_os = "linux")]
+        self.runtime
+            .configure_task_runner(Arc::downgrade(&tasks))
+            .map_err(ApiError::Workspace)?;
+        self.tasks = Some(tasks);
         Ok(self)
     }
 
@@ -359,6 +364,11 @@ impl Api {
         self,
         shutdown: impl Future<Output = ()> + Send + 'static,
     ) -> Result<(), ApiError> {
+        // Load and register persisted tasks before automatic saved-VM recovery.
+        #[cfg(target_os = "linux")]
+        if let Some(setup) = self.runtime.kvm_setup() {
+            setup.resume_saved().await.map_err(ApiError::Setup)?;
+        }
         let (explicit_stop, mut explicit_stopped) = tokio::sync::watch::channel(false);
         let service = self.service;
         let token = self.token;

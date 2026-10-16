@@ -106,6 +106,8 @@ struct Guest {
     echo_address: SocketAddr,
     desktop_claim: Mutex<Option<OperationId>>,
     stale: std::sync::atomic::AtomicBool,
+    desktop_binding: Mutex<Option<(u32, Vec<u8>)>>,
+    desktop_binding_checks: Mutex<Vec<String>>,
     wrong_version: std::sync::atomic::AtomicBool,
     cua_active: std::sync::atomic::AtomicBool,
     reject_start: std::sync::atomic::AtomicBool,
@@ -448,6 +450,22 @@ impl server::Handler for Peer {
             return session.close(channel);
         }
         let command = std::str::from_utf8(data).unwrap();
+        if command.starts_with("( set -eu; # GBOT-DESKTOP-BINDING-1\n") {
+            self.guest
+                .desktop_binding_checks
+                .lock()
+                .unwrap()
+                .push(command.into());
+            let reply = self.guest.desktop_binding.lock().unwrap().clone();
+            let Some((code, bytes)) = reply else {
+                return session.channel_failure(channel);
+            };
+            session.channel_success(channel)?;
+            session.data(channel, bytes)?;
+            session.exit_status_request(channel, code)?;
+            session.eof(channel)?;
+            return session.close(channel);
+        }
         if command.starts_with("( set -eu;") {
             self.buffers.insert(
                 channel,
@@ -1091,6 +1109,8 @@ impl Fixture {
             echo_address: media.unwrap_or(echo_address),
             desktop_claim: Mutex::new(None),
             stale: std::sync::atomic::AtomicBool::new(false),
+            desktop_binding: Mutex::default(),
+            desktop_binding_checks: Mutex::default(),
             wrong_version: std::sync::atomic::AtomicBool::new(false),
             cua_active: std::sync::atomic::AtomicBool::new(false),
             reject_start: std::sync::atomic::AtomicBool::new(false),
@@ -1769,6 +1789,110 @@ async fn hand_back_recovers_paused_control_while_setup_is_incomplete() {
     })
     .await
     .expect("bounded paused setup hand-back case timed out");
+}
+
+#[tokio::test]
+async fn stale_desktop_requires_authenticated_active_distinct_binding_proof() {
+    timeout(Duration::from_secs(20), async {
+        let fixture = Fixture::new().await;
+        let saved = "11111111111111111111111111111111";
+        let current = "22222222222222222222222222222222";
+        let proof = |saved: &str, current: &str, display: &str, state: &str| {
+            format!("GBOT-DESKTOP-BINDING-1\n{saved}\n{current}\n{display}\n{state}\n").into_bytes()
+        };
+        *fixture.guest.desktop_binding.lock().unwrap() =
+            Some((0, proof(saved, current, ":1", "active")));
+        let session = fixture.connect().await;
+        // The diagnostic cannot replace a successful guest hello.
+        assert!(fixture
+            .guest
+            .desktop_binding_checks
+            .lock()
+            .unwrap()
+            .is_empty());
+        fixture
+            .guest
+            .stale
+            .store(true, std::sync::atomic::Ordering::Release);
+        let request = || {
+            fixture.request(GuestOperationKind::Read {
+                path: GuestPath(
+                    fixture
+                        .directory
+                        .path()
+                        .join("not-dispatched")
+                        .display()
+                        .to_string(),
+                ),
+                offset: 0,
+                length: 32,
+            })
+        };
+        assert_eq!(
+            session.request(request()).await,
+            Err(SshError::DesktopRestarted {
+                saved_invocation_id: Uuid::parse_str(saved).unwrap(),
+                current_invocation_id: Uuid::parse_str(current).unwrap(),
+                display: 1,
+            })
+        );
+        // A new SSH connection also refuses the old identity; proof grants no
+        // operation capability and never rewrites the guest-owned binding.
+        assert!(matches!(
+            SshSession::connect(
+                &fixture.connection,
+                fixture.guest.hello.identity,
+                fixture.vault.as_ref(),
+                policy(),
+            )
+            .await,
+            Err(SshError::DesktopRestarted { .. })
+        ));
+        let invalid = [
+            None,
+            Some((69, proof(saved, current, ":1", "active"))),
+            Some((0, proof(saved, saved, ":1", "active"))),
+            Some((0, proof("not-an-invocation", current, ":1", "active"))),
+            Some((
+                0,
+                proof("00000000000000000000000000000000", current, ":1", "active"),
+            )),
+            Some((0, proof(saved, current, ":1; command", "active"))),
+            Some((0, proof(saved, current, ":65536", "active"))),
+            Some((0, proof(saved, current, ":1", "inactive"))),
+            Some((
+                0,
+                [
+                    proof(saved, current, ":1", "active"),
+                    b"unexpected\n".to_vec(),
+                ]
+                .concat(),
+            )),
+            Some((0, vec![b'x'; 129])),
+        ];
+        for reply in invalid {
+            *fixture.guest.desktop_binding.lock().unwrap() = reply;
+            assert_eq!(
+                session.request(request()).await,
+                Err(SshError::Contract(ContractError::SessionMismatch))
+            );
+        }
+        assert!(fixture.guest.dispatches.lock().unwrap().is_empty());
+        assert!(fixture.guest.states.lock().unwrap().is_empty());
+        assert!(!fixture.directory.path().join("not-dispatched").exists());
+        for command in fixture.guest.desktop_binding_checks.lock().unwrap().iter() {
+            assert!(command.contains(&format!(
+                "$HOME/.local/state/gbot/{}/{}/desktop",
+                fixture.guest.hello.identity.workspace_id.as_uuid(),
+                fixture.guest.hello.identity.session_id.as_uuid(),
+            )));
+            assert!(!command.contains("source "));
+        }
+        session.close().await.unwrap();
+        fixture.shutdown().await;
+    })
+    .await
+    .expect("bounded stale desktop proof test timed out");
 }
 
 #[tokio::test]
