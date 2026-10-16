@@ -48,6 +48,12 @@ export type EngineHardwareProfile = {
   reprofile: boolean
   started_unix_ms: number | null
   finished_unix_ms: number | null
+  phase?: 'preparing' | 'gpu_experts' | 'cpu_experts' | 'publishing' | null
+  phase_detail?: string | null
+  elapsed_ms?: number | null
+  expected_duration_ms?: number | null
+  remaining_ms?: number | null
+  duration_source?: 'measured_history' | null
   profile_path: string
   gpu_uuids: string[]
   engine_path: string | null

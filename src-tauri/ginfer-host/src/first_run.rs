@@ -14,6 +14,8 @@ use uuid::Uuid;
 pub struct Progress {
     pub gpu_uuids: Vec<String>,
     pub storage_accepted: bool,
+    pub requested_storage: Option<PathBuf>,
+    pub storage_error: Option<String>,
     pub releases: Vec<Release>,
     pub catalog_loaded: bool,
     pub catalog_error: Option<String>,
@@ -49,6 +51,9 @@ fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str
         return "storage";
     }
     if progress.download_ids.is_empty() && progress.selected_release_ids.is_empty() {
+        return "models";
+    }
+    if progress.download_ids.is_empty() && progress.download_error.is_some() {
         return "models";
     }
     if progress.selected_release_ids.iter().any(|sha| {
@@ -126,7 +131,7 @@ fn recommendations(
                 && release.bytes <= ram.saturating_add(vram.saturating_mul(release.tp.into()))
                 && release.bytes <= free);
         let reason = match capacity {
-            None => "Saved profile has no usable RAM/VRAM capacity; Engine fit must be checked",
+            None => "Hardware profiling must finish before checking memory and disk capacity",
             Some((vram, _)) if vram / (1024 * 1024) < release.min_vram_mib_per_gpu => "Below the published per-GPU VRAM requirement",
             _ if release.bytes > free => "Not enough live free space in the selected folder",
             _ if !fits => "Package exceeds saved usable RAM plus VRAM capacity",
@@ -163,15 +168,19 @@ impl Host {
             crate::hardware_profile::group_profile_path(&self.directory, &progress.gpu_uuids);
         let bytes = tokio::fs::read(path).await.ok()?;
         let profile: Value = serde_json::from_slice(&bytes).ok()?;
-        if profile["schema_version"] != 2 {
+        if profile["schema_version"] != 2
+            || measured_capacity(&profile, &progress.gpu_uuids).is_none()
+        {
             return None;
         }
         let processes = self.processes.lock().await;
         let job = processes.hardware_profile.as_ref()?;
-        if job.status(None).stale_groups.iter().any(|group| {
-            crate::hardware_profile::group_key(&group.gpu_uuids)
-                == crate::hardware_profile::group_key(&progress.gpu_uuids)
-        }) {
+        if job.busy()
+            || job.status(None).stale_groups.iter().any(|group| {
+                crate::hardware_profile::group_key(&group.gpu_uuids)
+                    == crate::hardware_profile::group_key(&progress.gpu_uuids)
+            })
+        {
             return None;
         }
         Some(profile)
@@ -201,9 +210,13 @@ impl Host {
             .cloned()
             .collect();
         let root = self.downloads.root();
-        let free = crate::model_downloads::available_bytes(root.clone())
-            .await
-            .ok();
+        let free = if profile.is_some() {
+            crate::model_downloads::available_bytes(root.clone())
+                .await
+                .ok()
+        } else {
+            None
+        };
         let models = recommendations(
             &progress.releases,
             &self.gpus,
@@ -227,6 +240,7 @@ impl Host {
             .min()
             .unwrap_or(0);
         let mut storage = json!({"path":root,"available_bytes":free,"existing_models_preserved":true,
+            "requested_path":progress.requested_storage,"accepted":progress.storage_accepted,
             "existing_downloads":jobs.iter().filter(|j|j.status=="installed" && j.storage_root!=root).collect::<Vec<_>>()});
         if let Some(profile) = &profile {
             match crate::model_storage::recommend_storage(profile, &root, required).await {
@@ -236,6 +250,9 @@ impl Host {
                 }
                 Err(error) => storage["error"] = error.into(),
             }
+        }
+        if let Some(error) = &progress.storage_error {
+            storage["error"] = json!(error);
         }
         let hardware = {
             let processes = self.processes.lock().await;
@@ -254,7 +271,7 @@ impl Host {
         Ok(
             json!({"step":stage(&progress,profile.is_some(),&jobs),"gpu_uuids":progress.gpu_uuids,
             "hardware_profile":hardware.map(|h|json!(h)).unwrap_or_else(||json!({"status":"unavailable","error":"Hardware profiling is not configured"})),
-            "storage":storage,"models":models,"catalog_loaded":progress.catalog_loaded,"error":progress.download_error.or(progress.catalog_error),
+            "storage":storage,"models":models,"selected_release_ids":progress.selected_release_ids,"catalog_loaded":progress.catalog_loaded,"error":progress.download_error.or(progress.catalog_error),
             "selected_downloads":selected,"startup_profiles":startup}),
         )
     }
@@ -293,10 +310,7 @@ impl Host {
                 let selected: Vec<String> =
                     serde_json::from_value(body["gpu_uuids"].clone()).map_err(|e| e.to_string())?;
                 validate_group(&self.gpus, &selected)?;
-                if progress.gpu_uuids != selected
-                    && (!progress.download_ids.is_empty()
-                        || !progress.selected_release_ids.is_empty())
-                {
+                if progress.gpu_uuids != selected && !progress.download_ids.is_empty() {
                     return Err("Finish the current setup before changing its GPU group".into());
                 }
                 let _lifecycle = self.lifecycle.lock().await;
@@ -316,24 +330,49 @@ impl Host {
                 }
             }
             "storage" => {
-                if !profiled || progress.complete {
-                    return Err("Complete hardware profiling before choosing storage".into());
+                if progress.gpu_uuids.is_empty()
+                    || progress.complete
+                    || !progress.download_ids.is_empty()
+                {
+                    return Err(
+                        "Choose storage after selecting GPUs and before admitting downloads".into(),
+                    );
                 }
                 let path = PathBuf::from(body["path"].as_str().ok_or("storage path required")?);
-                self.set_model_storage(path).await?;
-                progress.storage_accepted = true;
+                if !path.is_absolute() {
+                    return Err("Choose an absolute model storage path".into());
+                }
+                progress.requested_storage = Some(path);
+                progress.storage_accepted = false;
+                progress.storage_error = None;
+                progress.download_error = None;
+                self.store_first_run(progress.clone()).await?;
+                if profiled {
+                    self.apply_first_run_storage(&mut progress).await?;
+                }
             }
             "refresh_catalog" => {
-                if step != "models" {
-                    return Err("Choose storage before loading published models".into());
+                if progress.gpu_uuids.is_empty()
+                    || progress.complete
+                    || !progress.download_ids.is_empty()
+                {
+                    return Err(
+                        "Load published models after selecting GPUs and before admitting downloads"
+                            .into(),
+                    );
                 }
                 progress.releases = crate::model_downloads::published_releases().await?;
                 progress.catalog_loaded = true;
                 progress.catalog_error = None;
             }
             "models" => {
-                if step != "models" {
-                    return Err("Choose model storage before downloading models".into());
+                if progress.gpu_uuids.is_empty()
+                    || progress.complete
+                    || !progress.download_ids.is_empty()
+                {
+                    return Err(
+                        "Choose models after selecting GPUs and before admitting downloads".into(),
+                    );
                 }
                 let ids: BTreeSet<String> = serde_json::from_value(body["release_ids"].clone())
                     .map_err(|e| e.to_string())?;
@@ -351,7 +390,6 @@ impl Host {
                         "A selected release is no longer published; refresh the catalog".into(),
                     );
                 }
-                let mut bytes = 0u64;
                 for release in &selected {
                     if release.tp as usize != progress.gpu_uuids.len()
                         || progress.gpu_uuids.iter().any(|id| {
@@ -365,24 +403,15 @@ impl Host {
                     {
                         return Err("Release does not support the selected GPU group; NVFP4 requires Blackwell".into());
                     }
-                    if !jobs
-                        .iter()
-                        .any(|j| j.status == "installed" && j.release.sha256 == release.sha256)
-                    {
-                        bytes = bytes
-                            .checked_add(release.bytes)
-                            .ok_or("download size overflow")?;
-                    }
-                }
-                if crate::model_downloads::available_bytes(self.downloads.root()).await? < bytes {
-                    return Err("Selected downloads do not fit the live free space; choose another folder or fewer packages".into());
                 }
                 // Save the entire choice before admitting jobs. Maintenance can
                 // recover any interruption between individual journal writes.
                 progress.selected_release_ids = ids.into_iter().collect();
                 progress.download_error = None;
                 self.store_first_run(progress.clone()).await?;
-                self.admit_first_run_downloads(&mut progress).await?;
+                if profiled && progress.storage_accepted {
+                    self.admit_first_run_downloads(&mut progress).await?;
+                }
             }
             "resume" => match step {
                 "profiling" => {
@@ -398,6 +427,10 @@ impl Host {
                 "downloads" => {
                     progress.download_error = None;
                     self.admit_first_run_downloads(&mut progress).await?;
+                    let _lifecycle = self.lifecycle.lock().await;
+                    if self.first_run_profile(&progress).await.is_none() {
+                        return Err("Complete hardware profiling before resuming downloads".into());
+                    }
                     for job in &jobs {
                         if progress.download_ids.contains(&job.id)
                             && matches!(job.status.as_str(), "failed" | "paused")
@@ -578,7 +611,82 @@ impl Host {
         !data.first_run.complete && !data.first_run.gpu_uuids.is_empty()
     }
 
+    async fn apply_first_run_storage(&self, progress: &mut Progress) -> Result<(), String> {
+        if progress.storage_accepted || progress.storage_error.is_some() {
+            return Ok(());
+        }
+        let Some(path) = progress.requested_storage.clone() else {
+            return Ok(());
+        };
+        let _lifecycle = self.lifecycle.lock().await;
+        if self.first_run_profile(progress).await.is_none() {
+            return Ok(());
+        }
+        // Saving a path during calibration is metadata only. Filesystem/native
+        // storage validation is deferred until its matching profile is usable.
+        match self.set_model_storage_locked(path).await {
+            Ok(root) => {
+                progress.requested_storage = Some(root);
+                progress.storage_accepted = true;
+            }
+            Err(error) => {
+                progress.storage_error = Some(error.clone());
+                self.store_first_run(progress.clone()).await?;
+                return Err(error);
+            }
+        }
+        self.store_first_run(progress.clone()).await
+    }
+
     async fn admit_first_run_downloads(&self, progress: &mut Progress) -> Result<(), String> {
+        // Profile starts share this lock. Recheck after any storage probe so
+        // queued choices cannot admit heavy work while calibration is active.
+        let _lifecycle = self.lifecycle.lock().await;
+        if !progress.storage_accepted || self.first_run_profile(progress).await.is_none() {
+            return Err(
+                "Complete hardware profiling and validate storage before downloading models".into(),
+            );
+        }
+        let jobs = self.downloads.list().await;
+        let bytes = progress
+            .selected_release_ids
+            .iter()
+            .try_fold(0u64, |bytes, sha| {
+                if jobs.iter().any(|job| {
+                    &job.release.sha256 == sha
+                        && ((job.status == "installed"
+                            && job.path.as_ref().is_some_and(|path| path.is_file()))
+                            || (progress.download_ids.contains(&job.id)
+                                && matches!(
+                                    job.status.as_str(),
+                                    "queued" | "downloading" | "verifying"
+                                )))
+                }) {
+                    // Already admitted active work consumes this same reservation.
+                    // Paused/failed jobs must pass a fresh capacity check on Resume.
+                    return Ok(bytes);
+                }
+                let release = progress
+                    .releases
+                    .iter()
+                    .find(|release| &release.sha256 == sha)
+                    .ok_or("Selected release is missing from the saved catalog")?;
+                bytes
+                    .checked_add(release.bytes)
+                    .ok_or("download size overflow")
+            });
+        let capacity = match bytes {
+            Ok(bytes) => crate::model_downloads::available_bytes(self.downloads.root()).await
+                .and_then(|free| if free >= bytes { Ok(()) } else {
+                    Err("Selected downloads do not fit the live free space; choose another folder or fewer packages".into())
+                }),
+            Err(error) => Err(error.into()),
+        };
+        if let Err(error) = capacity {
+            progress.download_error = Some(error.clone());
+            self.store_first_run(progress.clone()).await?;
+            return Err(error);
+        }
         for sha in progress.selected_release_ids.clone() {
             let jobs = self.downloads.list().await;
             if progress
@@ -616,10 +724,9 @@ impl Host {
         let _operation = self.first_run_operation.lock().await;
         let mut progress = self.data.lock().await.first_run.clone();
         let profiled = self.first_run_profile(&progress).await.is_some();
-        if !progress.selected_release_ids.is_empty() && progress.download_error.is_none() {
-            self.admit_first_run_downloads(&mut progress).await?;
-        }
-        if profiled && !progress.catalog_loaded {
+        // The published catalog is metadata; it can load while calibration
+        // runs without starting package downloads or validating storage.
+        if !progress.catalog_loaded {
             match crate::model_downloads::published_releases().await {
                 Ok(releases) => {
                     progress.releases = releases;
@@ -629,6 +736,16 @@ impl Host {
             }
             progress.catalog_loaded = true;
             self.store_first_run(progress.clone()).await?;
+        }
+        if !profiled {
+            return Ok(());
+        }
+        self.apply_first_run_storage(&mut progress).await?;
+        if progress.storage_accepted
+            && !progress.selected_release_ids.is_empty()
+            && progress.download_error.is_none()
+        {
+            self.admit_first_run_downloads(&mut progress).await?;
         }
         let jobs = self.downloads.list().await;
         if stage(&progress, profiled, &jobs) != "startup" {
@@ -875,6 +992,273 @@ mod tests {
         )
         .unwrap();
         (host, jobs.into_values().collect())
+    }
+
+    #[tokio::test]
+    async fn pending_profile_retains_choices_across_restart_without_storage_or_admission() {
+        let directory = tempfile::tempdir().unwrap();
+        let (host, jobs) = installed_host(directory.path(), 1).await;
+        let profile_path =
+            crate::hardware_profile::group_profile_path(directory.path(), &[gpu().uuid.clone()]);
+        let accepted_profile = std::fs::read(&profile_path).unwrap();
+        // A profile for another GPU cannot validate this group's saved choices.
+        std::fs::write(
+            &profile_path,
+            serde_json::to_vec(&json!({
+                "schema_version":2,"ram_bytes":128_u64<<30,
+                "gpus":[{"uuid":"another-gpu","vram_bytes":32_u64<<30}]
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        host.store_first_run(Progress {
+            gpu_uuids: vec![gpu().uuid],
+            catalog_loaded: true,
+            releases: vec![jobs[0].release.clone()],
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        let original_root = host.downloads.root();
+        let selected_root = directory.path().join("chosen-after-calibration");
+        host.first_run_action(json!({"action":"storage","path":selected_root}))
+            .await
+            .unwrap();
+        let saved = host
+            .first_run_action(json!({
+                "action":"models","release_ids":[jobs[0].release.sha256]
+            }))
+            .await
+            .unwrap();
+        assert_eq!(saved["step"], "profiling");
+        assert_eq!(saved["storage"]["requested_path"], json!(selected_root));
+        assert_eq!(saved["storage"]["accepted"], false);
+        assert!(saved["selected_downloads"].as_array().unwrap().is_empty());
+        drop(host);
+        let restored = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
+        restored.first_run_maintenance().await.unwrap();
+        let mut progress = restored.data.lock().await.first_run.clone();
+        assert_eq!(progress.requested_storage, Some(selected_root.clone()));
+        assert_eq!(
+            progress.selected_release_ids,
+            vec![jobs[0].release.sha256.clone()]
+        );
+        assert!(!progress.storage_accepted);
+        assert!(progress.download_ids.is_empty());
+        assert_eq!(restored.downloads.root(), original_root);
+        assert!(!selected_root.exists());
+        assert_eq!(restored.downloads.list().await.len(), 1);
+
+        std::fs::write(profile_path, accepted_profile).unwrap();
+        restored
+            .apply_first_run_storage(&mut progress)
+            .await
+            .unwrap();
+        restored
+            .admit_first_run_downloads(&mut progress)
+            .await
+            .unwrap();
+        assert!(progress.storage_accepted);
+        assert_eq!(
+            restored.downloads.root(),
+            selected_root.canonicalize().unwrap()
+        );
+        assert_eq!(progress.download_ids, vec![jobs[0].id]);
+        assert_eq!(restored.downloads.list().await.len(), 1);
+        assert!(jobs[0].path.as_ref().unwrap().is_file());
+    }
+
+    #[tokio::test]
+    async fn deferred_storage_and_capacity_errors_require_an_explicit_corrected_choice() {
+        let directory = tempfile::tempdir().unwrap();
+        let (host, jobs) = installed_host(directory.path(), 1).await;
+        let mut too_large = package(7).0;
+        too_large.bytes = u64::MAX;
+        host.store_first_run(Progress {
+            gpu_uuids: vec![gpu().uuid],
+            catalog_loaded: true,
+            releases: vec![too_large.clone(), jobs[0].release.clone()],
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        let original_root = host.downloads.root();
+        let not_directory = directory.path().join("not-a-directory");
+        std::fs::write(&not_directory, "retained file").unwrap();
+        assert!(host
+            .first_run_action(json!({
+                "action":"storage","path":not_directory.join("models")
+            }))
+            .await
+            .is_err());
+        let failed = host.first_run_status().await.unwrap();
+        assert_eq!(failed["step"], "storage");
+        assert_eq!(failed["storage"]["accepted"], false);
+        assert!(failed["storage"]["error"].as_str().is_some());
+        assert_eq!(host.downloads.root(), original_root);
+
+        host.first_run_action(json!({"action":"storage","path":original_root}))
+            .await
+            .unwrap();
+        assert!(host
+            .first_run_action(json!({
+                "action":"models","release_ids":[too_large.sha256]
+            }))
+            .await
+            .unwrap_err()
+            .contains("free space"));
+        host.first_run_maintenance().await.unwrap();
+        let blocked = host.first_run_status().await.unwrap();
+        assert_eq!(blocked["step"], "models");
+        assert!(blocked["error"].as_str().unwrap().contains("free space"));
+        assert!(blocked["selected_downloads"].as_array().unwrap().is_empty());
+        assert_eq!(host.downloads.list().await.len(), 1);
+        let recovered = host
+            .first_run_action(json!({
+                "action":"models","release_ids":[jobs[0].release.sha256]
+            }))
+            .await
+            .unwrap();
+        assert!(recovered["error"].is_null());
+        assert_eq!(recovered["selected_downloads"][0]["id"], json!(jobs[0].id));
+        assert_eq!(host.downloads.list().await.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn paused_and_failed_downloads_cannot_bypass_live_capacity_on_resume() {
+        for status in ["paused", "failed"] {
+            let directory = tempfile::tempdir().unwrap();
+            let (host, mut jobs) = installed_host(directory.path(), 1).await;
+            let original_root = host.downloads.root();
+            drop(host);
+            jobs[0].status = status.into();
+            jobs[0].path = None;
+            jobs[0].release.bytes = 9_007_199_254_740_991;
+            let saved_jobs = std::collections::BTreeMap::from([(jobs[0].id, jobs[0].clone())]);
+            std::fs::write(
+                directory.path().join("model-downloads.json"),
+                serde_json::to_vec(&saved_jobs).unwrap(),
+            )
+            .unwrap();
+            let host = Host::open(
+                directory.path().to_owned(),
+                "Fixture".into(),
+                directory.path().join("ginfer-serve"),
+                vec![],
+                vec![],
+                vec![gpu()],
+            )
+            .await
+            .unwrap();
+            host.store_first_run(Progress {
+                gpu_uuids: vec![gpu().uuid],
+                requested_storage: Some(original_root.clone()),
+                storage_accepted: true,
+                catalog_loaded: true,
+                releases: vec![jobs[0].release.clone()],
+                selected_release_ids: vec![jobs[0].release.sha256.clone()],
+                download_ids: vec![jobs[0].id],
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+            let error = host
+                .first_run_action(json!({"action":"resume"}))
+                .await
+                .unwrap_err();
+            assert!(error.contains("free space"), "{status}: {error}");
+            let retained = host.downloads.list().await;
+            assert_eq!(retained.len(), 1);
+            assert_eq!(retained[0].id, jobs[0].id);
+            assert_eq!(retained[0].status, status);
+            assert_eq!(host.downloads.root(), original_root);
+            assert!(host.first_run_status().await.unwrap()["error"]
+                .as_str()
+                .unwrap()
+                .contains("free space"));
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn running_calibration_blocks_saved_profile_storage_and_download_admission() {
+        use std::future::Future;
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let (host, jobs) = installed_host(directory.path(), 1).await;
+        let cli = directory.path().join("profiling-cli");
+        std::fs::write(&cli, "#!/bin/sh\nexec /bin/sleep 600\n").unwrap();
+        std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o700)).unwrap();
+        host.store_first_run(Progress {
+            gpu_uuids: vec![gpu().uuid],
+            catalog_loaded: true,
+            releases: vec![jobs[0].release.clone()],
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let original_root = host.downloads.root();
+        let pending_root = directory.path().join("after-current-run");
+        let mut waiting = host.data.lock().await.first_run.clone();
+        waiting.requested_storage = Some(pending_root.clone());
+        let lifecycle = host.lifecycle.lock().await;
+        let validation = host.apply_first_run_storage(&mut waiting);
+        tokio::pin!(validation);
+        std::future::poll_fn(|context| {
+            assert!(validation.as_mut().poll(context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        // A profile start that owns lifecycle wins before any queued native
+        // path validation; the waiting choice must recheck after the lock.
+        job.start(HardwareProfileAction::Refresh, Some(cli), vec![gpu().uuid])
+            .unwrap();
+        drop(lifecycle);
+        let validation_result = validation.await;
+        let storage = host
+            .first_run_action(json!({"action":"storage","path":pending_root}))
+            .await;
+        let choices = host
+            .first_run_action(json!({
+                "action":"models","release_ids":[jobs[0].release.sha256]
+            }))
+            .await;
+        let mut progress = host.data.lock().await.first_run.clone();
+        // Exercise the final admission guard even if a previous acceptance bit
+        // was retained when a new calibration began.
+        progress.storage_accepted = true;
+        let admission = host.admit_first_run_downloads(&mut progress).await;
+        let busy = job.busy();
+        let final_root = host.downloads.root();
+        let current_jobs = host.downloads.list().await;
+        job.shutdown().await.unwrap();
+        assert!(busy);
+        validation_result.unwrap();
+        assert_eq!(storage.unwrap()["step"], "profiling");
+        assert_eq!(choices.unwrap()["step"], "profiling");
+        assert!(admission
+            .unwrap_err()
+            .contains("Complete hardware profiling"));
+        assert!(progress.download_ids.is_empty());
+        assert_eq!(final_root, original_root);
+        assert!(!pending_root.exists());
+        assert_eq!(current_jobs.len(), 1);
     }
 
     #[tokio::test]

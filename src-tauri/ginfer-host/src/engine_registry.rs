@@ -290,6 +290,12 @@ mod tests {
         snapshot.hardware_profile = Some(crate::hardware_profile::HardwareProfileStatus {
             status: "running".into(), job_id: Some(Uuid::new_v4()), pid: Some(42),
             reprofile: true, started_unix_ms: Some(100), finished_unix_ms: None,
+            phase: None,
+            phase_detail: None,
+            elapsed_ms: None,
+            expected_duration_ms: None,
+            remaining_ms: None,
+            duration_source: None,
             profile_path: "hardware.json".into(), checkpoint_available: false,
             gpu_uuids: vec!["GPU-B".into(), "GPU-A".into()], engine_path: Some("bin/ginfer".into()),
             pending_gpu_groups: vec![vec!["GPU-C".into()]],

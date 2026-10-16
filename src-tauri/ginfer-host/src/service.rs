@@ -451,6 +451,11 @@ impl Host {
         self.draft_width.start_next(&recipes)
     }
     pub(crate) async fn set_model_storage(&self, root: PathBuf) -> Result<PathBuf, String> {
+        let _lifecycle = self.lifecycle.lock().await;
+        self.set_model_storage_locked(root).await
+    }
+    // The caller holds lifecycle so profile starts cannot overlap validation.
+    pub(crate) async fn set_model_storage_locked(&self, root: PathBuf) -> Result<PathBuf, String> {
         if !root.is_absolute() {
             return Err("model storage must be an absolute path".into());
         }
@@ -471,7 +476,6 @@ impl Host {
         tokio::fs::remove_file(probe)
             .await
             .map_err(|e| e.to_string())?;
-        let _lifecycle = self.lifecycle.lock().await;
         let mut data = self.data.lock().await;
         let previous = data.managed_model_root.replace(root.clone());
         if let Err(error) = write_private(

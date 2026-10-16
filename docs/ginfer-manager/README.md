@@ -105,13 +105,38 @@ live `available_bytes`, existing downloads and candidate eligibility/reasons.
 | Action | Inputs and behavior |
 | --- | --- |
 | `profile` | Explicit `gpu_uuids`; require a compatible supported group of 1, 2 or 4 GPUs and prepare its saved native profile. |
-| `storage` | Absolute `path`; persist a writable native managed-download root. |
+| `storage` | Absolute `path`; save the choice during profiling, then validate and persist the native managed-download root. |
 | `move` | Installed managed `download_id`; explicitly move it to the selected storage root, rejecting active sources. |
 | `refresh_catalog` | Refresh the configured published release catalog. |
-| `models` | Exact `release_ids`; durably retain selection and admit compatible downloads after a live capacity check. |
+| `models` | Exact `release_ids`; save the compatible published choices during profiling; admit downloads only after profiling, storage validation and a live capacity check. |
 | `resume` | Continue interrupted profiling, download admission or startup review. |
 | `startup` | `download_id`, `concurrency`, `max_context`, `instance_count`, optional `kv_arena_bytes`; obtain a fresh Engine quote. |
 | `complete` | Save reviewed startup configurations as stopped instances. |
+
+### Choices and progress during profiling — October 16
+
+After explicitly choosing a GPU group, users can save a storage path and exact
+published model selections while its profile runs. These are durable intents:
+the Host waits for that group's complete profile before applying storage checks
+and admitting downloads. The user can close the wizard and return later. Live
+capacity, filesystem identity, writability and supported GPU/model checks still
+apply at admission; a failed choice shows an error and can be corrected. Saving
+a choice does not start a model.
+
+The profiling panel shows elapsed time and the latest phase reported by native
+diagnostics. A prior successful full measurement for the same GPU group can
+provide a clearly labelled historical estimate. The first measurement has no
+measured ETA; a cache hit or resumed partial job must not become a full-run
+duration sample. Progress never infers a percentage from completed-format counts.
+
+Runtime installation preserves the Host's accepted profiles, saved choices and
+native checkpoints. Ensure and Resume use the current runtime with retained
+profiles and checkpoints as seeds, including when an upgrade replaces the CLI
+at the same path. Resume also revalidates native output before retrying a failed
+publication. Native fingerprint and completeness validation still decide reuse
+or selective refresh. This GChat-only
+change does not alter the Engine calibration recipe or qualify model-scoped
+partial profiles, and is outside the October 16 RC package refresh.
 
 Storage ranking reads native `schema_version: 2` disk rows, using
 `disks[].sequential_read.value` in bytes/second only when its status is
