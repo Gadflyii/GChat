@@ -187,8 +187,19 @@ and durable-history discoverability. A follow-up at `1449c42ea` retires only the
 ending invocation's Live entry. The extended same-process regression checks that
 the original entry disappears, an unrelated active entry retains its text, and
 completed history remains available. The focused regression, library-only
-checking, strict Clippy and full `make verify` pass for this follow-up. Native
-unexpected-process exit and power-loss recovery remain unqualified; the
+checking, strict Clippy and full `make verify` pass for this follow-up.
+The source follow-up at `512412edd` also cancels the ending invocation and removes
+its cancellation sender, tool approvals and folder-access prompts from the
+original application state. Admission for the same run ID stays fenced until
+that asynchronous cleanup completes. The extended regression holds an original
+state mutex across invocation drop to check that fence, then checks cleanup,
+unrelated-run preservation, same-ID reuse and ordinary Stop. Verification of
+this follow-up passed the focused regression, library checking, strict Clippy
+and full `make verify` on Linux with Docker `--init`. The first gate without an
+init process failed two descendant-liveness tests; the approved unchanged-source
+rerun passed. That environment failure and both logs are retained under
+`out/studio-pending-drop-cleanup-20261016/`.
+Native unexpected-process exit and power-loss recovery remain unqualified; the
 normal-close acceptance above remains valid.
 See the [decision](../decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 
