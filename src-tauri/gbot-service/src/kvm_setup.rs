@@ -16,7 +16,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Weak,
     },
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     fs,
@@ -757,6 +757,7 @@ impl KvmSetup {
             ));
         }
         let unit = format!("gbot-setup-{}", record.id.as_uuid());
+        let launch_time = SystemTime::now().duration_since(UNIX_EPOCH).ok();
         let command = format!("systemctl --user stop {unit}.service 2>/dev/null; systemctl --user reset-failed {unit}.service 2>/dev/null; systemd-run --user --collect --unit={unit} /usr/local/bin/gbot-in-session mousepad --disable-server {}", path.0);
         let launched = self
             .guest(
@@ -779,6 +780,7 @@ impl KvmSetup {
         }
         let title = format!("Gbot-setup-{}", record.id.as_uuid());
         let mut window = None;
+        let mut last_windows = serde_json::Value::Null;
         for _ in 0..20 {
             let result = self
                 .guest(
@@ -791,6 +793,7 @@ impl KvmSetup {
                 )
                 .await?;
             if let GuestResult::Desktop { result } = result {
+                last_windows = window_diagnostics(&result, &title);
                 window = result["structuredContent"]["windows"]
                     .as_array()
                     .and_then(|windows| {
@@ -818,13 +821,38 @@ impl KvmSetup {
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-        let window = window.ok_or_else(|| {
-            SetupIssue::new(
-                "desktop_not_ready",
-                "Readiness list_windows did not observe the dedicated guest document window.",
-                action,
-            )
-        })?;
+        let window = match window {
+            Some(window) => window,
+            None => {
+                // Exec success above proves unit submission, not editor startup.
+                // Use only the existing setup transport and this setup's exact unit.
+                let diagnostic = self
+                    .guest(
+                        runtime,
+                        record,
+                        GuestOperationKind::Exec {
+                            program: "/bin/sh".into(),
+                            args: vec![
+                                "-c".into(),
+                                window_diagnostic_command(record.id, launch_time),
+                            ],
+                            cwd: GuestPath("/home/gbot".into()),
+                            env: BTreeMap::new(),
+                        },
+                    )
+                    .await;
+                if self.stopping.load(Ordering::Acquire)
+                    || self.cancellations.lock().await.contains(&record.id)
+                {
+                    return Err(SetupIssue::new(
+                        "setup_cancelled",
+                        "The setup check was cancelled.",
+                        "Resume or remove this same setup.",
+                    ));
+                }
+                return Err(window_failure_issue(last_windows, diagnostic));
+            }
+        };
         // Verify the saved effect in this setup's disposable document.
         let input_expected = "Gbot desktop input readiness confirmed\n";
         for (tool, arguments) in readiness_input(&window, input_expected) {
@@ -1108,6 +1136,69 @@ pub(crate) fn readiness_input(
         ),
     ]
 }
+fn diagnostic_text(text: &str, limit: usize) -> String {
+    text.chars()
+        .filter(|c| !c.is_control() || matches!(c, '\n' | '\t'))
+        .take(limit)
+        .collect()
+}
+
+fn window_diagnostics(result: &serde_json::Value, title: &str) -> serde_json::Value {
+    match result["structuredContent"]["windows"].as_array() {
+        Some(windows) => serde_json::json!({
+            "count": windows.len(),
+            "windows": windows.iter().take(6).map(|window| serde_json::json!({
+                "title_matches": window["title"].as_str().map(|value| value.contains(title)),
+                "pid": window["pid"].as_u64(),
+                "window_id": window["window_id"].as_u64(),
+            })).collect::<Vec<_>>()
+        }),
+        None => serde_json::json!({"windows": "missing or not an array"}),
+    }
+}
+
+fn window_diagnostic_command(id: WorkspaceId, launch_time: Option<Duration>) -> String {
+    let unit = format!("gbot-setup-{}.service", id.as_uuid());
+    let journal = match launch_time {
+        Some(time) => format!(
+            r#"timeout -k 1s 2s journalctl --user --unit={unit} --since=@{} --lines=12 --no-pager --output=short-iso 2>&1; printf '\njournal-exit=%s\n' "$?""#,
+            time.as_secs()
+        ),
+        None => "printf 'Launch time unavailable; journal omitted\\n'".into(),
+    };
+    format!(
+        r#"(timeout -k 1s 2s systemctl --user show {unit} --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus 2>&1; printf '\nunit-status-exit=%s\n' "$?"; {journal}) | head -c 2048"#
+    )
+}
+
+fn window_failure_issue(
+    windows: serde_json::Value,
+    diagnostic: Result<GuestResult, SetupIssue>,
+) -> SetupIssue {
+    let details = match diagnostic {
+        Err(issue) if issue.code == "setup_cancelled" => return issue,
+        Err(issue) => format!("Diagnostics unavailable: {}", issue.message),
+        Ok(GuestResult::ExecFinished {
+            exit_code,
+            stdout,
+            stderr,
+        }) => format!(
+            "Unit diagnostic collection (exit {exit_code}): {}\n{}",
+            String::from_utf8_lossy(&stdout),
+            String::from_utf8_lossy(&stderr)
+        ),
+        Ok(_) => "Diagnostics did not return command completion.".into(),
+    };
+    SetupIssue::new(
+        "desktop_not_ready",
+        format!(
+            "Readiness list_windows did not observe the dedicated guest document window. Last window metadata: {windows}. {}",
+            diagnostic_text(&details, 2304)
+        ),
+        "Inspect the guest's operation, desktop and media services, then retry this same setup.",
+    )
+}
+
 fn readiness_result(operation: &str, outcome: GuestOutcome) -> Result<GuestResult, SetupIssue> {
     let mut code = "guest_not_ready";
     let reason = match outcome {
@@ -1416,6 +1507,33 @@ mod tests {
             assert_eq!(saved[0].stage, SetupStage::TestingDesktop);
             assert_eq!(saved[0].issue, Some(issue));
         }
+        let issue = window_failure_issue(
+            window_diagnostics(
+                &serde_json::json!({"structuredContent":{"windows":[
+                    {"title":"Mousepad", "pid":42, "window_id":7}
+                ]}}),
+                "Gbot-setup-test",
+            ),
+            Ok(GuestResult::ExecFinished {
+                exit_code: 0,
+                stdout: b"ActiveState=failed\nExecMainStatus=1\nCannot open display\n".to_vec(),
+                stderr: Vec::new(),
+            }),
+        );
+        record.issue = Some(issue.clone());
+        setup.save(record.clone()).await.unwrap();
+        drop(setup);
+        setup = KvmSetup::open(
+            root.path().to_owned(),
+            service.clone(),
+            vault.clone(),
+            Weak::new(),
+        )
+        .await
+        .unwrap();
+        let saved = setup.status().await;
+        assert_eq!(saved[0].stage, SetupStage::TestingDesktop);
+        assert_eq!(saved[0].issue, Some(issue));
         let runtime = WorkspaceRuntime::new(service, vault);
         let issue = setup
             .guest(
@@ -1433,6 +1551,58 @@ mod tests {
         assert!(matches!(readiness_result("read", GuestOutcome::Success {
             result: GuestResult::Read { data: b"ready".to_vec() },
         }).unwrap(), GuestResult::Read { data } if data == b"ready"));
+    }
+    #[test]
+    fn window_failure_retains_only_bounded_metadata_and_diagnostics() {
+        let raw = serde_json::json!({
+            "content":[{"type":"image", "data":"excluded screenshot"}],
+            "structuredContent":{"windows":(0..20).map(|n| serde_json::json!({
+                "title":format!("Editor\u{1b}{}", "é".repeat(200)),
+                "pid":n, "window_id":n + 1,
+                "private":"excluded raw window fields"
+            })).collect::<Vec<_>>()}
+        });
+        let windows = window_diagnostics(&raw, "Gbot-setup-test");
+        assert_eq!(windows["count"], 20);
+        assert_eq!(windows["windows"].as_array().unwrap().len(), 6);
+        assert_eq!(windows["windows"][0]["title_matches"], false);
+        let issue = window_failure_issue(
+            windows,
+            Ok(GuestResult::ExecFinished {
+                exit_code: 0,
+                stdout: "x".repeat(10000).into_bytes(),
+                stderr: Vec::new(),
+            }),
+        );
+        assert_eq!(issue.code, "desktop_not_ready");
+        assert!(issue
+            .message
+            .contains("Unit diagnostic collection (exit 0)"));
+        assert!(issue.message.len() < 5000);
+        assert!(!issue.message.contains("excluded"));
+        assert!(!issue.message.contains('\u{1b}'));
+        assert_eq!(
+            window_diagnostics(
+                &serde_json::json!({"structuredContent":{}}),
+                "Gbot-setup-test"
+            ),
+            serde_json::json!({"windows":"missing or not an array"})
+        );
+        let unavailable = window_failure_issue(
+            serde_json::Value::Null,
+            Err(SetupIssue::new(
+                "guest_not_ready",
+                "Transport unavailable",
+                "Repair the guest",
+            )),
+        );
+        assert_eq!(unavailable.code, "desktop_not_ready");
+        assert!(unavailable.message.contains("Transport unavailable"));
+        let cancelled = SetupIssue::new("setup_cancelled", "Cancelled", "Resume same setup");
+        assert_eq!(
+            window_failure_issue(serde_json::Value::Null, Err(cancelled.clone())),
+            cancelled
+        );
     }
     #[tokio::test]
     async fn missing_assets_refuse_without_credentials_and_resume_same_owned_id() {
