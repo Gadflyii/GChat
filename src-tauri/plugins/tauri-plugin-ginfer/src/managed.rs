@@ -69,8 +69,22 @@ fn group_matches(group: &[String], config: &GinferConfig, visible: &[String]) ->
 
 fn selected_group(groups: &Value, config: &GinferConfig, visible: &[String]) -> Option<Vec<String>> {
     groups.as_array()?.iter()
-        .filter_map(|group| serde_json::from_value::<Vec<String>>(group.clone()).ok())
-        .filter(|group| group_matches(group, config, visible))
+        .filter_map(|group| {
+            let mut group: Vec<String> = serde_json::from_value(group.clone()).ok()?;
+            let members: BTreeSet<_> = group.iter().collect();
+            if group.is_empty() || members.len() != group.len()
+                || group.iter().any(|id| !visible.contains(id)) {
+                return None;
+            }
+            // Host qualification checks exact membership; launch order selects ranks.
+            if let Some(selected) = &config.gpu_uuids {
+                return (selected.len() == group.len()
+                    && selected.iter().collect::<BTreeSet<_>>() == members)
+                    .then(|| selected.clone());
+            }
+            group.sort_by_key(|id| visible.iter().position(|visible_id| visible_id == id));
+            Some(group)
+        })
         .min_by_key(|group| group.iter().map(|id| {
             visible.iter().position(|visible_id| visible_id == id).unwrap_or(usize::MAX)
         }).collect::<Vec<_>>())
@@ -449,6 +463,34 @@ mod tests {
     }
 
     #[test]
+    fn multi_gpu_catalog_selection_preserves_visible_rank_order() {
+        let visible: Vec<String> = ["GPU-three", "GPU-one", "GPU-two", "GPU-zero"]
+            .into_iter().map(String::from).collect();
+        let pairs = serde_json::json!([["GPU-zero", "GPU-one"], ["GPU-two", "GPU-three"]]);
+        assert_eq!(selected_group(&pairs, &GinferConfig::default(), &visible),
+            Some(vec!["GPU-three".into(), "GPU-two".into()]));
+        let four = serde_json::json!([["GPU-zero", "GPU-one", "GPU-two", "GPU-three"]]);
+        assert_eq!(selected_group(&four, &GinferConfig::default(), &visible), Some(visible));
+    }
+
+    #[test]
+    fn explicit_catalog_selection_preserves_order_only_for_the_exact_qualified_set() {
+        let groups = serde_json::json!([["GPU-zero", "GPU-one"]]);
+        let visible = vec!["GPU-zero".into(), "GPU-one".into(), "GPU-two".into()];
+        let mut config = GinferConfig {
+            gpu_uuids: Some(vec!["GPU-one".into(), "GPU-zero".into()]),
+            ..Default::default()
+        };
+        assert_eq!(selected_group(&groups, &config, &visible), config.gpu_uuids);
+        config.gpu_uuids = Some(vec!["GPU-zero".into(), "GPU-two".into()]);
+        assert!(selected_group(&groups, &config, &visible).is_none());
+        config.gpu_uuids = Some(vec!["GPU-zero".into(), "GPU-zero".into()]);
+        assert!(selected_group(&groups, &config, &visible).is_none());
+        let invalid = serde_json::json!([[], ["GPU-zero", "GPU-zero"], ["GPU-zero", "GPU-hidden"]]);
+        assert!(selected_group(&invalid, &GinferConfig::default(), &visible).is_none());
+    }
+
+    #[test]
     fn installed_load_never_reuses_a_resident_on_the_wrong_or_hidden_gpu() {
         let requested = LaunchOptions::default();
         let mut config = GinferConfig::default();
@@ -465,6 +507,11 @@ mod tests {
         assert!(!matches_resident(&launch, &config, &requested, &["GPU-zero".into()]));
         config.gpu_uuids = None;
         assert!(!matches_resident(&launch, &config, &requested, &["GPU-zero".into()]));
+        config.gpu_uuids = Some(vec!["GPU-one".into(), "GPU-zero".into()]);
+        launch.gpu_uuids = vec!["GPU-zero".into(), "GPU-one".into()];
+        assert!(!matches_resident(&launch, &config, &requested, &visible));
+        launch.gpu_uuids.reverse();
+        assert!(matches_resident(&launch, &config, &requested, &visible));
     }
 
     #[tokio::test]
