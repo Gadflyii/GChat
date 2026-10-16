@@ -267,7 +267,7 @@ Own processes and
 private state are retired; accepted binaries remain. No rebuild/model/GPU run.
 Evidence: `/ai/gchat/out/oi119-native-idle-20261013/result.json`.
 
-## WINDOWS-IDLE-CPU — incomplete first-run maintenance (merge-ready)
+## WINDOWS-IDLE-CPU — incomplete first-run maintenance
 
 The private, model-free Windows Host trace at `dcb11c14cd98ae594d56531782469247d47acce9`
 records **14.3383% of one core** and **30 × 30,303,018 bytes** read in
@@ -288,7 +288,17 @@ or measured improvement claim**. Saved OI-119 Linux/WSLg evidence (Host 0%,
 Manager family 0.133307% of one core over 30.005842534 s, zero models/profiles)
 is an unmatched source/workload comparison.
 
-Production source `846f782da` passed five focused regressions, Host check and
+Current-main integration at `9b4c4d9f8` preserves selected-artifact readiness:
+a reopened Host or reconfigured runtime must accept each exact selected artifact
+before retained quotes can authorize startup. Maintenance parks at the first
+interrupted scope until **Resume**, or at its stored error until correction;
+later unquoted selections cannot bypass that scope. This check avoids reading
+the full hardware profile while waiting. New regressions cover restart/runtime
+reconfiguration, a genuine interrupted scoped-job journal and the first blocked
+scope among two selections. Verification of this integration is pending; the
+results below apply to the earlier source.
+
+Earlier source `846f782da` passed five focused regressions, Host check and
 strict Clippy. The literal `make verify` exited 2 at two unchanged descendant-
 process liveness tests, after lint, typecheck, quality guards, frontend 2,465
 passed/6 skipped, extensions 114 passed and main Rust 695 passed/7 ignored.
