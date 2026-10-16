@@ -57,6 +57,23 @@ of a LAN service removes that entry. This does not run before user sign-in or
 change inference process ownership. A passphrase-protected vault still requires
 unlocking after sign-in; no key or passphrase is placed in the startup entry.
 
+Windows Gbot enablement registers the same background service for the current
+user in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Each App Data
+folder has its own entry, containing the exact installed executable, data folder
+and resource arguments. Registration is read back before success is saved;
+denied writes or a mismatched readback return an error. Disabling Gbot or choosing
+a LAN service removes only that folder's local entry. This does not stop an
+already running service or change the LAN service's startup settings.
+
+Windows limits Run commands to 260 characters. A longer command produces a clear
+error asking for shorter installation/App Data paths; disabling still removes an
+existing entry. The native sign-in preference is saved only after registration
+succeeds, and a failed preference save restores the previous registration. The
+integration visibility toggle remains separate from the actual OS registration.
+Linux desktop startup is unchanged. Windows registration is covered through a
+fake registry boundary on Linux; actual Windows sign-in remains a native release
+gate. Windows can delay or disable startup entries through its own policies.
+
 Bot brain assignment creation still starts with an empty API URL, model and
 context. Its explicit inputs preserve saved URLs and vault-backed keys. Adjacent
 text requires an independently running Host endpoint for background work and

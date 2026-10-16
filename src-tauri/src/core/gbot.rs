@@ -11,10 +11,16 @@ use tokio::sync::Mutex;
 mod background;
 mod cloud;
 mod inference;
+#[cfg(any(windows, test))]
+mod login_windows;
 #[cfg(target_os = "linux")]
 pub(crate) use background::credential_control;
 pub use background::run_service_mode;
 pub(crate) use background::Client;
+#[cfg(target_os = "linux")]
+use ginfer_host::gbot_login as login;
+#[cfg(windows)]
+use login_windows as login;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -417,15 +423,15 @@ impl GbotState {
             hosts.gbot_call(*host_id, "/v1/state", Value::Null).await?;
         }
         let mut connection = self.connection.lock().await;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         {
             let bootstrap = ginfer_host::gbot_bootstrap::Bootstrap::capture(
                 &root,
                 &app.path().resource_dir().map_err(|e| e.to_string())?,
             )?;
-            ginfer_host::gbot_login::reconcile(
+            login::reconcile(
                 &bootstrap,
-                ginfer_host::gbot_login::enabled(&root)? && target == ServiceTarget::Local,
+                login::enabled(&root)? && target == ServiceTarget::Local,
             )?;
         }
         save_service_target(&root, &target)?;
@@ -497,7 +503,7 @@ pub async fn gbot_service_set_enabled<R: Runtime>(
     state: State<'_, GbotState>,
     enabled: bool,
 ) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     {
         let root = state.root(&app).await?;
         let _connection = state.connection.lock().await;
@@ -505,16 +511,16 @@ pub async fn gbot_service_set_enabled<R: Runtime>(
             &root,
             &app.path().resource_dir().map_err(|e| e.to_string())?,
         )?;
-        ginfer_host::gbot_login::configure(
+        login::configure(
             &bootstrap,
             enabled,
             service_target(&root)? == ServiceTarget::Local,
         )
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         let _ = (app, state, enabled);
-        Ok(())
+        Err("Gbot sign-in startup is not supported on this platform yet".into())
     }
 }
 #[tauri::command]
