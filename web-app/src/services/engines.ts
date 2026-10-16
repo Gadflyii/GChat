@@ -59,6 +59,19 @@ export type EngineHardwareProfile = {
   expected_duration_ms?: number | null
   remaining_ms?: number | null
   duration_source?: 'measured_history' | null
+  scope?: 'all_formats' | 'artifact' | 'complete_remaining_formats' | null
+  selected_artifact?: {
+    path: string
+    directory_sha256: string
+    package_sha256?: string | null
+    tp: number
+    draft_tp: number
+    spec: string
+    draft_tokens?: number | null
+  } | null
+  scope_complete?: boolean | null
+  base_complete?: boolean | null
+  all_formats_complete?: boolean | null
   profile_path: string
   gpu_uuids: string[]
   engine_path: string | null
