@@ -11,28 +11,31 @@ normal app exit/restart. Active-worker cancellation, durable state and ordinary
 Studio reopening also pass after normal exit; broader restart recovery remains
 unqualified.
 
-## Native request capability errors — release scope
+## Client tools and native request capability errors — release scope
 
 Inference-server hosted retrieval, `file_search`, `web_search` and MCP are
 unsupported. Unsupported tool, input-content and output-format declarations
 return an explicit error; adapters must not remove them and continue generation.
 GChat client tools execute separately from unsupported inference-server hosted
-tools; the following Linux qualifications define their accepted scope.
+tools. The Linux release includes trusted static-credential MCP, web search/fetch
+and local file search, with the qualifications below. OAuth MCP and semantic
+indexed RAG are post-release. These are native Linux development qualifications;
+Windows and installer qualification remain separate.
 
-The separate `MCP-CLIENT-QUALIFY` Linux release item covers
+The Linux release includes
 trusted STDIO and HTTP/SSE connectors with static credentials. Linux native
 development GUI checks pass with real servers: discovery, approval and denial,
 disabled-tool enforcement, invocation, Stop cancellation and saved configuration
 across normal app restart. The shared Chat executor drives these model-free
 checks; model-led tool selection and installer qualification are separate.
-OAuth is outside scope. Configured connectors
+OAuth MCP is post-release. Configured connectors
 execute client function tools through the shared approval and cancellation
 executor. STDIO servers run with the user's permissions, and saved environment
 variables and headers are plaintext configuration, not a credential vault.
 See the [MCP setup guide](../src/pages/docs/desktop/integrations/mcp-servers.mdx)
 for the current GUI and trust boundaries.
 
-The separate `WEB-SEARCH-QUALIFY` Linux item covers native `os.web.search` and
+The Linux release includes native `os.web.search` and
 `os.web.fetch` from ordinary Chat and saved Standard Agents. The globe controls
 both tools and persists their thread setting; availability reflects the selected
 model and native catalog. Real-network primary Exa search/page reading and an
@@ -45,8 +48,8 @@ followed by hosted extraction remain outside local visibility. These are native
 Linux development checks; Windows and installer qualification are separate.
 Evidence: `/ai/gchat/out/web-search-qualify-20261015/{result.json,summary.md}`.
 
-The separate `LOCAL-FILE-SEARCH-QUALIFY` Linux item covers client-side direct
-PDF/DOCX/spreadsheet text extraction and filename/text search through
+The Linux release includes client-side direct
+PDF/DOCX/spreadsheet text extraction, filename globbing and raw-text grep through
 `gchat-native` tools. It uses the shared Chat/Agent executor and workspace folder
 permissions; an outside-folder Allow grants the displayed folder **CAN EDIT**
 access. Short text PDFs are valid; textless PDFs explicitly require unsupported
@@ -54,7 +57,7 @@ OCR. Malformed DOCX and unreadable worksheets or directory traversal return
 errors rather than silently reporting partial success. Native reads cap returned
 text, but document parsing still reads the full input and does not immediately
 observe cancellation. Pending permission requests can be cancelled with Stop.
-Semantic indexed retrieval remains unavailable without embeddings. See the
+Semantic indexed retrieval/RAG is post-release and remains unavailable without embeddings. See the
 [file guide](../src/pages/docs/desktop/file-upload.mdx) for Auto references,
 inline fallback, disabled tools and privacy boundaries. Model-led answers and
 installer qualification are separate from model-free native GUI checks.

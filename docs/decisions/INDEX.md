@@ -499,3 +499,4 @@ decision is reversed, add a new one that says which record it supersedes.
 
 - **2026-10-15** — [Bundle AppImage viewer media with host ABI exclusions](2026-10-15-bundle-appimage-viewer-media-with-host-abi-exclusions.md)
 - **2026-10-15** — [Confine AppImage GIO modules to the bundled directory](2026-10-15-confine-appimage-gio-modules-to-the-bundled-directory.md)
+- **2026-10-16** — [Include qualified client tools in the Linux release](2026-10-16-include-qualified-client-tools-in-linux-release.md)
