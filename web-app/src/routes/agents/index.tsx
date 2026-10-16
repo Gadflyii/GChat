@@ -2001,7 +2001,9 @@ function RunInspector({
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
                   {new Date(run.startedAtMs).toLocaleString()} ·{' '}
-                  {run.totalSteps} steps
+                  {run.finishedAtMs === 0
+                    ? 'Completion not recorded'
+                    : `${run.totalSteps} steps`}
                 </div>
               </button>
               <DropdownMenu>
@@ -2108,11 +2110,17 @@ function RunInspector({
                 >
                   {runStatusLabel(selected)}
                 </span>
-                <span>{selected.totalSteps} model steps</span>
-                <span>·</span>
-                <span>
-                  {Math.max(0, selected.finishedAtMs - selected.startedAtMs)} ms
-                </span>
+                {selected.finishedAtMs === 0 ? (
+                  <span>Completion not recorded</span>
+                ) : (
+                  <>
+                    <span>{selected.totalSteps} model steps</span>
+                    <span>·</span>
+                    <span>
+                      {Math.max(0, selected.finishedAtMs - selected.startedAtMs)} ms
+                    </span>
+                  </>
+                )}
               </div>
               <p className="mt-1 font-mono text-xs text-muted-foreground">
                 default: {selected.defaultModelInstanceId}
@@ -2145,7 +2153,10 @@ function RunInspector({
                       : 'Not applicable'
                   }
                 />
-                <Stat label="Steps used" value={String(selected.totalSteps)} />
+                <Stat
+                  label="Steps used"
+                  value={selected.finishedAtMs === 0 ? 'Not recorded' : String(selected.totalSteps)}
+                />
               </dl>
             )}
             {instanceMetrics.length > 0 && (

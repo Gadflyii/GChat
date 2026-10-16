@@ -24,13 +24,16 @@ title: "Persist interrupted Studio run history"
   that every side effect has a corresponding observation. There is no automatic
   replay, pending-approval restoration or import of interrupted session working
   state. The existing Continue as new run action creates fresh run and session
-  identities and keeps the verify-before-acting warning.
+  identities and keeps the verify-before-acting warning. A zero finish time
+  means completion was not recorded; the history view labels progress as unknown
+  rather than showing zero steps or a measured duration.
 - **Verification scope:** The pending model-free regression drops a scripted
   invocation after a completed file read and an unapproved shell request, then
   reopens the same data with fresh application state. This targets invocation
-  loss and history discoverability. Native unexpected-process exit and power-loss
-  recovery remain unqualified; existing native normal-close acceptance is
-  unchanged.
+  loss and durable-history discoverability; process-global live-monitor cleanup
+  is not qualified by this same-process regression. Native unexpected-process exit
+  and power-loss recovery remain unqualified; existing native normal-close
+  acceptance is unchanged.
 - **Owner:** team.
 - **Links:** [Runtime architecture](../../src-tauri/src/core/agent/ARCHITECTURE.md#durable-admission-and-interrupted-history),
   [runtime guide](../agent-runtime/README.md#interrupted-studio-run-history--october-16),

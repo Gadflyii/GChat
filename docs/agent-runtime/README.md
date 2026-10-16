@@ -165,12 +165,16 @@ files and verify completed work before continuing as a new run. The saved archiv
 location provides access to any outputs already written. Continue as new run
 creates fresh run and session identities; execution, pending approvals and
 interrupted session working state are not restored automatically.
+The history view labels completion and progress as not recorded instead of
+presenting zero steps or a zero duration as measured results.
 
 The new model-free regression is pending verification. It drops the invocation
 future after a completed file read and a pending, unapproved shell request, then
 reopens the same data with fresh application state. Its scope is invocation loss
-and history discoverability. Native unexpected-process exit and power-loss
-recovery remain unqualified; the normal-close acceptance above remains valid.
+and durable-history discoverability. This same-process regression does not
+qualify process-global live-monitor cleanup. Native unexpected-process exit and
+power-loss recovery remain unqualified; the normal-close acceptance above remains
+valid.
 See the [decision](../decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 
 ## Current worker review follow-up
