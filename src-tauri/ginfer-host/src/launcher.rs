@@ -49,25 +49,46 @@ pub struct DesktopBootstrap {
     pub engine: std::path::PathBuf,
 }
 
-pub fn installed_configuration() -> Result<InstalledConfiguration, String> {
+fn installed_configuration_path() -> Result<std::path::PathBuf, String> {
     let executable = std::env::current_exe().map_err(|e| e.to_string())?;
-    let path = executable
+    Ok(executable
         .parent()
         .ok_or("launcher executable has no parent")?
-        .join("ginfer-launch.json");
-    let config: InstalledConfiguration = serde_json::from_reader(std::io::BufReader::new(
-        std::fs::File::open(&path).map_err(|e| {
+        .join("ginfer-launch.json"))
+}
+
+fn read_installed_configuration(path: &Path) -> Result<Option<InstalledConfiguration>, String> {
+    let file = match std::fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(format!(
+                "Could not read installed launcher configuration {}: {error}",
+                path.display()
+            ));
+        }
+    };
+    let config: InstalledConfiguration = serde_json::from_reader(std::io::BufReader::new(file))
+        .map_err(|error| {
             format!(
-                "Missing installed launcher configuration {}: {e}",
+                "Invalid installed launcher configuration {}: {error}",
                 path.display()
             )
-        })?,
-    ))
-    .map_err(|e| e.to_string())?;
+        })?;
     if !config.data_dir.is_absolute() {
         return Err("installed host data path must be absolute".into());
     }
-    Ok(config)
+    Ok(Some(config))
+}
+
+pub fn installed_configuration() -> Result<InstalledConfiguration, String> {
+    let path = installed_configuration_path()?;
+    read_installed_configuration(&path)?.ok_or_else(|| {
+        format!(
+            "Missing installed launcher configuration {}",
+            path.display()
+        )
+    })
 }
 
 impl InstalledConfiguration {
@@ -77,6 +98,16 @@ impl InstalledConfiguration {
     }
 
     pub async fn connect(self) -> Result<LocalControl, String> {
+        self.connect_resolving(|owner| async move {
+            crate::local_host_registry::resolve(Some(owner)).await
+        }).await
+    }
+
+    async fn connect_resolving<F, Fut>(self, resolve: F) -> Result<LocalControl, String>
+    where
+        F: FnOnce(crate::local_host_registry::Owner) -> Fut,
+        Fut: std::future::Future<Output = Result<crate::local_host_registry::Owner, String>>,
+    {
         let owner = if let Some(desktop) = self.desktop {
             if self.data_dir != desktop.provider.join("host") {
                 return Err("desktop launcher must use its provider-owned host directory".into());
@@ -107,24 +138,32 @@ impl InstalledConfiguration {
         } else {
             crate::local_host_registry::Owner::Service { directory: self.data_dir, origin: self.host_url }
         };
-        let owner = crate::local_host_registry::resolve(Some(owner)).await?;
+        owner.validate()?;
+        let owner = match owner {
+            owner @ crate::local_host_registry::Owner::Desktop(_) => resolve(owner).await?,
+            owner @ crate::local_host_registry::Owner::Service { .. } => owner,
+        };
         owner.connect().await
     }
 }
 
 pub async fn installed_menu() -> Result<(), String> {
     require_terminal()?;
-    if let Some(owner) = crate::local_host_registry::registered().await? {
-        return menu_control(owner.connect().await?).await;
-    }
-    installed_configuration()?.open_menu().await
+    menu_control(installed_control().await?).await
 }
 
 pub async fn installed_control() -> Result<LocalControl, String> {
+    let path = installed_configuration_path()?;
+    if let Some(config) = read_installed_configuration(&path)? {
+        return config.connect().await;
+    }
     if let Some(owner) = crate::local_host_registry::registered().await? {
         return owner.connect().await;
     }
-    installed_configuration()?.connect().await
+    Err(format!(
+        "Missing installed launcher configuration {}",
+        path.display()
+    ))
 }
 
 pub async fn first_run(control: &LocalControl) -> Result<(), String> {
@@ -933,6 +972,124 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn installed_service_configuration_keeps_its_own_host_despite_discovery() {
+        async fn serve(host: std::sync::Arc<crate::service::Host>)
+            -> (String, tokio::task::JoinHandle<()>)
+        {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let origin = format!("https://{}", listener.local_addr().unwrap());
+            let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
+            let server = tokio::spawn(async move {
+                let mut connections = tokio::task::JoinSet::new();
+                loop {
+                    tokio::select! {
+                        Some(_) = connections.join_next(), if !connections.is_empty() => {},
+                        socket = listener.accept() => {
+                            let (socket, _) = socket.unwrap();
+                            let acceptor = acceptor.clone();
+                            let host = host.clone();
+                            connections.spawn(async move {
+                                if let Ok(tls) = acceptor.accept(socket).await {
+                                    let service = hyper::service::service_fn(move |request| {
+                                        let host = host.clone();
+                                        async move { host.route(request).await }
+                                    });
+                                    let _ = hyper::server::conn::Http::new()
+                                        .serve_connection(tls, service).await;
+                                }
+                            });
+                        }
+                    }
+                }
+            });
+            (origin, server)
+        }
+
+        let configured_directory = tempfile::tempdir().unwrap();
+        let foreign_directory = tempfile::tempdir().unwrap();
+        let configured_host = crate::service::Host::open(
+            configured_directory.path().into(), "Configured".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![],
+        ).await.unwrap();
+        let foreign_host = crate::service::Host::open(
+            foreign_directory.path().into(), "Foreign".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![],
+        ).await.unwrap();
+        let configured_id = configured_host.data.lock().await.host_id;
+        let foreign_id = foreign_host.data.lock().await.host_id;
+        assert_ne!(configured_id, foreign_id);
+        let (configured_origin, configured_server) = serve(configured_host).await;
+        let (foreign_origin, foreign_server) = serve(foreign_host).await;
+        let foreign_owner = crate::local_host_registry::Owner::Service {
+            directory: foreign_directory.path().into(), origin: foreign_origin.clone(),
+        };
+        let discovery_called = std::cell::Cell::new(false);
+        let control = tokio::time::timeout(Duration::from_secs(5), InstalledConfiguration {
+            data_dir: configured_directory.path().into(), host_url: configured_origin, desktop: None,
+        }.connect_resolving(|_| {
+            discovery_called.set(true);
+            async move { Ok(foreign_owner) }
+        })).await.unwrap().unwrap();
+        assert!(!discovery_called.get(), "An installed service must not rediscover another root");
+        assert_eq!(control.host_id(), configured_id);
+        let snapshot = control.snapshot().await.unwrap();
+        assert_eq!(snapshot["local_identity"]["state_directory"],
+            serde_json::to_value(configured_directory.path().canonicalize().unwrap()).unwrap());
+
+        // Matching TLS/UUID authority copied from another root must not authorize
+        // an installed launcher to use that root's live Host.
+        let copied_directory = tempfile::tempdir().unwrap();
+        std::fs::copy(foreign_directory.path().join("host.json"),
+            copied_directory.path().join("host.json")).unwrap();
+        let copied_control = LocalControl::open(copied_directory.path(), &foreign_origin).unwrap();
+        assert_eq!(copied_control.snapshot().await.unwrap()["host_id"], json!(foreign_id),
+            "Copied authority really authenticates to the foreign Host before the root check");
+        let copied_result = tokio::time::timeout(Duration::from_secs(5), InstalledConfiguration {
+            data_dir: copied_directory.path().into(), host_url: foreign_origin.clone(), desktop: None,
+        }.connect()).await.unwrap();
+        assert!(copied_result.err().unwrap().contains("different data folder"));
+        let mut wrong_platform = snapshot.clone();
+        wrong_platform["local_identity"]["platform"] = json!("another-platform");
+        assert!(crate::local_host::validate_local_identity(configured_directory.path(), &wrong_platform).is_err());
+
+        let foreign_control = LocalControl::open(foreign_directory.path(), &foreign_origin).unwrap();
+        assert_eq!(foreign_control.snapshot().await.unwrap()["host_id"], json!(foreign_id),
+            "The other Host remains reachable with its own local authority");
+        configured_server.abort();
+        foreign_server.abort();
+        let _ = configured_server.await;
+        let _ = foreign_server.await;
+    }
+
+    #[test]
+    fn installed_configuration_falls_back_only_when_missing() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("ginfer-launch.json");
+        assert!(read_installed_configuration(&path).unwrap().is_none());
+        for invalid in [
+            json!({"data_dir":"relative", "host_url":"https://127.0.0.1:17443"}),
+            json!({"data_dir":root.path(), "host_url":"https://127.0.0.1:17443", "unknown":true}),
+        ] {
+            std::fs::write(&path, serde_json::to_vec(&invalid).unwrap()).unwrap();
+            assert!(read_installed_configuration(&path).is_err());
+        }
+        std::fs::write(&path, b"{invalid").unwrap();
+        assert!(read_installed_configuration(&path).is_err());
+        std::fs::write(
+            &path,
+            serde_json::to_vec(&json!({
+                "data_dir":root.path(), "host_url":"https://127.0.0.1:17443"
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        let config = read_installed_configuration(&path).unwrap().unwrap();
+        assert_eq!(config.data_dir, root.path());
+        assert_eq!(config.host_url, "https://127.0.0.1:17443");
+    }
+
     #[test]
     fn first_run_selection_preserves_order_and_rejects_invalid_items() {
         assert_eq!(selected_indices("2, 1", 2).unwrap(), vec![1, 0]);

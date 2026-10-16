@@ -82,7 +82,10 @@ export type EngineSnapshot = {
   max_perf_profiles?: EngineMaxPerfProfile[]
   hardware_profile?: EngineHardwareProfile
   draft_width_calibrations?: EngineDraftWidthCalibration[]
-  lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null };
+  local_identity?: { state_directory: string | null; platform: string };
+  management_origin?: string | null;
+  management_notice?: string | null;
+  lan_sharing?: { managed: boolean; enabled: boolean; active: boolean; port: number; error?: string | null; notice?: string | null };
   launch_profiles?: { model_id: string; gpu_groups: string[][]; compatible_gpu_groups: string[][];
     profile: { id: string; name: string; tp: number; max_context: number; concurrency: number;
       options: Partial<EngineLaunchOptions> & { vision: boolean };

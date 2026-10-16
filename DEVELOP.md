@@ -110,12 +110,21 @@ Unlike the upstream layout there is no legacy-folder baggage: the fork is clean-
 
 GInfer and GChat share a per-user host locator: `%APPDATA%\GInfer\local-host.json`
 on Windows, or `$XDG_CONFIG_HOME/ginfer/local-host.json` on Linux (default
-`~/.config/ginfer/local-host.json`). It points to the first registered host's
-existing state, engine and model storage; it contains no credentials and moves
-no data. A neighboring `local-host.lock` serializes first registration. Changing
-installations does not overwrite an independently registered owner. Linux GChat
-updates refresh engine and host paths only for the same desktop data folder.
-Explicit host commands with `--data-dir` do not change the shared registration.
+`~/.config/ginfer/local-host.json`). It records the selected Host's state directory,
+instance identity, platform and management endpoint; it contains no credentials
+and moves no data. A neighboring `local-host.lock` serializes updates. Desktop
+bootstrap on Linux and Windows selects its configured data folder and refreshes
+its installed executable paths. An open client retains that owner even if another
+installation changes the discovery locator. Installed Manager CLI launchers prefer
+their own saved configuration; unconfigured clients use the registered owner.
+
+Managed Hosts verify their canonical state directory and platform in addition to
+their certificate and instance identity. If the preferred management or LAN port
+is occupied, they keep the other listener running, bind a free port atomically,
+save the selected port in their own `host.json`, and show a notice in the GChat Manager panel.
+Restarting reuses those saved ports. A Host from before this identity check must
+be restarted after updating. Standalone explicit listen addresses remain fixed;
+explicit host commands with `--data-dir` do not change the shared registration.
 
 Fresh standalone setup defaults to `%LOCALAPPDATA%\GInfer` for Windows binaries
 and `%APPDATA%\GInfer\data` for provider storage. Linux defaults are

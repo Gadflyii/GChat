@@ -84,6 +84,7 @@ pub async fn initialize<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<
     initialize_data_folder(&data_folder).await
 }
 async fn initialize_data_folder(data_folder: &std::path::Path) -> Result<(), String> {
+    client().set_local_directory(data_folder.join("ginfer/host")).await?;
     client().initialize().await?;
     client()
         .import_legacy(&data_folder.join("ginfer/hosts.json"))
@@ -183,12 +184,12 @@ async fn ensure_desktop_host<R: tauri::Runtime>(
     crate::core::setup::wait_for_bundled_resources(app).await?;
     #[cfg(feature = "hardware")]
     require_local_hardware().await?;
-    installed_desktop_host(
+    let local = installed_desktop_host(
         &crate::core::app::commands::get_jan_data_folder_path(app.clone()),
         &app.path().resource_dir().map_err(|e| e.to_string())?,
-    )?
-    .ensure_shared_running()
-    .await
+    )?;
+    client().initialize_from_owner(&ginfer_host::local_host_registry::Owner::Desktop(Box::new(local.clone()))).await?;
+    local.ensure_shared_running().await
 }
 
 /// Called only after a verified runtime installation changes its payload.
@@ -212,9 +213,9 @@ pub async fn prepare_installed_hardware_from_paths(
 ) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
     #[cfg(feature = "hardware")]
     require_local_hardware().await?;
-    installed_desktop_host(&data_folder, &resource_directory)?
-        .ensure_shared_running()
-        .await?;
+    let local = installed_desktop_host(&data_folder, &resource_directory)?;
+    client().initialize_from_owner(&ginfer_host::local_host_registry::Owner::Desktop(Box::new(local.clone()))).await?;
+    local.ensure_shared_running().await?;
     initialize_data_folder(&data_folder).await?;
     let host_id = client()
         .local_host()

@@ -25,6 +25,27 @@ it('keeps a saved remote host passive until its Connect button is used', async (
   await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled())
 })
 
+it('shows separate management and LAN ports as notices while preserving sharing errors', () => {
+  const host = { local: true, host_id: 'host', name: 'Host', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
+  const managementNotice = 'Another Host owns the preferred management port. This Host uses port 41235.'
+  const lanNotice = 'This Host uses saved port 41236 for LAN sharing.'
+  const sharingError = 'A later LAN advertisement failed.'
+  const snapshot: EngineSnapshot = {
+    host_id: 'host', display_name: 'Host', revision: 1, gpus: [], models: [], instances: [],
+    management_notice: managementNotice,
+    lan_sharing: {
+      managed: true, enabled: true, active: true, port: 41236,
+      notice: lanNotice,
+      error: sharingError,
+    },
+  }
+  render(<HostCard host={host} snapshot={snapshot} />)
+  expect(screen.getByText(managementNotice)).toHaveAttribute('role', 'status')
+  expect(screen.getByText(lanNotice)).toHaveAttribute('role', 'status')
+  expect(screen.getByText(sharingError)).toHaveAttribute('role', 'alert')
+  expect(screen.getByText(/Other computers on your network can pair/)).toBeInTheDocument()
+})
+
 it.each([
   ['qwen3.8-27b', 262144],
   ['qwen3.8-flash-next', 262144],

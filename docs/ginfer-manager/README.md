@@ -13,6 +13,19 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Managed Host ownership and ports — October 16
+
+Desktop bootstrap and an installed Manager CLI launcher use their configured Host data root.
+Connections check the Host UUID, pinned certificate, canonical state directory
+and platform; a discovery registration for another installation does not
+redirect an open client. If another process occupies a managed management or LAN
+port, Host binds a free port, saves it in that data root and shows the selected
+port in the GChat Manager panel. The other process stays running. Explicit standalone listener
+addresses remain fixed. The shared bootstrap applies to Linux and Windows;
+Windows runtime acceptance remains a separate platform gate. See the
+[ownership decision](../decisions/2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
+and [data-folder behavior](../../DEVELOP.md#custom-data-folder).
+
 ## Fresh startup quotes — October 15
 
 Merged source `16a338aff` addresses

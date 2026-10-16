@@ -222,43 +222,38 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
         .trim_matches(['[', ']'])
         .parse()
         .map_err(|_| "local Host origin must use a loopback IP address")?;
-    let owner = match ginfer_host::local_host_registry::registered().await? {
-        Some(owner) => owner,
-        None => {
-            #[cfg(target_os = "linux")]
-            let engine_runtimes = if args.runtime_set {
-                ginfer_host::local_host::desktop_runtimes(
-                    provider
-                        .as_ref()
-                        .ok_or("--runtime-set requires desktop provider storage")?,
-                )?
-            } else {
-                Default::default()
-            };
-            #[cfg(not(target_os = "linux"))]
-            let engine_runtimes = Default::default();
-            let local = ginfer_host::local_host::LocalHost {
-                binary: std::env::current_exe().map_err(|e| e.to_string())?,
-                engine,
-                engine_runtimes,
-                directory: directory.clone(),
-                desktop_provider: provider,
-                models: vec![],
-                artifact_sets: vec![],
-                name: ginfer_host::local_host::computer_name()?,
-                nvidia_smi: args.nvidia_smi,
-                listen: std::net::SocketAddr::new(
-                    address,
-                    url.port_or_known_default()
-                        .ok_or("local Host port is missing")?,
-                ),
-            };
-            ginfer_host::local_host_registry::resolve(Some(
-                ginfer_host::local_host_registry::Owner::Desktop(Box::new(local)),
-            ))
-            .await?
-        }
+    #[cfg(target_os = "linux")]
+    let engine_runtimes = if args.runtime_set {
+        ginfer_host::local_host::desktop_runtimes(
+            provider
+                .as_ref()
+                .ok_or("--runtime-set requires desktop provider storage")?,
+        )?
+    } else {
+        Default::default()
     };
+    #[cfg(not(target_os = "linux"))]
+    let engine_runtimes = Default::default();
+    let local = ginfer_host::local_host::LocalHost {
+        binary: std::env::current_exe().map_err(|e| e.to_string())?,
+        engine,
+        engine_runtimes,
+        directory: directory.clone(),
+        desktop_provider: provider,
+        models: vec![],
+        artifact_sets: vec![],
+        name: ginfer_host::local_host::computer_name()?,
+        nvidia_smi: args.nvidia_smi,
+        listen: std::net::SocketAddr::new(
+            address,
+            url.port_or_known_default()
+                .ok_or("local Host port is missing")?,
+        ),
+    };
+    let owner = ginfer_host::local_host_registry::resolve(Some(
+        ginfer_host::local_host_registry::Owner::Desktop(Box::new(local)),
+    ))
+    .await?;
     let directory = match &owner {
         ginfer_host::local_host_registry::Owner::Desktop(local) => local.directory.clone(),
         ginfer_host::local_host_registry::Owner::Service { directory, .. } => directory.clone(),
@@ -494,7 +489,7 @@ async fn run(
         });
     }
     let host = Host::open_with_model_storage(
-        data_dir,
+        data_dir.clone(),
         args.name,
         args.engine.ok_or("engine is required")?,
         args.models,
@@ -514,16 +509,27 @@ async fn run(
             })
             .collect(),
     )?;
-    let listener = tokio::net::TcpListener::bind(args.listen)
-        .await
-        .map_err(|e| e.to_string())?;
+    let preferred = if args.desktop_managed {
+        ginfer_host::local_host::management_address(&data_dir, args.listen)?
+    } else {
+        args.listen
+    };
+    let (listener, notice) =
+        ginfer_host::local_host::bind_management(preferred, args.desktop_managed).await?;
     let mut local_address = listener.local_addr().map_err(|e| e.to_string())?;
     if local_address.ip().is_unspecified() {
         local_address.set_ip(if local_address.is_ipv4() {
             std::net::Ipv4Addr::LOCALHOST.into()
         } else { std::net::Ipv6Addr::LOCALHOST.into() });
     }
-    host.data.lock().await.management_origin = Some(format!("https://{local_address}"));
+    {
+        let mut data = host.data.lock().await;
+        data.management_origin = Some(format!("https://{local_address}"));
+        if let Some(notice) = notice {
+            eprintln!("{notice}");
+            data.management_notice = Some(notice);
+        }
+    }
     host.save().await?;
     let data = host.data.lock().await;
     let acceptor = data.certificate.acceptor()?;

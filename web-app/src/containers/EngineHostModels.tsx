@@ -82,7 +82,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
       action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />}
     {host.local && <EngineFirstRun hostId={host.host_id} />}
-    {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} />}
+    {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} managementNotice={snapshot.management_notice} />}
       {host.local && snapshot && <EngineGbotControl clients={snapshot.clients} disabled={busy || !!error} change={(client_id, action) => act('gbot_grant', { body: { client_id, action } })} />}
     {snapshot && <details className="rounded-lg border p-4 space-y-3">
       <summary className="cursor-pointer font-medium">Launch Server Instance</summary>

@@ -11,12 +11,13 @@ pub struct LanSharing {
     /// Bound port of the independently advertised standalone listener.
     pub standalone: Option<u16>,
     pub error: Option<String>,
+    pub notice: Option<String>,
     running: Option<Listener>,
 }
 
 impl Default for LanSharing {
     fn default() -> Self {
-        Self { port: PORT, managed: false, standalone: None, error: None, running: None }
+        Self { port: PORT, managed: false, standalone: None, error: None, notice: None, running: None }
     }
 }
 
@@ -54,11 +55,31 @@ impl LanSharing {
         self.error = None;
         if enabled && !self.managed_active() {
             if let Some(previous) = self.running.take() { previous.stop().await; }
-            let listener = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, self.port))
-                .await.map_err(|e| format!("Cannot open LAN port {}: {e}", self.port))?;
-            let data = host.data.lock().await;
+            let preferred_port = self.port;
+            let listener = match TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, preferred_port)).await {
+                Ok(listener) => listener,
+                Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => {
+                    TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).await
+                        .map_err(|error| format!("Cannot open an alternate LAN port: {error}"))?
+                }
+                Err(error) => return Err(format!("Cannot open LAN port {preferred_port}: {error}")),
+            };
+            let address = listener.local_addr().map_err(|error| error.to_string())?;
+            let mut data = host.data.lock().await;
             let acceptor = data.certificate.acceptor()?;
-            let advertisement = advertise(data.host_id, &data.name, listener.local_addr().map_err(|e| e.to_string())?)?;
+            let previous_port = data.lan_port;
+            data.lan_port = Some(address.port());
+            let saved = serde_json::to_vec(&*data).map_err(|error| error.to_string())
+                .and_then(|bytes| crate::service::write_private(&host.directory.join("host.json"), &bytes));
+            if let Err(error) = saved {
+                data.lan_port = previous_port;
+                return Err(format!("Cannot save LAN port: {error}"));
+            }
+            self.port = address.port();
+            if self.port != preferred_port {
+                self.notice = Some(format!("LAN port {preferred_port} is already in use. This Host uses port {} for LAN sharing.", self.port));
+            }
+            let advertisement = advertise(data.host_id, &data.name, address)?;
             let fullname = format!("{}.{}", data.host_id, crate::discovery::SERVICE_TYPE);
             drop(data);
             let weak = Arc::downgrade(host);
@@ -125,7 +146,15 @@ impl Host {
     pub async fn initialize_lan_sharing(self: &Arc<Self>) {
         let mut sharing = self.lan_sharing.lock().await;
         sharing.managed = true;
-        let enabled = self.data.lock().await.share_lan;
+        let data = self.data.lock().await;
+        let enabled = data.share_lan;
+        if let Some(port) = data.lan_port.filter(|port| *port != 0) {
+            sharing.port = port;
+            if port != PORT {
+                sharing.notice = Some(format!("This Host uses saved port {port} for LAN sharing."));
+            }
+        }
+        drop(data);
         if let Err(error) = sharing.set(self, enabled).await { sharing.error = Some(error); }
     }
 
@@ -303,31 +332,57 @@ mod tests {
         assert_eq!(host.snapshot().await["display_name"], "Lab workstation");
         assert!(!host.lan_sharing.lock().await.active());
         assert_eq!(host.snapshot().await["lan_sharing"]["port"], port);
-        let occupied = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, port)).await.unwrap();
-        assert!(host.set_lan_sharing(true).await.is_err());
-        assert!(!host.data.lock().await.share_lan);
-        let network = host.snapshot().await["lan_sharing"].clone();
-        assert_eq!(network["enabled"], false);
-        assert_eq!(network["active"], false);
-        assert_eq!(network["managed"], true);
-        assert_eq!(network["port"], port);
-        assert!(network["error"].is_string());
-        drop(occupied);
         host.set_lan_sharing(true).await.unwrap();
         assert!(host.lan_sharing.lock().await.active());
         host.lan_sharing.lock().await.stop().await;
-        drop(host);
-        let host = open().await.unwrap();
-        let occupied = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, port)).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn occupied_managed_lan_port_selects_and_persists_an_independent_listener() {
+        let dir = tempfile::tempdir().unwrap();
+        let occupied = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).await.unwrap();
+        let preferred_port = occupied.local_addr().unwrap().port();
+        let host = Host::open(dir.path().to_owned(), "Independent Host".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        {
+            let mut data = host.data.lock().await;
+            data.lan_port = Some(preferred_port);
+            data.management_origin = Some("https://127.0.0.1:12345".into());
+            data.management_notice = Some("Management selected a separate port.".into());
+        }
         host.initialize_lan_sharing().await;
         let network = host.snapshot().await["lan_sharing"].clone();
-        assert_eq!(network["enabled"], true, "Failed startup preserves the requested desktop preference");
-        assert_eq!(network["active"], false);
-        assert_eq!(network["port"], port);
-        assert!(network["error"].is_string());
-        drop(occupied);
+        let selected_port = network["port"].as_u64().unwrap() as u16;
+        assert_ne!(selected_port, preferred_port);
+        assert_ne!(selected_port, 0);
+        assert_eq!(network["enabled"], true);
+        assert_eq!(network["active"], true);
+        assert_eq!(network["managed"], true);
+        assert!(network["error"].is_null());
+        assert!(network["notice"].as_str().unwrap().contains(&preferred_port.to_string()));
+        assert_eq!(host.data.lock().await.lan_port, Some(selected_port));
+        let foreign_connection = tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, preferred_port)).await.unwrap();
+        let (_, peer) = tokio::time::timeout(Duration::from_secs(2), occupied.accept()).await.unwrap().unwrap();
+        assert_eq!(peer, foreign_connection.local_addr().unwrap(), "The occupied listener remains owned by its original server");
+        assert!(tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, selected_port)).await.is_ok());
+        host.lan_sharing.lock().await.stop().await;
+        drop(host);
+
+        let host = Host::open(dir.path().to_owned(), "Reopened Host".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        host.initialize_lan_sharing().await;
+        let snapshot = host.snapshot().await;
+        assert_eq!(snapshot["local_identity"]["state_directory"], serde_json::json!(dir.path().canonicalize().unwrap()));
+        assert_eq!(snapshot["local_identity"]["platform"], std::env::consts::OS);
+        assert_eq!(snapshot["management_origin"], "https://127.0.0.1:12345");
+        assert_eq!(snapshot["management_notice"], "Management selected a separate port.");
+        assert_eq!(snapshot["lan_sharing"]["port"], selected_port);
+        assert_eq!(snapshot["lan_sharing"]["active"], true);
+        assert!(snapshot["lan_sharing"]["error"].is_null());
+        assert!(snapshot["lan_sharing"]["notice"].as_str().unwrap().contains(&selected_port.to_string()));
+        host.set_lan_sharing(false).await.unwrap();
         host.set_lan_sharing(true).await.unwrap();
-        assert!(host.lan_sharing.lock().await.active());
+        assert_eq!(host.snapshot().await["lan_sharing"]["port"], selected_port);
         host.lan_sharing.lock().await.stop().await;
     }
 }
