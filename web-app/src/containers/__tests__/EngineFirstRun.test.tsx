@@ -120,7 +120,7 @@ it('saves folder and model choices during profiling and restores them after reop
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'models', release_ids: [release.sha256] })
   view.unmount()
   render(<EngineFirstRun />)
-  expect(await screen.findByLabelText('Model download folder')).toHaveValue('/queued-models')
+  await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/queued-models'))
   await waitFor(() => expect(screen.getByRole('checkbox', { name: /Muse/ })).toBeChecked())
   expect(screen.getByText('Hardware profiling: running')).toBeInTheDocument()
   expect(screen.queryByText('Downloading models')).not.toBeInTheDocument()
