@@ -1431,3 +1431,22 @@ test('pending and exact stale profile groups update in shared snapshots and requ
   await waitFor(() => app.calls.some(({ input }) => input?.request?.args?.action === 'cancel'), 'queue cancellation uses the original job')
   assert.deepEqual(app.calls.find(({ input }) => input?.request?.args?.action === 'cancel').input.request.args, { action: 'cancel' })
 })
+
+test('screened startup profiles remain selectable with the full-context warning and witnessed cap', async (t) => {
+  const view = fixture()
+  const profile = view.hosts[0].snapshot.launch_profiles[0].profile
+  profile.qualification.tier = 'screened-startup'
+  profile.max_context = 131072
+  profile.concurrency = 8
+  const app = await manager(t, view)
+  button(app.document, 'Start a model…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  const options = pane.querySelector('select[name="profile_choice"]').options
+  assert.match(options[0].text, /Screened, not full-context qualified · C8 · 128K context/)
+  assert.doesNotMatch(options[0].text, /Recommended|256K/)
+  assert.match(pane.textContent, /Startup and short requests were checked; full-context capacity is unverified/)
+  assert.equal(requests(app).length, 0)
+  submit(app)
+  await completed(app, calls => calls.length === 1)
+  assert.equal(requests(app)[0].args.profile_id, profile.id)
+})

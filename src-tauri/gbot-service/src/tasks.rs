@@ -171,16 +171,164 @@ struct State {
     actors: BTreeMap<Uuid, Actor>,
 }
 
+// The metadata gate covers acquisition publication and release, so a setup
+// contention report identifies the current holder without changing the task lock.
+struct TaskStateMutex {
+    state: Arc<Mutex<State>>,
+    holder: Arc<SyncMutex<Option<TaskStateHolder>>>,
+}
+
+struct TaskStateHolder {
+    operation: &'static str,
+    workspace: Option<crate::contract::WorkspaceId>,
+    task: Option<Uuid>,
+    acquired_unix_ms: Option<u128>,
+    acquired: std::time::Instant,
+}
+
+impl TaskStateHolder {
+    fn new(
+        operation: &'static str,
+        workspace: Option<crate::contract::WorkspaceId>,
+        task: Option<Uuid>,
+        state: &State,
+    ) -> Self {
+        let workspace = workspace.or_else(|| {
+            let id = task?;
+            state.actors.get(&id).map_or_else(
+                || {
+                    state
+                        .records
+                        .get(&id)
+                        .map(|record| record.identity.workspace_id)
+                },
+                |actor| Some(actor.record.borrow().identity.workspace_id),
+            )
+        });
+        Self {
+            operation,
+            workspace,
+            task,
+            acquired_unix_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .ok()
+                .map(|elapsed| elapsed.as_millis()),
+            acquired: std::time::Instant::now(),
+        }
+    }
+}
+
+impl std::fmt::Display for TaskStateHolder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "holder={} workspace={} task={} acquired_unix_ms={} held_ms={}",
+            self.operation,
+            self.workspace
+                .map_or_else(|| "none".into(), |id| id.0.to_string()),
+            self.task.map_or_else(|| "none".into(), |id| id.to_string()),
+            self.acquired_unix_ms
+                .map_or_else(|| "unknown".into(), |value| value.to_string()),
+            self.acquired.elapsed().as_millis(),
+        )
+    }
+}
+
+struct TaskStateGuard {
+    state: Option<tokio::sync::OwnedMutexGuard<State>>,
+    holder: Arc<SyncMutex<Option<TaskStateHolder>>>,
+}
+
+impl std::ops::Deref for TaskStateGuard {
+    type Target = State;
+
+    fn deref(&self) -> &State {
+        self.state.as_ref().expect("task state guard is held")
+    }
+}
+
+impl std::ops::DerefMut for TaskStateGuard {
+    fn deref_mut(&mut self) -> &mut State {
+        self.state.as_mut().expect("task state guard is held")
+    }
+}
+
+impl Drop for TaskStateGuard {
+    fn drop(&mut self) {
+        let mut holder = self
+            .holder
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        // Keep the metadata gate until the actual state mutex has been released.
+        drop(self.state.take());
+        *holder = None;
+    }
+}
+
+impl TaskStateMutex {
+    fn new(state: State) -> Self {
+        Self {
+            state: Arc::new(Mutex::new(state)),
+            holder: Arc::new(SyncMutex::new(None)),
+        }
+    }
+
+    async fn lock(
+        &self,
+        operation: &'static str,
+        workspace: Option<crate::contract::WorkspaceId>,
+        task: Option<Uuid>,
+    ) -> TaskStateGuard {
+        let mut pending = std::pin::pin!(self.state.clone().lock_owned());
+        std::future::poll_fn(|context| {
+            let mut holder = self
+                .holder
+                .lock()
+                .unwrap_or_else(|error| error.into_inner());
+            let state = std::task::ready!(std::future::Future::poll(pending.as_mut(), context));
+            *holder = Some(TaskStateHolder::new(operation, workspace, task, &state));
+            std::task::Poll::Ready(TaskStateGuard {
+                state: Some(state),
+                holder: self.holder.clone(),
+            })
+        })
+        .await
+    }
+
+    #[cfg(target_os = "linux")]
+    fn try_lock(
+        &self,
+        operation: &'static str,
+        workspace: Option<crate::contract::WorkspaceId>,
+        task: Option<Uuid>,
+    ) -> std::result::Result<TaskStateGuard, String> {
+        let mut holder = self
+            .holder
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let state = self.state.clone().try_lock_owned().map_err(|_| {
+            holder
+                .as_ref()
+                .map_or_else(|| "holder=unknown".into(), ToString::to_string)
+        })?;
+        *holder = Some(TaskStateHolder::new(operation, workspace, task, &state));
+        Ok(TaskStateGuard {
+            state: Some(state),
+            holder: self.holder.clone(),
+        })
+    }
+}
+
 #[cfg(target_os = "linux")]
 pub(crate) struct SetupTaskGuard {
-    _state: tokio::sync::OwnedMutexGuard<State>,
+    _state: TaskStateGuard,
 }
 
 pub struct TaskRunner {
     root: PathBuf,
     runtime: Arc<WorkspaceRuntime>,
     processes: ExecutorProcesses,
-    state: Arc<Mutex<State>>,
+    state: TaskStateMutex,
     approvals: Arc<ApprovalQueue>,
     pub schedules: Arc<crate::schedules::Schedules>,
 }
@@ -228,11 +376,11 @@ impl TaskRunner {
             runtime,
             processes,
             schedules,
-            state: Arc::new(Mutex::new(State {
+            state: TaskStateMutex::new(State {
                 closed: false,
                 records,
                 actors: BTreeMap::new(),
-            })),
+            }),
             approvals: Arc::new(ApprovalQueue {
                 entries: SyncMutex::new(BTreeMap::new()),
                 revision,
@@ -250,9 +398,18 @@ impl TaskRunner {
     ) -> std::result::Result<SetupTaskGuard, WorkspaceError> {
         // Computer removal holds this lock before the setup lifecycle lock.
         // Renewal already owns that lifecycle, so contention must fail closed.
-        let state = self.state.clone().try_lock_owned().map_err(|_| {
-            WorkspaceError::GuestSetup("Task admission is busy; retry saved setup later.".into())
-        })?;
+        let state = self
+            .state
+            .try_lock("setup_session_renewal", Some(workspace), None)
+            .map_err(|holder| {
+                eprintln!(
+                    "[GChat Gbot] setup session renewal task contention: requested_workspace={} {holder}",
+                    workspace.0
+                );
+                WorkspaceError::GuestSetup(
+                    "Task admission is busy; retry saved setup later.".into(),
+                )
+            })?;
         if state.closed {
             return Err(WorkspaceError::ShuttingDown);
         }
@@ -321,7 +478,10 @@ impl TaskRunner {
         if !valid_assignment(&assignment) {
             return Err(TaskRunnerError::InvalidPrompt);
         }
-        let mut state = self.state.lock().await;
+        let mut state = self
+            .state
+            .lock("start_with_id", Some(identity.workspace_id), Some(id))
+            .await;
         if state.closed {
             return Err(TaskRunnerError::Closed);
         }
@@ -360,7 +520,7 @@ impl TaskRunner {
     }
 
     pub async fn resume(&self, id: Uuid, assignment: Option<Assignment>) -> Result<TaskRecord> {
-        let mut state = self.state.lock().await;
+        let mut state = self.state.lock("resume", None, Some(id)).await;
         if state.closed {
             return Err(TaskRunnerError::Closed);
         }
@@ -455,7 +615,7 @@ impl TaskRunner {
     }
 
     pub async fn list(&self) -> Result<Vec<TaskRecord>> {
-        let state = self.state.lock().await;
+        let state = self.state.lock("list", None, None).await;
         Ok(state
             .records
             .iter()
@@ -476,7 +636,7 @@ impl TaskRunner {
     ) -> std::result::Result<crate::kvm_setup::SetupRecord, crate::kvm_setup::SetupIssue> {
         let owner = self.clone();
         tokio::spawn(async move {
-            let state = owner.state.lock().await;
+            let state = owner.state.lock("remove_computer", Some(id), None).await;
             if state.records.iter().any(|(task_id, saved)| {
                 let record = state.actors.get(task_id)
                     .map_or_else(|| saved.clone(), |actor| actor.record.borrow().clone());
@@ -492,7 +652,7 @@ impl TaskRunner {
     }
 
     pub async fn snapshot(&self, id: Uuid) -> Result<TaskRecord> {
-        let state = self.state.lock().await;
+        let state = self.state.lock("snapshot", None, Some(id)).await;
         if let Some(actor) = state.actors.get(&id) {
             return Ok(actor.record.borrow().clone());
         }
@@ -504,7 +664,7 @@ impl TaskRunner {
     }
 
     pub async fn cancel(&self, id: Uuid) -> Result<TaskRecord> {
-        let mut state = self.state.lock().await;
+        let mut state = self.state.lock("cancel", None, Some(id)).await;
         if state.closed {
             return Err(TaskRunnerError::Closed);
         }
@@ -524,7 +684,10 @@ impl TaskRunner {
     }
 
     pub async fn pause(&self, identity: SessionIdentity) -> Result<()> {
-        let mut state = self.state.lock().await;
+        let mut state = self
+            .state
+            .lock("pause", Some(identity.workspace_id), None)
+            .await;
         let ids: Vec<_> = state
             .actors
             .iter()
@@ -587,7 +750,7 @@ impl TaskRunner {
         request_id: Uuid,
         response: Option<String>,
     ) -> Result<TaskRecord> {
-        let mut state = self.state.lock().await;
+        let mut state = self.state.lock("answer_help", None, Some(id)).await;
         if state.closed {
             return Err(TaskRunnerError::Closed);
         }
@@ -620,7 +783,7 @@ impl TaskRunner {
     }
 
     pub async fn close(&self) -> Result<()> {
-        let mut state = self.state.lock().await;
+        let mut state = self.state.lock("close", None, None).await;
         state.closed = true;
         self.approvals.closed.store(true, Ordering::Release);
         for actor in state.actors.values() {
@@ -744,7 +907,7 @@ mod tests {
             TaskState::Completed,
             TaskState::Cancelled,
         ] {
-            let mut records = runner.state.lock().await;
+            let mut records = runner.state.lock("test_fixture", None, None).await;
             let saved = records.records.get_mut(&id).unwrap();
             saved.state = state;
             saved.identity.session_id = SessionId::new();
@@ -757,23 +920,152 @@ mod tests {
             );
         }
         {
-            let mut state = runner.state.lock().await;
+            let acquired_not_before = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis();
+            let mut state = runner.state.lock("test_fixture", None, Some(id)).await;
             state.records.get_mut(&id).unwrap().state = TaskState::Paused;
             // Fail immediately rather than invert task/removal/setup lock order.
-            assert!(runner
+            let issue = runner
                 .guard_setup_session_renewal(WorkspaceId::new())
-                .is_err());
+                .err()
+                .unwrap()
+                .to_string();
+            assert_eq!(
+                issue,
+                WorkspaceError::GuestSetup(
+                    "Task admission is busy; retry saved setup later.".into()
+                )
+                .to_string()
+            );
+            let issue = runner
+                .state
+                .try_lock("test_probe", None, None)
+                .err()
+                .unwrap();
+            assert!(issue.contains("holder=test_fixture"));
+            assert!(issue.contains(&format!("workspace={}", identity.workspace_id.0)));
+            assert!(issue.contains(&format!("task={id}")));
+            let acquired = issue
+                .split_whitespace()
+                .find_map(|field| field.strip_prefix("acquired_unix_ms="))
+                .unwrap()
+                .parse::<u128>()
+                .unwrap();
+            assert!(acquired >= acquired_not_before);
+            assert!(
+                acquired
+                    <= std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_millis()
+            );
+            assert!(issue
+                .split_whitespace()
+                .find_map(|field| field.strip_prefix("held_ms="))
+                .unwrap()
+                .parse::<u128>()
+                .is_ok());
+            assert!(!issue.contains("unfinished before restart"));
         }
         let other = WorkspaceId::new();
         let guard = runner.guard_setup_session_renewal(other).unwrap();
-        assert!(runner.state.try_lock().is_err());
+        let issue = runner
+            .state
+            .try_lock("test_probe", None, None)
+            .err()
+            .unwrap();
+        assert!(issue.contains("holder=setup_session_renewal"));
+        assert!(issue.contains(&format!("workspace={}", other.0)));
+        assert!(issue.contains("task=none"));
+        assert!(!issue.contains(&id.to_string()));
         drop(guard);
-        assert!(runner.state.try_lock().is_ok());
-        runner.state.lock().await.closed = true;
+        assert!(runner.state.try_lock("test_probe", None, None).is_ok());
+        runner.state.lock("test_fixture", None, None).await.closed = true;
         assert!(matches!(
             runner.guard_setup_session_renewal(other),
             Err(WorkspaceError::ShuttingDown)
         ));
+    }
+
+    #[tokio::test]
+    async fn task_mutex_cancelled_waiter_preserves_holder_and_handoff() {
+        let state = Arc::new(TaskStateMutex::new(State {
+            closed: false,
+            records: BTreeMap::new(),
+            actors: BTreeMap::new(),
+        }));
+        let workspace = WorkspaceId::new();
+        let task = Uuid::new_v4();
+        let first = state.lock("first", Some(workspace), Some(task)).await;
+        // Register a waiter, then cancel its future while the first guard lives.
+        let mut cancelled = Box::pin(state.lock("cancelled_waiter", None, None));
+        std::future::poll_fn(|context| {
+            assert!(std::future::Future::poll(cancelled.as_mut(), context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        drop(cancelled);
+        let issue = state.try_lock("probe", None, None).err().unwrap();
+        assert!(issue.contains("holder=first"));
+        assert!(issue.contains(&format!("workspace={}", workspace.0)));
+        assert!(issue.contains(&format!("task={task}")));
+        let mut next = Box::pin(state.lock("next", None, None));
+        std::future::poll_fn(|context| {
+            assert!(std::future::Future::poll(next.as_mut(), context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        drop(first);
+        let second = next.await;
+        let issue = state.try_lock("probe", None, None).err().unwrap();
+        assert!(issue.contains("holder=next workspace=none task=none"));
+        assert!(!issue.contains(&task.to_string()));
+        drop(second);
+        assert!(state.holder.lock().unwrap().is_none());
+        assert!(state.try_lock("probe", None, None).is_ok());
+    }
+
+    #[tokio::test]
+    async fn task_mutex_holder_cancellation_and_error_clear_diagnostics() {
+        let state = Arc::new(TaskStateMutex::new(State {
+            closed: false,
+            records: BTreeMap::new(),
+            actors: BTreeMap::new(),
+        }));
+        let (acquired, ready) = oneshot::channel();
+        let actor_state = state.clone();
+        let actor = tokio::spawn(async move {
+            let _guard = actor_state.lock("cancelled_holder", None, None).await;
+            acquired.send(()).unwrap();
+            std::future::pending::<()>().await;
+        });
+        ready.await.unwrap();
+        assert!(state
+            .try_lock("probe", None, None)
+            .err()
+            .unwrap()
+            .contains("holder=cancelled_holder"));
+        actor.abort();
+        assert!(actor.await.unwrap_err().is_cancelled());
+        assert!(state.holder.lock().unwrap().is_none());
+        let failed: std::result::Result<(), ()> = async {
+            let _guard = state.lock("error_return", None, None).await;
+            Err(())
+        }
+        .await;
+        assert_eq!(failed, Err(()));
+        assert!(state.holder.lock().unwrap().is_none());
+        let mut replacement = state.try_lock("replacement", None, None).unwrap();
+        replacement.closed = true;
+        assert!(state
+            .try_lock("probe", None, None)
+            .err()
+            .unwrap()
+            .contains("holder=replacement workspace=none task=none"));
+        drop(replacement);
+        assert!(state.lock("readback", None, None).await.closed);
     }
 
     #[cfg(target_os = "linux")]
@@ -838,7 +1130,12 @@ mod tests {
         ] {
             let mut record = task.snapshot().clone();
             record.state = state;
-            runner.state.lock().await.records.insert(id, record);
+            runner
+                .state
+                .lock("test_fixture", None, None)
+                .await
+                .records
+                .insert(id, record);
             let issue = runner
                 .remove_computer(setup.clone(), identity.workspace_id)
                 .await
@@ -906,7 +1203,11 @@ mod tests {
         )
         .await
         .unwrap();
-        runner.launch(&mut *runner.state.lock().await, task, assignment().into());
+        runner.launch(
+            &mut *runner.state.lock("test_fixture", None, None).await,
+            task,
+            assignment().into(),
+        );
         let request = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 let record = runner.snapshot(id).await.unwrap();
@@ -1024,7 +1325,11 @@ mod tests {
         )
         .await
         .unwrap();
-        runner.launch(&mut *runner.state.lock().await, task, assignment().into());
+        runner.launch(
+            &mut *runner.state.lock("test_fixture", None, None).await,
+            task,
+            assignment().into(),
+        );
         let pending = next_approval(&runner, &mut changes).await;
         assert!(matches!(
             serde_json::from_value::<GuestRequest>(pending.request.clone())
@@ -1057,7 +1362,11 @@ mod tests {
         assert_eq!(runner.list().await.unwrap()[0].state, TaskState::Paused);
         let mut changes = runner.subscribe();
         let task = CuaTask::open(runner.path(id)).await.unwrap();
-        runner.launch(&mut *runner.state.lock().await, task, assignment().into());
+        runner.launch(
+            &mut *runner.state.lock("test_fixture", None, None).await,
+            task,
+            assignment().into(),
+        );
         let refresh = next_approval(&runner, &mut changes).await;
         assert!(refresh.request["operation"]["tool"] == "get_desktop_state");
         let record = runner.snapshot(id).await.unwrap();

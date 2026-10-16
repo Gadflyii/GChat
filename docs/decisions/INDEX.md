@@ -522,3 +522,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-16** — [Guide Google Desktop registration and import client JSON](2026-10-16-guide-google-desktop-registration.md)
 
 - [Preserve GPU selection when loading installed models](2026-10-16-preserve-installed-model-gpu-selection.md)
+- **2026-10-16** — [Record Gbot task admission holders](2026-10-16-record-gbot-task-admission-holders.md)
+- [Label screened startup launch profiles](2026-10-16-label-screened-startup-launch-profiles.md)
