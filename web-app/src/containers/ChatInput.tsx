@@ -1025,7 +1025,8 @@ const ChatInput = memo(function ChatInput({
       if (!docs.length || !currentThreadId) return
       const documentAccess = conversationDocumentAccess(
         Boolean(selectedModel?.capabilities?.includes('tools')),
-        tools,
+        // The picker and file-stat awaits can outlive a catalog refresh.
+        useAppState.getState().tools,
         useToolAvailable.getState().getDisabledToolsForThread(currentThreadId),
         selectedAgentSkill || activeSkill ? 'skill_invoke' : selectedAgentDefinitionId !== 'general' ? 'agent_run' : undefined
       )
@@ -1226,7 +1227,6 @@ const ChatInput = memo(function ChatInput({
       serviceHub,
       selectedAgentDefinitionId,
       selectedAgentSkill,
-      tools,
       setAttachmentsForThread,
       updateAttachmentProcessing,
     ]
