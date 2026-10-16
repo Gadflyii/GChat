@@ -169,7 +169,7 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
           const next = Object.fromEntries(
             snapshot.workspaces.map((bot) => [bot.id, replyKey(tasks, bot.id)])
           )
-          if (s.available && s.target === target && s.replyBaseline) {
+          if (s.target === target && s.replyBaseline) {
             for (const bot of snapshot.workspaces) {
               const previous = new Set(s.replyBaseline[bot.id] ?? [])
               if (next[bot.id].some((reply) => !previous.has(reply)))

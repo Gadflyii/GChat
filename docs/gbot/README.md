@@ -1,5 +1,31 @@
 # Gbot design
 
+## Outage reply notification fix — C7
+
+`GCHAT-GBOT-REPLY-OUTAGE-NOTIFICATION` is merge-ready on
+`fix/c7-gbot-reply-outage-20261015`; source `b9b487ff3`, baseline `c75c82483`.
+The one-line fix compares recovered replies with the retained same-service
+baseline even after a state or service-target read outage. A new reply then
+sets **New reply**; previously read history stays read. Startup, reset, service
+changes and stale-refresh fences retain their existing behavior.
+
+The existing outage regression now includes state and service-target failures.
+Against the original guard, exactly those two cases fail (13 pass); the fixed
+guard passes all 15. An independent source/regression review approved the diff.
+Full `make verify` passed on Linux at 2026-10-16 00:02:31 UTC in 253 seconds:
+lint, type checking, test-quality and coverage floors pass; 2,393 frontend,
+114 extension and 919 Rust cases pass, with 6 frontend skips and 27 Rust ignores.
+The frozen source was unchanged across the gate. No Engine/GPU test is required
+for this frontend-only change (standing rule 12).
+
+Owned source: `/ai/gchat-worktrees/c7-gbot-reply-outage-20261015`; shared
+`/ai/gchat` stays on main. Concise result:
+`out/gbot-reply-outage-20261015/result.json`. The S1 container terminated,
+compile guards and P2's borrowed cache were returned, and both CPU bookings
+and the fallback wake were canceled. Private S1 staging (458 MiB) was removed after checking for open references;
+no owned build or model was allocated. The source worktree is retained for merge.
+Next action: bubbs merges the branch.
+
 The Gbot menu retains settings, setup and controls. Bot avatars above Work open
 a right-side companion over the current Chat, Code or Studio view. Its hidden,
 compact and expanded states preserve the main workspace; each bot retains its
@@ -310,8 +336,10 @@ light/dark styling and reduced-motion support. Detailed channel layout and the
 guided setup remain separate UI work.
 
 The avatar's **New reply** state reflects newly received assistant text. A
-temporary task or approval fetch failure clears those lists until recovery,
-but preserves reply comparison history so read replies stay read. Disabling
+temporary service-target, state, task or approval fetch failure clears the task
+and approval lists until recovery, but preserves same-service reply comparison
+history so read replies stay read and replies received during the outage are
+announced when service recovers. Disabling
 Gbot or switching services clears that history; the first successful snapshot
 establishes a baseline without announcing old replies.
 
