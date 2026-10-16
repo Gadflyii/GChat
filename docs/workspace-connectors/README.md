@@ -28,6 +28,15 @@ Ron owns confirmation of the Entra redirect configuration and live-consent gate.
 [guided sign-in decision](../decisions/2026-10-16-guide-microsoft-sign-in-with-release-identity.md)
 and [account audience decision](../decisions/2026-10-16-allow-personal-microsoft-accounts.md).
 
+Google uses each user's own Desktop OAuth client, with no built-in Google release
+identity. Settings guides project creation, API enablement, External consent and
+production publishing, then imports the downloaded client JSON with a file picker.
+The existing native vault stores any registration secret; imported endpoint URLs
+never change provider routing. Expired or revoked sign-in prompts account
+reconnection in plain language. These source changes use mocks; live consent
+remains Ron's release gate. See [the Google setup guide](operations.md#google-register-your-own-desktop-app)
+and [the registration decision](../decisions/2026-10-16-guide-google-desktop-registration.md).
+
 Google services: Gmail, Calendar, Drive, Docs, Sheets, Slides, People contacts and
 Tasks. Microsoft Graph services: Outlook mail/calendar/contacts, OneDrive,
 SharePoint, Teams, To Do, OneNote and Excel. Cover practical service operations

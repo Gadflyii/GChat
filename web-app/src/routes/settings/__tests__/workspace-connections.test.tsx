@@ -17,13 +17,20 @@ import { WorkspaceConnections } from '../workspace-connections'
 const api = vi.hoisted(() => ({
   connectorAccounts: vi.fn(),
   configureConnector: vi.fn(),
+  nativeInvoke: vi.fn(),
   beginConnectorAuth: vi.fn(),
   connectorAuthStatus: vi.fn(),
   cancelConnectorAuth: vi.fn(),
   selectConnectorAccount: vi.fn(),
   disconnectConnectorAccount: vi.fn(),
 }))
-vi.mock('@/services/workspace-connectors', () => api)
+vi.mock('@/services/workspace-connectors', async () => ({
+  ...(await vi.importActual<typeof import('@/services/workspace-connectors')>(
+    '@/services/workspace-connectors'
+  )),
+  ...api,
+}))
+vi.mock('@tauri-apps/api/core', () => ({ invoke: api.nativeInvoke }))
 vi.mock('@/containers/SettingsMenu', () => ({
   default: () => <nav>Settings</nav>,
 }))
@@ -126,33 +133,149 @@ describe('Workspace connections', () => {
       screen.getByRole('button', { name: 'Connect Google Workspace' })
     ).toBeDisabled()
     expect(
-      screen.getByText(
-        'Save a client ID in App registration before connecting.'
-      )
+      screen.getByText('Import your Desktop app JSON before connecting.')
     ).toBeInTheDocument()
     expect(api.beginConnectorAuth).not.toHaveBeenCalled()
   })
 
-  it('clears a transient app secret when sending registration to the native vault', async () => {
+  it('guides user-owned Desktop setup with direct project, API and OAuth console links', async () => {
+    const view = initialView()
+    view.configs[0].client_id = ''
+    api.connectorAccounts.mockResolvedValue(view)
     await ready()
-    const user = userEvent.setup()
-    await user.click(googleCard().getByText('App registration'))
-    const secret = googleCard().getByLabelText('App secret (optional)')
-    await user.type(secret, 'disposable-registration-secret')
-    api.configureConnector.mockResolvedValue(initialView())
-    await user.click(
-      googleCard().getByRole('button', {
-        name: 'Save Google Workspace registration',
-      })
+    const google = googleCard()
+    expect(
+      google.getByText(/GChat does not include a shared Google app/)
+    ).toBeInTheDocument()
+    expect(
+      google.getByRole('link', { name: 'Google Cloud Console' })
+    ).toHaveAttribute(
+      'href',
+      'https://console.cloud.google.com/projectcreate'
     )
-    await waitFor(() =>
-      expect(api.configureConnector).toHaveBeenCalledWith({
+    for (const [name, page] of [
+      ['Branding', 'branding'],
+      ['Audience', 'audience'],
+      ['Clients', 'clients'],
+    ]) {
+      expect(google.getByRole('link', { name })).toHaveAttribute(
+        'href',
+        `https://console.cloud.google.com/auth/${page}`
+      )
+    }
+    expect(
+      google.getAllByRole('link').filter((link) =>
+        link
+          .getAttribute('href')
+          ?.startsWith('https://console.cloud.google.com/apis/enableflow;apiid=')
+      )
+    ).toHaveLength(8)
+    expect(google.getByText(/choose External/)).toBeInTheDocument()
+    expect(
+      google.getByText(/add your own Google email as a test user/)
+    ).toBeInTheDocument()
+    expect(google.getByText(/In production/)).toBeInTheDocument()
+    expect(
+      google.getByRole('link', {
+        name: /Testing refresh tokens expire after seven days/,
+      })
+    ).toBeInTheDocument()
+    expect(
+      google.getByText(/This does not bypass an organization block/)
+    ).toBeInTheDocument()
+    expect(google.queryByText(/drop it here/i)).not.toBeInTheDocument()
+  })
+
+  it('imports a Desktop JSON file directly to the native vault without credential fields', async () => {
+    await ready()
+    api.nativeInvoke.mockResolvedValue(initialView())
+    const file = new File(
+      [JSON.stringify({ installed: {
+        client_id: 'downloaded-client.apps.googleusercontent.com',
+        client_secret: 'private-desktop-secret',
+      } })],
+      'client-secret.json',
+      { type: 'application/json' }
+    )
+    const input = googleCard().getByLabelText('Import Google Desktop app JSON')
+    await userEvent.setup().upload(input, file)
+    await waitFor(() => expect(api.nativeInvoke).toHaveBeenCalledWith(
+      'connector_configure',
+      { request: {
         provider: 'google',
-        client_id: 'google-client',
-        client_secret: 'disposable-registration-secret',
-      })
+        client_id: 'downloaded-client.apps.googleusercontent.com',
+        client_secret: 'private-desktop-secret',
+      } }
+    ))
+    await waitFor(() => expect(input).toBeEnabled())
+    expect(input).toHaveValue('')
+    expect(googleCard().queryByLabelText('Client ID')).not.toBeInTheDocument()
+    expect(googleCard().queryByLabelText('App secret (optional)')).not.toBeInTheDocument()
+    expect(screen.queryByText(/private-desktop-secret/)).not.toBeInTheDocument()
+    expect(api.beginConnectorAuth).not.toHaveBeenCalled()
+  })
+
+  it('imports a replacement Desktop JSON and clears any previously saved vault secret when absent', async () => {
+    const view = initialView()
+    view.configs[0].has_client_secret = true
+    api.connectorAccounts.mockResolvedValue(view)
+    api.nativeInvoke.mockResolvedValue(initialView())
+    await ready()
+    const file = new File(
+      [JSON.stringify({ installed: { client_id: 'replacement-client' } })],
+      'desktop.json'
     )
-    expect(secret).toHaveValue('')
+    await userEvent.setup().upload(
+      googleCard().getByLabelText('Import Google Desktop app JSON'), file
+    )
+    await waitFor(() => expect(api.nativeInvoke).toHaveBeenCalledWith(
+      'connector_configure',
+      { request: { provider: 'google', client_id: 'replacement-client', client_secret: '' } }
+    ))
+    expect(screen.queryByText(/replacement-client/)).not.toBeInTheDocument()
+    expect(api.beginConnectorAuth).not.toHaveBeenCalled()
+  })
+
+  it('keeps imported contents and native error details out of validation and saving errors', async () => {
+    await ready()
+    const group = googleCard().getByRole('group', { name: 'Google Desktop app JSON import' })
+    const input = googleCard().getByLabelText('Import Google Desktop app JSON')
+    const user = userEvent.setup()
+    const webClient = new File(
+      [JSON.stringify({ web: { client_id: 'web-client', client_secret: 'private-file-secret' } })],
+      'web.json'
+    )
+    await user.upload(input, webClient)
+    await screen.findByText(/Choose the downloaded Google Desktop app JSON file/)
+    expect(api.nativeInvoke).not.toHaveBeenCalled()
+    expect(screen.queryByText(/private-file-secret/)).not.toBeInTheDocument()
+    await waitFor(() => expect(group).toHaveAttribute('aria-busy', 'false'))
+    api.nativeInvoke.mockRejectedValue(new Error('private-native-secret'))
+    await user.upload(input, new File(
+      [JSON.stringify({ installed: { client_id: 'client', client_secret: 'private-file-secret' } })],
+      'desktop.json'
+    ))
+    await screen.findByText(/Could not save the Google registration/)
+    expect(screen.queryByText(/private-native-secret|private-file-secret/)).not.toBeInTheDocument()
+  })
+
+  it('rejects multiple files and ignores a second import while one is pending', async () => {
+    await ready()
+    const group = googleCard().getByRole('group', { name: 'Google Desktop app JSON import' })
+    const input = googleCard().getByLabelText('Import Google Desktop app JSON')
+    const file = new File([JSON.stringify({ installed: { client_id: 'client' } })], 'desktop.json')
+    fireEvent.change(input, { target: { files: [file, file] } })
+    expect(googleCard().getByRole('alert')).toHaveTextContent('Choose one downloaded Google Desktop app JSON file.')
+    expect(api.nativeInvoke).not.toHaveBeenCalled()
+    let finish!: (view: ConnectorAccountsView) => void
+    api.nativeInvoke.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    fireEvent.change(input, { target: { files: [file] } })
+    await waitFor(() => expect(api.nativeInvoke).toHaveBeenCalledTimes(1))
+    expect(input).toBeDisabled()
+    fireEvent.change(input, { target: { files: [file] } })
+    expect(api.nativeInvoke).toHaveBeenCalledTimes(1)
+    await act(async () => { finish(initialView()) })
+    await waitFor(() => expect(group).toHaveAttribute('aria-busy', 'false'))
   })
 
   it('omits an empty optional Microsoft tenant so native registration uses common', async () => {

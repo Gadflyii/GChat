@@ -21,6 +21,8 @@ use tokio_util::sync::CancellationToken;
 const VAULT_SERVICE: &str = "GChat Workspace connections";
 const RECONNECT_REQUIRED: &str =
     "Provider credentials expired or registration rejected; reconnect in Settings";
+const GOOGLE_RECONNECT_REQUIRED: &str =
+    "Your Google sign-in has expired or access was removed. Open Settings → Workspace connections and reconnect your Google account.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -370,7 +372,11 @@ impl AccountsState {
             || account.client_id != config.client_id
             || account.needs_reconnect
         {
-            return Err("Reconnect this Workspace account in Settings".into());
+            return Err(if account.provider == Provider::Google && account.needs_reconnect {
+                GOOGLE_RECONNECT_REQUIRED.into()
+            } else {
+                "Reconnect this Workspace account in Settings".into()
+            });
         }
         if !account.services.iter().any(|known| known == service)
             || (write && account.access != Access::ReadWrite)
@@ -963,6 +969,11 @@ impl AccountsState {
                 response.get("error").and_then(Value::as_str),
                 Some("invalid_grant" | "invalid_client" | "unauthorized_client")
             ) {
+                if config.provider == Provider::Google
+                    && response.get("error").and_then(Value::as_str) == Some("invalid_grant")
+                {
+                    return Err(GOOGLE_RECONNECT_REQUIRED.into());
+                }
                 return Err(RECONNECT_REQUIRED.into());
             }
             if config.provider == Provider::Microsoft && matches!(status.as_u16(), 400 | 401 | 403) {
@@ -1046,7 +1057,11 @@ impl AccountsState {
             })
             .ok_or("Reconnect this Workspace account")?;
         if account.needs_reconnect {
-            return Err("Reconnect this Workspace account in Settings".into());
+            return Err(if account.provider == Provider::Google {
+                GOOGLE_RECONNECT_REQUIRED.into()
+            } else {
+                "Reconnect this Workspace account in Settings".into()
+            });
         }
         let refresh = self
             .vault_get(format!("account:{id}"))
@@ -1065,7 +1080,7 @@ impl AccountsState {
         let token = match response {
             Ok(token) => token,
             Err(error) => {
-                if error == RECONNECT_REQUIRED {
+                if error == RECONNECT_REQUIRED || error == GOOGLE_RECONNECT_REQUIRED {
                     self.invalidate_account(id)?;
                     self.update(|document| {
                         if let Some(account) = document.accounts.get_mut(id) {
@@ -2819,10 +2834,24 @@ mod tests {
             .expires = Instant::now();
         assert_eq!(
             state.token("first", &cancellation).await.unwrap_err(),
-            RECONNECT_REQUIRED
+            GOOGLE_RECONNECT_REQUIRED
         );
         assert!(lease.is_cancelled());
         assert!(state.view().unwrap().accounts[0].needs_reconnect);
+        assert_eq!(
+            state.token("first", &cancellation).await.unwrap_err(),
+            GOOGLE_RECONNECT_REQUIRED
+        );
+        assert_eq!(
+            state
+                .resolve_account_id(Provider::Google, "first", "calendar", false)
+                .unwrap_err(),
+            GOOGLE_RECONNECT_REQUIRED
+        );
+        assert_eq!(
+            vault.get("account:first").unwrap().as_deref(),
+            Some("rotated-refresh")
+        );
         server.await.unwrap();
     }
 

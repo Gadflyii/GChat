@@ -66,6 +66,70 @@ export const connectorAccounts = (connect = false) =>
 export const configureConnector = (request: ConfigureConnectorRequest) =>
   invoke<ConnectorAccountsView>('connector_configure', { request })
 
+const GOOGLE_REGISTRATION_MAX_BYTES = 64 * 1024
+const GOOGLE_REGISTRATION_INVALID =
+  'Choose the downloaded Google Desktop app JSON file, no larger than 64 KB.'
+
+// Credential material stays in this call and goes directly to the native vault.
+// In particular, neither file contents nor native errors are returned to the UI.
+export async function importGoogleDesktopRegistration(
+  file: File
+): Promise<ConnectorAccountsView> {
+  let request: ConfigureConnectorRequest
+  try {
+    if (file.size === 0 || file.size > GOOGLE_REGISTRATION_MAX_BYTES)
+      throw new Error()
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () =>
+        typeof reader.result === 'string'
+          ? resolve(reader.result)
+          : reject(new Error())
+      reader.onerror = () => reject(new Error())
+      reader.onabort = () => reject(new Error())
+      reader.readAsText(file)
+    })
+    const parsed: unknown = JSON.parse(text)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+      throw new Error()
+    const root = parsed as Record<string, unknown>
+    const installed = root.installed
+    if (
+      root.web !== undefined ||
+      !installed ||
+      typeof installed !== 'object' ||
+      Array.isArray(installed)
+    )
+      throw new Error()
+    const registration = installed as Record<string, unknown>
+    const clientId = registration.client_id
+    const secret = registration.client_secret
+    if (
+      typeof clientId !== 'string' ||
+      !clientId.trim() ||
+      clientId.length > 4096 ||
+      (secret !== undefined &&
+        (typeof secret !== 'string' || secret.length > 4096))
+    )
+      throw new Error()
+    request = {
+      provider: 'google',
+      client_id: clientId.trim(),
+      // Explicitly clear an old vault secret when this registration has none.
+      client_secret: typeof secret === 'string' ? secret : '',
+    }
+  } catch {
+    throw new Error(GOOGLE_REGISTRATION_INVALID)
+  }
+  try {
+    return await configureConnector(request)
+  } catch {
+    throw new Error(
+      'Could not save the Google registration. Try importing the Desktop app JSON again.'
+    )
+  }
+}
+
 export const beginConnectorAuth = (request: BeginConnectorAuthRequest) =>
   invoke<ConnectorAuthFlow>('connector_begin_auth', { request })
 
