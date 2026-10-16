@@ -130,6 +130,8 @@ pub struct WorkspaceRuntime {
     guest_assets: std::sync::OnceLock<std::path::PathBuf>,
     #[cfg(target_os = "linux")]
     kvm_setup: std::sync::OnceLock<Arc<crate::kvm_setup::KvmSetup>>,
+    #[cfg(target_os = "linux")]
+    task_runner: std::sync::OnceLock<std::sync::Weak<crate::tasks::TaskRunner>>,
 }
 
 #[cfg(target_os = "linux")]
@@ -162,6 +164,50 @@ impl WorkspaceRemoval<'_> {
     }
 }
 
+/// A setup renewal retains both lifecycle and durable control fences until connected.
+#[cfg(target_os = "linux")]
+pub(crate) struct SetupSessionRenewal<'a> {
+    runtime: &'a WorkspaceRuntime,
+    _guard: OwnedMutexGuard<()>,
+    _tasks: crate::tasks::SetupTaskGuard,
+    state: crate::service::SetupSessionRenewal<'a>,
+    connection: SshConnection,
+}
+
+#[cfg(target_os = "linux")]
+impl SetupSessionRenewal<'_> {
+    pub(crate) async fn connect(
+        self,
+        identity: SessionIdentity,
+    ) -> Result<GuestHello, WorkspaceError> {
+        self.runtime.accepting()?;
+        let session = Arc::new(
+            SshSession::connect(
+                &self.connection,
+                identity,
+                self.runtime.vault.as_ref(),
+                SshPolicy::default(),
+            )
+            .await?,
+        );
+        if let Err(error) = self.runtime.accepting() {
+            session.close().await?;
+            return Err(error);
+        }
+        let hello = session.hello().clone();
+        if let Err(error) = self.state.commit(hello.clone()).await {
+            session.close().await?;
+            return Err(error.into());
+        }
+        self.runtime
+            .sessions
+            .lock()
+            .await
+            .insert(identity.workspace_id, session);
+        Ok(hello)
+    }
+}
+
 #[derive(Serialize)]
 pub struct HandBack {
     pub control: SessionControl,
@@ -185,6 +231,8 @@ impl WorkspaceRuntime {
             guest_assets: std::sync::OnceLock::new(),
             #[cfg(target_os = "linux")]
             kvm_setup: std::sync::OnceLock::new(),
+            #[cfg(target_os = "linux")]
+            task_runner: std::sync::OnceLock::new(),
         }
     }
 
@@ -272,7 +320,17 @@ impl WorkspaceRuntime {
                 "Reuse the service's existing setup owner.",
             )
         })?;
-        owner.resume_saved().await
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn configure_task_runner(
+        &self,
+        runner: std::sync::Weak<crate::tasks::TaskRunner>,
+    ) -> Result<(), WorkspaceError> {
+        self.task_runner
+            .set(runner)
+            .map_err(|_| WorkspaceError::GuestSetup("The task runner is already configured".into()))
     }
     #[cfg(target_os = "linux")]
     pub fn kvm_setup(&self) -> Option<Arc<crate::kvm_setup::KvmSetup>> {
@@ -930,6 +988,69 @@ impl WorkspaceRuntime {
         self.connect_session(identity, true).await
     }
 
+    #[cfg(target_os = "linux")]
+    pub(crate) async fn lock_for_setup_renewal(
+        &self,
+        previous: SessionIdentity,
+    ) -> Result<SetupSessionRenewal<'_>, WorkspaceError> {
+        let guard = self
+            .lifecycle_lock(previous.workspace_id)
+            .await
+            .lock_owned()
+            .await;
+        self.accepting()?;
+        let tasks = self
+            .task_runner
+            .get()
+            .and_then(std::sync::Weak::upgrade)
+            .ok_or_else(|| {
+                WorkspaceError::GuestSetup(
+                    "The task runner must be loaded before renewing a setup session".into(),
+                )
+            })?
+            .guard_setup_session_renewal(previous.workspace_id)?;
+        let config = self
+            .service
+            .snapshot()
+            .await
+            .workspaces
+            .into_iter()
+            .find(|entry| entry.id == previous.workspace_id)
+            .ok_or(WorkspaceError::NotFound)?;
+        let WorkspaceConnection::Ssh(connection) = config.connection else {
+            return Err(WorkspaceError::AdapterUnavailable);
+        };
+        if config.service_pc != ServicePc::Local {
+            return Err(WorkspaceError::ServiceLocationUnavailable);
+        }
+        if self
+            .sessions
+            .lock()
+            .await
+            .get(&previous.workspace_id)
+            .is_some_and(|session| session.hello().identity != previous)
+        {
+            return Err(ServiceError::SessionMismatch.into());
+        }
+        let state = self.service.begin_setup_session_renewal(previous).await?;
+        // Revocation/transport cleanup must succeed before the saved identity changes.
+        self.close_media_locked(previous.workspace_id).await?;
+        self.resume_observations
+            .lock()
+            .await
+            .remove(&previous.workspace_id);
+        if let Some(session) = self.sessions.lock().await.remove(&previous.workspace_id) {
+            session.close().await?;
+        }
+        Ok(SetupSessionRenewal {
+            runtime: self,
+            _guard: guard,
+            _tasks: tasks,
+            state,
+            connection,
+        })
+    }
+
     async fn ensure_workspace_ready(&self, workspace: WorkspaceId) -> Result<(), WorkspaceError> {
         #[cfg(target_os = "linux")]
         if let Some(setup) = self.kvm_setup.get() {
@@ -992,6 +1113,10 @@ impl WorkspaceRuntime {
             .cloned();
         if let Some(session) = previous {
             if session.hello().identity == identity {
+                if setup {
+                    // Revalidate before setup journals or dispatches its first operation.
+                    session.check_session().await?;
+                }
                 return Ok(session.hello().clone());
             }
             self.disconnect_locked(identity.workspace_id).await?;
@@ -1078,6 +1203,11 @@ impl WorkspaceRuntime {
         &self,
         request: GuestRequest,
     ) -> Result<GuestReply, WorkspaceError> {
+        // A stale desktop rejects before dispatch; do not create an uncertain operation.
+        self.session(request.identity)
+            .await?
+            .check_session()
+            .await?;
         self.execute_request(request, None).await
     }
 

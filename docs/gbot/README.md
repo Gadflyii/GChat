@@ -94,6 +94,17 @@ unit records or truncated exit markers remain unknown. Each guest query allows
 two seconds plus one second for termination; transport receipt waiting uses the
 existing request behavior.
 
+Saved Linux setup can renew its session after the pinned SSH transport proves that
+the active desktop service invocation differs from the one bound to that session.
+It retains the workspace, VM, credentials and completed history, and saves the new
+session before reconnecting. Renewal requires the exact idle bot session with no
+human owner, unfinished task or unresolved operation. Saved setup resumes only
+after the task journal has loaded; task admission stays fenced through renewal.
+Paused/human control, incomplete proof or
+failed media/transport cleanup remain explicit failures. Cached setup transports
+are rechecked before creating an operation. See the
+[desktop renewal decision](../decisions/2026-10-16-renew-idle-gbot-setup-after-proven-desktop-restart.md).
+
 Gbot bootstrap now reports a child's exit status and log path promptly when no
 concurrent service owns the data folder. Concurrent-owner waiting remains intact.
 Two focused Host cases, compilation and strict all-target Clippy pass on
