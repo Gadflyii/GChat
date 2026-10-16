@@ -313,7 +313,7 @@ impl ManagerState {
                 // Keep inference and credentials outside the Manager UI.
                 let (method, path) = match operation {
                     HostOperation::Snapshot => {
-                        return self.client.snapshot(host_id).await.map_err(String::from)
+                        return self.client.connect(host_id).await.map_err(String::from)
                     }
                     HostOperation::FirstRun => {
                         let method = if args.get("action").is_some() {

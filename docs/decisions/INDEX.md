@@ -505,3 +505,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-15** — [Confine AppImage GIO modules to the bundled directory](2026-10-15-confine-appimage-gio-modules-to-the-bundled-directory.md)
 - **2026-10-16** — [Include qualified client tools in the Linux release](2026-10-16-include-qualified-client-tools-in-linux-release.md)
 - **2026-10-16** — [Persist interrupted Studio run history](2026-10-16-persist-interrupted-studio-run-history.md)
+- **2026-10-16** — [Open secure storage only for explicit connections](2026-10-16-open-secure-storage-only-for-explicit-connections.md)

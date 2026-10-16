@@ -192,27 +192,39 @@ impl Store {
                 .map(|_| ())
         }
     }
+    /// Read selection and provider availability without opening the keyring.
+    /// Native access is checked only by an explicit credential operation.
     pub fn status(&self) -> Status {
-        let error = self.require_ready().err();
-        let document = self.read();
-        let valid = document.is_ok();
-        let (tier, migrating) = match document {
-            Ok(document) => (
-                match document.active.as_deref() {
-                    Some("native") => Some(Tier::Native),
-                    Some("passphrase") => Some(Tier::Passphrase),
-                    _ => None,
-                },
-                document.migration.is_some(),
-            ),
-            Err(_) => (None, false),
+        let inspected = (|| {
+            let _lock = self.locked()?;
+            let document = self.read()?;
+            let tier = match document.active.as_deref() {
+                Some("passphrase") => Some(Tier::Passphrase),
+                Some("native") => Some(Tier::Native),
+                _ => None,
+            };
+            let availability = if tier == Some(Tier::Passphrase) {
+                self.key_for(document.vault.as_ref().ok_or(Error::InvalidData)?)
+                    .map(|_| ())
+            } else if self.native.present()? {
+                Ok(())
+            } else {
+                Err(Error::MissingProvider)
+            };
+            Ok::<_, Error>((tier, document.migration.is_some(), availability))
+        })();
+        let (tier, migrating, error, valid) = match inspected {
+            Ok((tier, migrating, availability)) => (tier, migrating, availability.err(), true),
+            Err(error) => (None, false, Some(error), false),
         };
+        let unchecked = error.is_none() && tier != Some(Tier::Passphrase);
         Status {
-            ready: error.is_none(),
+            ready: error.is_none() && !unchecked,
             can_create: valid && tier.is_none() && error == Some(Error::MissingProvider),
-            tier,
+            tier: if unchecked { Some(Tier::Native) } else { tier },
             migrating,
             state: match error {
+                None if unchecked => "unchecked",
                 None => "ready",
                 Some(Error::Locked) => "locked",
                 Some(Error::MissingProvider) => "missing_provider",
@@ -442,18 +454,23 @@ mod tests {
     struct Provider {
         records: Mutex<BTreeMap<Reference, Vec<u8>>>,
         failure: Mutex<Option<Error>>,
+        secret_operations: std::sync::atomic::AtomicUsize,
     }
     impl Native for Provider {
         fn present(&self) -> Result<bool, Error> {
             Ok(*self.failure.lock().unwrap() != Some(Error::MissingProvider))
         }
         fn get(&self, r: &Reference) -> Result<Option<Vec<u8>>, Error> {
+            self.secret_operations
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if let Some(error) = *self.failure.lock().unwrap() {
                 return Err(error);
             }
             Ok(self.records.lock().unwrap().get(r).cloned())
         }
         fn put(&self, r: &Reference, v: &[u8]) -> Result<(), Error> {
+            self.secret_operations
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             if let Some(error) = *self.failure.lock().unwrap() {
                 return Err(error);
             }
@@ -461,6 +478,8 @@ mod tests {
             Ok(())
         }
         fn delete(&self, r: &Reference) -> Result<(), Error> {
+            self.secret_operations
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             self.records.lock().unwrap().remove(r);
             Ok(())
         }
@@ -473,11 +492,47 @@ mod tests {
         (directory, Arc::new(store), provider)
     }
     #[test]
+    fn status_never_opens_native_storage_even_when_the_login_keyring_is_locked() {
+        for previously_selected in [false, true] {
+            let (_d, store, provider) = fixture();
+            if previously_selected {
+                store.require_ready().unwrap();
+                assert_eq!(store.read().unwrap().active.as_deref(), Some("native"));
+                provider
+                    .secret_operations
+                    .store(0, std::sync::atomic::Ordering::SeqCst);
+            }
+            *provider.failure.lock().unwrap() = Some(Error::Locked);
+            for _ in 0..2 {
+                let status = store.status();
+                assert!(!status.ready);
+                assert_eq!(status.state, "unchecked");
+                assert!(status.tier == Some(Tier::Native));
+                assert!(!status.can_create);
+                assert!(status.error.is_none());
+            }
+            assert_eq!(
+                provider
+                    .secret_operations
+                    .load(std::sync::atomic::Ordering::SeqCst),
+                0
+            );
+            assert_eq!(store.require_ready(), Err(Error::Locked));
+            assert_eq!(
+                provider
+                    .secret_operations
+                    .load(std::sync::atomic::Ordering::SeqCst),
+                1
+            );
+        }
+    }
+    #[test]
     fn selected_provider_never_falls_back_when_locked_or_missing() {
         let (_d, store, provider) = fixture();
-        assert!(store.status().ready);
+        store.require_ready().unwrap();
         for error in [Error::Locked, Error::MissingProvider, Error::Unavailable] {
             *provider.failure.lock().unwrap() = Some(error);
+            assert_eq!(store.require_ready(), Err(error));
             let status = store.status();
             assert!(!status.ready);
             assert!(status.tier == Some(Tier::Native));

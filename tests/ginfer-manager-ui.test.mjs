@@ -123,6 +123,29 @@ function submit(app) {
   return form
 }
 
+test('a saved remote host connects only after the explicit Connect action', async (t) => {
+  const view = fixture()
+  const remoteSnapshot = view.hosts[1].snapshot
+  Object.assign(view.hosts[1], { online: false, snapshot: null,
+    error: 'Connect this saved host to unlock its credential for this session' })
+  const app = await manager(t, view, request => {
+    assert.deepEqual(request, { action: 'host', host_id: pairedId, operation: 'snapshot', args: {} })
+    Object.assign(view.hosts[1], { online: true, snapshot: remoteSnapshot, error: null })
+    return remoteSnapshot
+  })
+  const remote = [...app.document.querySelectorAll('.host-button')].find(item => item.textContent.includes('GPU server'))
+  assert.ok(remote)
+  remote.click()
+  assert.deepEqual(requests(app), [], 'passive startup must not send an explicit host connection')
+  assert.ok(app.document.querySelector('main').textContent.includes('Connect this saved host'))
+  assert.equal(button(app.document, 'Connect').disabled, false)
+  button(app.document, 'Connect').click()
+  await completed(app, requests => requests.some(request => request.operation === 'snapshot'))
+  assert.ok(![...app.document.querySelectorAll('main button')].some(item => item.textContent.trim() === 'Connect'))
+  assert.ok(!app.document.querySelector('main').textContent.includes('Connect this saved host'))
+  assert.equal(button(app.document, 'Start a model…').disabled, false)
+})
+
 test('shared first-run flow selects GPUs, resumes work and approves Engine startup defaults', async (t) => {
   const view = fixture()
   const release = { name: 'Muse download', sha256: 'a'.repeat(64), bytes: 1024 ** 3 }

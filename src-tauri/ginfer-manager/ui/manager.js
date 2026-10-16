@@ -1013,6 +1013,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     } else {
       append(main, h('div', { class: 'heading' }, h('div', {}, h('h1', {}, host.snapshot?.display_name || host.name),
         h('div', { class: 'muted mono' }, host.base_url)), h('div', { class: 'actions' }, badge(online(host) ? 'ready' : host.offline ? 'offline' : 'failed'),
+        !host.local && !online(host) ? button('Connect', () => run(hostRequest(host, 'snapshot'), 'Host connected').catch(() => {})) : null,
         button('Start a model…', () => launchDialog(host), !online(host) || profiling(host) || !array(host.snapshot?.models).length, 'primary'))),
       !online(host) ? h('div', { class: 'empty' }, h('strong', {}, host.offline ? 'GInfer offline' : 'GInfer unavailable'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
         host.error && !host.offline ? h('p', { class: 'section-error' }, host.error) : null) : null,

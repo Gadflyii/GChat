@@ -12,6 +12,18 @@ vi.mock('../EngineProfilePicker', () => ({ EngineProfilePicker: () => null }))
 vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId }: { hostId: string }) => <section aria-label={`First-run setup for ${hostId}`} /> }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
+it('keeps a saved remote host passive until its Connect button is used', async () => {
+  const host = { local: false, host_id: 'remote', name: 'Saved server', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
+  const error = 'Connect this saved host to unlock its credential for this session'
+  render(<HostCard host={host} error={error} />)
+  expect(screen.getByRole('alert')).toHaveTextContent(error)
+  expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
+  expect(engineCommand).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+  await waitFor(() => expect(engineCommand).toHaveBeenCalledWith('connect', { host_id: 'remote' }))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled())
+})
+
 it.each([
   ['qwen3.8-27b', 262144],
   ['qwen3.8-flash-next', 262144],

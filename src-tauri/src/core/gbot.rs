@@ -71,6 +71,9 @@ struct Connection {
     generation: u64,
     stopped: bool,
     local_stopped: bool,
+    // Credential-backed connections are opt-in for each GUI session.
+    authorized: bool,
+    local_authorized: bool,
 }
 struct ViewLease {
     client: ServiceClient,
@@ -91,6 +94,18 @@ async fn close_views(views: BTreeMap<uuid::Uuid, ViewLease>) {
     .await;
 }
 impl Connection {
+    fn require_service(&self) -> Result<(), String> {
+        if self.stopped || !self.authorized {
+            return Err("Gbot service disconnected. Connect to the service to continue.".into());
+        }
+        Ok(())
+    }
+    fn require_local(&self) -> Result<(), String> {
+        if self.local_stopped || !self.local_authorized {
+            return Err("Connect the account service to use connected accounts.".into());
+        }
+        Ok(())
+    }
     fn detach(&mut self) -> BTreeMap<uuid::Uuid, ViewLease> {
         self.client = None;
         self.generation += 1;
@@ -133,6 +148,15 @@ impl GbotState {
     pub(crate) async fn is_stopped(&self) -> bool {
         self.connection.lock().await.local_stopped
     }
+    pub(crate) async fn local_authorized(&self) -> bool {
+        self.connection.lock().await.local_authorized
+    }
+    /// Only an explicit account action may open the local credential-backed service.
+    pub(crate) async fn authorize_local(&self) {
+        let mut connection = self.connection.lock().await;
+        connection.local_authorized = true;
+        connection.local_stopped = false;
+    }
     async fn root<R: Runtime>(&self, app: &AppHandle<R>) -> Result<PathBuf, String> {
         crate::core::setup::wait_for_bundled_resources(app).await?;
         let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
@@ -148,11 +172,10 @@ impl GbotState {
         &self,
         app: &AppHandle<R>,
     ) -> Result<background::Client, String> {
+        self.connection.lock().await.require_local()?;
         let root = self.root(app).await?;
         let mut connection = self.connection.lock().await;
-        if connection.local_stopped {
-            return Err("Start the local Gbot service to use connected accounts".into());
-        }
+        connection.require_local()?;
         if let Some(client) = &connection.local_client {
             return Ok(client.clone());
         }
@@ -162,20 +185,17 @@ impl GbotState {
         Ok(client)
     }
     async fn client<R: Runtime>(&self, app: &AppHandle<R>) -> Result<ServiceClient, String> {
+        self.connection.lock().await.require_service()?;
         let root = self.root(app).await?;
         let target = service_target(&root)?;
         let mut connection = self.connection.lock().await;
-        if connection.stopped {
-            return Err("Gbot service disconnected. Connect to the service to continue.".into());
-        }
+        connection.require_service()?;
         if let Some(client) = &connection.client {
             return Ok(client.clone());
         }
         let client = match target {
             ServiceTarget::Local => {
-                if connection.local_stopped {
-                    return Err("Start the local Gbot service to continue".into());
-                }
+                connection.require_local()?;
                 let resources = app.path().resource_dir().map_err(|e| e.to_string())?;
                 let client = background::ensure_running(&root, &resources).await?;
                 connection.local_client = Some(client.clone());
@@ -305,9 +325,7 @@ impl GbotState {
     }
     async fn call_generation(&self) -> Result<u64, String> {
         let connection = self.connection.lock().await;
-        if connection.stopped {
-            return Err("Gbot service disconnected. Connect to the service to continue.".into());
-        }
+        connection.require_service()?;
         Ok(connection.generation)
     }
     async fn track_view(
@@ -367,22 +385,15 @@ impl GbotState {
         Ok(())
     }
     pub async fn disconnect(&self) {
-        let (client, root, views) = {
+        let (client, views) = {
             let mut connection = self.connection.lock().await;
             connection.stopped = true;
+            connection.authorized = false;
+            connection.local_authorized = false;
             let views = connection.detach();
-            (
-                connection.local_client.take(),
-                connection.root.clone(),
-                views,
-            )
+            (connection.local_client.take(), views)
         };
         close_views(views).await;
-        let client = match (client, root) {
-            (Some(client), _) => Some(client),
-            (None, Some(root)) => background::connect(&root).await.ok(),
-            (None, None) => None,
-        };
         if let Some(client) = client {
             let _ = tokio::time::timeout(
                 std::time::Duration::from_secs(2),
@@ -420,7 +431,11 @@ impl GbotState {
         save_service_target(&root, &target)?;
         let views = connection.detach();
         connection.stopped = false;
-        connection.local_stopped = false;
+        connection.authorized = true;
+        if target == ServiceTarget::Local {
+            connection.local_stopped = false;
+            connection.local_authorized = true;
+        }
         drop(connection);
         close_views(views).await;
         let _ = app.emit("gbot-task-update", ());
@@ -430,20 +445,22 @@ impl GbotState {
         let root = self.root(app).await?;
         let target = service_target(&root)?;
         let mut connection = self.connection.lock().await;
+        let mut local_shutdown = false;
         if target == ServiceTarget::Local {
-            let client = match &connection.local_client {
-                Some(client) => client.clone(),
-                None => background::connect(&root).await?,
-            };
-            client.call("/v1/service/shutdown", Value::Null).await?;
+            if let Some(client) = &connection.local_client {
+                client.call("/v1/service/shutdown", Value::Null).await?;
+                local_shutdown = true;
+            }
             connection.local_stopped = true;
+            connection.local_authorized = false;
             connection.local_client = None;
         }
         connection.stopped = true;
+        connection.authorized = false;
         let views = connection.detach();
         drop(connection);
         close_views(views).await;
-        if target != ServiceTarget::Local {
+        if !local_shutdown {
             return Ok(());
         }
         let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
@@ -519,10 +536,16 @@ pub async fn gbot_service_start<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, GbotState>,
 ) -> Result<(), String> {
+    let root = state.root(&app).await?;
+    let target = service_target(&root)?;
     {
         let mut connection = state.connection.lock().await;
         connection.stopped = false;
-        connection.local_stopped = false;
+        connection.authorized = true;
+        if target == ServiceTarget::Local {
+            connection.local_stopped = false;
+            connection.local_authorized = true;
+        }
     }
     state.client(&app).await.map(|_| ())
 }
@@ -548,6 +571,7 @@ mod tests {
     use super::{GbotState, ServiceClient, ViewLease};
     use serde_json::{json, Value};
     use std::sync::Arc;
+    use tauri::Manager;
     use uuid::Uuid;
 
     struct UnusedCredentials;
@@ -574,6 +598,123 @@ mod tests {
             bridge: None,
             close: json!({"identity":identity,"owner":owner,"lease_id":lease}),
         }
+    }
+
+    #[tokio::test]
+    async fn passive_gbot_and_account_refresh_require_an_explicit_connection() {
+        let app = tauri::test::mock_app();
+        app.manage(GbotState::default());
+        let state = app.state::<GbotState>();
+        let error = state
+            .call(app.handle(), "/v1/state", Value::Null)
+            .await
+            .unwrap_err();
+        assert!(error.contains("Connect to the service"));
+        for connect in [None, Some(false)] {
+            let error = crate::core::connectors::connector_accounts(app.handle().clone(), connect)
+                .await
+                .unwrap_err();
+            assert!(error.contains("Connect the account service"));
+        }
+        let error = crate::core::connectors::connector_auth_status(
+            app.handle().clone(),
+            Uuid::new_v4().to_string(),
+        )
+        .await
+        .unwrap_err();
+        assert!(error.contains("Connect the account service"));
+        let connection = state.connection.lock().await;
+        assert!(connection.root.is_none());
+        assert!(connection.client.is_none());
+        assert!(connection.local_client.is_none());
+        assert!(!connection.authorized);
+        assert!(!connection.local_authorized);
+    }
+
+    #[tokio::test]
+    async fn ready_tool_catalog_does_not_connect_a_cold_account_service() {
+        let root = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(GbotState::default());
+        app.manage(crate::test_support::TestDataRoot(
+            root.path().join("new-data"),
+        ));
+        let (resources, completion) = crate::core::setup::BundledResources::pending();
+        completion.send(Some(Ok(()))).unwrap();
+        app.manage(resources);
+        let state = app.state::<GbotState>();
+        // An attempted service initialization would fail the data-root fence.
+        let original = root.path().join("original-data");
+        state.connection.lock().await.root = Some(original.clone());
+        assert!(crate::core::connectors::catalog(app.handle())
+            .await
+            .unwrap()
+            .is_empty());
+        let connection = state.connection.lock().await;
+        assert_eq!(connection.root.as_ref(), Some(&original));
+        assert!(connection.local_client.is_none());
+        assert!(!connection.local_authorized);
+    }
+
+    #[tokio::test]
+    async fn explicit_account_connect_authorizes_only_the_local_service() {
+        let app = tauri::test::mock_app();
+        app.manage(GbotState::default());
+        let (resources, completion) = crate::core::setup::BundledResources::pending();
+        completion
+            .send(Some(Err("resource preparation failed".into())))
+            .unwrap();
+        app.manage(resources);
+        let error = crate::core::connectors::connector_accounts(app.handle().clone(), Some(true))
+            .await
+            .unwrap_err();
+        assert_eq!(error, "resource preparation failed");
+        let state = app.state::<GbotState>();
+        assert!(state.local_authorized().await);
+        assert!(state
+            .call(app.handle(), "/v1/state", Value::Null)
+            .await
+            .unwrap_err()
+            .contains("Connect to the service"));
+        state.disconnect().await;
+        assert!(!state.local_authorized().await);
+        assert!(state.connection.lock().await.root.is_none());
+    }
+
+    #[tokio::test]
+    async fn explicit_paired_service_start_does_not_authorize_local_account_access() {
+        let root = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(GbotState::default());
+        app.manage(crate::test_support::TestDataRoot(root.path().to_path_buf()));
+        let (resources, completion) = crate::core::setup::BundledResources::pending();
+        completion.send(Some(Ok(()))).unwrap();
+        app.manage(resources);
+        let host_id = Uuid::new_v4();
+        super::save_service_target(root.path(), &super::ServiceTarget::PairedHost { host_id })
+            .unwrap();
+        let state = app.state::<GbotState>();
+        state.connection.lock().await.client = Some(ServiceClient::Remote {
+            hosts: Arc::new(ginfer_host::client::Client::new(
+                None,
+                Arc::new(UnusedCredentials),
+            )),
+            host_id,
+        });
+        super::gbot_service_start(app.handle().clone(), app.state())
+            .await
+            .unwrap();
+        assert!(state.connection.lock().await.authorized);
+        assert!(!state.local_authorized().await);
+        assert!(state
+            .local_client(app.handle())
+            .await
+            .err()
+            .unwrap()
+            .contains("Connect the account service"));
+        state.disconnect().await;
+        assert!(!state.connection.lock().await.authorized);
+        assert!(state.connection.lock().await.client.is_none());
     }
 
     #[tokio::test]
@@ -714,6 +855,7 @@ mod tests {
     #[tokio::test]
     async fn queued_view_open_is_rejected_after_native_disconnect() {
         let state = Arc::new(GbotState::default());
+        state.connection.lock().await.authorized = true;
         let active_open = state.view_operations.lock().await;
         let queued_state = state.clone();
         let queued_open = tokio::spawn(async move {
