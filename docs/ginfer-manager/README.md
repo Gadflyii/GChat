@@ -181,10 +181,10 @@ corrected. Saving a choice does not start a model.
 
 The profiling panel shows the Host's last reported elapsed time and the latest
 phase reported by native diagnostics, without comparing Host and GUI clocks.
-A prior successful measurement for the same GPU group and profiling scope can
-provide a clearly labelled historical estimate. Selected-artifact and all-format
-history remain separate. The first measurement has no measured ETA; a cache hit
-or resumed partial job must not become a full-run duration sample. Progress never infers a percentage from completed-format counts.
+A prior successful all-format measurement for the same GPU group can provide
+a clearly labelled historical estimate for another all-format run. Selected-artifact
+runs show no completion ETA; they never borrow all-format history. A cache hit or
+resumed partial job must not become a full-run duration sample. Progress never infers a percentage from completed-format counts.
 
 Runtime installation preserves the Host's accepted profiles, saved choices and
 native checkpoints. Ensure and Resume use the current runtime with retained

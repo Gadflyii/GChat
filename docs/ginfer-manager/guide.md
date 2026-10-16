@@ -72,8 +72,8 @@ and continue later without discarding progress.
    storage capacity. Progress survives closing Manager or restarting the Host.
 4. After each selected download is verified, the Host prepares the measurements
    required by that artifact and its startup settings. Other formats can remain
-   deferred. The panel shows the reported phase and elapsed time; any historical
-   ETA must match this profiling scope. No model starts during this step.
+   deferred. The first-run panel shows the reported phase and elapsed time, with
+   completion time unknown for this selected scope. No model starts during this step.
 5. Under **Review startup defaults**, review each package's context, concurrency,
    instance count and optional GPU KV budget. The Engine supplies a fresh startup
    estimate for that package. It does not prove that every selected package fits
@@ -109,10 +109,10 @@ does not create a different profile identity. The panel shows the current job's
 GPU group and Engine, plus pending saved deployment groups.
 
 Manual all-format preparation can take much longer than selected-artifact
-preparation. The panel shows elapsed time, native phase diagnostics and
-**Profiling log**. A historical ETA is available only for a matching GPU group
-and profiling scope; it does not infer a percentage from completed formats. One
-Host-owned job processes saved groups serially and holds model launches until the queue stops. Closing
+preparation. Its separate Hardware profile panel shows elapsed time and
+**Profiling log**, with the previous group duration or a 22–73-minute historical
+range as a hint. It does not show a native-phase percentage. One Host-owned job
+processes saved groups serially and holds model launches until the queue stops. Closing
 GChat or Manager leaves it running. Installation waits for file setup and Host
 handoff, not for the long measurements to finish.
 
@@ -134,9 +134,10 @@ without starting calibration. If the native Engine reader rejects a group's
 fingerprint, its exact profile appears as **Hardware changed — re-profile**.
 Click **Select group to re-profile**, then **Refresh hardware profile** (or
 **Prepare hardware profile** if no job has been started). Selecting the group
-alone starts nothing. The duration hint uses a previous successful measurement
-for the same group and profiling scope when available; otherwise no measured
-ETA is shown. An unrelated startup error does not establish a hardware change.
+alone starts nothing. The manual panel's duration hint uses that group's previous
+measured duration when available, otherwise the historical range above. The
+first-run selected-artifact panel does not use this hint. An unrelated startup
+error does not establish a hardware change.
 
 ## Run models
 
