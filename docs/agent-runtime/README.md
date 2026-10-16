@@ -176,10 +176,13 @@ strict Clippy, followed by full `make verify`, also pass at `2b7fae9a2`.
 The regression drops the invocation
 future after a completed file read and a pending, unapproved shell request, then
 reopens the same data with fresh application state. Its scope is invocation loss
-and durable-history discoverability. This same-process regression does not
-qualify process-global live-monitor cleanup. Native unexpected-process exit and
-power-loss recovery remain unqualified; the normal-close acceptance above remains
-valid.
+and durable-history discoverability. A follow-up at `1449c42ea` retires only the
+ending invocation's Live entry. The extended same-process regression checks that
+the original entry disappears, an unrelated active entry retains its text, and
+completed history remains available. The focused regression, library-only
+checking, strict Clippy and full `make verify` pass for this follow-up. Native
+unexpected-process exit and power-loss recovery remain unqualified; the
+normal-close acceptance above remains valid.
 See the [decision](../decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 
 ## Current worker review follow-up
