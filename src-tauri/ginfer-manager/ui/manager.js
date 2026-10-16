@@ -288,14 +288,14 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     } catch (error) {
       state.error = String(error)
       // Keep the draft's expected_revision fixed while refreshing a conflict.
-      if (state.error.includes('409')) {
+      if (request.operation !== 'stop_host' && state.error.includes('409')) {
         try { apply(await invoke('manager_snapshot')) } catch { /* Keep the reported edit conflict. */ }
       }
       throw error
     } finally { state.busy = false; render() }
   }
 
-  function dialog(title, description, fields, submitLabel, submit, afterSave = null) {
+  function dialog(title, description, fields, submitLabel, submit, afterSave = null, revisionConflicts = true) {
     if (state.dialog) state.dialog.close()
     const previousFocus = document.activeElement
     root.inert = true
@@ -321,7 +321,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       error.textContent = ''
       try { await submit(form); close(); afterSave?.() }
       catch (failure) {
-        const conflict = String(failure).includes('409')
+        const conflict = revisionConflicts && String(failure).includes('409')
         error.textContent = conflict ? 'The fleet changed while this form was open. Cancel and review the current revision before editing again.' : String(failure)
         accept.disabled = conflict
         cancel.disabled = false
@@ -346,7 +346,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   const checkedValues = (form, name) => [...form.querySelectorAll(`input[name="${name}"]:checked`)].map((input) => input.value)
 
   function confirm(title, description, request, success) {
-    dialog(title, description, [], title, () => run(request, success))
+    dialog(title, description, [], title, () => run(request, success), null, request.operation !== 'stop_host')
   }
 
   async function secureStorage() {

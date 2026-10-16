@@ -160,6 +160,10 @@ test('busy Host Stop leaves Manager open and reports the refusal', async (t) => 
   await waitFor(() => app.document.querySelector('[role="dialog"] [role="alert"]')?.textContent.includes('Host is busy'),
     'the authoritative busy error must stay visible')
   assert.equal(requests(app).length, 1)
+  assert.equal(button(app.document.querySelector('[role="dialog"]'), 'Stop Host and Quit').disabled, false,
+    'busy is retryable after the user stops the models')
+  assert.equal(app.calls.filter(call => call.command === 'manager_snapshot').length, 1,
+    'a busy Stop must not trigger a fleet-conflict refresh')
   assert.ok(app.document.querySelector('main'), 'Manager remains open after refusal')
   assert.equal(view.hosts[0].snapshot.instances[0].status, 'ready', 'Stop Host must not unload a running model')
 })
