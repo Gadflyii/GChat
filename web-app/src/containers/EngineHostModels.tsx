@@ -57,7 +57,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   }
   return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'GInfer unavailable' : snapshot ? 'Connected' : host.local ? 'Connecting' : 'Not connected'}</p></div>
+      <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'GInfer offline' : snapshot ? 'Connected' : host.local ? 'Connecting' : 'Not connected'}</p></div>
       {!host.local && (error || !snapshot) && <Button variant="outline" disabled={busy} onClick={() => void act('connect')}>Connect</Button>}
       {active && snapshot && <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
@@ -78,7 +78,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         if (window.confirm(`Forget ${host.name}? This removes its saved connection from GChat. Running jobs stay on the host.`)) void act('forget')
       }}>Forget</Button>}
     </div>
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {!host.local && !snapshot && <p className="text-sm text-muted-foreground">Choose Connect to use this saved host. Your desktop may ask you to unlock its stored credential.</p>}
     {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
       action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />}
     {host.local && <EngineFirstRun hostId={host.host_id} />}

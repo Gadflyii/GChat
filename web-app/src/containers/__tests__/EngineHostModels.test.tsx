@@ -16,7 +16,8 @@ it('keeps a saved remote host passive until its Connect button is used', async (
   const host = { local: false, host_id: 'remote', name: 'Saved server', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
   const error = 'Connect this saved host to unlock its credential for this session'
   render(<HostCard host={host} error={error} />)
-  expect(screen.getByRole('alert')).toHaveTextContent(error)
+  expect(screen.getByText(/Choose Connect to use this saved host/)).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
   expect(engineCommand).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
