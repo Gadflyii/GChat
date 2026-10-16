@@ -1,4 +1,6 @@
-use std::{path::PathBuf, process::ExitCode};
+#[cfg(target_os = "linux")]
+use std::path::PathBuf;
+use std::process::ExitCode;
 
 use clap::Parser;
 #[cfg(target_os = "linux")]
@@ -106,6 +108,9 @@ async fn kvm(command: KvmCommand) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(not(target_os = "linux"))]
+    let _ = args;
+
     #[cfg(target_os = "linux")]
     if let Some(mode) = args.command {
         match mode {
