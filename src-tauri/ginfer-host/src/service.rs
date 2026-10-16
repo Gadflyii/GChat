@@ -3754,7 +3754,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
                 name:"Synthetic queued transfer, never started".into(), identity:model.metadata.identity.clone(),
                 url:"https://huggingface.co/SectileLabs/fixture/resolve/0000000000000000000000000000000000000000/model.ginfer".into(),
                 sha256:"a".repeat(64), bytes:4096, tp:1, qualified_sm:vec!["12.0".into()], min_vram_mib_per_gpu:32768,
-                capabilities:vec!["tools".into()], launch_profiles:vec![],
+                capabilities:vec!["tools".into()], cpu_expert_formats:None, launch_profiles:vec![],
             };
             release.validate().unwrap();
             host.downloads.seed_concurrent_resource_jobs(job_ids.iter().enumerate().map(|(index, id)| crate::model_downloads::Download {
@@ -4184,7 +4184,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
                 url: "https://huggingface.co/SectileLabs/fixture/resolve/0000000000000000000000000000000000000000/model.ginfer".into(),
                 sha256: hex::encode(Sha256::digest(std::fs::read(&payload).unwrap())), bytes: 4096,
                 tp: 1, qualified_sm: vec!["12.0".into()], min_vram_mib_per_gpu: 32768,
-                capabilities: vec![], launch_profiles: vec![],
+                capabilities: vec![], cpu_expert_formats: None, launch_profiles: vec![],
             }, status: "installed".into(), received: 4096, bytes_per_second: 0,
             error: None, path: Some(payload.clone()), storage_root: host.downloads.root(),
         };

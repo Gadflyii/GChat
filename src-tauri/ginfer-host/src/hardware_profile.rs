@@ -75,6 +75,25 @@ impl ArtifactProfileIntent {
         Ok(())
     }
 }
+/// Catalog-declared work may warm native seeds before an artifact is available,
+/// but never supplies artifact admission or deferred all-format work.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeclaredFormatsIntent {
+    pub cpu_expert_formats: Vec<String>,
+}
+impl DeclaredFormatsIntent {
+    fn canonicalize(mut self) -> Result<Self, String> {
+        if self.cpu_expert_formats.iter().any(|format| {
+            !crate::model_downloads::CPU_EXPERT_FORMATS.contains(&format.as_str())
+        }) {
+            return Err("Declared profiling requires supported CPU expert formats".into());
+        }
+        self.cpu_expert_formats.sort();
+        self.cpu_expert_formats.dedup();
+        Ok(self)
+    }
+}
 fn all_formats_scope() -> String {
     "all_formats".into()
 }
@@ -83,6 +102,7 @@ enum ProfileScope {
     #[default]
     AllFormats,
     Artifact(ArtifactProfileIntent),
+    DeclaredFormats(DeclaredFormatsIntent),
     CompleteRemainingFormats,
 }
 impl ProfileScope {
@@ -90,6 +110,7 @@ impl ProfileScope {
         match self {
             Self::AllFormats => "all_formats",
             Self::Artifact(_) => "artifact",
+            Self::DeclaredFormats(_) => "declared_formats",
             Self::CompleteRemainingFormats => "complete_remaining_formats",
         }
     }
@@ -246,10 +267,10 @@ fn validate_native_result(
     } else {
         "ensure"
     };
-    let expected_scope = if matches!(scope, ProfileScope::Artifact(_)) {
-        "artifact"
-    } else {
-        "all_formats"
+    let expected_scope = match scope {
+        ProfileScope::Artifact(_) => "artifact",
+        ProfileScope::DeclaredFormats(_) => "declared_formats",
+        _ => "all_formats",
     };
     if value["schema_version"].as_u64() != Some(2)
         || value["mode"].as_str() != Some(expected_mode)
@@ -299,6 +320,21 @@ fn validate_native_result(
             if value["all_formats_complete"].as_bool() != Some(true) || !value["artifact"].is_null()
             {
                 return Err("Native remaining-format completion is incomplete".into());
+            }
+        }
+        ProfileScope::DeclaredFormats(intent) => {
+            let expected: Vec<_> = intent
+                .cpu_expert_formats
+                .iter()
+                .map(|format| {
+                    serde_json::json!({"gate_up_format": format, "down_format": format})
+                })
+                .collect();
+            if value.get("artifact") != Some(&serde_json::Value::Null)
+                || value.get("required_cpu_expert_formats")
+                    != Some(&serde_json::Value::Array(expected))
+            {
+                return Err("Native profiling formats do not match the declared scope".into());
             }
         }
         ProfileScope::AllFormats => unreachable!(),
@@ -786,6 +822,33 @@ impl HardwareProfiles {
         intent.validate(&gpus)?;
         self.start_with_scope(action, fallback, gpus, Some(ProfileScope::Artifact(intent)))
     }
+    /// A catalog hint only: actual serving still requires a later artifact Ensure.
+    pub fn start_declared_formats(
+        self: &Arc<Self>,
+        action: HardwareProfileAction,
+        fallback: Option<PathBuf>,
+        gpus: Vec<String>,
+        intent: DeclaredFormatsIntent,
+    ) -> Result<(), String> {
+        self.start_with_scope(
+            action,
+            fallback,
+            gpus,
+            Some(ProfileScope::DeclaredFormats(intent.canonicalize()?)),
+        )
+    }
+    /// Match retained work by its entire canonical declaration and GPU group.
+    pub fn declared_formats_status(
+        &self,
+        gpus: &[String],
+        intent: &DeclaredFormatsIntent,
+    ) -> Option<HardwareProfileStatus> {
+        let scope = ProfileScope::DeclaredFormats(intent.clone().canonicalize().ok()?);
+        let state = self.state.lock().unwrap();
+        (state.record.scope == scope
+            && group_key(&state.record.view.gpu_uuids) == group_key(gpus))
+        .then(|| state.record.view.clone())
+    }
     /// Explicit idle work, with its own private output/checkpoint and cancellation owner.
     pub fn start_remaining_formats(
         self: &Arc<Self>,
@@ -864,7 +927,7 @@ impl HardwareProfiles {
                 .as_ref()
                 .is_some_and(|scope| scope != &state.record.scope)
             {
-                return Err("Resume and cancel retain the original artifact scope".into());
+                return Err("Resume and cancel retain the original profiling scope".into());
             }
             state.record.scope.clone()
         } else {
@@ -907,7 +970,11 @@ impl HardwareProfiles {
                     && scope != ProfileScope::CompleteRemainingFormats)
                 || (state.record.view.status == "failed"
                     && (state.record.view.reprofile
-                        || scope == ProfileScope::CompleteRemainingFormats)))
+                        || matches!(
+                            scope,
+                            ProfileScope::CompleteRemainingFormats
+                                | ProfileScope::DeclaredFormats(_)
+                        ))))
         {
             // Inventory refresh must not silently retry interrupted or failed
             // background work. A foreground cancellation may resume while idle.
@@ -1085,6 +1152,16 @@ impl HardwareProfiles {
             }
             ProfileScope::CompleteRemainingFormats => {
                 command.arg("--complete-remaining-formats").arg("--json");
+            }
+            ProfileScope::DeclaredFormats(intent) => {
+                command
+                    .arg("--cpu-expert-formats")
+                    .arg(if intent.cpu_expert_formats.is_empty() {
+                        "none".into()
+                    } else {
+                        intent.cpu_expert_formats.join(",")
+                    })
+                    .arg("--json");
             }
             ProfileScope::AllFormats => {}
         }
@@ -1286,6 +1363,7 @@ impl HardwareProfiles {
                             receipt.completion_failed = false;
                         }
                     }
+                    ProfileScope::DeclaredFormats(_) => {}
                 }
             } else if state.record.view.status == "failed"
                 && scope == ProfileScope::CompleteRemainingFormats
@@ -1636,6 +1714,23 @@ mod tests {
             }
         })
     }
+    fn declared_result(intent: &DeclaredFormatsIntent) -> serde_json::Value {
+        serde_json::json!({
+            "schema_version": 2,
+            "mode": "ensure",
+            "scope": "declared_formats",
+            "hardware_profile": "__OUTPUT__",
+            "state": "loaded",
+            "complete": true,
+            "base_complete": true,
+            "all_formats_complete": false,
+            "required_cpu_expert_formats": intent.cpu_expert_formats.iter().map(|format| {
+                serde_json::json!({"gate_up_format": format, "down_format": format})
+            }).collect::<Vec<_>>(),
+            "missing_rows": [],
+            "artifact": null
+        })
+    }
     fn scoped_cli(directory: &Path, arguments: &Path, result: &serde_json::Value) {
         let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
         let result = serde_json::to_string(result).unwrap();
@@ -1644,6 +1739,297 @@ mod tests {
             "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nprintf '%s' '{{\"schema_version\":2,\"accepted\":\"scoped\"}}' > \"$3\"\nprintf '%s%s%s\\n' {} \"$3\" {}\n",
             quote(arguments.to_str().unwrap()), quote(prefix), quote(suffix)
         )).unwrap();
+    }
+    #[test]
+    fn hardware_profile_declared_formats_are_canonical_and_require_exact_native_scope() {
+        let intent = DeclaredFormatsIntent {
+            cpu_expert_formats: vec![
+                "q4g64-f16s".into(),
+                "q2g64-f16s".into(),
+                "q4g64-f16s".into(),
+            ],
+        }
+        .canonicalize()
+        .unwrap();
+        assert_eq!(intent.cpu_expert_formats, ["q2g64-f16s", "q4g64-f16s"]);
+        for unsupported in ["", "none", "q2g64", "Q2G64-F16S", " q2g64-f16s"] {
+            assert!(DeclaredFormatsIntent {
+                cpu_expert_formats: vec![unsupported.into()],
+            }
+            .canonicalize()
+            .is_err());
+        }
+        assert!(DeclaredFormatsIntent {
+            cpu_expert_formats: vec![],
+        }
+        .canonicalize()
+        .unwrap()
+        .cpu_expert_formats
+        .is_empty());
+        let output = Path::new("/private/profile.json");
+        let scope = ProfileScope::DeclaredFormats(intent.clone());
+        let mut valid = declared_result(&intent);
+        valid["hardware_profile"] = serde_json::json!(output);
+        let captured = |value: &serde_json::Value| NativeJson {
+            bytes: serde_json::to_vec(value).unwrap(),
+            complete: true,
+            error: None,
+        };
+        assert!(validate_native_result(&scope, output, &captured(&valid)).is_ok());
+        for (field, value) in [
+            ("schema_version", serde_json::json!(1)),
+            ("mode", serde_json::json!("check")),
+            ("scope", serde_json::json!("artifact")),
+            ("complete", serde_json::json!(false)),
+            ("base_complete", serde_json::json!(false)),
+            ("all_formats_complete", serde_json::Value::Null),
+            ("artifact", serde_json::json!({"path": "/another/model"})),
+            ("missing_rows", serde_json::json!(["unmeasured format"])),
+            ("hardware_profile", serde_json::json!("/other/profile.json")),
+            ("required_cpu_expert_formats", serde_json::json!([])),
+            (
+                "required_cpu_expert_formats",
+                serde_json::json!([
+                    {"gate_up_format": "q2g64-f16s", "down_format": "q4g64-f16s"},
+                    {"gate_up_format": "q4g64-f16s", "down_format": "q4g64-f16s"}
+                ]),
+            ),
+        ] {
+            let mut rejected = valid.clone();
+            rejected[field] = value;
+            assert!(
+                validate_native_result(&scope, output, &captured(&rejected)).is_err(),
+                "{field}"
+            );
+        }
+        for field in ["artifact", "required_cpu_expert_formats"] {
+            let mut rejected = valid.clone();
+            rejected.as_object_mut().unwrap().remove(field);
+            assert!(validate_native_result(&scope, output, &captured(&rejected)).is_err());
+        }
+        let mut reversed = valid.clone();
+        reversed["required_cpu_expert_formats"]
+            .as_array_mut()
+            .unwrap()
+            .reverse();
+        assert!(validate_native_result(&scope, output, &captured(&reversed)).is_err());
+    }
+    #[tokio::test]
+    async fn hardware_profile_declared_formats_complete_without_artifact_admission_or_deferred_work() {
+        for formats in [vec!["q4g64-f16s", "q2g64-f16s", "q4g64-f16s"], vec![]] {
+            let (directory, host, arguments) = fixture().await;
+            let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+            let requested = DeclaredFormatsIntent {
+                cpu_expert_formats: formats.into_iter().map(str::to_owned).collect(),
+            };
+            let canonical = requested.clone().canonicalize().unwrap();
+            scoped_cli(directory.path(), &arguments, &declared_result(&canonical));
+            let gpus = vec!["GPU-fixture".into()];
+            job.start_declared_formats(
+                HardwareProfileAction::Ensure,
+                Some(directory.path().join("ginfer")),
+                gpus.clone(),
+                requested.clone(),
+            )
+            .unwrap();
+            let done = observed(&job, |view| view.status == "completed").await;
+            assert!(!job.busy());
+            assert_eq!(done.scope, "declared_formats");
+            assert_eq!(done.scope_complete, Some(true));
+            assert_eq!(done.base_complete, Some(true));
+            assert_eq!(done.all_formats_complete, Some(false));
+            assert_eq!(done.selected_artifact, None);
+            assert_eq!(done.expected_duration_ms, None);
+            assert_eq!(done.duration_source, None);
+            assert_eq!(job.declared_formats_status(&gpus, &requested), Some(done));
+            assert!(job
+                .declared_formats_status(&["GPU-second".into()], &requested)
+                .is_none());
+            assert!(job.accepted_gpu_groups().is_empty());
+            assert!(job.deferred_groups().is_empty());
+            assert!(job.state.lock().unwrap().record.accepted_durations.is_empty());
+            let selected = selected_intent(directory.path());
+            assert!(!job.artifact_is_accepted(&gpus, &selected));
+            let expected_formats = if canonical.cpu_expert_formats.is_empty() {
+                "none".into()
+            } else {
+                canonical.cpu_expert_formats.join(",")
+            };
+            let args = std::fs::read_to_string(&arguments).unwrap();
+            let args: Vec<_> = args.lines().collect();
+            assert_eq!(args.len(), 6);
+            assert_eq!(&args[..2], ["profile-hardware", "--hardware-profile"]);
+            assert_eq!(
+                &args[3..],
+                ["--cpu-expert-formats", expected_formats.as_str(), "--json"]
+            );
+            assert_eq!(
+                serde_json::from_slice::<serde_json::Value>(
+                    &std::fs::read(directory.path().join("hardware.json")).unwrap()
+                )
+                .unwrap()["accepted"],
+                "scoped"
+            );
+            scoped_cli(directory.path(), &arguments, &selected_result(&selected));
+            job.start_scoped(
+                HardwareProfileAction::Ensure,
+                Some(directory.path().join("ginfer")),
+                gpus.clone(),
+                selected.clone(),
+            )
+            .unwrap();
+            observed(&job, |view| view.status == "completed").await;
+            assert!(job.artifact_is_accepted(&gpus, &selected));
+            assert_eq!(job.deferred_groups(), vec![gpus]);
+        }
+    }
+    #[tokio::test]
+    async fn hardware_profile_declared_resume_retains_scope_and_reaps_before_actual_model_ensure() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let gpus = vec!["GPU-fixture".into()];
+        let intent = DeclaredFormatsIntent {
+            cpu_expert_formats: vec!["q2g64-f16s".into(), "q4g64-f16s".into()],
+        };
+        let cli = Some(directory.path().join("ginfer"));
+        job.start_declared_formats(
+            HardwareProfileAction::Ensure,
+            cli.clone(),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        begun(&arguments).await;
+        observed(&job, |view| view.checkpoint_available).await;
+        let output = std::fs::read_to_string(&arguments)
+            .unwrap()
+            .lines()
+            .nth(2)
+            .unwrap()
+            .to_owned();
+        let selected = selected_intent(directory.path());
+        assert!(job
+            .start_scoped(
+                HardwareProfileAction::Ensure,
+                cli.clone(),
+                gpus.clone(),
+                selected.clone(),
+            )
+            .unwrap_err()
+            .contains("different artifact scope"));
+        job.start_declared_formats(
+            HardwareProfileAction::Cancel,
+            cli.clone(),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        observed(&job, |view| view.status == "cancelled" && !job.busy()).await;
+        assert!(!job.busy());
+        assert_eq!(job.status(None).status, "cancelled");
+        assert!(PathBuf::from(format!("{output}.install-state.json")).is_file());
+        assert!(job
+            .start_declared_formats(
+                HardwareProfileAction::Resume,
+                cli.clone(),
+                gpus.clone(),
+                DeclaredFormatsIntent {
+                    cpu_expert_formats: vec![],
+                },
+            )
+            .unwrap_err()
+            .contains("original profiling scope"));
+        let job_id = job.status(None).job_id;
+        job.start_declared_formats(
+            HardwareProfileAction::Resume,
+            cli.clone(),
+            gpus.clone(),
+            DeclaredFormatsIntent {
+                cpu_expert_formats: vec![
+                    "q4g64-f16s".into(),
+                    "q2g64-f16s".into(),
+                    "q4g64-f16s".into(),
+                ],
+            },
+        )
+        .unwrap();
+        assert_ne!(job.status(None).job_id, job_id);
+        job.start_declared_formats(
+            HardwareProfileAction::Cancel,
+            cli.clone(),
+            gpus.clone(),
+            intent,
+        )
+        .unwrap();
+        observed(&job, |view| view.status == "cancelled" && !job.busy()).await;
+        assert_eq!(
+            job.state.lock().unwrap().record.output_path,
+            Some(PathBuf::from(&output))
+        );
+        assert!(!job.artifact_is_accepted(&gpus, &selected));
+        assert!(job.deferred_groups().is_empty());
+        scoped_cli(directory.path(), &arguments, &selected_result(&selected));
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            cli,
+            gpus.clone(),
+            selected.clone(),
+        )
+        .unwrap();
+        observed(&job, |view| view.status == "completed").await;
+        assert!(job.artifact_is_accepted(&gpus, &selected));
+        assert_ne!(
+            job.state.lock().unwrap().record.output_path,
+            Some(PathBuf::from(output))
+        );
+    }
+    #[tokio::test]
+    async fn hardware_profile_declared_failure_preserves_canonical_and_requires_explicit_resume() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let intent = DeclaredFormatsIntent {
+            cpu_expert_formats: vec!["nvfp4".into()],
+        };
+        let gpus = vec!["GPU-fixture".into()];
+        let canonical = directory.path().join("hardware.json");
+        std::fs::write(&canonical, b"previous canonical profile").unwrap();
+        let mut invalid = declared_result(&intent);
+        invalid["required_cpu_expert_formats"] = serde_json::json!([]);
+        scoped_cli(directory.path(), &arguments, &invalid);
+        let cli = Some(directory.path().join("ginfer"));
+        job.start_declared_formats(
+            HardwareProfileAction::Ensure,
+            cli.clone(),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        let failed = observed(&job, |view| view.status == "failed").await;
+        assert!(!job.busy());
+        assert_eq!(
+            std::fs::read(&canonical).unwrap(),
+            b"previous canonical profile"
+        );
+        assert!(failed.error.as_deref().unwrap().contains("declared scope"));
+        assert!(job.accepted_gpu_groups().is_empty());
+        assert!(job.deferred_groups().is_empty());
+        job.start_declared_formats(
+            HardwareProfileAction::Ensure,
+            cli.clone(),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        assert_eq!(job.status(None).job_id, failed.job_id);
+        assert_eq!(job.status(None).status, "failed");
+        scoped_cli(directory.path(), &arguments, &declared_result(&intent));
+        job.start_declared_formats(HardwareProfileAction::Resume, cli, gpus, intent)
+            .unwrap();
+        let done = observed(&job, |view| view.status == "completed").await;
+        assert_ne!(done.job_id, failed.job_id);
+        assert_eq!(done.scope, "declared_formats");
+        assert!(job.accepted_gpu_groups().is_empty());
+        assert!(job.deferred_groups().is_empty());
     }
     #[test]
     fn hardware_profile_scoped_json_rejects_unqualified_or_mismatched_results() {

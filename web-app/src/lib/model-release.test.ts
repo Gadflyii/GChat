@@ -22,4 +22,18 @@ describe('released model recommendations', () => {
     expect(releaseReadiness(release, [{ ...gpu, compute_capability: undefined }]).available).toBe(false)
     expect(releaseReadiness(release, []).available).toBe(false)
   })
+  it('accepts absent, base-only and exact native declared CPU formats', () => {
+    expect(validRelease(release)).toBe(true)
+    expect(validRelease({ ...release, cpu_expert_formats: [] })).toBe(true)
+    expect(validRelease({ ...release, cpu_expert_formats: [
+      'q2g32-f16s', 'q4g32-f16s', 'q2g64-f16s', 'q4g64-f16s',
+      'w8g32-f16s', 'nvfp4', 'nvfp4-gmul',
+    ] })).toBe(true)
+  })
+  it('rejects malformed declared formats instead of changing the requested scope', () => {
+    for (const cpu_expert_formats of [null, 'none', [42], ['none'], [''],
+      ['Q2G64_F16S'], [' q2g64-f16s'], ['q2g64-f16s,q4g64-f16s'], ['q2g64-f16s', 'unsupported']]) {
+      expect(validRelease({ ...release, cpu_expert_formats })).toBe(false)
+    }
+  })
 })

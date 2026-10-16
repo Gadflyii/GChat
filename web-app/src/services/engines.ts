@@ -59,7 +59,7 @@ export type EngineHardwareProfile = {
   expected_duration_ms?: number | null
   remaining_ms?: number | null
   duration_source?: 'measured_history' | null
-  scope?: 'all_formats' | 'artifact' | 'complete_remaining_formats' | null
+  scope?: 'all_formats' | 'artifact' | 'declared_formats' | 'complete_remaining_formats' | null
   selected_artifact?: {
     path: string
     directory_sha256: string

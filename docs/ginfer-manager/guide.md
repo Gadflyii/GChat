@@ -75,6 +75,8 @@ and continue later without discarding progress.
 3. Select one or more compatible published packages and choose **Download selected
    models**. Suggestions use the selected GPUs, published memory guidance and live
    storage capacity. Progress survives closing Manager or restarting the Host.
+   When the catalog declares the selected formats, hardware preparation can run
+   during the downloads; its progress is shown separately.
 4. After each selected download is verified, the Host prepares the measurements
    required by that artifact and its startup settings. Other formats can remain
    deferred. The first-run panel shows the reported phase and elapsed time, with

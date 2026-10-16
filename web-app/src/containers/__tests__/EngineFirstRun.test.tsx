@@ -58,6 +58,29 @@ it('uses chosen storage, retries the shared catalog and resumes saved downloads'
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'resume' })
 })
 
+it('shows download preparation without granting selected-model readiness or an all-format ETA', async () => {
+  mocks.command.mockResolvedValue(flow('downloads', {
+    gpu_uuids: ['GPU-one'],
+    selected_downloads: [{ id: 'download', release, status: 'downloading', received: 2048, bytes_per_second: 1024 ** 2 }],
+    hardware_profile: {
+      status: 'running', scope: 'declared_formats', scope_complete: false, all_formats_complete: false,
+      elapsed_ms: 180_000, expected_duration_ms: 600_000, duration_source: 'measured_history',
+      phase_detail: 'q2g64-f16s', diagnostic_tail: '--cpu-expert-formats q2g64-f16s',
+    },
+  }))
+  render(<EngineFirstRun />)
+  expect(await screen.findByText('Download preparation: running')).toBeInTheDocument()
+  expect(screen.getByText(/Muse · downloading/)).toBeInTheDocument()
+  expect(screen.getByLabelText('Download preparation')).toBeInTheDocument()
+  expect(screen.getByText(/Preparing hardware for your downloads/)).toBeInTheDocument()
+  expect(screen.queryByText(/Selected-model profiling is complete/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Broader model-format coverage is deferred/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/remaining, based on/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/q2g64-f16s/)).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Model download folder')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Finish local setup' })).not.toBeInTheDocument()
+})
+
 it('observes verified downloads before selected profiling and retains its retry across reopening', async () => {
   const installed = { id: 'download', release, status: 'installed', received: release.bytes, bytes_per_second: 0 }
   let saved = flow('downloads', {

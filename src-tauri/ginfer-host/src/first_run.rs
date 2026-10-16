@@ -1,12 +1,18 @@
 //! One durable first-run workflow, driven by every installed client.
 use crate::{
-    hardware_profile::{ArtifactProfileIntent, HardwareProfileAction, HardwareProfileStatus},
+    hardware_profile::{
+        ArtifactProfileIntent, DeclaredFormatsIntent, HardwareProfileAction, HardwareProfileStatus,
+    },
     model_downloads::{Download, Release},
     service::{write_private, Gpu, Host, LaunchRequest},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::BTreeSet, path::PathBuf, sync::atomic::Ordering};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::PathBuf,
+    sync::atomic::Ordering,
+};
 use uuid::Uuid;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -22,8 +28,94 @@ pub struct Progress {
     pub selected_release_ids: Vec<String>,
     pub download_error: Option<String>,
     pub download_ids: Vec<Uuid>,
+    declared_overlap: Option<DeclaredOverlap>,
+    final_profiles: BTreeMap<Uuid, ArtifactEnsureReceipt>,
     pub startup_profiles: Vec<Startup>,
     pub complete: bool,
+}
+
+// Ownership is separate from the worker's matching scope: a matching manual job
+// must never grant first-run permission to overlap heavy work.
+#[derive(Clone, Serialize, Deserialize)]
+struct DeclaredOverlap {
+    intent: DeclaredFormatsIntent,
+    job_id: Uuid,
+    reaped: bool,
+}
+
+// A prior process-local artifact acceptance cannot substitute for this setup's
+// post-download Ensure. Persist its ownership before observing completion.
+#[derive(Clone, Serialize, Deserialize)]
+struct ArtifactEnsureReceipt {
+    intent: ArtifactProfileIntent,
+    job_id: Uuid,
+    complete: bool,
+}
+
+fn owns_final_profile(
+    receipt: &ArtifactEnsureReceipt,
+    status: &HardwareProfileStatus,
+    gpus: &[String],
+    intent: &ArtifactProfileIntent,
+) -> bool {
+    receipt.intent == *intent
+        && status.scope == "artifact"
+        && status.job_id == Some(receipt.job_id)
+        && status.selected_artifact.as_ref() == Some(intent)
+        && crate::hardware_profile::group_key(&status.gpu_uuids)
+            == crate::hardware_profile::group_key(gpus)
+}
+
+// Reconcile the retained final job before starting any earlier artifact after
+// restart. A durable completion is an ordering receipt, never runtime authority.
+// The caller must first observe !busy(), which includes child/reader reaping.
+fn reconcile_final_profiles(
+    progress: &mut Progress,
+    status: &HardwareProfileStatus,
+) -> Result<bool, (Uuid, String)> {
+    let mut completed = Vec::new();
+    for (download_id, receipt) in &progress.final_profiles {
+        if receipt.complete {
+            continue;
+        }
+        if !owns_final_profile(receipt, status, &progress.gpu_uuids, &receipt.intent) {
+            return Err((*download_id,
+                "The setup-owned selected-artifact job changed; resolve it in Hardware settings".into()));
+        }
+        if status.status != "completed" || status.scope_complete != Some(true) {
+            return Err((*download_id, status.error.clone().unwrap_or_else(||
+                "Selected-artifact profiling stopped; resume setup explicitly".into())));
+        }
+        completed.push(*download_id);
+    }
+    for download_id in &completed {
+        progress.final_profiles.get_mut(download_id).unwrap().complete = true;
+        if let Some(profile) = progress.startup_profiles.iter_mut()
+            .find(|profile| profile.download_id == *download_id)
+        {
+            profile.error = None;
+        }
+    }
+    Ok(!completed.is_empty())
+}
+
+fn declared_intent(progress: &Progress) -> Option<DeclaredFormatsIntent> {
+    if progress.selected_release_ids.is_empty() {
+        return None;
+    }
+    let mut formats = BTreeSet::new();
+    for sha in &progress.selected_release_ids {
+        let release = progress.releases.iter().find(|release| &release.sha256 == sha)?;
+        // One undeclared package keeps the whole selection sequential.
+        formats.extend(release.cpu_expert_formats.as_ref()?.iter().cloned());
+    }
+    Some(DeclaredFormatsIntent { cpu_expert_formats: formats.into_iter().collect() })
+}
+
+fn owned_declared_status(progress: &Progress, status: &HardwareProfileStatus) -> bool {
+    progress.declared_overlap.as_ref().is_some_and(|overlap| {
+        !overlap.reaped && status.job_id == Some(overlap.job_id)
+    })
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -50,7 +142,10 @@ fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str
     if progress.download_ids.is_empty() && progress.selected_release_ids.is_empty() {
         return "models";
     }
-    if progress.download_ids.is_empty() && progress.download_error.is_some() {
+    if progress.download_ids.is_empty()
+        && progress.download_error.is_some()
+        && progress.declared_overlap.is_none()
+    {
         return "models";
     }
     if progress.selected_release_ids.iter().any(|sha| {
@@ -68,7 +163,9 @@ fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str
     {
         return "downloads";
     }
-    if !profiled {
+    if progress.declared_overlap.as_ref().is_some_and(|overlap| !overlap.reaped)
+        || !profiled
+    {
         return "profiling";
     }
     "startup"
@@ -205,7 +302,9 @@ impl Host {
             let Ok(intent) = self.selected_profile_intent(&profile.request).await else {
                 return false;
             };
-            if !job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
+            if !progress.final_profiles.get(&profile.download_id)
+                .is_some_and(|receipt| receipt.complete && receipt.intent == intent)
+                || !job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
                 return false;
             }
         }
@@ -377,7 +476,9 @@ impl Host {
                 let selected: Vec<String> =
                     serde_json::from_value(body["gpu_uuids"].clone()).map_err(|e| e.to_string())?;
                 validate_group(&self.gpus, &selected)?;
-                if progress.gpu_uuids != selected && !progress.download_ids.is_empty() {
+                if progress.gpu_uuids != selected
+                    && (!progress.download_ids.is_empty() || progress.declared_overlap.is_some())
+                {
                     return Err("Finish the current setup before changing its GPU group".into());
                 }
                 // Selecting GPUs is durable intent, not permission to calibrate
@@ -393,6 +494,7 @@ impl Host {
                 if progress.gpu_uuids.is_empty()
                     || progress.complete
                     || !progress.download_ids.is_empty()
+                    || progress.declared_overlap.is_some()
                 {
                     return Err(
                         "Choose storage after selecting GPUs and before admitting downloads".into(),
@@ -413,6 +515,7 @@ impl Host {
                 if progress.gpu_uuids.is_empty()
                     || progress.complete
                     || !progress.download_ids.is_empty()
+                    || progress.declared_overlap.is_some()
                 {
                     return Err(
                         "Load published models after selecting GPUs and before admitting downloads"
@@ -427,6 +530,7 @@ impl Host {
                 if progress.gpu_uuids.is_empty()
                     || progress.complete
                     || !progress.download_ids.is_empty()
+                    || progress.declared_overlap.is_some()
                 {
                     return Err(
                         "Choose models after selecting GPUs and before admitting downloads".into(),
@@ -467,11 +571,14 @@ impl Host {
                 progress.selected_release_ids = ids.into_iter().collect();
                 progress.download_error = None;
                 self.store_first_run(progress.clone()).await?;
-                if progress.storage_accepted && !self.first_run_profile_busy().await {
+                if progress.storage_accepted {
                     self.admit_first_run_downloads(&mut progress).await?;
                 }
             }
-            "resume" => match step {
+            "resume" => {
+                let overlapping = self.resume_first_run_declared(&mut progress).await?;
+                match step {
+                "profiling" if overlapping => {}
                 "profiling" => {
                     let _lifecycle = self.lifecycle.lock().await;
                     self.stop_background_profile().await?;
@@ -495,13 +602,23 @@ impl Host {
                     let mut resumed = false;
                     for profile in &progress.startup_profiles {
                         let intent = self.selected_profile_intent(&profile.request).await?;
-                        if selected_scope_needs_resume(&status, &progress.gpu_uuids, &intent) {
+                        if selected_scope_needs_resume(&status, &progress.gpu_uuids, &intent)
+                            && progress.final_profiles.get(&profile.download_id).is_some_and(|receipt|
+                                !receipt.complete && owns_final_profile(receipt, &status, &progress.gpu_uuids, &intent))
+                        {
                             job.start_scoped(
                                 HardwareProfileAction::Resume,
                                 cli,
                                 progress.gpu_uuids.clone(),
-                                intent,
+                                intent.clone(),
                             )?;
+                            let next = job.status(None).job_id.filter(|id| Some(*id) != status.job_id)
+                                .ok_or("Selected-artifact profiling did not resume with a new job identity")?;
+                            progress.final_profiles.insert(profile.download_id, ArtifactEnsureReceipt {
+                                intent, job_id: next, complete: false,
+                            });
+                            // Save the new ownership even if the worker finishes immediately.
+                            self.store_first_run(progress.clone()).await?;
                             resumed = true;
                             break;
                         }
@@ -523,10 +640,8 @@ impl Host {
                     progress.download_error = None;
                     self.admit_first_run_downloads(&mut progress).await?;
                     let _lifecycle = self.lifecycle.lock().await;
-                    if self.first_run_profile_busy().await {
-                        return Err(
-                            "Wait for active hardware profiling before resuming downloads".into(),
-                        );
+                    if self.first_run_profile_busy().await && !self.first_run_owns_declared(&progress).await {
+                        return Err("Wait for active hardware profiling before resuming downloads".into());
                     }
                     for job in &jobs {
                         if progress.download_ids.contains(&job.id)
@@ -543,6 +658,7 @@ impl Host {
                     }
                 }
                 _ => return Err("No interrupted work to resume at this step".into()),
+                }
             },
             "startup" => {
                 if step != "startup" {
@@ -743,11 +859,71 @@ impl Host {
         self.store_first_run(progress.clone()).await
     }
 
+    async fn first_run_owns_declared(&self, progress: &Progress) -> bool {
+        let Some(overlap) = &progress.declared_overlap else { return false };
+        let processes = self.processes.lock().await;
+        processes.hardware_profile.as_ref().is_some_and(|job| {
+            job.declared_formats_status(&progress.gpu_uuids, &overlap.intent)
+                .is_some_and(|status| owned_declared_status(progress, &status))
+        })
+    }
+
+    // Caller holds lifecycle. Completion means the child and pipe readers have
+    // been reaped, not merely that native JSON claimed scope completeness.
+    async fn first_run_declared_barrier(&self, progress: &mut Progress) -> Result<bool, String> {
+        let Some(overlap) = progress.declared_overlap.clone() else { return Ok(true) };
+        if overlap.reaped { return Ok(true) }
+        let job = self.processes.lock().await.hardware_profile.clone()
+            .ok_or("Hardware profiling is not configured")?;
+        let status = job.declared_formats_status(&progress.gpu_uuids, &overlap.intent)
+            .filter(|status| owned_declared_status(progress, status))
+            .ok_or("The setup-owned declared calibration changed; resolve it in Hardware settings")?;
+        if job.busy() { return Ok(false) }
+        if status.status != "completed" || status.scope_complete != Some(true) {
+            return Err(status.error.unwrap_or_else(||
+                "Declared-format calibration stopped; resume setup explicitly".into()));
+        }
+        progress.declared_overlap.as_mut().expect("overlap exists").reaped = true;
+        self.store_first_run(progress.clone()).await?;
+        Ok(true)
+    }
+
+    async fn resume_first_run_declared(&self, progress: &mut Progress) -> Result<bool, String> {
+        let Some(overlap) = progress.declared_overlap.clone().filter(|overlap| !overlap.reaped) else {
+            return Ok(false);
+        };
+        let _lifecycle = self.lifecycle.lock().await;
+        let (job, cli, children) = {
+            let processes = self.processes.lock().await;
+            (processes.hardware_profile.clone().ok_or("Hardware profiling is not configured")?,
+             processes.profiling_cli(&progress.gpu_uuids), processes.has_children())
+        };
+        let status = job.declared_formats_status(&progress.gpu_uuids, &overlap.intent)
+            .filter(|status| owned_declared_status(progress, status))
+            .ok_or("The setup-owned declared calibration changed; resolve it in Hardware settings")?;
+        if !job.busy() && matches!(status.status.as_str(), "failed" | "interrupted" | "cancelled") {
+            if children { return Err("Stop active model instances before resuming calibration".into()) }
+            self.draft_width.cancel().await?;
+            job.start_declared_formats(HardwareProfileAction::Resume, cli,
+                progress.gpu_uuids.clone(), overlap.intent.clone())?;
+            let resumed = job.declared_formats_status(&progress.gpu_uuids, &overlap.intent)
+                .ok_or("Declared calibration did not resume")?;
+            progress.declared_overlap.as_mut().expect("overlap exists").job_id = resumed.job_id
+                .ok_or("Declared calibration has no job identity")?;
+        }
+        progress.download_error = None;
+        self.store_first_run(progress.clone()).await?;
+        self.first_run_declared_barrier(progress).await?;
+        Ok(true)
+    }
+
     async fn admit_first_run_downloads(&self, progress: &mut Progress) -> Result<(), String> {
         // Profile starts share this lock. Recheck after any storage probe so
         // queued choices cannot admit heavy work while calibration is active.
         let _lifecycle = self.lifecycle.lock().await;
-        if !progress.storage_accepted || self.first_run_profile_busy().await {
+        if !progress.storage_accepted
+            || (self.first_run_profile_busy().await && !self.first_run_owns_declared(progress).await)
+        {
             return Err(
                 "Wait for active hardware profiling and validate storage before downloading models"
                     .into(),
@@ -789,6 +965,32 @@ impl Host {
             Err(error) => Err(error.into()),
         };
         if let Err(error) = capacity {
+            progress.download_error = Some(error.clone());
+            self.store_first_run(progress.clone()).await?;
+            return Err(error);
+        }
+        if progress.declared_overlap.is_none() {
+            if let Some(intent) = declared_intent(progress) {
+                let (job, cli, children) = {
+                    let processes = self.processes.lock().await;
+                    (processes.hardware_profile.clone().ok_or("Hardware profiling is not configured")?,
+                     processes.profiling_cli(&progress.gpu_uuids), processes.has_children())
+                };
+                if children { return Err("Stop active model instances before calibration".into()) }
+                self.draft_width.cancel().await?;
+                let previous = job.status(cli.clone()).job_id;
+                job.start_declared_formats(HardwareProfileAction::Ensure, cli,
+                    progress.gpu_uuids.clone(), intent.clone())?;
+                let status = job.declared_formats_status(&progress.gpu_uuids, &intent)
+                    .ok_or("Declared calibration did not start")?;
+                let job_id = status.job_id.filter(|id| Some(*id) != previous)
+                    .ok_or("Resolve the retained hardware profiling job in Hardware settings before setup can overlap downloads")?;
+                progress.declared_overlap = Some(DeclaredOverlap { intent, job_id, reaped: false });
+                // If this write fails, the unowned job remains fail-closed.
+                self.store_first_run(progress.clone()).await?;
+            }
+        }
+        if let Err(error) = self.first_run_declared_barrier(progress).await {
             progress.download_error = Some(error.clone());
             self.store_first_run(progress.clone()).await?;
             return Err(error);
@@ -845,7 +1047,7 @@ impl Host {
         {
             let _lifecycle = self.lifecycle.lock().await;
             self.stop_background_profile().await?;
-            if self.first_run_profile_busy().await {
+            if self.first_run_profile_busy().await && !self.first_run_owns_declared(&progress).await {
                 return Ok(());
             }
         }
@@ -855,6 +1057,18 @@ impl Host {
             && progress.download_error.is_none()
         {
             self.admit_first_run_downloads(&mut progress).await?;
+        }
+        {
+            let _lifecycle = self.lifecycle.lock().await;
+            match self.first_run_declared_barrier(&mut progress).await {
+                Ok(true) => {}
+                Ok(false) => return Ok(()),
+                Err(error) => {
+                    progress.download_error = Some(error);
+                    self.store_first_run(progress).await?;
+                    return Ok(());
+                }
+            }
         }
         let jobs = self.downloads.list().await;
         // This ignores profiling only to test that every selected download is
@@ -947,6 +1161,21 @@ impl Host {
                 processes.profiling_cli(&progress.gpu_uuids),
             )
         };
+        // Resolve the last owned job before the first artifact can replace its
+        // status. This also handles a restart between native exit and our save.
+        match reconcile_final_profiles(&mut progress, &job.status(cli.clone())) {
+            Ok(true) => self.store_first_run(progress.clone()).await?,
+            Ok(false) => {},
+            Err((download_id, error)) => {
+                if let Some(profile) = progress.startup_profiles.iter_mut()
+                    .find(|profile| profile.download_id == download_id)
+                {
+                    profile.error = Some(error);
+                }
+                self.store_first_run(progress).await?;
+                return Ok(());
+            }
+        }
         for index in 0..progress.startup_profiles.len() {
             let intent = match self
                 .selected_profile_intent(&progress.startup_profiles[index].request)
@@ -959,30 +1188,43 @@ impl Host {
                     return Ok(());
                 }
             };
-            if job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
+            let download_id = progress.startup_profiles[index].download_id;
+            let status = job.status(cli.clone());
+            if progress.final_profiles.get(&download_id).is_some_and(|receipt|
+                receipt.complete && receipt.intent == intent)
+                && job.artifact_is_accepted(&progress.gpu_uuids, &intent)
+            {
                 continue;
             }
-            // Acceptance is deliberately process-local. Quotes retained across
-            // restart cannot authorize completion before current-runtime Ensure.
+            // Saved receipts and old quotes are not runtime authority. A restart
+            // or changed artifact requires another current-native Ensure.
             for profile in &mut progress.startup_profiles {
                 profile.quote = None;
             }
-            let status = job.status(cli.clone());
             if selected_scope_needs_resume(&status, &progress.gpu_uuids, &intent)
                 || progress.startup_profiles[index].error.is_some()
             {
                 self.store_first_run(progress).await?;
                 return Ok(());
             }
-            if let Err(error) = job.start_scoped(
+            match job.start_scoped(
                 HardwareProfileAction::Ensure,
                 cli.clone(),
                 progress.gpu_uuids.clone(),
                 intent.clone(),
             ) {
-                progress.startup_profiles[index].error = Some(error);
-            } else if !job.busy() && !job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
-                progress.startup_profiles[index].error = Some("Resolve the interrupted hardware profiling job before selected-artifact profiling can continue".into());
+                Err(error) => progress.startup_profiles[index].error = Some(error),
+                Ok(()) => {
+                    let next = job.status(None);
+                    if let Some(job_id) = next.job_id.filter(|id| Some(*id) != status.job_id) {
+                        progress.final_profiles.insert(download_id, ArtifactEnsureReceipt {
+                            intent, job_id, complete: false,
+                        });
+                    } else {
+                        progress.startup_profiles[index].error = Some(
+                            "Resolve the retained hardware profiling job before selected-artifact profiling can continue".into());
+                    }
+                }
             }
             self.store_first_run(progress).await?;
             return Ok(());
@@ -1054,6 +1296,7 @@ mod tests {
                 qualified_sm: vec!["12.0".into()],
                 min_vram_mib_per_gpu: 32768,
                 capabilities: vec!["tools".into()],
+                cpu_expert_formats: None,
                 launch_profiles: vec![],
             },
             bytes,
@@ -1112,6 +1355,122 @@ mod tests {
         )
         .unwrap();
         (host, jobs.into_values().collect())
+    }
+
+    #[test]
+    fn declared_catalog_hints_require_every_selection_and_migrate_old_progress() {
+        let (mut a, _) = package(1);
+        let (mut b, _) = package(2);
+        a.cpu_expert_formats = Some(vec!["q4g64-f16s".into(), "q2g64-f16s".into()]);
+        b.cpu_expert_formats = Some(vec!["q2g64-f16s".into()]);
+        let mut progress = Progress {
+            selected_release_ids: vec![a.sha256.clone(), b.sha256.clone()],
+            releases: vec![a, b],
+            ..Default::default()
+        };
+        assert_eq!(declared_intent(&progress).unwrap().cpu_expert_formats,
+            vec!["q2g64-f16s", "q4g64-f16s"]);
+        progress.releases[1].cpu_expert_formats = None;
+        assert!(declared_intent(&progress).is_none());
+        for release in &mut progress.releases {
+            release.cpu_expert_formats = Some(vec![]);
+        }
+        assert!(declared_intent(&progress).unwrap().cpu_expert_formats.is_empty());
+        let legacy: Progress = serde_json::from_value(json!({
+            "gpu_uuids":[gpu().uuid], "storage_accepted":true
+        })).unwrap();
+        assert!(legacy.declared_overlap.is_none());
+        assert!(legacy.final_profiles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn retained_final_job_reconciles_before_an_earlier_artifact_is_revalidated() {
+        let directory = tempfile::tempdir().unwrap();
+        let (host, _) = installed_host(directory.path(), 0).await;
+        let worker = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let a = Uuid::new_v4();
+        let b = Uuid::new_v4();
+        let job_b = Uuid::new_v4();
+        let intent = |name: &str| ArtifactProfileIntent {
+            path: directory.path().join(name),
+            directory_sha256: "a".repeat(64),
+            package_sha256: None,
+            tp: 1,
+            draft_tp: 0,
+            spec: "none".into(),
+            draft_tokens: None,
+        };
+        let intent_a = intent("a.ginfer");
+        let intent_b = intent("b.ginfer");
+        let mut progress = Progress {
+            gpu_uuids: vec![gpu().uuid],
+            final_profiles: BTreeMap::from([
+                (a, ArtifactEnsureReceipt { intent: intent_a.clone(), job_id: Uuid::new_v4(), complete: true }),
+                (b, ArtifactEnsureReceipt { intent: intent_b.clone(), job_id: job_b, complete: false }),
+            ]),
+            ..Default::default()
+        };
+        // Host loss between native completion and saving the setup receipt.
+        progress = serde_json::from_slice(&serde_json::to_vec(&progress).unwrap()).unwrap();
+        let mut status = worker.status(None);
+        status.scope = "artifact".into();
+        status.gpu_uuids = vec![gpu().uuid];
+        status.selected_artifact = Some(intent_b.clone());
+        status.job_id = Some(job_b);
+        status.status = "completed".into();
+        status.scope_complete = Some(true);
+        assert!(!worker.artifact_is_accepted(&[gpu().uuid], &intent_a));
+        assert!(!worker.artifact_is_accepted(&[gpu().uuid], &intent_b));
+        assert_eq!(reconcile_final_profiles(&mut progress, &status), Ok(true));
+        assert!(progress.final_profiles.values().all(|receipt| receipt.complete));
+        // Revalidating A can now replace the one retained worker record without
+        // stranding B's pending receipt. Neither receipt grants runtime admission.
+        status.job_id = Some(Uuid::new_v4());
+        status.selected_artifact = Some(intent_a);
+        assert_eq!(reconcile_final_profiles(&mut progress, &status), Ok(false));
+        assert!(!worker.artifact_is_accepted(&[gpu().uuid], &intent_b));
+        progress.final_profiles.get_mut(&b).unwrap().complete = false;
+        assert_eq!(reconcile_final_profiles(&mut progress, &status).unwrap_err().0, b);
+        assert!(!progress.final_profiles[&b].complete);
+        status.job_id = Some(job_b);
+        status.selected_artifact = Some(intent_b);
+        status.status = "interrupted".into();
+        assert_eq!(reconcile_final_profiles(&mut progress, &status).unwrap_err().0, b);
+        assert!(!progress.final_profiles[&b].complete);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn matching_manual_declared_job_does_not_authorize_first_run_download_overlap() {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let (host, _) = installed_host(directory.path(), 0).await;
+        let path = directory.path().join("ginfer");
+        std::fs::write(&path, "#!/bin/sh\nsleep 600\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let worker = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let intent = DeclaredFormatsIntent { cpu_expert_formats: vec!["q2g64-f16s".into()] };
+        worker.start_declared_formats(HardwareProfileAction::Ensure, Some(path),
+            vec![gpu().uuid], intent.clone()).unwrap();
+        let manual_id = worker.declared_formats_status(&[gpu().uuid], &intent).unwrap().job_id;
+        let (mut release, _) = package(1);
+        release.cpu_expert_formats = Some(intent.cpu_expert_formats.clone());
+        host.store_first_run(Progress {
+            gpu_uuids: vec![gpu().uuid], storage_accepted: true, catalog_loaded: true,
+            selected_release_ids: vec![release.sha256.clone()], releases: vec![release],
+            ..Default::default()
+        }).await.unwrap();
+        let mut progress = host.data.lock().await.first_run.clone();
+        let result = host.admit_first_run_downloads(&mut progress).await;
+        let saved = host.data.lock().await.first_run.clone();
+        let same_job = worker.status(None).job_id == manual_id;
+        let no_downloads = host.downloads.list().await.is_empty();
+        worker.shutdown().await.unwrap();
+        assert!(result.is_err());
+        assert!(saved.declared_overlap.is_none());
+        assert!(saved.download_ids.is_empty());
+        assert!(no_downloads);
+        assert!(same_job);
     }
 
     #[tokio::test]
@@ -1772,6 +2131,16 @@ mod tests {
             shell_quote(prefix), shell_quote(suffix)
         )).unwrap();
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let worker = host.processes.lock().await.hardware_profile.clone().unwrap();
+        worker.start_scoped(HardwareProfileAction::Ensure,
+            Some(directory.path().join("ginfer")), vec![gpu().uuid], intent.clone()).unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while worker.busy() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.unwrap();
+        assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
+        let prior_job = worker.status(None).job_id;
         host.store_first_run(Progress {
             gpu_uuids: vec![gpu().uuid],
             storage_accepted: true,
@@ -1787,13 +2156,8 @@ mod tests {
             .await
             .is_err());
         host.first_run_maintenance().await.unwrap();
-        let worker = host
-            .processes
-            .lock()
-            .await
-            .hardware_profile
-            .clone()
-            .unwrap();
+        assert_ne!(worker.status(None).job_id, prior_job);
+        assert!(!host.data.lock().await.first_run.final_profiles[&jobs[0].id].complete);
         tokio::time::timeout(Duration::from_secs(2), async {
             while worker.busy() {
                 tokio::time::sleep(Duration::from_millis(5)).await;
@@ -1801,6 +2165,22 @@ mod tests {
         })
         .await
         .unwrap();
+        assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
+        let completed_before_receipt = worker.status(None).job_id;
+        drop(worker);
+        drop(host);
+        let host = Host::open(directory.path().to_owned(), "Fixture".into(),
+            directory.path().join("ginfer-serve"), vec![], vec![], vec![gpu()]).await.unwrap();
+        let worker = host.processes.lock().await.hardware_profile.clone().unwrap();
+        assert!(!worker.artifact_is_accepted(&[gpu().uuid], &intent));
+        assert!(!host.data.lock().await.first_run.final_profiles[&jobs[0].id].complete);
+        host.first_run_maintenance().await.unwrap();
+        assert_ne!(worker.status(None).job_id, completed_before_receipt);
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while worker.busy() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.unwrap();
         assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
         assert_eq!(worker.status(None).all_formats_complete, Some(false));
         let profile_args = std::fs::read_to_string(directory.path().join("profile-args")).unwrap();

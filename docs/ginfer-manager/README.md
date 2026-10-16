@@ -109,8 +109,10 @@ against other allocations or qualify full-context inference.
 
 ## Selected-model first-run profiling — October 16
 
-First-run saves GPU, storage and model choices before calibration. It downloads
-and verifies the selected package, resolves its actual TP payload, then invokes
+First-run saves GPU, storage and model choices before calibration. When every
+selected catalog release declares its CPU expert formats, Host can prepare those
+formats while the downloads run. After verifying each selected package and
+reaping the early profiling process, it resolves the actual TP payload and invokes
 Engine artifact-scoped Ensure with the startup TP and speculation settings.
 The local artifact must exist and pass normal discovery; neither a catalog
 header nor a partial download substitutes for it. Engine derives the required
@@ -135,10 +137,37 @@ waits for it to be reaped. It never interrupts foreground Ensure. Ordinary nativ
 startup admission and a fresh capacity quote still apply. Explicit manual
 all-format Ensure remains available; an inventory refresh starts no calibration.
 
-This follows the signed GInfer `16267858e` contract. Download and selected Ensure
-are sequential in this change. The W10 follow-up for catalog-declared formats
-requires a separate Engine format-list contract before they can run in parallel.
+Artifact admission follows the signed GInfer `16267858e` contract. The optional
+download overlap uses the separate Engine format-list contract; it never replaces
+artifact-scoped Ensure.
 See the [decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md).
+
+### Catalog format hints and download overlap
+
+The optional `models[].releases[].cpu_expert_formats` array sits beside the
+release's immutable whole-package `sha256`. It uses the configured HTTPS catalog's
+existing trust; no catalog signature or signing service is added. The release
+publisher obtains the list from Engine's native artifact scoping output. GChat
+does not produce it. Values use the exact native names `q2g32-f16s`, `q4g32-f16s`,
+`q2g64-f16s`, `q4g64-f16s`, `w8g32-f16s`, `nvfp4` and `nvfp4-gmul`.
+
+When every selected release declares the field, Host sorts and deduplicates the
+union and starts `--cpu-expert-formats` Ensure alongside admitted downloads. An
+explicit empty array requests base measurements with `none`; an absent field in
+any selected release retains sequential download-then-artifact profiling.
+Malformed names or field shapes are rejected rather than widening the scope.
+The early job carries no artifact TP or speculation flags and cannot mark a model
+ready. Its progress is separate from download progress and does not borrow an
+all-format duration estimate.
+
+After verified download and the early job's terminal cleanup, Host always runs
+actual-artifact `--model` Ensure, without `--check`, using the intended startup
+settings. That Ensure supplies omitted formats and actual artifact/storage facts.
+An inaccurate catalog hint can waste calibration time; it cannot satisfy model
+admission. Saved choices and jobs retain the existing explicit Resume behavior
+after cancellation or Host loss. An unrelated manual profiling job is not adopted
+as the first-run overlap job. See the
+[overlap decision](../decisions/2026-10-16-overlap-catalog-format-profiling-with-downloads.md).
 
 ## Shared first-run setup — October 15
 
@@ -161,11 +190,11 @@ live `available_bytes`, existing downloads and candidate eligibility/reasons.
 
 | Action | Inputs and behavior |
 | --- | --- |
-| `profile` | Explicit `gpu_uuids`; save a compatible supported group of 1, 2 or 4 GPUs. Profiling starts after the selected download is verified. |
+| `profile` | Explicit `gpu_uuids`; save a compatible supported group of 1, 2 or 4 GPUs. Model selection can start declared-format profiling with downloads; artifact profiling waits for verification. |
 | `storage` | Absolute `path`; validate and persist the native managed-download root, or retain the choice while explicit profiling finishes. |
 | `move` | Installed managed `download_id`; explicitly move it to the selected storage root, rejecting active sources. |
 | `refresh_catalog` | Refresh the configured published release catalog. |
-| `models` | Exact `release_ids`; save compatible published choices; admit downloads after storage validation and a live capacity check, then profile each verified selected artifact. |
+| `models` | Exact `release_ids`; save compatible published choices; admit downloads after storage validation and a live capacity check, optionally overlap their declared-format profiling, then Ensure each verified selected artifact. |
 | `resume` | Continue interrupted profiling, download admission or startup review. |
 | `startup` | `download_id`, `concurrency`, `max_context`, `instance_count`, optional `kv_arena_bytes`; obtain a fresh Engine quote. |
 | `complete` | Save reviewed startup configurations as stopped instances. |
@@ -174,7 +203,8 @@ live `available_bytes`, existing downloads and candidate eligibility/reasons.
 
 After explicitly choosing a GPU group, users save a storage path and exact
 published model selections. The ordinary first-run flow downloads and verifies
-the selected artifacts before profiling their required formats. If an explicit
+the selected artifacts before their final artifact-scoped Ensure. Optional
+catalog hints can begin declared-format calibration during downloads. If an explicit
 manual profiling job is already running, choices remain durable intents until
 that foreground job finishes. The user can close the wizard and return later.
 Live capacity, filesystem identity, writability and supported GPU/model checks

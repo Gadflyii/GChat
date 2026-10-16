@@ -1,3 +1,9 @@
+const CPU_EXPERT_FORMATS = [
+  'q2g32-f16s', 'q4g32-f16s', 'q2g64-f16s', 'q4g64-f16s',
+  'w8g32-f16s', 'nvfp4', 'nvfp4-gmul',
+] as const
+export type CpuExpertFormat = typeof CPU_EXPERT_FORMATS[number]
+
 export type ModelRelease = {
   name: string
   identity: { model_id: string; weights_id: string }
@@ -8,6 +14,8 @@ export type ModelRelease = {
   qualified_sm: string[]
   min_vram_mib_per_gpu: number
   capabilities: string[]
+  // Optional catalog hint; only the downloaded artifact can satisfy final Ensure.
+  cpu_expert_formats?: CpuExpertFormat[]
   // Producer profile payloads are validated by the destination host before transfer.
   launch_profiles?: Record<string, unknown>[]
 }
@@ -34,6 +42,8 @@ export function validRelease(value: unknown): value is ModelRelease {
     [1, 2, 4].includes(r.tp) && Number.isSafeInteger(r.min_vram_mib_per_gpu) && r.min_vram_mib_per_gpu > 0 &&
     Array.isArray(r.qualified_sm) && r.qualified_sm.length > 0 && r.qualified_sm.every(s => /^\d+\.\d+$/.test(s)) &&
     Array.isArray(r.capabilities) && r.capabilities.every(c => typeof c === 'string') &&
+    (r.cpu_expert_formats === undefined || (Array.isArray(r.cpu_expert_formats) &&
+      r.cpu_expert_formats.every(f => CPU_EXPERT_FORMATS.includes(f)))) &&
     (r.launch_profiles === undefined || (Array.isArray(r.launch_profiles) &&
       r.launch_profiles.every(p => p !== null && typeof p === 'object' && !Array.isArray(p))))
 }

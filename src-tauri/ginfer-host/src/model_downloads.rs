@@ -18,6 +18,16 @@ use tokio::{
 };
 use uuid::Uuid;
 
+pub(crate) const CPU_EXPERT_FORMATS: &[&str] = &[
+    "q2g32-f16s",
+    "q4g32-f16s",
+    "q2g64-f16s",
+    "q4g64-f16s",
+    "w8g32-f16s",
+    "nvfp4",
+    "nvfp4-gmul",
+];
+
 /// The same publication catalog used by GChat; unpublished entries are never downloads.
 pub async fn published_releases() -> Result<Vec<Release>, String> {
     let url = std::env::var("GINFER_MODEL_CATALOG_URL").ok()
@@ -56,9 +66,25 @@ pub struct Release {
     pub qualified_sm: Vec<String>,
     pub min_vram_mib_per_gpu: u64,
     pub capabilities: Vec<String>,
+    // A catalog hint only: actual-artifact Ensure is still mandatory after download.
+    // Missing keeps sequential setup; an explicit empty list requests base measurements.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_cpu_expert_formats",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub cpu_expert_formats: Option<Vec<String>>,
     #[serde(default)]
     pub launch_profiles: Vec<crate::launch_profiles::LaunchProfile>,
 }
+
+fn deserialize_cpu_expert_formats<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Vec::<String>::deserialize(deserializer).map(Some)
+}
+
 impl Release {
     pub fn compatible_group(&self, gpus: &[crate::service::Gpu]) -> Option<Vec<String>> {
         let mut groups = BTreeMap::<_, Vec<String>>::new();
@@ -79,6 +105,15 @@ impl Release {
             })
     }
     pub fn validate(&self) -> Result<(), String> {
+        if self.cpu_expert_formats.as_ref().is_some_and(|formats| {
+            formats
+                .iter()
+                .any(|format| !CPU_EXPERT_FORMATS.contains(&format.as_str()))
+        }) {
+            return Err(
+                "release cpu_expert_formats must contain exact native CPU expert format names".into(),
+            );
+        }
         let mut profile_ids = std::collections::BTreeSet::new();
         for profile in &self.launch_profiles {
             profile.validate()?;
@@ -1077,6 +1112,7 @@ time.sleep(60)
             qualified_sm: vec!["12.0".into()],
             min_vram_mib_per_gpu: 32768,
             capabilities: vec!["tools".into()],
+            cpu_expert_formats: None,
             launch_profiles: vec![],
         };
         release.launch_profiles.push(serde_json::from_value(serde_json::json!({
@@ -1356,6 +1392,47 @@ time.sleep(60)
         let mut bad = catalog;
         bad["models"][0]["releases"][0]["sha256"] = serde_json::json!("invalid");
         assert!(catalog_releases(&bad).is_err());
+    }
+
+    #[test]
+    fn catalog_distinguishes_missing_declared_formats_from_explicit_base_only() {
+        let (release, _) = fixture();
+        let mut value = serde_json::to_value(&release).unwrap();
+        assert!(value.get("cpu_expert_formats").is_none());
+        let decoded: Release = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(decoded.cpu_expert_formats, None);
+
+        for formats in [
+            Vec::<String>::new(),
+            CPU_EXPERT_FORMATS.iter().map(|s| (*s).into()).collect(),
+        ] {
+            value["cpu_expert_formats"] = serde_json::json!(formats);
+            let catalog = serde_json::json!({"models":[{"library_name":"ginfer", "releases":[value]}]});
+            let decoded = catalog_releases(&catalog).unwrap();
+            assert_eq!(decoded[0].cpu_expert_formats.as_ref(), Some(&formats));
+            value = serde_json::to_value(&decoded[0]).unwrap();
+        }
+    }
+
+    #[test]
+    fn catalog_rejects_invalid_declared_format_names_and_shapes() {
+        let (release, _) = fixture();
+        for invalid in [
+            serde_json::json!(["none"]),
+            serde_json::json!([""]),
+            serde_json::json!(["Q2G64_F16S"]),
+            serde_json::json!(["q2g64-f16s,q4g64-f16s"]),
+            serde_json::json!([" q2g64-f16s"]),
+            serde_json::json!(["q2g64-f16s", "unsupported"]),
+            serde_json::json!([42]),
+            serde_json::json!("none"),
+            serde_json::Value::Null,
+        ] {
+            let mut value = serde_json::to_value(&release).unwrap();
+            value["cpu_expert_formats"] = invalid;
+            let catalog = serde_json::json!({"models":[{"library_name":"ginfer", "releases":[value]}]});
+            assert!(catalog_releases(&catalog).is_err());
+        }
     }
 
     #[tokio::test]
