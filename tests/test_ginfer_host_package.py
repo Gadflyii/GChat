@@ -118,7 +118,10 @@ class HostPackage(unittest.TestCase):
     def test_catalogs_keep_values_and_reject_cross_platform_or_duplicate_profiles(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'profiles.json'
-            profile = {'id': 'measured-c1', 'platform': 'linux', 'max_context': 131072}
+            profile = {'id': 'screened-c8', 'platform': 'linux', 'max_context': 131072,
+                       'concurrency': 8, 'qualification': {'tier': 'screened-startup',
+                       'full_context_requests': 0, 'smoke_requests': 8,
+                       'free_bytes_per_gpu': 18581880832}}
             path.write_text(json.dumps({'schema': 'ginfer-launch-profiles-v1', 'profiles': [profile]}))
             result = package.package(Path('/usr/bin/true'), 'linux-x86_64', Path(directory) / 'out', profiles=[path])
             with tarfile.open(result) as archive:

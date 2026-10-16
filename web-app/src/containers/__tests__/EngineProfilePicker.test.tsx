@@ -280,3 +280,22 @@ it('holds profile launches when the Host reports hardware profiling in progress'
   fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
   expect(launch).not.toHaveBeenCalled()
 })
+
+it('labels screened PRO settings without recommending or increasing their witnessed context', () => {
+  const data = snapshot()
+  data.instances = []
+  const entry = data.launch_profiles![0]
+  entry.profile.max_context = 131072
+  entry.profile.concurrency = 8
+  entry.profile.options.vision = true
+  entry.profile.qualification.tier = 'screened-startup'
+  const launch = vi.fn()
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
+  expect(screen.getByRole('option', { name: 'Screened, not full-context qualified · C8 · 128K context · Vision + text' })).toBeInTheDocument()
+  expect(screen.getByText(/Startup and short requests were checked; full-context capacity is unverified/)).toBeInTheDocument()
+  expect(screen.queryByRole('option', { name: /Recommended/ })).not.toBeInTheDocument()
+  expect(launch).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  expect(launch).toHaveBeenCalledWith(expect.objectContaining({ profile_id: 'fixture-c4', gpu_uuids: ['GPU-one'] }))
+  expect(screen.queryByText(/256K/)).not.toBeInTheDocument()
+})
