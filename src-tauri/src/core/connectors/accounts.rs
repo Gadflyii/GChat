@@ -2651,7 +2651,13 @@ mod tests {
             .is_success());
         let denied = settled_auth(&state, &flow).await;
         assert_eq!(denied.status, "failed");
-        assert!(denied.error.unwrap().contains("denied or cancelled"));
+        assert_eq!(
+            denied.error.as_deref(),
+            Some(match provider {
+                Provider::Google => "Provider sign-in was denied or cancelled",
+                Provider::Microsoft => "Microsoft sign-in was not approved. Try again in your browser. If your organization requires administrator approval, ask its administrator to approve GChat.",
+            })
+        );
         let (flow, _) = state.begin_auth(request).await.unwrap();
         assert_eq!(
             state.cancel_auth(&flow.flow_id).await.unwrap().status,
