@@ -267,7 +267,7 @@ Own processes and
 private state are retired; accepted binaries remain. No rebuild/model/GPU run.
 Evidence: `/ai/gchat/out/oi119-native-idle-20261013/result.json`.
 
-## WINDOWS-IDLE-CPU — incomplete first-run maintenance (gate pending)
+## WINDOWS-IDLE-CPU — incomplete first-run maintenance (merge-ready)
 
 The private, model-free Windows Host trace at `dcb11c14cd98ae594d56531782469247d47acce9`
 records **14.3383% of one core** and **30 × 30,303,018 bytes** read in
@@ -286,7 +286,22 @@ logical read bytes do not establish physical disk throughput. Capture recovery
 and forced Host cleanup remain recorded. There is **no post-fix physical sample
 or measured improvement claim**. Saved OI-119 Linux/WSLg evidence (Host 0%,
 Manager family 0.133307% of one core over 30.005842534 s, zero models/profiles)
-is an unmatched source/workload comparison. [Result — pending gate](/ai/gchat/out/windows-idle-cpu-20261016/result.json);
+is an unmatched source/workload comparison.
+
+Production source `846f782da` passed five focused regressions, Host check and
+strict Clippy. The literal `make verify` exited 2 at two unchanged descendant-
+process liveness tests, after lint, typecheck, quality guards, frontend 2,465
+passed/6 skipped, extensions 114 passed and main Rust 695 passed/7 ignored.
+The original failure is retained: orphan zombies in the container without an
+init process are a hypothesis, not a captured process-state diagnosis. With
+Docker `--init`, those two tests passed, followed by all five previously
+unreached Rust suites. This is a **composed completion of the verification
+scope**, totaling 971 Rust passed/27 ignored, rather than a literal successful
+`make verify` run. Both attempts checked the same 3,021 tracked blobs/modes and
+unchanged Cargo lock before and after execution. The continuation container and
+shared guards returned by 16:36:09.765Z; local helpers exited by 16:36:12.153Z.
+Independent process-group absence checks finished at 16:36:59.176Z. The build bookings were canceled and
+the successor notified. [Result and retained failures](/ai/gchat/out/windows-idle-cpu-20261016/result.json);
 recovered trace and limitations are in `/ai/gchat/out/windows-idle-cpu-20261016/`.
 
 ## Accepted OI-116 and OI-118 lifecycle review
