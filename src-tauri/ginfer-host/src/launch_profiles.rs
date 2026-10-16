@@ -1,4 +1,4 @@
-//! Producer-qualified launch configurations shared by the menu and desktop clients.
+//! Recorded launch configurations shared by the menu and desktop clients.
 use crate::{
     engine_host::LaunchOptions,
     engine_inventory::ArtifactIdentity,
@@ -48,7 +48,7 @@ pub struct Qualification {
     pub tier: QualificationTier,
     pub evidence: String,
     pub engine_revision: String,
-    /// Minimum across ranks during the workload identified by the evidence tier.
+    /// Minimum across ranks: startup for screened entries, the recorded workload otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub free_bytes_per_gpu: Option<u64>,
     pub full_context_requests: u32,
@@ -62,6 +62,7 @@ pub struct Qualification {
 #[serde(rename_all = "kebab-case")]
 pub enum QualificationTier {
     FullContextTested,
+    ScreenedStartup,
     CalculatedStartupSmoke,
     CalculatedPendingValidation,
 }
@@ -148,6 +149,11 @@ impl LaunchProfile {
                 self.qualification.full_context_requests == self.concurrency
                     && self.qualification.calculation.is_none()
                     && self.qualification.smoke_requests.is_none()
+            }
+            QualificationTier::ScreenedStartup => {
+                self.qualification.full_context_requests == 0
+                    && self.qualification.smoke_requests == Some(self.concurrency)
+                    && self.qualification.calculation.is_none()
             }
             QualificationTier::CalculatedStartupSmoke => {
                 self.qualification.full_context_requests == 0
@@ -385,6 +391,69 @@ mod tests {
         assert!(p.validate().is_err());
         p.qualification.smoke_requests = None;
         p.qualification.calculation.as_mut().unwrap().available_kv_bytes_per_rank = Some(4096);
+        assert!(p.validate().is_err());
+    }
+
+    #[test]
+    fn supplied_release_catalogs_validate_with_exact_screened_pro_settings() {
+        let Some(paths) = std::env::var_os("GINFER_PROFILE_CATALOGS") else {
+            return;
+        };
+        let mut ids = BTreeSet::new();
+        let mut screened_pro_found = false;
+        let supplied_paths: Vec<_> = std::env::split_paths(&paths).collect();
+        let screened_pro_supplied = supplied_paths.iter().any(|path| {
+            path.file_name().is_some_and(|name| {
+                name == "linux-rtx-pro6000-flash-next-smol-q2g64.json"
+            })
+        });
+        for path in supplied_paths {
+            let profiles = ProfileCatalog::read(&path).unwrap();
+            assert!(!profiles.is_empty(), "{}", path.display());
+            for p in profiles {
+                assert!(ids.insert(p.id.clone()), "duplicate {}", p.id);
+                if p.id == "rtx-pro6000-flash-next-smol-q2g64-tp1-c8-128k-int8-screened" {
+                    screened_pro_found = true;
+                    assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
+                    assert_eq!(p.artifact_sha256, "8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08");
+                    assert_eq!((p.tp, p.draft_tp, p.max_context, p.concurrency), (1, 0, 131072, 8));
+                    assert_eq!(p.options.kv_dtype, "int8");
+                    assert_eq!(p.options.kv_arena_bytes, None);
+                    assert_eq!(p.options.kv_arena_headroom_bytes, HEADROOM_BYTES);
+                    assert_eq!(p.qualification.free_bytes_per_gpu, Some(18581880832));
+                    assert!(!p.options.vision && p.options.structured_outputs);
+                    assert_eq!((p.options.spec.as_str(), p.options.draft_policy.as_str(), p.options.draft_tokens), ("mtp", "fixed", 3));
+                }
+            }
+        }
+        assert_eq!(screened_pro_found, screened_pro_supplied);
+    }
+
+    #[test]
+    fn screened_profiles_require_startup_guard_without_claiming_full_context_capacity() {
+        let mut p = profile();
+        p.qualification.tier = QualificationTier::ScreenedStartup;
+        p.qualification.full_context_requests = 0;
+        p.qualification.smoke_requests = Some(p.concurrency);
+        p.options.kv_arena_bytes = None;
+        p.validate().unwrap();
+        let json = serde_json::to_value(&p).unwrap();
+        assert_eq!(json["qualification"]["tier"], "screened-startup");
+        p.qualification.full_context_requests = p.concurrency;
+        assert!(p.validate().is_err());
+        p.qualification.full_context_requests = 0;
+        p.qualification.smoke_requests = Some(1);
+        assert!(p.validate().is_err());
+        p.qualification.smoke_requests = Some(p.concurrency);
+        p.qualification.calculation = Some(CapacityCalculation {
+            required_kv_bytes_per_rank: 4096,
+            available_kv_bytes_per_rank: Some(4096),
+        });
+        assert!(p.validate().is_err());
+        p.qualification.calculation = None;
+        p.qualification.free_bytes_per_gpu = None;
+        assert!(p.validate().is_err());
+        p.qualification.free_bytes_per_gpu = Some(p.options.kv_arena_headroom_bytes - 1);
         assert!(p.validate().is_err());
     }
 
