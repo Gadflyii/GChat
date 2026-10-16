@@ -276,9 +276,11 @@ one-second monitor active; each maintenance call read and parsed the full
 hardware profile while waiting for model choice. The candidate predicate keeps
 maintenance active for automatic work, admitted downloads and pending startup
 quotes, and waits for an explicit action at input/error/approval boundaries.
-Durable download admission wakes the parked monitor even when its HTTP caller
-is canceled; transfer-progress writes do not add wakeups. Regressions cover
-ordinary Models Resume and cancellation during journal publication.
+Durable download admission and discard wake the parked monitor even when the
+HTTP caller is canceled; transfer-progress writes do not add wakeups. Regressions
+cover ordinary Models Resume, cancellation during journal publication, and a
+paused job discarded while the monitor is parked. The discard case proves the
+wake and restored pending state, not completion of the wizard.
 The counters corroborate this source path without a file-path or stack trace;
 logical read bytes do not establish physical disk throughput. Capture recovery
 and forced Host cleanup remain recorded. There is **no post-fix physical sample

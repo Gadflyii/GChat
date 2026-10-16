@@ -258,9 +258,15 @@ impl ModelDownloads {
         mut jobs: OwnedMutexGuard<BTreeMap<Uuid, Download>>,
         start_after_commit: Option<(Arc<Self>, Uuid)>,
         rollback_enqueue: bool,
+        wake_after_commit: bool,
     ) -> Result<(), String> {
         let path = self.state_path.clone();
         let pending = self.pending_journal.clone();
+        let activity = if start_after_commit.is_some() || wake_after_commit {
+            self.activity.lock().unwrap().clone()
+        } else {
+            None
+        };
         pending.store(true, Ordering::SeqCst);
         tokio::task::spawn_blocking(move || {
             let result = serde_json::to_vec(&*jobs)
@@ -272,9 +278,11 @@ impl ModelDownloads {
                 // HTTP caller disappears while its journal is being written.
                 if let Some((manager, id)) = start_after_commit {
                     manager.spawn(id);
-                    if let Some(activity) = manager.activity.lock().unwrap().as_ref() {
-                        activity.notify_one();
-                    }
+                }
+                // Discard can also make missing first-run work actionable.
+                // Its wake survives caller cancellation just like admission.
+                if let Some(activity) = activity {
+                    activity.notify_one();
                 }
             } else if rollback_enqueue {
                 if let Some((_, id)) = start_after_commit {
@@ -285,7 +293,7 @@ impl ModelDownloads {
         }).await.map_err(|e| e.to_string())?
     }
     async fn save(&self, jobs: OwnedMutexGuard<BTreeMap<Uuid, Download>>) -> Result<(), String> {
-        self.persist(jobs, None, false).await
+        self.persist(jobs, None, false, false).await
     }
     pub(crate) async fn flush_pending(&self) -> Result<(), String> {
         if !self.pending_journal.load(Ordering::SeqCst) {
@@ -358,7 +366,7 @@ impl ModelDownloads {
             storage_root,
         };
         jobs.insert(job.id, job.clone());
-        self.persist(jobs, Some((self.clone(), job.id)), true).await?;
+        self.persist(jobs, Some((self.clone(), job.id)), true, false).await?;
         Ok(job)
     }
     pub async fn action(self: &Arc<Self>, id: Uuid, action: &str) -> Result<(), String> {
@@ -388,7 +396,7 @@ impl ModelDownloads {
                     .map_err(|e| e.to_string())?;
             }
             jobs.remove(&id);
-            return self.save(jobs).await;
+            return self.persist(jobs, None, false, true).await;
         }
         let job = jobs.get_mut(&id).ok_or("unknown download")?;
         match action {
@@ -410,7 +418,7 @@ impl ModelDownloads {
             _ => return Err("download action is not available in its current state".into()),
         }
         let start = if action == "resume" { Some((self.clone(), id)) } else { None };
-        self.persist(jobs, start, false).await
+        self.persist(jobs, start, false, false).await
     }
     pub async fn remove_installed(&self, path: &std::path::Path) -> Result<RemovedPackage, String> {
         let path = tokio::fs::canonicalize(path).await.map_err(|e| e.to_string())?;
@@ -1496,6 +1504,49 @@ time.sleep(60)
         assert!(installed.exists());
     }
     #[tokio::test]
+    async fn discard_wakes_parked_first_run_maintenance_after_durable_removal() {
+        let dir = tempfile::tempdir().unwrap();
+        let host = crate::service::Host::open(
+            dir.path().join("state"), "Discard fixture".into(),
+            dir.path().join("missing-engine"), vec![], vec![], vec![],
+        ).await.unwrap();
+        let (release, _) = fixture();
+        let sha256 = release.sha256.clone();
+        let id = insert(&host.downloads, release).await;
+        let mut jobs = host.downloads.jobs.clone().lock_owned().await;
+        jobs.get_mut(&id).unwrap().status = "paused".into();
+        host.downloads.save(jobs).await.unwrap();
+        host.data.lock().await.first_run = crate::first_run::Progress {
+            gpu_uuids: vec!["GPU-test".into()],
+            storage_accepted: true,
+            catalog_loaded: true,
+            selected_release_ids: vec![sha256],
+            download_ids: vec![id],
+            ..Default::default()
+        };
+        assert!(!host.processes.lock().await.needs_monitoring());
+        assert!(!host.first_run_pending().await, "Paused work must let the monitor park");
+        let activity = host.processes.lock().await.activity_notification();
+        let notified = activity.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        assert!(matches!(futures_util::poll!(notified.as_mut()), std::task::Poll::Pending));
+        assert!(host.downloads.action(id, "pause").await.is_err());
+        assert!(matches!(futures_util::poll!(notified.as_mut()), std::task::Poll::Pending),
+            "Rejected actions must not wake the monitor");
+
+        host.downloads.action(id, "discard").await.unwrap();
+        assert!(matches!(futures_util::poll!(notified.as_mut()), std::task::Poll::Ready(())),
+            "Durable discard must wake the already-parked monitor");
+        let saved: BTreeMap<Uuid, Download> = serde_json::from_slice(
+            &std::fs::read(&host.downloads.state_path).unwrap()).unwrap();
+        assert!(saved.is_empty(), "The removal must be durable before the wake");
+        assert!(host.downloads.list().await.is_empty());
+        assert!(host.first_run_pending().await, "Missing selected work must restore maintenance");
+        assert!(!host.processes.lock().await.has_children());
+    }
+
+    #[tokio::test]
     async fn corrupted_partial_is_not_installed() {
         let dir = tempfile::tempdir().unwrap();
         let manager =
@@ -2391,7 +2442,7 @@ time.sleep(60)
                 let mut jobs = manager.jobs.clone().lock_owned().await;
                 jobs.get_mut(&original.id).unwrap().status = "queued".into();
                 let mut admission = Box::pin(manager.persist(
-                    jobs, Some((manager.clone(), original.id)), false));
+                    jobs, Some((manager.clone(), original.id)), false, false));
                 futures_util::future::poll_fn(|cx| {
                     assert!(matches!(admission.as_mut().poll(cx), Poll::Pending));
                     Poll::Ready(())
