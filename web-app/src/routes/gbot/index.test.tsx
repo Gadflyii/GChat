@@ -666,6 +666,12 @@ it('imports an SSH workspace and preserves setup identity on retry', async () =>
     target: { value: 'Writer' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await screen.findByRole('group', {
+    name: 'Where should the Gbot service run?',
+  })
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  )
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(await screen.findByLabelText(/Another computer on the LAN/))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
