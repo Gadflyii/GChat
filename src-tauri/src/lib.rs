@@ -771,6 +771,14 @@ pub fn run() {
                             log::info!("ginfer processes cleaned up successfully");
                         }
 
+                        #[cfg(windows)]
+                        if let Err(error) = crate::core::engine_hosts::stop_configured_local_host_if_idle(
+                            &app_handle,
+                            None,
+                        ).await {
+                            log::warn!("Windows Host normal Stop on Quit was not confirmed: {error}");
+                        }
+
                         log::info!("App cleanup completed");
                     });
                 });

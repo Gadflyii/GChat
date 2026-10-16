@@ -3,11 +3,13 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { HostCard } from '../EngineHostModels'
 import { engineCommand, type EngineSnapshot, type EngineStartupQuote } from '@/services/engines'
 
+const { refreshHosts } = vi.hoisted(() => ({ refreshHosts: vi.fn().mockResolvedValue(undefined) }))
+
 vi.mock('@/services/engines', async (original) => ({
   ...await original<typeof import('@/services/engines')>(),
   engineCommand: vi.fn().mockResolvedValue({}),
 }))
-vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: () => vi.fn().mockResolvedValue(undefined) }))
+vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: () => refreshHosts }))
 vi.mock('../EngineProfilePicker', () => ({ EngineProfilePicker: () => null }))
 vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId }: { hostId: string }) => <section aria-label={`First-run setup for ${hostId}`} /> }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
@@ -24,6 +26,35 @@ const importedModelSnapshot: EngineSnapshot = {
 const importedQuote: EngineStartupQuote = {
   model_identity: { model_id: 'qwen3.8-27b', weights_id: 'int8' }, instance_count: 2, kv_arena_bytes: 1048576,
 }
+
+it('shows Host Stop only for a local Host advertising normal-stop capability', () => {
+  const { rerender } = render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  expect(screen.queryByRole('button', { name: 'Stop Host and Quit' })).not.toBeInTheDocument()
+  rerender(<HostCard host={{ ...localHost, local: false }} snapshot={{ ...importedModelSnapshot, can_stop_host: true }} />)
+  expect(screen.queryByRole('button', { name: 'Stop Host and Quit' })).not.toBeInTheDocument()
+  rerender(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, can_stop_host: true }} />)
+  expect(screen.getByRole('button', { name: 'Stop Host and Quit' })).toBeEnabled()
+})
+
+it('accepts normal Host Stop without refreshing or reattaching while quitting', async () => {
+  vi.mocked(engineCommand).mockResolvedValue({ stopping: true })
+  render(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, can_stop_host: true }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Stop Host and Quit' }))
+  expect(await screen.findByRole('status')).toHaveTextContent('Host is stopping. Quitting GChat')
+  expect(screen.getByRole('button', { name: 'Quitting…' })).toBeDisabled()
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('stop_host', { host_id: 'host' })
+  expect(refreshHosts).not.toHaveBeenCalled()
+})
+
+it('keeps the Host available and reports the reason when normal Stop is refused', async () => {
+  vi.mocked(engineCommand).mockRejectedValueOnce(new Error('Host is busy: model load in progress'))
+  render(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, can_stop_host: true }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Stop Host and Quit' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('model load in progress')
+  expect(screen.getByRole('button', { name: 'Stop Host and Quit' })).toBeEnabled()
+  expect(screen.queryByText('Host is stopping. Quitting GChat…')).not.toBeInTheDocument()
+  expect(refreshHosts).not.toHaveBeenCalled()
+})
 function selectImportedModel() {
   fireEvent.click(screen.getByText('Server details'))
   fireEvent.click(screen.getByText('Custom server settings'))

@@ -498,6 +498,8 @@ async fn run(
         args.desktop_provider,
     )
     .await?;
+    #[cfg(windows)]
+    if args.desktop_managed && !args.windows_service { host.enable_normal_stop(); }
     host.processes.lock().await.configure_runtimes(
         engine_runtimes,
         host.gpus
@@ -570,28 +572,30 @@ async fn run(
         tick.tick().await; // Host::open already performed the initial inventory.
         loop {
             tick.tick().await;
+            let Ok(_admission) = scan_host.running_admission().await else {
+                std::future::pending::<()>().await;
+                return;
+            };
             if let Err(e) = scan_host.scan().await {
                 eprintln!("Inventory refresh: {e}");
             }
         }
     });
     tokio::pin!(shutdown);
+    let mut normal_stop = false;
     let outcome = loop {
         tokio::select! {
+            _ = host.wait_for_normal_stop() => { normal_stop = true; break Ok(()); },
             _ = &mut shutdown => break Ok(()),
             result = maintenance.join_next() => break Err(format!("Host maintenance stopped unexpectedly: {result:?}")),
             Some(_) = connections.join_next(), if !connections.is_empty() => {},
             result = listener.accept() => {
                 let (socket,_) = match result { Ok(socket) => socket, Err(e) => break Err(e.to_string()) };
-                let acceptor = acceptor.clone(); let host = host.clone();
-                connections.spawn(async move {
-                    let Ok(Ok(tls)) = tokio::time::timeout(Duration::from_secs(10),acceptor.accept(socket)).await else { return };
-                    let service = hyper::service::service_fn(move |req| host.clone().route(req));
-                    let _ = hyper::server::conn::Http::new().serve_connection(tls, service).with_upgrades().await;
-                });
+                connections.spawn(serve_management_connection(socket, acceptor.clone(), host.clone()));
             },
         }
     };
+    drop(listener);
     if let Some(advertisement) = advertisement {
         let _ = advertisement.shutdown();
     }
@@ -600,13 +604,40 @@ async fn run(
         sharing.standalone = None;
         sharing.stop().await;
     }
-    connections.abort_all();
-    while connections.join_next().await.is_some() {}
     maintenance.abort_all();
     while maintenance.join_next().await.is_some() {}
+    // Let the authenticated Stop response flush and finish current HTTP replies.
+    // No work can be admitted after the Stop fence; idle keep-alives do not pin
+    // the process because each connection enters Hyper's graceful shutdown.
+    if normal_stop {
+        let _ = tokio::time::timeout(Duration::from_secs(2), async {
+            while connections.join_next().await.is_some() {}
+        }).await;
+    }
+    connections.abort_all();
+    while connections.join_next().await.is_some() {}
     host.shutdown_hardware_profile().await?;
     host.processes.lock().await.shutdown().await?;
     outcome
+}
+
+async fn serve_management_connection(
+    socket: tokio::net::TcpStream,
+    acceptor: tokio_rustls::TlsAcceptor,
+    host: std::sync::Arc<Host>,
+) {
+    let Ok(Ok(tls)) = tokio::time::timeout(Duration::from_secs(10), acceptor.accept(socket)).await else { return; };
+    let stopping_host = host.clone();
+    let service = hyper::service::service_fn(move |req| host.clone().route(req));
+    let connection = hyper::server::conn::Http::new().serve_connection(tls, service).with_upgrades();
+    tokio::pin!(connection);
+    tokio::select! {
+        _ = &mut connection => {},
+        _ = stopping_host.wait_for_normal_stop() => {
+            connection.as_mut().graceful_shutdown();
+            let _ = connection.await;
+        }
+    }
 }
 
 async fn monitor_processes(host: &Host) {
@@ -617,11 +648,17 @@ async fn monitor_processes(host: &Host) {
         tokio::pin!(notified);
         // Register before inspecting ownership so a launch cannot lose its wake.
         notified.as_mut().enable();
-        if let Err(error) = host.first_run_maintenance().await {
-            eprintln!("First-run setup: {error}");
-        }
-        if let Err(error) = host.idle_maintenance().await {
-            eprintln!("Draft calibration: {error}");
+        {
+            let Ok(_admission) = host.running_admission().await else {
+                std::future::pending::<()>().await;
+                return;
+            };
+            if let Err(error) = host.first_run_maintenance().await {
+                eprintln!("First-run setup: {error}");
+            }
+            if let Err(error) = host.idle_maintenance().await {
+                eprintln!("Draft calibration: {error}");
+            }
         }
         if !host.processes.lock().await.needs_monitoring() && !host.first_run_pending().await {
             tick = None;
@@ -645,6 +682,7 @@ async fn monitor_processes(host: &Host) {
 }
 
 async fn refresh_active_processes(host: &Host) -> Result<bool, String> {
+    let Ok(_admission) = host.running_admission().await else { return Ok(false); };
     if !host.processes.lock().await.needs_monitoring() {
         return Ok(false);
     }
@@ -737,6 +775,37 @@ mod tests {
         atomic::{AtomicUsize, Ordering},
         Arc,
     };
+
+    #[tokio::test]
+    async fn normal_stop_flushes_its_tls_ack_and_closes_an_idle_keepalive() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = ginfer_host::service::Host::open(directory.path().into(),
+            "Normal Stop TLS fixture".into(), std::env::current_exe().unwrap(),
+            vec![], vec![], vec![]).await.unwrap();
+        host.enable_normal_stop(); // Portable seam; the production opt-in is Windows-only.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        host.data.lock().await.management_origin = Some(format!("https://{address}"));
+        host.save().await.unwrap();
+        let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
+        let serving_host = host.clone();
+        let server = tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            super::serve_management_connection(socket, acceptor, serving_host).await;
+        });
+        let local = ginfer_host::local_host::LocalHost {
+            binary: std::env::current_exe().unwrap(), engine: std::env::current_exe().unwrap(),
+            engine_runtimes: Default::default(), directory: directory.path().into(),
+            desktop_provider: None, models: vec![], artifact_sets: vec![],
+            name: "Normal Stop TLS fixture".into(), nvidia_smi: "unused".into(),
+            listen: address,
+        };
+        let response = local.stop_if_idle().await.unwrap();
+        assert_eq!(response["stopping"], true);
+        assert_eq!(response["boot_id"], serde_json::json!(host.boot_id));
+        tokio::time::timeout(std::time::Duration::from_secs(2), server).await.unwrap().unwrap();
+        assert!(host.running_admission().await.is_err());
+    }
 
     #[test]
     fn cmp_alias_uses_device_identity_not_generic_driver_name() {

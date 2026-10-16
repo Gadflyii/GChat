@@ -31,7 +31,7 @@ const renderKey = (view) => JSON.stringify([
           instance.display_name, instance.status, instance.configuration, instance.profile,
           instance.upstream_model_id, instance.last_error]),
         array(snapshot.clients).map((client) => [client.client_id, client.name, client.local]),
-        !!snapshot.local_administrator,
+        !!snapshot.local_administrator, !!snapshot.can_stop_host,
       ]]
   }),
 ])
@@ -1080,7 +1080,9 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         })))) : h('p', { class: 'nearby muted' }, 'No new hosts found.'),
       h('div', { class: 'sidebar-footer' }, button('Pair a host…', () => pair()),
         state.ignored.size ? button('Show ignored hosts', () => { state.ignored.clear(); savePreference('ignored', []); render() }) : null,
-        h('p', { class: 'muted' }, 'Exiting Manager leaves GInfer hosts and models running.')))
+        h('p', { class: 'muted' }, hosts.some(entry => entry.local && entry.snapshot?.can_stop_host)
+          ? 'Exiting Manager stops an idle desktop Host. Models and setup work keep a busy Host running.'
+          : 'Exiting Manager leaves GInfer hosts and models running.')))
     const main = h('main')
     if (!host) {
       append(main, h('h1', {}, 'Your GInfer hosts'), h('div', { class: 'empty' }, h('strong', {}, 'No registered hosts'),
@@ -1090,6 +1092,9 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       append(main, h('div', { class: 'heading' }, h('div', {}, h('h1', {}, host.snapshot?.display_name || host.name),
         h('div', { class: 'muted mono' }, host.base_url)), h('div', { class: 'actions' }, badge(online(host) ? 'ready' : host.offline ? 'offline' : 'failed'),
         !host.local && !online(host) ? button('Connect', () => run(hostRequest(host, 'snapshot'), 'Host connected').catch(() => {})) : null,
+        host.local && host.snapshot?.can_stop_host ? button('Stop Host and Quit', () => confirm(
+          'Stop Host and Quit', 'Stop this computer’s idle desktop Host and quit Manager. Stop loaded models and wait for setup work to finish first.',
+          hostRequest(host, 'stop_host'), 'Host stopping'), !online(host)) : null,
         button('Start a model…', () => launchDialog(host), !online(host) || profiling(host) || !array(host.snapshot?.models).length, 'primary'))),
       !online(host) ? h('div', { class: 'empty' }, h('strong', {}, host.offline ? 'GInfer offline' : 'GInfer unavailable'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
         host.error && !host.offline ? h('p', { class: 'section-error' }, host.error) : null) : null,

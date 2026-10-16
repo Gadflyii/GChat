@@ -95,6 +95,16 @@ pub struct LocalHost {
 }
 
 impl LocalHost {
+    /// Control only this already-running managed Host. Never bootstrap, resolve
+    /// another installation's locator, or send a process-wide Windows signal.
+    pub async fn stop_if_idle(&self) -> Result<serde_json::Value, String> {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            let address = management_address(&self.directory, self.listen)?;
+            let control = LocalControl::open(&self.directory, &format!("https://{address}"))?;
+            control.stop_host_if_idle(&self.directory).await
+        }).await.map_err(|_| "The selected Host did not confirm normal Stop in time; status is unknown and no forced stop was sent".to_string())?
+    }
+
     pub async fn ensure_shared_running(self) -> Result<LocalControl, String> {
         crate::local_host_registry::resolve(Some(
             crate::local_host_registry::Owner::Desktop(Box::new(self)),
@@ -309,8 +319,11 @@ mod tests {
         let copied = tempfile::tempdir().unwrap();
         let host = crate::service::Host::open(directory.path().into(), "Original Host".into(),
             std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        host.enable_normal_stop(); // Exercise the platform seam over actual pinned TLS.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
+        host.data.lock().await.management_origin = Some(format!("https://{address}"));
+        host.save().await.unwrap();
         let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
         std::fs::copy(directory.path().join("host.json"), copied.path().join("host.json")).unwrap();
         let serving = host.clone();
@@ -343,11 +356,20 @@ mod tests {
         };
         let mut control = None;
         assert!(local.connect(&mut control).await.unwrap_err().contains("different data folder"));
+        assert!(local.stop_if_idle().await.unwrap_err().contains("different data folder"));
+        assert!(host.running_admission().await.is_ok(), "Copied authority cannot stop the original Host");
+        local.directory = directory.path().join("not-created-by-stop");
+        assert!(local.stop_if_idle().await.is_err());
+        assert!(!local.directory.exists(), "Stop never bootstraps or creates local Host state");
         local.directory = directory.path().into();
         assert!(local.connect(&mut control).await.is_ok(), "The original Host remains reachable");
         let mut wrong_platform = host.snapshot().await;
         wrong_platform["local_identity"]["platform"] = serde_json::json!("another-platform");
         assert!(validate_local_identity(&local.directory, &wrong_platform).is_err());
+        local.listen = "127.0.0.1:1".parse().unwrap();
+        let response = local.stop_if_idle().await.unwrap();
+        assert_eq!(response["stopping"], true, "Stop follows the persisted own endpoint");
+        assert!(host.running_admission().await.is_err());
         server.abort();
         let _ = server.await;
     }
