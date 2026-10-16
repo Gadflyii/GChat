@@ -295,8 +295,18 @@ interrupted scope until **Resume**, or at its stored error until correction;
 later unquoted selections cannot bypass that scope. This check avoids reading
 the full hardware profile while waiting. New regressions cover restart/runtime
 reconfiguration, a genuine interrupted scoped-job journal and the first blocked
-scope among two selections. Verification of this integration is pending; the
-results below apply to the earlier source.
+scope among two selections. At `ce950a163`, the affected suites pass
+**18 tests / 1 ignored**, with Host check and strict Clippy passing. The first
+merged attempt retained 12 passes, two failures and one ignored: two new tests
+expected single-poll completion across asynchronous artifact validation. They now
+hold the operation lock while awaiting bounded maintenance completion, proving
+that parked setup does not wait for that lock. Production code is unchanged from
+`9b4c4d9f8`. Two incorrectly named service selectors initially ran zero cases;
+the corrected selectors ran all three intended cases and only those receive
+credit. These focused results do not relabel the earlier broad gate below.
+All owned local child processes/groups returned by 17:20:18.755Z and both CPU
+bookings were canceled. The shared build guard had already passed to another
+owner, so the subsequent busy probe is retained without a global-free claim.
 
 Earlier source `846f782da` passed five focused regressions, Host check and
 strict Clippy. The literal `make verify` exited 2 at two unchanged descendant-
