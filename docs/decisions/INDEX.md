@@ -511,3 +511,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-16** — [Renew idle Gbot setup after a proven desktop restart](2026-10-16-renew-idle-gbot-setup-after-proven-desktop-restart.md)
 - **2026-10-16** — [Quote installed models without a catalog](2026-10-16-quote-installed-models-without-a-catalog.md)
 - **2026-10-16** — [Guide Microsoft sign-in with a release identity](2026-10-16-guide-microsoft-sign-in-with-release-identity.md)
+
+- **2026-10-16** — [Profile the selected artifact before idle format completion](2026-10-16-profile-selected-artifact-before-idle-format-completion.md)

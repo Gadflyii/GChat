@@ -471,6 +471,7 @@ impl Host {
             "resume" => match step {
                 "profiling" => {
                     let _lifecycle = self.lifecycle.lock().await;
+                    self.stop_background_profile().await?;
                     if self.processes.lock().await.has_children() {
                         return Err(
                             "Stop active model instances before resuming selected profiling".into(),
@@ -719,6 +720,7 @@ impl Host {
             return Ok(());
         };
         let _lifecycle = self.lifecycle.lock().await;
+        self.stop_background_profile().await?;
         if self.first_run_profile_busy().await {
             return Ok(());
         }
@@ -837,8 +839,12 @@ impl Host {
             progress.catalog_loaded = true;
             self.store_first_run(progress.clone()).await?;
         }
-        if self.first_run_profile_busy().await {
-            return Ok(());
+        {
+            let _lifecycle = self.lifecycle.lock().await;
+            self.stop_background_profile().await?;
+            if self.first_run_profile_busy().await {
+                return Ok(());
+            }
         }
         self.apply_first_run_storage(&mut progress).await?;
         if progress.storage_accepted
@@ -854,7 +860,8 @@ impl Host {
             return Ok(());
         }
         let _lifecycle = self.lifecycle.lock().await;
-        if self.processes.lock().await.has_children() {
+        self.stop_background_profile().await?;
+        if self.first_run_profile_busy().await || self.processes.lock().await.has_children() {
             return Ok(());
         }
         self.draft_width.cancel().await?;
@@ -1652,7 +1659,44 @@ mod tests {
             .unwrap(),
         );
         release.launch_profiles[0].validate().unwrap();
+        jobs[0].status = "paused".into();
         drop(host);
+        let persisted_jobs: std::collections::BTreeMap<_, _> =
+            jobs.iter().map(|job| (job.id, job.clone())).collect();
+        std::fs::write(
+            directory.path().join("model-downloads.json"),
+            serde_json::to_vec(&persisted_jobs).unwrap(),
+        )
+        .unwrap();
+        let host = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
+        host.store_first_run(Progress {
+            gpu_uuids: vec![gpu().uuid],
+            storage_accepted: true,
+            catalog_loaded: true,
+            releases: vec![jobs[0].release.clone()],
+            download_ids: vec![jobs[0].id],
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        host.first_run_maintenance().await.unwrap();
+        let pending = host.first_run_status().await.unwrap();
+        assert_eq!(pending["step"], "downloads");
+        assert_eq!(pending["startup_profiles"], json!([]));
+        assert_eq!(pending["hardware_profile"]["status"], "idle");
+        assert!(!directory.path().join("quote-args").exists());
+        assert!(!directory.path().join("profile-args").exists());
+        drop(host);
+        jobs[0].status = "installed".into();
         let persisted_jobs: std::collections::BTreeMap<_, _> =
             jobs.iter().map(|job| (job.id, job.clone())).collect();
         std::fs::write(
@@ -1700,6 +1744,10 @@ mod tests {
             })
             .await
             .unwrap();
+        assert_eq!(
+            intent.package_sha256.as_deref(),
+            Some(jobs[0].release.sha256.as_str())
+        );
         // This separate profiling fixture accepts only the verified selected
         // artifact; unrelated all-format coverage remains explicitly deferred.
         let result = json!({"schema_version":2,"mode":"ensure","scope":"artifact",
@@ -1711,7 +1759,8 @@ mod tests {
         let shell_quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
         let path = directory.path().join("ginfer");
         std::fs::write(&path, format!(
-            "#!/bin/sh\nprintf '%s' '{{\"schema_version\":2,\"accepted\":\"scoped\"}}' > \"$3\"\nprintf '%s%s%s\\n' {} \"$3\" {}\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nprintf '%s' '{{\"schema_version\":2,\"accepted\":\"scoped\"}}' > \"$3\"\nprintf '%s%s%s\\n' {} \"$3\" {}\n",
+            shell_quote(directory.path().join("profile-args").to_str().unwrap()),
             shell_quote(prefix), shell_quote(suffix)
         )).unwrap();
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -1746,6 +1795,20 @@ mod tests {
         .unwrap();
         assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
         assert_eq!(worker.status(None).all_formats_complete, Some(false));
+        let profile_args = std::fs::read_to_string(directory.path().join("profile-args")).unwrap();
+        let profile_args: Vec<_> = profile_args.lines().collect();
+        let tp = intent.tp.to_string();
+        assert!(profile_args
+            .windows(2)
+            .any(|pair| pair == ["--model", intent.path.to_str().unwrap()]));
+        assert!(profile_args
+            .windows(2)
+            .any(|pair| pair == ["--tp", tp.as_str()]));
+        assert!(profile_args
+            .windows(2)
+            .any(|pair| pair == ["--spec", intent.spec.as_str()]));
+        assert!(profile_args.contains(&"--json"));
+        assert!(!profile_args.contains(&"--complete-remaining-formats"));
         host.first_run_maintenance().await.unwrap();
         let status = host.first_run_status().await.unwrap();
         assert!(status["startup_profiles"][0]["quote"].is_object());

@@ -107,6 +107,37 @@ links the startup, Stop, cleanup and verification evidence. A quote samples free
 memory and planner allowances; it does not reserve VRAM, guarantee startup
 against other allocations or qualify full-context inference.
 
+## Selected-model first-run profiling — October 16
+
+First-run saves GPU, storage and model choices before calibration. It downloads
+and verifies the selected package, resolves its actual TP payload, then invokes
+Engine artifact-scoped Ensure with the startup TP and speculation settings.
+The local artifact must exist and pass normal discovery; neither a catalog
+header nor a partial download substitutes for it. Engine derives the required
+formats from the registered artifact binder. Host checks the returned artifact
+path, exact directory SHA and effective launch intent. A directory SHA identifies
+metadata, while an installed download's package SHA identifies the whole file;
+they are retained separately.
+
+Selected readiness requires the native base and required-format coverage for
+every selected startup recipe. Other formats may remain deferred. Reopening Host
+preserves compatible profile files and saved scope receipts, then revalidates the
+selected intent natively before first-run admission. The retained file alone
+does not authorize startup or promise calibration-free upgrades. Phase diagnostics
+report real work; scope-specific history is required for a measured ETA.
+
+After setup is complete, Host can run Engine's explicit remaining-format pass
+while no serving instance, download or draft-width calibration is active.
+Foreground profiling, quote or Start first cancels that background process and
+waits for it to be reaped. It never interrupts foreground Ensure. Ordinary native
+startup admission and a fresh capacity quote still apply. Explicit manual
+all-format Ensure remains available; an inventory refresh starts no calibration.
+
+This follows the signed GInfer `16267858e` contract. Download and selected Ensure
+are sequential in this change. The W10 follow-up for catalog-declared formats
+requires a separate Engine format-list contract before they can run in parallel.
+See the [decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md).
+
 ## Shared first-run setup — October 15
 
 `FIRST-RUN-WIZARD` and `MODEL-STORAGE-FASTEST-DISK` share one Host-owned workflow on branch

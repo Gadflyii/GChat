@@ -61,8 +61,10 @@ impl ArtifactProfileIntent {
             || !matches!(self.spec.as_str(), "auto" | "none" | "dflash" | "mtp")
             || match self.spec.as_str() {
                 "auto" | "none" => self.draft_tokens.unwrap_or(0) != 0,
-                "dflash" => !matches!(self.draft_tokens, Some(1..=15)),
-                "mtp" => self.draft_tokens.unwrap_or(0) == 0,
+                "dflash" => self
+                    .draft_tokens
+                    .is_some_and(|tokens| !(1..=15).contains(&tokens)),
+                "mtp" => self.draft_tokens == Some(0),
                 _ => true,
             }
         {
@@ -166,6 +168,17 @@ struct Record {
     duration_history_valid: bool,
     #[serde(default)]
     scope: ProfileScope,
+    #[serde(default)]
+    artifact_receipts: std::collections::BTreeMap<String, ArtifactReceipts>,
+}
+/// Durable work receipts support idle completion, never runtime admission.
+#[derive(Clone, Serialize, Deserialize)]
+struct ArtifactReceipts {
+    gpu_uuids: Vec<String>,
+    artifacts: Vec<ArtifactProfileIntent>,
+    all_formats_complete: bool,
+    #[serde(default)]
+    completion_failed: bool,
 }
 struct State {
     record: Record,
@@ -458,6 +471,7 @@ impl HardwareProfiles {
                 measured_work: false,
                 duration_history_valid: true,
                 scope: ProfileScope::AllFormats,
+                artifact_receipts: Default::default(),
                 view: HardwareProfileStatus {
                     status: "idle".into(),
                     job_id: None,
@@ -502,6 +516,11 @@ impl HardwareProfiles {
             record.view.duration_source = None;
         }
         if matches!(record.view.status.as_str(), "running" | "cancelling") {
+            if record.scope == ProfileScope::CompleteRemainingFormats {
+                if let Some(receipt) = record.artifact_receipts.get_mut(&group_key(&record.view.gpu_uuids)) {
+                    receipt.completion_failed = true;
+                }
+            }
             record.view.status = "interrupted".into();
             record.view.remaining_ms = None;
             if !record.native_completed {
@@ -601,6 +620,8 @@ impl HardwareProfiles {
         }
         let mut state = self.state.lock().unwrap();
         let key = group_key(gpus);
+        let removed = state.accepted_artifacts.remove(&key).is_some()
+            | state.record.artifact_receipts.remove(&key).is_some();
         if state
             .record
             .view
@@ -608,6 +629,10 @@ impl HardwareProfiles {
             .iter()
             .any(|group| group_key(&group.gpu_uuids) == key)
         {
+            if removed {
+                let _ = self.save(&state.record);
+                self.revision.fetch_add(1, Ordering::SeqCst);
+            }
             return;
         }
         let expected_duration_ms = state.record.accepted_durations.get(&key).copied();
@@ -620,7 +645,6 @@ impl HardwareProfiles {
                 profile_path: profile.to_path_buf(),
                 expected_duration_ms,
             });
-        state.accepted_artifacts.remove(&key);
         let _ = self.save(&state.record);
         self.revision.fetch_add(1, Ordering::SeqCst);
     }
@@ -785,6 +809,40 @@ impl HardwareProfiles {
             .get(&group_key(gpus))
             .is_some_and(|accepted| accepted.contains(intent))
     }
+    /// Groups with exact artifact acceptance in this Host process only.
+    pub fn accepted_gpu_groups(&self) -> Vec<Vec<String>> {
+        let state = self.state.lock().unwrap();
+        state
+            .record
+            .artifact_receipts
+            .iter()
+            .filter_map(|(key, receipt)| {
+                state
+                    .accepted_artifacts
+                    .get(key)
+                    .filter(|artifacts| !artifacts.is_empty())
+                    .map(|_| receipt.gpu_uuids.clone())
+            })
+            .collect()
+    }
+    /// Persisted work to finish while idle. These receipts confer no serving
+    /// admission, and native completion must revalidate their seed's freshness.
+    /// Failed/interrupted completion requires explicit Resume or new selection.
+    pub fn deferred_groups(&self) -> Vec<Vec<String>> {
+        self.state
+            .lock()
+            .unwrap()
+            .record
+            .artifact_receipts
+            .values()
+            .filter(|receipt| {
+                !receipt.artifacts.is_empty()
+                    && !receipt.all_formats_complete
+                    && !receipt.completion_failed
+            })
+            .map(|receipt| receipt.gpu_uuids.clone())
+            .collect()
+    }
     fn start_with_scope(
         self: &Arc<Self>,
         action: HardwareProfileAction,
@@ -837,14 +895,17 @@ impl HardwareProfiles {
             return Ok(());
         }
         if action == HardwareProfileAction::Ensure
-            && !(state.record.scope == ProfileScope::CompleteRemainingFormats
-                && scope != ProfileScope::CompleteRemainingFormats)
-            && (matches!(
-                state.record.view.status.as_str(),
-                "interrupted" | "cancelled"
-            ) || (state.record.view.status == "failed" && state.record.view.reprofile))
+            && state.record.scope == scope
+            && group_key(&state.record.view.gpu_uuids) == group_key(&gpus)
+            && (state.record.view.status == "interrupted"
+                || (state.record.view.status == "cancelled"
+                    && scope != ProfileScope::CompleteRemainingFormats)
+                || (state.record.view.status == "failed"
+                    && (state.record.view.reprofile
+                        || scope == ProfileScope::CompleteRemainingFormats)))
         {
-            // Inventory refresh never silently supersedes an interrupted forced recipe.
+            // Inventory refresh must not silently retry interrupted or failed
+            // background work. A foreground cancellation may resume while idle.
             return Ok(());
         }
         if action == HardwareProfileAction::Resume
@@ -940,6 +1001,7 @@ impl HardwareProfiles {
             measured_work: false,
             duration_history_valid: true,
             scope: scope.clone(),
+            artifact_receipts: previous.artifact_receipts.clone(),
             configuration: Some(configuration.clone()),
             output_path: Some(output_path.clone()),
             view: HardwareProfileStatus {
@@ -1191,12 +1253,49 @@ impl HardwareProfiles {
                 state.record.view.status = "failed".into();
                 state.record.view.error = Some(error);
             }
+            let previous_receipts = state.record.artifact_receipts.clone();
+            let key = group_key(&configuration.gpu_uuids);
+            let all_formats_complete = state.record.view.all_formats_complete == Some(true);
+            if state.record.view.status == "completed" {
+                match &scope {
+                    ProfileScope::Artifact(intent) => {
+                        let receipt = state
+                            .record
+                            .artifact_receipts
+                            .entry(key.clone())
+                            .or_insert_with(|| ArtifactReceipts {
+                                gpu_uuids: configuration.gpu_uuids.clone(),
+                                artifacts: vec![],
+                                all_formats_complete: false,
+                                completion_failed: false,
+                            });
+                        if !receipt.artifacts.contains(intent) {
+                            receipt.artifacts.push(intent.clone());
+                        }
+                        receipt.all_formats_complete = all_formats_complete;
+                        receipt.completion_failed = false;
+                    }
+                    ProfileScope::AllFormats | ProfileScope::CompleteRemainingFormats => {
+                        if let Some(receipt) = state.record.artifact_receipts.get_mut(&key) {
+                            receipt.all_formats_complete = true;
+                            receipt.completion_failed = false;
+                        }
+                    }
+                }
+            } else if state.record.view.status == "failed"
+                && scope == ProfileScope::CompleteRemainingFormats
+            {
+                if let Some(receipt) = state.record.artifact_receipts.get_mut(&key) {
+                    receipt.completion_failed = true;
+                }
+            }
             let advance =
                 state.record.view.status == "completed" && !state.record.pending.is_empty();
             if advance {
                 state.record.view.status = "running".into();
             }
             if let Err(error) = owner.save(&state.record) {
+                state.record.artifact_receipts = previous_receipts;
                 state.record.view.error =
                     Some(format!("Could not persist profiling result: {error}"));
                 state.record.view.status = "failed".into();
@@ -1254,8 +1353,9 @@ impl HardwareProfiles {
         });
         request_error.map_or(Ok(()), Err)
     }
-    /// Reap idle completion before the caller acquires foreground lifecycle locks.
-    /// A failed wait keeps the reservation and blocks admission.
+    /// Reap idle completion before foreground work. The caller may hold the Host
+    /// lifecycle lock, but must not hold this worker's state mutex. The worker
+    /// has no Host dependency. A failed wait retains its admission reservation.
     pub async fn cancel_background_and_wait(&self) -> Result<(), String> {
         loop {
             let idle = self.idle.notified();
@@ -1554,6 +1654,26 @@ mod tests {
             error: None,
         };
         assert!(validate_native_result(&scope, &output, &captured(&valid)).is_ok());
+        let mut default_intent = intent.clone();
+        default_intent.draft_tokens = None;
+        assert!(default_intent.validate(&["GPU-selected".into()]).is_ok());
+        assert!(validate_native_result(
+            &ProfileScope::Artifact(default_intent.clone()),
+            &output,
+            &captured(&valid)
+        )
+        .is_ok());
+        default_intent.spec = "dflash".into();
+        let mut default_result = valid.clone();
+        default_result["artifact"]["spec"] = serde_json::json!("dflash");
+        default_result["artifact"]["draft_tokens"] = serde_json::json!(4);
+        assert!(default_intent.validate(&["GPU-selected".into()]).is_ok());
+        assert!(validate_native_result(
+            &ProfileScope::Artifact(default_intent),
+            &output,
+            &captured(&default_result)
+        )
+        .is_ok());
         let mut automatic_intent = intent.clone();
         automatic_intent.spec = "auto".into();
         automatic_intent.draft_tokens = Some(0);
@@ -1640,6 +1760,8 @@ mod tests {
         assert_eq!(done.expected_duration_ms, None);
         assert_eq!(done.duration_source, None);
         assert!(job.artifact_is_accepted(&gpus, &intent));
+        assert_eq!(job.accepted_gpu_groups(), vec![gpus.clone()]);
+        assert_eq!(job.deferred_groups(), vec![gpus.clone()]);
         let mut different = intent.clone();
         different.package_sha256 = Some("c".repeat(64));
         assert!(!job.artifact_is_accepted(&gpus, &different));
@@ -1667,6 +1789,8 @@ mod tests {
             HardwareProfiles::open(directory.path().join("host"), Arc::new(AtomicU64::new(0)))
                 .unwrap();
         assert!(!reopened.artifact_is_accepted(&gpus, &intent));
+        assert!(reopened.accepted_gpu_groups().is_empty());
+        assert_eq!(reopened.deferred_groups(), vec![gpus.clone()]);
 
         let mut rejected = selected_result(&intent);
         rejected["artifact"]["directory_sha256"] = serde_json::json!("c".repeat(64));
@@ -1727,6 +1851,15 @@ mod tests {
         assert!(!job.busy());
         assert_eq!(job.status(None).status, "cancelled");
         assert!(checkpoint(&background_output).is_file());
+        // Foreground work cancels/reaps idle completion, but does not make it
+        // permanently unavailable to a later idle interval.
+        job.start_remaining_formats(Some(cli.clone()), gpus.clone())
+            .unwrap();
+        let retried = job.status(None);
+        assert_ne!(retried.job_id, running.job_id);
+        assert!(job.busy());
+        job.cancel_background_and_wait().await.unwrap();
+        assert!(!job.busy());
         scoped_cli(directory.path(), &arguments, &selected_result(&intent));
         job.start_scoped(
             HardwareProfileAction::Ensure,
@@ -1738,6 +1871,7 @@ mod tests {
         let selected = observed(&job, |view| view.status == "completed").await;
         assert_ne!(running.job_id, selected.job_id);
         assert!(job.artifact_is_accepted(&gpus, &intent));
+        assert_eq!(job.deferred_groups(), vec![gpus.clone()]);
         let selected_args = std::fs::read_to_string(&arguments).unwrap();
         assert_ne!(selected_args.lines().nth(2), background_output.to_str());
 
@@ -1755,11 +1889,65 @@ mod tests {
         assert_eq!(done.all_formats_complete, Some(true));
         assert_eq!(done.expected_duration_ms, None);
         assert!(job.artifact_is_accepted(&gpus, &intent));
+        assert!(job.deferred_groups().is_empty());
         let record: Record = serde_json::from_slice(
             &std::fs::read(directory.path().join("host/hardware-profile-job.json")).unwrap(),
         )
         .unwrap();
         assert!(record.accepted_durations.is_empty());
+    }
+    #[tokio::test]
+    async fn hardware_profile_failed_completion_requires_explicit_retry() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let gpus = vec!["GPU-fixture".into()];
+        let cli = directory.path().join("ginfer");
+        let intent = selected_intent(directory.path());
+        scoped_cli(directory.path(), &arguments, &selected_result(&intent));
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            Some(cli.clone()),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        observed(&job, |view| view.status == "completed").await;
+        assert_eq!(job.deferred_groups(), vec![gpus.clone()]);
+
+        let mut complete = selected_result(&intent);
+        complete["mode"] = serde_json::json!("complete_remaining_formats");
+        complete["scope"] = serde_json::json!("all_formats");
+        complete["artifact"] = serde_json::Value::Null;
+        // A zero exit with incomplete signed JSON still fails closed.
+        scoped_cli(directory.path(), &arguments, &complete);
+        job.start_remaining_formats(Some(cli.clone()), gpus.clone())
+            .unwrap();
+        let failed = observed(&job, |view| view.status == "failed").await;
+        assert!(job.deferred_groups().is_empty());
+        job.start_remaining_formats(Some(cli.clone()), gpus.clone())
+            .unwrap();
+        assert_eq!(job.status(None).job_id, failed.job_id);
+        assert!(!job.busy());
+        let reopened =
+            HardwareProfiles::open(directory.path().join("host"), Arc::new(AtomicU64::new(0)))
+                .unwrap();
+        assert!(reopened.deferred_groups().is_empty());
+        assert!(!reopened.artifact_is_accepted(&gpus, &intent));
+
+        complete["all_formats_complete"] = serde_json::json!(true);
+        scoped_cli(directory.path(), &arguments, &complete);
+        job.start(HardwareProfileAction::Resume, Some(cli), gpus.clone())
+            .unwrap();
+        let resumed = observed(&job, |view| view.status == "completed").await;
+        assert_ne!(resumed.job_id, failed.job_id);
+        assert_eq!(resumed.all_formats_complete, Some(true));
+        assert!(job.deferred_groups().is_empty());
     }
     #[tokio::test]
     async fn hardware_profile_cold_ensure_reports_completed_phases_and_records_measured_history() {

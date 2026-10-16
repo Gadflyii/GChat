@@ -2,6 +2,7 @@
 //! authority for executability: inspection does not qualify tensor payloads.
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs::File,
@@ -258,6 +259,12 @@ fn inspect_artifact_set(
 /// Reads the framed directory only, never tensor payloads. Unknown identities
 /// are reported as stored; no capability or runnable status is inferred.
 pub fn inspect_artifact(path: &Path) -> Result<ArtifactMetadata, String> {
+    inspect_artifact_directory(path).map(|(metadata, _)| metadata)
+}
+
+/// Hash the exact bounded directory bytes used by native artifact discovery.
+/// This identity deliberately excludes the weights and is not a package hash.
+pub(crate) fn inspect_artifact_directory(path: &Path) -> Result<(ArtifactMetadata, String), String> {
     #[cfg(test)]
     let mut file = resource_io::Reader::open(path)?;
     #[cfg(not(test))]
@@ -282,8 +289,21 @@ pub fn inspect_artifact(path: &Path) -> Result<ArtifactMetadata, String> {
         return Err("container is truncated before its payload boundary".into());
     }
     // Take wraps the file before buffering so the reader cannot prefetch weights.
-    let directory: Directory = serde_json::from_reader(BufReader::new(file.take(json_bytes)))
+    struct DirectoryReader<R> {
+        reader: R,
+        digest: Sha256,
+    }
+    impl<R: Read> Read for DirectoryReader<R> {
+        fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+            let count = self.reader.read(buffer)?;
+            self.digest.update(&buffer[..count]);
+            Ok(count)
+        }
+    }
+    let mut reader = DirectoryReader { reader: file.take(json_bytes), digest: Sha256::new() };
+    let directory: Directory = serde_json::from_reader(BufReader::new(&mut reader))
         .map_err(|e| format!("invalid container directory: {e}"))?;
+    let directory_sha256 = hex::encode(reader.digest.finalize());
     if directory.identity.model_id.is_empty() || directory.identity.weights_id.is_empty() {
         return Err("container identity is empty".into());
     }
@@ -299,14 +319,14 @@ pub fn inspect_artifact(path: &Path) -> Result<ArtifactMetadata, String> {
         return Err("container object directory is empty".into());
     }
     let nvfp4_kv_available = directory.nvfp4_kv_available();
-    Ok(ArtifactMetadata {
+    Ok((ArtifactMetadata {
         identity: directory.identity,
         tp_size: directory.tp_size,
         draft_tp: directory.draft_tp,
         size_bytes,
         object_count: directory.objects.len(),
         nvfp4_kv_available,
-    })
+    }, directory_sha256))
 }
 
 #[cfg(test)]
@@ -379,6 +399,32 @@ mod tests {
     fn directory() -> serde_json::Value {
         serde_json::json!({"identity": {"model_id": "muse-glimmer-30b", "weights_id": "nvfp4"},
             "tp_size": 2, "draft_tp": 0, "objects": [{"name": "fixture"}]})
+    }
+
+    #[test]
+    fn selected_profile_identity_hashes_raw_directory_without_weights_or_padding() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("selected.ginfer");
+        let raw = serde_json::to_vec(&directory()).unwrap();
+        let write = |raw: &[u8], padding: u8| {
+            let mut bytes = b"NINFER\0\x03".to_vec();
+            bytes.extend_from_slice(&(raw.len() as u64).to_le_bytes());
+            bytes.extend_from_slice(raw);
+            bytes.resize(8192, padding);
+            std::fs::write(&path, bytes).unwrap();
+        };
+        write(&raw, 0);
+        let (metadata, hash) = inspect_artifact_directory(&path).unwrap();
+        assert_eq!(hash, hex::encode(Sha256::digest(&raw)));
+        assert_ne!(hash, hex::encode(Sha256::digest(std::fs::read(&path).unwrap())));
+        write(&raw, 0x71);
+        assert_eq!(inspect_artifact_directory(&path).unwrap(), (metadata.clone(), hash.clone()));
+        let spaced = [raw.as_slice(), b" \n"].concat();
+        write(&spaced, 0x71);
+        let (same_metadata, changed_hash) = inspect_artifact_directory(&path).unwrap();
+        assert_eq!(metadata, same_metadata);
+        assert_eq!(changed_hash, hex::encode(Sha256::digest(&spaced)));
+        assert_ne!(hash, changed_hash);
     }
 
     #[test]

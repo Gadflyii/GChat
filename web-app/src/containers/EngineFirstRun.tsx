@@ -90,10 +90,10 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
   const selected = known.filter(gpu => gpus.includes(gpu.uuid))
   const validGroup = [1, 2, 4].includes(gpus.length) && selected.length === gpus.length && selected.every(gpu => gpu.name === selected[0].name && gpu.compute_capability === selected[0].compute_capability)
   const unavailable = error || (localId && errors[localId])
-  const choosing = ['profiling', 'storage', 'models'].includes(step ?? '')
   const profiling = step === 'profiling'
   const hardware = flow?.hardware_profile
   const selectedScope = hardware?.scope === 'artifact'
+  const choosing = step === 'storage' || step === 'models' || (profiling && !selectedScope && !flow?.selected_downloads.length)
   const selectedReady = selectedScope && hardware?.status === 'completed' && hardware.scope_complete === true
   const phase = hardware?.phase === 'gpu_experts' ? 'GPU expert calibration' : hardware?.phase === 'cpu_experts' ? 'CPU expert calibration' : hardware?.phase === 'publishing' ? 'Validating and saving hardware profile' : 'Hardware calibration and validation'
   const elapsed = hardware?.elapsed_ms
@@ -120,8 +120,8 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
     {hardware?.all_formats_complete === true && <p className="text-sm text-muted-foreground">Hardware profiling covers all model formats.</p>}
     {profiling && <div className="space-y-3"><p role="status">{selectedScope ? 'Selected-model profiling' : 'Hardware profiling'}: {hardware?.status}</p><p className="text-sm">{phase}{elapsed != null ? ` · Last reported elapsed: ${minutes(elapsed)}` : ''}</p>
       {hardware?.phase_detail && <p className="text-sm text-muted-foreground">{hardware.phase_detail}</p>}
-      <p className="text-sm text-muted-foreground">{remaining != null ? `About ${minutes(remaining)} remaining, based on a previous full profile of this GPU group; CPU resources may differ.` : overdue ? 'Profiling is taking longer than the previous full profile; completion time is unknown.' : 'Completion time is unknown for this GPU group.'} You can close this window or continue choosing storage and models; the Host keeps working.</p>
-      <p className="text-sm text-muted-foreground">You can save revised choices while calibration runs. New folder checks, downloads and extraction wait until calibration finishes.</p>
+      <p className="text-sm text-muted-foreground">{remaining != null ? `About ${minutes(remaining)} remaining, based on a previous matching calibration of this GPU group; CPU resources may differ.` : overdue ? 'Profiling is taking longer than the previous matching calibration; completion time is unknown.' : 'Completion time is unknown for this GPU group.'} {choosing ? 'You can close this window or continue choosing storage and models; the Host keeps working.' : 'You can close this window; the Host keeps working.'}</p>
+      <p className="text-sm text-muted-foreground">{choosing ? 'You can save revised choices while calibration runs. New folder checks, downloads and extraction wait until calibration finishes.' : 'Your verified model downloads and saved choices are retained for selected-model profiling.'}</p>
       {flow?.hardware_profile.status === 'running' && <progress aria-label="Hardware profiling" />}
       {flow?.hardware_profile.error && <p role="alert">{flow.hardware_profile.error}</p>}
       {['failed', 'interrupted', 'cancelled'].includes(flow?.hardware_profile.status ?? '') && <Button disabled={busy} onClick={() => void act({ action: 'resume' })}>Resume hardware profiling</Button>}
