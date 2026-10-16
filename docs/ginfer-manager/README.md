@@ -26,6 +26,16 @@ Windows runtime acceptance remains a separate platform gate. See the
 [ownership decision](../decisions/2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
 and [data-folder behavior](../../DEVELOP.md#custom-data-folder).
 
+## Installed model GPU selection
+
+The Installed page keeps the selected GPU UUIDs through Load and verifies them
+against fresh hardware inventory. Automatic remains available. A resident on
+another GPU group is never reused; unavailable selections fail clearly.
+Selection also respects each process's `CUDA_VISIBLE_DEVICES`: numeric entries
+use PCI order only for `CUDA_DEVICE_ORDER=PCI_BUS_ID`; default ordering comes from
+the Engine's unmasked CUDA runtime query. UUID masks preserve their declared order
+and work without that newer Engine query. Empty masks expose no GPUs.
+
 ## Fresh startup quotes — October 15
 
 Installed and imported local models can use **Check startup settings** without
