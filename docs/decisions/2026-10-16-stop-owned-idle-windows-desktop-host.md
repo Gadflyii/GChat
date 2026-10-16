@@ -6,8 +6,8 @@ title: "Stop the owned idle Windows desktop Host normally"
 # 2026-10-16 — Stop the owned idle Windows desktop Host normally
 
 - **Context:** Windows desktop Hosts are detached from the launching application.
-  Unlike the Linux stdin lifetime, closing the desktop did not provide a normal
-  shutdown path. Stopping an arbitrary listener or terminating a busy Host would
+  Linux accepts SIGTERM; the detached Windows desktop Host has no retained
+  console or control path for ordinary shutdown. Stopping an arbitrary listener or terminating a busy Host would
   risk another installation's work or interrupt a model load.
 - **Decision:** Only Windows desktop-managed Hosts enable authenticated normal
   Stop. The client uses its already attached desktop owner, pinned certificate,
