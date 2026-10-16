@@ -33,7 +33,7 @@ import {
   keyEventToInput,
   MAX_INPUT_BATCH,
   modifiersOf,
-  normalizePoint,
+  normalizeContainedPoint,
   parseBinary,
   pointerButton,
   ticketValid,
@@ -665,41 +665,78 @@ export class MediaSession {
       canvas.addEventListener(type, handler as EventListener, options);
       this.detachInput.push(() => canvas.removeEventListener(type, handler as EventListener, options));
     };
-    const point = (event: MouseEvent) => normalizePoint(event.clientX, event.clientY, canvas.getBoundingClientRect());
+    const point = (event: MouseEvent, clampOutside = false) => normalizeContainedPoint(
+      event.clientX, event.clientY, canvas.getBoundingClientRect(),
+      { width: canvas.width, height: canvas.height }, clampOutside,
+    );
+    const activePointers = new Map<number, {
+      button: ReturnType<typeof pointerButton>;
+      position: NonNullable<ReturnType<typeof point>>;
+    }>();
+    const releaseCapture = (pointerId: number) => {
+      if (canvas.hasPointerCapture?.(pointerId)) canvas.releasePointerCapture(pointerId);
+    };
+    const finishPointer = (event: PointerEvent) => {
+      const active = activePointers.get(event.pointerId);
+      if (!active) return;
+      activePointers.delete(event.pointerId);
+      this.queueInput({
+        kind: "pointer", phase: "up", button: active.button,
+        ...(event.type === "pointerup" ? point(event, true) ?? active.position : active.position),
+        modifiers: modifiersOf(event),
+      });
+      releaseCapture(event.pointerId);
+    };
+    this.detachInput.push(() => {
+      const ids = [...activePointers.keys()];
+      activePointers.clear();
+      for (const pointerId of ids) releaseCapture(pointerId);
+    });
     on("pointermove", (event) => {
+      const active = activePointers.get(event.pointerId);
+      const position = point(event, active !== undefined);
+      if (!position) return;
+      if (active) active.position = position;
       const now = performance.now();
       if (now - this.lastMove < POINTER_MOVE_INTERVAL_MS) return;
       this.lastMove = now;
-      this.queueInput({ kind: "pointer", phase: "move", button: null, ...point(event), modifiers: modifiersOf(event) });
+      this.queueInput({ kind: "pointer", phase: "move", button: null, ...position, modifiers: modifiersOf(event) });
     });
     on("pointerdown", (event) => {
+      const position = point(event);
+      if (!position) return;
       canvas.focus();
+      const button = pointerButton(event.button);
+      activePointers.set(event.pointerId, { button, position });
+      try {
+        canvas.setPointerCapture?.(event.pointerId);
+      } catch {
+        // Do not send a down if the browser cannot retain its matching up.
+        activePointers.delete(event.pointerId);
+        return;
+      }
       this.queueInput({
         kind: "pointer",
         phase: "down",
-        button: pointerButton(event.button),
-        ...point(event),
+        button,
+        ...position,
         modifiers: modifiersOf(event),
       });
       event.preventDefault();
     });
-    on("pointerup", (event) => {
-      this.queueInput({
-        kind: "pointer",
-        phase: "up",
-        button: pointerButton(event.button),
-        ...point(event),
-        modifiers: modifiersOf(event),
-      });
-    });
+    on("pointerup", finishPointer);
+    on("pointercancel", finishPointer);
+    on("lostpointercapture", finishPointer);
     on("contextmenu", (event) => event.preventDefault());
     on(
       "wheel",
       (event) => {
+        const position = point(event);
+        if (!position) return;
         event.preventDefault();
         this.queueInput({
           kind: "scroll",
-          ...point(event),
+          ...position,
           delta_x: event.deltaX,
           delta_y: event.deltaY,
           phase: "none",
