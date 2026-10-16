@@ -229,12 +229,12 @@ describe('ChatInput', () => {
     const readerKey = `${reader.server}::${reader.name}`
     let finishPicker!: (paths: string[]) => void
     const open = vi.fn(() => new Promise<string[]>((resolve) => { finishPicker = resolve }))
-    const parseDocument = vi.fn().mockResolvedValue('Selected file text')
+    const parseDocumentDuringPickerMock = vi.fn().mockResolvedValue('Selected file text')
     const ingestFileAttachment = vi.fn()
     const getTokensCount = vi.fn().mockResolvedValue(16)
     seedServiceHub({
       dialog: { open } as never,
-      rag: { parseDocument } as never,
+      rag: { parseDocument: parseDocumentDuringPickerMock } as never,
       uploads: { ingestFileAttachment } as never,
       models: { getTokensCount } as never,
     })
@@ -271,13 +271,13 @@ describe('ChatInput', () => {
         expect(attachment.processed).toBeUndefined()
         expect(attachment.inlineContent).toBeUndefined()
         expect(attachment.injectionMode).toBeUndefined()
-        expect(parseDocument).not.toHaveBeenCalled()
+        expect(parseDocumentDuringPickerMock).not.toHaveBeenCalled()
         expect(getTokensCount).not.toHaveBeenCalled()
       } else {
         await waitFor(() => expect(useChatAttachments.getState().getAttachments(threadId)[0]).toMatchObject({
           processed: true, injectionMode: 'inline', inlineContent: 'Selected file text',
         }))
-        expect(parseDocument).toHaveBeenCalledWith('/documents/short.pdf', 'pdf')
+        expect(parseDocumentDuringPickerMock).toHaveBeenCalledWith('/documents/short.pdf', 'pdf')
       }
       expect(showPrompt).not.toHaveBeenCalled()
       expect(ingestFileAttachment).not.toHaveBeenCalled()
