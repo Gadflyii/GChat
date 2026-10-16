@@ -197,8 +197,39 @@ describe('AgentStudioPage', () => {
       expect(screen.getAllByText('completed synthesis').length).toBeGreaterThan(0)
       expect(screen.getByText('completed', { exact: true })).toBeInTheDocument()
       expect(screen.getAllByText(/incomplete/).length).toBeGreaterThan(0)
+      expect(screen.getByText('45 model steps')).toBeInTheDocument()
+      expect(screen.getByText('2 ms')).toBeInTheDocument()
     }
   )
+
+  it('shows interrupted history without inventing completed progress and offers a new run', async () => {
+    const warning = 'Completion was not recorded. Inspect the saved run files and verify completed work before continuing as a new run; pending actions were not restored.'
+    const run: AgentRunRecord = {
+      schemaVersion: 3, id: 'interrupted', runId: 'run', sessionId: 'session',
+      definitionId: 'review', definitionName: 'Review', userMessage: 'Inspect the sources',
+      kind: 'standard', status: 'incomplete', finishReason: '',
+      startedAtMs: 1_000, finishedAtMs: 0, totalSteps: 0, maxSteps: 25,
+      workspace: '/workspace', outputWorkspace: '/run-files',
+      finalReply: warning, defaultModelInstanceId: 'model', stages: [],
+    }
+    listAgentRuns.mockResolvedValue([run])
+    render(<AgentStudioPage />)
+    fireEvent.click(await screen.findByRole('button', { name: /Runs/i }))
+
+    expect(await screen.findByText('Available output')).toBeInTheDocument()
+    expect(screen.getAllByText(/Completion not recorded/)).toHaveLength(2)
+    expect(screen.getAllByText(/incomplete/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(warning)).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Continue as new run…' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Open workspace' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Open run files' })).toBeEnabled()
+    expect(screen.getByText('Not recorded')).toBeInTheDocument()
+    expect(screen.getByText(`${new Date(run.startedAtMs).toLocaleString()} · Completion not recorded`)).toBeInTheDocument()
+    expect(screen.queryByText(/\b0 steps\b/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\b0 model steps\b/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/\b0 ms\b/)).not.toBeInTheDocument()
+    expect(screen.queryByText('0', { exact: true })).not.toBeInTheDocument()
+  })
 
   it('opens on a single create action when no user definitions exist', async () => {
     render(<AgentStudioPage />)

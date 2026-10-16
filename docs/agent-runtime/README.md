@@ -8,8 +8,9 @@ separately. The [acceptance record](remaining-acceptance.md#accepted-general-age
 closes `GCHAT-CHAT-GENERAL-AGENT-DISPATCH`. OI-068 now has separate Linux passes for live-worker checkpoint continuity and
 a correct eight-file task after compaction. The finished record also survives a
 normal app exit/restart. Active-worker cancellation, durable state and ordinary
-Studio reopening also pass after normal exit; broader restart recovery remains
-unqualified.
+Studio reopening also pass after normal exit. Interrupted-run history now has a
+[passing bounded invocation-loss regression](#interrupted-studio-run-history--october-16);
+native unexpected-process exit and power-loss recovery remain unqualified.
 
 ## Client tools and native request capability errors — release scope
 
@@ -149,8 +150,37 @@ closure, cancelled persistence and fresh-app reopening without replay. One nativ
 Standard Agent also read a file and reached shell approval before normal window
 Close. The cancelled record, original task and completed read survived same-data
 relaunch and ordinary Studio Runs reopening; the unapproved command never ran.
-Automatic continuation and crash recovery remain unqualified.
+Native unexpected-process exit and power-loss recovery remain unqualified.
 [Evidence and remaining scope](remaining-acceptance.md#oi-068-studio-worker-exit-persistence--october-15).
+
+## Interrupted Studio run history — October 16
+
+Studio now saves an admission record after preflight and session loading, before
+model or tool execution. It keeps the existing run-history schema 3 and records
+the task, workspace and archive location. A terminal result replaces the same
+record. Active records stay out of saved history and cannot be deleted or pruned
+while their invocation is still completing persistence and cleanup; retention
+keeps the newest 100 inactive records in addition to active records.
+
+When fresh application state finds an admission without a recorded completion,
+it appears as incomplete history. Its warning asks the user to inspect saved run
+files and verify completed work before continuing as a new run. The saved archive
+location provides access to any outputs already written. Continue as new run
+creates fresh run and session identities; execution, pending approvals and
+interrupted session working state are not restored automatically.
+The history view labels completion and progress as not recorded instead of
+presenting zero steps or a zero duration as measured results.
+
+The model-free invocation-loss regression passes. Library-only checking and
+strict Clippy, followed by full `make verify`, also pass at `2b7fae9a2`.
+The regression drops the invocation
+future after a completed file read and a pending, unapproved shell request, then
+reopens the same data with fresh application state. Its scope is invocation loss
+and durable-history discoverability. This same-process regression does not
+qualify process-global live-monitor cleanup. Native unexpected-process exit and
+power-loss recovery remain unqualified; the normal-close acceptance above remains
+valid.
+See the [decision](../decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 
 ## Current worker review follow-up
 

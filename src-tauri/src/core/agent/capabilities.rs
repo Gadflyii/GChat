@@ -751,7 +751,7 @@ async fn execute_control<R: Runtime>(
                 }
                 json!({"cancelled":active,"runId":run_id})
             } else {
-                let record = super::runs::list_runs(&data)?
+                let record = super::runs::list_inactive_runs(&data, &app.state::<AppState>().agent_runs)?
                     .into_iter()
                     .find(|run| run.run_id == run_id);
                 let events = if active {
