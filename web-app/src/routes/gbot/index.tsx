@@ -51,6 +51,7 @@ function GbotPage() {
   const [owner] = useState(gbotControlOwner)
   const desktop = useRef<DesktopViewHandle>(null)
   const [busy, setBusy] = useState(false)
+  const [recoveryConfirmation, setRecoveryConfirmation] = useState('')
   const [serviceStopped, setServiceStopped] = useState(false)
   const [serviceTarget, setServiceTarget] = useState<ServiceTarget>({
     kind: 'local',
@@ -285,6 +286,33 @@ function GbotPage() {
       (control.state === 'human' || control.state === 'paused') &&
       control.owner === owner
   )
+  const recoverableControl =
+    serviceTarget.kind === 'local' &&
+    control?.state === 'paused' &&
+    control.owner &&
+    control.owner !== owner
+      ? state?.recoverable_controls?.find(
+          (value) =>
+            value.state === 'paused' &&
+            value.owner === control.owner &&
+            value.identity.workspace_id === control.identity.workspace_id &&
+            value.identity.session_id === control.identity.session_id
+        )
+      : undefined
+  const recoveryKey = recoverableControl
+    ? `${recoverableControl.identity.workspace_id}:${recoverableControl.identity.session_id}:${recoverableControl.owner}`
+    : ''
+  const recoverControl = () => {
+    if (!recoverableControl || recoveryConfirmation !== recoveryKey) return
+    void perform(async () => {
+      await gbot('control/recover', {
+        identity: recoverableControl.identity,
+        expected_owner: recoverableControl.owner,
+        owner,
+      })
+      setRecoveryConfirmation('')
+    })
+  }
   const changeControl = () => {
     if (!identity || (setupBlocked && !canHandBackDuringSetup)) return
     void perform(() => {
@@ -379,7 +407,9 @@ function GbotPage() {
               variant="outline"
               size="sm"
               disabled={busy}
-              onClick={() => void changeService(serviceStopped || Boolean(error))}
+              onClick={() =>
+                void changeService(serviceStopped || Boolean(error))
+              }
             >
               {serviceTarget.kind === 'paired_host'
                 ? serviceStopped || error
@@ -686,6 +716,37 @@ function GbotPage() {
             )}
             {bot && (
               <>
+                {recoverableControl && (
+                  <div className="space-y-2 rounded-md border p-3 text-sm">
+                    <p>
+                      This bot was paused by a previous app session. Recover
+                      control to hand it back, then resume any unfinished setup.
+                      The bot will remain paused until you hand back control.
+                    </p>
+                    {recoveryConfirmation === recoveryKey ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button disabled={busy} onClick={recoverControl}>
+                          Confirm recovery
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() => setRecoveryConfirmation('')}
+                        >
+                          Cancel recovery
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        disabled={busy}
+                        onClick={() => setRecoveryConfirmation(recoveryKey)}
+                      >
+                        Recover control
+                      </Button>
+                    )}
+                  </div>
+                )}
                 {setupBlocked && (
                   <div className="space-y-2 rounded-md border p-3 text-sm">
                     <p role="status">Setup incomplete</p>

@@ -1167,6 +1167,29 @@ impl WorkspaceRuntime {
         Ok(control)
     }
 
+    pub async fn recover_control(
+        &self,
+        identity: SessionIdentity,
+        expected_owner: Uuid,
+        owner: Uuid,
+    ) -> Result<SessionControl, WorkspaceError> {
+        let lock = self.lifecycle_lock(identity.workspace_id).await;
+        let _guard = lock.lock().await;
+        self.session(identity).await?;
+        let recovery = self
+            .service
+            .begin_control_recovery(identity, expected_owner, owner)
+            .await?;
+        // No new owner can act until all old media has been revoked successfully.
+        self.close_media_locked(identity.workspace_id).await?;
+        let control = recovery.commit().await?;
+        self.resume_observations
+            .lock()
+            .await
+            .remove(&identity.workspace_id);
+        Ok(control)
+    }
+
     pub async fn hand_back(
         &self,
         identity: SessionIdentity,
@@ -1309,6 +1332,10 @@ impl WorkspaceRuntime {
             {
                 return Err(ServiceError::ControlOwner.into());
             }
+            runtime
+                .service
+                .control_owner_active(identity, request.owner)
+                .await;
             runtime.close_media_locked(identity.workspace_id).await?;
             let token = session.media_token().await?;
             let endpoint = session.open_view().await?;
@@ -1348,6 +1375,9 @@ impl WorkspaceRuntime {
         }
         // Transport closure preserves Human ownership until explicit hand-back.
         drop(media);
+        self.service
+            .control_owner_active(identity, request.owner)
+            .await;
         self.close_media_locked(identity.workspace_id).await?;
         Ok(())
     }

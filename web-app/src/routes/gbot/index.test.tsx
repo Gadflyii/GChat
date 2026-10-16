@@ -72,7 +72,191 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   sessionStorage.clear()
+  localStorage.removeItem('gbot-control-owner')
   vi.clearAllMocks()
+})
+
+it('explicitly recovers an orphaned paused owner while keeping hand-back and setup resume separate', async () => {
+  const identity = { workspace_id: 'orphaned-kvm', session_id: 'saved-session' }
+  const owner = 'durable-current-owner'
+  const previousOwner = 'previous-app-owner'
+  localStorage.setItem('gbot-control-owner', owner)
+  let control = {
+    identity,
+    owner: previousOwner as string | null,
+    state: 'paused',
+  }
+  let recoverable = true
+  let recoveries = 0
+  let handBacks = 0
+  const record: KvmSetupRecord = {
+    id: identity.workspace_id,
+    name: 'Writer',
+    identity,
+    stage: 'testing_desktop',
+    issue: {
+      code: 'guest_not_ready',
+      message: 'Bot dispatch is paused for human control',
+      next_action: 'Hand back control before resuming setup.',
+    },
+  }
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(async (path: string, body: unknown) => {
+    if (path === 'state')
+      return {
+        workspaces: [
+          {
+            id: identity.workspace_id,
+            name: 'Writer',
+            bot_pc: { kind: 'local_vm', hypervisor: 'kvm' },
+          },
+        ],
+        live_sessions: [identity],
+        controls: [control],
+        recoverable_controls: recoverable ? [control] : [],
+        assignments: [],
+      }
+    if (path === 'setup/kvm/status') return [record]
+    if (path === 'setup/kvm/preflight') return { ready: true, issues: [] }
+    if (path === 'setup/kvm/start') return record
+    if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+    if (path === 'control/recover') {
+      expect(body).toEqual({ identity, expected_owner: previousOwner, owner })
+      if (++recoveries === 1) throw new Error('Media close failed')
+      control = { identity, owner, state: 'paused' }
+      recoverable = false
+      return control
+    }
+    if (path === 'control/hand-back') {
+      expect(body).toEqual({ identity, owner })
+      if (++handBacks === 1) throw new Error('Fresh observation failed')
+      control = { identity, owner: null, state: 'bot' }
+      return control
+    }
+    return []
+  })
+  render(<Page />)
+  const recover = await screen.findByRole('button', { name: 'Recover control' })
+  expect(recover.closest('fieldset')).toBeNull()
+  expect(screen.getByRole('button', { name: 'Disconnect' })).toBeDisabled()
+  fireEvent.click(recover)
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel recovery' }))
+  expect(recoveries).toBe(0)
+  fireEvent.click(screen.getByRole('button', { name: 'Recover control' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm recovery' }))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Confirm recovery' })
+    ).toBeEnabled()
+  )
+  expect(control.owner).toBe(previousOwner)
+  expect(control.state).toBe('paused')
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm recovery' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+  )
+  expect(control.owner).toBe(owner)
+  expect(control.state).toBe('paused')
+  expect(
+    screen.queryByRole('button', { name: 'Recover control' })
+  ).not.toBeInTheDocument()
+  expect(handBacks).toBe(0)
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'setup/kvm/start',
+    expect.anything()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+  )
+  expect(control.state).toBe('paused')
+  fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: 'Hand back' })
+    ).not.toBeInTheDocument()
+  )
+  expect(control.state).toBe('bot')
+  expect(screen.getByText('Setup incomplete')).toBeInTheDocument()
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'setup/kvm/start',
+    expect.anything()
+  )
+  for (const path of [
+    'tasks/start',
+    'tasks/resume',
+    'connect',
+    'disconnect',
+    'view/open',
+  ])
+    expect(mocks.call).not.toHaveBeenCalledWith(path, expect.anything())
+  fireEvent.click(screen.getByRole('button', { name: 'Resume setup' }))
+  const wizard = await screen.findByRole('form', { name: 'Set up Gbot' })
+  await waitFor(() =>
+    expect(
+      within(wizard).getByRole('button', { name: 'Resume setup' })
+    ).toBeEnabled()
+  )
+  fireEvent.click(within(wizard).getByRole('button', { name: 'Resume setup' }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('setup/kvm/start', {
+      id: record.id,
+      name: record.name,
+    })
+  )
+})
+
+it.each([
+  'remote',
+  'human',
+  'current pause',
+  'stale owner',
+  'stale session',
+  'same owner',
+])('hides local-admin recovery for %s control', async (scenario) => {
+  const identity = { workspace_id: 'writer', session_id: 'saved-session' }
+  const owner = 'durable-owner'
+  localStorage.setItem('gbot-control-owner', owner)
+  if (scenario === 'remote')
+    mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'host' })
+  const control = {
+    identity,
+    owner: scenario === 'same owner' ? owner : 'previous-owner',
+    state: scenario === 'human' ? 'human' : 'paused',
+  }
+  const candidate = {
+    ...control,
+    owner: scenario === 'stale owner' ? 'stale-owner' : control.owner,
+    identity:
+      scenario === 'stale session'
+        ? { ...identity, session_id: 'stale-session' }
+        : identity,
+  }
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+    return path === 'state'
+      ? {
+          workspaces: [{ id: identity.workspace_id, name: 'Writer' }],
+          live_sessions: [identity],
+          controls: [control],
+          assignments: [],
+          recoverable_controls: scenario === 'current pause' ? [] : [candidate],
+        }
+      : []
+  })
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('setup/kvm/status', {})
+  )
+  expect(
+    screen.queryByRole('button', { name: 'Recover control' })
+  ).not.toBeInTheDocument()
+  expect(mocks.call).not.toHaveBeenCalledWith(
+    'control/recover',
+    expect.anything()
+  )
 })
 
 it('opens first-bot setup after opt-in and makes no service calls while disabled', async () => {
@@ -109,7 +293,12 @@ it('discovers a saved KVM setup without a workspace after remount and resumes on
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockImplementation(async (path: string) => {
     if (path === 'state')
-      return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+      return {
+        workspaces: [],
+        live_sessions: [],
+        assignments: [],
+        controls: [],
+      }
     if (path === 'setup/kvm/status') return [record]
     if (path === 'setup/kvm/preflight')
       return {
@@ -120,7 +309,8 @@ it('discovers a saved KVM setup without a workspace after remount and resumes on
               {
                 code: 'kvm_unavailable',
                 message: 'KVM access is not ready.',
-                next_action: 'Restore KVM access and check prerequisites again.',
+                next_action:
+                  'Restore KVM access and check prerequisites again.',
               },
             ],
       }
@@ -204,7 +394,12 @@ it('does not offer removed KVM setups and permits first-bot setup', async () => 
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockImplementation(async (path: string) => {
     if (path === 'state')
-      return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+      return {
+        workspaces: [],
+        live_sessions: [],
+        assignments: [],
+        controls: [],
+      }
     if (path === 'setup/kvm/status')
       return [
         {
@@ -235,7 +430,12 @@ it('retains a KVM status error instead of assuming no saved setup and discovers 
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockImplementation(async (path: string) => {
     if (path === 'state')
-      return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+      return {
+        workspaces: [],
+        live_sessions: [],
+        assignments: [],
+        controls: [],
+      }
     if (path === 'setup/kvm/status') {
       if (unavailable) throw new Error('Saved setup status could not be read')
       return [
@@ -256,7 +456,9 @@ it('retains a KVM status error instead of assuming no saved setup and discovers 
   ).not.toBeInTheDocument()
   unavailable = false
   fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-  await screen.findByRole('region', { name: 'Local setup Recovered researcher' })
+  await screen.findByRole('region', {
+    name: 'Local setup Recovered researcher',
+  })
   expect(
     screen.queryByRole('form', { name: 'Set up Gbot' })
   ).not.toBeInTheDocument()

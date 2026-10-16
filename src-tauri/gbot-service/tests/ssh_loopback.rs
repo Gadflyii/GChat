@@ -1511,6 +1511,107 @@ async fn interactive_media_reconnect_preserves_human_control() {
 }
 
 #[tokio::test]
+async fn startup_paused_recovery_closes_media_before_transfer_and_fails_closed() {
+    use cua_spacesd_client::{
+        pb,
+        testing::{MockAuth, MockServer, Status},
+    };
+    use gbot_service::media::OpenView;
+    use gbot_service::service::SessionControlState;
+
+    timeout(Duration::from_secs(30), async {
+        let server = MockServer::start(MockAuth {
+            token: Some(MEDIA_TOKEN.into()),
+            ..Default::default()
+        })
+        .await;
+        server
+            .state
+            .stream_targets
+            .lock()
+            .unwrap()
+            .push(pb::StreamTarget {
+                target: Some(pb::stream_target::Target::Display(pb::Display {
+                    id: "dedicated".into(),
+                    ..Default::default()
+                })),
+                available: true,
+                ..Default::default()
+            });
+        let fixture = Fixture::with_media(key(), Some(server.addr)).await;
+        let path = fixture.directory.path().join("service.json");
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        let runtime = fixture.runtime(service.clone()).await;
+        let identity = fixture.guest.hello.identity;
+        let old_owner = Uuid::new_v4();
+        let owner = Uuid::new_v4();
+        runtime.connect(identity).await.unwrap();
+        runtime.take_over(identity, old_owner).await.unwrap();
+        runtime.disconnect(identity).await.unwrap();
+        runtime.close().await.unwrap();
+        drop(runtime);
+        drop(service);
+
+        let service = Arc::new(Service::open(&path).await.unwrap());
+        let runtime = Arc::new(WorkspaceRuntime::new(
+            service.clone(),
+            fixture.vault.clone(),
+        ));
+        runtime.connect(identity).await.unwrap();
+        let before = service.snapshot().await;
+        assert_eq!(service.recoverable_controls().await, before.controls);
+        let ticket = runtime
+            .open_view(OpenView {
+                identity,
+                owner,
+                interactive: false,
+                audio: false,
+                h264: false,
+            })
+            .await
+            .unwrap();
+        *server.state.media_close_error.lock().unwrap() =
+            Some(Status::unavailable("fixture media close unavailable"));
+        let error = runtime
+            .recover_control(identity, old_owner, owner)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, WorkspaceError::Media(ref cause)
+            if cause.diagnostic().contains("fixture media close unavailable")));
+        assert_eq!(service.snapshot().await, before);
+        assert_eq!(service.recoverable_controls().await, before.controls);
+        assert!(fixture.guest.desktop_calls.lock().unwrap().is_empty());
+        let url = ticket.ws_url.replacen("ws://", "http://", 1);
+        assert!(Client::new().get(url.parse().unwrap()).await.is_err());
+
+        *server.state.media_close_error.lock().unwrap() = None;
+        let recovered = runtime
+            .recover_control(identity, old_owner, owner)
+            .await
+            .unwrap();
+        assert_eq!(recovered.state, SessionControlState::Paused);
+        assert_eq!(recovered.owner, Some(owner));
+        assert_eq!(recovered.identity, identity);
+        assert!(service.snapshot().await.operations.is_empty());
+        assert!(service.recoverable_controls().await.is_empty());
+        assert_eq!(server.state.observed.media_close.lock().unwrap().len(), 2);
+        assert!(matches!(
+            runtime.hand_back(identity, old_owner).await,
+            Err(WorkspaceError::State(ServiceError::ControlOwner))
+        ));
+        assert!(fixture.guest.desktop_calls.lock().unwrap().is_empty());
+        let returned = runtime.hand_back(identity, owner).await.unwrap();
+        assert_eq!(returned.control.state, SessionControlState::Bot);
+        assert_eq!(returned.control.owner, None);
+        assert_eq!(service.snapshot().await.operations.len(), 1);
+        runtime.close().await.unwrap();
+        fixture.shutdown().await;
+    })
+    .await
+    .expect("bounded startup paused recovery case timed out");
+}
+
+#[tokio::test]
 #[cfg(target_os = "linux")]
 async fn hand_back_recovers_paused_control_while_setup_is_incomplete() {
     use gbot_service::kvm_setup::{SetupIssue, SetupRecord, SetupStage};
@@ -1607,7 +1708,17 @@ async fn hand_back_recovers_paused_control_while_setup_is_incomplete() {
             Err(WorkspaceError::SetupIncomplete)
         ));
 
-        let returned = runtime.hand_back(identity, owner).await.unwrap();
+        let replacement = Uuid::new_v4();
+        let recovered = runtime.recover_control(identity, owner, replacement).await.unwrap();
+        assert_eq!(recovered.state, SessionControlState::Paused);
+        assert_eq!(recovered.owner, Some(replacement));
+        assert!(service.snapshot().await.operations.is_empty());
+        assert!(fixture.guest.desktop_calls.lock().unwrap().is_empty());
+        assert_eq!(serde_json::to_value(setup.status().await).unwrap(), setup_before);
+        assert!(matches!(runtime.request(write.clone()).await, Err(WorkspaceError::SetupIncomplete)));
+        assert!(matches!(runtime.hand_back(identity, owner).await,
+            Err(WorkspaceError::State(ServiceError::ControlOwner))));
+        let returned = runtime.hand_back(identity, replacement).await.unwrap();
         assert_eq!(returned.control.identity, identity);
         assert_eq!(returned.control.state, SessionControlState::Bot);
         assert_eq!(returned.control.owner, None);

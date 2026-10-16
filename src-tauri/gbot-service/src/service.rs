@@ -316,11 +316,38 @@ impl fmt::Display for SshWorkspaceCreationError {
 struct RuntimeState {
     durable: DurableState,
     sessions: BTreeMap<WorkspaceId, GuestHello>,
+    recoverable_controls: BTreeMap<WorkspaceId, SessionControl>,
 }
 
 pub struct Service {
     store: Arc<Store>,
     state: Arc<Mutex<RuntimeState>>,
+}
+
+/// Retain the control fence while the runtime revokes the previous media lease.
+pub(crate) struct ControlRecovery<'a> {
+    service: &'a Service,
+    state: OwnedMutexGuard<RuntimeState>,
+    identity: SessionIdentity,
+    owner: Uuid,
+}
+
+impl ControlRecovery<'_> {
+    pub(crate) async fn commit(self) -> Result<SessionControl, ServiceError> {
+        let mut next = self.state.durable.clone();
+        let control = next
+            .controls
+            .iter_mut()
+            .find(|control| control.identity == self.identity)
+            .ok_or(ServiceError::ControlOwner)?;
+        control.owner = Some(self.owner);
+        let result = control.clone();
+        let mut state = self.service.commit(self.state, next).await?;
+        state
+            .recoverable_controls
+            .remove(&self.identity.workspace_id);
+        Ok(result)
+    }
 }
 
 pub(crate) struct OwnedWorkspaceRemoval<'a> {
@@ -364,6 +391,14 @@ impl Service {
         let initial = loaded.is_none();
         let mut durable = loaded.unwrap_or_else(DurableState::new);
         durable.validate()?;
+        // Only an already-paused, startup-loaded owner may be explicitly replaced.
+        // Current-process pauses and active Human ownership never enter this map.
+        let recoverable_controls = durable
+            .controls
+            .iter()
+            .filter(|control| control.state == SessionControlState::Paused)
+            .map(|control| (control.identity.workspace_id, control.clone()))
+            .collect();
         let mut recovered = false;
         for operation in &mut durable.operations {
             if operation.state == OperationState::InFlight {
@@ -387,6 +422,7 @@ impl Service {
             state: Arc::new(Mutex::new(RuntimeState {
                 durable,
                 sessions: BTreeMap::new(),
+                recoverable_controls,
             })),
         })
     }
@@ -400,6 +436,59 @@ impl Service {
 
     pub async fn snapshot(&self) -> DurableState {
         self.state.lock().await.durable.clone()
+    }
+
+    pub async fn recoverable_controls(&self) -> Vec<SessionControl> {
+        self.state
+            .lock()
+            .await
+            .recoverable_controls
+            .values()
+            .cloned()
+            .collect()
+    }
+
+    pub(crate) async fn begin_control_recovery(
+        &self,
+        identity: SessionIdentity,
+        expected_owner: Uuid,
+        owner: Uuid,
+    ) -> Result<ControlRecovery<'_>, ServiceError> {
+        if owner.is_nil() || expected_owner.is_nil() || owner == expected_owner {
+            return Err(ServiceError::ControlOwner);
+        }
+        let state = self.state.clone().lock_owned().await;
+        verified_session(&state, identity)?;
+        let control = state
+            .recoverable_controls
+            .get(&identity.workspace_id)
+            .filter(|control| {
+                control.identity == identity
+                    && control.owner == Some(expected_owner)
+                    && control.state == SessionControlState::Paused
+                    && state.durable.controls.contains(control)
+            })
+            .ok_or(ServiceError::ControlOwner)?;
+        if unresolved(&state.durable.operations, control.identity) {
+            return Err(ServiceError::OperationState);
+        }
+        Ok(ControlRecovery {
+            service: self,
+            state,
+            identity,
+            owner,
+        })
+    }
+
+    pub(crate) async fn control_owner_active(&self, identity: SessionIdentity, owner: Uuid) {
+        let mut state = self.state.lock().await;
+        if state
+            .recoverable_controls
+            .get(&identity.workspace_id)
+            .is_some_and(|control| control.identity == identity && control.owner == Some(owner))
+        {
+            state.recoverable_controls.remove(&identity.workspace_id);
+        }
     }
 
     pub async fn live_sessions(&self) -> Vec<SessionIdentity> {
@@ -542,6 +631,9 @@ impl Service {
         // Cancellation of the caller must not release ownership during a disk commit.
         tokio::spawn(async move {
             store.save(&next).await?;
+            state
+                .recoverable_controls
+                .retain(|_, control| next.controls.contains(control));
             state.durable = next;
             Ok(state)
         })
@@ -847,7 +939,7 @@ impl Service {
         request: &GuestRequest,
         owner: Option<Uuid>,
     ) -> Result<OperationRecord, ServiceError> {
-        let state = self.state.clone().lock_owned().await;
+        let mut state = self.state.clone().lock_owned().await;
         let hello = state
             .sessions
             .get(&request.identity.workspace_id)
@@ -903,6 +995,11 @@ impl Service {
             target_operation_id,
             state: OperationState::InFlight,
         };
+        if owner.is_some() {
+            state
+                .recoverable_controls
+                .remove(&request.identity.workspace_id);
+        }
         let mut next = state.durable.clone();
         next.operations.push(operation.clone());
         drop(self.commit(state, next).await?);
@@ -957,10 +1054,11 @@ impl Service {
         identity: SessionIdentity,
         owner: Uuid,
     ) -> Result<(), ServiceError> {
-        let state = self.state.clone().lock_owned().await;
+        let mut state = self.state.clone().lock_owned().await;
         verified_session(&state, identity)?;
         let mut next = state.durable.clone();
         let control = owned_control(&mut next, identity, owner)?;
+        state.recoverable_controls.remove(&identity.workspace_id);
         // Disable human ownership before closing its tunnel and observing the desktop.
         control.state = SessionControlState::Paused;
         let pending = unresolved(&next.operations, identity);
@@ -1403,6 +1501,171 @@ mod tests {
         removal.commit().await.unwrap();
         assert!(service.state.lock().await.sessions.is_empty());
         assert!(service.snapshot().await.workspaces.is_empty());
+    }
+
+    #[tokio::test]
+    async fn recovery_is_fenced_to_unchanged_startup_paused_control() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("state.json");
+        let service = Service::open(&path).await.unwrap();
+        let config = workspace();
+        let identity = SessionIdentity {
+            workspace_id: config.id,
+            session_id: crate::contract::SessionId::new(),
+        };
+        let owner = Uuid::new_v4();
+        let replacement = Uuid::new_v4();
+        service.register_workspace(config).await.unwrap();
+        service
+            .register_session(identity, hello(identity))
+            .await
+            .unwrap();
+        service.take_over(identity, owner).await.unwrap();
+        assert!(service.recoverable_controls().await.is_empty());
+        assert!(matches!(
+            service
+                .begin_control_recovery(identity, owner, replacement)
+                .await,
+            Err(ServiceError::ControlOwner)
+        ));
+        service.begin_hand_back(identity, owner).await.unwrap();
+        assert!(service.recoverable_controls().await.is_empty());
+        assert!(matches!(
+            service
+                .begin_control_recovery(identity, owner, replacement)
+                .await,
+            Err(ServiceError::ControlOwner)
+        ));
+        drop(service);
+
+        let service = Service::open(&path).await.unwrap();
+        let before = service.snapshot().await;
+        assert_eq!(service.recoverable_controls().await, before.controls);
+        assert!(matches!(
+            service
+                .begin_control_recovery(identity, owner, replacement)
+                .await,
+            Err(ServiceError::SessionUnavailable)
+        ));
+        service
+            .register_session(identity, hello(identity))
+            .await
+            .unwrap();
+        for (expected, new_owner) in [
+            (Uuid::new_v4(), replacement),
+            (owner, Uuid::nil()),
+            (owner, owner),
+        ] {
+            assert!(matches!(
+                service
+                    .begin_control_recovery(identity, expected, new_owner)
+                    .await,
+                Err(ServiceError::ControlOwner)
+            ));
+        }
+        assert!(matches!(
+            service
+                .begin_control_recovery(
+                    SessionIdentity {
+                        session_id: crate::contract::SessionId::new(),
+                        ..identity
+                    },
+                    owner,
+                    replacement,
+                )
+                .await,
+            Err(ServiceError::SessionMismatch)
+        ));
+        assert_eq!(service.snapshot().await, before);
+        let recovery = service
+            .begin_control_recovery(identity, owner, replacement)
+            .await
+            .unwrap();
+        // Original-owner activity cannot interleave between validation and media revocation.
+        assert!(service.state.try_lock().is_err());
+        let transferred = recovery.commit().await.unwrap();
+        assert_eq!(transferred.state, SessionControlState::Paused);
+        assert_eq!(transferred.owner, Some(replacement));
+        assert!(service.recoverable_controls().await.is_empty());
+        assert!(matches!(
+            service
+                .begin_control_recovery(identity, replacement, Uuid::new_v4())
+                .await,
+            Err(ServiceError::ControlOwner)
+        ));
+        assert_eq!(
+            service.begin_operation(&exec(identity)).await,
+            Err(ServiceError::BotPaused)
+        );
+
+        drop(service);
+        let service = Service::open(&path).await.unwrap();
+        service
+            .register_session(identity, hello(identity))
+            .await
+            .unwrap();
+        service.control_owner_active(identity, Uuid::new_v4()).await;
+        assert_eq!(service.recoverable_controls().await.len(), 1);
+        service.control_owner_active(identity, replacement).await;
+        assert!(service.recoverable_controls().await.is_empty());
+        assert!(matches!(
+            service
+                .begin_control_recovery(identity, replacement, owner)
+                .await,
+            Err(ServiceError::ControlOwner)
+        ));
+    }
+
+    #[tokio::test]
+    async fn startup_human_and_unresolved_paused_controls_cannot_be_recovered() {
+        for unresolved_operation in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("state.json");
+            let service = Service::open(&path).await.unwrap();
+            let config = workspace();
+            let identity = SessionIdentity {
+                workspace_id: config.id,
+                session_id: crate::contract::SessionId::new(),
+            };
+            let owner = Uuid::new_v4();
+            service.register_workspace(config).await.unwrap();
+            service
+                .register_session(identity, hello(identity))
+                .await
+                .unwrap();
+            if unresolved_operation {
+                service.begin_operation(&exec(identity)).await.unwrap();
+            }
+            service.take_over(identity, owner).await.unwrap();
+            if unresolved_operation {
+                assert_eq!(
+                    service.begin_hand_back(identity, owner).await,
+                    Err(ServiceError::OperationState)
+                );
+            }
+            drop(service);
+            let service = Service::open(&path).await.unwrap();
+            service
+                .register_session(identity, hello(identity))
+                .await
+                .unwrap();
+            if unresolved_operation {
+                assert!(matches!(
+                    service
+                        .begin_control_recovery(identity, owner, Uuid::new_v4())
+                        .await,
+                    Err(ServiceError::OperationState)
+                ));
+            } else {
+                assert!(matches!(
+                    service
+                        .begin_control_recovery(identity, owner, Uuid::new_v4())
+                        .await,
+                    Err(ServiceError::ControlOwner)
+                ));
+                assert!(service.recoverable_controls().await.is_empty());
+            }
+        }
     }
 
     #[tokio::test]
