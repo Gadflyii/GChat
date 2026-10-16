@@ -152,13 +152,21 @@ describe('MediaSession contained desktop input', () => {
 
   it('does not release another pointer or accept its movement through a bar', () => {
     const f = fixture()
-    f.pointer('pointerdown', aspects[0].quarter)
+    const down = f.pointer('pointerdown', aspects[0].quarter)
     f.pointer('pointermove', aspects[0].bars[0], 8)
     f.pointer('pointerup', aspects[0].quarter, 8)
-    expect(f.queueInput).toHaveBeenCalledOnce()
+    expect(down.defaultPrevented).toBe(true)
+    expect(f.captured).toEqual(new Set([7]))
+    expect(f.queueInput.mock.calls).toEqual([
+      [{ kind: 'pointer', phase: 'down', button: 'left', x_normalized: 0.25, y_normalized: 0.25, modifiers: [] }],
+    ])
     expect(f.releasePointerCapture).not.toHaveBeenCalled()
     f.pointer('pointerup', aspects[0].quarter)
-    expect(f.queueInput).toHaveBeenCalledTimes(2)
+    expect(f.captured.size).toBe(0)
+    expect(f.queueInput.mock.calls).toEqual([
+      [{ kind: 'pointer', phase: 'down', button: 'left', x_normalized: 0.25, y_normalized: 0.25, modifiers: [] }],
+      [{ kind: 'pointer', phase: 'up', button: 'left', x_normalized: 0.25, y_normalized: 0.25, modifiers: [] }],
+    ])
   })
 
   it('uses the current painted rectangle after resizing during a drag', () => {
@@ -191,19 +199,25 @@ describe('MediaSession contained desktop input', () => {
   it('does not enqueue a down or unmatched up when pointer capture fails', () => {
     const f = fixture()
     f.setPointerCapture.mockImplementation(() => { throw new DOMException('Capture failed') })
-    f.pointer('pointerdown', aspects[0].quarter)
+    const down = f.pointer('pointerdown', aspects[0].quarter)
     f.pointer('pointerup', aspects[0].quarter)
-    expect(f.queueInput).not.toHaveBeenCalled()
+    expect(down.defaultPrevented).toBe(false)
+    expect(f.captured.size).toBe(0)
+    expect(f.queueInput.mock.calls).toEqual([])
   })
 
   it('keeps a view-only canvas free of pointer, wheel and keyboard input', () => {
     const f = fixture(1920, 1080, false)
-    f.pointer('pointerdown', aspects[0].quarter)
+    const down = f.pointer('pointerdown', aspects[0].quarter)
     f.pointer('pointermove', aspects[0].threeQuarters)
     f.pointer('pointerup', aspects[0].quarter)
-    f.wheel({ ...aspects[0].quarter, deltaY: 50 })
-    f.canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true }))
-    expect(f.queueInput).not.toHaveBeenCalled()
+    const wheel = f.wheel({ ...aspects[0].quarter, deltaY: 50 })
+    const key = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true })
+    f.canvas.dispatchEvent(key)
+    expect([down.defaultPrevented, wheel.defaultPrevented, key.defaultPrevented]).toEqual([false, false, false])
+    expect(f.canvas.hasAttribute('tabindex')).toBe(false)
+    expect(f.captured.size).toBe(0)
+    expect(f.queueInput.mock.calls).toEqual([])
     expect(f.focus).not.toHaveBeenCalled()
     expect(f.setPointerCapture).not.toHaveBeenCalled()
   })
