@@ -99,6 +99,13 @@ impl Store {
             native: Arc::new(NativeProvider),
         }
     }
+    #[cfg(test)]
+    pub(super) fn with_native(root: &Path, native: Arc<dyn Native>) -> Self {
+        Self {
+            native,
+            ..Self::new(root)
+        }
+    }
     pub(super) fn root(&self) -> PathBuf {
         self.root.clone()
     }
