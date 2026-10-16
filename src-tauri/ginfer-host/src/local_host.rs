@@ -36,6 +36,17 @@ pub async fn bind_management(preferred: SocketAddr, managed: bool) -> Result<(to
     }
 }
 
+/// Local authority alone can be copied; verify the authenticated process's root too.
+pub(crate) fn validate_local_identity(directory: &Path, snapshot: &serde_json::Value) -> Result<(), String> {
+    let expected = directory.canonicalize().map_err(|e| e.to_string())?;
+    let identity = &snapshot["local_identity"];
+    let actual: Option<PathBuf> = serde_json::from_value(identity["state_directory"].clone()).map_err(|e| e.to_string())?;
+    if actual.as_ref() != Some(&expected) || identity["platform"] != std::env::consts::OS {
+        return Err("The running Host belongs to a different data folder or platform, or cannot prove its local identity. Restart this data folder's Host after updating GChat.".into());
+    }
+    Ok(())
+}
+
 #[cfg(windows)]
 fn keep_client_pipes_private() -> Result<(), String> {
     use std::ffi::c_void;
@@ -98,18 +109,8 @@ impl LocalHost {
         let snapshot = tokio::time::timeout(Duration::from_secs(2), control.as_ref().unwrap().snapshot())
             .await
             .map_err(|_| "local host connection timed out".to_string())??;
-        self.validate_identity(&snapshot)?;
+        validate_local_identity(&self.directory, &snapshot)?;
         Ok(snapshot)
-    }
-
-    fn validate_identity(&self, snapshot: &serde_json::Value) -> Result<(), String> {
-        let expected = self.directory.canonicalize().map_err(|e| e.to_string())?;
-        let identity = &snapshot["local_identity"];
-        let actual: Option<PathBuf> = serde_json::from_value(identity["state_directory"].clone()).map_err(|e| e.to_string())?;
-        if actual.as_ref() != Some(&expected) || identity["platform"] != std::env::consts::OS {
-            return Err("The running Host belongs to a different data folder or platform, or cannot prove its local identity. Restart this data folder's Host after updating GChat.".into());
-        }
-        Ok(())
     }
 
     pub(crate) fn validate(&self) -> Result<(), String> {
@@ -346,7 +347,7 @@ mod tests {
         assert!(local.connect(&mut control).await.is_ok(), "The original Host remains reachable");
         let mut wrong_platform = host.snapshot().await;
         wrong_platform["local_identity"]["platform"] = serde_json::json!("another-platform");
-        assert!(local.validate_identity(&wrong_platform).is_err());
+        assert!(validate_local_identity(&local.directory, &wrong_platform).is_err());
         server.abort();
         let _ = server.await;
     }

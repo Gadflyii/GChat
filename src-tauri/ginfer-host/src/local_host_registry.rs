@@ -49,7 +49,8 @@ impl Owner {
             }
             Self::Service { directory, origin } => {
                 let control = LocalControl::open(directory, origin)?;
-                control.snapshot().await?;
+                let snapshot = control.snapshot().await?;
+                crate::local_host::validate_local_identity(directory, &snapshot)?;
                 Ok(control)
             }
         }

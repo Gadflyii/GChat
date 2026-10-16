@@ -1037,6 +1037,23 @@ mod tests {
         let snapshot = control.snapshot().await.unwrap();
         assert_eq!(snapshot["local_identity"]["state_directory"],
             serde_json::to_value(configured_directory.path().canonicalize().unwrap()).unwrap());
+
+        // Matching TLS/UUID authority copied from another root must not authorize
+        // an installed launcher to use that root's live Host.
+        let copied_directory = tempfile::tempdir().unwrap();
+        std::fs::copy(foreign_directory.path().join("host.json"),
+            copied_directory.path().join("host.json")).unwrap();
+        let copied_control = LocalControl::open(copied_directory.path(), &foreign_origin).unwrap();
+        assert_eq!(copied_control.snapshot().await.unwrap()["host_id"], json!(foreign_id),
+            "Copied authority really authenticates to the foreign Host before the root check");
+        let copied_result = tokio::time::timeout(Duration::from_secs(5), InstalledConfiguration {
+            data_dir: copied_directory.path().into(), host_url: foreign_origin.clone(), desktop: None,
+        }.connect()).await.unwrap();
+        assert!(copied_result.err().unwrap().contains("different data folder"));
+        let mut wrong_platform = snapshot.clone();
+        wrong_platform["local_identity"]["platform"] = json!("another-platform");
+        assert!(crate::local_host::validate_local_identity(configured_directory.path(), &wrong_platform).is_err());
+
         let foreign_control = LocalControl::open(foreign_directory.path(), &foreign_origin).unwrap();
         assert_eq!(foreign_control.snapshot().await.unwrap()["host_id"], json!(foreign_id),
             "The other Host remains reachable with its own local authority");
