@@ -70,14 +70,19 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('Connection lost')
   })
-  it('forwards the explicit installed GPU choice when loading', async () => {
+  it('shows an unavailable selected GPU error and restores Load after forwarding the choice', async () => {
     mocks.selectedGpuUuids = ['local-gpu']
+    mocks.switchModel.mockRejectedValueOnce(new Error('Selected GPU is unavailable'))
     vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
     render(<ModelManagement />)
-    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
-    await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({
+    const loadButton = screen.getByRole('button', { name: 'Load model' })
+    fireEvent.click(loadButton)
+    expect(loadButton).toBeDisabled()
+    expect(await screen.findByRole('alert')).toHaveTextContent('Selected GPU is unavailable')
+    await waitFor(() => expect(loadButton).toBeEnabled())
+    expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({
       modelId: 'local-model', providerName: 'ginfer', gpuUuids: ['local-gpu'],
-    })))
+    }))
     vi.restoreAllMocks()
   })
   it.each([{ selection: [] }, { selection: ['missing-gpu'] }])('disables Load for unavailable explicit selection $selection', ({ selection }) => {
