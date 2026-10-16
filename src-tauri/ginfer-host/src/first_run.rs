@@ -1249,8 +1249,6 @@ mod tests {
 
     #[tokio::test]
     async fn blocked_first_scope_parks_later_unquoted_selections() {
-        use std::{future::Future, task::Poll};
-
         let directory = tempfile::tempdir().unwrap();
         let (host, jobs) = installed_host(directory.path(), 2).await;
         let inventory = host.inventory.read().await.clone();
@@ -1295,12 +1293,12 @@ mod tests {
         assert!(!host.first_run_pending().await);
         {
             let _operation = host.first_run_operation.lock().await;
-            let mut maintenance = std::pin::pin!(host.first_run_maintenance());
-            std::future::poll_fn(|cx| {
-                assert!(matches!(maintenance.as_mut().poll(cx), Poll::Ready(Ok(()))));
-                Poll::Ready(())
-            })
-            .await;
+            // Selected-artifact validation may yield for metadata I/O, but
+            // parked maintenance must finish without this operation lock.
+            tokio::time::timeout(Duration::from_secs(2), host.first_run_maintenance())
+                .await
+                .expect("parked maintenance waited for the operation lock")
+                .unwrap();
         }
         progress.startup_profiles[0].error = None;
         host.store_first_run(progress).await.unwrap();
@@ -2204,14 +2202,13 @@ mod tests {
         }
         assert!(!host.first_run_pending().await);
         {
-            use std::{future::Future, task::Poll};
             let _operation = host.first_run_operation.lock().await;
-            let mut maintenance = std::pin::pin!(host.first_run_maintenance());
-            std::future::poll_fn(|cx| {
-                assert!(matches!(maintenance.as_mut().poll(cx), Poll::Ready(Ok(()))));
-                Poll::Ready(())
-            })
-            .await;
+            // Selected-artifact validation may yield for metadata I/O, but
+            // parked maintenance must finish without this operation lock.
+            tokio::time::timeout(Duration::from_secs(2), host.first_run_maintenance())
+                .await
+                .expect("parked maintenance waited for the operation lock")
+                .unwrap();
         }
         host.first_run_action(json!({"action":"resume"}))
             .await
