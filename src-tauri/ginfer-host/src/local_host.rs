@@ -47,6 +47,20 @@ pub(crate) fn validate_local_identity(directory: &Path, snapshot: &serde_json::V
     Ok(())
 }
 
+/// Stop the process belonging to an explicitly configured root during relocation.
+/// Missing state or authority fails closed; no discovery, credentials or bootstrap.
+pub(crate) async fn stop_existing_if_idle(directory: &Path) -> Result<serde_json::Value, String> {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let private: crate::service::Persistent = serde_json::from_slice(
+            &std::fs::read(directory.join("host.json")).map_err(|e| e.to_string())?,
+        ).map_err(|e| e.to_string())?;
+        private.management_origin.ok_or("The configured Host has no saved management endpoint; data folder move was refused")?;
+        let address = management_address(directory, SocketAddr::from(([127, 0, 0, 1], 1)))?;
+        let control = LocalControl::open(directory, &format!("https://{address}"))?;
+        control.stop_host_for_relocation(directory).await
+    }).await.map_err(|_| "The configured Host did not confirm idle Stop in time; data folder move was refused and no forced stop was sent".to_string())?
+}
+
 #[cfg(windows)]
 fn keep_client_pipes_private() -> Result<(), String> {
     use std::ffi::c_void;

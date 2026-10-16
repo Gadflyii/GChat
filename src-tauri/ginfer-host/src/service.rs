@@ -124,6 +124,7 @@ pub struct Host {
     pub(crate) lifecycle: Mutex<()>,
     pub(crate) first_run_operation: Mutex<()>,
     normal_stop_enabled: AtomicBool,
+    normal_stop_quit_enabled: AtomicBool,
     normal_stopping: AtomicBool,
     normal_stop_admission: RwLock<()>,
     normal_stop_notification: Notify,
@@ -415,6 +416,7 @@ impl Host {
             lifecycle: Mutex::new(()),
             first_run_operation: Mutex::new(()),
             normal_stop_enabled: AtomicBool::new(false),
+            normal_stop_quit_enabled: AtomicBool::new(false),
             normal_stopping: AtomicBool::new(false),
             normal_stop_admission: RwLock::new(()),
             normal_stop_notification: Notify::new(),
@@ -425,9 +427,15 @@ impl Host {
         host.scan().await?;
         Ok(host)
     }
-    /// Only the Windows desktop-managed process enables this control. Services
-    /// retain their existing SCM/signal lifetime and Linux client quit is unchanged.
+    /// Windows desktop-managed processes offer an explicit Stop and Quit control.
     pub fn enable_normal_stop(&self) {
+        self.normal_stop_quit_enabled.store(true, Ordering::SeqCst);
+        self.enable_relocation_stop();
+    }
+
+    /// Linux desktop-managed processes support idle root handoff without changing
+    /// the existing client/Manager Quit behavior or advertising a Stop/Quit control.
+    pub fn enable_relocation_stop(&self) {
         self.normal_stop_enabled.store(true, Ordering::SeqCst);
     }
 
@@ -457,7 +465,7 @@ impl Host {
             return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"local administrator credential required"})));
         }
         if !self.normal_stop_enabled.load(Ordering::SeqCst) {
-            return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"Normal Host Stop is available only for a Windows desktop-managed Host"})));
+            return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"Normal Host Stop is available only for a desktop-managed Host"})));
         }
         #[derive(Deserialize)]
         struct Stop {
@@ -1012,7 +1020,7 @@ impl Host {
         }
         let engine_presets_available = !available_profiles.is_empty() || !max_perf_profiles.is_empty();
         let mut snapshot = serde_json::json!({"protocol_version":1,"host_id":host_id,"boot_id":self.boot_id,
-            "can_stop_host":self.normal_stop_enabled.load(Ordering::SeqCst),
+            "can_stop_host":self.normal_stop_quit_enabled.load(Ordering::SeqCst),
             "local_identity":{"state_directory":state_directory,"platform":std::env::consts::OS},
             "management_origin":management_origin,"management_notice":management_notice,
             "lan_sharing": {"enabled":network["enabled"],"managed":network["managed"],
@@ -2444,6 +2452,16 @@ mod normal_stop_tests {
             .body(Body::from(body.to_string())).unwrap()).await.unwrap();
         let status = response.status();
         (status, serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap())
+    }
+
+    #[tokio::test]
+    async fn relocation_stop_keeps_linux_quit_controls_hidden() {
+        let (_directory, host, token, body) = fixture().await;
+        host.enable_relocation_stop();
+        assert_eq!(host.snapshot().await["can_stop_host"], false);
+        let (status, reply) = stop(&host, &token, body).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        assert_eq!(reply["stopping"], true);
     }
 
     #[tokio::test]

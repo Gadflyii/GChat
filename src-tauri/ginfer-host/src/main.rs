@@ -500,6 +500,8 @@ async fn run(
     .await?;
     #[cfg(windows)]
     if args.desktop_managed && !args.windows_service { host.enable_normal_stop(); }
+    #[cfg(not(windows))]
+    if args.desktop_managed { host.enable_relocation_stop(); }
     host.processes.lock().await.configure_runtimes(
         engine_runtimes,
         host.gpus
@@ -782,7 +784,7 @@ mod tests {
         let host = ginfer_host::service::Host::open(directory.path().into(),
             "Normal Stop TLS fixture".into(), std::env::current_exe().unwrap(),
             vec![], vec![], vec![]).await.unwrap();
-        host.enable_normal_stop(); // Portable seam; the production opt-in is Windows-only.
+        host.enable_normal_stop(); // Desktop-managed processes opt in on both platforms.
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
         host.data.lock().await.management_origin = Some(format!("https://{address}"));
