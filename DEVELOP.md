@@ -121,7 +121,7 @@ their own saved configuration; unconfigured clients use the registered owner.
 Managed Hosts verify their canonical state directory and platform in addition to
 their certificate and instance identity. If the preferred management or LAN port
 is occupied, they keep the other listener running, bind a free port atomically,
-save the selected port in their own `host.json`, and show a notice in Manager.
+save the selected port in their own `host.json`, and show a notice in the GChat Manager panel.
 Restarting reuses those saved ports. A Host from before this identity check must
 be restarted after updating. Standalone explicit listen addresses remain fixed;
 explicit host commands with `--data-dir` do not change the shared registration.
