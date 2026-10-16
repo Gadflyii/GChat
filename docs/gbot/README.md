@@ -93,9 +93,18 @@ not prove the editor opened. A missing diagnostic result stays an explicit
 failure; setup does not bypass readiness, change control ownership or retry the
 editor automatically. Journal timestamps are fenced by the host launch time;
 guest clock differences can therefore leave the journal section empty. Missing
-unit records or truncated exit markers remain unknown. Each guest query allows
-two seconds plus one second for termination; transport receipt waiting uses the
-existing request behavior.
+unit records or truncated exit markers remain unknown. On failure, the same exact
+unit's positive MainPID also supplies bounded NUL-preserving argument bytes,
+process stat/wait-channel prefixes and the installed Mousepad version, each with
+its own exit marker. If the complete retained window list identifies exactly one
+window for that PID, setup requests one accessibility observation without a
+screenshot or input. The issue retains partial-walk flags, bounded tree/text
+excerpts and a document-name observation; these never establish readiness.
+Ambiguous targets skip that observation. The normal private guest-operation
+journal retains the original tool response, including accessibility text; the
+issue projection alone is bounded. Guest command timeouts allow two seconds plus
+one for termination, and the accessibility walk requests a two-second budget.
+Neither bounds transport receipt waiting, which uses the existing behavior.
 
 Saved Linux setup can renew its session after the pinned SSH transport proves that
 the active desktop service invocation differs from the one bound to that session.

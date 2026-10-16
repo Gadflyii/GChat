@@ -878,6 +878,24 @@ impl KvmSetup {
                         },
                     )
                     .await;
+                let editor = match editor_diagnostic_target(&last_windows, &diagnostic) {
+                    Some(arguments) => {
+                        let result = self
+                            .guest(
+                                runtime,
+                                record,
+                                GuestOperationKind::Desktop {
+                                    tool: "get_window_state".into(),
+                                    arguments,
+                                },
+                            )
+                            .await;
+                        editor_diagnostics(result, &title)?
+                    }
+                    None => serde_json::json!({
+                        "unavailable": "No unique listed window matches a confirmed positive unit MainPID."
+                    }),
+                };
                 if self.stopping.load(Ordering::Acquire)
                     || self.cancellations.lock().await.contains(&record.id)
                 {
@@ -887,7 +905,11 @@ impl KvmSetup {
                         "Resume or remove this same setup.",
                     ));
                 }
-                return Err(window_failure_issue(last_windows, diagnostic));
+                let mut issue = window_failure_issue(last_windows, diagnostic);
+                issue
+                    .message
+                    .push_str(&format!("\nEditor accessibility: {editor}"));
+                return Err(issue);
             }
         };
         // Verify the saved effect in this setup's disposable document.
@@ -1227,8 +1249,122 @@ fn window_diagnostic_command(id: WorkspaceId, launch_time: Option<Duration>) -> 
         None => "printf 'Launch time unavailable; journal omitted\\n'".into(),
     };
     format!(
-        r#"(timeout -k 1s 2s systemctl --user show {unit} --property=LoadState,ActiveState,SubState,Result,MainPID,ExecMainCode,ExecMainStatus 2>&1; printf '\nunit-status-exit=%s\n' "$?"; {journal}) | head -c 2048"#
+        r#"(status=$(timeout -k 1s 2s systemctl --user show {unit} --property=LoadState,ActiveState,SubState,Result,MainPID,ExecMainCode,ExecMainStatus 2>&1); code=$?; printf '%s\nunit-status-exit=%s\n' "$status" "$code"; pid=$(printf '%s\n' "$status" | sed -n 's/^MainPID=//p'); case "$code:$pid" in 0:[1-9]*) case "$pid" in *[!0-9]*) printf 'editor-process=unavailable\n';; *) printf 'editor-argv-hex-prefix(max256B)=\n'; od -An -v -N256 -tx1 /proc/"$pid"/cmdline 2>&1; printf '\neditor-argv-exit=%s\neditor-stat-prefix(max512B)=' "$?"; head -c 512 /proc/"$pid"/stat 2>&1; printf '\neditor-stat-exit=%s\neditor-wchan-prefix(max128B)=' "$?"; head -c 128 /proc/"$pid"/wchan 2>&1; printf '\neditor-wchan-exit=%s\n' "$?";; esac;; *) printf 'editor-process=unavailable\n';; esac; printf 'mousepad-version='; timeout -k 1s 2s dpkg-query --show --showformat='${{Version}}\n' mousepad 2>&1; printf '\nmousepad-version-exit=%s\n' "$?"; {journal}) | head -c 3072"#
     )
+}
+
+fn editor_diagnostic_target(
+    windows: &serde_json::Value,
+    diagnostic: &Result<GuestResult, SetupIssue>,
+) -> Option<serde_json::Value> {
+    let Ok(GuestResult::ExecFinished {
+        exit_code: 0,
+        stdout,
+        ..
+    }) = diagnostic
+    else {
+        return None;
+    };
+    let output = std::str::from_utf8(stdout).ok()?;
+    let status = output.split_once("\nunit-status-exit=0\n")?.0;
+    let mut pids = status
+        .lines()
+        .filter_map(|line| line.strip_prefix("MainPID="));
+    let pid = pids.next()?.parse::<u32>().ok().filter(|pid| *pid > 0)?;
+    if pids.next().is_some() {
+        return None;
+    }
+    let listed = windows["windows"].as_array()?;
+    if windows["count"].as_u64()? != listed.len() as u64 {
+        // A truncated list cannot establish that the editor has just one window.
+        return None;
+    }
+    let mut matches = listed.iter().filter(|window| {
+        window["pid"].as_u64() == Some(u64::from(pid))
+            && window["window_id"].as_u64().is_some_and(|id| id > 0)
+    });
+    let window = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    Some(serde_json::json!({
+        "pid": pid, "window_id": window["window_id"],
+        "include_screenshot": false, "include_accessibility_tree": true,
+        "max_elements": 80, "max_depth": 8, "timeout_ms": 2000
+    }))
+}
+
+fn editor_diagnostics(
+    result: Result<GuestResult, SetupIssue>,
+    title: &str,
+) -> Result<serde_json::Value, SetupIssue> {
+    let result = match result {
+        Err(issue) if issue.code == "setup_cancelled" => return Err(issue),
+        Err(issue) => {
+            return Ok(serde_json::json!({"unavailable": diagnostic_text(&issue.message, 256)}))
+        }
+        Ok(GuestResult::Desktop { result }) => result,
+        Ok(_) => return Ok(serde_json::json!({"unavailable": "No desktop result returned."})),
+    };
+    let state = &result["structuredContent"];
+    let tree = diagnostic_window_text(&state["tree_markdown"], 768);
+    let document_match = state["tree_markdown"]
+        .as_str()
+        .map(|text| text.contains(title));
+    let mut diagnostic = serde_json::json!({
+        "isError": result["isError"].as_bool(),
+        "pid": state["pid"].as_u64(), "window_id": state["window_id"].as_u64(),
+        "window_title": diagnostic_window_text(&state["window_title"], 160),
+        "elements_complete": state["elements_complete"].as_bool(),
+        "truncated": state["truncated"].as_bool(),
+        "degraded": state["degraded"].as_bool(),
+        "degraded_reason": diagnostic_window_text(&state["degraded_reason"], 160),
+        "truncation_reason": diagnostic_window_text(&state["truncation_reason"], 160),
+        "total_element_count": state["total_element_count"].as_u64(),
+        "nodes_pending": state["nodes_pending"].as_u64(),
+        "walk_elapsed_ms": state["walk_elapsed_ms"].as_u64(),
+        "tree_markdown": tree,
+        "retained_tree_truncated": tree.as_deref().zip(state["tree_markdown"].as_str())
+            .map(|(retained, original)| retained != original),
+        // These are observations, never substitutes for title/input/readback readiness.
+        "observed_document_match": state["elements"].as_array().map(|elements| {
+            document_match == Some(true) || elements.iter().any(|element| ["label", "value"].iter().any(|field| {
+                element[field].as_str().is_some_and(|text| text.contains(title))
+            }))
+        }).or(document_match),
+    });
+    diagnostic["error_text"] = if result["isError"] == true {
+        serde_json::json!(result["content"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|part| part["type"] == "text")
+            .take(2)
+            .map(|part| diagnostic_window_text(&part["text"], 192))
+            .collect::<Vec<_>>())
+    } else {
+        serde_json::Value::Null
+    };
+    diagnostic["elements"] = match state["elements"].as_array() {
+        Some(elements) => serde_json::json!(elements
+            .iter()
+            .take(20)
+            .map(|element| {
+                serde_json::json!({
+                    "role": diagnostic_window_text(&element["role"], 48),
+                    "label": diagnostic_window_text(&element["label"], 96),
+                    "value": diagnostic_window_text(&element["value"], 96),
+                    "depth": element["depth"].as_u64(),
+                    "parent_index": element["parent_index"].as_u64(),
+                })
+            })
+            .collect::<Vec<_>>()),
+        None => serde_json::Value::Null,
+    };
+    diagnostic["retained_elements_truncated"] = serde_json::json!(state["elements"]
+        .as_array()
+        .is_some_and(|elements| elements.len() > 20));
+    Ok(diagnostic)
 }
 
 fn window_failure_issue(
@@ -1748,7 +1884,7 @@ mod tests {
             assert_eq!(saved[0].stage, SetupStage::TestingDesktop);
             assert_eq!(saved[0].issue, Some(issue));
         }
-        let issue = window_failure_issue(
+        let mut issue = window_failure_issue(
             window_diagnostics(
                 &serde_json::json!({"structuredContent":{"windows":[
                     {"title":"Mousepad", "pid":42, "window_id":7}
@@ -1761,6 +1897,23 @@ mod tests {
                 stderr: Vec::new(),
             }),
         );
+        let editor = editor_diagnostics(
+            Ok(GuestResult::Desktop {
+                result: serde_json::json!({
+                    "structuredContent":{"pid":42,"window_id":7,"elements_complete":false,
+                        "truncated":true,"truncation_reason":"deadline","elements":[
+                            {"role":"window","label":"Mousepad"}
+                        ]}
+                }),
+            }),
+            "Gbot-setup-test",
+        )
+        .unwrap();
+        issue
+            .message
+            .push_str(&format!("\nEditor accessibility: {editor}"));
+        assert!(issue.message.contains("\"elements_complete\":false"));
+        assert_eq!(issue.code, "desktop_not_ready");
         record.issue = Some(issue.clone());
         setup.save(record.clone()).await.unwrap();
         drop(setup);
@@ -1813,7 +1966,10 @@ mod tests {
         assert_eq!(windows["windows"][1]["title"], "x".repeat(160));
         assert_eq!(windows["windows"][1]["title_matches"], true);
         assert_eq!(windows["windows"][1]["app_name"], serde_json::Value::Null);
-        assert_eq!(windows["windows"][2]["title_matches"], serde_json::Value::Null);
+        assert_eq!(
+            windows["windows"][2]["title_matches"],
+            serde_json::Value::Null
+        );
         let issue = window_failure_issue(
             windows,
             Ok(GuestResult::ExecFinished {
@@ -1830,7 +1986,152 @@ mod tests {
         let command = window_diagnostic_command(WorkspaceId::new(), Some(Duration::from_secs(123)));
         assert!(command.contains("Result,MainPID,ExecMainCode"));
         assert!(command.contains("--since=@123 --lines=12"));
-        assert!(command.ends_with("| head -c 2048"));
+        assert!(command.contains("editor-argv-hex-prefix(max256B)="));
+        assert!(command.contains("editor-stat-exit=%s"));
+        assert!(command.contains("editor-wchan-exit=%s"));
+        assert!(command.contains("mousepad-version-exit=%s"));
+        assert!(command.ends_with("| head -c 3072"));
+    }
+    #[test]
+    fn editor_diagnostics_target_only_the_confirmed_unambiguous_unit_window() {
+        let raw = serde_json::json!({"structuredContent":{"windows":[
+            {"title":"Mousepad","pid":1199,"window_id":27262979},
+            {"title":"Terminal","pid":700,"window_id":12}
+        ]}});
+        let windows = window_diagnostics(&raw, "Gbot-setup-test");
+        let completion = |text: &str| {
+            Ok(GuestResult::ExecFinished {
+                exit_code: 0,
+                stdout: text.as_bytes().to_vec(),
+                stderr: Vec::new(),
+            })
+        };
+        let status = "ActiveState=active\nMainPID=1199\nunit-status-exit=0\n";
+        let target = editor_diagnostic_target(&windows, &completion(status)).unwrap();
+        assert_eq!(target["pid"], 1199);
+        assert_eq!(target["window_id"], 27262979u64);
+        assert_eq!(target["include_screenshot"], false);
+        assert_eq!(target["include_accessibility_tree"], true);
+        assert_eq!(target["max_elements"], 80);
+        assert_eq!(target["max_depth"], 8);
+        assert_eq!(target["timeout_ms"], 2000);
+        // Pinned Cua rejects display_only with an AX tree. No input or capture fields.
+        for field in [
+            "display_only",
+            "screenshot_out_file",
+            "element_token",
+            "text",
+            "key",
+        ] {
+            assert!(target.get(field).is_none());
+        }
+        for invalid in [
+            "MainPID=0\nunit-status-exit=0\n",
+            "MainPID=1199\nunit-status-exit=1\n",
+            "MainPID=1199\nunit-status-exit=",
+            "MainPID=1199\nMainPID=700\nunit-status-exit=0\n",
+            "MainPID=4000\nunit-status-exit=0\n",
+            "MainPID=1199;echo unsafe\nunit-status-exit=0\n",
+        ] {
+            assert!(editor_diagnostic_target(&windows, &completion(invalid)).is_none());
+        }
+        let ambiguous = serde_json::json!({"count":2,"windows":[
+            {"pid":1199,"window_id":1},{"pid":1199,"window_id":2}
+        ]});
+        let truncated = serde_json::json!({"count":7,"windows":[
+            {"pid":1199,"window_id":1}
+        ]});
+        for unknown in [ambiguous, truncated, serde_json::Value::Null] {
+            assert!(editor_diagnostic_target(&unknown, &completion(status)).is_none());
+        }
+        assert!(editor_diagnostic_target(
+            &windows,
+            &Err(SetupIssue::new(
+                "guest_not_ready",
+                "Transport error",
+                "Retry same setup"
+            ))
+        )
+        .is_none());
+    }
+    #[test]
+    fn editor_diagnostics_bound_text_and_keep_partial_observations_explicit() {
+        let result = serde_json::json!({
+            "isError":false,"content":[{"type":"image","data":"excluded image"}],
+            "structuredContent":{
+                "pid":1199,"window_id":27262979u64,"elements_complete":false,
+                "truncated":true,"truncation_reason":"deadline","nodes_pending":4,
+                "tree_markdown":format!("{}Gbot-setup-test", "é\u{1b}".repeat(500)),"snapshot_id":"excluded snapshot",
+                "elements":(0..80).map(|n| serde_json::json!({
+                    "role":"text","label":format!("{}Gbot-setup-test", "é\u{1b}".repeat(200)),
+                    "value":"v".repeat(2000),"depth":2,"parent_index":0,"element_token":format!("excluded token{n}")
+                })).collect::<Vec<_>>()
+            }
+        });
+        let projection =
+            editor_diagnostics(Ok(GuestResult::Desktop { result }), "Gbot-setup-test").unwrap();
+        assert_eq!(projection["observed_document_match"], true);
+        assert_eq!(projection["elements_complete"], false);
+        assert_eq!(projection["truncation_reason"], "deadline");
+        assert_eq!(projection["nodes_pending"], 4);
+        assert_eq!(projection["elements"].as_array().unwrap().len(), 20);
+        assert_eq!(projection["retained_elements_truncated"], true);
+        assert_eq!(projection["retained_tree_truncated"], true);
+        assert!(projection["tree_markdown"].to_string().len() <= 770);
+        assert_eq!(projection["elements"][0]["depth"], 2);
+        assert_eq!(projection["elements"][0]["parent_index"], 0);
+        let serialized = projection.to_string();
+        assert!(serialized.len() < 8500);
+        assert!(!serialized.contains("excluded"));
+        assert!(!serialized.contains('\u{1b}'));
+        for element in projection["elements"].as_array().unwrap() {
+            assert!(element["label"].to_string().len() <= 98);
+            assert!(element["value"].to_string().len() <= 98);
+        }
+        let absent = editor_diagnostics(
+            Ok(GuestResult::Desktop {
+                result: serde_json::json!({"structuredContent":{}}),
+            }),
+            "Gbot-setup-test",
+        )
+        .unwrap();
+        assert_eq!(absent["observed_document_match"], serde_json::Value::Null);
+        assert_eq!(absent["elements_complete"], serde_json::Value::Null);
+        let tree_only = editor_diagnostics(Ok(GuestResult::Desktop {
+            result: serde_json::json!({"structuredContent":{"tree_markdown":"Tab: Gbot-setup-test"}})
+        }), "Gbot-setup-test").unwrap();
+        assert_eq!(tree_only["observed_document_match"], true);
+        let tool_error = editor_diagnostics(
+            Ok(GuestResult::Desktop {
+                result: serde_json::json!({"isError":true,"content":[
+                    {"type":"text","text":"Accessibility unavailable"},
+                    {"type":"text","text":"x".repeat(500)},
+                    {"type":"text","text":"excluded extra error"},
+                    {"type":"image","data":"excluded image"}
+                ]}),
+            }),
+            "Gbot-setup-test",
+        )
+        .unwrap();
+        assert_eq!(tool_error["error_text"][0], "Accessibility unavailable");
+        assert_eq!(tool_error["error_text"].as_array().unwrap().len(), 2);
+        assert!(tool_error["error_text"][1].to_string().len() <= 194);
+        assert!(!tool_error.to_string().contains("excluded"));
+        let unavailable = editor_diagnostics(
+            Err(SetupIssue::new(
+                "guest_not_ready",
+                "Window is stale",
+                "Retry same setup",
+            )),
+            "Gbot-setup-test",
+        )
+        .unwrap();
+        assert_eq!(unavailable["unavailable"], "Window is stale");
+        let cancelled = SetupIssue::new("setup_cancelled", "Cancelled", "Resume same setup");
+        assert_eq!(
+            editor_diagnostics(Err(cancelled.clone()), "Gbot-setup-test"),
+            Err(cancelled)
+        );
     }
     #[test]
     fn window_failure_retains_only_bounded_metadata_and_diagnostics() {
