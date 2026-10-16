@@ -799,6 +799,11 @@ impl HardwareProfiles {
             Some(ProfileScope::CompleteRemainingFormats),
         )
     }
+    /// A configured path can contain a replacement runtime even when unchanged.
+    /// Preserve durable native seeds and deferred work, but require fresh acceptance.
+    pub fn invalidate_runtime_acceptance(&self) {
+        self.state.lock().unwrap().accepted_artifacts.clear();
+    }
     /// This is deliberately not restored from disk: each Host process revalidates
     /// selected artifacts with its current runtime before relying on acceptance.
     pub fn artifact_is_accepted(&self, gpus: &[String], intent: &ArtifactProfileIntent) -> bool {
@@ -1807,6 +1812,98 @@ mod tests {
         assert!(failed.error.unwrap().contains("verified launch intent"));
         assert_eq!(std::fs::read(&done.profile_path).unwrap(), canonical);
         assert!(!job.artifact_is_accepted(&gpus, &intent));
+    }
+    #[tokio::test]
+    async fn hardware_profile_runtime_configuration_requires_fresh_artifact_acceptance() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let intent = selected_intent(directory.path());
+        let result = selected_result(&intent);
+        scoped_cli(directory.path(), &arguments, &result);
+        let replacement = directory.path().join("replacement");
+        std::fs::create_dir(&replacement).unwrap();
+        scoped_cli(&replacement, &arguments, &result);
+        std::fs::set_permissions(
+            replacement.join("ginfer"),
+            std::fs::Permissions::from_mode(0o700),
+        )
+        .unwrap();
+        std::fs::write(replacement.join("ginfer-serve"), "").unwrap();
+        let gpus = vec!["GPU-fixture".to_owned()];
+        let mut cli = directory.path().join("ginfer");
+        let mut previous_job_id = None;
+        for (per_architecture, serve) in [
+            (false, directory.path().join("ginfer-serve")),
+            (false, replacement.join("ginfer-serve")),
+            (true, replacement.join("ginfer-serve")),
+            (true, replacement.join("ginfer-serve")),
+        ] {
+            job.start_scoped(
+                HardwareProfileAction::Ensure,
+                Some(cli.clone()),
+                gpus.clone(),
+                intent.clone(),
+            )
+            .unwrap();
+            let done = observed(&job, |view| view.status == "completed").await;
+            assert_ne!(done.job_id, previous_job_id);
+            previous_job_id = done.job_id;
+            assert!(job.artifact_is_accepted(&gpus, &intent));
+            let profile = std::fs::read(&done.profile_path).unwrap();
+            let record_path = directory.path().join("host/hardware-profile-job.json");
+            let record = std::fs::read(&record_path).unwrap();
+            {
+                let mut processes = host.processes.lock().await;
+                assert!(processes
+                    .configure_executable(directory.path().join("missing-runtime"))
+                    .is_err());
+                assert!(processes
+                    .configure_runtimes(
+                        std::collections::BTreeMap::from([(
+                            "12.0".into(),
+                            directory.path().join("missing-runtime"),
+                        )]),
+                        std::collections::BTreeMap::new(),
+                    )
+                    .is_err());
+                assert!(job.artifact_is_accepted(&gpus, &intent));
+                if per_architecture {
+                    processes
+                        .configure_runtimes(
+                            std::collections::BTreeMap::from([("12.0".into(), serve.clone())]),
+                            std::collections::BTreeMap::from([(
+                                gpus[0].clone(),
+                                "12.0".into(),
+                            )]),
+                        )
+                        .unwrap();
+                } else {
+                    processes.configure_executable(serve.clone()).unwrap();
+                }
+            }
+            assert!(!job.artifact_is_accepted(&gpus, &intent));
+            assert!(job.accepted_gpu_groups().is_empty());
+            assert_eq!(job.deferred_groups(), vec![gpus.clone()]);
+            assert_eq!(std::fs::read(&done.profile_path).unwrap(), profile);
+            assert_eq!(std::fs::read(&record_path).unwrap(), record);
+            cli = serve.with_file_name("ginfer");
+        }
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            Some(cli),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        let done = observed(&job, |view| view.status == "completed").await;
+        assert_ne!(done.job_id, previous_job_id);
+        assert!(job.artifact_is_accepted(&gpus, &intent));
     }
     #[tokio::test]
     async fn hardware_profile_background_completion_is_reaped_before_selected_ensure() {

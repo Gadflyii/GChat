@@ -122,9 +122,11 @@ they are retained separately.
 Selected readiness requires the native base and required-format coverage for
 every selected startup recipe. Other formats may remain deferred. Reopening Host
 preserves compatible profile files and saved scope receipts, then revalidates the
-selected intent natively before first-run admission. The retained file alone
-does not authorize startup or promise calibration-free upgrades. Phase diagnostics
-report real work; scope-specific history is required for a measured ETA.
+selected intent natively before first-run admission. Successfully configuring a
+runtime also requires fresh native acceptance, even if its path is unchanged.
+The retained file alone does not authorize startup or promise calibration-free
+upgrades. Phase diagnostics report real work; scope-specific history is required
+for a measured ETA.
 
 After setup is complete, Host can run Engine's explicit remaining-format pass
 while no serving instance, download or draft-width calibration is active.
