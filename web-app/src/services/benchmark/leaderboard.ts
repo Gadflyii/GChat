@@ -1,4 +1,4 @@
-import type { BenchmarkConfiguration, BenchmarkResult, BenchmarkSessionInfo, BenchmarkWave } from './tauri'
+import type { BenchmarkConfiguration, BenchmarkResult, BenchmarkSessionInfo, BenchmarkV2Report, BenchmarkWave } from './tauri'
 import type { BenchmarkModelClass, BenchmarkProfileReference } from '@/services/engines'
 import { invoke } from '@tauri-apps/api/core'
 import { localStorageKey } from '@/constants/localStorage'
@@ -48,6 +48,51 @@ function wave(w: BenchmarkWave): BenchmarkWave {
     decode_seconds: w.decode_seconds, wall_seconds: w.wall_seconds }
 }
 
+// Native v2 contains two complete phase pairs. Public v1 keeps its approved raw-wave
+// projection; local v2 scores and the original report remain untouched.
+function projectedV2Waves(report: BenchmarkV2Report, concurrency: number): [BenchmarkWave, BenchmarkWave] {
+  const invalid = () => new Error('The native v2 evidence does not match the Standard Benchmark contract.')
+  const workload = report.workload
+  if (!workload || workload.prompt_tokens !== 2048 || workload.output_tokens !== 500 ||
+      workload.concurrency !== concurrency || workload.warmup_rounds !== 1 || workload.measured_rounds !== 1 ||
+      report.configuration.prefix_reuse !== true || report.cold_prefill?.prefix_reuse !== false ||
+      report.warm_generation?.prefix_reuse !== true) throw invalid()
+  const logical = 2048 * concurrency
+  const positive = (value: number | null) => value === null || (Number.isFinite(value) && Number(value) > 0)
+  const close = (value: number | null, expected: number | null) => expected === null
+    ? value === null : typeof value === 'number' && Math.abs(value - expected) <= 1e-9 * Math.max(Math.abs(value), Math.abs(expected), 1)
+  for (const phase of [report.cold_prefill, report.warm_generation]) {
+    if (!Array.isArray(phase.warmup) || !Array.isArray(phase.measured) ||
+        phase.warmup.length !== 1 || phase.measured.length !== 1) throw invalid()
+    for (const actual of [...phase.warmup, ...phase.measured]) {
+      if (!actual || ![actual.logical_prompt_tokens, actual.observed_compute_tokens, actual.computed_tokens,
+        actual.cached_tokens, actual.output_tokens, actual.decode_tokens, actual.decode_rounds]
+        .every(value => Number.isInteger(value) && value >= 0) ||
+          actual.logical_prompt_tokens !== logical || actual.computed_tokens + actual.cached_tokens !== logical ||
+          actual.observed_compute_tokens > actual.computed_tokens || actual.output_tokens !== 500 * concurrency ||
+          actual.decode_tokens > actual.output_tokens - concurrency || actual.prefix_reuse !== phase.prefix_reuse ||
+          ![actual.compute_seconds, actual.mean_ttft_seconds, actual.decode_seconds, actual.wall_seconds,
+            actual.prefill_seconds_sum, actual.decode_seconds_sum, actual.request_seconds_sum]
+            .every(value => Number.isFinite(value) && value >= 0) || actual.wall_seconds <= 0 ||
+          ![actual.warm_prefill_seconds_mean, actual.warm_pp_effective_per_request, actual.warm_cached_ttft_seconds]
+            .every(positive)) throw invalid()
+      const fullCold = actual.cached_tokens === 0 && actual.computed_tokens === logical && actual.observed_compute_tokens === logical
+      const fullWarm = phase.prefix_reuse && actual.cached_tokens === logical && actual.computed_tokens === 0 && actual.observed_compute_tokens === 0
+      if (actual.full_cold_prompt !== fullCold || (!phase.prefix_reuse && !fullCold) || actual.warm_cached_prompt !== fullWarm) throw invalid()
+      const status = actual.warm_prefill_status
+      if (!((status === 'prefix_reuse_disabled' && !phase.prefix_reuse) ||
+          (status === 'prefix_incomplete' && phase.prefix_reuse && !fullWarm) ||
+          (status === 'prefill_timer_unavailable' && fullWarm) ||
+          (status === 'cached' && fullWarm && actual.prefill_seconds_sum > 0))) throw invalid()
+      const cachedTiming = fullWarm && status === 'cached'
+      if (!close(actual.warm_prefill_seconds_mean, cachedTiming ? actual.prefill_seconds_sum / concurrency : null) ||
+          !close(actual.warm_pp_effective_per_request, cachedTiming ? logical / actual.prefill_seconds_sum : null) ||
+          (actual.warm_cached_ttft_seconds !== null && (!fullWarm || !close(actual.warm_cached_ttft_seconds, actual.mean_ttft_seconds)))) throw invalid()
+    }
+  }
+  return [report.cold_prefill.warmup[0], report.warm_generation.measured[0]]
+}
+
 const maxPerfPolicies: Record<BenchmarkModelClass, { model: string; weights: string; kv: string; spec: string; tokens: number; draftTp: number }> = {
   'qwen27-int-dflash-q4': { model: 'qwen3.8-27b', weights: 'groupwise-int-dflash2-q4', kv: 'int8', spec: 'dflash', tokens: 7, draftTp: 1 },
   'qwen27-nvfp4-dflash-q4': { model: 'qwen3.8-27b', weights: 'nvfp4-dflash2-q4', kv: 'nvfp4', spec: 'dflash', tokens: 7, draftTp: 1 },
@@ -90,10 +135,9 @@ export function maxPerfSessionMismatch(session: BenchmarkSessionInfo | Benchmark
 }
 
 export function buildSubmission(run: BenchmarkResult, nickname: string) {
-  if (run.methodology === 'ginfer-resident-max-perf-v2' || run.points.some(point => point.evidence.schema === 'ginfer-resident-benchmark-v2')) {
-    throw new Error('Native v2 results require an approved public report and scoring contract before leaderboard submission.')
-  }
-  if (run.benchmark_id !== 'standard' || run.methodology !== 'ginfer-resident-max-perf-v1') throw new Error('Only Standard Benchmark results can be submitted.')
+  if (run.benchmark_id !== 'standard' || !['ginfer-resident-max-perf-v1', 'ginfer-resident-max-perf-v2'].includes(run.methodology)) throw new Error('Only Standard Benchmark results can be submitted.')
+  const schema = run.methodology === 'ginfer-resident-max-perf-v2' ? 'ginfer-resident-benchmark-v2' : 'ginfer-resident-benchmark-v1'
+  if (run.points.some(point => point.evidence.schema !== schema)) throw new Error('The report schema does not match the Standard Benchmark methodology contract.')
   const name = nickname.trim()
   const normalizedName = name.toLowerCase().replace(/[ ._-]/g, '')
   if (['sectile', 'ginfer', 'gchat', 'gbench'].some(brand => normalizedName.includes(brand))) throw new Error('Sectile, GInfer, GChat, and GBench names are reserved for official Sectile Labs results. Please choose another nickname.')
@@ -116,7 +160,7 @@ export function buildSubmission(run: BenchmarkResult, nickname: string) {
     throw new Error('The benchmark configuration does not match the actual selected Max Perf session.')
   }
   return {
-    schema: 'gbench-submission-v1', benchmark_id: 'standard', methodology: run.methodology,
+    schema: 'gbench-submission-v1', benchmark_id: 'standard', methodology: 'ginfer-resident-max-perf-v1',
     run_id: run.run_id, nickname: name,
     hardware: { cpu_model: h.cpu_model, physical_cores: h.physical_cores,
       logical_threads: h.logical_threads, ram_bytes: h.ram_bytes, ram_speed_mt_s: h.ram_speed_mt_s,
@@ -124,20 +168,22 @@ export function buildSubmission(run: BenchmarkResult, nickname: string) {
       gpus: h.gpus.map(g => ({ model: g.model, vram_mib: g.vram_mib, sm: g.sm })) },
     configuration: config,
     points: run.points.map(p => {
-      if (p.evidence.schema !== 'ginfer-resident-benchmark-v1' ||
-          p.evidence.corpus !== corpus ||
+      const [warmup, measured] = p.evidence.schema === 'ginfer-resident-benchmark-v2'
+        ? projectedV2Waves(p.evidence, p.concurrency)
+        : [p.evidence.warmup[0], p.evidence.measured[0]]
+      if (p.evidence.corpus !== corpus ||
           (Object.prototype.hasOwnProperty.call(p.evidence.configuration, 'prefix_reuse') && p.evidence.configuration.prefix_reuse !== true) ||
           p.requested_prompt_tokens !== 2048 || p.requested_output_tokens !== 500 ||
-          p.evidence.warmup.length !== 1 || p.evidence.measured.length !== 1 ||
+          (p.evidence.schema === 'ginfer-resident-benchmark-v1' && (p.evidence.warmup.length !== 1 || p.evidence.measured.length !== 1)) ||
           JSON.stringify(configuration(p.evidence.configuration)) !== JSON.stringify(config)) throw new Error('The result does not match the Standard Benchmark contract.')
-      for (const actual of [...p.evidence.warmup, ...p.evidence.measured]) {
+      for (const actual of [warmup, measured]) {
         if (![actual.computed_tokens, actual.cached_tokens, actual.output_tokens].every(value => Number.isInteger(value) && value >= 0) ||
             actual.computed_tokens + actual.cached_tokens !== 2048 * p.concurrency || actual.output_tokens !== 500 * p.concurrency) {
           throw new Error('The benchmark wave does not match the Standard token workload.')
         }
       }
       return { concurrency: p.concurrency, corpus: p.evidence.corpus,
-        warmup: wave(p.evidence.warmup[0]), measured: wave(p.evidence.measured[0]) }
+        warmup: wave(warmup), measured: wave(measured) }
     }),
   }
 }

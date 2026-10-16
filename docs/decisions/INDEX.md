@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-16** — [Project native v2 results into the public v1 report](2026-10-16-project-native-v2-into-public-v1.md)
+
 - **2026-10-16** — [Stop the owned idle Windows desktop Host normally](2026-10-16-stop-owned-idle-windows-desktop-host.md)
 
 - **2026-10-16** — [Bind managed Host identity and ports to its data root](2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
