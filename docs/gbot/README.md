@@ -81,6 +81,19 @@ Evidence: `/ai/gchat/out/gbot-first-run-resource-feedback-20261015/`.
 The retained `00068f2a8` DEB and AppImage do not include this change; this is
 candidate desktop acceptance, with no new package or Windows qualification.
 
+If the dedicated setup document window does not match after the existing readiness
+polls, setup retains bounded title-match/PID/window-ID metadata and exact-unit
+systemd status plus recent journal output in its existing issue. The diagnostic
+uses the same private setup transport, limits guest commands and output, and
+keeps the computer in Testing Desktop. Successful command submission alone does
+not prove the editor opened. A missing diagnostic result stays an explicit
+failure; setup does not bypass readiness, change control ownership or retry the
+editor automatically. Journal timestamps are fenced by the host launch time;
+guest clock differences can therefore leave the journal section empty. Missing
+unit records or truncated exit markers remain unknown. Each guest query allows
+two seconds plus one second for termination; transport receipt waiting uses the
+existing request behavior.
+
 Gbot bootstrap now reports a child's exit status and log path promptly when no
 concurrent service owns the data folder. Concurrent-owner waiting remains intact.
 Two focused Host cases, compilation and strict all-target Clippy pass on
