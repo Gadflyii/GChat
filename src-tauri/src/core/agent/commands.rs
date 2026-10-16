@@ -125,6 +125,9 @@ impl AgentRunRegistry {
 
 impl Drop for AgentRunGuard {
     fn drop(&mut self) {
+        // Retire live events before allowing this run ID to be admitted again.
+        // The live-view lock is released before taking the registry lock.
+        super::studio::forget_live_run(&self.run_id);
         self.registry
             .inner
             .lock()
@@ -1602,9 +1605,40 @@ mod tests {
             })
             .await
             .expect("the first read must finish before the pending shell approval");
+            let other_run_id = Uuid::new_v4().to_string();
+            let other_run = app
+                .state::<AppState>()
+                .agent_runs
+                .register(&other_run_id, CancellationToken::new())
+                .unwrap();
+            super::super::studio::observe(
+                &other_run_id,
+                &AgentEvent::AssistantReply {
+                    text: "Another run is still active".into(),
+                },
+            );
+            let monitor = super::super::studio::operation(
+                app.handle().clone(), "monitor", serde_json::json!({}),
+            )
+            .await
+            .unwrap();
+            assert!(monitor["active"].get(&run_id).is_some());
+            assert!(monitor["active"].get(&other_run_id).is_some());
             // Drop the invocation without the normal exit/cancellation path.
             // A fresh AppState models loss of volatile state, not power loss.
             drop(run);
+            let monitor = super::super::studio::operation(
+                app.handle().clone(), "monitor", serde_json::json!({}),
+            )
+            .await
+            .unwrap();
+            assert!(monitor["active"].get(&run_id).is_none());
+            assert_eq!(
+                monitor["active"][&other_run_id][0]["text"],
+                "Another run is still active"
+            );
+            assert_eq!(monitor["completed"].as_array().unwrap().len(), 1);
+            drop(other_run);
             let reopened = tauri::test::mock_app();
             reopened.manage(AppState::default());
             reopened.manage(crate::test_support::TestDataRoot(data.clone()));
@@ -1633,6 +1667,8 @@ mod tests {
             .await
             .unwrap();
             assert_eq!(monitor["completed"].as_array().unwrap().len(), 1);
+            assert!(monitor["active"].get(&run_id).is_none());
+            assert!(monitor["active"].get(&other_run_id).is_none());
             let state = reopened.state::<AppState>();
             assert!(state.agent_pending_approvals.lock().await.is_empty());
             assert!(state.agent_pending_folder_access.lock().await.is_empty());

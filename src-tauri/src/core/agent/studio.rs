@@ -7,6 +7,16 @@ use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager, Runtime};
 
 static LIVE: OnceLock<Mutex<BTreeMap<String, VecDeque<Value>>>> = OnceLock::new();
+
+/// Retire only this invocation's live view when its lifetime ends without a
+/// terminal event. Durable history remains owned by runs.rs.
+pub(super) fn forget_live_run(run_id: &str) {
+    let Some(live) = LIVE.get() else { return };
+    if let Ok(mut live) = live.lock() {
+        live.remove(run_id);
+    }
+}
+
 pub fn observe(run_id: &str, event: &super::types::AgentEvent) {
     use super::types::AgentEvent;
     fn compact(event: &AgentEvent) -> Option<Value> {
