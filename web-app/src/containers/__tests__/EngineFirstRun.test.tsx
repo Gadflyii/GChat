@@ -152,7 +152,7 @@ it('keeps edited folder and package choices when a pending profile completes', a
   expect(mocks.command.mock.calls.every(([, args]) => !args.action)).toBe(true)
 })
 
-it('shows measured phase and elapsed time without inventing a first-run completion estimate', async () => {
+it.each([-3_600_000, 3_600_000])('uses reported elapsed despite Host clock offset %i ms and keeps honest history guidance', async (clockOffset) => {
   const now = 2_000_000
   vi.spyOn(Date, 'now').mockReturnValue(now)
   let updates = 0
@@ -162,14 +162,14 @@ it('shows measured phase and elapsed time without inventing a first-run completi
       gpu_uuids: ['GPU-one'],
       hardware_profile: {
         status: 'running', phase: 'cpu_experts', phase_detail: 'Completed node 0, FP16 grid',
-        started_unix_ms: now - 180_000, elapsed_ms: 1000,
-        ...(updates === 1 ? { expected_duration_ms: 600_000, remaining_ms: 599_000, duration_source: 'measured_history' } : {}),
+        started_unix_ms: now + clockOffset, elapsed_ms: 180_000,
+        ...(updates === 1 ? { expected_duration_ms: 600_000, remaining_ms: 420_000, duration_source: 'measured_history' } : {}),
         ...(updates >= 2 ? { expected_duration_ms: 120_000, remaining_ms: null, duration_source: 'measured_history' } : {}),
       },
     }))
   })
   render(<EngineFirstRun />)
-  expect(await screen.findByText('CPU expert calibration · 3 min elapsed')).toBeInTheDocument()
+  expect(await screen.findByText('CPU expert calibration · Last reported elapsed: 3 min')).toBeInTheDocument()
   expect(screen.getByText('Completed node 0, FP16 grid')).toBeInTheDocument()
   expect(screen.getByText(/Completion time is unknown for this GPU group/)).toBeInTheDocument()
   expect(screen.queryByText(/remaining, based on/)).not.toBeInTheDocument()
@@ -179,6 +179,23 @@ it('shows measured phase and elapsed time without inventing a first-run completi
   fireEvent.click(screen.getByRole('button', { name: 'Refresh model catalog' }))
   expect(await screen.findByText(/taking longer than the previous full profile; completion time is unknown/)).toBeInTheDocument()
   expect(screen.queryByText(/About 0 min remaining/)).not.toBeInTheDocument()
+})
+
+it('does not derive elapsed or a history estimate from Host timestamps when reported elapsed is absent', async () => {
+  const now = 2_000_000
+  vi.spyOn(Date, 'now').mockReturnValue(now)
+  mocks.command.mockResolvedValue(flow('profiling', {
+    hardware_profile: {
+      status: 'running', phase: 'cpu_experts', started_unix_ms: now - 3_600_000,
+      expected_duration_ms: 600_000, duration_source: 'measured_history',
+    },
+  }))
+  render(<EngineFirstRun />)
+  expect(await screen.findByText('CPU expert calibration')).toBeInTheDocument()
+  expect(screen.queryByText(/Last reported elapsed:/)).not.toBeInTheDocument()
+  expect(screen.getByText(/Completion time is unknown for this GPU group/)).toBeInTheDocument()
+  expect(screen.queryByText(/remaining, based on/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/taking longer than the previous full profile/)).not.toBeInTheDocument()
 })
 
 it('shows pending work before the Host returns initial startup profiles', async () => {

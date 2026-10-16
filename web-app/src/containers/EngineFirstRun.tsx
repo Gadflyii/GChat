@@ -94,9 +94,7 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
   const profiling = step === 'profiling'
   const hardware = flow?.hardware_profile
   const phase = hardware?.phase === 'gpu_experts' ? 'GPU expert calibration' : hardware?.phase === 'cpu_experts' ? 'CPU expert calibration' : hardware?.phase === 'publishing' ? 'Validating and saving hardware profile' : 'Hardware calibration and validation'
-  const elapsed = hardware?.status === 'running' && hardware.started_unix_ms != null
-    ? Math.max(0, Date.now() - hardware.started_unix_ms)
-    : hardware?.elapsed_ms
+  const elapsed = hardware?.elapsed_ms
   const expected = hardware?.status === 'running' && hardware.duration_source === 'measured_history' ? hardware.expected_duration_ms : null
   const remaining = expected != null && elapsed != null && elapsed < expected ? expected - elapsed : null
   const overdue = expected != null && elapsed != null && elapsed >= expected
@@ -115,7 +113,7 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
       {!known.length && <p role="alert">No supported NVIDIA GPUs detected. Check your GPU and CUDA 13.1 driver, or use a network host.</p>}
       <Button disabled={!validGroup} onClick={() => void act({ action: 'profile', gpu_uuids: gpus })}>Use selected GPUs and profile</Button>
     </fieldset>}
-    {profiling && <div className="space-y-3"><p role="status">Hardware profiling: {hardware?.status}</p><p className="text-sm">{phase}{elapsed != null ? ` · ${minutes(elapsed)} elapsed` : ''}</p>
+    {profiling && <div className="space-y-3"><p role="status">Hardware profiling: {hardware?.status}</p><p className="text-sm">{phase}{elapsed != null ? ` · Last reported elapsed: ${minutes(elapsed)}` : ''}</p>
       {hardware?.phase_detail && <p className="text-sm text-muted-foreground">{hardware.phase_detail}</p>}
       <p className="text-sm text-muted-foreground">{remaining != null ? `About ${minutes(remaining)} remaining, based on a previous full profile of this GPU group; CPU resources may differ.` : overdue ? 'Profiling is taking longer than the previous full profile; completion time is unknown.' : 'Completion time is unknown for this GPU group.'} You can close this window or continue choosing storage and models; the Host keeps working.</p>
       <p className="text-sm text-muted-foreground">Choices are saved now. Folder validation, downloads and extraction wait until hardware profiling finishes.</p>

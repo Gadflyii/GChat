@@ -123,8 +123,9 @@ capacity, filesystem identity, writability and supported GPU/model checks still
 apply at admission; a failed choice shows an error and can be corrected. Saving
 a choice does not start a model.
 
-The profiling panel shows elapsed time and the latest phase reported by native
-diagnostics. A prior successful full measurement for the same GPU group can
+The profiling panel shows the Host's last reported elapsed time and the latest
+phase reported by native diagnostics, without comparing Host and GUI clocks.
+A prior successful full measurement for the same GPU group can
 provide a clearly labelled historical estimate. The first measurement has no
 measured ETA; a cache hit or resumed partial job must not become a full-run
 duration sample. Progress never infers a percentage from completed-format counts.
