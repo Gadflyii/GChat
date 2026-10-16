@@ -50,7 +50,7 @@ it('keeps the Host available and reports the reason when normal Stop is refused'
   vi.mocked(engineCommand).mockRejectedValueOnce(new Error('Host is busy: model load in progress'))
   render(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, can_stop_host: true }} />)
   fireEvent.click(screen.getByRole('button', { name: 'Stop Host and Quit' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('model load in progress')
+  expect(await screen.findByText('Error: Host is busy: model load in progress')).toHaveAttribute('role', 'alert')
   expect(screen.getByRole('button', { name: 'Stop Host and Quit' })).toBeEnabled()
   expect(screen.queryByText('Host is stopping. Quitting GChat…')).not.toBeInTheDocument()
   expect(refreshHosts).not.toHaveBeenCalled()
