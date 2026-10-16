@@ -121,6 +121,8 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
     {changedStructured && <p className="text-sm text-muted-foreground">Changing the recorded structured output setting makes this launch custom and unqualified.</p>}
     {selected && <p className="text-sm text-muted-foreground">{selected.entry.profile.qualification.tier === 'full-context-tested'
       ? 'Recorded profile: tested with full-length requests at this concurrency.'
+      : selected.entry.profile.qualification.tier === 'screened-startup'
+        ? 'Screened, not full-context qualified. Startup and short requests were checked; full-context capacity is unverified.'
       : selected.entry.profile.qualification.tier === 'calculated-startup-smoke'
         ? 'Recorded profile: capacity calculated for the full context; startup and concurrent short requests checked. Full-length requests have not been tested.'
         : 'Recorded profile: pending validation; capacity is calculated only. Startup, memory margin and inference are unverified; this profile may fail to load until the required engine support is available.'}</p>}
