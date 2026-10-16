@@ -517,3 +517,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-16** — [Profile the selected artifact before idle format completion](2026-10-16-profile-selected-artifact-before-idle-format-completion.md)
 
 - **2026-10-16** — [Allow personal Microsoft accounts with the release registration](2026-10-16-allow-personal-microsoft-accounts.md)
+- **2026-10-16** — [Guide Google Desktop registration and import client JSON](2026-10-16-guide-google-desktop-registration.md)

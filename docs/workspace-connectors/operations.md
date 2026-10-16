@@ -14,12 +14,61 @@ continues to take precedence. Google still requires its Desktop registration.
 Select the account to use by default. Multiple connected accounts
 can be addressed by their public account IDs; email addresses are not account IDs.
 
-Google needs a Desktop application OAuth client and the selected service APIs
-enabled in that project. The callback uses `http://127.0.0.1:<port>/oauth/callback`
-on a temporary local listener. Enter a registration secret only if required by
-that Desktop client; GChat stores it in the OS vault. Test users, consent status
-and organization policy must admit the account and requested scopes.
-[Google native-app authorization](https://developers.google.com/identity/protocols/oauth2/native-app).
+### Google: register your own Desktop app
+
+Each user supplies their own Google Desktop OAuth client. GChat has no built-in
+Google release identity. Settings provides these steps and imports the downloaded
+JSON, so users do not need to copy a client ID or secret:
+
+1. [Create or select a Google Cloud project](https://console.cloud.google.com/projectcreate).
+2. Enable the [Gmail](https://console.cloud.google.com/apis/library/gmail.googleapis.com),
+   [Calendar](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com),
+   [Drive](https://console.cloud.google.com/apis/library/drive.googleapis.com),
+   [Docs](https://console.cloud.google.com/apis/library/docs.googleapis.com),
+   [Sheets](https://console.cloud.google.com/apis/library/sheets.googleapis.com),
+   [Slides](https://console.cloud.google.com/apis/library/slides.googleapis.com),
+   [Tasks](https://console.cloud.google.com/apis/library/tasks.googleapis.com) and
+   [People](https://console.cloud.google.com/apis/library/people.googleapis.com) APIs
+   in that project.
+3. Open [Google Auth Platform → Branding](https://console.cloud.google.com/auth/branding)
+   to configure the consent screen, then [Audience](https://console.cloud.google.com/auth/audience)
+   and choose **External**. While testing, add your own Google account as a test
+   user. Set the publishing status to **In production** before relying on the
+   connection: External apps left in Testing receive refresh tokens that expire
+   after seven days for these Workspace scopes. Production status removes that
+   testing limit; users can still revoke consent and other token expiry rules
+   still apply.
+4. Open [Clients](https://console.cloud.google.com/auth/clients), create an OAuth
+   client with application type **Desktop app**, and download its client JSON.
+5. In **Settings → Workspace connections → Google**, choose the JSON file.
+   GChat accepts Desktop-client JSON, saves the public ID
+   and stores any registration secret in the existing OS credential vault.
+   Importing another client replaces the registration and requires reconnecting
+   existing Google accounts. Keep the downloaded file private; do not paste it
+   into chat.
+6. Choose services and access, then sign in through the system browser. If Google
+   shows **Google hasn't verified this app**, proceed only if this is the app
+   you just created in your own project and its requested permissions are expected.
+   Expand **Advanced**, choose **Go to your app (unsafe)**, then review permissions
+   and **Continue** when offered. This warning does not override an organization
+   restriction or an access-denied screen. Publishing and verification are separate;
+   making your app public for other users can require Google's verification.
+
+The callback uses `http://127.0.0.1:<port>/oauth/callback` on a temporary local
+listener. Imported authorization and token URLs are ignored; GChat continues to
+use its fixed Google endpoints and PKCE. Import does not sign in or grant access.
+If Google sign-in expires or access is removed, GChat explains that the account
+must be reconnected in **Settings → Workspace connections**. A temporary network,
+throttling or server error does not become a consent-revoked message.
+
+Google documents [project creation](https://developers.google.com/workspace/guides/create-project),
+[API enablement](https://developers.google.com/workspace/guides/enable-apis),
+[consent configuration](https://developers.google.com/workspace/guides/configure-oauth-consent),
+[Desktop credentials](https://developers.google.com/workspace/guides/create-credentials),
+[refresh-token expiry](https://developers.google.com/identity/protocols/oauth2#expiration)
+and [unverified-app warnings](https://developers.google.com/data-manager/api/devguides/concepts/oauth-verification).
+
+### Microsoft: use the release sign-in
 
 For Microsoft, select **Sign in with Microsoft**. The release registration uses
 the `common` tenant and accepts work, school and personal Microsoft accounts,
@@ -76,6 +125,8 @@ temporary localhost port, following Microsoft's loopback-port matching rules.
 and personal Microsoft accounts**. The repository confirms the requested URL
 and audience, but cannot verify the portal's saved redirect configuration.
 No Microsoft client secret is required. Live consent remains Ron's release gate.
+
+### Grants and stored credentials
 
 The provider consent screen controls actual grants. Settings displays the granted
 scopes and reconnect status. Changing registration or expired consent requires
@@ -149,9 +200,10 @@ account/organization portal; GChat does not revoke unrelated application session
 
 ## Acceptance still needed
 
-Registered Google and Microsoft client IDs and user-approved test accounts are
-needed to verify sign-in, refresh, cancellation, reconnect, consent, disconnect
-and a disposable read/write operation on both desktop platforms. Enter credentials
-through Settings and provider consent pages, not chat. Passing focused fixtures
+Ron supplies his own Google Desktop registration and uses the Microsoft release
+identity for live acceptance. User-approved accounts are needed to verify sign-in,
+refresh, cancellation, reconnect, consent, disconnect and a disposable read/write
+operation on both desktop platforms. Import Google credentials through Settings
+and use the provider consent pages, not chat. Passing focused fixtures
 cover request construction, state transitions, shared dispatch and connection UI;
 they do not establish live provider or credential-store qualification.

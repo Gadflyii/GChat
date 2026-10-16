@@ -22,6 +22,7 @@ import {
   connectorAccounts,
   connectorAuthStatus,
   disconnectConnectorAccount,
+  importGoogleDesktopRegistration,
   selectConnectorAccount,
   type BeginConnectorAuthRequest,
   type ConfigureConnectorRequest,
@@ -60,6 +61,201 @@ const serviceNames: Record<string, string> = {
   cloud_pc: 'Windows 365 Cloud PCs',
 }
 const serviceName = (id: string) => serviceNames[id] ?? id
+const googleApis = [
+  ['Gmail API', 'gmail.googleapis.com'],
+  ['Google Calendar API', 'calendar-json.googleapis.com'],
+  ['Google Drive API', 'drive.googleapis.com'],
+  ['Google Docs API', 'docs.googleapis.com'],
+  ['Google Sheets API', 'sheets.googleapis.com'],
+  ['Google Slides API', 'slides.googleapis.com'],
+  ['Google Tasks API', 'tasks.googleapis.com'],
+  ['People API', 'people.googleapis.com'],
+]
+
+function GoogleRegistration({
+  configured,
+  disabled,
+  onImport,
+}: {
+  configured: boolean
+  disabled: boolean
+  onImport: (file: File) => Promise<void>
+}) {
+  const importing = useRef(false)
+  const [reading, setReading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const importFiles = async (files: readonly File[]) => {
+    if (disabled || importing.current) return
+    setError(null)
+    if (files.length !== 1) {
+      setError('Choose one downloaded Google Desktop app JSON file.')
+      return
+    }
+    importing.current = true
+    setReading(true)
+    try {
+      await onImport(files[0])
+    } finally {
+      importing.current = false
+      setReading(false)
+    }
+  }
+  return (
+    <div className="mb-4 space-y-3 text-sm">
+      <p>
+        Google sign-in needs a Desktop app registration in your own Google Cloud
+        project. GChat does not include a shared Google app. You do not need to
+        copy a client ID or secret into GChat.
+      </p>
+      <details open={!configured}>
+        <summary className="cursor-pointer text-foreground">
+          Set up your Google app
+        </summary>
+        <ol className="mt-2 list-decimal space-y-2 pl-5">
+          <li>
+            Create or select a project in{' '}
+            <a
+              href="https://console.cloud.google.com/projectcreate"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Google Cloud Console
+            </a>.
+          </li>
+          <li>
+            In that project, enable the APIs for the services you want:
+            <ul className="mt-1 list-disc pl-5">
+              {googleApis.map(([name, id]) => (
+                <li key={id}>
+                  <a
+                    href={`https://console.cloud.google.com/apis/enableflow;apiid=${id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline"
+                  >
+                    {name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </li>
+          <li>
+            Configure{' '}
+            <a
+              href="https://console.cloud.google.com/auth/branding"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Branding
+            </a>{' '}
+            in Google Auth Platform, then choose External in{' '}
+            <a
+              href="https://console.cloud.google.com/auth/audience"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Audience
+            </a>.
+            While Testing, add your own Google email as a test user. Google’s{' '}
+            <a
+              href="https://developers.google.com/workspace/guides/configure-oauth-consent"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              consent setup guide
+            </a>{' '}
+            explains these settings.
+          </li>
+          <li>
+            Open{' '}
+            <a
+              href="https://console.cloud.google.com/auth/clients"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Clients
+            </a>{' '}
+            → Create client → Desktop app → Create, then download the JSON file,
+            following Google’s{' '}
+            <a
+              href="https://developers.google.com/workspace/gmail/api/quickstart/python#authorize_credentials_for_a_desktop_application"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Desktop app instructions
+            </a>.
+            Import that file below; do not share it.
+          </li>
+          <li>
+            Set the app’s publishing status to In production. With these service
+            permissions,{' '}
+            <a
+              href="https://developers.google.com/identity/protocols/oauth2#expiration"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Testing refresh tokens expire after seven days
+            </a>.
+            Publishing does not itself verify your app.
+          </li>
+          <li>
+            Choose your services below and connect. For your own unverified app,
+            Google may offer Advanced → Go to your app (unsafe). Use that option
+            only for your own project when the displayed app, account and
+            permissions are the ones you expect, then review permissions and
+            select Continue. This does not bypass an organization block; your
+            organization may restrict access or require administrator approval.
+          </li>
+        </ol>
+      </details>
+      <div
+        role="group"
+        aria-label="Google Desktop app JSON import"
+        aria-busy={reading}
+        className="space-y-2 rounded border border-border p-3"
+      >
+        <label className="block">
+          Import Google Desktop app JSON
+          <Input
+            type="file"
+            accept=".json,application/json"
+            disabled={disabled || reading}
+            onChange={(event) => {
+              const files = Array.from(event.target.files ?? [])
+              event.target.value = ''
+              void importFiles(files)
+            }}
+          />
+        </label>
+        <p>Choose one downloaded JSON file, up to 64 KB.</p>
+        <p>
+          The app secret goes directly to your operating system’s credential
+          vault. GChat does not display or keep it in this form.
+        </p>
+        {configured ? (
+          <p>
+            Google registration saved. Importing a different registration requires
+            reconnecting existing accounts.
+          </p>
+        ) : (
+          <p>Import your Desktop app JSON before connecting.</p>
+        )}
+        {error && (
+          <p role="alert" className="text-destructive">
+            {error}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
 
 type ProviderCardProps = {
   provider: ConnectorProvider
@@ -69,6 +265,7 @@ type ProviderCardProps = {
   selectedAccount?: string
   disabled: boolean
   onConfigure: (request: ConfigureConnectorRequest) => Promise<void>
+  onImportGoogle: (file: File) => Promise<void>
   onConnect: (request: BeginConnectorAuthRequest) => Promise<void>
   onSelect: (account: ConnectorAccount) => Promise<void>
   onDisconnect: (account: ConnectorAccount) => void
@@ -82,37 +279,28 @@ function ProviderCard({
   selectedAccount,
   disabled,
   onConfigure,
+  onImportGoogle,
   onConnect,
   onSelect,
   onDisconnect,
 }: ProviderCardProps) {
   const [clientId, setClientId] = useState(config?.client_id ?? '')
   const [tenant, setTenant] = useState(config?.tenant ?? '')
-  const [clearSecret, setClearSecret] = useState(false)
-  const secretInput = useRef<HTMLInputElement>(null)
   const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [access, setAccess] = useState<ConnectorAccess>('read_only')
 
   useEffect(() => {
     setClientId(config?.client_id ?? '')
     setTenant(config?.tenant ?? '')
-    setClearSecret(false)
   }, [config?.client_id, config?.tenant, config?.has_client_secret])
 
   const saveRegistration = async () => {
-    const secret = secretInput.current?.value ?? ''
-    if (secretInput.current) secretInput.current.value = ''
     await onConfigure({
       provider,
       client_id: clientId.trim(),
       ...(provider === 'microsoft' && tenant.trim()
         ? { tenant: tenant.trim() }
         : {}),
-      ...(clearSecret
-        ? { client_secret: '' }
-        : secret
-          ? { client_secret: secret }
-          : {}),
     })
   }
   const requestedScopes = [
@@ -127,13 +315,17 @@ function ProviderCard({
 
   return (
     <Card title={providerNames[provider]}>
-      <details className="mb-4">
-        <summary className="cursor-pointer text-foreground">
-          {provider === 'microsoft'
-            ? 'Advanced: use your organization’s Microsoft app'
-            : 'App registration'}
-        </summary>
-        {provider === 'microsoft' ? (
+      {provider === 'google' ? (
+        <GoogleRegistration
+          configured={Boolean(config?.client_id)}
+          disabled={disabled}
+          onImport={onImportGoogle}
+        />
+      ) : (
+        <details className="mb-4">
+          <summary className="cursor-pointer text-foreground">
+            Advanced: use your organization’s Microsoft app
+          </summary>
           <div className="my-3 space-y-2 text-sm">
             <p>
               Only use this option if your organization has an approved app
@@ -167,81 +359,43 @@ function ProviderCard({
               approval.
             </p>
           </div>
-        ) : (
-          <>
-            <p className="my-2 text-sm">
-              Use your app registration’s client ID. Sign-in opens your system
-              browser.
-            </p>
-            <p className="mb-3 text-sm">
-              Create a Google Desktop app registration.
-            </p>
-          </>
-        )}
-        <form
-          className="space-y-3"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void saveRegistration()
-          }}
-        >
-          <label className="block text-sm">
-            Client ID
-            <Input
-              value={clientId}
-              onChange={(event) => setClientId(event.target.value)}
-              disabled={disabled}
-            />
-          </label>
-          {provider === 'microsoft' && (
+          <form
+            className="space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void saveRegistration()
+            }}
+          >
             <label className="block text-sm">
-              Tenant (optional)
+              Client ID
               <Input
-                value={tenant}
-                onChange={(event) => setTenant(event.target.value)}
+                value={clientId}
+                onChange={(event) => setClientId(event.target.value)}
                 disabled={disabled}
-                placeholder="common"
               />
             </label>
-          )}
-          {provider === 'google' && (
-            <>
+            {provider === 'microsoft' && (
               <label className="block text-sm">
-                App secret (optional)
+                Tenant (optional)
                 <Input
-                  ref={secretInput}
-                  type="password"
-                  autoComplete="off"
-                  disabled={disabled || clearSecret}
+                  value={tenant}
+                  onChange={(event) => setTenant(event.target.value)}
+                  disabled={disabled}
+                  placeholder="common"
                 />
               </label>
-              {config?.has_client_secret && (
-                <label className="flex gap-2 items-center text-sm">
-                  <input
-                    type="checkbox"
-                    checked={clearSecret}
-                    onChange={(event) => setClearSecret(event.target.checked)}
-                    disabled={disabled}
-                  />
-                  Remove the saved app secret
-                </label>
-              )}
-              <p className="text-xs">
-                An app secret is sent directly to the native vault and cleared
-                from this form.
-              </p>
-            </>
-          )}
-          <Button
-            type="submit"
-            variant="outline"
-            size="sm"
-            disabled={disabled || !clientId.trim()}
-          >
-            Save {providerNames[provider]} registration
-          </Button>
-        </form>
-      </details>
+            )}
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              disabled={disabled || !clientId.trim()}
+            >
+              Save {providerNames[provider]} registration
+            </Button>
+          </form>
+        </details>
+      )}
       {provider === 'microsoft' ? (
         <>
           <p className="mb-3 text-sm">
@@ -255,11 +409,7 @@ function ProviderCard({
             depend on your account.
           </p>
         </>
-      ) : !config?.client_id && (
-        <p className="mb-3 text-sm">
-          Save a client ID in App registration before connecting.
-        </p>
-      )}
+      ) : null}
       <fieldset disabled={disabled} className="space-y-3">
         <legend className="mb-2 font-medium text-foreground">
           Services to connect
@@ -676,6 +826,11 @@ export function WorkspaceConnections() {
                 onConfigure={(request) =>
                   perform('Saving registration', async () =>
                     acceptSnapshot(await configureConnector(request))
+                  )
+                }
+                onImportGoogle={(file) =>
+                  perform('Importing Google registration', async () =>
+                    acceptSnapshot(await importGoogleDesktopRegistration(file))
                   )
                 }
                 onConnect={connect}
