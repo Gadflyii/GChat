@@ -251,6 +251,10 @@ pub(crate) fn start_bundled_ginfer_linux<R: Runtime>(
 
 #[cfg(target_os = "linux")]
 fn install_linux_resources_from(resource_directory: &Path, data_folder: &Path) -> std::io::Result<bool> {
+    let catalog_source = resource_directory.join("resources/bin/launch-profiles.json");
+    let catalog = fs::read(&catalog_source)?;
+    ginfer_host::launch_profiles::ProfileCatalog::read(&catalog_source)
+        .map_err(std::io::Error::other)?;
     if let Err(error) = gbot_assets::install(resource_directory, data_folder) {
         // Gbot is opt-in. Preserve ordinary GChat startup; its setup preflight
         // still refuses absent/mismatched data payloads with an actionable issue.
@@ -268,6 +272,11 @@ fn install_linux_resources_from(resource_directory: &Path, data_folder: &Path) -
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&temporary, fs::Permissions::from_mode(0o755))?;
         fs::rename(temporary, host)?;
+    }
+    let installed_catalog = host_directory.join("launch-profiles.json");
+    if fs::read(&installed_catalog).ok().as_deref() != Some(catalog.as_slice()) {
+        ginfer_host::service::write_private(&installed_catalog, &catalog)
+            .map_err(std::io::Error::other)?;
     }
     Ok(changed)
 }
@@ -1349,8 +1358,16 @@ mod tests {
     #[test]
     fn linux_runtime_install_keeps_all_architectures_and_models_across_upgrade() {
         let root = tempdir().unwrap();
-        let source = root.path().join("bundle");
+        let resources = root.path().join("bundle");
+        let source = resources.join("resources/ginfer/linux");
         let data = root.path().join("data");
+        let host_override = data.join("ginfer/host/launch-profiles.json");
+        let hardware_profile = data.join("ginfer/host/hardware-profiles/fixture.json");
+        let host_override_bytes = b"{\"schema\":\"ginfer-launch-profiles-v1\",\"profiles\":[]}\n";
+        let hardware_profile_bytes = b"synthetic measured hardware profile marker\n";
+        fs::create_dir_all(hardware_profile.parent().unwrap()).unwrap();
+        fs::write(&host_override, host_override_bytes).unwrap();
+        fs::write(&hardware_profile, hardware_profile_bytes).unwrap();
         let model = data.join("ginfer/models/model.ginfer");
         fs::create_dir_all(model.parent().unwrap()).unwrap();
         fs::write(&model, "model").unwrap();
@@ -1368,6 +1385,26 @@ mod tests {
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             fs::write(path, contents).unwrap();
         }
+        let resource_bin = resources.join("resources/bin");
+        fs::create_dir_all(&resource_bin).unwrap();
+        fs::write(resource_bin.join("ginfer-host"), "host-v1").unwrap();
+        let catalog_source = resource_bin.join("launch-profiles.json");
+        let mut catalog = serde_json::json!({
+            "schema":"ginfer-launch-profiles-v1", "profiles":[{
+                "id":"fixture-c1", "name":"Synthetic test only", "platform":"linux",
+                "identity":{"model_id":"muse-glimmer-30b", "weights_id":"nvfp4"},
+                "artifact_sha256":"a".repeat(64), "artifact_bytes":4096,
+                "tp":1, "draft_tp":0, "gpu_name":"Fixture GPU",
+                "compute_capability":"12.0", "vram_tier_gib":32,
+                "min_memory_mib_per_gpu":32000, "max_context":65536, "concurrency":1,
+                "options":ginfer_host::engine_host::LaunchOptions::default(),
+                "qualification":{"tier":"full-context-tested", "evidence":"synthetic test only",
+                    "engine_revision":"fixture", "free_bytes_per_gpu":1073741824u64,
+                    "full_context_requests":1}
+            }]
+        });
+        fs::write(&catalog_source, serde_json::to_vec(&catalog).unwrap()).unwrap();
+        let installed_catalog = data.join("ginfer/bin/launch-profiles.json");
         let create_bundle = |version: &str| {
             fs::create_dir_all(&source).unwrap();
             fs::write(source.join("runtime-set.json"), serde_json::to_vec(&serde_json::json!({
@@ -1396,14 +1433,35 @@ mod tests {
             }
         };
         create_bundle("version-one");
-        assert!(install_linux_runtimes_from(&source, &data).unwrap());
-        assert!(!install_linux_runtimes_from(&source, &data).unwrap());
+        assert!(install_linux_resources_from(&resources, &data).unwrap());
+        assert_eq!(fs::read(&installed_catalog).unwrap(), fs::read(&catalog_source).unwrap());
+        assert_eq!(ginfer_host::launch_profiles::ProfileCatalog::read(&installed_catalog).unwrap().len(), 1);
+        assert!(!install_linux_resources_from(&resources, &data).unwrap());
+        catalog["profiles"][0]["name"] = "Updated synthetic test only".into();
+        fs::write(&catalog_source, serde_json::to_vec(&catalog).unwrap()).unwrap();
+        assert!(!install_linux_resources_from(&resources, &data).unwrap());
+        assert_eq!(fs::read(&installed_catalog).unwrap(), fs::read(&catalog_source).unwrap());
+        assert_eq!(fs::read_to_string(data.join("ginfer/bin/ginfer-host")).unwrap(), "host-v1");
+        let valid_catalog = fs::read(&installed_catalog).unwrap();
+        fs::write(&catalog_source, b"{broken").unwrap();
+        assert!(install_linux_resources_from(&resources, &data).is_err());
+        assert_eq!(fs::read(&installed_catalog).unwrap(), valid_catalog);
+        fs::remove_file(&catalog_source).unwrap();
+        assert!(install_linux_resources_from(&resources, &data).is_err());
+        assert_eq!(fs::read(&installed_catalog).unwrap(), valid_catalog);
+        fs::write(&catalog_source, valid_catalog).unwrap();
+        let empty_catalog = b"{\"schema\":\"ginfer-launch-profiles-v1\",\"profiles\":[]}";
+        fs::write(&catalog_source, empty_catalog).unwrap();
+        assert!(!install_linux_resources_from(&resources, &data).unwrap());
+        assert_eq!(fs::read(&installed_catalog).unwrap(), empty_catalog);
+        assert_eq!(ginfer_host::launch_profiles::ProfileCatalog::read(&installed_catalog).unwrap().len(), 0);
+        assert_eq!(fs::read_to_string(data.join("ginfer/bin/ginfer-host")).unwrap(), "host-v1");
         create_bundle("version-two");
         fs::write(source.join("sm86/bin/ginfer-serve"), "corrupt").unwrap();
-        assert!(install_linux_runtimes_from(&source, &data).is_err());
+        assert!(install_linux_resources_from(&resources, &data).is_err());
         assert_eq!(fs::read_to_string(data.join("ginfer/linux/sm86/bin/ginfer-serve")).unwrap(), "sm86-version-one");
         create_bundle("version-two");
-        assert!(install_linux_runtimes_from(&source, &data).unwrap());
+        assert!(install_linux_resources_from(&resources, &data).unwrap());
         for (_, directory, _) in LINUX_RUNTIME_ARCHITECTURES {
             assert_eq!(fs::read_to_string(data.join("ginfer/linux").join(directory).join("bin/ginfer-serve")).unwrap(), format!("{directory}-version-two"));
         }
@@ -1414,5 +1472,7 @@ mod tests {
                 contents
             );
         }
+        assert_eq!(fs::read(&host_override).unwrap(), host_override_bytes);
+        assert_eq!(fs::read(&hardware_profile).unwrap(), hardware_profile_bytes);
     }
 }
