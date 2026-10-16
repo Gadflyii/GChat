@@ -1,10 +1,12 @@
 # GBench Standard and Max Perf
 
 Standard Benchmark uses one fresh resident server unchanged across C1, C4 and C8.
-Each point sends 2,048 input tokens and generates exactly 500 output IDs, with one
-warmup and one measured wave. The server has TP1, 8,181 context and capacity 8;
-graphs and prefix reuse stay enabled. The 131K/C8 workload is internal capacity
-evidence and is not Standard Benchmark.
+Each wave sends 2,048 input tokens and generates exactly 500 output IDs per lane.
+Native v2 runs one warmup and one measured wave in each of its cold-prefill and
+warm-generation phases; stored v1 runs have one pair per point. The server has
+TP1, 8,181 context and capacity 8; graphs stay enabled. The cold phase disables
+prefix reuse, and the warm phase enables it. The 131K/C8 workload is internal
+capacity evidence and is not Standard Benchmark.
 
 ## Max Perf launch policy
 
@@ -52,16 +54,39 @@ waves; it is an effective per-request rate, not an aggregate physical compute ra
 Cached TTFT is a separate mean over warm measured waves. Missing individual lane timers
 or incomplete cache observations leave the corresponding warm metric unavailable.
 TG uses committed exact-concurrency decode tokens/time from measured warm generation;
-the first prefill token is excluded. Warmup waves are retained as evidence, never scored.
+the first prefill token is excluded. Local v2 scores exclude warmup waves.
 The obsolete live v1 PP field is null; it is not an alias for warm v2 prefill.
 
 Persisted/user v1 runs retain historical rendering and their external v1 submission
-contract. Native v2 cannot be converted or submitted to the public v1 board. The next
-unresolved product decision is the public site's report/scoring contract for v2, including
-its metric meanings; this task does not select a conversion, change the site or publish.
+contract. On October 16 Bubbs approved this legacy projection for native v2 into
+the unchanged `gbench-submission-v1` contract:
+
+| Public field | Native v2 source |
+| --- | --- |
+| `methodology` | Literal `ginfer-resident-max-perf-v1`, identifying the public scoring view; the stored local result remains v2. |
+| `configuration.engine_build` | The original native engine build, unchanged. |
+| `points[].warmup` | `cold_prefill.warmup[0]`, never the measured cold wave. |
+| `points[].measured` | `warm_generation.measured[0]`, never a merged or synthesized wave. |
+
+All ten public wave fields retain their original counters and timers. Hardware,
+configuration and identity keep the existing public whitelist. No phase details,
+extra native metrics or private session fields enter the payload. The projection
+requires complete C1/C4/C8 Standard results with matching Max Perf sessions and
+one warmup/measured wave in both native phases; a malformed or mixed-version
+result is refused.
+
+The site keeps computing Cold PP from the projected warmup's computed tokens and
+compute duration, historical PP from logical input and measured mean TTFT, and
+TG from the measured wave's committed decode tokens and duration. These are v1
+scores, not aliases for local v2 measured-cold or warm-prefill scores. The native
+v2 phases and local metrics remain unchanged. No site, signing or upload change
+is needed for this projection.
+
 The separate MTP whitelist/upload blocker is closed: the site now admits `mtp`,
 and Bubbs confirmed Ron uploaded the correction on October 15. This does not
-qualify a live submission. Publishing remains disabled.
+qualify a live submission. `GBENCH_PUBLISHING_ENABLED=false` still prevents native
+submission and ownership writes. The first live submission remains Ron's gate.
+[Projection decision](../decisions/2026-10-16-project-native-v2-into-public-v1.md).
 
 The native-v2 implementation is merged in GChat main `ca4346ba2`. Its accepted
 focused gate passed eight owning Rust cases, strict library Clippy, 34 affected
@@ -111,8 +136,8 @@ acceptance record `d1b7325f1` are ancestors of reviewed main `1825d964e`.
 The retained focused gates below qualify that implementation; no fresh physical
 benchmark or performance result is claimed. The later saved native-v2 C4 report
 gate also verifies rejection of its Vision-off configuration against the
-Vision-on Max Perf policy. Public native-v2 schema/scoring remains a separate
-site-owner decision.
+Vision-on Max Perf policy. The approved public legacy projection is described
+above; it does not qualify a physical run or live submission.
 
 On October 11 the focused CPU gate passed eight Rust cases and twenty frontend
 cases: four-class selection, launch argv/restart/persistence, stale-session and
