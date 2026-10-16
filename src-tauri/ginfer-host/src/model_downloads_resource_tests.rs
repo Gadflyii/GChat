@@ -267,7 +267,15 @@ fn cancelled_resume_still_starts_its_durably_admitted_transfer() {
             let id = insert(&manager, release).await;
             std::fs::write(manager.root().join(format!("{id}.part")), &bytes).unwrap();
             manager.action(id, "pause").await.unwrap();
+            let (release_preflight, hold_preflight) = std::sync::mpsc::channel();
+            let (preflight_started, preflight_ready) = tokio::sync::oneshot::channel();
+            let preflight_blocker = tokio::task::spawn_blocking(move || {
+                preflight_started.send(()).unwrap();
+                hold_preflight.recv_timeout(Duration::from_secs(5)).unwrap();
+            });
+            preflight_ready.await.unwrap();
             let mut resume = Box::pin(manager.action(id, "resume"));
+            // Queue storage preflight behind the occupied blocking worker.
             futures_util::future::poll_fn(|cx| {
                 assert!(matches!(resume.as_mut().poll(cx), Poll::Pending));
                 Poll::Ready(())
@@ -278,11 +286,15 @@ fn cancelled_resume_still_starts_its_durably_admitted_transfer() {
                 started.send(()).unwrap();
                 blocked.recv_timeout(Duration::from_secs(5)).unwrap();
             });
+            // The second blocker runs after preflight, before journal persistence.
+            release_preflight.send(()).unwrap();
+            preflight_blocker.await.unwrap();
             ready.await.unwrap();
             futures_util::future::poll_fn(|cx| {
                 assert!(matches!(resume.as_mut().poll(cx), Poll::Pending));
                 Poll::Ready(())
             }).await;
+            assert!(manager.pending_journal.load(Ordering::SeqCst));
             drop(resume);
             unblock.send(()).unwrap();
             blocker.await.unwrap();
