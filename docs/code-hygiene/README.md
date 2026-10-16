@@ -267,6 +267,26 @@ Own processes and
 private state are retired; accepted binaries remain. No rebuild/model/GPU run.
 Evidence: `/ai/gchat/out/oi119-native-idle-20261013/result.json`.
 
+## WINDOWS-IDLE-CPU — incomplete first-run maintenance (gate pending)
+
+The private, model-free Windows Host trace at `dcb11c14cd98ae594d56531782469247d47acce9`
+records **14.3383% of one core** and **30 × 30,303,018 bytes** read in
+**29.9679143 s** (31 endpoints). An incomplete setup with GPU selection kept the
+one-second monitor active; each maintenance call read and parsed the full
+hardware profile while waiting for model choice. The candidate predicate keeps
+maintenance active for automatic work, admitted downloads and pending startup
+quotes, and waits for an explicit action at input/error/approval boundaries.
+Durable download admission wakes the parked monitor even when its HTTP caller
+is canceled; transfer-progress writes do not add wakeups. Regressions cover
+ordinary Models Resume and cancellation during journal publication.
+The counters corroborate this source path without a file-path or stack trace;
+logical read bytes do not establish physical disk throughput. Capture recovery
+and forced Host cleanup remain recorded. There is **no post-fix physical sample
+or measured improvement claim**. Saved OI-119 Linux/WSLg evidence (Host 0%,
+Manager family 0.133307% of one core over 30.005842534 s, zero models/profiles)
+is an unmatched source/workload comparison. [Result — pending gate](/ai/gchat/out/windows-idle-cpu-20261016/result.json);
+recovered trace and limitations are in `/ai/gchat/out/windows-idle-cpu-20261016/`.
+
 ## Accepted OI-116 and OI-118 lifecycle review
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.

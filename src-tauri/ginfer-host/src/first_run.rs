@@ -84,8 +84,8 @@ fn needs_maintenance(progress: &Progress, jobs: &[Download]) -> bool {
     if !progress.storage_accepted {
         return progress.requested_storage.is_some() && progress.storage_error.is_none();
     }
-    // Downloads do not notify the Host monitor when their state changes. Keep
-    // its timer until admitted work settles, then wait for an explicit action.
+    // Download progress and terminal states do not notify the Host monitor.
+    // Keep its timer until admitted work settles, then wait for an explicit action.
     if jobs.iter().any(|job| {
         progress.download_ids.contains(&job.id)
             && matches!(

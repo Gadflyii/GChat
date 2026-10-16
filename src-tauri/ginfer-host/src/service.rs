@@ -373,7 +373,7 @@ impl Host {
         processes.hardware_profile.as_ref().unwrap()
             .set_activity_notification(process_activity.clone());
         let draft_width = crate::draft_width::DraftWidths::open(
-            &directory, revision.clone(), process_activity)?;
+            &directory, revision.clone(), process_activity.clone())?;
         let downloads = match desktop_provider {
             Some(provider) => crate::model_downloads::ModelDownloads::open_local(
                 provider.join("models"),
@@ -384,6 +384,7 @@ impl Host {
                 directory.join("model-downloads.json"),
             )?,
         };
+        downloads.set_activity_notification(process_activity);
         if let Some(root) = &data.managed_model_root {
             std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
             downloads.set_root(root.canonicalize().map_err(|e| e.to_string())?);
@@ -2631,6 +2632,141 @@ mod target_launch_tests {
             options: LaunchOptions::default(),
         };
         (dir, host, request)
+    }
+
+    #[tokio::test]
+    async fn ordinary_download_resume_wakes_parked_first_run_maintenance() {
+        use sha2::Digest;
+
+        let (dir, host, _) = installed_flash("groupwise-int", false).await;
+        let artifact = std::fs::read(&host.inventory.read().await[0].path).unwrap();
+        let sha256 = hex::encode(Sha256::digest(&artifact));
+        let root = host.downloads.root();
+        let id = Uuid::new_v4();
+        let release = crate::model_downloads::Release {
+            name: "Paused first-run fixture".into(),
+            identity: host.inventory.read().await[0].metadata.identity.clone(),
+            url: format!(
+                "https://huggingface.co/SectileLabs/fixture/resolve/{}/model.ginfer",
+                "a".repeat(40)
+            ),
+            sha256: sha256.clone(),
+            bytes: artifact.len() as u64,
+            tp: 1,
+            qualified_sm: vec!["12.0".into()],
+            min_vram_mib_per_gpu: 1,
+            capabilities: vec![],
+            launch_profiles: vec![],
+        };
+        release.validate().unwrap();
+        // Resume verifies this complete package locally; the test never needs
+        // a network transfer, and installed work still needs its startup quote.
+        let package = root.join(format!("{sha256}.ginfer"));
+        std::fs::write(&package, &artifact).unwrap();
+        let download = crate::model_downloads::Download {
+            id,
+            release,
+            status: "paused".into(),
+            received: artifact.len() as u64,
+            bytes_per_second: 0,
+            error: None,
+            path: None,
+            storage_root: root,
+        };
+        std::fs::write(
+            host.directory.join("model-downloads.json"),
+            serde_json::to_vec(&BTreeMap::from([(id, download)])).unwrap(),
+        )
+        .unwrap();
+        host.data.lock().await.first_run = crate::first_run::Progress {
+            gpu_uuids: vec!["GPU-test".into()],
+            storage_accepted: true,
+            catalog_loaded: true,
+            selected_release_ids: vec![sha256],
+            download_ids: vec![id],
+            ..Default::default()
+        };
+        host.save().await.unwrap();
+        drop(host);
+        let host = Host::open(
+            dir.path().join("state"),
+            "Resume fixture".into(),
+            std::env::current_exe().unwrap(),
+            vec![dir.path().join("models")],
+            vec![],
+            vec![Gpu {
+                uuid: "GPU-test".into(),
+                name: "Test".into(),
+                display_name: None,
+                memory_mib: 32768,
+                compute_capability: Some("12.0".into()),
+            }],
+        )
+        .await
+        .unwrap();
+        assert!(!host.processes.lock().await.needs_monitoring());
+        assert!(
+            !host.first_run_pending().await,
+            "A paused download must let the monitor park"
+        );
+        let activity = host.processes.lock().await.activity_notification();
+        let notified = activity.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        assert!(matches!(
+            futures_util::poll!(notified.as_mut()),
+            std::task::Poll::Pending
+        ));
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let request = |action| {
+            Request::post("/host/v1/download-actions")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(
+                    serde_json::json!({"id":id,"action":action}).to_string(),
+                ))
+                .unwrap()
+        };
+        let rejected = host.clone().route(request("invalid")).await.unwrap();
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            matches!(
+                futures_util::poll!(notified.as_mut()),
+                std::task::Poll::Pending
+            ),
+            "Rejected actions must not wake the parked monitor"
+        );
+
+        let response = host.clone().route(request("resume")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            matches!(
+                futures_util::poll!(notified.as_mut()),
+                std::task::Poll::Ready(())
+            ),
+            "Ordinary Resume must wake the already-parked monitor"
+        );
+        assert!(
+            host.first_run_pending().await,
+            "Resumed work must restore maintenance ticks"
+        );
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let jobs = host.downloads.list().await;
+                assert_ne!(jobs[0].status, "failed", "{:?}", jobs[0].error);
+                if jobs[0].status == "installed" {
+                    assert_eq!(jobs[0].path.as_ref(), Some(&package));
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(
+            host.first_run_pending().await,
+            "Installation must keep the pending startup quote awake"
+        );
+        assert!(!host.processes.lock().await.has_children());
     }
 
     #[tokio::test]

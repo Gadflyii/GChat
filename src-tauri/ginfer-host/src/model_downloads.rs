@@ -14,7 +14,7 @@ use std::{
 };
 use tokio::{
     io::AsyncWriteExt,
-    sync::{Mutex, OwnedMutexGuard, Semaphore},
+    sync::{Mutex, Notify, OwnedMutexGuard, Semaphore},
 };
 use uuid::Uuid;
 
@@ -160,6 +160,7 @@ pub struct ModelDownloads {
     state_path: PathBuf,
     jobs: Arc<Mutex<BTreeMap<Uuid, Download>>>,
     pending_journal: Arc<AtomicBool>,
+    activity: std::sync::Mutex<Option<Arc<Notify>>>,
     serial: Arc<Semaphore>,
     local_layout: bool,
 }
@@ -228,6 +229,7 @@ impl ModelDownloads {
             state_path,
             jobs: Arc::new(Mutex::new(jobs)),
             pending_journal: Arc::new(AtomicBool::new(false)),
+            activity: std::sync::Mutex::new(None),
             serial: Arc::new(Semaphore::new(1)),
             local_layout,
         });
@@ -244,6 +246,9 @@ impl ModelDownloads {
     }
     pub fn set_root(&self, root: PathBuf) {
         *self.root.write().unwrap() = root;
+    }
+    pub(crate) fn set_activity_notification(&self, activity: Arc<Notify>) {
+        *self.activity.lock().unwrap() = Some(activity);
     }
     // The journal worker owns the jobs guard through serialization, fsync and
     // atomic publication. No newer transition can overtake this durable write,
@@ -267,6 +272,9 @@ impl ModelDownloads {
                 // HTTP caller disappears while its journal is being written.
                 if let Some((manager, id)) = start_after_commit {
                     manager.spawn(id);
+                    if let Some(activity) = manager.activity.lock().unwrap().as_ref() {
+                        activity.notify_one();
+                    }
                 }
             } else if rollback_enqueue {
                 if let Some((_, id)) = start_after_commit {
@@ -2344,6 +2352,80 @@ time.sleep(60)
                     assert!(!partial.exists());
                     assert!(manager.list().await[0].error.is_none());
                 }
+            });
+    }
+
+    #[test]
+    fn cancelled_admission_caller_still_wakes_maintenance_and_installs() {
+        use std::{future::Future, task::Poll};
+
+        tokio::runtime::Builder::new_current_thread().enable_all().max_blocking_threads(1)
+            .build().unwrap().block_on(async {
+                let directory = tempfile::tempdir().unwrap();
+                let (manager, original, bytes) = seed_installed_move(directory.path(), false).await;
+                let activity = Arc::new(Notify::new());
+                manager.set_activity_notification(activity.clone());
+                let mut jobs = manager.jobs.clone().lock_owned().await;
+                let job = jobs.get_mut(&original.id).unwrap();
+                job.status = "paused".into();
+                job.path = None;
+                manager.save(jobs).await.unwrap();
+                let notified = activity.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                assert!(matches!(futures_util::poll!(notified.as_mut()), Poll::Pending),
+                    "Journal-only writes must not wake maintenance");
+                assert!(manager.action(original.id, "pause").await.is_err());
+                assert!(matches!(futures_util::poll!(notified.as_mut()), Poll::Pending),
+                    "Rejected actions must not wake maintenance");
+
+                // Queue the actual durable Resume commit behind the only
+                // blocking worker, then drop its caller before publication.
+                let (unblock, blocked) = std::sync::mpsc::channel();
+                let (started, ready) = tokio::sync::oneshot::channel();
+                let blocker = tokio::task::spawn_blocking(move || {
+                    let _ = started.send(());
+                    let _ = blocked.recv();
+                });
+                ready.await.unwrap();
+                let mut jobs = manager.jobs.clone().lock_owned().await;
+                jobs.get_mut(&original.id).unwrap().status = "queued".into();
+                let mut admission = Box::pin(manager.persist(
+                    jobs, Some((manager.clone(), original.id)), false));
+                futures_util::future::poll_fn(|cx| {
+                    assert!(matches!(admission.as_mut().poll(cx), Poll::Pending));
+                    Poll::Ready(())
+                }).await;
+                drop(admission);
+                assert!(manager.pending_journal.load(Ordering::SeqCst));
+                assert!(manager.jobs.try_lock().is_err(), "The queued commit must retain admission ownership");
+                let saved: BTreeMap<Uuid, Download> = serde_json::from_slice(
+                    &std::fs::read(&manager.state_path).unwrap()).unwrap();
+                assert_eq!(saved[&original.id].status, "paused");
+                assert!(matches!(futures_util::poll!(notified.as_mut()), Poll::Pending));
+
+                unblock.send(()).unwrap();
+                blocker.await.unwrap();
+                tokio::time::timeout(Duration::from_secs(5), notified).await.unwrap();
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    loop {
+                        let job = manager.list().await.remove(0);
+                        assert_ne!(job.status, "failed", "{:?}", job.error);
+                        if job.status == "installed" {
+                            assert_eq!(job.path, original.path);
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                }).await.unwrap();
+                assert_eq!(std::fs::read(original.path.as_ref().unwrap()).unwrap(), bytes);
+                let saved: BTreeMap<Uuid, Download> = serde_json::from_slice(
+                    &std::fs::read(&manager.state_path).unwrap()).unwrap();
+                assert_eq!(saved[&original.id].status, "installed");
+                let extra = activity.notified();
+                tokio::pin!(extra);
+                assert!(matches!(futures_util::poll!(extra.as_mut()), Poll::Pending),
+                    "Transfer progress writes must not add maintenance wakeups");
             });
     }
 
