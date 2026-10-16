@@ -1526,7 +1526,7 @@ mod tests {
         );
         assert_eq!(
             service.begin_operation(&exec(identity)).await,
-            Err(ServiceError::SessionMismatch)
+            Err(ServiceError::Contract(ContractError::SessionMismatch))
         );
     }
 
