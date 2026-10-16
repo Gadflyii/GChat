@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-16** — [Hand off the owned Host during an App Data move](2026-10-16-handoff-owned-host-during-app-data-move.md)
+
 - **2026-10-16** — [Stop the owned idle Windows desktop Host normally](2026-10-16-stop-owned-idle-windows-desktop-host.md)
 
 - **2026-10-16** — [Bind managed Host identity and ports to its data root](2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)

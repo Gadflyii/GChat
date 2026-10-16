@@ -13,7 +13,7 @@ import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useThreadNotifications } from '@/hooks/useThreadNotifications'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import ChangeDataFolderLocation from '@/containers/dialogs/ChangeDataFolderLocation'
 import { FactoryResetDialog } from '@/containers/dialogs'
 import { useServiceHub } from '@/hooks/useServiceHub'
@@ -28,7 +28,6 @@ import {
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { isDev } from '@/lib/utils'
-import { SystemEvent } from '@/types/events'
 import { Input } from '@/components/ui/input'
 import { useHardware } from '@/hooks/useHardware'
 import LanguageSwitcher from '@/containers/LanguageSwitcher'
@@ -81,6 +80,8 @@ function General() {
   const [isCopied, setIsCopied] = useState(false)
   const [selectedNewPath, setSelectedNewPath] = useState<string | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isRelocatingData, setIsRelocatingData] = useState(false)
+  const relocatingData = useRef(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isValidatingToken, setIsValidatingToken] = useState(false)
   const [cliInstalled, setCliInstalled] = useState<boolean | null>(null)
@@ -195,6 +196,7 @@ function General() {
   }
 
   const handleDataFolderChange = async () => {
+    if (relocatingData.current) return
     const selectedPath = await serviceHub.dialog().open({
       multiple: false,
       directory: true,
@@ -209,38 +211,42 @@ function General() {
   }
 
   const confirmDataFolderChange = async () => {
-    if (selectedNewPath) {
+    if (!selectedNewPath || relocatingData.current) return
+    relocatingData.current = true
+    setIsRelocatingData(true)
+    try {
+      if (isRootDir(selectedNewPath))
+        throw new Error(t('settings:general.couldNotRelocateToRoot'))
+      // Native code refuses a busy Host before moving data and owns the full
+      // configuration/Host cutover. Keep this path until that transaction commits.
+      await serviceHub.app().relocateGchatDataFolder(selectedNewPath)
+      setJanDataFolder(selectedNewPath)
+      setSelectedNewPath(null)
+      setIsDialogOpen(false)
+      window.core?.api?.relaunch()
+    } catch (error) {
+      console.error('Failed to relocate data folder:', error)
+      // A restart failure can follow a committed move. Read the saved path so
+      // this page reflects that cutover without hiding the original refusal.
       try {
-        await serviceHub.models().stopAllModels()
-        serviceHub.events().emit(SystemEvent.KILL_SIDECAR)
-        setTimeout(async () => {
-          try {
-            // Prevent relocating to root directory (e.g., C:\ or D:\ on Windows, / on Unix)
-            if (isRootDir(selectedNewPath))
-              throw new Error(t('settings:general.couldNotRelocateToRoot'))
-            await serviceHub.app().relocateGchatDataFolder(selectedNewPath)
-            setJanDataFolder(selectedNewPath)
-            // Only relaunch if relocation was successful
-            window.core?.api?.relaunch()
-            setSelectedNewPath(null)
-            setIsDialogOpen(false)
-          } catch (error) {
-            console.error(error)
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : t('settings:general.failedToRelocateDataFolder')
-            )
-          }
-        }, 1000)
-      } catch (error) {
-        console.error('Failed to relocate data folder:', error)
-        // Revert the data folder path on error
-        const originalPath = await serviceHub.app().getGchatDataFolder()
-        setJanDataFolder(originalPath)
-
-        toast.error(t('settings:general.failedToRelocateDataFolderDesc'))
+        const savedPath = await serviceHub.app().getGchatDataFolder()
+        if (savedPath) setJanDataFolder(savedPath)
+      } catch (refreshError) {
+        console.error(
+          'Failed to refresh data folder after relocation:',
+          refreshError
+        )
       }
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string' && error
+            ? error
+            : t('settings:general.failedToRelocateDataFolder')
+      )
+    } finally {
+      relocatingData.current = false
+      setIsRelocatingData(false)
     }
   }
 
@@ -469,6 +475,7 @@ function General() {
                       size="sm"
                       title={t('settings:dataFolder.appData')}
                       onClick={handleDataFolderChange}
+                      disabled={isRelocatingData}
                     >
                       <IconFolder size={12} className="text-muted-foreground" />
                       <span>{t('settings:general.changeLocation')}</span>
@@ -478,8 +485,10 @@ function General() {
                         currentPath={janDataFolder || ''}
                         newPath={selectedNewPath}
                         onConfirm={confirmDataFolderChange}
+                        pending={isRelocatingData}
                         open={isDialogOpen}
                         onOpenChange={(open) => {
+                          if (relocatingData.current) return
                           setIsDialogOpen(open)
                           if (!open) {
                             setSelectedNewPath(null)

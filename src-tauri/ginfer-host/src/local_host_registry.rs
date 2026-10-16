@@ -162,6 +162,28 @@ async fn refresh_connected(local: Box<LocalHost>) -> Result<(), String> {
     }).await.map_err(|e| e.to_string())?
 }
 
+fn relocate(path: &Path, previous: &Path, updated: LocalHost) -> Result<bool, String> {
+    updated.validate()?;
+    if !path.try_exists().map_err(|e| e.to_string())? { return Ok(false); }
+    let parent = path.parent().ok_or("local host locator has no parent")?;
+    // Never create or replace the registration lock during a move. In particular,
+    // a concurrent installation keeps both its locator and its ownership.
+    let lock = OpenOptions::new().read(true).write(true).open(parent.join("local-host.lock"))
+        .map_err(|e| e.to_string())?;
+    lock.try_lock().map_err(|e| format!("Local Host registration is changing; data folder move was refused: {e}"))?;
+    let Some(Owner::Desktop(current)) = read(path)? else { return Ok(false); };
+    if !same_directory(&current.directory, previous) { return Ok(false); }
+    write(path, Owner::Desktop(Box::new(updated)))?;
+    Ok(true)
+}
+
+/// Publish a relocation only while discovery still names the relocated owner.
+/// This synchronous, nonblocking compare-and-switch cannot outlive cancellation
+/// of the caller's move transaction in a detached blocking task.
+pub(crate) fn relocate_if_current(previous: &Path, updated: LocalHost) -> Result<bool, String> {
+    relocate(&locator_path()?, previous, updated)
+}
+
 pub async fn resolve(seed: Option<Owner>) -> Result<Owner, String> {
     let path = locator_path()?;
     tokio::task::spawn_blocking(move || select(&path, seed)).await.map_err(|error| error.to_string())?
@@ -200,6 +222,48 @@ mod tests {
         let Owner::Desktop(reopened) = select(&path, Some(Owner::Desktop(Box::new(local)))).unwrap() else { panic!("desktop owner expected"); };
         assert_eq!(reopened.listen.port(), 17445);
         assert_eq!(reopened.directory, directory);
+    }
+
+    #[test]
+    fn relocation_updates_only_the_registered_source_and_preserves_concurrent_owners() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config/local-host.json");
+        let owner = |provider: &Path| LocalHost {
+            binary: std::env::current_exe().unwrap(), engine: std::env::current_exe().unwrap(),
+            engine_runtimes: Default::default(), directory: provider.join("host"),
+            desktop_provider: Some(provider.into()), models: vec![], artifact_sets: vec![],
+            name: "Relocation fixture".into(), nvidia_smi: "unused".into(),
+            listen: "127.0.0.1:1".parse().unwrap(),
+        };
+        let original = owner(&root.path().join("original"));
+        let relocated = owner(&root.path().join("relocated"));
+        let foreign = owner(&root.path().join("foreign"));
+        assert!(!relocate(&path, &original.directory, relocated.clone()).unwrap());
+        assert!(!path.exists());
+
+        select(&path, Some(Owner::Desktop(Box::new(original.clone())))).unwrap();
+        let lock_path = path.with_file_name("local-host.lock");
+        let lock = OpenOptions::new().read(true).write(true).open(&lock_path).unwrap();
+        lock.lock().unwrap();
+        assert!(relocate(&path, &original.directory, relocated.clone()).unwrap_err().contains("registration is changing"));
+        assert_eq!(read(&path).unwrap().unwrap().directory(), original.directory);
+        drop(lock);
+        assert!(relocate(&path, &original.directory, relocated.clone()).unwrap());
+        assert_eq!(read(&path).unwrap().unwrap().directory(), relocated.directory);
+
+        select(&path, Some(Owner::Desktop(Box::new(foreign.clone())))).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert!(!relocate(&path, &original.directory, relocated.clone()).unwrap());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(read(&path).unwrap().unwrap().directory(), foreign.directory);
+
+        let service_path = root.path().join("service-config/local-host.json");
+        select(&service_path, Some(Owner::Service {
+            directory: original.directory.clone(), origin: "https://127.0.0.1:1".into(),
+        })).unwrap();
+        let before = std::fs::read(&service_path).unwrap();
+        assert!(!relocate(&service_path, &original.directory, relocated).unwrap());
+        assert_eq!(std::fs::read(&service_path).unwrap(), before);
     }
 
     #[test]

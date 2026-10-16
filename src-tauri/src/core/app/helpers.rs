@@ -5,6 +5,7 @@ pub fn copy_dir_recursive(
     src: &PathBuf,
     dst: &PathBuf,
     exclude_dirs: &[&str],
+    exclude_files: &[PathBuf],
 ) -> Result<(), io::Error> {
     if !dst.exists() {
         fs::create_dir_all(dst)?;
@@ -16,6 +17,10 @@ pub fn copy_dir_recursive(
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
 
+        if exclude_files.contains(&src_path) {
+            continue;
+        }
+
         if let Some(name) = entry.file_name().to_str() {
             if exclude_dirs.contains(&name) {
                 continue;
@@ -25,7 +30,7 @@ pub fn copy_dir_recursive(
         let is_dir = file_type.is_dir() || (file_type.is_symlink() && src_path.is_dir());
 
         if is_dir {
-            copy_dir_recursive(&src_path, &dst_path, exclude_dirs)?;
+            copy_dir_recursive(&src_path, &dst_path, exclude_dirs, exclude_files)?;
         } else if file_type.is_file() || file_type.is_symlink() {
             fs::copy(&src_path, &dst_path)?;
         } else {

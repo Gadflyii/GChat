@@ -159,6 +159,8 @@ struct Document {
     #[serde(default)]
     fleet_snapshot: Option<crate::fleet::FleetSnapshot>,
 }
+type LocalOwnerSelection = (Option<PathBuf>, Option<crate::local_host_registry::Owner>);
+
 pub struct Client {
     state: Mutex<ClientState>,
     credentials: Arc<dyn CredentialStore>,
@@ -166,10 +168,84 @@ pub struct Client {
     operation: Mutex<()>,
     // Desktop clients pin their own root instead of following another install's
     // later change to the per-user discovery locator.
-    local_owner: Mutex<(Option<PathBuf>, Option<crate::local_host_registry::Owner>)>,
+    local_owner: Mutex<LocalOwnerSelection>,
     // Serialize bootstrap with an accepted normal Stop. Passive list polling
     // must not restart the same Host while its desktop is exiting.
     local_attachment: Mutex<bool>,
+}
+
+/// Exclusive handoff for one configured desktop root. Keep this guard while
+/// copying and saving the new app configuration, excluding the two host.lock
+/// files from the copy. Dropping it without commit preserves the old selection.
+pub struct LocalRelocation<'a> {
+    // Drop ownership before reopening client attachment admission.
+    _ownership: (crate::service_owner::ServiceOwner, crate::service_owner::ServiceOwner),
+    selection: tokio::sync::MutexGuard<'a, LocalOwnerSelection>,
+    attachment: tokio::sync::MutexGuard<'a, bool>,
+    previous: PathBuf,
+    destination: PathBuf,
+    identity: Option<(Uuid, String)>,
+    had_running_host: bool,
+}
+
+fn relocation_identity(directory: &Path) -> Result<Option<(Uuid, String)>, String> {
+    let bytes = match std::fs::read(directory.join("host.json")) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.to_string()),
+    };
+    let private: crate::service::Persistent = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    Ok(Some((private.host_id, private.certificate.fingerprint())))
+}
+
+fn relocation_source_owner(directory: &Path) -> Result<Option<crate::service_owner::ServiceOwner>, String> {
+    match crate::service_owner::ServiceOwner::acquire(directory) {
+        Ok(owner) => Ok(Some(owner)),
+        Err(acquisition_error) => {
+            // Only proven contention permits a Stop request. Filesystem errors
+            // must not be mistaken for a running Host, including after its ACK.
+            let probe = std::fs::OpenOptions::new().read(true).write(true)
+                .open(directory.join("host.lock"))
+                .map_err(|error| format!("Cannot inspect Host ownership; data folder move was refused: {error}"))?;
+            match probe.try_lock() {
+                Err(std::fs::TryLockError::WouldBlock) => Ok(None),
+                Err(error) => Err(format!("Cannot inspect Host ownership; data folder move was refused: {error}")),
+                Ok(()) => Err(format!("Host ownership changed while preparing the move; retry the data folder move: {acquisition_error}")),
+            }
+        }
+    }
+}
+
+impl LocalRelocation<'_> {
+    pub fn had_running_host(&self) -> bool {
+        self.had_running_host
+    }
+
+    /// The caller has copied the old data and saved its new configured root.
+    /// Both ownership locks are released on return, before restarting a Host.
+    pub fn commit(self, local: crate::local_host::LocalHost) -> Result<bool, String> {
+        self.commit_with(local, crate::local_host_registry::relocate_if_current)
+    }
+
+    fn commit_with<F>(mut self, local: crate::local_host::LocalHost, publish: F) -> Result<bool, String>
+    where
+        F: FnOnce(&Path, crate::local_host::LocalHost) -> Result<bool, String>,
+    {
+        local.validate()?;
+        if !crate::local_host_registry::same_directory(&self.destination, &local.directory) {
+            return Err("Relocated Host does not use the reserved destination".into());
+        }
+        if relocation_identity(&local.directory)? != self.identity {
+            return Err("Relocated Host identity does not match the original data folder".into());
+        }
+        publish(&self.previous, local.clone())?;
+        *self.selection = (
+            Some(local.directory.clone()),
+            Some(crate::local_host_registry::Owner::Desktop(Box::new(local))),
+        );
+        *self.attachment = false;
+        Ok(self.had_running_host)
+    }
 }
 /// Read-only native routing view. Mutations stay behind the client's locked operations.
 pub struct ClientViewGuard<'a>(tokio::sync::MutexGuard<'a, ClientState>);
@@ -522,6 +598,67 @@ impl Client {
             *local = (Some(directory), None);
         }
         Ok(())
+    }
+
+    /// Reserve both configured roots before copying. Stop only the process at
+    /// the source's own saved endpoint, and wait for its ownership to be released.
+    /// No discovery, credential initialization, model launch or forced stop.
+    pub async fn prepare_local_relocation(
+        &self,
+        previous: &Path,
+        destination: &Path,
+    ) -> Result<LocalRelocation<'_>, String> {
+        self.prepare_local_relocation_with(previous, destination, |directory| async move {
+            crate::local_host::stop_existing_if_idle(&directory).await
+        }).await
+    }
+
+    async fn prepare_local_relocation_with<F, Fut>(
+        &self,
+        previous: &Path,
+        destination: &Path,
+        stop: F,
+    ) -> Result<LocalRelocation<'_>, String>
+    where
+        F: FnOnce(PathBuf) -> Fut,
+        Fut: Future<Output = Result<Value, String>>,
+    {
+        if !previous.is_absolute() || !destination.is_absolute() {
+            return Err("Local Host relocation requires absolute data folders".into());
+        }
+        if crate::local_host_registry::same_directory(previous, destination) {
+            return Err("Local Host relocation requires a different destination".into());
+        }
+        let (attachment, selection) = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            async { (self.local_attachment.lock().await, self.local_owner.lock().await) },
+        ).await.map_err(|_| "Local Host bootstrap is still in progress; data folder move was refused".to_string())?;
+        let destination_owner = crate::service_owner::ServiceOwner::acquire(destination)?;
+        if destination.join("host.json").try_exists().map_err(|e| e.to_string())? {
+            return Err("The destination already contains Host state; data folder move was refused".into());
+        }
+        let (source_owner, had_running_host) = match relocation_source_owner(previous)? {
+            Some(owner) => (owner, false),
+            None => {
+                let reply = stop(previous.to_owned()).await?;
+                if reply["stopping"] != true {
+                    return Err("Host did not acknowledge idle Stop; data folder move was refused".into());
+                }
+                let owner = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                    loop {
+                        if let Some(owner) = relocation_source_owner(previous)? { break Ok::<_, String>(owner); }
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                }).await.map_err(|_| "Host acknowledged Stop but has not released its ownership; data folder move was refused".to_string())??;
+                (owner, true)
+            }
+        };
+        let identity = relocation_identity(previous)?;
+        Ok(LocalRelocation {
+            attachment, selection, _ownership: (source_owner, destination_owner),
+            previous: previous.to_owned(), destination: destination.to_owned(),
+            identity, had_running_host,
+        })
     }
 
     /// Stop only the already selected desktop Host. This path never initializes
