@@ -1180,11 +1180,34 @@ fn diagnostic_text(text: &str, limit: usize) -> String {
         .collect()
 }
 
+fn diagnostic_window_text(value: &serde_json::Value, limit: usize) -> Option<String> {
+    let mut remaining = limit;
+    value.as_str().map(|text| {
+        text.chars()
+            .take_while(|character| {
+                // Bound the serialized size while letting serde escape control characters.
+                let bytes = match *character {
+                    '"' | '\\' | '\u{8}' | '\t' | '\n' | '\u{c}' | '\r' => 2,
+                    '\u{0}'..='\u{1f}' => 6,
+                    character => character.len_utf8(),
+                };
+                if bytes > remaining {
+                    return false;
+                }
+                remaining -= bytes;
+                true
+            })
+            .collect()
+    })
+}
+
 fn window_diagnostics(result: &serde_json::Value, title: &str) -> serde_json::Value {
     match result["structuredContent"]["windows"].as_array() {
         Some(windows) => serde_json::json!({
             "count": windows.len(),
             "windows": windows.iter().take(6).map(|window| serde_json::json!({
+                "title": diagnostic_window_text(&window["title"], 160),
+                "app_name": diagnostic_window_text(&window["app_name"], 64),
                 "title_matches": window["title"].as_str().map(|value| value.contains(title)),
                 "pid": window["pid"].as_u64(),
                 "window_id": window["window_id"].as_u64(),
@@ -1204,7 +1227,7 @@ fn window_diagnostic_command(id: WorkspaceId, launch_time: Option<Duration>) -> 
         None => "printf 'Launch time unavailable; journal omitted\\n'".into(),
     };
     format!(
-        r#"(timeout -k 1s 2s systemctl --user show {unit} --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus 2>&1; printf '\nunit-status-exit=%s\n' "$?"; {journal}) | head -c 2048"#
+        r#"(timeout -k 1s 2s systemctl --user show {unit} --property=LoadState,ActiveState,SubState,Result,MainPID,ExecMainCode,ExecMainStatus 2>&1; printf '\nunit-status-exit=%s\n' "$?"; {journal}) | head -c 2048"#
     )
 }
 
@@ -1771,11 +1794,51 @@ mod tests {
         }).unwrap(), GuestResult::Read { data } if data == b"ready"));
     }
     #[test]
+    fn window_diagnostics_retains_actual_values_and_full_title_matches() {
+        let title = "Gbot-setup-test.txt — Mousepad\n\u{1b}";
+        let app_name = "Mousepad\teditor";
+        let raw = serde_json::json!({"structuredContent":{"windows":[
+            {"title":title,"app_name":app_name,"pid":1661,"window_id":27262979},
+            {"title":format!("{}Gbot-setup-test", "x".repeat(200)),"app_name":42},
+            {"title":null}
+        ]}});
+        let windows = window_diagnostics(&raw, "Gbot-setup-test");
+        assert_eq!(
+            windows["windows"][0],
+            serde_json::json!({
+                "title":title,"app_name":app_name,"title_matches":true,
+                "pid":1661,"window_id":27262979
+            })
+        );
+        assert_eq!(windows["windows"][1]["title"], "x".repeat(160));
+        assert_eq!(windows["windows"][1]["title_matches"], true);
+        assert_eq!(windows["windows"][1]["app_name"], serde_json::Value::Null);
+        assert_eq!(windows["windows"][2]["title_matches"], serde_json::Value::Null);
+        let issue = window_failure_issue(
+            windows,
+            Ok(GuestResult::ExecFinished {
+                exit_code: 0,
+                stdout: b"MainPID=1661\nActiveState=active\n".to_vec(),
+                stderr: Vec::new(),
+            }),
+        );
+        assert_eq!(issue.code, "desktop_not_ready");
+        assert!(issue.message.contains("MainPID=1661"));
+        assert!(issue.message.contains("Mousepad\\n\\u001b"));
+        assert!(issue.message.contains("Mousepad\\teditor"));
+        assert!(!issue.message.contains('\u{1b}'));
+        let command = window_diagnostic_command(WorkspaceId::new(), Some(Duration::from_secs(123)));
+        assert!(command.contains("Result,MainPID,ExecMainCode"));
+        assert!(command.contains("--since=@123 --lines=12"));
+        assert!(command.ends_with("| head -c 2048"));
+    }
+    #[test]
     fn window_failure_retains_only_bounded_metadata_and_diagnostics() {
         let raw = serde_json::json!({
             "content":[{"type":"image", "data":"excluded screenshot"}],
             "structuredContent":{"windows":(0..20).map(|n| serde_json::json!({
                 "title":format!("Editor\u{1b}{}", "é".repeat(200)),
+                "app_name":format!("Mousepad\t{}", "\u{1b}".repeat(200)),
                 "pid":n, "window_id":n + 1,
                 "private":"excluded raw window fields"
             })).collect::<Vec<_>>()}
@@ -1784,6 +1847,18 @@ mod tests {
         assert_eq!(windows["count"], 20);
         assert_eq!(windows["windows"].as_array().unwrap().len(), 6);
         assert_eq!(windows["windows"][0]["title_matches"], false);
+        assert_eq!(
+            windows["windows"][0]["title"],
+            format!("Editor\u{1b}{}", "é".repeat(74))
+        );
+        assert_eq!(
+            windows["windows"][0]["app_name"],
+            format!("Mousepad\t{}", "\u{1b}".repeat(9))
+        );
+        for window in windows["windows"].as_array().unwrap() {
+            assert!(window["title"].to_string().len() <= 162);
+            assert!(window["app_name"].to_string().len() <= 66);
+        }
         let issue = window_failure_issue(
             windows,
             Ok(GuestResult::ExecFinished {
