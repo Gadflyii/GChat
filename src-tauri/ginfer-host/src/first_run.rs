@@ -1750,10 +1750,15 @@ mod tests {
         );
         // This separate profiling fixture accepts only the verified selected
         // artifact; unrelated all-format coverage remains explicitly deferred.
+        // Native output resolves the omitted non-speculative draft width to 0.
+        assert_eq!(intent.spec, "none");
+        assert_eq!(intent.draft_tokens, None);
         let result = json!({"schema_version":2,"mode":"ensure","scope":"artifact",
             "hardware_profile":"__OUTPUT__","state":"loaded","complete":true,
             "base_complete":true,"all_formats_complete":false,"missing_rows":[],
-            "artifact":intent});
+            "artifact":{"path":intent.path,"directory_sha256":intent.directory_sha256,
+                "tp":intent.tp,"draft_tp":intent.draft_tp,"spec":intent.spec,
+                "draft_tokens":0}});
         let result = serde_json::to_string(&result).unwrap();
         let (prefix, suffix) = result.split_once("__OUTPUT__").unwrap();
         let shell_quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
