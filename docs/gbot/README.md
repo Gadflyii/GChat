@@ -2,43 +2,29 @@
 
 ## Outage reply notification fix — C7
 
-Current task: `GCHAT-GBOT-REPLY-OUTAGE-NOTIFICATION`, assigned by bubbs;
-target 2026-10-16 01:30 UTC after shared compiler release. Baseline `c75c82483`; owned worktree
-`/ai/gchat-worktrees/c7-gbot-reply-outage-20261015`, branch
-`fix/c7-gbot-reply-outage-20261015`. Shared `/ai/gchat` stays on main.
+`GCHAT-GBOT-REPLY-OUTAGE-NOTIFICATION` is merge-ready on
+`fix/c7-gbot-reply-outage-20261015`; source `b9b487ff3`, baseline `c75c82483`.
+The one-line fix compares recovered replies with the retained same-service
+baseline even after a state or service-target read outage. A new reply then
+sets **New reply**; previously read history stays read. Startup, reset, service
+changes and stale-refresh fences retain their existing behavior.
 
-Acceptance: a reply arriving during a same-service state/target read outage
-produces **New reply** on recovery; previously read history stays read, and
-startup/reset/service changes still establish a silent initial baseline.
-Remove the availability prerequisite from the existing same-target baseline
-comparison. Extend the existing outage regression to state and target failures;
-reproduce against the original guard, then run the focused file and `make verify`.
-No backend, transport, model, GPU, Engine test, or dependency changes.
+The existing outage regression now includes state and service-target failures.
+Against the original guard, exactly those two cases fail (13 pass); the fixed
+guard passes all 15. An independent source/regression review approved the diff.
+Full `make verify` passed on Linux at 2026-10-16 00:02:31 UTC in 253 seconds:
+lint, type checking, test-quality and coverage floors pass; 2,393 frontend,
+114 extension and 919 Rust cases pass, with 6 frontend skips and 27 Rust ignores.
+The frozen source was unchanged across the gate. No Engine/GPU test is required
+for this frontend-only change (standing rule 12).
 
-Status: independent source/regression audit passes. With the original guard,
-exactly the two added state/target cases fail at the missed-unread assertion
-(13 existing cases pass); the one-line fix passes all 15 cases. Full `make verify`
-remains pending a compiler slot; no Engine/GPU test is required (standing rule12).
-Two independent read-only agents cover source/regression and gate/cache checks;
-C7 owns source, tests and this record. Existing shared dependencies may be linked.
-The full gate will use a fresh private Cargo target beneath this worktree at
-`out/gbot-reply-outage-20261015/native-target`, offline with debug and incremental
-outputs disabled, at most six native build jobs, and retained protoc29.3;
-no shared Cargo cache writes or installs.
-No native target is allocated yet. Focused frontend tests finished
-2026-10-15 23:34 UTC; CPU819 released early, no C7 lock or job remains. Full gate
-has fallback local CPU8–17 booked 01:00–01:30 UTC after C2 actual release.
-C7 released the earlier 00:30–01:00 reservation for Gchat 3 to use six build
-jobs; C7 may book the returned tail after its actual terminal/release.
-Local policy requires one compiler at a time; shared
-compile locks apply to S1 only. C7 cedes first priority to the prior hard-deadline
-Gchat 3 gate (12–20 minutes forecast); C7 follows, then Gchat 2. C2 confirms this
-serial queue, and Gchat 2 acknowledges the same order. C7 holds the compiler
-lock for at most 30 minutes with waiters. No execution follows a clock time
-alone, and no compilers run during booked GPU timing quiet.
-Next unresolved action: obtain C2's actual release and Gchat 3's actual terminal,
-then run full `make verify`, retain its outcome, and push merge-ready.
-
+Owned source: `/ai/gchat-worktrees/c7-gbot-reply-outage-20261015`; shared
+`/ai/gchat` stays on main. Concise result:
+`out/gbot-reply-outage-20261015/result.json`. The S1 container terminated,
+compile guards and P2's borrowed cache were returned, and both CPU bookings
+and the fallback wake were canceled. Private S1 staging (458 MiB) was removed after checking for open references;
+no owned build or model was allocated. The source worktree is retained for merge.
+Next action: bubbs merges the branch.
 
 The Gbot menu retains settings, setup and controls. Bot avatars above Work open
 a right-side companion over the current Chat, Code or Studio view. Its hidden,
