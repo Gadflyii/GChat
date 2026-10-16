@@ -10,7 +10,8 @@ title: "Reject unsupported native request capabilities"
   conversion. Successful generation could therefore ignore a requested capability.
 - **Decision:** Inference-server hosted retrieval, `file_search`, `web_search`
   and MCP remain unsupported and must fail explicitly. GChat client-side web
-  search, document retrieval and MCP release scope remains under review in OI-055.
+  search/fetch, direct local-file search and trusted static-credential MCP are
+  included in the Linux release under the [client tools decision](2026-10-16-include-qualified-client-tools-in-linux-release.md).
   Host checks declarations
   ignored by the engine; native protocol validation remains authoritative for
   supported features. Translation rejects unrepresentable requests. Native Messages
