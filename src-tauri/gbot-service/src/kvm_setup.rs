@@ -688,7 +688,7 @@ impl KvmSetup {
                 .await
                 .map_err(persistence)?,
         }
-        let hello = runtime.connect_for_setup(record.identity).await.map_err(|error| SetupIssue::new("guest_not_ready", error.to_string(), "Wait for guest cloud-init and the desktop session to complete, then retry this same setup."))?;
+        let hello = self.connect_guest(record, &runtime).await?;
         if ![
             GuestCapability::Exec,
             GuestCapability::Read,
@@ -710,6 +710,43 @@ impl KvmSetup {
         self.verify_guest(&runtime, record).await?;
         self.stage(record, SetupStage::Ready).await
     }
+    async fn connect_guest(
+        &self,
+        record: &mut SetupRecord,
+        runtime: &WorkspaceRuntime,
+    ) -> Result<GuestHello, SetupIssue> {
+        let error = match runtime.connect_for_setup(record.identity).await {
+            Ok(hello) => return Ok(hello),
+            Err(error) => error,
+        };
+        if !matches!(
+            error,
+            crate::workspace::WorkspaceError::Transport(
+                crate::ssh::SshError::DesktopRestarted { .. }
+            )
+        ) {
+            return Err(SetupIssue::new("guest_not_ready", error.to_string(),
+                "Wait for guest cloud-init and the desktop session to complete, then retry this same setup."));
+        }
+        let renewal = runtime.lock_for_setup_renewal(record.identity).await.map_err(|blocked| {
+            SetupIssue::new("guest_session_recovery_blocked", format!("{error}; {blocked}"),
+                "Keep human or paused control and unresolved operations intact. Review them before retrying setup.")
+        })?;
+        let previous = record.identity;
+        let mut next = record.clone();
+        next.identity.session_id = SessionId::new();
+        // Persist before connecting: a failed reconnect resumes this same new identity.
+        self.save(next.clone()).await?;
+        *record = next;
+        eprintln!("Gbot saved setup desktop renewal: workspace={} guest={} previous_session={} session={} owner=Bot; {}",
+            record.id.as_uuid(), record.spec.as_ref().map(|spec| spec.id).unwrap_or(record.id.as_uuid()),
+            previous.session_id.as_uuid(), record.identity.session_id.as_uuid(), error);
+        renewal.connect(record.identity).await.map_err(|error| SetupIssue::new(
+            "guest_not_ready", error.to_string(),
+            "Wait for the guest desktop, then retry this saved setup; its fresh session is retained.",
+        ))
+    }
+
     async fn verify_guest(
         &self,
         runtime: &Arc<WorkspaceRuntime>,
@@ -1143,11 +1180,34 @@ fn diagnostic_text(text: &str, limit: usize) -> String {
         .collect()
 }
 
+fn diagnostic_window_text(value: &serde_json::Value, limit: usize) -> Option<String> {
+    let mut remaining = limit;
+    value.as_str().map(|text| {
+        text.chars()
+            .take_while(|character| {
+                // Bound the serialized size while letting serde escape control characters.
+                let bytes = match *character {
+                    '"' | '\\' | '\u{8}' | '\t' | '\n' | '\u{c}' | '\r' => 2,
+                    '\u{0}'..='\u{1f}' => 6,
+                    character => character.len_utf8(),
+                };
+                if bytes > remaining {
+                    return false;
+                }
+                remaining -= bytes;
+                true
+            })
+            .collect()
+    })
+}
+
 fn window_diagnostics(result: &serde_json::Value, title: &str) -> serde_json::Value {
     match result["structuredContent"]["windows"].as_array() {
         Some(windows) => serde_json::json!({
             "count": windows.len(),
             "windows": windows.iter().take(6).map(|window| serde_json::json!({
+                "title": diagnostic_window_text(&window["title"], 160),
+                "app_name": diagnostic_window_text(&window["app_name"], 64),
                 "title_matches": window["title"].as_str().map(|value| value.contains(title)),
                 "pid": window["pid"].as_u64(),
                 "window_id": window["window_id"].as_u64(),
@@ -1167,7 +1227,7 @@ fn window_diagnostic_command(id: WorkspaceId, launch_time: Option<Duration>) -> 
         None => "printf 'Launch time unavailable; journal omitted\\n'".into(),
     };
     format!(
-        r#"(timeout -k 1s 2s systemctl --user show {unit} --property=LoadState,ActiveState,SubState,Result,ExecMainCode,ExecMainStatus 2>&1; printf '\nunit-status-exit=%s\n' "$?"; {journal}) | head -c 2048"#
+        r#"(timeout -k 1s 2s systemctl --user show {unit} --property=LoadState,ActiveState,SubState,Result,MainPID,ExecMainCode,ExecMainStatus 2>&1; printf '\nunit-status-exit=%s\n' "$?"; {journal}) | head -c 2048"#
     )
 }
 
@@ -1286,6 +1346,187 @@ mod tests {
         .await
         .unwrap();
     }
+    #[tokio::test]
+    async fn renewed_setup_identity_survives_failed_connect_and_retry() {
+        use crate::{
+            executor::{ExecutorProcesses, ProcessSpec},
+            service::{
+                DurableState, OperationRecord, OperationState, SessionControl, SessionControlState,
+            },
+            ssh::{generate_ssh_key, ssh_public_key, SshError},
+            tasks::TaskRunner,
+            workspace::WorkspaceError,
+        };
+        let root = tempfile::tempdir().unwrap();
+        let id = WorkspaceId::new();
+        let previous = SessionIdentity {
+            workspace_id: id,
+            session_id: SessionId::new(),
+        };
+        let service_id = Uuid::new_v4();
+        let credential_ref = VaultCredentialRef::new();
+        let pinned_host_key = ssh_public_key(&generate_ssh_key().unwrap()).unwrap();
+        let state_path = root.path().join("state.json");
+        let initial = DurableState {
+            service_id,
+            service_pc: ServicePc::Local,
+            workspaces: vec![WorkspaceConfig {
+                id,
+                name: "Saved computer".into(),
+                service_pc: ServicePc::Local,
+                bot_pc: BotPc::LocalVm {
+                    host_id: service_id,
+                    vm_id: id.as_uuid().to_string(),
+                    hypervisor: Hypervisor::Kvm,
+                },
+                connection: WorkspaceConnection::Ssh(SshConnection {
+                    endpoint: SshEndpoint {
+                        hostname: "127.0.0.1".into(),
+                        port: 2222,
+                        user: "gbot".into(),
+                    },
+                    pinned_host_key: pinned_host_key.clone(),
+                    credential_ref,
+                }),
+            }],
+            operations: vec![OperationRecord {
+                id: OperationId::new(),
+                identity: previous,
+                capability: GuestCapability::Exec,
+                target_operation_id: None,
+                state: OperationState::Completed,
+            }],
+            controls: vec![SessionControl {
+                identity: previous,
+                owner: None,
+                state: SessionControlState::Bot,
+            }],
+            assignments: vec![],
+            connector_accounts: vec![],
+        };
+        let store = Arc::new(Store::open(state_path.clone()).await.unwrap());
+        store.save(&initial).await.unwrap();
+        drop(store);
+        let service = Arc::new(Service::open(state_path).await.unwrap());
+        let runtime = Arc::new(WorkspaceRuntime::new(
+            service.clone(),
+            Arc::new(MemoryVault::default()),
+        ));
+        runtime
+            .configure_kvm_setup(root.path().to_owned())
+            .await
+            .unwrap();
+        let tasks = Arc::new(
+            TaskRunner::new(
+                root.path().join("tasks"),
+                runtime.clone(),
+                ExecutorProcesses {
+                    python: ProcessSpec {
+                        program: "/bin/false".into(),
+                        args: vec![],
+                    },
+                    context: ProcessSpec {
+                        program: "/bin/false".into(),
+                        args: vec![],
+                    },
+                },
+            )
+            .await
+            .unwrap(),
+        );
+        runtime
+            .configure_task_runner(Arc::downgrade(&tasks))
+            .unwrap();
+        let setup = runtime.kvm_setup().unwrap();
+        let mut record = SetupRecord {
+            id,
+            name: "Saved computer".into(),
+            service_id,
+            credential_ref,
+            pending_model_credential: None,
+            identity: previous,
+            stage: SetupStage::TestingDesktop,
+            resume_on_start: true,
+            issue: None,
+            spec: None,
+            pinned_host_key: Some(pinned_host_key),
+        };
+        setup.save(record.clone()).await.unwrap();
+        service
+            .register_session(
+                previous,
+                GuestHello {
+                    protocol_version: GUEST_PROTOCOL_VERSION,
+                    identity: previous,
+                    capabilities: [
+                        GuestCapability::Exec,
+                        GuestCapability::Read,
+                        GuestCapability::Write,
+                        GuestCapability::Status,
+                        GuestCapability::Cancel,
+                    ]
+                    .into(),
+                    view: None,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(service.live_sessions().await, vec![previous]);
+
+        // Exercise the persistence/connection boundary after stale-desktop proof.
+        // An absent credential fails before SSH or any guest process can start.
+        let renewal = runtime.lock_for_setup_renewal(previous).await.unwrap();
+        record.identity.session_id = SessionId::new();
+        let fresh = record.identity;
+        setup.save(record.clone()).await.unwrap();
+        assert!(matches!(
+            renewal.connect(fresh).await,
+            Err(WorkspaceError::Transport(SshError::MissingCredential))
+        ));
+        let saved = setup
+            .store
+            .load::<Vec<SetupRecord>>()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&saved[0]).unwrap(),
+            serde_json::to_value(&record).unwrap()
+        );
+        assert_ne!(fresh, previous);
+        assert_eq!(service.snapshot().await, initial);
+        assert!(service.live_sessions().await.is_empty());
+
+        // The actual setup retry retains the durable new identity on an ordinary
+        // connection error; only a newly proven desktop restart can renew it again.
+        let issue = setup
+            .connect_guest(&mut record, &runtime)
+            .await
+            .unwrap_err();
+        assert_eq!(issue.code, "guest_not_ready");
+        assert!(issue.message.contains("SSH credential is missing"));
+        assert_eq!(record.identity, fresh);
+        let retried = setup
+            .store
+            .load::<Vec<SetupRecord>>()
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(retried).unwrap(),
+            serde_json::to_value(saved).unwrap()
+        );
+        assert_eq!(service.snapshot().await, initial);
+        assert!(service.live_sessions().await.is_empty());
+        assert!(matches!(
+            runtime.connect(fresh).await,
+            Err(WorkspaceError::SetupIncomplete)
+        ));
+        tasks.close().await.unwrap();
+        runtime.close().await.unwrap();
+    }
+
     #[tokio::test]
     async fn unfinished_and_restarted_setups_hold_user_admission_until_ready() {
         use crate::{media::OpenView, workspace::WorkspaceError};
@@ -1553,11 +1794,51 @@ mod tests {
         }).unwrap(), GuestResult::Read { data } if data == b"ready"));
     }
     #[test]
+    fn window_diagnostics_retains_actual_values_and_full_title_matches() {
+        let title = "Gbot-setup-test.txt — Mousepad\n\u{1b}";
+        let app_name = "Mousepad\teditor";
+        let raw = serde_json::json!({"structuredContent":{"windows":[
+            {"title":title,"app_name":app_name,"pid":1661,"window_id":27262979},
+            {"title":format!("{}Gbot-setup-test", "x".repeat(200)),"app_name":42},
+            {"title":null}
+        ]}});
+        let windows = window_diagnostics(&raw, "Gbot-setup-test");
+        assert_eq!(
+            windows["windows"][0],
+            serde_json::json!({
+                "title":title,"app_name":app_name,"title_matches":true,
+                "pid":1661,"window_id":27262979
+            })
+        );
+        assert_eq!(windows["windows"][1]["title"], "x".repeat(160));
+        assert_eq!(windows["windows"][1]["title_matches"], true);
+        assert_eq!(windows["windows"][1]["app_name"], serde_json::Value::Null);
+        assert_eq!(windows["windows"][2]["title_matches"], serde_json::Value::Null);
+        let issue = window_failure_issue(
+            windows,
+            Ok(GuestResult::ExecFinished {
+                exit_code: 0,
+                stdout: b"MainPID=1661\nActiveState=active\n".to_vec(),
+                stderr: Vec::new(),
+            }),
+        );
+        assert_eq!(issue.code, "desktop_not_ready");
+        assert!(issue.message.contains("MainPID=1661"));
+        assert!(issue.message.contains("Mousepad\\n\\u001b"));
+        assert!(issue.message.contains("Mousepad\\teditor"));
+        assert!(!issue.message.contains('\u{1b}'));
+        let command = window_diagnostic_command(WorkspaceId::new(), Some(Duration::from_secs(123)));
+        assert!(command.contains("Result,MainPID,ExecMainCode"));
+        assert!(command.contains("--since=@123 --lines=12"));
+        assert!(command.ends_with("| head -c 2048"));
+    }
+    #[test]
     fn window_failure_retains_only_bounded_metadata_and_diagnostics() {
         let raw = serde_json::json!({
             "content":[{"type":"image", "data":"excluded screenshot"}],
             "structuredContent":{"windows":(0..20).map(|n| serde_json::json!({
                 "title":format!("Editor\u{1b}{}", "é".repeat(200)),
+                "app_name":format!("Mousepad\t{}", "\u{1b}".repeat(200)),
                 "pid":n, "window_id":n + 1,
                 "private":"excluded raw window fields"
             })).collect::<Vec<_>>()}
@@ -1566,6 +1847,18 @@ mod tests {
         assert_eq!(windows["count"], 20);
         assert_eq!(windows["windows"].as_array().unwrap().len(), 6);
         assert_eq!(windows["windows"][0]["title_matches"], false);
+        assert_eq!(
+            windows["windows"][0]["title"],
+            format!("Editor\u{1b}{}", "é".repeat(74))
+        );
+        assert_eq!(
+            windows["windows"][0]["app_name"],
+            format!("Mousepad\t{}", "\u{1b}".repeat(9))
+        );
+        for window in windows["windows"].as_array().unwrap() {
+            assert!(window["title"].to_string().len() <= 162);
+            assert!(window["app_name"].to_string().len() <= 66);
+        }
         let issue = window_failure_issue(
             windows,
             Ok(GuestResult::ExecFinished {

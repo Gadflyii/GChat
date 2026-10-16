@@ -82,8 +82,11 @@ The retained `00068f2a8` DEB and AppImage do not include this change; this is
 candidate desktop acceptance, with no new package or Windows qualification.
 
 If the dedicated setup document window does not match after the existing readiness
-polls, setup retains bounded title-match/PID/window-ID metadata and exact-unit
-systemd status plus recent journal output in its existing issue. The diagnostic
+polls, setup retains bounded actual titles and application names alongside
+title-match/PID/window-ID metadata, exact-unit systemd status (including MainPID)
+and recent journal output in its existing issue. At most six windows are included;
+titles and application names use JSON-escaped prefixes bounded to 160 and 64 bytes.
+Matching still uses the full original title. The diagnostic
 uses the same private setup transport, limits guest commands and output, and
 keeps the computer in Testing Desktop. Successful command submission alone does
 not prove the editor opened. A missing diagnostic result stays an explicit
@@ -93,6 +96,17 @@ guest clock differences can therefore leave the journal section empty. Missing
 unit records or truncated exit markers remain unknown. Each guest query allows
 two seconds plus one second for termination; transport receipt waiting uses the
 existing request behavior.
+
+Saved Linux setup can renew its session after the pinned SSH transport proves that
+the active desktop service invocation differs from the one bound to that session.
+It retains the workspace, VM, credentials and completed history, and saves the new
+session before reconnecting. Renewal requires the exact idle bot session with no
+human owner, unfinished task or unresolved operation. Saved setup resumes only
+after the task journal has loaded; task admission stays fenced through renewal.
+Paused/human control, incomplete proof or
+failed media/transport cleanup remain explicit failures. Cached setup transports
+are rechecked before creating an operation. See the
+[desktop renewal decision](../decisions/2026-10-16-renew-idle-gbot-setup-after-proven-desktop-restart.md).
 
 Gbot bootstrap now reports a child's exit status and log path promptly when no
 concurrent service owns the data folder. Concurrent-owner waiting remains intact.

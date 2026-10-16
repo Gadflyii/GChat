@@ -9,9 +9,10 @@ use std::{
 };
 use uuid::Uuid;
 #[derive(Default)]
-struct Vault(Mutex<BTreeMap<Uuid, String>>);
+struct Vault(Mutex<BTreeMap<Uuid, String>>, std::sync::atomic::AtomicUsize);
 impl CredentialStore for Vault {
     fn get(&self, id: Uuid) -> CredentialFuture<'_, String> {
+        self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Box::pin(async move {
             self.0
                 .lock()
@@ -130,6 +131,47 @@ async fn tls_at(
     });
     (origin, job)
 }
+#[tokio::test]
+async fn cold_saved_host_snapshots_never_read_the_vault_and_connect_caches_only_current_identity() {
+    use std::sync::atomic::Ordering::SeqCst;
+    let root = tempfile::tempdir().unwrap();
+    let host = Host::open(root.path().join("host"), "Lazy credential fixture".into(),
+        std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+    let (origin, server) = tls(host.clone()).await;
+    host.lan_sharing.lock().await.standalone = Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
+    let vault = Arc::new(Vault::default());
+    let registry = root.path().join("registry.json");
+    let paired = Client::new(Some(registry.clone()), vault.clone());
+    paired.pair(PairRequest { host_id: None, base_url: Some(origin), client_name: "Pair fixture".into() }).await.unwrap();
+    let saved = paired.registered().await.unwrap().remove(0);
+    let client = Client::new(Some(registry.clone()), vault.clone());
+    let reads = vault.1.load(SeqCst);
+    let cold = client.snapshot(saved.host_id).await.unwrap_err();
+    assert!(cold.to_string().contains("Connect this saved host"));
+    assert!(!cold.is_offline());
+    assert_eq!(vault.1.load(SeqCst), reads, "launch observation must not access secure storage");
+    assert_eq!(client.connect(saved.host_id).await.unwrap()["host_id"], saved.host_id.to_string());
+    assert_eq!(vault.1.load(SeqCst), reads + 1);
+    vault.delete(saved.client_id).await.unwrap();
+    assert!(client.snapshot(saved.host_id).await.is_ok(), "background polling uses this session's token even after vault lock");
+    assert_eq!(vault.1.load(SeqCst), reads + 1);
+    assert!(client.connect(saved.host_id).await.unwrap_err().to_string().contains("credential absent"),
+        "an explicit reconnect still checks the credential store");
+    let original = std::fs::read(&registry).unwrap();
+    let mut changed: Value = serde_json::from_slice(&original).unwrap();
+    changed["hosts"][0]["client_id"] = Uuid::new_v4().to_string().into();
+    std::fs::write(&registry, serde_json::to_vec(&changed).unwrap()).unwrap();
+    let reads = vault.1.load(SeqCst);
+    assert!(client.snapshot(saved.host_id).await.unwrap_err().to_string().contains("Connect this saved host"));
+    std::fs::write(&registry, original).unwrap();
+    assert!(client.snapshot(saved.host_id).await.is_err(), "restoring metadata must not revive a retired session token");
+    assert_eq!(vault.1.load(SeqCst), reads);
+    client.forget(saved.host_id).await.unwrap();
+    assert!(client.registered().await.unwrap().is_empty());
+    assert!(client.snapshot(saved.host_id).await.is_err());
+    server.abort();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_batch_observes_hosts_concurrently_and_preserves_order_and_errors() {
     let root = tempfile::tempdir().unwrap();
@@ -160,6 +202,7 @@ async fn snapshot_batch_observes_hosts_concurrently_and_preserves_order_and_erro
     let imported = root.path().join("imported.json");
     std::fs::write(&imported, serde_json::to_vec(&vec![offline]).unwrap()).unwrap();
     client.import_legacy(&imported).await.unwrap();
+    assert!(client.connect(offline_id).await.unwrap_err().is_offline());
     for gate in &gates { gate.armed.store(true, std::sync::atomic::Ordering::SeqCst); }
     let batch_client = client.clone();
     let batch_ids = vec![ids[1], offline_id, Uuid::new_v4(), ids[0]];
@@ -200,21 +243,21 @@ async fn pinned_requests_reuse_connections_without_reusing_credentials_or_change
         "ten complete warm reads must reuse the enrolled transport's TLS connection");
 
     vault.set(saved.client_id, "revoked-token").await.unwrap();
-    let unauthorized = client.snapshot(saved.host_id).await.unwrap_err();
+    let unauthorized = client.connect(saved.host_id).await.unwrap_err();
     assert!(!unauthorized.is_offline());
     assert!(unauthorized.to_string().contains("401"));
     vault.set(saved.client_id, &token).await.unwrap();
-    client.snapshot(saved.host_id).await.unwrap();
+    client.connect(saved.host_id).await.unwrap();
 
     let original = std::fs::read(&registry).unwrap();
     let mut changed: Value = serde_json::from_slice(&original).unwrap();
     changed["hosts"][0]["certificate_sha256"] = "00".repeat(32).into();
     std::fs::write(&registry, serde_json::to_vec(&changed).unwrap()).unwrap();
-    let bad_pin = client.snapshot(saved.host_id).await.unwrap_err();
+    let bad_pin = client.connect(saved.host_id).await.unwrap_err();
     assert!(!bad_pin.is_offline());
     assert!(bad_pin.to_string().contains("certificate has changed"));
     std::fs::write(&registry, original).unwrap();
-    client.snapshot(saved.host_id).await.unwrap();
+    client.connect(saved.host_id).await.unwrap();
     let valid_snapshot = client.snapshot(saved.host_id).await.unwrap();
     let mut wrong_identity = valid_snapshot.clone();
     wrong_identity["host_id"] = Uuid::new_v4().to_string().into();
@@ -730,6 +773,7 @@ async fn delayed_snapshot_merges_other_apps_changes_and_rejects_replaced_or_forg
             .unwrap(),
         replacement
     );
+    first.connect(original.host_id).await.unwrap();
     gate.armed.store(true, Ordering::SeqCst);
     let poll = {
         let first = first.clone();
@@ -836,7 +880,7 @@ async fn typed_requests_distinguish_stopped_hosts_from_vault_auth_and_pin_proble
     let token = vault.get(saved.client_id).await.unwrap();
     assert!(client.snapshot(saved.host_id).await.is_ok());
     vault.delete(saved.client_id).await.unwrap();
-    let missing = client.snapshot(saved.host_id).await.unwrap_err();
+    let missing = client.connect(saved.host_id).await.unwrap_err();
     assert!(!missing.is_offline());
     assert!(missing.to_string().contains("credential absent"));
     vault.set(saved.client_id, "revoked token").await.unwrap();
@@ -863,7 +907,7 @@ async fn typed_requests_distinguish_stopped_hosts_from_vault_auth_and_pin_proble
     std::fs::write(&legacy, serde_json::to_vec(&vec![wrong_pin]).unwrap()).unwrap();
     let bad_pin = Client::new(Some(root.path().join("bad-pin-registry.json")), vault);
     bad_pin.import_legacy(&legacy).await.unwrap();
-    let pin = bad_pin.snapshot(saved.host_id).await.unwrap_err();
+    let pin = bad_pin.connect(saved.host_id).await.unwrap_err();
     assert!(
         !pin.is_offline(),
         "A failed TLS pin must remain a problem: {pin}"
@@ -900,11 +944,11 @@ async fn typed_requests_distinguish_stopped_hosts_from_vault_auth_and_pin_proble
 }
 
 #[tokio::test]
-async fn fleet_deadline_keeps_a_stalled_vault_actionable_and_preserves_cached_pools() {
+async fn fleet_background_reads_use_session_credentials_when_the_vault_is_locked() {
     use ginfer_host::{
         engine_registry::InstanceRef,
         fleet::{AuthorityLocator, FleetOperation, FleetPool, FleetPoolMember, FleetUpdate},
-        fleet_client::{FleetClient, FleetHostPhase},
+        fleet_client::FleetClient,
     };
     let root = tempfile::tempdir().unwrap();
     let host = Host::open(
@@ -921,8 +965,9 @@ async fn fleet_deadline_keeps_a_stalled_vault_actionable_and_preserves_cached_po
     host.lan_sharing.lock().await.standalone =
         Some(reqwest::Url::parse(&origin).unwrap().port().unwrap());
     let vault = Arc::new(StallingVault::default());
+    let registry = root.path().join("registry.json");
     let client = Arc::new(Client::new(
-        Some(root.path().join("registry.json")),
+        Some(registry.clone()),
         vault.clone(),
     ));
     client
@@ -970,24 +1015,24 @@ async fn fleet_deadline_keeps_a_stalled_vault_actionable_and_preserves_cached_po
     vault
         .stalled
         .store(true, std::sync::atomic::Ordering::SeqCst);
-    let started = std::time::Instant::now();
-    let report = tokio::time::timeout(std::time::Duration::from_secs(20), fleet.read())
+    let reads = vault.inner.1.load(std::sync::atomic::Ordering::SeqCst);
+    let report = tokio::time::timeout(std::time::Duration::from_secs(2), fleet.read())
         .await
-        .expect("The existing ten-second fleet deadline must include credential lookup")
+        .expect("A passive fleet refresh must not wait for the locked vault")
         .unwrap();
-    assert!(started.elapsed() >= std::time::Duration::from_secs(10));
-    assert!(!report.connected);
+    assert!(report.connected);
     assert!(report.error.is_none());
     assert_eq!(report.snapshot, Some(cached.clone()));
-    assert_eq!(report.host_issues.len(), 1);
-    let issue = &report.host_issues[0];
-    assert_eq!(issue.host_id, saved.host_id);
-    assert_eq!(issue.phase, FleetHostPhase::Coordinator);
-    assert!(
-        !issue.offline,
-        "A stalled credential store is not an offline host"
-    );
-    assert!(issue.message.contains("secure storage"));
+    assert!(report.host_issues.is_empty());
+    assert_eq!(vault.inner.1.load(std::sync::atomic::Ordering::SeqCst), reads);
+    let cold = FleetClient::new(Arc::new(Client::new(Some(registry), vault.clone())));
+    let cold_report = tokio::time::timeout(std::time::Duration::from_secs(2), cold.read())
+        .await.expect("A cold fleet refresh must not unlock the vault").unwrap();
+    assert!(!cold_report.connected);
+    assert_eq!(cold_report.snapshot, Some(cached.clone()));
+    assert_eq!(cold_report.host_issues.len(), 1);
+    assert!(!cold_report.host_issues[0].offline);
+    assert!(cold_report.host_issues[0].message.contains("Connect this saved host"));
     vault
         .stalled
         .store(false, std::sync::atomic::Ordering::SeqCst);
@@ -1190,6 +1235,8 @@ async fn fleet_reports_exact_offline_hosts_and_recovers_without_electing_or_losi
         vault,
     ));
     discovering.import_legacy(&legacy).await.unwrap();
+    assert!(discovering.connect(coordinator_id).await.unwrap_err().is_offline());
+    discovering.connect(member_id).await.unwrap();
     let report = FleetClient::new(discovering).read().await.unwrap();
     assert!(!report.connected);
     assert!(report.error.is_none());

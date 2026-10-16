@@ -1,6 +1,51 @@
 //! Reconnect or start one persistent local host; never launch an inference child.
 use crate::{launcher::LocalControl, service_owner::ServiceOwner};
-use std::{net::SocketAddr, path::PathBuf, process::Stdio, time::Duration};
+use std::{net::SocketAddr, path::{Path, PathBuf}, process::Stdio, time::Duration};
+
+/// The saved endpoint belongs to this state directory, never to another locator owner.
+pub fn management_address(directory: &Path, preferred: SocketAddr) -> Result<SocketAddr, String> {
+    let bytes = match std::fs::read(directory.join("host.json")) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(preferred),
+        Err(error) => return Err(format!("Cannot read local Host state: {error}")),
+    };
+    let state: crate::service::Persistent = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    let Some(origin) = state.management_origin else { return Ok(preferred); };
+    let url = reqwest::Url::parse(&origin).map_err(|e| e.to_string())?;
+    let address: std::net::IpAddr = url.host_str().ok_or("Missing local Host address")?
+        .trim_matches(['[', ']']).parse().map_err(|_| "Local Host requires a loopback IP address")?;
+    let port = url.port_or_known_default().ok_or("Missing local Host port")?;
+    if url.scheme() != "https" || !address.is_loopback() || port == 0 || url.path() != "/"
+        || url.query().is_some() || url.fragment().is_some() || !url.username().is_empty() || url.password().is_some() {
+        return Err("Saved local Host endpoint must be an HTTPS loopback origin".into());
+    }
+    Ok(SocketAddr::new(address, port))
+}
+
+/// Keep the fallback socket bound: a probe followed by a second bind is racy.
+pub async fn bind_management(preferred: SocketAddr, managed: bool) -> Result<(tokio::net::TcpListener, Option<String>), String> {
+    match tokio::net::TcpListener::bind(preferred).await {
+        Ok(listener) => Ok((listener, None)),
+        Err(error) if managed && preferred.ip().is_loopback() && error.kind() == std::io::ErrorKind::AddrInUse => {
+            let listener = tokio::net::TcpListener::bind(SocketAddr::new(preferred.ip(), 0)).await.map_err(|e| e.to_string())?;
+            let actual = listener.local_addr().map_err(|e| e.to_string())?;
+            let notice = format!("Local Host port {} is already in use. GChat is using https://{actual} for this data folder; the other Host was left running.", preferred.port());
+            Ok((listener, Some(notice)))
+        }
+        Err(error) => Err(format!("Cannot open Host management address {preferred}: {error}")),
+    }
+}
+
+/// Local authority alone can be copied; verify the authenticated process's root too.
+pub(crate) fn validate_local_identity(directory: &Path, snapshot: &serde_json::Value) -> Result<(), String> {
+    let expected = directory.canonicalize().map_err(|e| e.to_string())?;
+    let identity = &snapshot["local_identity"];
+    let actual: Option<PathBuf> = serde_json::from_value(identity["state_directory"].clone()).map_err(|e| e.to_string())?;
+    if actual.as_ref() != Some(&expected) || identity["platform"] != std::env::consts::OS {
+        return Err("The running Host belongs to a different data folder or platform, or cannot prove its local identity. Restart this data folder's Host after updating GChat.".into());
+    }
+    Ok(())
+}
 
 #[cfg(windows)]
 fn keep_client_pipes_private() -> Result<(), String> {
@@ -58,21 +103,14 @@ impl LocalHost {
 
     async fn connect(&self, control: &mut Option<LocalControl>) -> Result<serde_json::Value, String> {
         let previous = control.take();
+        let address = management_address(&self.directory, self.listen)?;
         *control = Some(LocalControl::open_reusing(&self.directory,
-            &format!("https://{}", self.listen), previous)?);
+            &format!("https://{address}"), previous)?);
         let snapshot = tokio::time::timeout(Duration::from_secs(2), control.as_ref().unwrap().snapshot())
             .await
             .map_err(|_| "local host connection timed out".to_string())??;
+        validate_local_identity(&self.directory, &snapshot)?;
         Ok(snapshot)
-    }
-
-    fn validate_storage(&self, snapshot: &serde_json::Value) -> Result<(), String> {
-        if let Some(provider) = &self.desktop_provider {
-            let expected = provider.join("models").canonicalize().map_err(|e| format!("desktop model cache unavailable: {e}"))?;
-            let actual: PathBuf = serde_json::from_value(snapshot["model_management"]["managed_root"].clone()).map_err(|e| e.to_string())?;
-            if actual != expected { return Err("The running host uses different managed storage; explicitly restart it with the desktop provider configuration".into()); }
-        }
-        Ok(())
     }
 
     pub(crate) fn validate(&self) -> Result<(), String> {
@@ -94,8 +132,7 @@ impl LocalHost {
     pub async fn ensure_running(&self) -> Result<LocalControl, String> {
         self.validate()?;
         let mut control = None;
-        if let Ok(snapshot) = self.connect(&mut control).await {
-            self.validate_storage(&snapshot)?;
+        if self.connect(&mut control).await.is_ok() {
             return Ok(control.unwrap());
         }
         let mut child = None;
@@ -174,15 +211,17 @@ impl LocalHost {
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
         let mut exit = None;
         loop {
-            if let Ok(snapshot) = self.connect(&mut control).await {
-                self.validate_storage(&snapshot)?;
-                if let Some(mut child) = child {
-                    tokio::spawn(async move {
-                        let _ = child.wait().await;
-                    });
+            let last_error = match self.connect(&mut control).await {
+                Ok(_) => {
+                    if let Some(mut child) = child {
+                        tokio::spawn(async move {
+                            let _ = child.wait().await;
+                        });
+                    }
+                    return Ok(control.unwrap());
                 }
-                return Ok(control.unwrap());
-            }
+                Err(error) => error,
+            };
             if let Some(process) = child.as_mut() {
                 if let Some(status) = process.try_wait().map_err(|e| e.to_string())? {
                     exit = Some(status);
@@ -197,8 +236,8 @@ impl LocalHost {
                     });
                 }
                 return Err(match exit {
-                    Some(status) => format!("ginfer-host exited ({status}); no local owner became ready. See {}", self.directory.join("host.log").display()),
-                    None => format!("ginfer-host has not become ready; its existing owner was left running. See {}", self.directory.join("host.log").display()),
+                    Some(status) => format!("ginfer-host exited ({status}); no local owner became ready: {last_error}. See {}", self.directory.join("host.log").display()),
+                    None => format!("ginfer-host has not become ready; its existing owner was left running: {last_error}. See {}", self.directory.join("host.log").display()),
                 });
             }
             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -233,6 +272,85 @@ pub fn desktop_runtimes(provider: &std::path::Path) -> Result<std::collections::
 mod tests {
     use super::*;
     use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+
+    #[tokio::test]
+    async fn managed_port_collision_preserves_foreign_listener_and_saved_endpoint() {
+        let directory = tempfile::tempdir().unwrap();
+        let host = crate::service::Host::open(directory.path().into(), "Own Host".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let foreign = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let preferred = foreign.local_addr().unwrap();
+        assert!(bind_management(preferred, false).await.is_err(), "Explicit standalone listeners stay fixed");
+        let (own, notice) = bind_management(preferred, true).await.unwrap();
+        let selected = own.local_addr().unwrap();
+        assert_ne!(selected, preferred);
+        assert!(notice.as_ref().unwrap().contains(&preferred.port().to_string()));
+        let connection = tokio::net::TcpStream::connect(preferred).await.unwrap();
+        let (_, peer) = tokio::time::timeout(Duration::from_secs(2), foreign.accept()).await.unwrap().unwrap();
+        assert_eq!(peer, connection.local_addr().unwrap());
+        host.data.lock().await.management_origin = Some(format!("https://{selected}"));
+        host.save().await.unwrap();
+        drop(own);
+        let saved = management_address(directory.path(), preferred).unwrap();
+        assert_eq!(saved, selected);
+        let (reopened, notice) = bind_management(saved, true).await.unwrap();
+        assert_eq!(reopened.local_addr().unwrap(), selected);
+        assert!(notice.is_none());
+        for invalid in ["http://127.0.0.1:17443", "https://192.0.2.1:17443", "https://127.0.0.1:17443/host", "https://user@127.0.0.1:17443"] {
+            host.data.lock().await.management_origin = Some(invalid.into());
+            host.save().await.unwrap();
+            assert!(management_address(directory.path(), preferred).is_err(), "{invalid}");
+        }
+    }
+
+    #[tokio::test]
+    async fn copied_host_credentials_cannot_prove_another_data_roots_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let copied = tempfile::tempdir().unwrap();
+        let host = crate::service::Host::open(directory.path().into(), "Original Host".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
+        std::fs::copy(directory.path().join("host.json"), copied.path().join("host.json")).unwrap();
+        let serving = host.clone();
+        let server = tokio::spawn(async move {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                tokio::select! {
+                    Some(_) = connections.join_next(), if !connections.is_empty() => {},
+                    socket = listener.accept() => {
+                        let (socket, _) = socket.unwrap();
+                        let acceptor = acceptor.clone();
+                        let host = serving.clone();
+                        connections.spawn(async move {
+                            if let Ok(tls) = acceptor.accept(socket).await {
+                                let service = hyper::service::service_fn(move |request| {
+                                    let host = host.clone();
+                                    async move { host.route(request).await }
+                                });
+                                let _ = hyper::server::conn::Http::new().serve_connection(tls, service).await;
+                            }
+                        });
+                    }
+                }
+            }
+        });
+        let mut local = LocalHost {
+            binary: std::env::current_exe().unwrap(), engine: std::env::current_exe().unwrap(),
+            engine_runtimes: Default::default(), directory: copied.path().into(), desktop_provider: None,
+            models: vec![], artifact_sets: vec![], name: "Fixture".into(), nvidia_smi: "unused".into(), listen: address,
+        };
+        let mut control = None;
+        assert!(local.connect(&mut control).await.unwrap_err().contains("different data folder"));
+        local.directory = directory.path().into();
+        assert!(local.connect(&mut control).await.is_ok(), "The original Host remains reachable");
+        let mut wrong_platform = host.snapshot().await;
+        wrong_platform["local_identity"]["platform"] = serde_json::json!("another-platform");
+        assert!(validate_local_identity(&local.directory, &wrong_platform).is_err());
+        server.abort();
+        let _ = server.await;
+    }
 
     #[tokio::test]
     async fn delayed_bootstrap_reuses_tls_only_with_fresh_local_authority() {

@@ -171,11 +171,16 @@ struct State {
     actors: BTreeMap<Uuid, Actor>,
 }
 
+#[cfg(target_os = "linux")]
+pub(crate) struct SetupTaskGuard {
+    _state: tokio::sync::OwnedMutexGuard<State>,
+}
+
 pub struct TaskRunner {
     root: PathBuf,
     runtime: Arc<WorkspaceRuntime>,
     processes: ExecutorProcesses,
-    state: Mutex<State>,
+    state: Arc<Mutex<State>>,
     approvals: Arc<ApprovalQueue>,
     pub schedules: Arc<crate::schedules::Schedules>,
 }
@@ -223,11 +228,11 @@ impl TaskRunner {
             runtime,
             processes,
             schedules,
-            state: Mutex::new(State {
+            state: Arc::new(Mutex::new(State {
                 closed: false,
                 records,
                 actors: BTreeMap::new(),
-            }),
+            })),
             approvals: Arc::new(ApprovalQueue {
                 entries: SyncMutex::new(BTreeMap::new()),
                 revision,
@@ -236,6 +241,44 @@ impl TaskRunner {
                 changed: tokio::sync::Notify::new(),
             }),
         })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn guard_setup_session_renewal(
+        &self,
+        workspace: crate::contract::WorkspaceId,
+    ) -> std::result::Result<SetupTaskGuard, WorkspaceError> {
+        // Computer removal holds this lock before the setup lifecycle lock.
+        // Renewal already owns that lifecycle, so contention must fail closed.
+        let state = self.state.clone().try_lock_owned().map_err(|_| {
+            WorkspaceError::GuestSetup("Task admission is busy; retry saved setup later.".into())
+        })?;
+        if state.closed {
+            return Err(WorkspaceError::ShuttingDown);
+        }
+        let unfinished = |record: &TaskRecord| {
+            record.identity.workspace_id == workspace
+                && !matches!(
+                    record.state,
+                    crate::executor::TaskState::Completed | crate::executor::TaskState::Cancelled
+                )
+        };
+        if state.records.iter().any(|(id, saved)| {
+            state.actors.get(id).map_or_else(
+                || unfinished(saved),
+                |actor| unfinished(&actor.record.borrow()),
+            )
+        }) || state.actors.values().any(|actor| {
+            let record = actor.record.borrow();
+            record.identity.workspace_id == workspace
+                && (!actor.join.is_finished() || unfinished(&record))
+        }) {
+            return Err(WorkspaceError::GuestSetup(
+                "Finish or cancel this bot's unfinished tasks before resuming its saved computer."
+                    .into(),
+            ));
+        }
+        Ok(SetupTaskGuard { _state: state })
     }
 
     pub fn subscribe(&self) -> watch::Receiver<u64> {
@@ -650,6 +693,89 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn setup_session_renewal_fences_tasks_loaded_before_startup_resume() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("tasks");
+        tokio::fs::create_dir_all(&root).await.unwrap();
+        let identity = SessionIdentity {
+            workspace_id: WorkspaceId::new(),
+            session_id: SessionId::new(),
+        };
+        let id = Uuid::new_v4();
+        CuaTask::create_with_id(
+            root.join(format!("{id}.json")),
+            id,
+            identity,
+            vec![json!({"role":"user","content":"unfinished before restart"})],
+            vec![],
+        )
+        .await
+        .unwrap();
+        let service = Arc::new(
+            Service::open(dir.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = Arc::new(WorkspaceRuntime::new(service, Arc::new(NativeVault)));
+        let processes = ExecutorProcesses {
+            python: ProcessSpec {
+                program: "/bin/false".into(),
+                args: vec![],
+            },
+            context: ProcessSpec {
+                program: "/bin/false".into(),
+                args: vec![],
+            },
+        };
+        let runner = TaskRunner::new(root, runtime, processes).await.unwrap();
+        assert_eq!(runner.list().await.unwrap().len(), 1);
+        assert!(runner
+            .guard_setup_session_renewal(identity.workspace_id)
+            .is_err());
+        // An unfinished task from another saved session of this bot still owns it.
+        for state in [
+            TaskState::Ready,
+            TaskState::Running,
+            TaskState::WaitingForHuman,
+            TaskState::Interrupted,
+            TaskState::Paused,
+            TaskState::NeedsReview,
+            TaskState::Completed,
+            TaskState::Cancelled,
+        ] {
+            let mut records = runner.state.lock().await;
+            let saved = records.records.get_mut(&id).unwrap();
+            saved.state = state;
+            saved.identity.session_id = SessionId::new();
+            drop(records);
+            let result = runner.guard_setup_session_renewal(identity.workspace_id);
+            assert_eq!(
+                result.is_ok(),
+                matches!(state, TaskState::Completed | TaskState::Cancelled),
+                "task state {state:?}"
+            );
+        }
+        {
+            let mut state = runner.state.lock().await;
+            state.records.get_mut(&id).unwrap().state = TaskState::Paused;
+            // Fail immediately rather than invert task/removal/setup lock order.
+            assert!(runner
+                .guard_setup_session_renewal(WorkspaceId::new())
+                .is_err());
+        }
+        let other = WorkspaceId::new();
+        let guard = runner.guard_setup_session_renewal(other).unwrap();
+        assert!(runner.state.try_lock().is_err());
+        drop(guard);
+        assert!(runner.state.try_lock().is_ok());
+        runner.state.lock().await.closed = true;
+        assert!(matches!(
+            runner.guard_setup_session_renewal(other),
+            Err(WorkspaceError::ShuttingDown)
+        ));
+    }
+
     #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn computer_removal_requires_finished_tasks() {
@@ -792,6 +918,11 @@ mod tests {
         })
         .await
         .unwrap();
+        // The actor is waiting for a person, with no in-flight guest request.
+        // Its live snapshot must override the stale Ready record in the runner.
+        assert!(runner
+            .guard_setup_session_renewal(identity.workspace_id)
+            .is_err());
         runner.close().await.unwrap();
         for path in [python_pid, context_pid] {
             let pid = tokio::fs::read_to_string(path).await.unwrap();
@@ -806,6 +937,9 @@ mod tests {
             runner.snapshot(id).await.unwrap().state,
             TaskState::WaitingForHuman
         );
+        assert!(runner
+            .guard_setup_session_renewal(identity.workspace_id)
+            .is_err());
         assert!(runner
             .answer_help(id, request.id, Some("Documents".into()))
             .await

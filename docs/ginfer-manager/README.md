@@ -13,7 +13,31 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Managed Host ownership and ports — October 16
+
+Desktop bootstrap and an installed Manager CLI launcher use their configured Host data root.
+Connections check the Host UUID, pinned certificate, canonical state directory
+and platform; a discovery registration for another installation does not
+redirect an open client. If another process occupies a managed management or LAN
+port, Host binds a free port, saves it in that data root and shows the selected
+port in the GChat Manager panel. The other process stays running. Explicit standalone listener
+addresses remain fixed. The shared bootstrap applies to Linux and Windows;
+Windows runtime acceptance remains a separate platform gate. See the
+[ownership decision](../decisions/2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
+and [data-folder behavior](../../DEVELOP.md#custom-data-folder).
+
 ## Fresh startup quotes — October 15
+
+Installed and imported local models can use **Check startup settings** without
+a published catalog or download job. In Manager, choose **Start a model → Custom
+settings**; in GChat, open **Server details → Custom server settings**. Select the
+installed model, GPUs, context, concurrent requests and instance count, then
+check the settings. Host reopens the artifact metadata, validates its registered
+identity and asks the selected Engine runtime for a fresh quote with those exact
+options. Automatic KV sizing uses the same per-instance calculation as placement.
+The check displays the verified identity and KV budget or a clear error; it
+does not start or save an instance, reserve memory, or hash the entire model.
+Changing the form invalidates the displayed result. Actual Start quotes again.
 
 Merged source `16a338aff` addresses
 `GINFER-HOST-PROFILE-DEFAULT-STARTUP-20261015`. Single-instance starts on idle

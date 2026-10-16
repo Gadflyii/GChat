@@ -100,6 +100,21 @@ afterEach(() => {
 })
 
 describe('Workspace connections', () => {
+  it('loads saved accounts only after an explicit connection from a cold session', async () => {
+    api.connectorAccounts
+      .mockRejectedValueOnce(new Error('Connect the account service first'))
+      .mockResolvedValue(initialView())
+    render(<WorkspaceConnections />)
+    const connect = await screen.findByRole('button', {
+      name: 'Connect account service',
+    })
+    expect(api.connectorAccounts).toHaveBeenCalledExactlyOnceWith()
+    await userEvent.setup().click(connect)
+    await screen.findByRole('button', { name: 'Connect Google Workspace' })
+    expect(api.connectorAccounts).toHaveBeenNthCalledWith(2, true)
+    expect(api.connectorAccounts).toHaveBeenCalledTimes(2)
+  })
+
   it('requires saved registration and explicit services before sign-in', async () => {
     const view = initialView()
     view.configs[0].client_id = ''
@@ -150,7 +165,9 @@ describe('Workspace connections', () => {
     const microsoft = within(
       screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
     )
-    await user.click(microsoft.getByText('App registration'))
+    await user.click(
+      microsoft.getByText('Advanced: use your organization’s Microsoft app')
+    )
     await user.click(
       microsoft.getByRole('button', { name: 'Save Microsoft 365 registration' })
     )
@@ -166,6 +183,71 @@ describe('Workspace connections', () => {
     expect(
       microsoft.getByRole('button', { name: 'Save Microsoft 365 registration' })
     ).toBeEnabled()
+  })
+
+  it('explains a missing release identity without exposing a default client ID form', async () => {
+    const view = initialView()
+    view.configs = view.configs.filter((config) => config.provider !== 'microsoft')
+    api.connectorAccounts.mockResolvedValue(view)
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    expect(
+      microsoft.getByText(
+        /Microsoft sign-in is not configured in this GChat release yet/
+      )
+    ).toBeInTheDocument()
+    expect(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    ).toBeDisabled()
+    const field = microsoft.getByLabelText('Client ID')
+    expect(field.closest('details')).not.toHaveAttribute('open')
+    expect(api.beginConnectorAuth).not.toHaveBeenCalled()
+    await userEvent.setup().click(
+      microsoft.getByText('Advanced: use your organization’s Microsoft app')
+    )
+    expect(field.closest('details')).toHaveAttribute('open')
+    expect(
+      microsoft.getByText(/copy its Application \(client\) ID/)
+    ).toBeInTheDocument()
+    expect(
+      microsoft.getByText('http://localhost/oauth/callback')
+    ).toBeInTheDocument()
+    expect(
+      microsoft.queryByLabelText('App secret (optional)')
+    ).not.toBeInTheDocument()
+  })
+
+  it('uses the configured release identity for Microsoft browser sign-in without editing an ID', async () => {
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    const signIn = microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    expect(signIn).toBeDisabled()
+    expect(
+      microsoft.getByLabelText('Client ID').closest('details')
+    ).not.toHaveAttribute('open')
+    const user = userEvent.setup()
+    await user.click(microsoft.getByLabelText('Excel'))
+    api.beginConnectorAuth.mockResolvedValue({
+      ...waiting,
+      provider: 'microsoft',
+      flow_id: 'flow-microsoft',
+    })
+    await user.click(signIn)
+    await waitFor(() =>
+      expect(api.beginConnectorAuth).toHaveBeenCalledWith({
+        provider: 'microsoft',
+        services: ['excel'],
+        access: 'read_only',
+      })
+    )
+    expect(api.configureConnector).not.toHaveBeenCalled()
+    expect(
+      screen.getByText('Complete Microsoft 365 sign-in in your browser.')
+    ).toBeInTheDocument()
   })
 
   it('requests only selected services and access through system-browser sign-in', async () => {

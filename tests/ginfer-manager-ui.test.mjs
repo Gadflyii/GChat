@@ -123,6 +123,29 @@ function submit(app) {
   return form
 }
 
+test('a saved remote host connects only after the explicit Connect action', async (t) => {
+  const view = fixture()
+  const remoteSnapshot = view.hosts[1].snapshot
+  Object.assign(view.hosts[1], { online: false, snapshot: null,
+    error: 'Connect this saved host to unlock its credential for this session' })
+  const app = await manager(t, view, request => {
+    assert.deepEqual(request, { action: 'host', host_id: pairedId, operation: 'snapshot', args: {} })
+    Object.assign(view.hosts[1], { online: true, snapshot: remoteSnapshot, error: null })
+    return remoteSnapshot
+  })
+  const remote = [...app.document.querySelectorAll('.host-button')].find(item => item.textContent.includes('GPU server'))
+  assert.ok(remote)
+  remote.click()
+  assert.deepEqual(requests(app), [], 'passive startup must not send an explicit host connection')
+  assert.ok(app.document.querySelector('main').textContent.includes('Connect this saved host'))
+  assert.equal(button(app.document, 'Connect').disabled, false)
+  button(app.document, 'Connect').click()
+  await completed(app, requests => requests.some(request => request.operation === 'snapshot'))
+  assert.ok(![...app.document.querySelectorAll('main button')].some(item => item.textContent.trim() === 'Connect'))
+  assert.ok(!app.document.querySelector('main').textContent.includes('Connect this saved host'))
+  assert.equal(button(app.document, 'Start a model…').disabled, false)
+})
+
 test('shared first-run flow selects GPUs, resumes work and approves Engine startup defaults', async (t) => {
   const view = fixture()
   const release = { name: 'Muse download', sha256: 'a'.repeat(64), bytes: 1024 ** 3 }
@@ -729,6 +752,106 @@ test('new custom launches default structured outputs ON and preserve Host KV AUT
     assert.equal(configuration.concurrency, 1)
     assert.equal(configuration.qualified_profile_id, null)
   }
+})
+
+test('installed local models can quote exact custom settings with an empty release catalog without starting or saving', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.launch_profiles = []
+  view.first_run = { step: 'models', catalog_loaded: true, models: [], selected_downloads: [], startup_profiles: [] }
+  const app = await manager(t, view, request => request.operation === 'quote'
+    ? { model_identity: { model_id: 'muse-glimmer-30b', weights_id: 'nvfp4' }, instance_count: 2, kv_arena_bytes: 4294967296, quote: {} }
+    : {})
+  const saved = structuredClone(view.hosts[0].snapshot)
+  button(app.document, 'Start a model…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  pane.querySelector('input[name="gpu"]').checked = true
+  pane.querySelector('input[name="max_context"]').value = '131072'
+  pane.querySelector('input[name="concurrency"]').value = '2'
+  pane.querySelector('input[name="instance_count"]').value = '2'
+  pane.querySelector('input[name="structured_outputs"]').checked = false
+  pane.querySelector('input[name="host_kv_cache_bytes"]').value = '0'
+  pane.querySelector('input[name="kv_arena_bytes"]').value = '4294967296'
+  button(pane, 'Check startup settings').click()
+  await waitFor(() => pane.textContent.includes('Verified artifact:'), 'a local artifact quote must render without a published release')
+  const expected = {
+    instance_id: null, qualified_profile_id: null, model_id: 'installed-muse', gpu_uuids: ['GPU-local'],
+    max_context: 131072, concurrency: 2, vision: true, structured_outputs: false,
+    spec: 'auto', draft_policy: 'auto', draft_tokens: 0, kv_dtype: 'auto',
+    kv_arena_bytes: 4294967296, vram_budget_bytes: null, host_kv_cache_bytes: 0, remaining_instances: 2,
+  }
+  assert.deepEqual(requests(app), [{ action: 'host', host_id: localId, operation: 'quote', args: expected }])
+  assert.match(pane.textContent, /Verified artifact: muse-glimmer-30b \/ nvfp4/)
+  assert.match(pane.textContent, /GPU KV per instance: 4\.0 GiB \(4,294,967,296 bytes\) · 2 instance\(s\)/)
+  assert.match(pane.textContent, /No instance has been started or saved/)
+  assert.deepEqual(view.hosts[0].snapshot, saved, 'quote must not manufacture a download, profile or instance')
+  submit(app)
+  await completed(app, calls => calls.length === 3)
+  assert.deepEqual(requests(app)[1], { action: 'host', host_id: localId, operation: 'launch', args: expected },
+    'ordinary Start must use the same settings and obtain its own fresh quote')
+  assert.equal(requests(app)[2].operation, 'launch')
+  assert.equal(requests(app)[2].args.remaining_instances, undefined)
+})
+
+test('local startup quotes discard late responses and clear success on settings or Host changes', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.launch_profiles = []
+  let release
+  const app = await manager(t, view, async request => {
+    assert.equal(request.operation, 'quote')
+    if (requests(app).length === 1) await new Promise(resolve => { release = resolve })
+    return { model_identity: { model_id: 'muse-glimmer-30b', weights_id: 'nvfp4' }, instance_count: 1, kv_arena_bytes: 4294967296, quote: {} }
+  })
+  button(app.document, 'Start a model…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  pane.querySelector('input[name="gpu"]').checked = true
+  const context = pane.querySelector('input[name="max_context"]')
+  context.value = '131072'
+  button(pane, 'Check startup settings').click()
+  await waitFor(() => typeof release === 'function', 'quote request must remain in flight')
+  context.value = '65536'
+  context.dispatchEvent(new app.window.Event('input', { bubbles: true }))
+  release()
+  await waitFor(() => !button(pane, 'Check startup settings').disabled, 'stale quote must settle')
+  assert.ok(!pane.textContent.includes('Verified artifact:'), 'a quote for old settings must never render success')
+  button(pane, 'Check startup settings').click()
+  await waitFor(() => pane.textContent.includes('Verified artifact:'), 'current settings can be checked again')
+  assert.equal(requests(app)[1].args.max_context, 65536)
+  const structured = pane.querySelector('input[name="structured_outputs"]')
+  structured.checked = false
+  structured.dispatchEvent(new app.window.Event('change', { bubbles: true }))
+  assert.ok(!pane.textContent.includes('Verified artifact:'))
+  button(pane, 'Check startup settings').click()
+  await waitFor(() => pane.textContent.includes('Verified artifact:'), 'changed options can be checked again')
+  const next = structuredClone(view)
+  next.hosts[0].snapshot.boot_id = 'new-host-process'
+  await app.publish(next)
+  assert.ok(!pane.textContent.includes('Verified artifact:'), 'a restarted Host invalidates the estimate')
+  assert.ok(requests(app).every(request => request.operation === 'quote'))
+})
+
+test('local startup checks show Engine failures and validate the shared launch settings before sending', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.launch_profiles = []
+  const app = await manager(t, view, request => {
+    assert.equal(request.operation, 'quote')
+    throw new Error('Engine quote: insufficient memory for selected context')
+  })
+  button(app.document, 'Start a model…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  pane.querySelector('input[name="gpu"]').checked = true
+  pane.querySelector('input[name="max_context"]').value = '131072'
+  const budget = pane.querySelector('input[name="kv_arena_bytes"]')
+  budget.value = '0'
+  button(pane, 'Check startup settings').click()
+  await waitFor(() => pane.textContent.includes('GPU KV budget must be a positive whole number'), 'invalid explicit allocation must fail before the request')
+  assert.equal(requests(app).length, 0)
+  budget.value = ''
+  budget.dispatchEvent(new app.window.Event('input', { bubbles: true }))
+  button(pane, 'Check startup settings').click()
+  await waitFor(() => pane.textContent.includes('Engine quote: insufficient memory for selected context'), 'Engine rejection must stay visible in the form')
+  assert.equal(requests(app).length, 1)
+  assert.ok(!pane.textContent.includes('Verified artifact:'))
+  assert.ok(pane.isConnected, 'failed checking must preserve the editable form')
 })
 
 test('reload preserves saved structured-output OFF and Host KV zero or cleared AUTO', async (t) => {

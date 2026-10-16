@@ -1,7 +1,9 @@
 //! Tauri commands for starting and cancelling an isolated agent turn.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::UNIX_EPOCH;
 
@@ -57,6 +59,36 @@ pub(super) struct AgentRunGuard {
     registry: AgentRunRegistry,
     run_id: String,
     finished: watch::Sender<bool>,
+    pending_cleanup: Option<AgentPendingCleanup>,
+}
+
+struct AgentPendingCleanup {
+    runtime: tokio::runtime::Handle,
+    pending: Pin<Box<dyn Future<Output = ()> + Send>>,
+}
+
+impl AgentRunGuard {
+    fn cleanup_pending_on_drop(&mut self, state: &AppState, cancellation: CancellationToken) {
+        let run_id = self.run_id.clone();
+        let cancellations = state.tool_call_cancellations.clone();
+        let approvals = state.agent_pending_approvals.clone();
+        let folder_access = state.agent_pending_folder_access.clone();
+        self.pending_cleanup = Some(AgentPendingCleanup {
+            runtime: tokio::runtime::Handle::current(),
+            pending: Box::pin(async move {
+                cancellation.cancel();
+                cancellations.lock().await.remove(&run_id);
+                approvals
+                    .lock()
+                    .await
+                    .retain(|_, pending| pending.run_id != run_id);
+                folder_access
+                    .lock()
+                    .await
+                    .retain(|_, pending| pending.run_id != run_id);
+            }),
+        });
+    }
 }
 
 impl AgentRunRegistry {
@@ -84,6 +116,7 @@ impl AgentRunRegistry {
             registry: self.clone(),
             run_id: run_id.to_owned(),
             finished,
+            pending_cleanup: None,
         })
     }
 
@@ -128,13 +161,28 @@ impl Drop for AgentRunGuard {
         // Retire live events before allowing this run ID to be admitted again.
         // The live-view lock is released before taking the registry lock.
         super::studio::forget_live_run(&self.run_id);
-        self.registry
-            .inner
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .runs
-            .remove(&self.run_id);
-        self.finished.send_replace(true);
+        let registry = self.registry.clone();
+        let run_id = self.run_id.clone();
+        let finished = self.finished.clone();
+        let complete = move || {
+            registry
+                .inner
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .runs
+                .remove(&run_id);
+            finished.send_replace(true);
+        };
+        if let Some(AgentPendingCleanup { runtime, pending }) = self.pending_cleanup.take() {
+            // Keep admission fenced until this invocation's state is retired.
+            // A replacement with the same run ID must not lose its new entries.
+            runtime.spawn(async move {
+                pending.await;
+                complete();
+            });
+        } else {
+            complete();
+        }
     }
 }
 
@@ -809,7 +857,7 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
     let state = app_handle.state::<AppState>();
     validate_request(&request)?;
     let cancellation = CancellationToken::new();
-    let _run_guard = state
+    let mut run_guard = state
         .agent_runs
         .register(&request.run_id, cancellation.clone())?;
     let event_registry = state.agent_runs.clone();
@@ -890,6 +938,7 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         }
         cancellations.insert(request.run_id.clone(), cancel_tx);
     }
+    run_guard.cleanup_pending_on_drop(&state, cancellation.clone());
     if let Some(notify) = registered {
         notify();
     }
@@ -1184,6 +1233,7 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         .remove(&request.run_id);
     clear_pending_approvals_for_run(&state, &request.run_id).await;
     clear_pending_folder_access_for_run(&state, &request.run_id).await;
+    run_guard.pending_cleanup = None;
     result
 }
 
@@ -1596,6 +1646,8 @@ mod tests {
             .contains("still active"));
         };
         if interrupted {
+            use crate::core::state::{PendingAgentApproval, PendingAgentFolderAccess};
+
             let mut run = Box::pin(run);
             tokio::time::timeout(Duration::from_secs(5), async {
                 tokio::select! {
@@ -1624,9 +1676,113 @@ mod tests {
             .unwrap();
             assert!(monitor["active"].get(&run_id).is_some());
             assert!(monitor["active"].get(&other_run_id).is_some());
+            let state = app.state::<AppState>();
+            let (mut finished, cancellation) = {
+                let registry = state.agent_runs.inner.lock().unwrap();
+                let registered = registry.runs.get(&run_id).unwrap();
+                (registered.finished.clone(), registered.cancellation.clone())
+            };
+            let (other_cancel_tx, mut other_cancel_rx) = oneshot::channel();
+            state
+                .tool_call_cancellations
+                .lock()
+                .await
+                .insert(other_run_id.clone(), other_cancel_tx);
+            let (other_approval_tx, mut other_approval_rx) = oneshot::channel();
+            state.agent_pending_approvals.lock().await.insert(
+                "other-approval".into(),
+                PendingAgentApproval {
+                    run_id: other_run_id.clone(),
+                    fingerprint: "other".into(),
+                    can_remember: false,
+                    sender: other_approval_tx,
+                },
+            );
+            let (other_folder_tx, mut other_folder_rx) = oneshot::channel();
+            let (folder_tx, mut folder_rx) = oneshot::channel();
+            {
+                let mut pending = state.agent_pending_folder_access.lock().await;
+                pending.insert(
+                    "other-folder".into(),
+                    PendingAgentFolderAccess {
+                        run_id: other_run_id.clone(),
+                        sender: other_folder_tx,
+                    },
+                );
+                // Cover retirement of an owned folder prompt as well as the
+                // real shell approval already waiting in this invocation.
+                pending.insert(
+                    "interrupted-folder".into(),
+                    PendingAgentFolderAccess {
+                        run_id: run_id.clone(),
+                        sender: folder_tx,
+                    },
+                );
+            }
+            let cancellations = state.tool_call_cancellations.lock().await;
+            assert!(cancellations.contains_key(&run_id));
             // Drop the invocation without the normal exit/cancellation path.
             // A fresh AppState models loss of volatile state, not power loss.
             drop(run);
+            // The held original-state mutex prevents cleanup from completing;
+            // admission must remain fenced without relying on a timing sleep.
+            assert!(state.agent_runs.is_active(&run_id));
+            assert!(!*finished.borrow());
+            assert!(state
+                .agent_runs
+                .register(&run_id, CancellationToken::new())
+                .err()
+                .unwrap()
+                .contains("already active"));
+            drop(cancellations);
+            tokio::time::timeout(Duration::from_secs(5), async {
+                while !*finished.borrow_and_update() {
+                    finished
+                        .changed()
+                        .await
+                        .expect("invocation cleanup completes");
+                }
+            })
+            .await
+            .expect("pending state must retire before completion is reported");
+            assert!(cancellation.is_cancelled());
+            assert!(!state.agent_runs.is_active(&run_id));
+            assert!(!state
+                .tool_call_cancellations
+                .lock()
+                .await
+                .contains_key(&run_id));
+            {
+                let pending = state.agent_pending_approvals.lock().await;
+                assert!(pending.values().all(|pending| pending.run_id != run_id));
+                assert_eq!(pending["other-approval"].run_id, other_run_id);
+            }
+            {
+                let pending = state.agent_pending_folder_access.lock().await;
+                assert!(!pending.contains_key("interrupted-folder"));
+                assert_eq!(pending["other-folder"].run_id, other_run_id);
+            }
+            assert_eq!(
+                folder_rx.try_recv(),
+                Err(oneshot::error::TryRecvError::Closed)
+            );
+            assert_eq!(
+                other_cancel_rx.try_recv(),
+                Err(oneshot::error::TryRecvError::Empty)
+            );
+            assert_eq!(
+                other_approval_rx.try_recv(),
+                Err(oneshot::error::TryRecvError::Empty)
+            );
+            assert_eq!(
+                other_folder_rx.try_recv(),
+                Err(oneshot::error::TryRecvError::Empty)
+            );
+            let replacement = state
+                .agent_runs
+                .register(&run_id, CancellationToken::new())
+                .expect("the same run ID is reusable after pending-state cleanup");
+            drop(replacement);
             let monitor = super::super::studio::operation(
                 app.handle().clone(), "monitor", serde_json::json!({}),
             )
@@ -1638,6 +1794,14 @@ mod tests {
                 "Another run is still active"
             );
             assert_eq!(monitor["completed"].as_array().unwrap().len(), 1);
+            agent_cancel_turn(app.state(), other_run_id.clone())
+                .await
+                .unwrap();
+            other_cancel_rx
+                .try_recv()
+                .expect("ordinary Stop still cancels the other run");
+            assert_eq!(other_approval_rx.try_recv().unwrap(), ApprovalDecision::Deny);
+            assert!(!other_folder_rx.try_recv().unwrap());
             drop(other_run);
             let reopened = tauri::test::mock_app();
             reopened.manage(AppState::default());

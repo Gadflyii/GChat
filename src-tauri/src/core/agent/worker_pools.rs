@@ -919,6 +919,25 @@ mod tests {
             .await
             .unwrap();
         let joining = member.independent_client().await;
+        joining.connect(member_id).await.unwrap();
+        let discovered = FleetClient::new(joining.clone()).read().await.unwrap();
+        assert!(!discovered.connected);
+        assert!(discovered
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("Pair the fleet coordinator"));
+        let authority = discovered.authority.unwrap();
+        assert_eq!(authority.host_id, host_id);
+        assert_eq!(
+            coordinator.host.data.lock().await.clients.len(),
+            1,
+            "passive discovery must not issue a coordinator grant"
+        );
+        joining
+            .pair_locator(&authority, "Joining fixture")
+            .await
+            .unwrap();
         let report = FleetClient::new(joining.clone()).read().await.unwrap();
         assert!(report.connected, "{:?}", report.error);
         assert_eq!(report.snapshot.unwrap().pools, vec![pool]);
@@ -942,6 +961,8 @@ mod tests {
             let a = TestFleet::start().await;
             let b = TestFleet::start().await;
             let observing = a.independent_client().await;
+            let a_host_id = a.host.data.lock().await.host_id;
+            observing.connect(a_host_id).await.unwrap();
             let original = FleetClient::new(a.client.clone())
                 .read()
                 .await
@@ -967,6 +988,7 @@ mod tests {
                     .unwrap()
                     .authority
                     .unwrap();
+                observing.connect(selected.host_id).await.unwrap();
                 other.set_fleet_authority(selected.clone()).await.unwrap();
                 a.resume_fleet_reads();
                 selected
@@ -1055,6 +1077,24 @@ mod tests {
             Some(&published)
         );
         let client_b = member.independent_client().await;
+        client_b.connect(member_id).await.unwrap();
+        let discovered = FleetClient::new(client_b.clone()).read().await.unwrap();
+        assert!(!discovered.connected);
+        assert_eq!(discovered.authority.as_ref(), Some(&published));
+        assert!(discovered
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("Pair the fleet coordinator"));
+        assert_eq!(
+            coordinator.host.data.lock().await.clients.len(),
+            1,
+            "passive discovery must not issue a coordinator grant"
+        );
+        client_b
+            .pair_locator(&published, "Second fixture")
+            .await
+            .unwrap();
         let b = FleetClient::new(client_b.clone()).read().await.unwrap();
         assert!(b.connected, "{:?}", b.error);
         assert_eq!(b.snapshot.as_ref().unwrap().pools, vec![pool.clone()]);
@@ -1170,6 +1210,10 @@ mod tests {
         let local = TestFleet::unconfigured().await;
         let remote = TestFleet::unconfigured().await;
         local.register(&remote).await;
+        let local_id = local.host.data.lock().await.host_id;
+        let remote_id = remote.host.data.lock().await.host_id;
+        local.client.connect(local_id).await.unwrap();
+        local.client.connect(remote_id).await.unwrap();
         remote.stop();
         tokio::task::yield_now().await;
         let config = tempfile::tempdir().unwrap();

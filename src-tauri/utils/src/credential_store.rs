@@ -204,18 +204,13 @@ impl Store {
         self.native.probe()
     }
     pub fn status(&self) -> Status {
-        let error = self.require_ready().err();
+        // Availability is checked explicitly when a credential is needed.
         Status {
-            ready: error.is_none(),
+            ready: false,
             tier: Some(Tier::Native),
-            state: if error.is_none() {
-                "ready"
-            } else {
-                "unavailable"
-            }
-            .into(),
+            state: "unchecked".into(),
             can_create: false,
-            error: error.map(|e| e.to_string()),
+            error: None,
             migrating: false,
         }
     }

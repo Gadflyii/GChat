@@ -59,9 +59,22 @@ fn installer() -> Option<(&'static str, &'static [&'static str])> {
     std::path::Path::new(plan.0).exists().then_some(plan)
 }
 
-pub async fn status() -> Value {
-    let result = checked(|| {
-        serde_json::to_value(super::initialize_credentials()?.status()).map_err(|e| e.to_string())
+pub async fn status(check: bool) -> Value {
+    let result = checked(move || {
+        let store = super::initialize_credentials()?;
+        let verified = check.then(|| store.require_ready());
+        let mut status = store.status();
+        if let Some(result) = verified {
+            status.ready = result.is_ok();
+            status.state = if result.is_ok() {
+                "ready"
+            } else {
+                "unavailable"
+            }
+            .into();
+            status.error = result.err().map(|error| error.to_string());
+        }
+        serde_json::to_value(status).map_err(|e| e.to_string())
     })
     .await;
     let mut value = result
@@ -193,7 +206,7 @@ pub async fn change(
         }
         _ => return Err("Unknown credential operation".into()),
     }
-    Ok(status().await)
+    Ok(status(false).await)
 }
 
 pub async fn require_ready() -> Result<(), String> {

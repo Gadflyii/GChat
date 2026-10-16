@@ -6,7 +6,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::{collections::BTreeSet, path::PathBuf, sync::atomic::Ordering, time::Duration};
+use std::{collections::BTreeSet, path::PathBuf, sync::atomic::Ordering};
 use uuid::Uuid;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
@@ -997,42 +997,7 @@ impl Host {
             .lock()
             .await
             .validate_launch(&launch, false)?;
-        let receipt = if launch.model_id.starts_with("qwen3.8-flash-next/") {
-            let key = self.processes.lock().await.graph_receipt_key(&launch)?;
-            self.data.lock().await.graph_receipts.get(&key).copied()
-        } else {
-            None
-        };
-        let mut command = self
-            .processes
-            .lock()
-            .await
-            .startup_quote_command(&launch, receipt)?;
-        let output = tokio::time::timeout(Duration::from_secs(600), command.output())
-            .await
-            .map_err(|_| "Engine startup quote timed out")?
-            .map_err(|e| e.to_string())?;
-        if !output.status.success() {
-            return Err(format!(
-                "Engine startup quote failed: {}",
-                String::from_utf8_lossy(
-                    &output.stderr[output.stderr.len().saturating_sub(16384)..]
-                )
-                .trim()
-            ));
-        }
-        let value: Value = serde_json::from_slice(&output.stdout)
-            .map_err(|e| format!("Invalid Engine startup quote: {e}"))?;
-        let quote: crate::engine_host::StartupQuote =
-            serde_json::from_value(value.clone()).map_err(|e| e.to_string())?;
-        quote.validate(&launch)?;
-        if !(launch.model_id.starts_with("qwen3.8-flash-next/")
-            && profile.instance_count == 1
-            && launch.options.kv_arena_bytes.is_none()
-            && quote.unknown_graph_allowance())
-        {
-            quote.kv_budget(&launch, profile.instance_count)?;
-        }
+        let (value, _) = self.quote_prepared(&launch, profile.instance_count).await?;
         Ok(value)
     }
 }
@@ -1041,6 +1006,7 @@ impl Host {
 mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
+    use std::time::Duration;
 
     fn gpu() -> Gpu {
         Gpu {

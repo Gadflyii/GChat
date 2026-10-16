@@ -244,6 +244,15 @@ pub(super) async fn collect_stream<R: tokio::io::AsyncRead + Unpin>(
     command: &str,
     input: R,
 ) -> Result<(u32, Vec<u8>), SshError> {
+    collect_stream_limited(client, command, input, None).await
+}
+
+async fn collect_stream_limited<R: tokio::io::AsyncRead + Unpin>(
+    client: &Client,
+    command: &str,
+    input: R,
+    limit: Option<usize>,
+) -> Result<(u32, Vec<u8>), SshError> {
     let channel = open_exec(client, command).await?;
     let (mut read, write) = channel.split();
     let write = CommandWrite(Some(write));
@@ -270,7 +279,12 @@ pub(super) async fn collect_stream<R: tokio::io::AsyncRead + Unpin>(
         let mut code = None;
         while let Some(message) = read.wait().await {
             match message {
-                russh::ChannelMsg::Data { data } => bytes.extend_from_slice(&data),
+                russh::ChannelMsg::Data { data } => {
+                    if limit.is_some_and(|limit| data.len() > limit.saturating_sub(bytes.len())) {
+                        return Err(SshError::Protocol);
+                    }
+                    bytes.extend_from_slice(&data);
+                }
                 russh::ChannelMsg::ExitStatus { exit_status } => code = Some(exit_status),
                 russh::ChannelMsg::Close => break,
                 _ => {}
@@ -288,6 +302,16 @@ pub(super) async fn check_session(
 ) -> Result<(), SshError> {
     let (code, bytes) = collect(client, &command("hello", identity, None, &[]), &[]).await?;
     if code == 65 {
+        // A generic mismatch is never enough to renew an identity. Inspect only
+        // this binding through the same pinned, authenticated SSH connection.
+        if let Ok(Ok(change)) = tokio::time::timeout(
+            Duration::from_secs(5),
+            desktop_binding_change(client, identity),
+        )
+        .await
+        {
+            return Err(change);
+        }
         return Err(SshError::Contract(ContractError::SessionMismatch));
     }
     if code != 0 {
@@ -304,6 +328,67 @@ pub(super) async fn check_session(
         return Err(SshError::Protocol);
     }
     Ok(())
+}
+
+async fn desktop_binding_change(
+    client: &Client,
+    identity: SessionIdentity,
+) -> Result<SshError, SshError> {
+    // Do not source desktop.env or expose its authentication/environment fields.
+    // UUIDs are typed host identities; no guest or user text enters this command.
+    let command = format!(
+        r#"( set -eu; # GBOT-DESKTOP-BINDING-1
+export XDG_RUNTIME_DIR=/run/user/$(id -u)
+export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
+binding="$HOME/.local/state/gbot/{}/{}/desktop"
+[ "$(wc -c < "$binding")" -eq 32 ]
+saved=$(head -c 32 "$binding")
+current=$(systemctl --user show gbot-desktop.service --property=InvocationID --value)
+systemctl --user is-active --quiet gbot-desktop.service
+display=$(sed -n 's/^DISPLAY=//p' "$XDG_RUNTIME_DIR/gbot/desktop.env" | head -c 17)
+confirmed=$(systemctl --user show gbot-desktop.service --property=InvocationID --value)
+[ "$current" = "$confirmed" ]
+systemctl --user is-active --quiet gbot-desktop.service
+printf 'GBOT-DESKTOP-BINDING-1\n%s\n%s\n%s\nactive\n' "$saved" "$current" "$display"
+)"#,
+        identity.workspace_id.as_uuid(),
+        identity.session_id.as_uuid(),
+    );
+    let (code, bytes) = collect_stream_limited(client, &command, &[][..], Some(128)).await?;
+    if code != 0 {
+        return Err(SshError::Protocol);
+    }
+    let text = std::str::from_utf8(&bytes).map_err(|_| SshError::Protocol)?;
+    let fields: Vec<_> = text.split('\n').collect();
+    let ["GBOT-DESKTOP-BINDING-1", saved, current, display, "active", ""] = fields.as_slice()
+    else {
+        return Err(SshError::Protocol);
+    };
+    let invocation_id = |value: &str| {
+        if value.len() != 32 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(SshError::Protocol);
+        }
+        let id = uuid::Uuid::parse_str(value).map_err(|_| SshError::Protocol)?;
+        if id.is_nil() {
+            return Err(SshError::Protocol);
+        }
+        Ok(id)
+    };
+    let saved_invocation_id = invocation_id(saved)?;
+    let current_invocation_id = invocation_id(current)?;
+    let number = display.strip_prefix(':').ok_or(SshError::Protocol)?;
+    if number.is_empty() || !number.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(SshError::Protocol);
+    }
+    let display = number.parse::<u16>().map_err(|_| SshError::Protocol)?;
+    if saved_invocation_id == current_invocation_id {
+        return Err(SshError::Protocol);
+    }
+    Ok(SshError::DesktopRestarted {
+        saved_invocation_id,
+        current_invocation_id,
+        display,
+    })
 }
 
 struct Receipt {

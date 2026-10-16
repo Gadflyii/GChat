@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-16** — [Bind managed Host identity and ports to its data root](2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
+
 - **2026-10-16** — [Accept first-run choices during native profiling](2026-10-16-accept-first-run-intents-during-profiling.md)
 
 - **2026-10-15** — [Preserve Gbot owner and recover paused control](2026-10-15-preserve-gbot-owner-and-recover-paused-control.md)
@@ -505,3 +507,7 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-15** — [Confine AppImage GIO modules to the bundled directory](2026-10-15-confine-appimage-gio-modules-to-the-bundled-directory.md)
 - **2026-10-16** — [Include qualified client tools in the Linux release](2026-10-16-include-qualified-client-tools-in-linux-release.md)
 - **2026-10-16** — [Persist interrupted Studio run history](2026-10-16-persist-interrupted-studio-run-history.md)
+- **2026-10-16** — [Open secure storage only for explicit connections](2026-10-16-open-secure-storage-only-for-explicit-connections.md)
+- **2026-10-16** — [Renew idle Gbot setup after a proven desktop restart](2026-10-16-renew-idle-gbot-setup-after-proven-desktop-restart.md)
+- **2026-10-16** — [Quote installed models without a catalog](2026-10-16-quote-installed-models-without-a-catalog.md)
+- **2026-10-16** — [Guide Microsoft sign-in with a release identity](2026-10-16-guide-microsoft-sign-in-with-release-identity.md)

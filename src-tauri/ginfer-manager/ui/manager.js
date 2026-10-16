@@ -153,6 +153,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       state.selected = array(view.hosts).find((host) => host.local)?.host_id || array(view.hosts)[0]?.host_id || null
     }
     savePreference('host', state.selected)
+    state.dialog?.observe?.()
     for (const host of array(view.hosts)) {
       if (host.local && online(host) && state.firstRuns.get(host.host_id)?.step !== 'complete' && !state.firstRunPending.has(host.host_id)) void readFirstRun(host)
     }
@@ -424,6 +425,88 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       checked: previous.structured_outputs ?? true, onchange: () => updateStructuredEvidence() })
     const structuredField = h('label', { class: 'check' }, structuredInput, 'Structured outputs')
     const content = h('div')
+    let quoteRevision = 0
+    let quotePending = false
+    const quoteResult = h('div', { 'aria-live': 'polite' })
+    const quoteButton = h('button', { type: 'button', onclick: async () => {
+      const form = quoteButton.closest('form')
+      if (!form || quotePending) return
+      invalidateQuote()
+      const revision = quoteRevision
+      try {
+        const { count, kvBytes } = placementSettings(form)
+        requireOnlineHost()
+        const configuration = customConfiguration(form, kvBytes)
+        quotePending = true
+        quoteButton.disabled = true
+        quoteResult.replaceChildren(h('p', { role: 'status' }, 'Checking these settings with the Engine…'))
+        const response = await invoke('manager_request', { request: hostRequest(host, 'quote', {
+          ...configuration, remaining_instances: count,
+        }) })
+        apply(response.view)
+        if (!form.isConnected || revision !== quoteRevision) return
+        const result = response.result
+        const identity = result?.model_identity
+        if (!identity?.model_id || !identity?.weights_id) throw new Error('The Engine quote did not identify the model artifact')
+        quoteResult.replaceChildren(
+          h('p', { role: 'status' }, `Verified artifact: ${identity.model_id} / ${identity.weights_id}`),
+          h('p', {}, result.kv_arena_bytes == null
+            ? 'Automatic GPU KV memory needs a successful startup to measure graph memory.'
+            : `GPU KV per instance: ${size(result.kv_arena_bytes)} (${result.kv_arena_bytes.toLocaleString()} bytes) · ${result.instance_count} instance(s)`),
+          note('This is a current Engine estimate. Starting obtains a fresh quote. No instance has been started or saved.'))
+      } catch (error) {
+        if (form.isConnected && revision === quoteRevision) quoteResult.replaceChildren(h('p', { class: 'section-error', role: 'alert' }, String(error)))
+      } finally {
+        quotePending = false
+        updateQuoteAvailability()
+      }
+    } }, 'Check startup settings')
+    const quoteControls = h('div', {}, quoteButton, quoteResult)
+    function invalidateQuote() {
+      quoteRevision++
+      quoteResult.replaceChildren()
+    }
+    function updateQuoteAvailability() {
+      const latest = observation().hosts.get(host.host_id)
+      quoteButton.disabled = quotePending || !online(latest) || profiling(latest)
+      quoteControls.hidden = !!instance || mode !== 'custom'
+    }
+    function requireOnlineHost() {
+      const latest = observation().hosts.get(host.host_id)
+      if (!online(latest) || profiling(latest)) throw new Error('Wait until the Host is online and hardware profiling has stopped before checking or launching a model.')
+    }
+    function placementSettings(form) {
+      const count = instance ? 1 : Number(fieldValue(form, 'instance_count'))
+      if (!Number.isInteger(count) || count < 1 || count > 4294967295) throw new Error('Instances must be a positive whole number below 4294967296')
+      const kvBytes = fieldValue(form, 'kv_arena_bytes') === '' ? null : Number(fieldValue(form, 'kv_arena_bytes'))
+      if (kvBytes !== null && (!Number.isSafeInteger(kvBytes) || kvBytes < 1)) {
+        throw new Error('GPU KV budget must be a positive whole number of bytes, or blank for automatic sizing')
+      }
+      return { count, kvBytes }
+    }
+    function customConfiguration(form, kvBytes) {
+      const configuration = { ...previous, instance_id: instance?.instance_id || null, qualified_profile_id: null,
+        model_id: fieldValue(form, 'model_id'), gpu_uuids: checkedValues(form, 'gpu'),
+        max_context: Number(fieldValue(form, 'max_context')), concurrency: Number(fieldValue(form, 'concurrency')),
+        vision: checked(form, 'vision'), structured_outputs: checked(form, 'structured_outputs'), spec: fieldValue(form, 'spec'), draft_policy: fieldValue(form, 'draft_policy'),
+        draft_tokens: Number(fieldValue(form, 'draft_tokens')), kv_dtype: fieldValue(form, 'kv_dtype'),
+        kv_arena_bytes: kvBytes,
+        vram_budget_bytes: fieldValue(form, 'vram_budget_bytes') === '' ? null : Number(fieldValue(form, 'vram_budget_bytes')),
+        host_kv_cache_bytes: fieldValue(form, 'host_kv_cache_bytes') === '' ? null : Number(fieldValue(form, 'host_kv_cache_bytes')) }
+      if (!configuration.gpu_uuids.length) throw new Error('Choose the exact GPU group')
+      if (configuration.vram_budget_bytes !== null && (!Number.isSafeInteger(configuration.vram_budget_bytes) || configuration.vram_budget_bytes < 1)) {
+        throw new Error('Flash weight residency budget must be a positive whole number of bytes, or blank for automatic sizing')
+      }
+      if (configuration.host_kv_cache_bytes !== null && (!Number.isSafeInteger(configuration.host_kv_cache_bytes) || configuration.host_kv_cache_bytes < 0)) {
+        throw new Error('Host KV cache must be a nonnegative whole number of bytes, or blank for automatic sizing')
+      }
+      const width = configuration.draft_tokens
+      if (!Number.isInteger(width) || width < 0) throw new Error('Draft width must be a whole number')
+      if (configuration.spec === 'dflash' && (width < 1 || width > 15)) throw new Error('DFlash2 requires a draft width from 1 to 15; the host checks the exact model limit')
+      if (configuration.spec === 'mtp' && (width < 1 || width >= 4294967295)) throw new Error('MTP requires a positive draft width below 4294967295')
+      if (['auto', 'none'].includes(configuration.spec) && width !== 0) throw new Error('Automatic or disabled speculation uses draft width 0')
+      return configuration
+    }
     const radios = h('div', { class: 'radio-tabs' }, ['profile', 'custom'].map((kind) => h('label', {},
       h('input', { type: 'radio', name: 'launch_mode', value: kind, checked: mode === kind,
         disabled: kind === 'profile' && !profiles.length, onchange: () => { mode = kind; fill() } }),
@@ -433,6 +516,8 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       return `GPU ${entry?.index ?? -1} · ${text(entry?.gpu.display_name || entry?.gpu.name, id)}`
     }).join(' + ')
     function fill() {
+      invalidateQuote()
+      updateQuoteAvailability()
       if (mode === 'profile') {
         const selected = profiles[profileChoice]
         const groupKey = (group) => JSON.stringify([...group].sort())
@@ -525,18 +610,13 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         ...(!instance ? [field('Instances', 'instance_count', 1, 'number', { required: '', min: 1, max: 4294967295 })] : []),
         field('GPU KV budget per instance (bytes, blank = automatic)', 'kv_arena_bytes', previous.kv_arena_bytes ?? '', 'number', { min: 1, max: Number.MAX_SAFE_INTEGER }),
         note('When sharing a GPU, the Host uses the Engine startup quote and splits the remaining KV memory equally across the new instances. Enter a byte budget to choose their share. Instances start one at a time with separate ports; existing instances keep their allocations.'),
+        ...(!instance ? [quoteControls] : []),
         ...(instance?.active_requests > 0 ? [h('label', { class: 'check' },
         h('input', { type: 'checkbox', name: 'force' }), `Interrupt ${instance.active_requests} active request(s)`)] : [])],
       instance ? 'Reload' : 'Start', async (form) => {
-        const latest = observation().hosts.get(host.host_id)
-        if (!online(latest) || profiling(latest)) throw new Error('Wait until the Host is online and hardware profiling has stopped before launching a model.')
+        requireOnlineHost()
         const guard = instance ? { instance_id: instance.instance_id, expected_session_id: instance.session_id ?? null, force: checked(form, 'force') } : {}
-        const count = instance ? 1 : Number(fieldValue(form, 'instance_count'))
-        if (!Number.isInteger(count) || count < 1 || count > 4294967295) throw new Error('Instances must be a positive whole number below 4294967296')
-        const kvBytes = fieldValue(form, 'kv_arena_bytes') === '' ? null : Number(fieldValue(form, 'kv_arena_bytes'))
-        if (kvBytes !== null && (!Number.isSafeInteger(kvBytes) || kvBytes < 1)) {
-          throw new Error('GPU KV budget must be a positive whole number of bytes, or blank for automatic sizing')
-        }
+        const { count, kvBytes } = placementSettings(form)
         const place = async (operation, args) => {
           let result
           let started = 0
@@ -561,28 +641,24 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
             model_id: choice.entry.model_id, gpu_uuids: choice.group, structured_outputs: checked(form, 'structured_outputs'),
             ...(kvBytes !== null ? { kv_arena_bytes: kvBytes } : {}) })
         }
-        const configuration = { ...previous, instance_id: instance?.instance_id || null, qualified_profile_id: null,
-          model_id: fieldValue(form, 'model_id'), gpu_uuids: checkedValues(form, 'gpu'),
-          max_context: Number(fieldValue(form, 'max_context')), concurrency: Number(fieldValue(form, 'concurrency')),
-          vision: checked(form, 'vision'), structured_outputs: checked(form, 'structured_outputs'), spec: fieldValue(form, 'spec'), draft_policy: fieldValue(form, 'draft_policy'),
-          draft_tokens: Number(fieldValue(form, 'draft_tokens')), kv_dtype: fieldValue(form, 'kv_dtype'),
-          kv_arena_bytes: kvBytes,
-          vram_budget_bytes: fieldValue(form, 'vram_budget_bytes') === '' ? null : Number(fieldValue(form, 'vram_budget_bytes')),
-          host_kv_cache_bytes: fieldValue(form, 'host_kv_cache_bytes') === '' ? null : Number(fieldValue(form, 'host_kv_cache_bytes')) }
-        if (!configuration.gpu_uuids.length) throw new Error('Choose the exact GPU group')
-        if (configuration.vram_budget_bytes !== null && (!Number.isSafeInteger(configuration.vram_budget_bytes) || configuration.vram_budget_bytes < 1)) {
-          throw new Error('Flash weight residency budget must be a positive whole number of bytes, or blank for automatic sizing')
-        }
-        if (configuration.host_kv_cache_bytes !== null && (!Number.isSafeInteger(configuration.host_kv_cache_bytes) || configuration.host_kv_cache_bytes < 0)) {
-          throw new Error('Host KV cache must be a nonnegative whole number of bytes, or blank for automatic sizing')
-        }
-        const width = configuration.draft_tokens
-        if (!Number.isInteger(width) || width < 0) throw new Error('Draft width must be a whole number')
-        if (configuration.spec === 'dflash' && (width < 1 || width > 15)) throw new Error('DFlash2 requires a draft width from 1 to 15; the host checks the exact model limit')
-        if (configuration.spec === 'mtp' && (width < 1 || width >= 4294967295)) throw new Error('MTP requires a positive draft width below 4294967295')
-        if (['auto', 'none'].includes(configuration.spec) && width !== 0) throw new Error('Automatic or disabled speculation uses draft width 0')
+        const configuration = customConfiguration(form, kvBytes)
         return place(instance ? 'instance' : 'launch', instance ? { ...guard, operation: 'reload', configuration } : configuration)
       })
+    const form = content.closest('form')
+    form.addEventListener('input', invalidateQuote)
+    form.addEventListener('change', invalidateQuote)
+    const quoteContext = () => {
+      const latest = observation().hosts.get(host.host_id)
+      return JSON.stringify([latest?.online, latest?.certificate_sha256, latest?.snapshot?.boot_id,
+        latest?.snapshot?.models, latest?.snapshot?.gpus, latest?.snapshot?.hardware_profile,
+        array(latest?.snapshot?.instances).map(entry => [entry.instance_id, entry.status, entry.configuration])])
+    }
+    let previousContext = quoteContext()
+    state.dialog.observe = () => {
+      const current = quoteContext()
+      if (current !== previousContext) { previousContext = current; invalidateQuote() }
+      updateQuoteAvailability()
+    }
   }
 
   function instanceCard(host, instance) {
@@ -1013,6 +1089,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     } else {
       append(main, h('div', { class: 'heading' }, h('div', {}, h('h1', {}, host.snapshot?.display_name || host.name),
         h('div', { class: 'muted mono' }, host.base_url)), h('div', { class: 'actions' }, badge(online(host) ? 'ready' : host.offline ? 'offline' : 'failed'),
+        !host.local && !online(host) ? button('Connect', () => run(hostRequest(host, 'snapshot'), 'Host connected').catch(() => {})) : null,
         button('Start a model…', () => launchDialog(host), !online(host) || profiling(host) || !array(host.snapshot?.models).length, 'primary'))),
       !online(host) ? h('div', { class: 'empty' }, h('strong', {}, host.offline ? 'GInfer offline' : 'GInfer unavailable'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
         host.error && !host.offline ? h('p', { class: 'section-error' }, host.error) : null) : null,

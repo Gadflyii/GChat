@@ -30,6 +30,39 @@ impl CredentialStore for MetadataOnlyVault {
 }
 
 #[tokio::test]
+async fn desktop_clients_keep_their_selected_local_owner_without_credentials() {
+    use crate::local_host_registry::Owner;
+    let root = tempfile::tempdir().unwrap();
+    let first = Client::new(Some(root.path().join("first-clients.json")), Arc::new(MetadataOnlyVault));
+    let second = Client::new(Some(root.path().join("second-clients.json")), Arc::new(MetadataOnlyVault));
+    let first_owner = Owner::Service { directory: root.path().join("first/host"), origin: "https://127.0.0.1:17443".into() };
+    let second_owner = Owner::Service { directory: root.path().join("second/host"), origin: "https://127.0.0.1:17444".into() };
+    first.initialize_from_owner(&first_owner).await.unwrap();
+    second.initialize_from_owner(&second_owner).await.unwrap();
+    first.set_local_directory(first_owner.directory().into()).await.unwrap();
+    assert_eq!(first.selected_local_owner().await.unwrap().unwrap().directory(), first_owner.directory());
+    assert_eq!(second.selected_local_owner().await.unwrap().unwrap().directory(), second_owner.directory());
+    // Gbot reinitializes the shared client. A later registration for another
+    // installation must not redirect this already selected desktop root.
+    let discovery_called = std::sync::atomic::AtomicBool::new(false);
+    first.initialize_from_local_owner_resolving(|| {
+        discovery_called.store(true, std::sync::atomic::Ordering::SeqCst);
+        async { Ok(Some(second_owner.clone())) }
+    }).await.unwrap();
+    assert!(!discovery_called.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(first.selected_local_owner().await.unwrap().unwrap().directory(), first_owner.directory());
+    // Selecting a new desktop root must retire the old in-process owner, while
+    // another open client continues to use its independently selected owner.
+    first.set_local_directory(second_owner.directory().into()).await.unwrap();
+    assert!(first.local_owner.lock().await.1.is_none());
+    first.initialize_from_local_owner_resolving(|| async { Ok(Some(first_owner.clone())) }).await.unwrap();
+    assert!(first.local_owner.lock().await.1.is_none());
+    first.initialize_from_local_owner_resolving(|| async { Ok(Some(second_owner.clone())) }).await.unwrap();
+    assert_eq!(first.selected_local_owner().await.unwrap().unwrap().directory(), second_owner.directory());
+    assert_eq!(second.selected_local_owner().await.unwrap().unwrap().directory(), second_owner.directory());
+}
+
+#[tokio::test]
 async fn inference_rejects_restarted_session_before_accessing_credentials() {
     use crate::engine_registry::{
         HostSnapshot, InstanceRef, InstanceSnapshot, InstanceStatus, HOST_PROTOCOL_VERSION,

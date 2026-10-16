@@ -68,8 +68,16 @@ async fn native<R: Runtime>(
     operation: &str,
     arguments: Value,
 ) -> Result<Value, String> {
-    app.state::<super::gbot::GbotState>()
-        .local_client(app).await?
+    let state = app.state::<super::gbot::GbotState>();
+    if matches!(
+        operation,
+        "configure" | "begin_auth" | "select_account" | "disconnect"
+    ) {
+        state.authorize_local().await;
+    }
+    state
+        .local_client(app)
+        .await?
         .call(&format!("/v1/native/connectors/{operation}"), arguments)
         .await
 }
@@ -79,6 +87,9 @@ pub async fn catalog<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<ConnectedTool
         return Ok(Vec::new());
     }
     if !super::setup::bundled_resources_ready(app.clone())? {
+        return Ok(Vec::new());
+    }
+    if !app.state::<super::gbot::GbotState>().local_authorized().await {
         return Ok(Vec::new());
     }
     let catalog: Vec<gbot_service::connectors::ConnectorTool> =
@@ -558,7 +569,9 @@ pub async fn execute<R: Runtime>(
     args: Value,
     cancellation: &CancellationToken,
 ) -> Result<Value, String> {
-    let client = app.state::<super::gbot::GbotState>().local_client(app).await?;
+    let state = app.state::<super::gbot::GbotState>();
+    state.authorize_local().await;
+    let client = state.local_client(app).await?;
     let id = uuid::Uuid::new_v4().to_string();
     client
         .call(
@@ -583,7 +596,13 @@ pub async fn execute<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn connector_accounts<R: Runtime>(app: AppHandle<R>) -> Result<Value, String> {
+pub async fn connector_accounts<R: Runtime>(
+    app: AppHandle<R>,
+    connect: Option<bool>,
+) -> Result<Value, String> {
+    if connect == Some(true) {
+        app.state::<super::gbot::GbotState>().authorize_local().await;
+    }
     native(&app, "accounts", Value::Null).await
 }
 
