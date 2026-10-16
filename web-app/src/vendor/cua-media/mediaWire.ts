@@ -398,6 +398,29 @@ export function normalizePoint(
   };
 }
 
+/** Map a centered object-fit:contain image, excluding its letterbox bars.
+ * Only an already accepted drag may clamp points outside the image. */
+export function normalizeContainedPoint(
+  clientX: number,
+  clientY: number,
+  rect: { left: number; top: number; width: number; height: number },
+  content: { width: number; height: number },
+  clampOutside = false,
+): { x_normalized: number; y_normalized: number } | null {
+  if (
+    ![clientX, clientY, rect.left, rect.top, rect.width, rect.height, content.width, content.height].every(Number.isFinite) ||
+    rect.width <= 0 || rect.height <= 0 || content.width <= 0 || content.height <= 0
+  ) return null;
+  const scale = Math.min(rect.width / content.width, rect.height / content.height);
+  const width = content.width * scale;
+  const height = content.height * scale;
+  const left = rect.left + (rect.width - width) / 2;
+  const top = rect.top + (rect.height - height) / 2;
+  if (![left, top, width, height].every(Number.isFinite) || width <= 0 || height <= 0) return null;
+  if (!clampOutside && (clientX < left || clientX > left + width || clientY < top || clientY > top + height)) return null;
+  return normalizePoint(clientX, clientY, { left, top, width, height });
+}
+
 const BUTTONS = ["left", "middle", "right"] as const;
 
 export function pointerButton(button: number): "left" | "right" | "middle" {

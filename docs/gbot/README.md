@@ -608,6 +608,10 @@ The frame shown and Driver input target must be the **same graphical session**,
 with explicit display identity, geometry and scaling. Proposed viewer libraries
 must demonstrate this contract rather than just showing any desktop.
 
+Pointer input follows the displayed desktop when the view is resized or
+letterboxed. Clicks and scrolling in the surrounding bars are ignored; a drag
+that starts on the desktop keeps its matching button release outside it.
+
 | Control | Required observable behavior |
 | --- | --- |
 | View | Read-only. Opening a panel does not grant mouse, keyboard, clipboard or file-transfer input. |
