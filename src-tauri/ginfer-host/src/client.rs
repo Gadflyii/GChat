@@ -167,6 +167,9 @@ pub struct Client {
     // Desktop clients pin their own root instead of following another install's
     // later change to the per-user discovery locator.
     local_owner: Mutex<(Option<PathBuf>, Option<crate::local_host_registry::Owner>)>,
+    // Serialize bootstrap with an accepted normal Stop. Passive list polling
+    // must not restart the same Host while its desktop is exiting.
+    local_attachment: Mutex<bool>,
 }
 /// Read-only native routing view. Mutations stay behind the client's locked operations.
 pub struct ClientViewGuard<'a>(tokio::sync::MutexGuard<'a, ClientState>);
@@ -451,6 +454,7 @@ impl Client {
             credentials,
             operation: Mutex::new(()),
             local_owner: Mutex::new((None, None)),
+            local_attachment: Mutex::new(false),
         }
     }
     pub async fn view(&self) -> Result<ClientViewGuard<'_>, String> {
@@ -518,6 +522,89 @@ impl Client {
             *local = (Some(directory), None);
         }
         Ok(())
+    }
+
+    /// Stop only the already selected desktop Host. This path never initializes
+    /// client metadata, opens the credential store, discovers an owner or starts
+    /// a missing Host. Absence of a cached desktop selection is a no-op.
+    pub async fn stop_selected_local_host_if_idle(
+        &self,
+        expected_host_id: Option<Uuid>,
+    ) -> Result<bool, String> {
+        self.stop_cached_local_host_if_idle(None, expected_host_id).await
+    }
+
+    /// As above, also requiring the desktop's current configured data root.
+    pub async fn stop_local_host_if_idle(
+        &self,
+        directory: &Path,
+        expected_host_id: Option<Uuid>,
+    ) -> Result<bool, String> {
+        if !directory.is_absolute() {
+            return Err("local Host state directory must be absolute".into());
+        }
+        self.stop_cached_local_host_if_idle(Some(directory), expected_host_id).await
+    }
+
+    async fn stop_cached_local_host_if_idle(
+        &self,
+        directory: Option<&Path>,
+        expected_host_id: Option<Uuid>,
+    ) -> Result<bool, String> {
+        self.stop_cached_local_host_if_idle_with(directory, expected_host_id, |host| async move {
+            host.stop_if_idle().await
+        }).await
+    }
+
+    async fn stop_cached_local_host_if_idle_with<F, Fut>(
+        &self,
+        directory: Option<&Path>,
+        expected_host_id: Option<Uuid>,
+        stop: F,
+    ) -> Result<bool, String>
+    where
+        F: FnOnce(crate::local_host::LocalHost) -> Fut,
+        Fut: Future<Output = Result<Value, String>>,
+    {
+        let (mut stopped, local) = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            async {
+                let stopped = self.local_attachment.lock().await;
+                let local = self.local_owner.lock().await;
+                (stopped, local)
+            },
+        ).await.map_err(|_| "Local Host bootstrap is still in progress; normal Stop was refused".to_string())?;
+        let Some(owner) = &local.1 else { return Ok(false); };
+        let crate::local_host_registry::Owner::Desktop(host) = owner else {
+            return Err("Normal Stop is only available for this desktop's managed Host".into());
+        };
+        if !local.0.as_ref().is_some_and(|selected|
+            crate::local_host_registry::same_directory(selected, &host.directory))
+            || directory.is_some_and(|directory|
+                !crate::local_host_registry::same_directory(directory, &host.directory))
+        {
+            return Err("The selected Host belongs to a different data folder".into());
+        }
+        if let Some(expected) = expected_host_id {
+            let private: crate::service::Persistent = serde_json::from_slice(
+                &std::fs::read(host.directory.join("host.json")).map_err(|e| e.to_string())?,
+            ).map_err(|e| e.to_string())?;
+            if private.host_id != expected {
+                return Err("The selected Host identity changed; normal Stop was refused".into());
+            }
+        }
+        if *stopped { return Ok(true); }
+        // Holding this fence closes passive bootstrap admission throughout the
+        // request. Persist suppression only after ACK, so cancellation cannot
+        // accidentally masquerade as an accepted Stop.
+        let result = stop((**host).clone()).await.and_then(|reply| {
+            if reply["stopping"] == true { Ok(true) }
+            else { Err("Host did not acknowledge normal Stop".into()) }
+        });
+        if result.is_ok() { *stopped = true; }
+        // Keep the owner selection stable until the identity-checked request ends.
+        drop(local);
+        result
     }
 
     async fn selected_local_owner(&self) -> Result<Option<crate::local_host_registry::Owner>, String> {
@@ -608,6 +695,8 @@ impl Client {
         Ok(())
     }
     async fn attach_local(&self) -> Result<Option<Uuid>, String> {
+        let stopped = self.local_attachment.lock().await;
+        if *stopped { return Ok(None); }
         let Some(owner) = self.selected_local_owner().await? else {
             return Ok(None);
         };
@@ -640,6 +729,8 @@ impl Client {
         Ok(Some(id))
     }
     pub async fn local_host(&self) -> Result<Option<Uuid>, String> {
+        // An explicit local-host start may re-enable bootstrap; list never does.
+        *self.local_attachment.lock().await = false;
         self.attach_local().await
     }
     pub async fn registered(&self) -> Result<Vec<SavedHost>, String> {

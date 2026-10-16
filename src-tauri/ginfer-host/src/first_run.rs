@@ -353,6 +353,9 @@ impl Host {
     }
 
     async fn run_first_run_action(&self, body: Value) -> Result<Value, String> {
+        // The detached transition retains admission even if its HTTP caller
+        // disconnects, and a queued transition must honor an accepted Stop.
+        let _admission = self.running_admission().await?;
         if body["action"] == "move" {
             let id =
                 serde_json::from_value(body["download_id"].clone()).map_err(|e| e.to_string())?;

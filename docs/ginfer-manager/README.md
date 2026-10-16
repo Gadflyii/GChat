@@ -1491,7 +1491,15 @@ comparisons. The user's repeated launch was C4/131,072, not either larger value.
 
 Manager shares GChat's locked registry and native credential vault. The Host owns
 launch, downloads, grants and sharing. Opening Manager does not start a model or
-replace another owner's Host. Closing/exiting Manager leaves hosts running.
+replace another owner's Host. On Windows, exiting Manager or GChat requests a
+normal Stop of the desktop Host already attached to that application, only when
+it is idle. **Stop Host and Quit** exposes that control for a capable local Host;
+an explicit refusal keeps the application open. Loaded models, model loads,
+profiling, calibration, downloads and setup transactions block Stop. The request
+verifies the Host certificate, identity, current process and canonical data root,
+and closes admission before acknowledging Stop. Passive refresh cannot restart
+that Host after acceptance. Linux, service-owned and remote Hosts keep their
+existing lifetime. Native Windows acceptance belongs to the Windows release gate.
 
 One selected coordinator owns durable revision/CAS pools and client assignments.
 Paired clients resolve its pinned locator through fleet members. Hosts receive

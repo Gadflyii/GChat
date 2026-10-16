@@ -1,5 +1,9 @@
 # GChat installer refresh
 
+## October 16 Windows gate — functional checks complete, findings retained
+
+The [Windows gate packet](windows-gate-20261016.md) binds the current-user NSIS installer to GChat `dcb11c14` and Engine `c440179a` (SM120a), records the upgrade and fresh application-state checks, and lists each PASS, failure and unqualified check. One model started and answered one request; custom-root Host migration and normal detached Host shutdown remain findings. The packet also records the 85m7.168s natural profile, 2365ms native reuse, functional long-chat render and actual idle measurement.
+
 ## October 15 current Linux Engine package — accepted
 
 Bubbs's one unsigned package refresh passes. Desktop/CLI/Host/Gbot source is

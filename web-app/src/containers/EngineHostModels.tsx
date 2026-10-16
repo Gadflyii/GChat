@@ -21,6 +21,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [instanceCount, setInstanceCount] = useState(1)
   const [startupQuote, setStartupQuote] = useState<{ key: string; result?: EngineStartupQuote; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [hostStopError, setHostStopError] = useState<string | null>(null)
+  const [hostStopping, setHostStopping] = useState(false)
   const profiling = hardwareProfileBusy(snapshot?.hardware_profile)
   const [activeId, setActiveId] = useState('')
   const active = activeId === 'additional' ? undefined : snapshot?.instances.find(i => i.instance_id === activeId) ??
@@ -90,7 +92,18 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       {host.local ? <span className="text-sm text-muted-foreground">Local host</span> : <Button variant="outline" disabled={busy} onClick={() => {
         if (window.confirm(`Forget ${host.name}? This removes its saved connection from GChat. Running jobs stay on the host.`)) void act('forget')
       }}>Forget</Button>}
+      {host.local && snapshot?.can_stop_host && <Button variant="outline" disabled={busy || hostStopping || !!error} onClick={async () => {
+        setBusy(true)
+        setHostStopError(null)
+        try {
+          await engineCommand('stop_host', { host_id: host.host_id })
+          setHostStopping(true)
+        } catch (e) { setHostStopError(String(e)) }
+        finally { setBusy(false) }
+      }}>{hostStopping ? 'Quitting…' : 'Stop Host and Quit'}</Button>}
     </div>
+    {hostStopError && <p role="alert" className="text-sm text-destructive">{hostStopError}</p>}
+    {hostStopping && <p role="status" className="text-sm text-muted-foreground">Host is stopping. Quitting GChat…</p>}
     {!host.local && !snapshot && <p className="text-sm text-muted-foreground">Choose Connect to use this saved host. Your desktop may ask you to unlock its stored credential.</p>}
     {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
       action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />}

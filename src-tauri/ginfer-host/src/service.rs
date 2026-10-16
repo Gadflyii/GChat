@@ -123,6 +123,10 @@ pub struct Host {
     pub artifact_sets: Vec<PathBuf>,
     pub(crate) lifecycle: Mutex<()>,
     pub(crate) first_run_operation: Mutex<()>,
+    normal_stop_enabled: AtomicBool,
+    normal_stopping: AtomicBool,
+    normal_stop_admission: RwLock<()>,
+    normal_stop_notification: Notify,
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
     worker_slots: Arc<std::sync::Mutex<BTreeMap<crate::engine_registry::InstanceRef, u32>>>,
@@ -410,12 +414,94 @@ impl Host {
             artifact_sets,
             lifecycle: Mutex::new(()),
             first_run_operation: Mutex::new(()),
+            normal_stop_enabled: AtomicBool::new(false),
+            normal_stopping: AtomicBool::new(false),
+            normal_stop_admission: RwLock::new(()),
+            normal_stop_notification: Notify::new(),
             traffic: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             activity: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
             worker_slots: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
         });
         host.scan().await?;
         Ok(host)
+    }
+    /// Only the Windows desktop-managed process enables this control. Services
+    /// retain their existing SCM/signal lifetime and Linux client quit is unchanged.
+    pub fn enable_normal_stop(&self) {
+        self.normal_stop_enabled.store(true, Ordering::SeqCst);
+    }
+
+    /// Hold across an HTTP operation or a maintenance pass which can admit work.
+    /// Disabled Hosts retain their previous admission and shutdown behavior.
+    pub async fn running_admission(&self) -> Result<Option<tokio::sync::RwLockReadGuard<'_, ()>>, String> {
+        if !self.normal_stop_enabled.load(Ordering::SeqCst) { return Ok(None); }
+        let guard = self.normal_stop_admission.read().await;
+        if self.normal_stopping.load(Ordering::SeqCst) {
+            return Err("The Host is stopping; start it again before sending work".into());
+        }
+        Ok(Some(guard))
+    }
+
+    pub async fn wait_for_normal_stop(&self) {
+        loop {
+            let notified = self.normal_stop_notification.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self.normal_stopping.load(Ordering::SeqCst) { return; }
+            notified.await;
+        }
+    }
+
+    async fn normal_stop(&self, req: &mut Request<Body>) -> Result<Response<Body>, String> {
+        if !self.local_administrator(req).await {
+            return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"local administrator credential required"})));
+        }
+        if !self.normal_stop_enabled.load(Ordering::SeqCst) {
+            return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"Normal Host Stop is available only for a Windows desktop-managed Host"})));
+        }
+        #[derive(Deserialize)]
+        struct Stop {
+            host_id: Uuid,
+            boot_id: Uuid,
+            local_identity: serde_json::Value,
+        }
+        let request: Stop = serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
+        let busy = || json(StatusCode::CONFLICT, serde_json::json!({"error":"The Host is busy. Wait for model loads, hardware profiling, downloads and other Host work to finish, then Stop again."}));
+        // A successful exclusive acquisition proves no HTTP handler or admitting
+        // maintenance pass is in flight. Keep it through the idle check and fence.
+        let Ok(_admission) = self.normal_stop_admission.try_write() else { return Ok(busy()); };
+        let Ok(_lifecycle) = self.lifecycle.try_lock() else { return Ok(busy()); };
+        let Ok(_first_run) = self.first_run_operation.try_lock() else { return Ok(busy()); };
+        let Ok(data) = self.data.try_lock() else { return Ok(busy()); };
+        let identity = serde_json::json!({"local_identity": request.local_identity});
+        if request.host_id != data.host_id || request.boot_id != self.boot_id
+            || crate::local_host::validate_local_identity(&self.directory, &identity).is_err() {
+            return Ok(json(StatusCode::CONFLICT, serde_json::json!({"error":"The selected Host identity, data folder, platform or process changed; no Host was stopped"})));
+        }
+        let host_id = data.host_id;
+        drop(data);
+        let Ok(processes) = self.processes.try_lock() else { return Ok(busy()); };
+        if processes.needs_monitoring()
+            || processes.hardware_profile.as_ref().is_some_and(|job| job.busy())
+            || self.draft_width.busy() {
+            return Ok(busy());
+        }
+        drop(processes);
+        {
+            // Coordinator leases can keep workers active on another Host after
+            // the admitting HTTP handler has returned its streaming body.
+            let Ok(slots) = self.worker_slots.try_lock() else { return Ok(busy()); };
+            if slots.values().any(|used| *used != 0) { return Ok(busy()); }
+        }
+        // Download/move transactions can retain their own journal lock after an
+        // HTTP caller disconnects. Never wait for or interrupt that transaction.
+        let Ok(downloads) = tokio::time::timeout(Duration::from_millis(100), self.downloads.list()).await else { return Ok(busy()); };
+        if downloads.iter().any(|job| matches!(job.status.as_str(), "queued" | "downloading" | "verifying" | "pausing")) {
+            return Ok(busy());
+        }
+        self.normal_stopping.store(true, Ordering::SeqCst);
+        self.normal_stop_notification.notify_waiters();
+        Ok(json(StatusCode::OK, serde_json::json!({"stopping":true,"host_id":host_id,"boot_id":self.boot_id})))
     }
     pub async fn shutdown_hardware_profile(&self) -> Result<(), String> {
         self.draft_width.cancel().await?;
@@ -950,6 +1036,7 @@ impl Host {
         }
         let engine_presets_available = !available_profiles.is_empty() || !max_perf_profiles.is_empty();
         let mut snapshot = serde_json::json!({"protocol_version":1,"host_id":host_id,"boot_id":self.boot_id,
+            "can_stop_host":self.normal_stop_enabled.load(Ordering::SeqCst),
             "local_identity":{"state_directory":state_directory,"platform":std::env::consts::OS},
             "management_origin":management_origin,"management_notice":management_notice,
             "lan_sharing": {"enabled":network["enabled"],"managed":network["managed"],
@@ -1489,7 +1576,14 @@ impl Host {
         self: Arc<Self>,
         mut req: Request<Body>,
     ) -> Result<Response<Body>, std::convert::Infallible> {
-        let result = self.handle(&mut req).await;
+        let result = if req.method() == hyper::Method::POST && req.uri().path() == "/host/v1/stop" {
+            self.normal_stop(&mut req).await
+        } else {
+            match self.running_admission().await {
+                Ok(_admission) => self.handle(&mut req).await,
+                Err(error) => Ok(json(StatusCode::SERVICE_UNAVAILABLE, serde_json::json!({"error":error}))),
+            }
+        };
         Ok(result
             .unwrap_or_else(|e| json(StatusCode::BAD_REQUEST, serde_json::json!({"error": e}))))
     }
@@ -2392,6 +2486,147 @@ pub(crate) async fn body_json(req: &mut Request<Body>) -> Result<serde_json::Val
 }
 
 #[cfg(test)]
+mod normal_stop_tests {
+    use super::*;
+
+    async fn fixture() -> (tempfile::TempDir, Arc<Host>, String, serde_json::Value) {
+        let directory = tempfile::tempdir().unwrap();
+        let host = Host::open(directory.path().into(), "Normal Stop fixture".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let snapshot = host.snapshot().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let body = serde_json::json!({"host_id":snapshot["host_id"],"boot_id":snapshot["boot_id"],
+            "local_identity":snapshot["local_identity"]});
+        (directory, host, token, body)
+    }
+
+    pub(super) async fn stop(host: &Arc<Host>, token: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+        let response = host.clone().route(Request::post("/host/v1/stop")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(body.to_string())).unwrap()).await.unwrap();
+        let status = response.status();
+        (status, serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap())
+    }
+
+    #[tokio::test]
+    async fn normal_stop_requires_desktop_mode_admin_and_exact_process_identity() {
+        let (_directory, host, token, body) = fixture().await;
+        assert_eq!(host.snapshot().await["can_stop_host"], false);
+        assert_eq!(stop(&host, &token, body.clone()).await.0, StatusCode::FORBIDDEN);
+        host.enable_normal_stop(); // Platform seam: no Windows process or console.
+        assert_eq!(host.snapshot().await["can_stop_host"], true);
+        assert_eq!(stop(&host, "invalid", body.clone()).await.0, StatusCode::FORBIDDEN);
+        let client_id = Uuid::new_v4();
+        let client_token = format!("{client_id}.normal-stop-client");
+        host.data.lock().await.clients.insert(client_id, ClientGrant {
+            name: "Paired client".into(),
+            token_verifier: hex::encode(verifier(&client_token).finalize().into_bytes()),
+        });
+        assert_eq!(stop(&host, &client_token, body.clone()).await.0, StatusCode::FORBIDDEN);
+        let mut changed = body.clone();
+        changed["host_id"] = serde_json::json!(Uuid::new_v4());
+        assert_eq!(stop(&host, &token, changed).await.0, StatusCode::CONFLICT);
+        let mut changed = body.clone();
+        changed["boot_id"] = serde_json::json!(Uuid::new_v4());
+        assert_eq!(stop(&host, &token, changed).await.0, StatusCode::CONFLICT);
+        let mut changed = body.clone();
+        changed["local_identity"]["state_directory"] = serde_json::json!(host.directory.join("foreign"));
+        assert_eq!(stop(&host, &token, changed).await.0, StatusCode::CONFLICT);
+        let mut changed = body.clone();
+        changed["local_identity"]["platform"] = serde_json::json!("foreign-platform");
+        assert_eq!(stop(&host, &token, changed).await.0, StatusCode::CONFLICT);
+        assert!(!host.normal_stopping.load(Ordering::SeqCst));
+        let (status, reply) = stop(&host, &token, body).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        assert_eq!(reply["stopping"], true);
+        assert_eq!(reply["boot_id"], serde_json::json!(host.boot_id));
+    }
+
+    #[tokio::test]
+    async fn normal_stop_refuses_inflight_work_and_seals_http_and_maintenance_admission() {
+        let (_directory, host, token, body) = fixture().await;
+        host.enable_normal_stop();
+        let admission = host.running_admission().await.unwrap();
+        assert_eq!(stop(&host, &token, body.clone()).await.0, StatusCode::CONFLICT);
+        drop(admission);
+        let lifecycle = host.lifecycle.lock().await;
+        assert_eq!(stop(&host, &token, body.clone()).await.0, StatusCode::CONFLICT);
+        drop(lifecycle);
+        let operation = host.first_run_operation.lock().await;
+        assert_eq!(stop(&host, &token, body.clone()).await.0, StatusCode::CONFLICT);
+        drop(operation);
+        let instance = crate::engine_registry::InstanceRef {
+            host_id: host.data.lock().await.host_id,
+            instance_id: Uuid::new_v4(),
+        };
+        host.data.lock().await.fleet = serde_json::from_value(serde_json::json!({
+            "kind":"coordinator","fleet":{
+                "schema":crate::fleet::FLEET_SCHEMA,"revision":1,
+                "authority":{"host_id":instance.host_id,"origins":["https://127.0.0.1:1"],
+                    "certificate_sha256":"00".repeat(32)},
+                "members":[],"assignments":[],
+                "pools":[{"id":Uuid::new_v4(),"name":"Worker pool",
+                    "members":[{"instance":instance,"worker_limit":1}]}]
+            }
+        })).unwrap();
+        let lease = host.clone().route(Request::post("/host/v1/fleet/worker-slot")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::to_string(&instance).unwrap())).unwrap()).await.unwrap();
+        assert_eq!(lease.status(), StatusCode::OK);
+        assert_eq!(stop(&host, &token, body.clone()).await.0, StatusCode::CONFLICT);
+        drop(lease);
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while host.worker_slots.lock().unwrap().values().any(|used| *used != 0) {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
+        assert!(!host.normal_stopping.load(Ordering::SeqCst));
+
+        let (status, reply) = stop(&host, &token, body).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        assert!(host.running_admission().await.is_err());
+        let response = host.clone().route(Request::post("/host/v1/instances")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from("{}")).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        host.wait_for_normal_stop().await;
+        assert!(!host.processes.lock().await.has_children());
+        assert!(host.downloads.list().await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn normal_stop_fences_a_detached_setup_action_after_its_http_caller_disconnects() {
+        let (_directory, host, token, body) = fixture().await;
+        host.enable_normal_stop();
+        host.data.lock().await.first_run.gpu_uuids = vec!["GPU-fixture".into()];
+        host.save().await.unwrap();
+        let journal = std::fs::read(host.directory.join("host.json")).unwrap();
+        let owners = Arc::strong_count(&host);
+        let mut request = Box::pin(host.clone().route(Request::post("/host/v1/first-run")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(serde_json::json!({"action":"storage",
+                "path":host.directory.join("must-not-be-admitted")}).to_string())).unwrap()));
+        // This current-thread test stops at the first join of the detached
+        // setup transition. No spawned task can run between these two polls.
+        assert!(matches!(futures_util::poll!(request.as_mut()), std::task::Poll::Pending));
+        drop(request);
+        assert_eq!(Arc::strong_count(&host), owners + 1, "Only the detached transition retains the Host");
+        let mut stopping = Box::pin(stop(&host, &token, body));
+        let std::task::Poll::Ready((status, reply)) = futures_util::poll!(stopping.as_mut()) else {
+            panic!("An idle Stop must seal admission before the queued setup task runs");
+        };
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        drop(stopping);
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while Arc::strong_count(&host) != owners { tokio::task::yield_now().await; }
+        }).await.unwrap();
+        assert!(host.data.lock().await.first_run.requested_storage.is_none());
+        assert_eq!(std::fs::read(host.directory.join("host.json")).unwrap(), journal);
+        assert!(!host.directory.join("must-not-be-admitted").exists());
+    }
+}
+
+#[cfg(test)]
 mod target_launch_tests {
     use super::*;
 
@@ -2876,6 +3111,33 @@ time.sleep(60)
         assert!(!job.busy());
         assert!(!host.processes.lock().await.has_children());
         assert!(host.data.lock().await.profiles.is_empty());
+    }
+
+    #[tokio::test]
+    async fn normal_stop_preserves_a_model_load_until_its_owner_stops_it() {
+        let (directory, host, request) = fixture().await;
+        host.enable_normal_stop();
+        let launch = host.prepare_launch(&request).await.unwrap();
+        let mut processes = HostProcesses::new(directory.path().join("engine"),
+            host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(), Duration::from_secs(600)).unwrap();
+        processes.configure_runtimes(Default::default(), host.gpus.iter().filter_map(|gpu| {
+            gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))
+        }).collect()).unwrap();
+        processes.launch(launch).unwrap();
+        *host.processes.lock().await = processes;
+        let snapshot = host.snapshot().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let body = serde_json::json!({"host_id":snapshot["host_id"],"boot_id":snapshot["boot_id"],
+            "local_identity":snapshot["local_identity"]});
+        let (status, rejected) = super::normal_stop_tests::stop(&host, &token, body.clone()).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{rejected}");
+        host.refresh_processes().await.unwrap();
+        assert!(host.processes.lock().await.has_children(), "Stop must preserve the loading model child");
+        assert!(!host.normal_stopping.load(Ordering::SeqCst));
+        host.processes.lock().await.shutdown().await.unwrap();
+        let (status, reply) = super::normal_stop_tests::stop(&host, &token, body).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        assert_eq!(reply["stopping"], true);
     }
 
     #[tokio::test]

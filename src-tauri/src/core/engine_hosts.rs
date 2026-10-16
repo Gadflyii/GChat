@@ -66,6 +66,30 @@ fn client_slot() -> &'static OnceLock<Arc<Client>> {
 fn client() -> &'static Arc<Client> {
     client_slot().get_or_init(|| Arc::new(Client::new(None, Arc::new(NativeVault))))
 }
+#[cfg(any(windows, test))]
+fn configured_stop_directory(configuration: &std::path::Path) -> Result<std::path::PathBuf, String> {
+    let saved: crate::core::app::models::AppConfiguration = serde_json::from_slice(
+        &std::fs::read(configuration).map_err(|e| e.to_string())?,
+    ).map_err(|e| e.to_string())?;
+    let directory = std::path::PathBuf::from(saved.data_folder);
+    if !directory.is_absolute() {
+        return Err("Configured GChat data folder must be absolute for normal Host Stop".into());
+    }
+    Ok(directory.join("ginfer/host"))
+}
+
+/// Best-effort Windows desktop shutdown, using only an already selected owner.
+/// Reading configuration here must not create a default folder or credentials.
+#[cfg(windows)]
+pub async fn stop_configured_local_host_if_idle<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    expected_host_id: Option<Uuid>,
+) -> Result<bool, String> {
+    let Some(client) = client_slot().get() else { return Ok(false); };
+    let configuration = crate::core::app::commands::get_configuration_file_path(app.clone());
+    let directory = configured_stop_directory(&configuration)?;
+    client.stop_local_host_if_idle(&directory, expected_host_id).await
+}
 async fn state() -> Result<ginfer_host::client::ClientViewGuard<'static>, String> {
     client().view().await
 }
@@ -239,6 +263,21 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     action: String,
     args: Value,
 ) -> Result<Value, String> {
+    if action == "stop_host" {
+        #[cfg(windows)]
+        {
+            let id = args.get("host_id").and_then(Value::as_str)
+                .ok_or("host_id is required")?.parse::<Uuid>().map_err(|e| e.to_string())?;
+            if !stop_configured_local_host_if_idle(&app, Some(id)).await? {
+                return Err("No local desktop Host is selected; normal Stop was refused".into());
+            }
+            // Quit prevents normal UI polling from reattaching after Stop.
+            app.exit(0);
+            return Ok(json!({"stopping":true}));
+        }
+        #[cfg(not(windows))]
+        return Err("Stop Host and Quit is only available for a Windows desktop-managed Host".into());
+    }
     if action.starts_with("local_model_") {
         if action == "local_model_adopt" {
             let root = crate::core::app::commands::get_jan_data_folder_path(app.clone());
@@ -800,6 +839,22 @@ mod live_tests;
 #[cfg(test)]
 mod registration_tests {
     use super::*;
+
+    #[test]
+    fn normal_stop_reads_only_an_existing_absolute_configured_root() {
+        let root = tempfile::tempdir().unwrap();
+        let configuration = root.path().join("config.json");
+        assert!(configured_stop_directory(&configuration).is_err());
+        assert!(!configuration.exists());
+        std::fs::write(&configuration, b"invalid").unwrap();
+        assert!(configured_stop_directory(&configuration).is_err());
+        std::fs::write(&configuration, br#"{"data_folder":"relative"}"#).unwrap();
+        assert!(configured_stop_directory(&configuration).unwrap_err().contains("absolute"));
+        let selected = root.path().join("existing-selection");
+        std::fs::write(&configuration, serde_json::to_vec(&json!({"data_folder":selected})).unwrap()).unwrap();
+        assert_eq!(configured_stop_directory(&configuration).unwrap(), selected.join("ginfer/host"));
+        assert!(!selected.exists(), "normal Stop must not create a data directory");
+    }
 
     #[cfg(feature = "hardware")]
     #[test]

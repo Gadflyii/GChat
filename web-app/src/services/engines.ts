@@ -96,6 +96,7 @@ export type EngineDraftWidthCalibration = {
 }
 
 export type EngineSnapshot = {
+  can_stop_host?: boolean
   clients?: { client_id: string; name: string; local: boolean; gbot_control?: import('@/services/gbot').GbotControlGrant }[]
   max_perf_profiles?: EngineMaxPerfProfile[]
   hardware_profile?: EngineHardwareProfile

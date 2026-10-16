@@ -582,6 +582,20 @@ impl LocalControl {
         Ok(value)
     }
 
+    pub async fn stop_host_if_idle(&self, directory: &Path) -> Result<Value, String> {
+        let snapshot = self.snapshot().await?;
+        crate::local_host::validate_local_identity(directory, &snapshot)?;
+        if snapshot["can_stop_host"] != true {
+            return Err("This Host does not support Windows desktop normal Stop; it was left running".into());
+        }
+        let boot_id: uuid::Uuid = serde_json::from_value(snapshot["boot_id"].clone())
+            .map_err(|_| "The selected Host cannot prove its current process identity")?;
+        self.request("/host/v1/stop", Some(json!({
+            "host_id":self.host_id,"boot_id":boot_id,
+            "local_identity":{"state_directory":directory.canonicalize().map_err(|e| e.to_string())?,"platform":std::env::consts::OS}
+        }))).await
+    }
+
     pub async fn register_model(&self, path: &Path) -> Result<crate::service::ModelEntry, String> {
         let entry = self
             .request("/host/v1/local-artifacts", Some(json!({"path":path})))

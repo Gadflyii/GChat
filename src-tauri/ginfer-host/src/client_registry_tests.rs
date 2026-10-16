@@ -29,6 +29,93 @@ impl CredentialStore for MetadataOnlyVault {
     }
 }
 
+fn desktop_owner_for_stop(directory: &Path) -> crate::local_host_registry::Owner {
+    crate::local_host_registry::Owner::Desktop(Box::new(crate::local_host::LocalHost {
+        binary: directory.join("must-not-start"),
+        engine: directory.join("must-not-load"),
+        engine_runtimes: Default::default(),
+        directory: directory.into(),
+        desktop_provider: None,
+        models: vec![],
+        artifact_sets: vec![],
+        name: "Stop fixture".into(),
+        nvidia_smi: "unused".into(),
+        listen: "127.0.0.1:1".parse().unwrap(),
+    }))
+}
+
+#[tokio::test]
+async fn cached_stop_never_initializes_or_follows_a_foreign_owner() {
+    use crate::local_host_registry::Owner;
+    let directory = tempfile::tempdir().unwrap();
+    let client = Client::new(Some(directory.path().join("must-not-create.json")), Arc::new(MetadataOnlyVault));
+    assert!(!client.stop_local_host_if_idle(directory.path(), None).await.unwrap());
+    assert!(client.state.lock().await.path.is_none());
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+
+    let service = Owner::Service { directory: directory.path().into(), origin: "https://127.0.0.1:1".into() };
+    *client.local_owner.lock().await = (Some(directory.path().into()), Some(service));
+    assert!(client.stop_selected_local_host_if_idle(None).await.unwrap_err().contains("desktop's managed Host"));
+    *client.local_owner.lock().await = (Some(directory.path().into()), Some(desktop_owner_for_stop(directory.path())));
+    let foreign = directory.path().join("foreign");
+    assert!(client.stop_local_host_if_idle(&foreign, None).await.unwrap_err().contains("different data folder"));
+    assert!(client.stop_local_host_if_idle(directory.path(), None).await.is_err());
+    assert!(client.state.lock().await.path.is_none());
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+
+    let host = crate::service::Host::open(directory.path().into(), "Identity fixture".into(),
+        directory.path().join("must-not-load"), vec![], vec![], vec![]).await.unwrap();
+    let before = host.snapshot().await;
+    assert!(client.stop_local_host_if_idle(directory.path(), Some(Uuid::new_v4())).await.unwrap_err().contains("identity changed"));
+    assert_eq!(host.snapshot().await, before);
+    assert!(!*client.local_attachment.lock().await);
+}
+
+#[tokio::test]
+async fn cached_stop_serializes_bootstrap_and_retains_accepted_stop() {
+    use std::task::{Context, Poll, Waker};
+    let directory = tempfile::tempdir().unwrap();
+    let client = Client::new(None, Arc::new(MetadataOnlyVault));
+    *client.local_owner.lock().await = (Some(directory.path().into()), Some(desktop_owner_for_stop(directory.path())));
+    let (release, wait) = tokio::sync::oneshot::channel();
+    let mut stopping = Box::pin(client.stop_cached_local_host_if_idle_with(Some(directory.path()), None,
+        |_| async move { wait.await.unwrap() }));
+    let mut context = Context::from_waker(Waker::noop());
+    assert!(matches!(stopping.as_mut().poll(&mut context), Poll::Pending));
+    let mut polling = Box::pin(client.attach_local());
+    assert!(matches!(polling.as_mut().poll(&mut context), Poll::Pending));
+    release.send(Ok(json!({"stopping":true}))).unwrap();
+    assert!(stopping.await.unwrap());
+    // An already waiting passive refresh must not execute bootstrap after Stop.
+    assert_eq!(polling.await.unwrap(), None);
+    assert!(client.stop_selected_local_host_if_idle(None).await.unwrap());
+    assert!(client.state.lock().await.path.is_none());
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+}
+
+#[tokio::test]
+async fn cached_stop_busy_or_invalid_ack_restores_attachment_admission() {
+    use std::task::{Context, Poll, Waker};
+    let directory = tempfile::tempdir().unwrap();
+    let client = Client::new(None, Arc::new(MetadataOnlyVault));
+    *client.local_owner.lock().await = (Some(directory.path().into()), Some(desktop_owner_for_stop(directory.path())));
+    let mut cancelled = Box::pin(client.stop_cached_local_host_if_idle_with(None, None,
+        |_| std::future::pending()));
+    assert!(matches!(cancelled.as_mut().poll(&mut Context::from_waker(Waker::noop())), Poll::Pending));
+    drop(cancelled);
+    assert!(!*client.local_attachment.lock().await);
+    let error = client.stop_cached_local_host_if_idle_with(None, None,
+        |_| async { Err("Host is busy: model load in progress".into()) }).await.unwrap_err();
+    assert!(error.contains("model load in progress"));
+    assert!(!*client.local_attachment.lock().await);
+    assert!(client.stop_cached_local_host_if_idle_with(None, None,
+        |_| async { Ok(json!({"stopping":false})) }).await.unwrap_err().contains("did not acknowledge"));
+    assert!(!*client.local_attachment.lock().await);
+    assert_eq!(client.local_owner.lock().await.1.as_ref().unwrap().directory(), directory.path());
+    assert!(client.state.lock().await.path.is_none());
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+}
+
 #[tokio::test]
 async fn desktop_clients_keep_their_selected_local_owner_without_credentials() {
     use crate::local_host_registry::Owner;

@@ -4,6 +4,40 @@ fn id(value: u128) -> String {
     Uuid::from_u128(value).to_string()
 }
 
+#[tokio::test]
+async fn stop_without_an_attached_desktop_owner_does_not_initialize_or_open_credentials() {
+    struct NoCredentials;
+    impl ginfer_host::client::CredentialStore for NoCredentials {
+        fn get(&self, _: Uuid) -> ginfer_host::client::CredentialFuture<'_, String> {
+            panic!("Stop must not open a credential store")
+        }
+        fn set<'a>(&'a self, _: Uuid, _: &'a str) -> ginfer_host::client::CredentialFuture<'a, ()> {
+            panic!("Stop must not write credentials")
+        }
+        fn delete(&self, _: Uuid) -> ginfer_host::client::CredentialFuture<'_, ()> {
+            panic!("Stop must not delete credentials")
+        }
+    }
+    let client = Arc::new(Client::new(None, Arc::new(NoCredentials)));
+    let state = ManagerState {
+        fleet: FleetClient::new(client.clone()),
+        client,
+        view: Mutex::new(ManagerView::new(json!({"hosts":[]}))),
+        initialized: Mutex::new(false),
+        refresh: Mutex::new(()),
+        tray_ready: AtomicBool::new(false),
+    };
+    assert_eq!(
+        state.execute(ManagerRequest::Host {
+            host_id: Uuid::from_u128(1),
+            operation: HostOperation::StopHost,
+            args: json!({}),
+        }).await.unwrap_err(),
+        "No owned desktop Host is attached"
+    );
+    assert!(!*state.initialized.lock().await, "Stop must not bootstrap a Host");
+}
+
 #[test]
 fn refresh_keeps_current_locators_order_and_exact_error_fallbacks() {
     let first = json!({"host_id":id(1),"name":"Renamed local","local":true,

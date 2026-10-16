@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-16** — [Stop the owned idle Windows desktop Host normally](2026-10-16-stop-owned-idle-windows-desktop-host.md)
+
 - **2026-10-16** — [Bind managed Host identity and ports to its data root](2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
 
 - **2026-10-16** — [Accept first-run choices during native profiling](2026-10-16-accept-first-run-intents-during-profiling.md)
