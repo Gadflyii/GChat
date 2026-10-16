@@ -64,7 +64,7 @@ fn visible_selection(snapshot: &Value, config: &GinferConfig, mask: Option<&str>
 
 fn group_matches(group: &[String], config: &GinferConfig, visible: &[String]) -> bool {
     !group.is_empty() && group.iter().all(|id| visible.contains(id))
-        && config.gpu_uuids.as_ref().is_none_or(|selected| selected == group)
+        && config.gpu_uuids.as_ref().map_or(true, |selected| selected == group)
 }
 
 fn selected_group(groups: &Value, config: &GinferConfig, visible: &[String]) -> Option<Vec<String>> {
