@@ -100,7 +100,10 @@ pub(crate) async fn wait_for_bundled_resources<R: Runtime>(
         .await
 }
 
-#[cfg(any(all(target_os = "linux", not(feature = "cli")), test))]
+#[cfg(any(
+    all(any(target_os = "linux", target_os = "windows"), not(feature = "cli")),
+    test
+))]
 async fn install_bundled_resources(
     completion: tokio::sync::watch::Sender<InstallationResult>,
     install: impl FnOnce() -> Result<bool, String> + Send + 'static,
@@ -480,16 +483,28 @@ fn install_bundled_ginfer_from(source: &Path, data_folder: &Path) -> std::io::Re
 }
 
 #[cfg(all(target_os = "windows", not(feature = "cli")))]
-pub fn install_bundled_ginfer<R: Runtime>(
+pub(crate) fn start_bundled_ginfer_windows<R: Runtime>(
     app: tauri::AppHandle<R>,
-) -> Result<bool, Box<dyn std::error::Error>> {
-    let source = app.path().resource_dir()?.join(GINFER_RUNTIME_RESOURCE_DIR);
-    let data_folder = get_jan_data_folder_path(app.clone());
-    let changed = install_bundled_ginfer_from(&source, &data_folder)?;
-    if changed {
-        prepare_hardware_after_runtime_install(app);
-    }
-    Ok(changed)
+    completion: tokio::sync::watch::Sender<InstallationResult>,
+) {
+    tauri::async_runtime::spawn(async move {
+        let installer_app = app.clone();
+        let result = install_bundled_resources(completion, move || {
+            let source = installer_app.path().resource_dir().map_err(|e| e.to_string())?
+                .join(GINFER_RUNTIME_RESOURCE_DIR);
+            let data_folder = get_jan_data_folder_path(installer_app);
+            install_bundled_ginfer_from(&source, &data_folder).map_err(|e| e.to_string())
+        }).await;
+        let _ = app.emit(BUNDLED_RESOURCES_UPDATE, ());
+        match result {
+            Ok(true) => {
+                log::info!("Installed the bundled GInfer Windows runtime");
+                prepare_hardware_after_runtime_install(app);
+            }
+            Ok(false) => log::info!("Bundled GInfer Windows runtime is already current"),
+            Err(error) => log::error!("Bundled Windows resource installation failed: {error}"),
+        }
+    });
 }
 
 pub fn install_extensions<R: Runtime>(app: tauri::AppHandle<R>, force: bool) -> Result<(), String> {
@@ -1136,17 +1151,29 @@ mod tests {
 
     #[tokio::test]
     async fn bundled_resources_wait_without_blocking_or_canceling_installation() {
+        let root = tempdir().unwrap();
+        let source = root.path().join("bundled runtime ü");
+        let data = root.path().join("user data ü");
+        let model = data.join("ginfer/models/qwen/model.ginfer");
+        fs::create_dir_all(model.parent().unwrap()).unwrap();
+        fs::write(&model, "model").unwrap();
+        write_runtime(&source, "runtime-v1", "server-v1");
         let (resources, completion) = BundledResources::pending();
         assert_eq!(resources.ready(), Ok(false));
         let (started, started_rx) = tokio::sync::oneshot::channel();
         let (release, release_rx) = tokio::sync::oneshot::channel();
+        let installer_source = source.clone();
+        let installer_data = data.clone();
         let installer = tokio::spawn(install_bundled_resources(completion, move || {
             started.send(()).unwrap();
             release_rx.blocking_recv().unwrap();
-            Ok(true)
+            install_bundled_ginfer_from(&installer_source, &installer_data)
+                .map_err(|error| error.to_string())
         }));
         started_rx.await.unwrap();
         assert_eq!(resources.ready(), Ok(false));
+        assert!(!data.join("ginfer/bin/ginfer-serve.exe").exists());
+        assert!(!data.join("ginfer/bin/ginfer.exe").exists());
         let first = resources.clone();
         let mut waiter = tokio::spawn(async move { first.wait().await });
         tokio::select! {
@@ -1164,21 +1191,66 @@ mod tests {
         assert_eq!(resources.ready(), Ok(true));
         assert_eq!(resources.wait().await, Ok(()));
         assert_eq!(resources.ready(), Ok(true));
+        assert_eq!(
+            fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
+            "server-v1"
+        );
+        assert_eq!(
+            fs::read_to_string(data.join("ginfer/bin/ginfer.exe")).unwrap(),
+            "profiler-cli"
+        );
+        assert_eq!(
+            fs::read(data.join("ginfer").join(GINFER_RUNTIME_MANIFEST)).unwrap(),
+            fs::read(source.join(GINFER_RUNTIME_MANIFEST)).unwrap()
+        );
+        assert_eq!(fs::read_to_string(&model).unwrap(), "model");
+
+        let (resources, completion) = BundledResources::pending();
+        assert_eq!(
+            install_bundled_resources(completion, move || {
+                install_bundled_ginfer_from(&source, &data).map_err(|error| error.to_string())
+            })
+            .await,
+            Ok(false)
+        );
+        assert_eq!(resources.ready(), Ok(true));
+        assert_eq!(resources.wait().await, Ok(()));
     }
 
     #[tokio::test]
     async fn bundled_resources_retain_installation_failure_for_every_waiter() {
+        let root = tempdir().unwrap();
+        let source = root.path().join("source");
+        let data = root.path().join("data");
+        let model = data.join("ginfer/models/qwen/model.ginfer");
+        fs::create_dir_all(model.parent().unwrap()).unwrap();
+        fs::write(&model, "model").unwrap();
+        write_runtime(&source, "runtime-v1", "server-v1");
+        assert!(install_bundled_ginfer_from(&source, &data).unwrap());
+        let original_manifest = fs::read(data.join("ginfer").join(GINFER_RUNTIME_MANIFEST)).unwrap();
+        write_runtime(&source, "runtime-v2", "server-v2");
+        fs::write(source.join("bin/runtime.dll"), "bad").unwrap();
         let (resources, completion) = BundledResources::pending();
         assert_eq!(resources.ready(), Ok(false));
-        let installer = tokio::spawn(install_bundled_resources(completion, || {
-            Err("runtime digest mismatch".into())
+        let installer_data = data.clone();
+        let installer = tokio::spawn(install_bundled_resources(completion, move || {
+            install_bundled_ginfer_from(&source, &installer_data).map_err(|error| error.to_string())
         }));
-        let expected = "runtime digest mismatch";
+        let expected = "runtime file hash mismatch: bin/runtime.dll";
         assert_eq!(resources.wait().await.unwrap_err(), expected);
         assert_eq!(installer.await.unwrap().unwrap_err(), expected);
         assert_eq!(resources.ready().unwrap_err(), expected);
         assert_eq!(resources.wait().await.unwrap_err(), expected);
         assert_eq!(resources.ready().unwrap_err(), expected);
+        assert_eq!(
+            fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
+            "server-v1"
+        );
+        assert_eq!(
+            fs::read(data.join("ginfer").join(GINFER_RUNTIME_MANIFEST)).unwrap(),
+            original_manifest
+        );
+        assert_eq!(fs::read_to_string(&model).unwrap(), "model");
     }
 
     #[tokio::test]

@@ -511,13 +511,7 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             {
-                if setup::install_bundled_ginfer(app.handle().clone())? {
-                    log::info!("Installed the bundled GInfer Windows runtime");
-                } else {
-                    log::info!("Bundled GInfer Windows runtime is already current");
-                }
-                resource_completion.send_replace(Some(Ok(())));
-                let _ = app.emit(setup::BUNDLED_RESOURCES_UPDATE, ());
+                setup::start_bundled_ginfer_windows(app.handle().clone(), resource_completion);
             }
 
             #[cfg(target_os = "linux")]
@@ -628,10 +622,10 @@ pub fn run() {
             setup_mcp(app);
             setup::setup_theme_listener(app)?;
 
-            // Keep the Windows window hidden until synchronous setup is
-            // complete, then let WebView2 begin navigation. A fully hidden
-            // WebView2 does not load, so the frontend cannot reveal itself from
-            // JavaScript. The window is decorated/non-transparent on Windows to
+            // Reveal the Windows window after main-thread setup so WebView2
+            // can navigate while bundled resources install in the background.
+            // A fully hidden WebView2 does not load, so the frontend cannot
+            // reveal itself from JavaScript. Windows decorations and opacity
             // avoid the softbuffer resize panic that kills the process when the
             // client area becomes zero (minimise, bad saved state, etc.).
             #[cfg(target_os = "windows")]
