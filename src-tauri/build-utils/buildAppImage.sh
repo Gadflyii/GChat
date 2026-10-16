@@ -43,6 +43,20 @@ for library in "${HOST_LIBRARIES[@]}"; do
   rm -f -- "${APP_DIR}/usr/lib/${library}" "${APP_DIR}/usr/lib/${library}".*
 done
 
+# GIO_EXTRA_MODULES adds to GLib's compiled-in host module directory. Host GVfs
+# modules can require a newer GLib than the copy in this AppImage, so replace
+# the default directory as well and keep the bundled TLS module available.
+if [ ! -f "${APP_DIR}/apprun-hooks/linuxdeploy-plugin-gtk.sh" ] \
+  || [ ! -f "${APP_DIR}/usr/lib/x86_64-linux-gnu/gio/modules/libgiognutls.so" ]; then
+  echo "AppDir GTK hook or bundled GIO TLS module is missing."
+  exit 1
+fi
+cat >> "${APP_DIR}/apprun-hooks/linuxdeploy-plugin-gtk.sh" <<'GIO'
+
+export GIO_MODULE_DIR="$APPDIR/usr/lib/x86_64-linux-gnu/gio/modules"
+export GIO_EXTRA_MODULES="$GIO_MODULE_DIR"
+GIO
+
 install -m755 src-tauri/resources/bin/bun "${RESOURCE_DIR}/bin/bun"
 install -m755 src-tauri/resources/bin/uv "${RESOURCE_DIR}/bin/uv"
 
