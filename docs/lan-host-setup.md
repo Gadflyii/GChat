@@ -64,9 +64,12 @@ Unlisted files, models and private host state are excluded. The engine's license
 files may be nested (for example `licenses/llguidance-crates/<crate>/LICENSE*`,
 carried since GInfer's `llguidance` moved to a Rust build); the packager accepts
 anything under `licenses/` regardless of depth or extension, not only top-level
-`.txt` files. Packaging does not
-install or start anything. Extract the combined archive to a local directory and
-run `setup.cmd`: setup displays editable binary and model/state locations, accepts
+`.txt` files. Windows setup accepts these nested license members too, while
+rejecting traversal, malformed paths, and duplicate members before installation.
+The Linux packaging regression checks the emitted ZIP against the setup path
+allowlist; native Windows setup remains a separate platform gate. Packaging does
+not install or start anything. Extract the combined archive to a local directory
+and run `setup.cmd`: setup displays editable binary and model/state locations, accepts
 Enter for the defaults, then asks for confirmation. It installs for the current
 user without elevation and adds the binary directory to the user PATH. Open a
 new terminal and type `ginfer`. Existing registered hosts retain their engine and

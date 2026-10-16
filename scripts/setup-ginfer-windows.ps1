@@ -46,7 +46,8 @@ if ($manifest.schema -ne 'ginfer-windows-runtime-v1' -or $manifest.platform -ne 
 $members = @{}
 foreach ($entry in $manifest.files) {
     $name = [string]$entry.path
-    if ($name -notmatch '^(bin/[A-Za-z0-9_.-]+\.(exe|dll)|licenses/[A-Za-z0-9_.-]+\.txt|README\.md|LICENSE)$' -or $members.ContainsKey($name)) {
+    # Vendor licenses include nested, extensionless files; keep every component relative.
+    if ($name -notmatch '\A(bin/[A-Za-z0-9_.-]+\.(exe|dll)|licenses/[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?(?:/[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)*|README\.md|LICENSE)\z' -or $members.ContainsKey($name)) {
         throw "Unexpected or duplicate runtime member: $name"
     }
     $source = Join-Path $runtime $name
