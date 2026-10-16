@@ -432,3 +432,16 @@ settings. Start submits a profile selection, Manage provides start/stop/restart/
 switch, and Refresh rescans models and profiles. LAN clients pair from GChat when
 sharing is enabled. Quitting the menu leaves host-owned processes and downloads running.
 The menu shows starting state until a refreshed snapshot reports ready or failed.
+
+### GPUs for installed Load
+
+On **Models → Installed**, choose **Automatic (visible GPUs only)** or select the
+GPU UUIDs required by the model's TP size. The choice is saved in the existing
+hardware settings. Load waits for fresh hardware information; a disconnected saved
+GPU requires a new selection. An explicit device choice is passed to the Host and
+cannot silently reuse an instance running on different GPUs.
+
+The Host also enforces `CUDA_VISIBLE_DEVICES`. Automatic uses its ordered visible
+devices; an explicit selection outside that set is refused. An empty value or `-1`
+disables all devices. GPU UUIDs are stable identities; CUDA integer entries are
+resolved against the physical inventory before visibility is filtered.

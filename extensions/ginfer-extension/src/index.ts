@@ -139,7 +139,7 @@ export default class ginfer_extension extends AIEngine {
   }
 
   private buildGinferConfig(
-    perLoad?: { max_context?: number }
+    perLoad?: { max_context?: number; gpu_uuids?: string[] }
   ): GinferConfig {
     const cfg = this.config ?? {}
     return {
@@ -153,6 +153,9 @@ export default class ginfer_extension extends AIEngine {
       prefill_chunk: Number(cfg.prefill_chunk) || 0,
       max_concurrency: Number(cfg.max_concurrency) || 0,
       no_cuda_graph: !!cfg.no_cuda_graph,
+      ...(perLoad?.gpu_uuids === undefined
+        ? {}
+        : { gpu_uuids: [...perLoad.gpu_uuids] }),
     }
   }
 
@@ -281,12 +284,15 @@ export default class ginfer_extension extends AIEngine {
     bypassAutoUnload?: boolean
   ): Promise<SessionInfo> {
     if (this.loadingModels.has(modelId)) {
+      if (settings?.gpu_uuids !== undefined) {
+        throw new Error("A load is already in progress; wait before changing GPUs")
+      }
       return this.loadingModels.get(modelId)!
     }
 
     const loadingPromise = (async () => {
       const existing = await findSessionByModel(modelId)
-      if (existing) {
+      if (existing && settings?.gpu_uuids === undefined) {
         return existing
       }
 
