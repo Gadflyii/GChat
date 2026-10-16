@@ -69,6 +69,17 @@ impl FleetClient {
             )
             .await
     }
+    async fn passive_request(
+        &self,
+        host_id: Uuid,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&serde_json::Value>,
+    ) -> Result<serde_json::Value, ClientError> {
+        self.client.request_json_passive_bounded(
+            host_id, method, path, body, std::time::Duration::from_secs(10),
+        ).await
+    }
 
     /// Discover published locators only when no authority was already selected.
     /// An unreachable selected authority never causes a local election.
@@ -80,7 +91,7 @@ impl FleetClient {
         let mut host_issues = Vec::new();
         if authority.is_none() {
             let views = futures_util::future::join_all(registered.iter().map(|host| {
-                self.request(host.host_id, reqwest::Method::GET, "/host/v1/fleet", None)
+                self.passive_request(host.host_id, reqwest::Method::GET, "/host/v1/fleet", None)
             }))
             .await;
             for (host, view) in registered.iter().zip(views) {
@@ -123,26 +134,6 @@ impl FleetClient {
                 registered = self.client.registered().await?;
             }
         }
-        let mut enrollment_error = None;
-        if let Some(locator) = &authority {
-            if !registered
-                .iter()
-                .any(|host| host.host_id == locator.host_id)
-            {
-                match self
-                    .client
-                    .pair_locator(locator, "Shared GInfer applications")
-                    .await
-                {
-                    Ok(_) => registered = self.client.registered().await?,
-                    Err(error) => {
-                        enrollment_error = Some(format!(
-                            "Cannot enroll the published fleet coordinator: {error}"
-                        ))
-                    }
-                }
-            }
-        }
         let client_id = authority.as_ref().and_then(|locator| {
             registered
                 .iter()
@@ -170,16 +161,14 @@ impl FleetClient {
             return Ok(report);
         };
         if client_id.is_none() {
-            report.error = enrollment_error.or_else(|| {
-                Some(
+            report.error = Some(
                     "Pair the fleet coordinator to access its work pools and client assignment."
                         .into(),
-                )
-            });
+                );
             return Ok(report);
         }
         let response = self
-            .request(
+            .passive_request(
                 locator.host_id,
                 reqwest::Method::GET,
                 "/host/v1/fleet",
@@ -298,14 +287,14 @@ impl FleetClient {
         issues.extend(futures_util::future::join_all(registered.iter()
             .filter(|host| host.host_id != fleet.authority.host_id).map(|host| async move {
             let result = async {
-                let published: FleetView = serde_json::from_value(self.request(host.host_id, reqwest::Method::GET,
+                let published: FleetView = serde_json::from_value(self.passive_request(host.host_id, reqwest::Method::GET,
                     "/host/v1/fleet", None).await?).map_err(|error| ClientError::Problem(error.to_string()))?;
                 let enrolled = fleet.members.iter().any(|member| member.host.host_id == host.host_id);
                 match published {
-                    FleetView::Unconfigured if enrolled => self.publish_member_locator(host.host_id, &fleet.authority).await?,
+                    FleetView::Unconfigured if enrolled => self.publish_member_locator_passive(host.host_id, &fleet.authority).await?,
                     view if view.authority().is_some_and(|known| known.host_id == fleet.authority.host_id && known.certificate_sha256 == fleet.authority.certificate_sha256) => {
                         if view.authority() != Some(&fleet.authority) {
-                            self.publish_member_locator(host.host_id, &fleet.authority).await?;
+                            self.publish_member_locator_passive(host.host_id, &fleet.authority).await?;
                         }
                     },
                     _ if enrolled => return Err("This enrolled host publishes a different coordinator; review its fleet membership explicitly.".into()),
@@ -313,12 +302,19 @@ impl FleetClient {
                 }
                 let body = serde_json::to_value(validated.as_ref().map_err(Clone::clone)?.membership(host.host_id)?)
                     .map_err(|error| ClientError::Problem(error.to_string()))?;
-                self.request(host.host_id, reqwest::Method::POST, "/host/v1/fleet/membership", Some(&body)).await?;
+                self.passive_request(host.host_id, reqwest::Method::POST, "/host/v1/fleet/membership", Some(&body)).await?;
                 Ok(())
             }.await;
             result.err().map(|error| FleetHostIssue::new(host.host_id, FleetHostPhase::Membership, error))
         })).await.into_iter().flatten());
         issues
+    }
+    async fn publish_member_locator_passive(
+        &self, host_id: Uuid, authority: &AuthorityLocator,
+    ) -> Result<(), ClientError> {
+        self.passive_request(host_id, reqwest::Method::POST, "/host/v1/fleet/authority",
+            Some(&serde_json::json!({"authority":authority}))).await?;
+        Ok(())
     }
 
     async fn send_update(

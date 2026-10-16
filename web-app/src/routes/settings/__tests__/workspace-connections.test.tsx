@@ -100,6 +100,21 @@ afterEach(() => {
 })
 
 describe('Workspace connections', () => {
+  it('loads saved accounts only after an explicit connection from a cold session', async () => {
+    api.connectorAccounts
+      .mockRejectedValueOnce(new Error('Connect the account service first'))
+      .mockResolvedValue(initialView())
+    render(<WorkspaceConnections />)
+    const connect = await screen.findByRole('button', {
+      name: 'Connect account service',
+    })
+    expect(api.connectorAccounts).toHaveBeenCalledExactlyOnceWith()
+    await userEvent.setup().click(connect)
+    await screen.findByRole('button', { name: 'Connect Google Workspace' })
+    expect(api.connectorAccounts).toHaveBeenNthCalledWith(2, true)
+    expect(api.connectorAccounts).toHaveBeenCalledTimes(2)
+  })
+
   it('requires saved registration and explicit services before sign-in', async () => {
     const view = initialView()
     view.configs[0].client_id = ''

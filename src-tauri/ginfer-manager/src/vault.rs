@@ -89,8 +89,29 @@ pub async fn control(
             }
         }
         #[cfg(not(target_os = "linux"))]
-        let _ = (operation, passphrase);
-        serde_json::to_value(store.status()).map_err(|e| e.to_string())
+        let _ = &passphrase;
+        let mut status = store.status();
+        // This command is user initiated; background snapshots only inspect passive status.
+        if !matches!(operation.as_deref(), Some("lock"))
+            && !matches!(
+                status.tier.as_ref(),
+                Some(jan_utils::credential_store::Tier::Passphrase)
+            )
+        {
+            match store.require_ready() {
+                Ok(()) => {
+                    status.ready = true;
+                    status.state = "ready".into();
+                    status.error = None;
+                }
+                Err(error) => {
+                    status.ready = false;
+                    status.state = "unavailable".into();
+                    status.error = Some(error.to_string());
+                }
+            }
+        }
+        serde_json::to_value(status).map_err(|e| e.to_string())
     })
     .await
 }

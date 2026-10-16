@@ -244,15 +244,20 @@ Standalone `gchat-cli serve` defaults to port `6767`; the desktop facade default
 
 ### Linux desktop prerequisite for LAN pairing
 
-When running **GChat on Linux**, install and enable a Secret Service provider
-(for example, GNOME Keyring). Its keyring must be unlocked in the desktop session
-so GChat can securely store paired GInfer host credentials through
-`org.freedesktop.secrets`. Without it, host pairing cannot complete; GChat does
-not fall back to plaintext credential storage.
+When running **GChat on Linux**, Secret Service (for example, GNOME Keyring)
+can securely store paired GInfer host credentials. Plain launch does not open
+the keyring. Choose **Connect** for a saved remote host or Gbot service, or
+**Connect account service** for workspace accounts, when you need them; your
+desktop may then ask you to unlock the keyring. Saved hosts reconnect only after
+this explicit action in each app session. GChat does not fall back to plaintext
+credential storage.
 
-First-run setup checks this prerequisite. **Set up secure storage** offers a
+First-run setup reports provider availability without opening secure storage.
+**Set up secure storage** offers a
 guided install on supported Linux systems with OS administrator approval;
-**Check again** verifies readiness and **Skip for now** preserves local use.
+**Check again** explicitly verifies access and may ask you to unlock the keyring.
+**Skip for now** preserves local use. Hosts without Secret Service can explicitly
+create a passphrase-encrypted vault instead.
 
 This is a **client-side** requirement for LAN pairing, not a requirement for
 local-only inference or headless Linux/WSL machines running `ginfer-host`.

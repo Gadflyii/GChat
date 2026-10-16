@@ -531,6 +531,24 @@ export function WorkspaceConnections() {
             </p>
           )}
           {loading && !view && <p role="status">Loading accounts…</p>}
+          {!loading && !view && (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Connect to load saved accounts. Your desktop may ask you to
+                unlock secure storage.
+              </p>
+              <Button
+                disabled={busy !== null}
+                onClick={() =>
+                  void perform('Connecting account service', async () =>
+                    acceptSnapshot(await connectorAccounts(true))
+                  )
+                }
+              >
+                Connect account service
+              </Button>
+            </div>
+          )}
           {flows.map((flow) => (
             <div
               key={flow.flow_id}

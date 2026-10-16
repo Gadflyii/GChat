@@ -108,6 +108,7 @@ pub struct SavedHost {
 pub struct ClientState {
     transports: BTreeMap<Uuid, HostTransport>,
     local_credentials: BTreeMap<Uuid, String>,
+    session_credentials: BTreeMap<Uuid, SessionCredential>,
     path: Option<PathBuf>,
     installation_id: Option<Uuid>,
     imported: BTreeSet<PathBuf>,
@@ -117,6 +118,23 @@ pub struct ClientState {
     pub registry: EngineRegistry,
     discovery: Option<Discovery>,
     pub snapshots: BTreeMap<Uuid, Value>,
+}
+struct SessionCredential {
+    certificate_sha256: String,
+    client_id: Uuid,
+    token: jan_utils::credential_store::Zeroizing<String>,
+}
+impl SessionCredential {
+    fn matches(&self, host: &SavedHost) -> bool {
+        self.certificate_sha256 == host.certificate_sha256 && self.client_id == host.client_id
+    }
+    fn new(host: &SavedHost, token: String) -> Self {
+        Self {
+            certificate_sha256: host.certificate_sha256.clone(),
+            client_id: host.client_id,
+            token: jan_utils::credential_store::Zeroizing::new(token),
+        }
+    }
 }
 struct HostTransport {
     certificate_sha256: String,
@@ -219,6 +237,7 @@ fn reload(state: &mut ClientState) -> Result<(), String> {
         .map(|host| (host.host_id, host))
         .collect();
     state.transports.retain(|id, transport| saved.get(id).is_some_and(|host| transport.matches(host)));
+    state.session_credentials.retain(|id, credential| saved.get(id).is_some_and(|host| credential.matches(host)));
     let removed: Vec<_> = state
         .saved
         .keys()
@@ -370,6 +389,9 @@ fn publish_registration(
     if state.transports.get(&id).is_some_and(|transport| !transport.matches(&host)) {
         state.transports.remove(&id);
     }
+    if state.session_credentials.get(&id).is_some_and(|credential| !credential.matches(&host)) {
+        state.session_credentials.remove(&id);
+    }
     state.snapshots.remove(&id);
     Ok(previous)
 }
@@ -382,6 +404,7 @@ fn remove_registration(state: &mut ClientState, id: Uuid) -> Result<SavedHost, S
     }
     state.registry.forget(id);
     state.transports.remove(&id);
+    state.session_credentials.remove(&id);
     state.snapshots.remove(&id);
     Ok(previous)
 }
@@ -622,6 +645,13 @@ impl Client {
     pub async fn snapshots(&self, ids: &[Uuid]) -> Vec<Result<Value, ClientError>> {
         futures_util::future::join_all(ids.iter().map(|id| self.snapshot(*id))).await
     }
+    /// Explicit user connection: unlock once, then let passive observers use session memory.
+    pub async fn connect(&self, id: Uuid) -> Result<Value, ClientError> {
+        self.refresh().await?;
+        let host = self.state.lock().await.saved.get(&id).cloned().ok_or("host is not registered")?;
+        self.authorize(&host).await?;
+        self.snapshot(id).await
+    }
     pub async fn snapshot(&self, id: Uuid) -> Result<Value, ClientError> {
         self.refresh().await?;
         let (connection, host, alternatives) = {
@@ -644,7 +674,7 @@ impl Client {
         let mut network_started = false;
         let result = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             use futures_util::StreamExt;
-            let token = self.secret(host.client_id).await?;
+            let token = self.session_secret(&host).await?;
             network_started = true;
             let client = self.pinned_transport(&host).await?;
             match host_snapshot_with_client(&host.base_url, &client, &token, id).await {
@@ -732,7 +762,35 @@ impl Client {
         if let Some(token) = self.state.lock().await.local_credentials.get(&id).cloned() {
             return Ok(token);
         }
-        self.credentials.get(id).await
+        self.refresh().await?;
+        let host = self.state.lock().await.saved.values().find(|host| host.client_id == id)
+            .cloned().ok_or("host credential is not registered")?;
+        self.authorize(&host).await
+    }
+    async fn authorize(&self, host: &SavedHost) -> Result<String, String> {
+        if let Some(token) = self.state.lock().await.local_credentials.get(&host.client_id).cloned() {
+            return Ok(token);
+        }
+        let token = self.credentials.get(host.client_id).await?;
+        self.refresh().await?;
+        let mut state = self.state.lock().await;
+        if state.saved.get(&host.host_id).is_none_or(|current|
+            current.client_id != host.client_id || current.certificate_sha256 != host.certificate_sha256) {
+            return Err("Host registration changed while unlocking; connect the current host explicitly".into());
+        }
+        state.session_credentials.insert(host.host_id, SessionCredential::new(host, token.clone()));
+        Ok(token)
+    }
+    async fn session_secret(&self, host: &SavedHost) -> Result<String, String> {
+        let state = self.state.lock().await;
+        if state.saved.get(&host.host_id).is_none_or(|current|
+            current.client_id != host.client_id || current.certificate_sha256 != host.certificate_sha256) {
+            return Err("Host registration changed; connect the current host explicitly".into());
+        }
+        state.local_credentials.get(&host.client_id).cloned()
+            .or_else(|| state.session_credentials.get(&host.host_id)
+                .filter(|credential| credential.matches(host)).map(|credential| credential.token.to_string()))
+            .ok_or_else(|| "Connect this saved host to unlock its credential for this session".into())
     }
     pub async fn pinned_transport(&self, host: &SavedHost) -> Result<reqwest::Client, String> {
         let mut state = self.state.lock().await;
@@ -790,6 +848,7 @@ impl Client {
                 reference.instance_id
             ),
             body,
+            false,
         )
         .await?
         .header("x-ginfer-session-id", session_id.to_string())
@@ -805,7 +864,7 @@ impl Client {
         path: &str,
         body: Option<&Value>,
     ) -> Result<reqwest::Response, ClientError> {
-        self.prepare_request_current(host_id, method, path, body)
+        self.prepare_request_current(host_id, method, path, body, false)
             .await?
             .send()
             .await
@@ -817,6 +876,7 @@ impl Client {
         method: reqwest::Method,
         path: &str,
         body: Option<&Value>,
+        passive: bool,
     ) -> Result<reqwest::RequestBuilder, ClientError> {
         let host = self
             .state
@@ -826,7 +886,7 @@ impl Client {
             .get(&host_id)
             .cloned()
             .ok_or("host is not registered")?;
-        let token = self.secret(host.client_id).await?;
+        let token = if passive { self.session_secret(&host).await? } else { self.authorize(&host).await? };
         let client = self.pinned_transport(&host).await?;
         // Worker leases stream for the worker lifetime. Placement waits for
         // Engine quote/startup stages, each bounded by Host, and may first wait
@@ -864,10 +924,22 @@ impl Client {
         body: Option<&Value>,
         timeout: std::time::Duration,
     ) -> Result<Value, ClientError> {
+        self.request_json_with_credential(id, method, path, body, timeout, false).await
+    }
+    pub(crate) async fn request_json_passive_bounded(
+        &self, id: Uuid, method: reqwest::Method, path: &str, body: Option<&Value>,
+        timeout: std::time::Duration,
+    ) -> Result<Value, ClientError> {
+        self.request_json_with_credential(id, method, path, body, timeout, true).await
+    }
+    async fn request_json_with_credential(
+        &self, id: Uuid, method: reqwest::Method, path: &str, body: Option<&Value>,
+        timeout: std::time::Duration, passive: bool,
+    ) -> Result<Value, ClientError> {
         let mut network_started = false;
         tokio::time::timeout(timeout, async {
             self.refresh().await?;
-            let request = self.prepare_request_current(id, method, path, body).await?;
+            let request = self.prepare_request_current(id, method, path, body, passive).await?;
             network_started = true;
             let response = request.send().await.map_err(ClientError::from)?;
             response_json(response).await
@@ -983,10 +1055,12 @@ impl Client {
                         );
                     }
                 }
-                if let Some(saved) = self.state.lock().await.saved.get(&host_id) {
+                let saved = self.state.lock().await.saved.get(&host_id).cloned();
+                if let Some(saved) = saved {
                     if saved.certificate_sha256 != fingerprint {
                         return Err("Paired host certificate has changed; forget it explicitly before pairing again".into());
                     }
+                    self.authorize(&saved).await?;
                     return Ok(json!({"host_id":host_id}));
                 }
                 let client = pinned_client(&fingerprint)?;
@@ -1033,6 +1107,9 @@ impl Client {
                 };
                 let mut state = self.state.lock().await;
                 let published = publish_registration(&mut state, host.clone());
+                if published.is_ok() {
+                    state.session_credentials.insert(host_id, SessionCredential::new(&host, token.clone()));
+                }
                 drop(state);
                 let previous = match published {
                     Ok(previous) => previous,
@@ -1078,6 +1155,10 @@ impl Client {
             }
             "snapshot" => self
                 .snapshot(argument_id(&args, "host_id")?)
+                .await
+                .map_err(String::from),
+            "connect" => self
+                .connect(argument_id(&args, "host_id")?)
                 .await
                 .map_err(String::from),
             "first_run" => {

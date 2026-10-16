@@ -58,8 +58,10 @@ export type BeginConnectorAuthRequest = {
   account_id?: string
 }
 
-export const connectorAccounts = () =>
-  invoke<ConnectorAccountsView>('connector_accounts')
+export const connectorAccounts = (connect = false) =>
+  connect
+    ? invoke<ConnectorAccountsView>('connector_accounts', { connect: true })
+    : invoke<ConnectorAccountsView>('connector_accounts')
 
 export const configureConnector = (request: ConfigureConnectorRequest) =>
   invoke<ConnectorAccountsView>('connector_configure', { request })

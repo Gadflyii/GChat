@@ -273,7 +273,10 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
     }
     // The prerequisite check must work before registry initialization or pairing.
     if action == "credential_status" {
-        return Ok(credential_setup::status().await);
+        return Ok(credential_setup::status(
+            args.get("check").and_then(Value::as_bool) == Some(true),
+        )
+        .await);
     }
     #[cfg(target_os = "linux")]
     if matches!(
