@@ -240,6 +240,19 @@ impl AccountsState {
     }
 
     pub fn initialize(&self, data: PathBuf) -> Result<(), String> {
+        self.initialize_with_release_registration(
+            data,
+            option_env!("GCHAT_MICROSOFT_CLIENT_ID"),
+            option_env!("GCHAT_MICROSOFT_TENANT"),
+        )
+    }
+
+    fn initialize_with_release_registration(
+        &self,
+        data: PathBuf,
+        client_id: Option<&str>,
+        tenant: Option<&str>,
+    ) -> Result<(), String> {
         let path = data.join("workspace-connections.json");
         let mut known = self
             .path
@@ -253,12 +266,13 @@ impl AccountsState {
                 "Workspace data folder changed; restart GChat before account operations".into(),
             );
         }
-        let document = match std::fs::read(&path) {
+        let mut document = match std::fs::read(&path) {
             Ok(bytes) => serde_json::from_slice(&bytes)
                 .map_err(|_| "Workspace account metadata is invalid")?,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Document::default(),
             Err(_) => return Err("Workspace account metadata cannot be read".into()),
         };
+        apply_release_microsoft_registration(&mut document, client_id, tenant);
         *self
             .document
             .lock()
@@ -1259,6 +1273,35 @@ fn random_secret() -> String {
 fn pkce_challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
+fn apply_release_microsoft_registration(
+    document: &mut Document,
+    client_id: Option<&str>,
+    tenant: Option<&str>,
+) {
+    if document.configs.contains_key(&Provider::Microsoft) {
+        return;
+    }
+    let Some(client_id) = client_id
+        .and_then(|value| uuid::Uuid::parse_str(value).ok())
+        .filter(|value| !value.is_nil())
+    else {
+        return;
+    };
+    let Ok(tenant) = validate_tenant(tenant.unwrap_or("organizations")) else {
+        return;
+    };
+    // Loading a public release registration does not touch the vault or metadata file.
+    // If a later account operation persists it, that saved registration wins on upgrade.
+    document.configs.insert(
+        Provider::Microsoft,
+        ProviderConfig {
+            provider: Provider::Microsoft,
+            client_id: client_id.to_string(),
+            tenant: Some(tenant),
+            has_client_secret: false,
+        },
+    );
+}
 fn validate_tenant(tenant: &str) -> Result<String, String> {
     if tenant.is_empty()
         || !tenant
@@ -1647,6 +1690,19 @@ mod tests {
         }
     }
 
+    struct NoVaultAccess;
+    impl Vault for NoVaultAccess {
+        fn get(&self, _key: &str) -> Result<Option<String>, String> {
+            panic!("Loading a release registration must not read credentials")
+        }
+        fn set(&self, _key: &str, _value: &str) -> Result<(), String> {
+            panic!("Loading a release registration must not write credentials")
+        }
+        fn delete(&self, _key: &str) -> Result<(), String> {
+            panic!("Loading a release registration must not delete credentials")
+        }
+    }
+
     #[derive(Default)]
     struct MemoryVault {
         values: Mutex<BTreeMap<String, String>>,
@@ -1732,6 +1788,226 @@ mod tests {
             scope: None,
             token_type: Some("Bearer".into()),
         }
+    }
+
+    const RELEASE_CLIENT: &str = "00000000-0000-4000-8000-000000000001";
+    const NEXT_RELEASE_CLIENT: &str = "00000000-0000-4000-8000-000000000002";
+
+    fn release_state() -> Arc<AccountsState> {
+        Arc::new(AccountsState {
+            vault: Arc::new(NoVaultAccess),
+            ..AccountsState::default()
+        })
+    }
+
+    fn microsoft_account(client_id: &str) -> Account {
+        Account {
+            provider: Provider::Microsoft,
+            services: vec!["cloud_pc".into()],
+            granted_scopes: scopes(Provider::Microsoft, "cloud_pc", Access::ReadOnly).unwrap(),
+            client_id: client_id.into(),
+            ..account("work-account", Access::ReadOnly)
+        }
+    }
+
+    #[test]
+    fn absent_or_invalid_release_registration_stays_unavailable_without_writes() {
+        for (client_id, tenant) in [
+            (None, None),
+            (Some(""), None),
+            (Some("not-a-uuid"), None),
+            (Some("00000000-0000-0000-0000-000000000000"), None),
+            (Some(RELEASE_CLIENT), Some("")),
+            (Some(RELEASE_CLIENT), Some("organizations/path")),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let state = release_state();
+            state
+                .initialize_with_release_registration(directory.path().into(), client_id, tenant)
+                .unwrap();
+            assert!(state.view().unwrap().configs.is_empty());
+            assert!(!directory.path().join("workspace-connections.json").exists());
+        }
+    }
+
+    #[test]
+    fn release_registration_is_public_in_memory_and_defaults_to_work_school() {
+        for (tenant, expected) in [
+            (None, "organizations"),
+            (Some("example.org"), "example.org"),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let state = release_state();
+            state
+                .initialize_with_release_registration(
+                    directory.path().into(),
+                    Some(RELEASE_CLIENT),
+                    tenant,
+                )
+                .unwrap();
+            let view = state.view().unwrap();
+            assert_eq!(view.configs.len(), 1);
+            let config = &view.configs[0];
+            assert_eq!(config.provider, Provider::Microsoft);
+            assert_eq!(config.client_id, RELEASE_CLIENT);
+            assert_eq!(config.tenant.as_deref(), Some(expected));
+            assert!(!config.has_client_secret);
+            assert!(view.accounts.is_empty());
+            assert!(view.selected_accounts.is_empty());
+            assert!(!directory.path().join("workspace-connections.json").exists());
+        }
+    }
+
+    #[test]
+    fn saved_custom_registration_accounts_and_selection_win_over_release_default() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("workspace-connections.json");
+        let mut document = Document::default();
+        for (provider, client_id, tenant) in [
+            (Provider::Google, "saved-google-client", None),
+            (
+                Provider::Microsoft,
+                "saved-custom-client",
+                Some("consumers".into()),
+            ),
+        ] {
+            document.configs.insert(
+                provider,
+                ProviderConfig {
+                    provider,
+                    client_id: client_id.into(),
+                    tenant,
+                    has_client_secret: false,
+                },
+            );
+        }
+        let account = microsoft_account("saved-custom-client");
+        document
+            .selected_accounts
+            .insert(Provider::Microsoft, account.id.clone());
+        document.accounts.insert(account.id.clone(), account);
+        let before = serde_json::to_vec_pretty(&document).unwrap();
+        std::fs::write(&path, &before).unwrap();
+        let state = release_state();
+        state
+            .initialize_with_release_registration(
+                directory.path().into(),
+                Some(RELEASE_CLIENT),
+                Some("organizations"),
+            )
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(&*state.document.lock().unwrap()).unwrap(),
+            serde_json::to_value(&document).unwrap()
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(
+            state
+                .resolve_account_id(Provider::Microsoft, "", "cloud_pc", false)
+                .unwrap(),
+            "work-account"
+        );
+    }
+
+    #[test]
+    fn ordinary_metadata_update_persists_release_identity_without_upgrade_rebinding() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = release_state();
+        state
+            .initialize_with_release_registration(
+                directory.path().into(),
+                Some(RELEASE_CLIENT),
+                None,
+            )
+            .unwrap();
+        state
+            .update(|document| {
+                let account = microsoft_account(RELEASE_CLIENT);
+                document
+                    .selected_accounts
+                    .insert(Provider::Microsoft, account.id.clone());
+                document.accounts.insert(account.id.clone(), account);
+                Ok(())
+            })
+            .unwrap();
+        let upgraded = release_state();
+        upgraded
+            .initialize_with_release_registration(
+                directory.path().into(),
+                Some(NEXT_RELEASE_CLIENT),
+                Some("consumers"),
+            )
+            .unwrap();
+        let config = upgraded.view().unwrap().configs.remove(0);
+        assert_eq!(config.client_id, RELEASE_CLIENT);
+        assert_eq!(config.tenant.as_deref(), Some("organizations"));
+        assert_eq!(
+            upgraded
+                .resolve_account_id(Provider::Microsoft, "", "cloud_pc", false)
+                .unwrap(),
+            "work-account"
+        );
+        upgraded
+            .document
+            .lock()
+            .unwrap()
+            .accounts
+            .get_mut("work-account")
+            .unwrap()
+            .client_id = NEXT_RELEASE_CLIENT.into();
+        assert!(upgraded
+            .resolve_account_id(Provider::Microsoft, "", "cloud_pc", false)
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn release_registration_uses_existing_public_oauth_flow_without_custom_setup() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = release_state();
+        let request = AuthRequest {
+            provider: Provider::Microsoft,
+            services: vec!["cloud_pc".into()],
+            access: Access::ReadOnly,
+            account_id: None,
+        };
+        state
+            .initialize_with_release_registration(directory.path().into(), None, None)
+            .unwrap();
+        assert_eq!(
+            state.begin_auth(request.clone()).await.err().unwrap(),
+            "Configure the provider application client ID first"
+        );
+        let configured = release_state();
+        configured
+            .initialize_with_release_registration(
+                directory.path().into(),
+                Some(RELEASE_CLIENT),
+                None,
+            )
+            .unwrap();
+        let (flow, url) = configured.begin_auth(request).await.unwrap();
+        let url = Url::parse(&url).unwrap();
+        assert_eq!(url.host_str(), Some("login.microsoftonline.com"));
+        assert_eq!(url.path(), "/organizations/oauth2/v2.0/authorize");
+        let query = url.query_pairs().collect::<BTreeMap<_, _>>();
+        assert_eq!(
+            query.get("client_id").map(|value| value.as_ref()),
+            Some(RELEASE_CLIENT)
+        );
+        assert_eq!(
+            query
+                .get("code_challenge_method")
+                .map(|value| value.as_ref()),
+            Some("S256")
+        );
+        assert!(query["scope"]
+            .split_whitespace()
+            .any(|scope| scope == "CloudPC.Read.All"));
+        assert_eq!(
+            configured.cancel_auth(&flow.flow_id).await.unwrap().status,
+            "cancelled"
+        );
+        assert!(!directory.path().join("workspace-connections.json").exists());
     }
 
     #[test]
