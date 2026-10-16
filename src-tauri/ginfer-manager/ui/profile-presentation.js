@@ -1,5 +1,6 @@
 export function profileEvidenceLabel(tier) {
   return tier === 'full-context-tested' ? 'Tested'
+    : tier === 'screened-startup' ? 'Screened, not full-context qualified'
     : tier === 'calculated-startup-smoke' ? 'Estimated' : 'Untested'
 }
 

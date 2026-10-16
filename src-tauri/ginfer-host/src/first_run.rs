@@ -74,6 +74,49 @@ fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str
     "startup"
 }
 
+fn needs_maintenance(progress: &Progress, jobs: &[Download]) -> bool {
+    if progress.complete || progress.gpu_uuids.is_empty() {
+        return false;
+    }
+    if !progress.catalog_loaded {
+        return true;
+    }
+    if !progress.storage_accepted {
+        return progress.requested_storage.is_some() && progress.storage_error.is_none();
+    }
+    // Download progress and terminal states do not notify the Host monitor.
+    // Keep its timer until admitted work settles, then wait for an explicit action.
+    if jobs.iter().any(|job| {
+        progress.download_ids.contains(&job.id)
+            && matches!(
+                job.status.as_str(),
+                "queued" | "downloading" | "verifying" | "pausing"
+            )
+    }) {
+        return true;
+    }
+    if progress.download_error.is_none()
+        && progress.selected_release_ids.iter().any(|sha| {
+            !progress.download_ids.iter().any(|id| {
+                jobs.iter()
+                    .any(|job| job.id == *id && job.release.sha256 == *sha)
+            })
+        })
+    {
+        return true;
+    }
+    !progress.download_ids.is_empty()
+        && progress.download_ids.iter().all(|id| {
+            jobs.iter()
+                .any(|job| job.id == *id && job.status == "installed")
+        })
+        && (progress.startup_profiles.len() != progress.download_ids.len()
+            || progress
+                .startup_profiles
+                .iter()
+                .any(|profile| profile.quote.is_none() && profile.error.is_none()))
+}
+
 fn selected_scope_needs_resume(
     status: &HardwareProfileStatus,
     gpus: &[String],
@@ -711,8 +754,51 @@ impl Host {
     }
 
     pub async fn first_run_pending(&self) -> bool {
-        let data = self.data.lock().await;
-        !data.first_run.complete && !data.first_run.gpu_uuids.is_empty()
+        let progress = self.data.lock().await.first_run.clone();
+        let jobs = self.downloads.list().await;
+        if progress.complete
+            || !progress.catalog_loaded
+            || stage(&progress, true, &jobs) != "startup"
+            || progress.startup_profiles.len() != progress.download_ids.len()
+            || progress.download_ids.iter().any(|id| {
+                !progress
+                    .startup_profiles
+                    .iter()
+                    .any(|profile| profile.download_id == *id)
+            })
+        {
+            return needs_maintenance(&progress, &jobs);
+        }
+        // Retained quotes cannot authorize this process or a replacement runtime.
+        // Follow maintenance's first-unaccepted-scope barrier so an interrupted
+        // scope parks until Resume instead of polling or hiding later work.
+        let (job, cli) = {
+            let processes = self.processes.lock().await;
+            (
+                processes.hardware_profile.clone(),
+                processes.profiling_cli(&progress.gpu_uuids),
+            )
+        };
+        let Some(job) = job else {
+            return needs_maintenance(&progress, &jobs);
+        };
+        if job.busy() {
+            return true;
+        }
+        for profile in &progress.startup_profiles {
+            let Ok(intent) = self.selected_profile_intent(&profile.request).await else {
+                return profile.error.is_none();
+            };
+            if job.artifact_is_accepted(&progress.gpu_uuids, &intent) {
+                continue;
+            }
+            return profile.error.is_none()
+                && !selected_scope_needs_resume(&job.status(cli), &progress.gpu_uuids, &intent);
+        }
+        progress
+            .startup_profiles
+            .iter()
+            .any(|profile| profile.quote.is_none() && profile.error.is_none())
     }
 
     async fn apply_first_run_storage(&self, progress: &mut Progress) -> Result<(), String> {
@@ -1115,6 +1201,150 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn waiting_for_first_run_input_does_not_enter_maintenance() {
+        use std::{future::Future, task::Poll};
+
+        let directory = tempfile::tempdir().unwrap();
+        let (host, jobs) = installed_host(directory.path(), 1).await;
+        let storage = Progress {
+            gpu_uuids: vec![gpu().uuid],
+            catalog_loaded: true,
+            releases: vec![jobs[0].release.clone()],
+            ..Default::default()
+        };
+        let mut models = storage.clone();
+        models.storage_accepted = true;
+        let mut storage_error = storage.clone();
+        storage_error.requested_storage = Some(directory.path().join("rejected-storage"));
+        storage_error.storage_error = Some("choose another folder".into());
+        let mut download_error = models.clone();
+        download_error.selected_release_ids = vec![jobs[0].release.sha256.clone()];
+        download_error.download_error = Some("not enough free space".into());
+        let mut catalog_error = models.clone();
+        catalog_error.catalog_error = Some("catalog unavailable; refresh to retry".into());
+
+        for (step, progress) in [
+            ("storage choice", storage),
+            ("model choice", models),
+            ("storage correction", storage_error),
+            ("download correction", download_error),
+            ("catalog retry", catalog_error),
+        ] {
+            host.store_first_run(progress).await.unwrap();
+            assert!(!host.first_run_pending().await, "{step}");
+            // Waiting setup must return before entering the expensive profile
+            // path, even when another first-run action holds its operation lock.
+            let _operation = host.first_run_operation.lock().await;
+            let mut maintenance = std::pin::pin!(host.first_run_maintenance());
+            std::future::poll_fn(|cx| {
+                assert!(
+                    matches!(maintenance.as_mut().poll(cx), Poll::Ready(Ok(()))),
+                    "maintenance entered while waiting for {step}"
+                );
+                Poll::Ready(())
+            })
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn blocked_first_scope_parks_later_unquoted_selections() {
+        let directory = tempfile::tempdir().unwrap();
+        let (host, jobs) = installed_host(directory.path(), 2).await;
+        let inventory = host.inventory.read().await.clone();
+        let mut progress = Progress {
+            gpu_uuids: vec![gpu().uuid],
+            storage_accepted: true,
+            catalog_loaded: true,
+            releases: jobs.iter().map(|job| job.release.clone()).collect(),
+            download_ids: jobs.iter().map(|job| job.id).collect(),
+            startup_profiles: jobs
+                .iter()
+                .map(|job| {
+                    let model = inventory
+                        .iter()
+                        .find(|model| Some(&model.path) == job.path.as_ref())
+                        .unwrap();
+                    Startup {
+                        download_id: job.id,
+                        model_id: "fixture".into(),
+                        request: LaunchRequest {
+                            instance_id: None,
+                            qualified_profile_id: None,
+                            benchmark_profile: None,
+                            model_id: model.id,
+                            gpu_uuids: vec![gpu().uuid],
+                            max_context: 4096,
+                            concurrency: 1,
+                            options: Default::default(),
+                        },
+                        instance_count: 1,
+                        instance_ids: vec![],
+                        quote: None,
+                        error: None,
+                    }
+                })
+                .collect(),
+            ..Default::default()
+        };
+        // A later unquoted draft cannot bypass the first profiling failure.
+        progress.startup_profiles[0].error = Some("correct this selection".into());
+        host.store_first_run(progress.clone()).await.unwrap();
+        assert!(!host.first_run_pending().await);
+        {
+            let _operation = host.first_run_operation.lock().await;
+            // Selected-artifact validation may yield for metadata I/O, but
+            // parked maintenance must finish without this operation lock.
+            tokio::time::timeout(Duration::from_secs(2), host.first_run_maintenance())
+                .await
+                .expect("parked maintenance waited for the operation lock")
+                .unwrap();
+        }
+        progress.startup_profiles[0].error = None;
+        host.store_first_run(progress).await.unwrap();
+        assert!(host.first_run_pending().await);
+        assert!(!host.processes.lock().await.has_children());
+    }
+
+    #[tokio::test]
+    async fn admitted_downloads_keep_monitoring_until_work_settles() {
+        let directory = tempfile::tempdir().unwrap();
+        let (_, mut jobs) = installed_host(directory.path(), 2).await;
+        let mut progress = Progress {
+            gpu_uuids: vec![gpu().uuid],
+            ..Default::default()
+        };
+        assert!(needs_maintenance(&progress, &jobs));
+        progress.catalog_loaded = true;
+        assert!(!needs_maintenance(&progress, &jobs));
+        progress.requested_storage = Some(directory.path().join("chosen-storage"));
+        assert!(needs_maintenance(&progress, &jobs));
+        progress = Progress {
+            gpu_uuids: vec![gpu().uuid],
+            storage_accepted: true,
+            catalog_loaded: true,
+            selected_release_ids: vec![jobs[0].release.sha256.clone()],
+            download_ids: vec![jobs[0].id],
+            ..Default::default()
+        };
+        // Another download cannot keep this completed/paused selection ticking.
+        jobs[1].status = "downloading".into();
+        for status in ["queued", "downloading", "verifying", "pausing"] {
+            jobs[0].status = status.into();
+            assert!(needs_maintenance(&progress, &jobs), "{status}");
+        }
+        for status in ["paused", "failed"] {
+            jobs[0].status = status.into();
+            assert!(!needs_maintenance(&progress, &jobs), "{status}");
+        }
+        // An installed selection still needs its automatic startup quote.
+        jobs[0].status = "installed".into();
+        assert!(needs_maintenance(&progress, &jobs));
+        progress.complete = true;
+        assert!(!needs_maintenance(&progress, &jobs));
+    }
+
+    #[tokio::test]
     async fn verified_download_choices_precede_selected_profiling_and_survive_restart() {
         let directory = tempfile::tempdir().unwrap();
         let (host, jobs) = installed_host(directory.path(), 1).await;
@@ -1164,6 +1394,7 @@ mod tests {
         )
         .await
         .unwrap();
+        assert!(restored.first_run_pending().await);
         let mut progress = restored.data.lock().await.first_run.clone();
         assert_eq!(progress.gpu_uuids, vec![gpu().uuid]);
         assert_eq!(progress.requested_storage, Some(selected_root.clone()));
@@ -1229,6 +1460,7 @@ mod tests {
         assert_eq!(failed["storage"]["accepted"], false);
         assert!(failed["storage"]["error"].as_str().is_some());
         assert_eq!(host.downloads.root(), original_root);
+        assert!(!host.first_run_pending().await);
 
         host.first_run_action(json!({"action":"storage","path":original_root}))
             .await
@@ -1240,6 +1472,7 @@ mod tests {
             .await
             .unwrap_err()
             .contains("free space"));
+        assert!(!host.first_run_pending().await);
         host.first_run_maintenance().await.unwrap();
         let blocked = host.first_run_status().await.unwrap();
         assert_eq!(blocked["step"], "models");
@@ -1255,6 +1488,7 @@ mod tests {
         assert!(recovered["error"].is_null());
         assert_eq!(recovered["selected_downloads"][0]["id"], json!(jobs[0].id));
         assert_eq!(host.downloads.list().await.len(), 1);
+        assert!(host.first_run_pending().await);
     }
 
     #[tokio::test]
@@ -1295,6 +1529,7 @@ mod tests {
             })
             .await
             .unwrap();
+            assert!(!host.first_run_pending().await, "{status}");
             let error = host
                 .first_run_action(json!({"action":"resume"}))
                 .await
@@ -1309,6 +1544,7 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("free space"));
+            assert!(!host.first_run_pending().await, "{status}");
         }
     }
 
@@ -1414,6 +1650,7 @@ mod tests {
             restored.first_run_status().await.unwrap()["step"],
             "downloads"
         );
+        assert!(restored.first_run_pending().await);
         let mut progress = restored.data.lock().await.first_run.clone();
         restored
             .admit_first_run_downloads(&mut progress)
@@ -1429,6 +1666,7 @@ mod tests {
             restored.first_run_status().await.unwrap()["step"],
             "profiling"
         );
+        assert!(restored.first_run_pending().await);
         assert!(restored
             .first_run_action(json!({"action":"complete"}))
             .await
@@ -1786,6 +2024,7 @@ mod tests {
             .first_run_action(json!({"action":"complete"}))
             .await
             .is_err());
+        assert!(host.first_run_pending().await);
         host.first_run_maintenance().await.unwrap();
         let worker = host
             .processes
@@ -1823,6 +2062,7 @@ mod tests {
         assert_eq!(status["startup_profiles"][0]["max_context"], 65536);
         assert_eq!(status["startup_profiles"][0]["concurrency"], 3);
         assert!(status["startup_profiles"][0]["kv_arena_bytes"].is_null());
+        assert!(!host.first_run_pending().await);
         let args = std::fs::read_to_string(directory.path().join("quote-args")).unwrap();
         assert!(args.lines().any(|arg| arg == "--quote-only"));
         assert!(!args.lines().any(|arg| arg == "--kv-arena-bytes"));
@@ -1834,6 +2074,156 @@ mod tests {
             .windows(2)
             .any(|pair| pair == ["--max-concurrency", "3"]));
         assert!(!host.processes.lock().await.has_children());
+        // Retained quotes must wake selected-artifact validation after restart
+        // and either runtime reconfiguration path, then park once accepted.
+        drop(host);
+        let host = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
+        for runtime in ["reopened", "executable", "runtimes"] {
+            {
+                let mut processes = host.processes.lock().await;
+                match runtime {
+                    "executable" => processes
+                        .configure_executable(directory.path().join("ginfer-serve"))
+                        .unwrap(),
+                    "runtimes" => processes
+                        .configure_runtimes(
+                            std::collections::BTreeMap::from([(
+                                "12.0".into(),
+                                directory.path().join("ginfer-serve"),
+                            )]),
+                            std::collections::BTreeMap::from([(gpu().uuid, "12.0".into())]),
+                        )
+                        .unwrap(),
+                    _ => {}
+                }
+            }
+            let saved = host.data.lock().await.first_run.clone();
+            assert!(saved.startup_profiles[0].quote.is_some(), "{runtime}");
+            assert!(host.first_run_pending().await, "{runtime}");
+            host.first_run_maintenance().await.unwrap();
+            let worker = host
+                .processes
+                .lock()
+                .await
+                .hardware_profile
+                .clone()
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(2), async {
+                while worker.busy() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            assert!(
+                worker.artifact_is_accepted(&[gpu().uuid], &intent),
+                "{runtime}"
+            );
+            host.first_run_maintenance().await.unwrap();
+            assert!(!host.first_run_pending().await, "{runtime}");
+        }
+        // Recover a real running scoped journal: interruption needs explicit
+        // Resume even though its startup draft still has no quote or error.
+        let cli = directory.path().join("ginfer");
+        let valid_cli = std::fs::read(&cli).unwrap();
+        let begun = directory.path().join("interrupted-profile-begun");
+        std::fs::write(
+            &cli,
+            format!(
+                "#!/bin/sh\nprintf ready > {}\nexec /bin/sleep 60\n",
+                shell_quote(begun.to_str().unwrap())
+            ),
+        )
+        .unwrap();
+        let mut progress = host.data.lock().await.first_run.clone();
+        progress.startup_profiles[0].quote = None;
+        host.store_first_run(progress).await.unwrap();
+        let worker = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        worker
+            .start_scoped(
+                HardwareProfileAction::Ensure,
+                Some(cli.clone()),
+                vec![gpu().uuid],
+                intent.clone(),
+            )
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while !begun.exists() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let journal = directory.path().join("hardware-profile-job.json");
+        let interrupted = std::fs::read(&journal).unwrap();
+        worker.shutdown().await.unwrap();
+        drop(worker);
+        drop(host);
+        std::fs::write(&journal, interrupted).unwrap();
+        std::fs::write(&cli, valid_cli).unwrap();
+        let host = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
+        let worker = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        assert_eq!(worker.status(None).status, "interrupted");
+        assert!(!worker.busy());
+        {
+            let data = host.data.lock().await;
+            assert!(data.first_run.startup_profiles[0].quote.is_none());
+            assert!(data.first_run.startup_profiles[0].error.is_none());
+        }
+        assert!(!host.first_run_pending().await);
+        {
+            let _operation = host.first_run_operation.lock().await;
+            // Selected-artifact validation may yield for metadata I/O, but
+            // parked maintenance must finish without this operation lock.
+            tokio::time::timeout(Duration::from_secs(2), host.first_run_maintenance())
+                .await
+                .expect("parked maintenance waited for the operation lock")
+                .unwrap();
+        }
+        host.first_run_action(json!({"action":"resume"}))
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while worker.busy() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
+        assert!(host.first_run_pending().await);
+        host.first_run_maintenance().await.unwrap();
+        assert!(!host.first_run_pending().await);
         assert!(host
             .first_run_action(json!({"action":"startup","download_id":jobs[0].id,"concurrency":0}))
             .await
@@ -1844,12 +2234,14 @@ mod tests {
         )
         .await
         .unwrap();
+        assert!(host.first_run_pending().await);
         host.first_run_maintenance().await.unwrap();
         let status = host.first_run_status().await.unwrap();
         assert!(status["startup_profiles"][0]["error"]
             .as_str()
             .unwrap()
             .contains("cannot fit 2"));
+        assert!(!host.first_run_pending().await);
         assert!(host
             .first_run_action(json!({"action":"complete"}))
             .await
@@ -1859,13 +2251,16 @@ mod tests {
         )
         .await
         .unwrap();
+        assert!(host.first_run_pending().await);
         host.first_run_maintenance().await.unwrap();
+        assert!(!host.first_run_pending().await);
         assert_eq!(
             host.first_run_action(json!({"action":"complete"}))
                 .await
                 .unwrap()["step"],
             "complete"
         );
+        assert!(!host.first_run_pending().await);
         let snapshot = host.snapshot().await;
         assert_eq!(snapshot["instances"].as_array().unwrap().len(), 2);
         assert!(snapshot["instances"]

@@ -15,14 +15,27 @@ the source flow; live provider consent is a release gate for Ron. See
 User-connected SaaS accounts are integrations,
 not an expansion of GChat LAN host/workspace management or paid Arbitor features.
 
-Microsoft sign-in uses an approved public release app identity when supplied at
-build time, while retaining any saved organization registration. Gbot Cloud PC
+Microsoft sign-in uses Ron's registered public app identity in release builds
+with tenant `common`, supporting organizational and personal Microsoft accounts,
+while retaining any saved organization registration. Outlook.com, Hotmail and
+personal OneDrive are supported by the available account-specific Graph APIs;
+SharePoint and Windows 365 Cloud PC require a work or school account. Gbot Cloud PC
 setup guides browser sign-in and explicit account/PC choice. Without a release
 identity, it explains the missing release setup without asking novices for a
 client ID; custom registration stays in an advanced Settings option with steps.
-Ron owns the release Entra registration and live-consent gate. See
+Ron owns confirmation of the Entra redirect configuration and live-consent gate. See
 [setup and release configuration](operations.md) and the
-[decision](../decisions/2026-10-16-guide-microsoft-sign-in-with-release-identity.md).
+[guided sign-in decision](../decisions/2026-10-16-guide-microsoft-sign-in-with-release-identity.md)
+and [account audience decision](../decisions/2026-10-16-allow-personal-microsoft-accounts.md).
+
+Google uses each user's own Desktop OAuth client, with no built-in Google release
+identity. Settings guides project creation, API enablement, External consent and
+production publishing, then imports the downloaded client JSON with a file picker.
+The existing native vault stores any registration secret; imported endpoint URLs
+never change provider routing. Expired or revoked sign-in prompts account
+reconnection in plain language. These source changes use mocks; live consent
+remains Ron's release gate. See [the Google setup guide](operations.md#google-register-your-own-desktop-app)
+and [the registration decision](../decisions/2026-10-16-guide-google-desktop-registration.md).
 
 Google services: Gmail, Calendar, Drive, Docs, Sheets, Slides, People contacts and
 Tasks. Microsoft Graph services: Outlook mail/calendar/contacts, OneDrive,

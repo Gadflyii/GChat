@@ -2,6 +2,7 @@
 
 - **2026-10-16** — [Hand off the owned Host during an App Data move](2026-10-16-handoff-owned-host-during-app-data-move.md)
 - **2026-10-16** — [Register per-user Windows Gbot sign-in startup](2026-10-16-register-windows-gbot-sign-in-startup.md)
+- **2026-10-16** — [Project native v2 results into the public v1 report](2026-10-16-project-native-v2-into-public-v1.md)
 
 - **2026-10-16** — [Stop the owned idle Windows desktop Host normally](2026-10-16-stop-owned-idle-windows-desktop-host.md)
 
@@ -518,3 +519,8 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-16** — [Guide Microsoft sign-in with a release identity](2026-10-16-guide-microsoft-sign-in-with-release-identity.md)
 
 - **2026-10-16** — [Profile the selected artifact before idle format completion](2026-10-16-profile-selected-artifact-before-idle-format-completion.md)
+
+- **2026-10-16** — [Allow personal Microsoft accounts with the release registration](2026-10-16-allow-personal-microsoft-accounts.md)
+- **2026-10-16** — [Guide Google Desktop registration and import client JSON](2026-10-16-guide-google-desktop-registration.md)
+
+- [Label screened startup launch profiles](2026-10-16-label-screened-startup-launch-profiles.md)

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { invoke } from '@tauri-apps/api/core'
 import { localStorageKey } from '@/constants/localStorage'
 import { buildSubmission, submitStandardBenchmark, ownedLeaderboardResults, deleteLeaderboardResult, GBENCH_PUBLISHING_ENABLED, maxPerfSessionMismatch } from './leaderboard'
-import type { BenchmarkResult, BenchmarkPoint, BenchmarkV1Report } from './tauri'
+import type { BenchmarkResult, BenchmarkPoint, BenchmarkV1Report, BenchmarkV2Report, BenchmarkV2Wave } from './tauri'
 import type { BenchmarkModelClass } from '@/services/engines'
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 afterEach(() => { vi.mocked(invoke).mockReset(); localStorage.removeItem(localStorageKey.gbenchReceipts) })
@@ -40,6 +40,37 @@ function fixture(modelClass: BenchmarkModelClass = 'qwen27-int-dflash-q4'): Benc
   }
 }
 
+
+function v2Fixture(modelClass: BenchmarkModelClass = 'qwen27-int-dflash-q4'): BenchmarkResult & { points: (BenchmarkPoint & { evidence: BenchmarkV2Report })[] } {
+  const run = fixture(modelClass)
+  return { ...run, methodology: 'ginfer-resident-max-perf-v2', points: run.points.map(point => {
+    const logical = 2048 * point.concurrency
+    const makeWave = (prefix: boolean, duration: number): BenchmarkV2Wave => ({
+      ...point.evidence.warmup[0], full_cold_prompt: !prefix,
+      computed_tokens: prefix ? 0 : logical, cached_tokens: prefix ? logical : 0,
+      compute_seconds: prefix ? 0 : duration, mean_ttft_seconds: duration, wall_seconds: duration + 4,
+      logical_prompt_tokens: logical, observed_compute_tokens: prefix ? 0 : logical,
+      prefix_reuse: prefix, warm_cached_prompt: prefix,
+      prefill_seconds_sum: prefix ? duration * point.concurrency : duration,
+      decode_seconds_sum: 2 * point.concurrency, request_seconds_sum: (duration + 4) * point.concurrency,
+      warm_prefill_status: prefix ? 'cached' : 'prefix_reuse_disabled',
+      warm_prefill_seconds_mean: prefix ? duration : null,
+      warm_pp_effective_per_request: prefix ? 2048 / duration : null,
+      warm_cached_ttft_seconds: prefix ? duration : null,
+    })
+    const evidence: BenchmarkV2Report = {
+      schema: 'ginfer-resident-benchmark-v2', corpus: point.evidence.corpus,
+      configuration: { ...point.evidence.configuration, prefix_reuse: true },
+      workload: { prompt_tokens: 2048, output_tokens: 500, concurrency: point.concurrency, warmup_rounds: 1, measured_rounds: 1 },
+      cold_prefill: { prefix_reuse: false, warmup: [makeWave(false, 1)], measured: [makeWave(false, 2)] },
+      warm_generation: { prefix_reuse: true, warmup: [makeWave(true, 3)], measured: [makeWave(true, 4)] },
+    }
+    // Native deserialization retains these empty v1 defaults alongside the real v2 phases.
+    Object.assign(evidence, { warmup: [], measured: [] })
+    return { ...point, evidence }
+  }) }
+}
+
 describe('G.bench public submission', () => {
   it.each<BenchmarkModelClass>(['qwen27-int-dflash-q4', 'qwen27-nvfp4-dflash-q4', 'flash-smol-mtp', 'flash-int-mtp'])('accepts the exact %s Max Perf release policy without adding public v1 fields', modelClass => {
     const run = fixture(modelClass)
@@ -53,11 +84,130 @@ describe('G.bench public submission', () => {
     expect(JSON.stringify(payload)).not.toContain('benchmark_profile')
     expect(JSON.stringify(payload)).not.toContain('private-')
   })
-  it('refuses native v2 methodology before projecting or sending public v1 evidence', () => {
-    const run: BenchmarkResult = fixture()
-    run.methodology = 'ginfer-resident-max-perf-v2'
-    expect(() => buildSubmission(run, 'Player')).toThrow('public report and scoring contract')
+  it.each<BenchmarkModelClass>(['qwen27-int-dflash-q4', 'qwen27-nvfp4-dflash-q4', 'flash-smol-mtp', 'flash-int-mtp'])('projects native v2 %s cold warmup and warm measured waves into public v1', modelClass => {
+    const run = v2Fixture(modelClass)
+    const before = JSON.stringify(run)
+    const payload = buildSubmission(run, 'Player')
+    expect(payload.schema).toBe('gbench-submission-v1')
+    expect(payload.methodology).toBe('ginfer-resident-max-perf-v1')
+    expect(payload.configuration.engine_build).toBe('test')
+    expect(payload.points.map(point => point.concurrency)).toEqual([1, 4, 8])
+    for (const point of payload.points) {
+      expect(point.warmup).toEqual({ full_cold_prompt: true, computed_tokens: 2048 * point.concurrency,
+        compute_seconds: 1, cached_tokens: 0, output_tokens: 500 * point.concurrency, mean_ttft_seconds: 1,
+        decode_tokens: 480 * point.concurrency, decode_rounds: 120 * point.concurrency, decode_seconds: 2, wall_seconds: 5 })
+      expect(point.measured).toEqual({ full_cold_prompt: false, computed_tokens: 0, compute_seconds: 0,
+        cached_tokens: 2048 * point.concurrency, output_tokens: 500 * point.concurrency, mean_ttft_seconds: 4,
+        decode_tokens: 480 * point.concurrency, decode_rounds: 120 * point.concurrency, decode_seconds: 2, wall_seconds: 8 })
+    }
+    expect(JSON.stringify(run)).toBe(before)
+  })
+  it('ignores top-level v2 legacy defaults and whitelists raw public evidence without local scores or private data', () => {
+    const run = v2Fixture()
+    Object.assign(run.hardware!, { hostname: 'private-host', api_key: 'private-key' })
+    Object.assign(run.hardware!.gpus[0], { uuid: 'private-uuid' })
+    for (const point of run.points) {
+      Object.assign(point.evidence, { warmup: [{ model_path: 'private-path' }], measured: [{ model_path: 'private-path' }] })
+      Object.assign(point.evidence.configuration, { model_path: 'private-path' })
+      Object.assign(point.evidence.cold_prefill.warmup[0], { prompt: 'private-prompt' })
+      Object.assign(point.evidence.warm_generation.measured[0], { response: 'private-response' })
+      point.prompt_tokens_per_second = 999999
+    }
+    const payload = buildSubmission(run, 'Player')
+    expect(Object.keys(payload)).toEqual(['schema', 'benchmark_id', 'methodology', 'run_id', 'nickname', 'hardware', 'configuration', 'points'])
+    expect(Object.keys(payload.configuration)).toEqual(['engine_build', 'model', 'weights', 'tp', 'draft_tp', 'max_context', 'max_concurrency', 'kv_dtype', 'spec', 'draft_tokens', 'draft_policy', 'cuda_graph', 'vision'])
+    expect(Object.keys(payload.points[0])).toEqual(['concurrency', 'corpus', 'warmup', 'measured'])
+    expect(Object.keys(payload.points[0].measured)).toEqual(['full_cold_prompt', 'computed_tokens', 'compute_seconds', 'cached_tokens', 'output_tokens', 'mean_ttft_seconds', 'decode_tokens', 'decode_rounds', 'decode_seconds', 'wall_seconds'])
+    expect(payload.points[0].measured.mean_ttft_seconds).toBe(4)
+    expect(JSON.stringify(payload)).not.toMatch(/private-|999999|warm_pp|warm_prefill|warm_cached|logical_prompt|observed_compute|prefix_reuse|scores/)
+  })
+  it('rejects methodology/schema mismatches, unknown schemas and mixed report versions', () => {
+    for (const makeRun of [fixture, v2Fixture]) {
+      const run = makeRun()
+      run.methodology = run.methodology.endsWith('v1') ? 'ginfer-resident-max-perf-v2' : 'ginfer-resident-max-perf-v1'
+      expect(() => buildSubmission(run, 'Player')).toThrow('schema')
+    }
+    const unknown = v2Fixture(); Object.assign(unknown.points[0].evidence, { schema: 'ginfer-resident-benchmark-v3' })
+    expect(() => buildSubmission(unknown, 'Player')).toThrow('schema')
+    const mixed: BenchmarkResult = v2Fixture(); mixed.points[1] = fixture().points[1]
+    expect(() => buildSubmission(mixed, 'Player')).toThrow('schema')
+    const custom = v2Fixture(); custom.methodology = 'custom-v2'
+    expect(() => buildSubmission(custom, 'Player')).toThrow('Only Standard')
     expect(invoke).not.toHaveBeenCalled()
+  })
+  it('requires exactly one complete warmup and measured wave in both v2 phases, including unprojected observations', () => {
+    for (const phase of ['cold_prefill', 'warm_generation'] as const) {
+      for (const round of ['warmup', 'measured'] as const) {
+        for (const replacement of [undefined, [], [null], 'not-a-wave-array']) {
+          const run = v2Fixture(); Object.assign(run.points[1].evidence[phase], { [round]: replacement })
+          expect(() => buildSubmission(run, 'Player'), `${phase}.${round}`).toThrow('native v2')
+        }
+        const extra = v2Fixture(); extra.points[2].evidence[phase][round].push(extra.points[2].evidence[phase][round][0])
+        expect(() => buildSubmission(extra, 'Player'), `${phase}.${round} extra`).toThrow('native v2')
+      }
+      const missing = v2Fixture(); Reflect.deleteProperty(missing.points[0].evidence, phase)
+      expect(() => buildSubmission(missing, 'Player')).toThrow('native v2')
+    }
+  })
+  it('rejects v2 workload and prefix acquisition policy changes', () => {
+    for (const change of [{ prompt_tokens: 2047 }, { output_tokens: 499 }, { concurrency: 1 }, { warmup_rounds: 0 }, { measured_rounds: 2 }]) {
+      const run = v2Fixture(); Object.assign(run.points[1].evidence.workload, change)
+      expect(() => buildSubmission(run, 'Player')).toThrow('native v2')
+    }
+    for (const phase of ['cold_prefill', 'warm_generation'] as const) {
+      const run = v2Fixture(); run.points[0].evidence[phase].prefix_reuse = phase === 'cold_prefill'
+      expect(() => buildSubmission(run, 'Player')).toThrow('native v2')
+    }
+    for (const prefix of [false, undefined]) {
+      const run = v2Fixture(); run.points[0].evidence.configuration.prefix_reuse = prefix
+      expect(() => buildSubmission(run, 'Player')).toThrow('native v2')
+    }
+  })
+  it('rejects incomplete or inconsistent native v2 observations in all four waves', () => {
+    for (const phase of ['cold_prefill', 'warm_generation'] as const) {
+      for (const round of ['warmup', 'measured'] as const) {
+        for (const change of [{ logical_prompt_tokens: 2048 }, { observed_compute_tokens: 99999 },
+          { computed_tokens: -1 }, { cached_tokens: 0.5 }, { output_tokens: 500 }, { decode_tokens: 2000 },
+          { decode_rounds: Number.NaN }, { compute_seconds: Number.POSITIVE_INFINITY }, { mean_ttft_seconds: -1 },
+          { wall_seconds: 0 }, { prefill_seconds_sum: undefined }, { decode_seconds_sum: -1 }, { request_seconds_sum: Number.NaN },
+          { prefix_reuse: phase !== 'warm_generation' }, { full_cold_prompt: phase === 'warm_generation' },
+          { warm_cached_prompt: phase === 'cold_prefill' }, { warm_prefill_status: 'unknown' },
+          { warm_prefill_seconds_mean: 123 }, { warm_pp_effective_per_request: 123 }, { warm_cached_ttft_seconds: 123 }]) {
+          const run = v2Fixture(); Object.assign(run.points[1].evidence[phase][round][0], change)
+          expect(() => buildSubmission(run, 'Player'), `${phase}.${round} ${Object.keys(change)[0]}`).toThrow('native v2')
+        }
+      }
+    }
+  })
+  it.each([0, 16])('preserves partial-prefix and unavailable-timer evidence with aggregate %s without inventing warm metrics', (prefillSecondsSum) => {
+    const run = v2Fixture()
+    const partial = run.points[1].evidence.warm_generation.warmup[0]
+    Object.assign(partial, { computed_tokens: 4096, cached_tokens: 4096, observed_compute_tokens: 4096,
+      warm_cached_prompt: false, warm_prefill_status: 'prefix_incomplete', warm_prefill_seconds_mean: null,
+      warm_pp_effective_per_request: null, warm_cached_ttft_seconds: null })
+    const measured = run.points[1].evidence.warm_generation.measured[0]
+    Object.assign(measured, { prefill_seconds_sum: prefillSecondsSum, warm_prefill_status: 'prefill_timer_unavailable',
+      warm_prefill_seconds_mean: null, warm_pp_effective_per_request: null })
+    const payload = buildSubmission(run, 'Player')
+    expect(payload.points[1].measured.cached_tokens).toBe(8192)
+    expect(payload.points[1].measured.mean_ttft_seconds).toBe(4)
+    expect(payload.points[1].measured).not.toHaveProperty('warm_pp_effective_per_request')
+  })
+  it('preserves Max Perf, session, corpus, configuration and Standard workload refusals for v2', () => {
+    const noProfile = v2Fixture(); noProfile.session.benchmark_profile = undefined
+    expect(() => buildSubmission(noProfile, 'Player')).toThrow('Max Perf')
+    const session = v2Fixture(); session.session.cuda_graph = false
+    expect(() => buildSubmission(session, 'Player')).toThrow('session')
+    const config = v2Fixture(); config.points[0].evidence.configuration.draft_tokens = 1
+    expect(() => buildSubmission(config, 'Player')).toThrow('actual selected')
+    const changedConfig = v2Fixture(); changedConfig.points[1].evidence.configuration.engine_build = 'other-build'
+    expect(() => buildSubmission(changedConfig, 'Player')).toThrow('contract')
+    const corpus = v2Fixture(); corpus.points[1].evidence.corpus = 'different-corpus'
+    expect(() => buildSubmission(corpus, 'Player')).toThrow('contract')
+    const workload = v2Fixture(); workload.points[0].requested_prompt_tokens = 1000
+    expect(() => buildSubmission(workload, 'Player')).toThrow('contract')
+    const order = v2Fixture(); order.points.reverse()
+    expect(() => buildSubmission(order, 'Player')).toThrow('C1, C4 and C8')
   })
   it('rejects missing or unknown profile metadata, historical drafter classes and unspecified Muse', () => {
     for (const change of [
@@ -109,7 +259,7 @@ describe('G.bench public submission', () => {
       expect(() => buildSubmission(run, 'Player')).toThrow('contract')
     }
     const v2 = fixture(); Object.assign(v2.points[0].evidence, { schema: 'ginfer-resident-benchmark-v2' })
-    expect(() => buildSubmission(v2, 'Player')).toThrow('public report and scoring contract')
+    expect(() => buildSubmission(v2, 'Player')).toThrow('schema')
     for (const build of ['', '   ']) {
       const noBuild = fixture(); noBuild.points.forEach(point => { point.evidence.configuration.engine_build = build })
       expect(() => buildSubmission(noBuild, 'Player')).toThrow('Engine build')
@@ -180,7 +330,9 @@ describe('G.bench public submission', () => {
   })
   it('keeps publishing disabled without native submission or ownership writes', async () => {
     expect(GBENCH_PUBLISHING_ENABLED).toBe(false)
-    await expect(submitStandardBenchmark(fixture(), 'Player')).rejects.toThrow('not enabled')
+    for (const run of [fixture(), v2Fixture()]) {
+      await expect(submitStandardBenchmark(run, 'Player')).rejects.toThrow('not enabled')
+    }
     expect(invoke).not.toHaveBeenCalled()
     expect(localStorage.getItem(localStorageKey.gbenchReceipts)).toBeNull()
   })

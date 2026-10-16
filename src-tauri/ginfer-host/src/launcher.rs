@@ -677,6 +677,7 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
                     profile["max_context"],
                     match profile["qualification"]["tier"].as_str() {
                         Some("full-context-tested") => "Full-context tested",
+                        Some("screened-startup") => "Screened, not full-context qualified",
                         Some("calculated-startup-smoke") => "Calculated + startup/smoke checked (not full-context tested)",
                         Some("calculated-pending-validation") => "Calculated — pending validation (startup/memory/inference unverified; may require engine update)",
                         _ => "Unknown evidence tier",

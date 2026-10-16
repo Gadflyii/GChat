@@ -46,12 +46,31 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CARGO_MANIFEST_DIR");
     stage_bundle_identifier();
     stage_launch_profiles();
+    stage_microsoft_registration();
 
     #[cfg(all(windows, feature = "test-tauri"))]
     embed_windows_test_manifest();
 
     #[cfg(not(feature = "cli"))]
     build_tauri()
+}
+
+fn stage_microsoft_registration() {
+    println!("cargo:rerun-if-env-changed=GCHAT_MICROSOFT_CLIENT_ID");
+    println!("cargo:rerun-if-env-changed=GCHAT_MICROSOFT_TENANT");
+    // Public desktop-app identity registered for organizational and personal
+    // Microsoft accounts. Explicit build configuration still takes precedence;
+    // an empty client ID deliberately leaves sign-in unavailable.
+    let client_id = std::env::var("GCHAT_MICROSOFT_CLIENT_ID").ok().or_else(|| {
+        (std::env::var("PROFILE").as_deref() == Ok("release"))
+            .then(|| "e618bfb1-eb1d-4112-ad84-e3ff963f585c".to_owned())
+    });
+    if let Some(client_id) = client_id {
+        let tenant =
+            std::env::var("GCHAT_MICROSOFT_TENANT").unwrap_or_else(|_| "common".to_owned());
+        println!("cargo:rustc-env=GCHAT_MICROSOFT_CLIENT_ID={client_id}");
+        println!("cargo:rustc-env=GCHAT_MICROSOFT_TENANT={tenant}");
+    }
 }
 
 fn stage_bundle_identifier() {
