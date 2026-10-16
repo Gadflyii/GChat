@@ -2568,7 +2568,7 @@ mod tests {
         assert!(block.unwrap_err().contains("Hardware changed"));
     }
     #[tokio::test]
-    async fn hardware_profile_scan_queue_preserves_exact_saved_groups_and_reservation() {
+    async fn hardware_profile_scan_defers_until_explicit_ensure_queues_saved_groups() {
         let (directory, host, _) = fixture().await;
         let cli = directory.path().join("ginfer");
         std::fs::write(&cli, format!("#!/bin/sh\nprintf '%s' \"$CUDA_VISIBLE_DEVICES\" > '{}/'\"$CUDA_VISIBLE_DEVICES\"'.begun'\nwhile [ ! -f \"$3.release\" ]; do /bin/sleep 0.01; done\nprintf '%s' '{{\"schema_version\":2}}' > \"$3\"\n", directory.path().display())).unwrap();
@@ -2598,6 +2598,31 @@ mod tests {
             .await
             .hardware_profile
             .clone()
+            .unwrap();
+        assert!(response.status().is_success());
+        let scanned = job.status(None);
+        assert_eq!(scanned.status, "idle");
+        assert!(!job.busy());
+        assert!(scanned.pending_gpu_groups.is_empty());
+        assert!(!directory.path().join("GPU-fixture.begun").exists());
+        assert!(!directory.path().join("GPU-second.begun").exists());
+        let response = host
+            .clone()
+            .route(
+                Request::builder()
+                    .method("POST")
+                    .uri("/host/v1/hardware-profile")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(
+                        serde_json::to_vec(&HardwareProfileRequest {
+                            action: HardwareProfileAction::Ensure,
+                            gpu_uuids: None,
+                        })
+                        .unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
             .unwrap();
         let first = job.status(None);
         let launch = EngineLaunch {

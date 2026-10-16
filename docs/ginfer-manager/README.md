@@ -143,10 +143,10 @@ See the [decision](../decisions/2026-10-16-profile-selected-artifact-before-idle
 `FIRST-RUN-WIZARD` and `MODEL-STORAGE-FASTEST-DISK` share one Host-owned workflow on branch
 `feat/gchat-shared-first-run-wizard`, based on `3681810c4`. Linux installer
 continuation, Manager's **Set up local GInfer** and GChat Welcome use the same
-durable state. The sequence is explicit GPU-group selection, native profiling,
-storage selection, published package selection and download, startup review, then
-completion. No GPU is selected automatically. Selected release identities are
-saved before download admission; reopening a client resumes partial admission and
+durable state. The sequence is explicit GPU-group selection, storage selection,
+published package selection and verified download, selected-artifact profiling,
+startup review, then completion. No GPU is selected automatically. Selected
+release identities are saved before download admission; reopening a client resumes partial admission and
 existing jobs. The workflow saves instances stopped and leaves Start explicit.
 See the [decision](../decisions/2026-10-15-own-first-run-setup-and-measured-model-storage-in-host.md)
 and [operator steps](guide.md#complete-local-setup).
@@ -159,40 +159,41 @@ live `available_bytes`, existing downloads and candidate eligibility/reasons.
 
 | Action | Inputs and behavior |
 | --- | --- |
-| `profile` | Explicit `gpu_uuids`; require a compatible supported group of 1, 2 or 4 GPUs and prepare its saved native profile. |
-| `storage` | Absolute `path`; save the choice during profiling, then validate and persist the native managed-download root. |
+| `profile` | Explicit `gpu_uuids`; save a compatible supported group of 1, 2 or 4 GPUs. Profiling starts after the selected download is verified. |
+| `storage` | Absolute `path`; validate and persist the native managed-download root, or retain the choice while explicit profiling finishes. |
 | `move` | Installed managed `download_id`; explicitly move it to the selected storage root, rejecting active sources. |
 | `refresh_catalog` | Refresh the configured published release catalog. |
-| `models` | Exact `release_ids`; save the compatible published choices during profiling; admit downloads only after profiling, storage validation and a live capacity check. |
+| `models` | Exact `release_ids`; save compatible published choices; admit downloads after storage validation and a live capacity check, then profile each verified selected artifact. |
 | `resume` | Continue interrupted profiling, download admission or startup review. |
 | `startup` | `download_id`, `concurrency`, `max_context`, `instance_count`, optional `kv_arena_bytes`; obtain a fresh Engine quote. |
 | `complete` | Save reviewed startup configurations as stopped instances. |
 
 ### Choices and progress during profiling — October 16
 
-After explicitly choosing a GPU group, users can save a storage path and exact
-published model selections while its profile runs. These are durable intents:
-the Host waits for that group's complete profile before applying storage checks
-and admitting downloads. The user can close the wizard and return later. Live
-capacity, filesystem identity, writability and supported GPU/model checks still
-apply at admission; a failed choice shows an error and can be corrected. Saving
-a choice does not start a model.
+After explicitly choosing a GPU group, users save a storage path and exact
+published model selections. The ordinary first-run flow downloads and verifies
+the selected artifacts before profiling their required formats. If an explicit
+manual profiling job is already running, choices remain durable intents until
+that foreground job finishes. The user can close the wizard and return later.
+Live capacity, filesystem identity, writability and supported GPU/model checks
+still apply at download admission; a failed choice shows an error and can be
+corrected. Saving a choice does not start a model.
 
 The profiling panel shows the Host's last reported elapsed time and the latest
 phase reported by native diagnostics, without comparing Host and GUI clocks.
-A prior successful full measurement for the same GPU group can
-provide a clearly labelled historical estimate. The first measurement has no
-measured ETA; a cache hit or resumed partial job must not become a full-run
-duration sample. Progress never infers a percentage from completed-format counts.
+A prior successful measurement for the same GPU group and profiling scope can
+provide a clearly labelled historical estimate. Selected-artifact and all-format
+history remain separate. The first measurement has no measured ETA; a cache hit
+or resumed partial job must not become a full-run duration sample. Progress never infers a percentage from completed-format counts.
 
 Runtime installation preserves the Host's accepted profiles, saved choices and
 native checkpoints. Ensure and Resume use the current runtime with retained
 profiles and checkpoints as seeds, including when an upgrade replaces the CLI
 at the same path. Resume also revalidates native output before retrying a failed
 publication. Native fingerprint and completeness validation still decide reuse
-or selective refresh. This GChat-only
-change does not alter the Engine calibration recipe or qualify model-scoped
-partial profiles, and is outside the October 16 RC package refresh.
+or selective refresh. This GChat-only change uses the signed model-scoped Engine
+contract; it does not alter calibration recipes or establish real Engine/GPU
+acceptance. It is outside the October 16 RC package refresh.
 
 Storage ranking reads native `schema_version: 2` disk rows, using
 `disks[].sequential_read.value` in bytes/second only when its status is
@@ -216,7 +217,8 @@ External discovered models are not moved by this action. An error before journal
 commit retains the original; an error removing it after commit reports the
 remaining copy.
 
-Model suggestions use saved native RAM/VRAM facts and current disk capacity.
+Model suggestions use the selected GPUs, published memory guidance and current
+disk capacity; they do not require calibration before download.
 Startup review uses Engine `ginfer-serve --quote-only` for each package's own
 context, concurrency and instance count. These are per-package estimates; they
 do not qualify simultaneous placement of all selected packages or full-context
