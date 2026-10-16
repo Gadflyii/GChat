@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-16** — [Bind managed Host identity and ports to its data root](2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
+
 - **2026-10-16** — [Accept first-run choices during native profiling](2026-10-16-accept-first-run-intents-during-profiling.md)
 
 - **2026-10-15** — [Preserve Gbot owner and recover paused control](2026-10-15-preserve-gbot-owner-and-recover-paused-control.md)

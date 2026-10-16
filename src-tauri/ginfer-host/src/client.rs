@@ -164,6 +164,9 @@ pub struct Client {
     credentials: Arc<dyn CredentialStore>,
     configured_path: Option<PathBuf>,
     operation: Mutex<()>,
+    // Desktop clients pin their own root instead of following another install's
+    // later change to the per-user discovery locator.
+    local_owner: Mutex<(Option<PathBuf>, Option<crate::local_host_registry::Owner>)>,
 }
 /// Read-only native routing view. Mutations stay behind the client's locked operations.
 pub struct ClientViewGuard<'a>(tokio::sync::MutexGuard<'a, ClientState>);
@@ -447,6 +450,7 @@ impl Client {
             configured_path: path,
             credentials,
             operation: Mutex::new(()),
+            local_owner: Mutex::new((None, None)),
         }
     }
     pub async fn view(&self) -> Result<ClientViewGuard<'_>, String> {
@@ -474,8 +478,15 @@ impl Client {
     /// Manager-first startup imports the registered owner's existing client metadata.
     /// This reads its configured storage; it does not start a host or enroll again.
     pub async fn initialize_from_local_owner(&self) -> Result<(), String> {
+        self.initialize_from_local_owner_resolving(crate::local_host_registry::registered).await
+    }
+    async fn initialize_from_local_owner_resolving<F, Fut>(&self, discover: F) -> Result<(), String>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<Option<crate::local_host_registry::Owner>, String>>,
+    {
         self.initialize().await?;
-        if let Some(owner) = crate::local_host_registry::registered().await? {
+        if let Some(owner) = self.selected_local_owner_resolving(discover).await? {
             self.initialize_from_owner(&owner).await?;
         }
         Ok(())
@@ -485,6 +496,7 @@ impl Client {
         owner: &crate::local_host_registry::Owner,
     ) -> Result<(), String> {
         self.initialize().await?;
+        *self.local_owner.lock().await = (Some(owner.directory().to_owned()), Some(owner.clone()));
         let provider = match owner {
             crate::local_host_registry::Owner::Desktop(local) => local.desktop_provider.as_deref(),
             // Service client metadata lives beside the private host directory.
@@ -498,6 +510,34 @@ impl Client {
             }
         }
         Ok(())
+    }
+    pub async fn set_local_directory(&self, directory: PathBuf) -> Result<(), String> {
+        if !directory.is_absolute() { return Err("local Host state directory must be absolute".into()); }
+        let mut local = self.local_owner.lock().await;
+        if !local.0.as_ref().is_some_and(|current| crate::local_host_registry::same_directory(current, &directory)) {
+            *local = (Some(directory), None);
+        }
+        Ok(())
+    }
+
+    async fn selected_local_owner(&self) -> Result<Option<crate::local_host_registry::Owner>, String> {
+        self.selected_local_owner_resolving(crate::local_host_registry::registered).await
+    }
+    async fn selected_local_owner_resolving<F, Fut>(&self, discover: F) -> Result<Option<crate::local_host_registry::Owner>, String>
+    where
+        F: FnOnce() -> Fut,
+        Fut: std::future::Future<Output = Result<Option<crate::local_host_registry::Owner>, String>>,
+    {
+        let mut local = self.local_owner.lock().await;
+        if local.1.is_some() { return Ok(local.1.clone()); }
+        let owner = discover().await?;
+        let owner = owner.filter(|owner| local.0.as_ref().is_none_or(|directory|
+            crate::local_host_registry::same_directory(directory, owner.directory())));
+        if let Some(owner) = &owner {
+            local.0 = Some(owner.directory().to_owned());
+            local.1 = Some(owner.clone());
+        }
+        Ok(owner)
     }
     async fn lock_registry(&self) -> Result<RegistryLock, String> {
         self.initialize().await?;
@@ -568,7 +608,7 @@ impl Client {
         Ok(())
     }
     async fn attach_local(&self) -> Result<Option<Uuid>, String> {
-        let Some(owner) = crate::local_host_registry::registered().await? else {
+        let Some(owner) = self.selected_local_owner().await? else {
             return Ok(None);
         };
         let connection = tokio::time::timeout(std::time::Duration::from_secs(10), owner.connect())

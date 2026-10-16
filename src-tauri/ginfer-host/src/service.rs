@@ -77,6 +77,10 @@ pub struct Persistent {
     pub share_lan: bool,
     #[serde(default)]
     pub management_origin: Option<String>,
+    #[serde(default)]
+    pub management_notice: Option<String>,
+    #[serde(default)]
+    pub lan_port: Option<u16>,
     pub host_id: Uuid,
     pub name: String,
     pub certificate: HostCertificate,
@@ -296,6 +300,8 @@ impl Host {
                 fleet_revision: 0,
                 fleet_membership: None,
                 management_origin: None,
+                management_notice: None,
+                lan_port: None,
                 share_lan: true,
                 host_id: Uuid::new_v4(),
                 name,
@@ -777,11 +783,13 @@ impl Host {
         Ok(())
     }
     pub async fn snapshot(&self) -> serde_json::Value {
+        let state_directory = self.directory.canonicalize().ok();
         let sharing = self.lan_sharing.lock().await;
         let data = self.data.lock().await;
         let network = serde_json::json!({"managed":sharing.managed,"active":sharing.active(),
             "enabled":if sharing.managed { data.share_lan } else { sharing.standalone.is_some() },
-            "port":sharing.standalone.unwrap_or(sharing.port),"error":sharing.error});
+            "port":sharing.standalone.unwrap_or(sharing.port),"error":sharing.error,
+            "notice":sharing.notice});
         drop(sharing);
         let processes = self.processes.lock().await;
         let (hardware_profile, revision) = match &processes.hardware_profile {
@@ -809,6 +817,8 @@ impl Host {
         let first_run_complete = data.first_run.complete;
         let host_id = data.host_id;
         let name = data.name.clone();
+        let management_origin = data.management_origin.clone();
+        let management_notice = data.management_notice.clone();
         let fleet = data.fleet.clone();
         let usage = self.client_projection(&data);
         let membership = match Self::membership_view(&data) {
@@ -916,8 +926,11 @@ impl Host {
         }
         let engine_presets_available = !available_profiles.is_empty() || !max_perf_profiles.is_empty();
         let mut snapshot = serde_json::json!({"protocol_version":1,"host_id":host_id,"boot_id":self.boot_id,
+            "local_identity":{"state_directory":state_directory,"platform":std::env::consts::OS},
+            "management_origin":management_origin,"management_notice":management_notice,
             "lan_sharing": {"enabled":network["enabled"],"managed":network["managed"],
-                "active":network["active"],"port":network["port"],"error":network["error"]},
+                "active":network["active"],"port":network["port"],"error":network["error"],
+                "notice":network["notice"]},
             "display_name":name,"revision":revision,
             "fleet":fleet,
             "fleet_membership":membership,
