@@ -5,10 +5,12 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::core::app::commands::get_jan_data_folder_path;
+use crate::core::state::AppState;
 
+use super::commands::AgentRunRegistry;
 use super::definitions::{AgentDefinition, AgentReasoningEffort, AgentStrategy};
 use super::runner::{combine_turn_reason, turn_status, AgentTurnOutcome};
 use super::types::{AgentEvent, AgentInferenceMetrics};
@@ -202,21 +204,42 @@ impl AgentRunRecord {
     }
 }
 
+#[cfg(test)]
 pub fn record_run(data_folder: &Path, record: AgentRunRecord) -> Result<(), String> {
+    record_run_preserving_active(data_folder, record, &AgentRunRegistry::default())
+}
+
+pub fn record_run_preserving_active(
+    data_folder: &Path,
+    record: AgentRunRecord,
+    registry: &AgentRunRegistry,
+) -> Result<(), String> {
     let _guard = RUN_HISTORY_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| "Agent run-history lock is poisoned".to_string())?;
     let mut history = read_history(data_folder)?;
+    history.runs.retain(|run| run.id != record.id);
     history.runs.insert(0, record);
-    let removed = if history.runs.len() > MAX_RUN_HISTORY {
-        history.runs.split_off(MAX_RUN_HISTORY)
-    } else {
-        Vec::new()
-    };
+    let mut inactive = 0;
+    let mut removed = Vec::new();
+    // The guard covers session persistence and cleanup after terminal history
+    // is written, so status alone cannot establish that pruning is safe.
+    history.runs.retain(|run| {
+        if registry.is_active(&run.run_id) {
+            return true;
+        }
+        inactive += 1;
+        if inactive <= MAX_RUN_HISTORY {
+            true
+        } else {
+            removed.push(run.id.clone());
+            false
+        }
+    });
     write_history(data_folder, &history)?;
-    for run in removed {
-        prune_run_workspace(data_folder, &run.id);
+    for id in removed {
+        prune_run_workspace(data_folder, &id);
     }
     Ok(())
 }
@@ -225,13 +248,39 @@ pub fn list_runs(data_folder: &Path) -> Result<Vec<AgentRunRecord>, String> {
     Ok(read_history(data_folder)?.runs)
 }
 
-pub fn delete_run(data_folder: &Path, id: &str) -> Result<(), String> {
+pub fn list_inactive_runs(
+    data_folder: &Path,
+    registry: &AgentRunRegistry,
+) -> Result<Vec<AgentRunRecord>, String> {
+    Ok(list_runs(data_folder)?
+        .into_iter()
+        .filter(|run| !registry.is_active(&run.run_id))
+        .collect())
+}
+
+#[cfg(test)]
+fn delete_run(data_folder: &Path, id: &str) -> Result<(), String> {
+    delete_inactive_run(data_folder, id, &AgentRunRegistry::default())
+}
+
+fn delete_inactive_run(
+    data_folder: &Path,
+    id: &str,
+    registry: &AgentRunRegistry,
+) -> Result<(), String> {
     uuid::Uuid::parse_str(id).map_err(|_| "Agent run id is invalid".to_string())?;
     let _guard = RUN_HISTORY_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| "Agent run-history lock is poisoned".to_string())?;
     let mut history = read_history(data_folder)?;
+    if history
+        .runs
+        .iter()
+        .any(|run| run.id == id && registry.is_active(&run.run_id))
+    {
+        return Err(format!("Agent run '{id}' is still active"));
+    }
     let before = history.runs.len();
     history.runs.retain(|run| run.id != id);
     if history.runs.len() == before {
@@ -327,8 +376,9 @@ pub fn now_ms() -> u64 {
 pub async fn agent_list_runs<R: Runtime>(
     app_handle: AppHandle<R>,
 ) -> Result<Vec<AgentRunRecord>, String> {
+    let registry = app_handle.state::<AppState>().agent_runs.clone();
     let data = get_jan_data_folder_path(app_handle);
-    tokio::task::spawn_blocking(move || list_runs(&data))
+    tokio::task::spawn_blocking(move || list_inactive_runs(&data, &registry))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -338,8 +388,9 @@ pub async fn agent_delete_run<R: Runtime>(
     app_handle: AppHandle<R>,
     id: String,
 ) -> Result<(), String> {
+    let registry = app_handle.state::<AppState>().agent_runs.clone();
     let data = get_jan_data_folder_path(app_handle);
-    tokio::task::spawn_blocking(move || delete_run(&data, &id))
+    tokio::task::spawn_blocking(move || delete_inactive_run(&data, &id, &registry))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -348,6 +399,114 @@ pub async fn agent_delete_run<R: Runtime>(
 mod tests {
     use super::*;
     use crate::core::agent::definitions::general_agent;
+
+    fn completed_record(id: &str, run_id: &str) -> AgentRunRecord {
+        let outcome = Ok(AgentTurnOutcome {
+            reply: Some("done".into()),
+            reason: "reply".into(),
+            step_count: 1,
+            inference: AgentInferenceMetrics::default(),
+        });
+        AgentRunRecord::completed(CompletedRun {
+            id,
+            run_id,
+            session_id: run_id,
+            origin_session_id: None,
+            user_message: "task",
+            definition: &general_agent(),
+            started_at_ms: 1,
+            events: &[],
+            result: &outcome,
+        })
+    }
+
+    #[test]
+    fn active_admission_is_replaced_without_exposing_or_deleting_its_history() {
+        let root = tempfile::tempdir().unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let registry = AgentRunRegistry::default();
+        let guard = registry
+            .register("active", tokio_util::sync::CancellationToken::new())
+            .unwrap();
+        let workspace = root.path().join("agent-runs").join(&id);
+        std::fs::create_dir_all(&workspace).unwrap();
+        std::fs::write(workspace.join("evidence.txt"), "completed read").unwrap();
+        let mut admission = completed_record(&id, "active");
+        admission.status = "incomplete".into();
+        admission.finish_reason.clear();
+        admission.finished_at_ms = 0;
+        admission.total_steps = 0;
+        admission.final_reply = "No completion was recorded".into();
+        record_run_preserving_active(root.path(), admission, &registry).unwrap();
+
+        assert!(list_inactive_runs(root.path(), &registry).unwrap().is_empty());
+        let original = std::fs::read(history_path(root.path())).unwrap();
+        assert!(delete_inactive_run(root.path(), &id, &registry)
+            .unwrap_err()
+            .contains("still active"));
+        assert_eq!(std::fs::read(history_path(root.path())).unwrap(), original);
+
+        record_run_preserving_active(root.path(), completed_record(&id, "active"), &registry)
+            .unwrap();
+        let records = list_runs(root.path()).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].id, id);
+        assert_eq!(records[0].status, "finished");
+        assert!(records[0].finished_at_ms > 0);
+        assert_eq!(
+            std::fs::read_to_string(workspace.join("evidence.txt")).unwrap(),
+            "completed read"
+        );
+        assert!(list_inactive_runs(root.path(), &registry).unwrap().is_empty());
+        assert!(delete_inactive_run(root.path(), &id, &registry).is_err());
+
+        drop(guard);
+        assert_eq!(list_inactive_runs(root.path(), &registry).unwrap().len(), 1);
+        delete_inactive_run(root.path(), &id, &registry).unwrap();
+        assert!(!workspace.exists());
+    }
+
+    #[test]
+    fn pruning_keeps_active_terminal_history_and_its_workspace() {
+        let root = tempfile::tempdir().unwrap();
+        let id = uuid::Uuid::new_v4().to_string();
+        let registry = AgentRunRegistry::default();
+        let guard = registry
+            .register("active", tokio_util::sync::CancellationToken::new())
+            .unwrap();
+        let workspace = root.path().join("agent-runs").join(&id);
+        std::fs::create_dir_all(&workspace).unwrap();
+        record_run_preserving_active(root.path(), completed_record(&id, "active"), &registry)
+            .unwrap();
+
+        for index in 0..105 {
+            record_run_preserving_active(
+                root.path(),
+                completed_record(&uuid::Uuid::new_v4().to_string(), &format!("run-{index}")),
+                &registry,
+            )
+            .unwrap();
+        }
+        let records = list_runs(root.path()).unwrap();
+        assert_eq!(records.len(), 101);
+        assert_eq!(list_inactive_runs(root.path(), &registry).unwrap().len(), 100);
+        assert_eq!(records[0].run_id, "run-104");
+        assert_eq!(records[99].run_id, "run-5");
+        assert_eq!(records[100].id, id);
+        assert!(workspace.exists());
+
+        drop(guard);
+        record_run_preserving_active(
+            root.path(),
+            completed_record(&uuid::Uuid::new_v4().to_string(), "newest"),
+            &registry,
+        )
+        .unwrap();
+        let records = list_runs(root.path()).unwrap();
+        assert_eq!(records.len(), 100);
+        assert!(records.iter().all(|run| run.id != id));
+        assert!(!workspace.exists());
+    }
 
     #[test]
     fn keeps_newest_one_hundred_runs() {

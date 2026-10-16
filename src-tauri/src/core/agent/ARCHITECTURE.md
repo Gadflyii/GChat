@@ -130,8 +130,38 @@ Definitions use schema version 3.
   stages. Concurrent siblings always publish a terminal stage status, even
   when another sibling fails or cancels.
 - Only the final result is committed to the owning thread session. The latest
-  100 runs retain bounded stage summaries, status, duration, resolved instance,
-  model identity, reasoning effort, inference metrics, and final output.
+  100 inactive runs retain bounded stage summaries, status, duration, resolved
+  instance, model identity, reasoning effort, inference metrics, and final
+  output. Active runs and their archives are additionally retained.
+
+### Durable admission and interrupted history
+
+After preflight and session loading, `commands.rs` writes a schema-3 admission
+record before invoking the model/tool runner. It uses the final record's storage
+ID and preserves the task, workspace and archive location. The initial status is
+`incomplete`, its finish reason is empty, and `finishedAtMs` is zero because no
+completion time is known. Terminal persistence upserts that same storage ID
+without pruning its existing archive.
+
+Saved-history listing, deletion and retention consult `AgentRunRegistry`, not
+the record's status alone. This hides and protects a record while the original
+invocation still owns it, including a terminal record awaiting semantic-session
+persistence and pending-request cleanup. Retention keeps the newest 100 inactive
+records plus all active records; it prunes an archive only when its inactive
+history record is removed.
+
+Fresh application state has no live owner for an unfinished admission, so the
+record appears as incomplete history. Its warning asks the user to inspect saved
+files and verify completed work before continuing as a new run. The archive
+location exposes any observations already saved, but cannot establish that every
+external side effect was observed. Continue as new run creates fresh run and
+session identities. It does not replay execution, restore pending approvals or
+import interrupted session working state.
+
+The planned scripted regression covers invocation loss followed by fresh-state
+reopening and is pending verification. Native unexpected-process exit and
+power-loss acceptance remain unqualified. See the
+[decision](../../../../docs/decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 
 ## Performance telemetry
 

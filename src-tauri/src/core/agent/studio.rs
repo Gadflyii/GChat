@@ -117,6 +117,7 @@ pub async fn operation<R: Runtime>(
     if action == "pools" {
         return Ok(json!(pools));
     }
+    let registry = app.state::<crate::core::state::AppState>().agent_runs.clone();
     let action = action.to_owned();
     let mut result = tokio::task::spawn_blocking(move || {
     let id = || args.get("id").and_then(Value::as_str).ok_or_else(|| "id is required".to_string());
@@ -137,8 +138,8 @@ pub async fn operation<R: Runtime>(
             definitions::validate_definition(&definition)?;
             Ok(json!({"valid":true,"roles":definitions::placement_roles(&definition)}))
         }
-        "runs" => Ok(json!(runs::list_runs(&data)?)),
-        "monitor" => Ok(json!({"active": LIVE.get_or_init(|| Mutex::new(BTreeMap::new())).lock().map_err(|e|e.to_string())?.clone(), "completed":runs::list_runs(&data)?})),
+        "runs" => Ok(json!(runs::list_inactive_runs(&data, &registry)?)),
+        "monitor" => Ok(json!({"active": LIVE.get_or_init(|| Mutex::new(BTreeMap::new())).lock().map_err(|e|e.to_string())?.clone(), "completed":runs::list_inactive_runs(&data, &registry)?})),
         _ => Err(format!("Unsupported Agent Studio operation `{action}`")),
     }
     }).await.map_err(|e| e.to_string())??;

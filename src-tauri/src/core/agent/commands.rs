@@ -21,7 +21,7 @@ use super::ginfer_client::{find_session_by_model_id, GinferClient};
 use super::orchestrator::{run_definition, AgentModelRoutes, OrchestrationInput};
 use super::path_policy::{canonical_directory, expand_home, lexical_normalize, EditableRoots};
 use super::prompt::{CapabilitiesSummary, SkillDescriptor};
-use super::runs::{now_ms, record_run, AgentRunRecord};
+use super::runs::{now_ms, record_run_preserving_active, AgentRunRecord};
 use super::session::{load_session, reset_session, save_session, validate_session_id};
 use super::tools::DesktopServices;
 use super::types::{
@@ -53,14 +53,14 @@ struct ActiveAgentRun {
     finished: watch::Receiver<bool>,
 }
 
-struct AgentRunGuard {
+pub(super) struct AgentRunGuard {
     registry: AgentRunRegistry,
     run_id: String,
     finished: watch::Sender<bool>,
 }
 
 impl AgentRunRegistry {
-    fn register(
+    pub(super) fn register(
         &self,
         run_id: &str,
         cancellation: CancellationToken,
@@ -85,6 +85,14 @@ impl AgentRunRegistry {
             run_id: run_id.to_owned(),
             finished,
         })
+    }
+
+    pub(super) fn is_active(&self, run_id: &str) -> bool {
+        self.inner
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .runs
+            .contains_key(run_id)
     }
 
     fn is_shutting_down(&self) -> bool {
@@ -933,9 +941,12 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
             record.workspace = Some(working_dir.to_string_lossy().into_owned());
             record.parent_run_id = request.parent_run_id.clone();
             let record_data = data_folder.clone();
-            tokio::task::spawn_blocking(move || record_run(&record_data, record))
-                .await
-                .map_err(|error| error.to_string())??;
+            let registry = state.agent_runs.clone();
+            tokio::task::spawn_blocking(move || {
+                record_run_preserving_active(&record_data, record, &registry)
+            })
+            .await
+            .map_err(|error| error.to_string())??;
             if !cancelled {
                 let failure = AgentEvent::StepError {
                     message: error.clone(),
@@ -1001,10 +1012,61 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
         disabled_tools: request.disabled_tools.iter().cloned().collect(),
     };
     let session_lock = get_session_lock(&state.agent_session_locks, &request.session_id).await;
-    let result = {
+    let result = async {
         let _session_guard = session_lock.lock().await;
         match load_session(&data_folder, &request.session_id).await {
             Ok(mut session) => {
+                // Persist discoverability before any model/tool execution. If
+                // this future or process disappears, the next app sees an
+                // incomplete run and its archives, never a replayable turn.
+                let interrupted = Err(concat!(
+                    "Completion was not recorded. Inspect the saved run files and verify ",
+                    "completed work before continuing as a new run; pending actions were not restored."
+                )
+                .to_owned());
+                let mut admission = AgentRunRecord::completed(super::runs::CompletedRun {
+                    id: &storage_id,
+                    run_id: &request.run_id,
+                    session_id: &request.session_id,
+                    origin_session_id: request.origin_session_id.as_deref(),
+                    user_message: &user_message,
+                    definition: &definition,
+                    started_at_ms,
+                    events: &[],
+                    result: &interrupted,
+                });
+                admission.status = "incomplete".into();
+                admission.finish_reason.clear();
+                admission.finished_at_ms = 0;
+                admission.kind = match &definition.strategy {
+                    AgentStrategy::Standard => "standard",
+                    AgentStrategy::GoalLoop { .. } => "goal_loop",
+                    AgentStrategy::Coordinator { .. } => "coordinator",
+                    AgentStrategy::Workflow { .. } => "workflow",
+                }
+                .into();
+                admission.default_model_instance_id = definition
+                    .model_instance_id
+                    .as_deref()
+                    .unwrap_or(&request.model_id)
+                    .into();
+                admission.workspace = Some(working_dir.to_string_lossy().into_owned());
+                admission.output_workspace = Some(
+                    data_folder
+                        .join("agent-runs")
+                        .join(&storage_id)
+                        .to_string_lossy()
+                        .into_owned(),
+                );
+                admission.parent_run_id = request.parent_run_id.clone();
+                admission.fleet_revision = fleet_revision;
+                let admission_data = data_folder.clone();
+                let registry = state.agent_runs.clone();
+                tokio::task::spawn_blocking(move || {
+                    record_run_preserving_active(&admission_data, admission, &registry)
+                })
+                .await
+                .map_err(|error| error.to_string())??;
                 let mut recorded_events = Vec::new();
                 let run_result = run_definition(
                     OrchestrationInput {
@@ -1096,11 +1158,13 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
                 if output_workspace.is_dir() {
                     record.output_workspace = Some(output_workspace.to_string_lossy().into_owned());
                 }
-                let record_result =
-                    tokio::task::spawn_blocking(move || record_run(&record_data, record))
-                        .await
-                        .map_err(|e| e.to_string())
-                        .and_then(|result| result);
+                let registry = state.agent_runs.clone();
+                let record_result = tokio::task::spawn_blocking(move || {
+                    record_run_preserving_active(&record_data, record, &registry)
+                })
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(|result| result);
                 let session_result = save_session(&data_folder, &session).await;
                 session_result
                     .and(record_result)
@@ -1108,7 +1172,8 @@ pub async fn run_turn_with_sink_ready<R: Runtime>(
             }
             Err(error) => Err(error),
         }
-    };
+    }
+    .await;
     state
         .tool_call_cancellations
         .lock()
@@ -1393,6 +1458,17 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn shutdown_waits_for_direct_studio_durability_after_window_closes() {
+        studio_run_durability_after_window_loss(false).await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn interrupted_studio_run_reopens_incomplete_without_replaying_tools() {
+        studio_run_durability_after_window_loss(true).await;
+    }
+
+    #[cfg(unix)]
+    async fn studio_run_durability_after_window_loss(interrupted: bool) {
         use crate::core::agent::ginfer_client::GinferConnection;
         use crate::core::agent::test_support::{ScriptedGinferServer, ScriptedResponse, TestFleet};
         use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -1486,7 +1562,7 @@ mod tests {
                 Ok(())
             }),
         );
-        let exit = async {
+        let check_active = async {
             approval.notified().await;
             assert!(!app
                 .state::<AppState>()
@@ -1494,6 +1570,84 @@ mod tests {
                 .lock()
                 .await
                 .is_empty());
+            let records = super::super::runs::list_runs(&data).unwrap();
+            assert_eq!(records.len(), 1);
+            assert_eq!(records[0].run_id, run_id);
+            assert_eq!(records[0].finished_at_ms, 0);
+            assert!(super::super::runs::agent_list_runs(app.handle().clone())
+                .await
+                .unwrap()
+                .is_empty());
+            for action in ["runs", "monitor"] {
+                let history = super::super::studio::operation(
+                    app.handle().clone(), action, serde_json::json!({}),
+                ).await.unwrap();
+                let records = if action == "monitor" { &history["completed"] } else { &history };
+                assert!(records.as_array().unwrap().is_empty(), "{action}");
+            }
+            assert!(super::super::runs::agent_delete_run(
+                app.handle().clone(), records[0].id.clone(),
+            )
+            .await
+            .unwrap_err()
+            .contains("still active"));
+        };
+        if interrupted {
+            let mut run = Box::pin(run);
+            tokio::time::timeout(Duration::from_secs(5), async {
+                tokio::select! {
+                    result = &mut run => panic!("run finished before its unapproved action: {result:?}"),
+                    () = check_active => (),
+                }
+            })
+            .await
+            .expect("the first read must finish before the pending shell approval");
+            // Drop the invocation without the normal exit/cancellation path.
+            // A fresh AppState models loss of volatile state, not power loss.
+            drop(run);
+            let reopened = tauri::test::mock_app();
+            reopened.manage(AppState::default());
+            reopened.manage(crate::test_support::TestDataRoot(data.clone()));
+            let history = super::super::runs::agent_list_runs(reopened.handle().clone())
+                .await
+                .unwrap();
+            assert_eq!(history.len(), 1);
+            let restored = &history[0];
+            assert_eq!(restored.run_id, run_id);
+            assert_eq!(restored.session_id, session_id);
+            assert_eq!(restored.user_message, task);
+            assert_eq!(restored.workspace.as_deref(), root.path().to_str());
+            assert_eq!(restored.status, "incomplete");
+            assert_eq!(restored.finished_at_ms, 0);
+            assert!(restored.finish_reason.is_empty());
+            assert!(restored.final_reply.contains("Completion was not recorded"));
+            let output = Path::new(restored.output_workspace.as_deref().unwrap())
+                .join("agent/context");
+            for name in ["transcript.jsonl", "working-state.json", "step-0-tool-0.json"] {
+                let contents = fs::read_to_string(output.join(name)).unwrap();
+                assert!(contents.contains("DURABLE_STUDIO_OBSERVATION"), "{name}");
+            }
+            let monitor = super::super::studio::operation(
+                reopened.handle().clone(), "monitor", serde_json::json!({}),
+            )
+            .await
+            .unwrap();
+            assert_eq!(monitor["completed"].as_array().unwrap().len(), 1);
+            let state = reopened.state::<AppState>();
+            assert!(state.agent_pending_approvals.lock().await.is_empty());
+            assert!(state.agent_pending_folder_access.lock().await.is_empty());
+            assert!(state.tool_call_cancellations.lock().await.is_empty());
+            assert!(state.agent_runs.inner.lock().unwrap().runs.is_empty());
+            assert_eq!(server.requests().len(), 2, "history reopening must not replay execution");
+            assert!(!root.path().join("must-not-run.txt").exists());
+            super::super::runs::agent_delete_run(reopened.handle().clone(), restored.id.clone())
+                .await
+                .unwrap();
+            assert!(!data.join("agent-runs").join(&restored.id).exists());
+            return;
+        }
+        let exit = async {
+            check_active.await;
             app.state::<AppState>().agent_runs.close_admission();
             closed.store(true, Ordering::SeqCst);
             shutdown(app.handle()).await;
@@ -1501,6 +1655,7 @@ mod tests {
             // Check before joining the caller: shutdown itself must wait for
             // the history and semantic session writes, not just cancellation.
             let records = super::super::runs::list_runs(&data).unwrap();
+            assert_eq!(records.len(), 1, "terminal history replaces durable admission");
             let record = records
                 .iter()
                 .find(|record| record.run_id == run_id)
