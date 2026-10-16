@@ -211,6 +211,14 @@ struct ControlRequest {
     owner: Uuid,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecoverControlRequest {
+    identity: SessionIdentity,
+    expected_owner: Uuid,
+    owner: Uuid,
+}
+
 impl Api {
     pub async fn bind(
         service: Arc<Service>,
@@ -1044,6 +1052,9 @@ async fn route(
                 serde_json::to_value(service.snapshot().await).expect("Gbot state is serializable");
             state["live_sessions"] = serde_json::to_value(service.live_sessions().await)
                 .expect("session identities are serializable");
+            state["recoverable_controls"] =
+                serde_json::to_value(service.recoverable_controls().await)
+                    .expect("control identities are serializable");
             json_response(StatusCode::OK, &state)
         }
         (&Method::POST, "/v1/ssh/identity") => {
@@ -1169,6 +1180,18 @@ async fn route(
             },
             None => invalid_request(),
         },
+        (&Method::POST, "/v1/control/recover") => {
+            match parse_body::<RecoverControlRequest>(request).await {
+                Some(control) => match runtime
+                    .recover_control(control.identity, control.expected_owner, control.owner)
+                    .await
+                {
+                    Ok(control) => json_response(StatusCode::OK, &control),
+                    Err(error) => workspace_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/control/take-over" | "/v1/control/hand-back") => {
             let take_over = request.uri().path() == "/v1/control/take-over";
             match parse_body::<ControlRequest>(request).await {
@@ -2623,7 +2646,25 @@ mod tests {
             let bytes = hyper::body::to_bytes(response.into_body()).await.unwrap();
             assert!(!bytes.windows(token.len()).any(|window| window == token));
         }
-        for path in ["/v1/connect", "/v1/operations"] {
+        for authorization in [None, Some("Bearer incorrect")] {
+            let mut request = Request::builder()
+                .method(Method::POST)
+                .uri(format!("http://{endpoint}/v1/control/recover"));
+            if let Some(value) = authorization {
+                request = request.header(AUTHORIZATION, value);
+            }
+            let response = client
+                .request(request.body(Body::from("{}")).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+        let state = local_api
+            .call("/v1/state", serde_json::Value::Null)
+            .await
+            .unwrap();
+        assert_eq!(state["recoverable_controls"], serde_json::json!([]));
+        for path in ["/v1/connect", "/v1/operations", "/v1/control/recover"] {
             let response = client
                 .request(
                     Request::builder()

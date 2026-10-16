@@ -52,7 +52,12 @@ impl ServiceClient {
     async fn call(&self, path: &str, body: Value) -> Result<Value, String> {
         match self {
             Self::Local(client) => client.call(path, body).await,
-            Self::Remote { hosts, host_id } => hosts.gbot_call(*host_id, path, body).await,
+            Self::Remote { hosts, host_id } => {
+                if path == "/v1/control/recover" {
+                    return Err("Recover control is available only on the local service".into());
+                }
+                hosts.gbot_call(*host_id, path, body).await
+            }
         }
     }
 }
@@ -522,7 +527,8 @@ pub async fn gbot_service_start<R: Runtime>(
     state.client(&app).await.map(|_| ())
 }
 fn supported_route(path: &str) -> bool {
-    path != "/v1/updates" && ginfer_host::gbot_control::supported_route(path)
+    path == "/v1/control/recover"
+        || (path != "/v1/updates" && ginfer_host::gbot_control::supported_route(path))
 }
 #[tauri::command]
 pub async fn gbot_command<R: Runtime>(
@@ -568,6 +574,26 @@ mod tests {
             bridge: None,
             close: json!({"identity":identity,"owner":owner,"lease_id":lease}),
         }
+    }
+
+    #[tokio::test]
+    async fn remote_recovery_is_rejected_before_accessing_host_credentials() {
+        let client = ServiceClient::Remote {
+            hosts: Arc::new(ginfer_host::client::Client::new(
+                None,
+                Arc::new(UnusedCredentials),
+            )),
+            host_id: Uuid::new_v4(),
+        };
+        let error = client
+            .call("/v1/control/recover", json!({}))
+            .await
+            .unwrap_err();
+        assert!(error.contains("only on the local service"));
+        assert!(super::supported_route("/v1/control/recover"));
+        assert!(!ginfer_host::gbot_control::supported_route(
+            "/v1/control/recover"
+        ));
     }
 
     #[tokio::test]

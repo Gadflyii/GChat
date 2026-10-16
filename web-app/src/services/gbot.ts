@@ -126,6 +126,7 @@ export type BotState = {
   workspaces: Workspace[]
   live_sessions: Identity[]
   controls: Control[]
+  recoverable_controls?: Control[]
   assignments: SavedAssignment[]
 }
 export type PairedTarget = {
@@ -187,10 +188,16 @@ export function gbot<T>(path: string, body?: unknown): Promise<T> {
 }
 
 export function gbotControlOwner(): string {
-  const saved = sessionStorage.getItem('gbot-control-owner')
-  if (saved) return saved
-  const owner = crypto.randomUUID()
-  sessionStorage.setItem('gbot-control-owner', owner)
+  const key = 'gbot-control-owner'
+  const saved = localStorage.getItem(key)
+  const owner = saved || sessionStorage.getItem(key) || crypto.randomUUID()
+  // Persist before granting control so closing the window cannot lose its owner.
+  if (!saved) localStorage.setItem(key, owner)
+  try {
+    sessionStorage.setItem(key, owner)
+  } catch {
+    // The session mirror is optional once the owner is durably stored.
+  }
   return owner
 }
 
