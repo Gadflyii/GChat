@@ -78,6 +78,9 @@ pub async fn catalog<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<ConnectedTool
     if app.state::<super::gbot::GbotState>().is_stopped().await {
         return Ok(Vec::new());
     }
+    if !super::setup::bundled_resources_ready(app.clone())? {
+        return Ok(Vec::new());
+    }
     let catalog: Vec<gbot_service::connectors::ConnectorTool> =
         serde_json::from_value(native(app, "catalog", Value::Null).await?)
             .map_err(|_| "Invalid native connector catalog")?;

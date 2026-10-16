@@ -3,6 +3,7 @@ import { getServiceHub } from '@/hooks/useServiceHub'
 import { SystemEvent } from '@/types/events'
 import { useAppState } from './useAppState'
 import { useToolAvailable } from './useToolAvailable'
+import { useBundledResources } from './useBundledResources'
 import { ExtensionManager } from '@/lib/extension'
 import { ExtensionTypeEnum, MCPExtension } from '@gchat/core'
 
@@ -14,6 +15,7 @@ let processedRefreshVersion = 0
 let refreshLoop: Promise<void> | undefined
 let mcpUpdateUnsubscribe: (() => void) | undefined
 let mcpUpdateListener: Promise<() => void> | undefined
+let resourcesRefreshQueued = false
 const refreshSubscribers = new Set<(snapshot: ToolSnapshot) => void>()
 
 async function fetchToolSnapshot() {
@@ -90,6 +92,7 @@ function subscribeToMcpUpdates(refresh: (snapshot: ToolSnapshot) => void) {
   return () => {
     refreshSubscribers.delete(refresh)
     if (refreshSubscribers.size === 0) {
+      resourcesRefreshQueued = false
       if (mcpUpdateUnsubscribe) {
         mcpUpdateUnsubscribe()
         mcpUpdateUnsubscribe = undefined
@@ -108,6 +111,7 @@ function subscribeToMcpUpdates(refresh: (snapshot: ToolSnapshot) => void) {
 }
 
 export const useTools = () => {
+  const { ready: resourcesReady, error: resourceError } = useBundledResources()
   const updateTools = useAppState((state) => state.updateTools)
   const updateRagToolNames = useAppState((state) => state.updateRagToolNames)
   const updateCapabilityToolNames = useAppState((state) => state.updateCapabilityToolNames)
@@ -150,4 +154,16 @@ export const useTools = () => {
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    if (!IS_TAURI) return
+    if (resourceError) {
+      console.error('Failed to prepare capability resources:', resourceError)
+    } else if (resourcesReady && !resourcesRefreshQueued) {
+      // The first catalog may have omitted pending connectors. Queue a new
+      // snapshot even when that initial request has not finished yet.
+      resourcesRefreshQueued = true
+      queueFreshToolSnapshot()
+    }
+  }, [resourcesReady, resourceError])
 }
