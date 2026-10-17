@@ -201,8 +201,22 @@ function HermesAgentIntegration() {
 
     try {
       if (serverStatus === 'stopped') {
+        // With nothing chosen, nothing loaded and no chat model to fall back
+        // on, starting the server would only leave it running for no reason.
+        const hasCandidate =
+          selectedHermesModel ||
+          (await serviceHub
+            .models()
+            .getActiveModels()
+            .then((m) => m?.length > 0)
+            .catch(() => false)) ||
+          getModelToStart({ selectedModel, selectedProvider, getProviderByName })
+        if (!hasCandidate) {
+          toast.error('Choose a model, then select Save connection again.')
+          return
+        }
         toast.info('Preparing the Hermes Agent connection…', {
-          description: 'Starting the selected model and the local connection.',
+          description: 'Starting the local connection.',
         })
         await startServer()
       }
