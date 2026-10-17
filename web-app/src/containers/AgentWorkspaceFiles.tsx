@@ -101,6 +101,7 @@ function WorkspaceSection({
                 type="button"
                 className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2 text-left text-sm font-medium text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-foreground/8 hover:text-sidebar-accent-foreground focus-visible:ring-2"
                 aria-label={`${rootExpanded ? 'Collapse' : 'Expand'} ${root.name}`}
+                aria-expanded={rootExpanded}
                 title={root.path}
                 onClick={() => void onToggle(root, '')}
               >
@@ -267,7 +268,7 @@ export function AgentWorkspaceFiles({
           new Set([
             ...current,
             ...results
-              .filter(({ entries }) => Boolean(entries?.length))
+              .filter(({ entries }) => entries !== undefined)
               .map(({ root }) => entryKey(root.rootId, '')),
           ])
       )
@@ -294,8 +295,8 @@ export function AgentWorkspaceFiles({
       const requestGeneration = generation.current
       const cached = directories[key]
       if (cached?.loading) return
-      const entries = cached?.entries ?? (await loadDirectory(root, path))
-      if (generation.current !== requestGeneration || entries?.length === 0) return
+      if (!cached?.entries) await loadDirectory(root, path)
+      if (generation.current !== requestGeneration) return
 
       setExpanded((current) => new Set(current).add(key))
     },
@@ -378,7 +379,17 @@ export function AgentWorkspaceFiles({
         </div>
       )
     }
-    if (state?.entries?.length === 0) return null
+    if (state?.entries?.length === 0) {
+      return (
+        <div
+          role="status"
+          className="py-2 pr-3 text-xs text-sidebar-foreground/70"
+          style={{ paddingLeft: `${54 + depth * 16}px` }}
+        >
+          This folder is empty.
+        </div>
+      )
+    }
 
     return state?.entries?.map((entry) => {
       const isDirectory = entry.kind === 'directory'
@@ -404,6 +415,7 @@ export function AgentWorkspaceFiles({
                 })
             }}
             onDoubleClick={() => void revealEntry(root, entry.path)}
+            aria-expanded={isDirectory ? isExpanded : undefined}
             title={entry.path}
           >
             {isDirectory ? (

@@ -1,4 +1,11 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentWorkspaceFiles } from '../AgentWorkspaceFiles'
 import type { ConversationWorkspace } from '@/hooks/useConversationPolicy'
@@ -203,5 +210,128 @@ describe('Agent workspace directory request lifetime', () => {
         relativePath: 'docs/new.txt',
       }),
     ])
+  })
+})
+
+describe('Agent workspace empty folder feedback', () => {
+  it('automatically opens empty project and external roots with their own labels and paths', async () => {
+    const roots = workspace('/workspace/project')
+    roots.externalRoots = [
+      {
+        rootId: 'reference',
+        path: '/reference/manuals',
+        name: 'Manuals',
+        canEdit: false,
+      },
+    ]
+    mocks.list.mockResolvedValue([])
+    render(files(roots))
+
+    expect(await screen.findAllByRole('status')).toHaveLength(2)
+    const project = screen.getByRole('button', { name: 'Collapse Project' })
+    const external = screen.getByRole('button', { name: 'Collapse Manuals' })
+    expect(project).toHaveAttribute('title', '/workspace/project')
+    expect(external).toHaveAttribute('title', '/reference/manuals')
+    expect(project).toHaveAttribute('aria-expanded', 'true')
+    expect(external).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      within(project.closest('section')!).getByRole('status')
+    ).toHaveTextContent('This folder is empty.')
+    expect(
+      within(external.closest('section')!).getByRole('status')
+    ).toHaveTextContent('This folder is empty.')
+    expect(external).toHaveTextContent('agentWorkspace.viewOnly')
+    expect(mocks.list).toHaveBeenNthCalledWith(1, {
+      rootId: 'primary',
+      rootPath: '/workspace/project',
+      relativePath: undefined,
+    })
+    expect(mocks.list).toHaveBeenNthCalledWith(2, {
+      rootId: 'reference',
+      rootPath: '/reference/manuals',
+      relativePath: undefined,
+    })
+  })
+
+  it('opens an empty nested folder and reuses its result after collapsing and reopening', async () => {
+    const child = deferred<AgentWorkspaceEntry[]>()
+    mocks.list
+      .mockResolvedValueOnce([entry('docs', 'directory')])
+      .mockReturnValueOnce(child.promise)
+    render(files(workspace('/workspace/project')))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'docs' }))
+    expect(mocks.list).toHaveBeenLastCalledWith({
+      rootId: 'primary',
+      rootPath: '/workspace/project',
+      relativePath: 'docs',
+    })
+    await complete(child, [])
+    expect(screen.getByRole('status')).toHaveTextContent('This folder is empty.')
+    expect(screen.getByRole('button', { name: 'docs' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'docs' }))
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'docs' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'docs' }))
+    expect(screen.getByRole('status')).toHaveTextContent('This folder is empty.')
+    expect(screen.getByRole('button', { name: 'docs' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+    expect(screen.getByRole('button', { name: 'Collapse Project' })).toBeVisible()
+    expect(mocks.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('replaces previously listed files with an empty folder message after refresh', async () => {
+    const refreshed = deferred<AgentWorkspaceEntry[]>()
+    mocks.list
+      .mockResolvedValueOnce([entry('removed.txt')])
+      .mockReturnValueOnce(refreshed.promise)
+    render(files(workspace('/workspace/project')))
+    expect(await screen.findByRole('button', { name: 'removed.txt' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: 'common:refresh' }))
+    await complete(refreshed, [])
+
+    expect(screen.getByRole('status')).toHaveTextContent('This folder is empty.')
+    expect(
+      screen.queryByRole('button', { name: 'removed.txt' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Collapse Project' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'common:refresh' })).toBeEnabled()
+    expect(mocks.list).toHaveBeenLastCalledWith({
+      rootId: 'primary',
+      rootPath: '/workspace/project',
+      relativePath: undefined,
+    })
+  })
+
+  it('shows loading instead of a cached empty result while the folder refresh is pending', async () => {
+    const refreshed = deferred<AgentWorkspaceEntry[]>()
+    mocks.list
+      .mockResolvedValueOnce([])
+      .mockReturnValueOnce(refreshed.promise)
+    render(files(workspace('/workspace/project')))
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'This folder is empty.'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'common:refresh' }))
+    expect(screen.getByText('Loading…')).toBeVisible()
+    expect(screen.queryByText('This folder is empty.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'common:refresh' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Collapse Project' })).toBeVisible()
+
+    await complete(refreshed, [])
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('This folder is empty.')
+    expect(screen.getByRole('button', { name: 'common:refresh' })).toBeEnabled()
   })
 })
