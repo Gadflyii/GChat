@@ -396,9 +396,7 @@ pub(crate) fn spawn(command: &Command) -> Result<Child, String> {
 fn spawn_native(command: &Command) -> io::Result<Child> {
     let program = Path::new(command.get_program());
     let args: Vec<_> = command.get_args().collect();
-    let hardware = (args.len() == 3 || args.len() == 4)
-        && args[0] == "profile-hardware" && args[1] == "--hardware-profile"
-        && (args.len() == 3 || args[3] == "--reprofile");
+    let hardware = crate::hardware_profile::prepared_hardware_profile_args(&args);
     let draft = args.iter().any(|arg| *arg == "--calibrate-draft-width")
         && args.windows(2).any(|pair| pair[0] == "--hardware-profile" && Path::new(pair[1]).is_absolute())
         && (args.first().is_some_and(|arg| Path::new(arg).is_absolute())
