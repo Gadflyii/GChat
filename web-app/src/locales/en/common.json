@@ -385,7 +385,7 @@
       "updateSuccess": "Project \"{{projectName}}\" updated successfully"
     },
     "noConversationsIn": "No Conversations in {{projectName}}",
-    "startNewConversation": "Start a new conversation with {{projectName}} below",
+    "startNewConversation": "Start a new conversation with {{projectName}} above",
     "conversationsIn": "Conversations in {{projectName}}",
     "conversationsDescription": "Click on any conversation to continue chatting, or start a new one below.",
     "conversation": "Conversation",
