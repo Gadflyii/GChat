@@ -8,10 +8,12 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentRunSetup } from '../AgentRunSetup'
+import { useStudioRuns } from '@/stores/studio-run-store'
 import type { AgentDefinition } from '@/types/agent'
 
 const mocks = vi.hoisted(() => ({
   start: vi.fn(),
+  turn: vi.fn(async () => undefined),
   save: vi.fn(),
   current: 'local',
   catalog: {
@@ -54,10 +56,12 @@ vi.mock('@/services/agent/studio', async (original) => ({
   ...(await original<object>()),
   studioCommand: async () => mocks.catalog,
 }))
-vi.mock('@/services/agent/definitions', () => ({
+vi.mock('@/services/agent/definitions', async (original) => ({
+  ...(await original<object>()),
   saveAgentDefinition: mocks.save,
 }))
 vi.mock('@/services/agent/tauri', () => ({
+  runAgentTurn: mocks.turn,
   resolveConversationWorkspaceRoot: async () => ({
     path: '/workspace',
     name: 'Workspace',
@@ -67,12 +71,12 @@ vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: (select: (s: unknown) => unknown) =>
     select({ selectedModel: mocks.current ? { id: mocks.current } : null }),
 }))
-vi.mock('@/stores/studio-run-store', () => ({
-  useStudioRuns: { getState: () => ({ start: mocks.start }) },
-}))
+const startRun = useStudioRuns.getState().start
 afterEach(cleanup)
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.start.mockImplementation(startRun)
+  useStudioRuns.setState({ runs: {}, start: mocks.start })
   mocks.current = 'local'
   mocks.catalog.fleet.connected = true
 })
@@ -147,6 +151,7 @@ describe('Agent Studio run setup', () => {
 
     expect(mocks.start).not.toHaveBeenCalled()
     expect(onRun).not.toHaveBeenCalled()
+    expect(useStudioRuns.getState().runs).toEqual({})
   })
 
   it('does not start after unmount while saving role defaults', async () => {
@@ -166,6 +171,7 @@ describe('Agent Studio run setup', () => {
 
     expect(mocks.start).not.toHaveBeenCalled()
     expect(onRun).not.toHaveBeenCalled()
+    expect(useStudioRuns.getState().runs).toEqual({})
   })
 
   it('starts exactly once after saving role defaults successfully', async () => {
@@ -191,6 +197,19 @@ describe('Agent Studio run setup', () => {
       user_message: 'Review the workspace',
     })
     expect(onRun).toHaveBeenCalledOnce()
+    const runs = Object.values(useStudioRuns.getState().runs)
+    expect(runs).toHaveLength(1)
+    expect(runs[0]).toMatchObject({
+      name: definition.name,
+      request: {
+        definition_id: definition.id,
+        model_id: 'local',
+        user_message: 'Review the workspace',
+      },
+      state: { status: 'running', runId: runs[0].request.run_id },
+      approvals: [],
+    })
+    expect(runs[0].request.session_id).toBe(runs[0].request.run_id)
   })
 
   it('allows retry after saving role defaults fails without starting a run', async () => {
@@ -211,6 +230,7 @@ describe('Agent Studio run setup', () => {
     })
     expect(mocks.start).not.toHaveBeenCalled()
     expect(onRun).not.toHaveBeenCalled()
+    expect(useStudioRuns.getState().runs).toEqual({})
     expect(run).toBeEnabled()
     expect(screen.getByLabelText('Task or goal')).toHaveValue(
       'Review the workspace'
@@ -225,6 +245,9 @@ describe('Agent Studio run setup', () => {
 
     expect(mocks.start).toHaveBeenCalledOnce()
     expect(onRun).toHaveBeenCalledOnce()
+    const runs = Object.values(useStudioRuns.getState().runs)
+    expect(runs).toHaveLength(1)
+    expect(runs[0].request.user_message).toBe('Review the workspace')
   })
 
   it('submits explicit client fleet placement without a current model or changing saved defaults', async () => {
