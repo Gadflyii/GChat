@@ -22,14 +22,30 @@ export function useAgentSkills(enabled = true) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const selectedNameRef = useRef<string | null>(null)
+  const selectionRequest = useRef(0)
+  const loadRequest = useRef(0)
+
+  const select = useCallback(async (name: string) => {
+    const request = ++selectionRequest.current
+    selectedNameRef.current = name
+    setError(null)
+    try {
+      const detail = await getAgentSkill(name)
+      if (request === selectionRequest.current) setSelected(detail)
+    } catch (reason) {
+      if (request === selectionRequest.current) setError(String(reason))
+    }
+  }, [])
 
   const load = useCallback(async (refresh = false) => {
+    const request = ++loadRequest.current
     setLoading(true)
     setError(null)
     try {
       const next = refresh
         ? await refreshAgentSkills()
         : await listAgentSkills()
+      if (request !== loadRequest.current) return
       const sorted = [...next].sort((left, right) =>
         left.name.localeCompare(right.name)
       )
@@ -37,50 +53,49 @@ export function useAgentSkills(enabled = true) {
       const selectedName = selectedNameRef.current
       if (selectedName && sorted.some((skill) => skill.name === selectedName)) {
         if (refresh) {
-          setSelected(await getAgentSkill(selectedName))
+          await select(selectedName)
         }
       } else {
         const fallbackName = sorted[0]?.name ?? null
-        selectedNameRef.current = fallbackName
-        setSelected(fallbackName ? await getAgentSkill(fallbackName) : null)
+        if (fallbackName) {
+          await select(fallbackName)
+        } else {
+          selectionRequest.current += 1
+          selectedNameRef.current = null
+          setSelected(null)
+        }
       }
     } catch (reason) {
-      setError(String(reason))
+      if (request === loadRequest.current) setError(String(reason))
     } finally {
-      setLoading(false)
+      if (request === loadRequest.current) setLoading(false)
     }
-  }, [])
+  }, [select])
 
   useEffect(() => {
     if (!enabled) return
     void load()
-  }, [enabled, load])
-
-  const select = useCallback(async (name: string) => {
-    setError(null)
-    try {
-      const detail = await getAgentSkill(name)
-      selectedNameRef.current = name
-      setSelected(detail)
-    } catch (reason) {
-      setError(String(reason))
+    return () => {
+      selectionRequest.current += 1
+      loadRequest.current += 1
     }
-  }, [])
+  }, [enabled, load])
 
   const setEnabled = useCallback(
     async (name: string, enabled: boolean) => {
       await setAgentSkillEnabled(name, enabled)
       await load()
-      if (selected?.name === name) {
+      if (selectedNameRef.current === name) {
         await select(name)
       }
     },
-    [load, select, selected?.name]
+    [load, select]
   )
 
   const addCreated = useCallback(
     async (request: CreateAgentSkillRequest) => {
       const detail = await createAgentSkill(request)
+      selectionRequest.current += 1
       selectedNameRef.current = detail.name
       setSelected(detail)
       await load()
@@ -91,6 +106,7 @@ export function useAgentSkills(enabled = true) {
   const addImported = useCallback(
     async (sourcePath: string) => {
       const detail = await importAgentSkill(sourcePath)
+      selectionRequest.current += 1
       selectedNameRef.current = detail.name
       setSelected(detail)
       await load()
@@ -102,6 +118,7 @@ export function useAgentSkills(enabled = true) {
     async (name: string) => {
       await deleteAgentSkill(name)
       if (selectedNameRef.current === name) {
+        selectionRequest.current += 1
         selectedNameRef.current = null
       }
       setSelected((current) => (current?.name === name ? null : current))
@@ -118,6 +135,7 @@ export function useAgentSkills(enabled = true) {
       )
     )
     if (selectedNameRef.current === detail.name) {
+      selectionRequest.current += 1
       setSelected(detail)
     }
   }, [])
