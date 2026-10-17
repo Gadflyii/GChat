@@ -394,6 +394,71 @@ it('submits a task to the chosen bot and keeps a newer draft typed during submis
   )
 })
 
+it.each(['', '   '])(
+  'ignores forced empty companion tasks (%j)',
+  async (draft) => {
+    await mount()
+    const input = screen.getByRole('textbox', { name: 'Message bot' })
+    fireEvent.change(input, { target: { value: draft } })
+    fireEvent.submit(input.closest('form')!)
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/start',
+      expect.anything()
+    )
+    expect(
+      screen.queryByText('Sending this task to the bot…')
+    ).not.toBeInTheDocument()
+  }
+)
+
+it('blocks same-tick duplicate companion tasks and keeps a failed draft for retry', async () => {
+  await mount()
+  let reject!: (error: Error) => void
+  const submit = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail
+        })
+    )
+    .mockResolvedValueOnce({ id: 'task' })
+  mocks.call.mockImplementation(async (path: string, body: unknown) => {
+    if (path === 'tasks/start') return submit(body)
+    return path === 'state' ? snapshot : []
+  })
+  const input = screen.getByRole('textbox', { name: 'Message bot' })
+  fireEvent.change(input, { target: { value: 'Send exactly once' } })
+  const form = input.closest('form')!
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
+  expect(submit).toHaveBeenCalledExactlyOnceWith({
+    identity: snapshot.live_sessions[0],
+    prompt: 'Send exactly once',
+  })
+  expect(form).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
+  )
+  fireEvent.submit(form)
+  expect(submit).toHaveBeenCalledTimes(1)
+  await act(async () => reject(new Error('Task admission refused')))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Send', exact: true })
+    ).toBeEnabled()
+  )
+  expect(input).toHaveValue('Send exactly once')
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  fireEvent.submit(form)
+  await waitFor(() => expect(input).toHaveValue(''))
+  expect(submit).toHaveBeenCalledTimes(2)
+})
+
 it('releases desktop input, audio and leases on hide, then reopens without restarting the bot', async () => {
   await mount()
   fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
