@@ -41,14 +41,20 @@ guards remain required.
 
 The October 17 guidance change is on
 `fix/c4-benchmark-settings-guidance-20261017` in
-`/ai/gchat-worktrees/c4-benchmark-settings-guidance-20261017`. Acceptance is the
-focused settings/benchmark route tests and `make verify`; launch settings,
-benchmark controls and submission behavior are outside this change. Verification
-is pending in the owned S1 checkout
-`/media/ron/SSD_RAID/ai/tmp-c4-benchmark-settings-guidance-20261017/gchat`;
-the inactive Gchat 3 donor is read-only and disposable copied caches will be
-removed after the gate. The next action is to complete verification and submit
-this branch for merge.
+`/ai/gchat-worktrees/c4-benchmark-settings-guidance-20261017`. The focused
+settings/benchmark route tests pass (16 tests), and every Linux `make verify`
+stage passes: lint, typecheck, quality/registry checks, Manager assets,
+2,581 frontend tests, 119 extension tests, six coverage floors and all Rust
+suites. Completed stages were retained while Rust invocation issues were
+corrected using container init, normal networking and unset CUDA visibility;
+no product code changed to accommodate those fixtures. Launch settings,
+benchmark controls and submission behavior remain unchanged.
+
+The verification result and logs are retained at
+`/ai/gchat/out/c4-benchmark-settings-guidance-20261017/result.json`.
+The owned S1 copied source and caches were removed after verification;
+the inactive Gchat 3 donor remains unchanged. S1 returned 12:59Z.
+The branch is ready for merge.
 
 Standard records the selected Host session and profile version. Every native
 report must match those facts and the same configuration across all three points.
