@@ -952,3 +952,40 @@ Open, not fixed (product or design decisions):
 
 Test-isolation notes: a launch must set a private `XDG_RUNTIME_DIR` and unset `WAYLAND_DISPLAY`;
 Browse on a bare private session opens a file chooser on the real display through the portal.
+
+## First-run journey, October 17 (claude-gui-journey)
+
+Release build of GChat `a8e2b7347` (private development catalog variant; see below), empty profile, private
+`HOME`, `XDG_RUNTIME_DIR` and keyring, no Wayland or X11 display of the user's (an Xvfb in a container served the
+window). Steps from a fresh launch, in UTC on October 17:
+
+| Step | Time |
+|---|---|
+| Launch to Welcome visible | 6 s |
+| Engine runtime install and Host start (first launch) | 12 s |
+| Pick graphics card, folder, model (clicks) | under 1 min |
+| Download 10.7 GB Qwen 27B 2-bit mix from the local NAS | 28 s (about 460 MiB/s) |
+| Checking the download (SHA256) | 18 s |
+| Hardware profile (clean run, with the loop fix) | 177 s |
+| Finish local setup, Start to Ready | under 1 s, 9 s |
+| First message to answer | 1.4 s (209 tok/s) |
+| Stop to idle (draft calibration then ran 71 s on the GPU) | 7 s |
+
+Fixed (one branch each, rows in the open-work list):
+
+- `GUI-JOURNEY-PROFILE-INSTALL-LOOP`: idle profile completion no longer counts as first-run work. The cancel/restart
+  loop wrote a 2 MB profile copy about 50 times a second (12 GB in four minutes, then the app exited on
+  'No space left on device'; a restart repeated it).
+- `GUI-JOURNEY-CONNECTING-GRACE`: 'Starting GInfer on this computer' for the first 30 seconds instead of
+  'could not connect'.
+- `GUI-JOURNEY-INTAKE-LOCAL-HOST`: this computer's own host is not '1 paired host'.
+- `GUI-JOURNEY-WIZARD-STEP-COPY`: instructions name the button that is on screen.
+- `GUI-JOURNEY-PROFILE-PROGRESS-LAYOUT`: the profiling bar and Cancel profiling no longer overlap.
+
+Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
+`GUI-JOURNEY-LOAD-WITHOUT-PROFILE`, `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`, `GUI-JOURNEY-JARGON`,
+`GUI-JOURNEY-DISK-SPACE-CRASH`, `GUI-JOURNEY-POST-STOP-GPU-BUSY`, `GUI-JOURNEY-UPDATER-404`.
+
+Method note: release Host and frontend accept only commit-pinned Hugging Face package URLs, so the download
+steps used the release profile with debug assertions, a development frontend and the private loopback catalog
+(`c6a23a4d4`); the pure release build stops at 'No model downloads are available for these graphics cards'.
