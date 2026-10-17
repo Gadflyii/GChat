@@ -570,11 +570,35 @@ completed at 08:24:45Z. Evidence:
 `/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-retrieval-known-password-20261017/result.json`.
 The earlier rejected-password fixture remains recorded separately above.
 
-This passes installed Linux locked launch, explicit saved-Connect prompting,
-ordinary unlock and stored-credential reconnection after restart, alongside the
-earlier Cancel result. It does not qualify a fresh install, Gbot credential
-workflow or native Windows. This check used synthetic credentials and a private
-remote Host, with no model or GPU workload.
+This saved-Host check passes installed Linux locked launch, explicit saved-Connect
+prompting, ordinary unlock and stored-credential reconnection after restart,
+alongside the earlier Cancel result. It does not qualify a fresh install, Gbot
+credential workflow or native Windows. This check used synthetic credentials and
+a private remote Host, with no model or GPU workload.
+
+### Gbot local service-token follow-up
+
+The same installed d31 executable and isolated known-password keyring pass the
+local Gbot service-token round trip. Ordinary Enable Gbot and Start created the
+token; the first Start remained disconnected after a roughly 40-second unlock
+delay, and a second Start connected. The desktop closed normally while the
+service survived. After locking the collection and restarting the desktop at
+08:37:54.808Z, plain launch and Gbot navigation through 08:38:18.875Z produced no
+Secret Service calls or unlock prompt.
+
+Ordinary Start waited for bundled-resource validation, then requested Unlock and
+Prompt at 08:41:22Z. Sender `:1.35` mapped live to the restarted desktop PID1814;
+ordinary password entry was followed by GetSecret at 08:41:23.407809Z. The UI
+reconnected, with the same service UUID and endpoint and the original service
+process still alive. Ordinary Quit Gbot service and normal desktop close left
+both processes absent at 08:41:54.564547Z.
+
+This qualifies local service-token creation, persistence and retrieval across
+GUI restart, alongside silent locked launch and navigation. Service-process
+restart, SSH/provider credentials, bot control/tasks, fresh installation and
+native Windows remain unqualified. No model, GPU workload, bot or task ran.
+Evidence:
+`/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-gbot-credential-20261017/result.json`.
 
 Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
 Two concurrent workers finished; a third queued at full capacity and was cancelled.
