@@ -64,7 +64,9 @@ export function NavMain() {
   const hermesEnabled = useHermesAgentStore((state) => state.enabled)
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const localTransfers = useLocalModelDownloads(s => s.jobs.filter(j => j.status !== 'installed').length)
-  const remoteTransfers = useEngineHosts(s => Object.values(s.snapshots).reduce((n, host) => n + (host.model_management?.downloads.filter(j => j.status !== 'installed').length ?? 0), 0))
+  const remoteTransfers = useEngineHosts(s => s.hosts
+    .filter(host => !host.local)
+    .reduce((n, host) => n + (s.snapshots[host.host_id]?.model_management?.downloads.filter(j => j.status !== 'installed').length ?? 0), 0))
 
   const handleNewChat = async () => {
     if (creatingConversation) return
