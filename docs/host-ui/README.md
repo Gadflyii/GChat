@@ -20,10 +20,20 @@ collision remains a separate leaf awaiting Gchat 2's installed-app handoff.
 Current preparation: owned source
 `/ai/gchat-worktrees/c7-models-hub-engine-hardware-20261017`, branch
 `test/c7-models-hub-engine-hardware-20261017`, from `77ccd3624`. Codex 3's
-build 2616 is the pending read-only runnable donor; no C7 desktop, model, build,
-private runtime copy or booking exists. Await its terminal closure receipt and
+read-only build 2616 passed at 15:06:36Z and returned at 15:08Z. Its S1 runnable
+root is `/media/ron/SSD_RAID/ai/tmp-c3-chat-area-hands-on-20261017/runnable`;
+the receipt and layout are under
+`/ai/gchat/out/c3-chat-area-hands-on-20261017/`. Desktop and Host are from the
+frozen main revision; the genuine bundled Engine resources are retained
+`5af502f1e59a99205750c9090874e2a0448f199f`, so this is not a current-Engine
+qualification. Local portability remains unproven until local `ldd` resolves.
+
+No C7 desktop, model, build, private runtime copy or booking exists. Await
 Gchat 3's RC Load resource return, then book the actual walkthrough and launch
-with separate Host/Inspector ports. Keep Ron's port 17483 and all existing data
+with separate Host/Inspector ports. Use a private `dbus-run-session` as well as
+fresh HOME/XDG: desktop single-instance ownership uses a session-bus name and
+is not isolated by the data directories alone. Keep WSLg display/runtime
+variables intact. Keep Ron's port 17483 and all existing data
 untouched. Retain concise results under
 `/ai/gchat/out/c7-models-hub-engine-hardware-20261017/` when observations exist;
 release private processes and disposable copies at completion.
