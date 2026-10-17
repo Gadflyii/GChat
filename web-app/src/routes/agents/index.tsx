@@ -637,7 +637,7 @@ function AgentStudioPage() {
           )}
         </div>
       ) : view === 'definitions' ? (
-        <div className="grid min-h-0 grid-cols-[250px_minmax(360px,1fr)_280px] xl:grid-cols-[280px_minmax(420px,1fr)_300px]">
+        <div className="grid h-full min-h-0 grid-cols-[250px_minmax(360px,1fr)_280px] xl:grid-cols-[280px_minmax(420px,1fr)_300px]">
           <aside className="min-h-0 overflow-y-auto border-r p-3">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -2021,7 +2021,7 @@ function RunInspector({
   const finishReason = selected?.finishReason
   const incompleteMessage = incompleteOutcomeMessage(finishReason)
   return (
-    <div className="grid min-h-0 grid-cols-[340px_1fr]">
+    <div className="grid h-full min-h-0 grid-cols-[340px_1fr]">
       <aside className="min-h-0 overflow-y-auto border-r p-3">
         <div className="mb-3 flex items-center justify-between px-1">
           <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
