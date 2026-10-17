@@ -38,9 +38,9 @@ with Gchat2. Next: coordinator merge.
 Owned source: `/ai/gchat-worktrees/c4-settings-attachment-labels-20261017`,
 branch `fix/c4-settings-attachment-labels-20261017`. Evidence belongs to
 `/ai/gchat/out/c4-settings-sweep-20261017/`. No model, Engine, provider request
-or retained user profile operation is required. The owned generated S1 cache
-is being retired after the final native replay;
-concise results and screenshots remain in the evidence directory.
+or retained user profile operation is required. The owned generated S1 cache was removed at 16:43Z, reclaiming
+27,895,226,368 allocated bytes. Results, screenshots and the restored XML
+remain in the evidence directory; `cleanup.json` records the cleanup.
 
 ## Available attachment settings — C4
 
@@ -147,7 +147,8 @@ combined source `5a46f3fb5` confirmed 20→21, navigation after 50 ms and 21 on
 return; the value was restored to 20. The result is retained in
 `final-attachment-quick-navigation.json` beneath the evidence directory.
 The private S1 cache at `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/`
-is being retired after the final native replay; concise evidence is retained.
+was removed at 16:43Z; concise evidence and screenshots are retained in the
+evidence directory, with the cleanup recorded in `cleanup.json`.
 Provider labels remain C6-owned and provider keyboard navigation C7-owned; availability,
 sidebar and attachment labels retain their separate findings in Gchat3's list.
 
@@ -340,7 +341,7 @@ receipt are in `token-fix/result.json` beneath the retained evidence directory.
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
 | C4 / local | `/ai/gchat-worktrees/c4-settings-attachment-labels-20261017`, branch `fix/c4-settings-attachment-labels-20261017` | Combined source `0c598c378`: focused/full gates and native replay PASS |
-| C4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017` | Owned generated dependency/build cache being retired; donor untouched |
+| C4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017` | Removed 16:43Z; 27,895,226,368 allocated bytes reclaimed; donor untouched |
 | C4 / OLD | `/home/gchat/c4-settings-sweep-20261017` | Private native app/home; returned16:39Z OFF/original XML restored, custody back with Gchat2 |
 | C4 / evidence | `/ai/gchat/out/c4-settings-sweep-20261017/` | Before/after screenshots, native control results and source validation; no real token used |
 
