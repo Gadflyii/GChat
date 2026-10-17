@@ -209,7 +209,7 @@ export function MemoryLibrary() {
         <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
           {entries.length
             ? 'No matching memories.'
-            : 'No saved memories yet. Create one above, or ask an agent to remember a fact and review its approval request.'}
+            : 'No saved memories yet. Choose New memory to create one, or ask an agent to remember a fact and review its approval request.'}
         </p>
       )}
       <div className="space-y-3">
