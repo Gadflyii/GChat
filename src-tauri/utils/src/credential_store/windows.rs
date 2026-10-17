@@ -32,7 +32,7 @@ fn root(reference: &Reference) -> Result<Reference, Error> {
 
 impl Manifest {
     fn decode(bytes: &[u8]) -> Result<Self, Error> {
-        let value: Self = serde_json::from_slice(bytes).map_err(|_| Error::InvalidData)?;
+        let value: Self = serde_json::from_slice(bytes).map_err(|_| Error::InvalidCredential)?;
         if value.version != 1
             || value.generation.len() != 32
             || !value
@@ -42,7 +42,7 @@ impl Manifest {
             || value.sha256.len() != 64
             || !value.sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
         {
-            return Err(Error::InvalidData);
+            return Err(Error::InvalidCredential);
         }
         Ok(value)
     }
@@ -109,16 +109,16 @@ impl Native for WindowsNative {
             let chunk = Zeroizing::new(
                 self.storage
                     .get(&manifest.chunk(&root, index))?
-                    .ok_or(Error::InvalidData)?,
+                    .ok_or(Error::InvalidCredential)?,
             );
             let expected = (manifest.length - bytes.len()).min(CHUNK_SIZE);
             if chunk.len() != expected {
-                return Err(Error::InvalidData);
+                return Err(Error::InvalidCredential);
             }
             bytes.extend_from_slice(&chunk);
         }
         if bytes.len() != manifest.length || digest(&bytes) != manifest.sha256 {
-            return Err(Error::InvalidData);
+            return Err(Error::InvalidCredential);
         }
         Ok(Some(std::mem::take(&mut *bytes)))
     }
@@ -134,7 +134,7 @@ impl Native for WindowsNative {
             length: bytes.len(),
             sha256: digest(bytes),
         };
-        let encoded = serde_json::to_vec(&manifest).map_err(|_| Error::InvalidData)?;
+        let encoded = serde_json::to_vec(&manifest).map_err(|_| Error::InvalidCredential)?;
         for (index, chunk) in bytes.chunks(CHUNK_SIZE).enumerate() {
             if let Err(error) = self.storage.put(&manifest.chunk(&root, index), chunk) {
                 let _ = self.remove_chunks(&root, &manifest);
