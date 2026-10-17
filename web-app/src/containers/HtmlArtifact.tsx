@@ -60,6 +60,8 @@ function HtmlArtifactComponent({
   const [tab, setTab] = useState<ArtifactTab>('preview')
   const [copied, setCopied] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string>('')
+  const [previewFailed, setPreviewFailed] = useState(false)
+  const [previewRetry, setPreviewRetry] = useState(0)
   const [frameLoaded, setFrameLoaded] = useState(false)
   const [progress, setProgress] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -149,8 +151,15 @@ function HtmlArtifactComponent({
   const navigatedCodeRef = useRef('')
   useEffect(() => {
     if (!isPlatformTauri()) return
-    if (generating || !code || navigatedCodeRef.current === code) return
+    if (generating) {
+      setPreviewFailed(false)
+      return
+    }
+    if (!code || navigatedCodeRef.current === code) return
     let cancelled = false
+    navigatedCodeRef.current = ''
+    setPreviewFailed(false)
+    setPreviewUrl('')
     void (async () => {
       try {
         await invoke('set_artifact_html', {
@@ -164,13 +173,15 @@ function HtmlArtifactComponent({
           `${artifactBaseUrl()}/${artifactIdRef.current}?v=${versionRef.current}`
         )
       } catch (error) {
+        if (cancelled) return
         console.error('Failed to register artifact preview:', error)
+        setPreviewFailed(true)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [code, generating])
+  }, [code, generating, previewRetry])
 
   // Watchdog forces the loader to clear if the iframe never fires `load`.
   useEffect(() => {
@@ -188,7 +199,8 @@ function HtmlArtifactComponent({
     setProgress((previous) => Math.max(previous, estimateHtmlProgress(code)))
   }, [code, generating])
 
-  const showPreviewLoader = generating || !previewUrl || !frameLoaded
+  const showPreviewLoader =
+    !previewFailed && (generating || !previewUrl || !frameLoaded)
   const progressPct = Math.round((generating ? progress : 1) * 100)
 
   useEffect(() => {
@@ -392,6 +404,24 @@ function HtmlArtifactComponent({
             fill ? 'h-full' : 'h-[440px]'
           )}
         />
+        {previewFailed && (
+          <div
+            role="alert"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background px-8 text-center"
+          >
+            <p className="text-sm">Could not load the preview.</p>
+            <p className="text-sm text-muted-foreground">
+              You can still read the source in Code.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPreviewRetry((attempt) => attempt + 1)}
+            >
+              Retry preview
+            </Button>
+          </div>
+        )}
         {showPreviewLoader && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background px-8 text-muted-foreground">
             <div className="h-1.5 w-full max-w-[240px] overflow-hidden rounded-full bg-muted">
