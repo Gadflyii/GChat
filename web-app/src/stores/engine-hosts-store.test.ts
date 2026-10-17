@@ -183,7 +183,7 @@ describe('Host facade address projection', () => {
       providers.selectedModel = null
       useEngineHosts.setState({ hosts: [host] as never, errors: {} })
       useEngineHosts.getState().publishSnapshot('local', snapshot(['one']) as never)
-      expect(providers.selectModelProvider).toHaveBeenCalledWith('ginfer-lan', 'ginfer/local/one')
+      expect(providers.selectModelProvider.mock.calls).toEqual([['ginfer-lan', 'ginfer/local/one']])
     })
     it('keeps an explicit choice and does not guess among several ready models', () => {
       providers.selectModelProvider.mockClear()
@@ -192,7 +192,7 @@ describe('Host facade address projection', () => {
       useEngineHosts.getState().publishSnapshot('local', snapshot(['one']) as never)
       providers.selectedModel = null
       useEngineHosts.getState().publishSnapshot('local', snapshot(['one', 'two']) as never)
-      expect(providers.selectModelProvider).not.toHaveBeenCalled()
+      expect(providers.selectModelProvider.mock.calls).toEqual([])
     })
   })
 })
