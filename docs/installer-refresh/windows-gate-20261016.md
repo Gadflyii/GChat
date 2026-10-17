@@ -190,13 +190,25 @@ booking 967 was canceled.
 The [canonical open-work snapshot](https://github.com/Gadflyii/ginfer-dev/blob/3fb81caf98b934c3532c61be43569175414c68e5/docs/maintainer/open-work.md)
 records these rows. Later source fixes below are **not included** in this installer.
 
-| Row | Canonical status at packet preparation | Remaining boundary |
+| Row | Recorded status and current disposition | Remaining boundary |
 | --- | --- | --- |
-| W11 `GCHAT-WINDOWS-DETACHED-HOST-NORMAL-STOP-20261016` | Gchat; MERGE-READY at `6449daf0f383a147e2f2a4c7bf9e5305dc71d865` (12:23) | Source/Linux gates passed; native Windows acceptance remains pending. Frozen installer required forced idle-Host return. |
+| W11 `GCHAT-WINDOWS-DETACHED-HOST-NORMAL-STOP-20261016` | CLOSED / QUALIFIED: idle desktop-owned Host only | Source `6449daf0f383a147e2f2a4c7bf9e5305dc71d865` merged; existing focused/Linux gates passed and October 17 native Stop accepted below. Busy refusal has source-test coverage only; SCM shutdown is outside scope. Frozen installer required forced idle-Host return. |
 | W11 `GCHAT-WINDOWS-APP-DATA-MOVE-HOST-ROOT-20261016` | Gchat 3; OPEN | Installed root mismatch reproduced; depends on owner-checked normal Stop, locator/root update and restart. Installed evidence entered in canonical commit `f77fb3104811804c15f9bf4de247208d29b0156b`. |
 | W10 `GCHAT-CROSS-OS-HOST-PORT-COLLISION-20261016` | Gchat; FIXED / MERGE-READY at `d28af8ec6a34075f3366633f7452c343988ad49e` | Source verification does not qualify this Windows package. Ports 7443/7444 were prechecked free for this gate; WSL/native coexistence was not tested. |
 | W10 `GCHAT-LOCAL-MODEL-STARTUP-QUOTE-20261016` | Gchat; FIXED / MERGE-READY at `e5c396727c016ab93f3730119185757454a977e2` | Imported-model quote remained unreachable in this installed candidate; new packaged Windows route awaits acceptance. |
 | W10 `GCHAT-FIRST-RUN-PROFILE-DURATION-20261016` | Gchat 3; OPEN | Natural 85m7.168s measurement and CPU phase costs retained; duration remediation not qualified. |
+
+The [October 17 native follow-up packet](https://github.com/Gadflyii/GChat/blob/5671542f5/docs/installer-refresh/windows-native-followup-20261017.md)
+qualifies ordinary **Stop Host and Quit** for an idle desktop-owned Host, using
+GChat `376a0bddce2dae9a28200099f3eac4c944aba8a7` and Engine
+`c440179a9c731ba4fb591e3aee7472a20422d644`. The control was invoked at
+**2026-10-17T02:02:00.5417606Z**; owned app, Host and helper processes and
+listeners were absent at **2026-10-17T02:03:39.8748158Z**. The raw receipt is
+`/mnt/c/Users/Ron/gchat-windows-gate-20261016/batch-20261017/gui/stop-host-and-quit-result.json`,
+SHA-256 `5a3658ff96cfe0798aab4554c75bf8a395a272e942911b9e1e16fd66010018c8`.
+This matching native-desktop run did not install the new NSIS artifact and does
+not replace the October 16 forced-return failure above. Busy refusal was not
+exercised natively; Windows SCM shutdown remains unqualified.
 
 Windows Gbot remains unqualified: Cua execution is Linux-only, local Hyper-V setup
 returns 501 and Windows autostart is a no-op. This gate makes no Windows Gbot

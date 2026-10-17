@@ -24,7 +24,7 @@ For the October 17 release candidate:
 
 ## October 16 Windows gate — functional checks complete, findings retained
 
-The [Windows gate packet](windows-gate-20261016.md) binds the current-user NSIS installer to GChat `dcb11c14` and Engine `c440179a` (SM120a), records the upgrade and fresh application-state checks, and lists each PASS, failure and unqualified check. One model started and answered one request; custom-root Host migration and normal detached Host shutdown remain findings. The packet also records the 85m7.168s natural profile, 2365ms native reuse, functional long-chat render and actual idle measurement.
+The [Windows gate packet](windows-gate-20261016.md) binds the current-user NSIS installer to GChat `dcb11c14` and Engine `c440179a` (SM120a), records the upgrade and fresh application-state checks, and lists each PASS, failure and unqualified check. One model started and answered one request. Custom-root Host migration remains open for Windows. The [October 17 native follow-up](https://github.com/Gadflyii/GChat/blob/5671542f5/docs/installer-refresh/windows-native-followup-20261017.md) qualifies ordinary **Stop Host and Quit** for an idle desktop-owned Host; busy refusal is covered by source tests, and SCM shutdown was not run. The packet also records the 85m7.168s natural profile, 2365ms native reuse, functional long-chat render and actual idle measurement.
 
 ## October 15 current Linux Engine package — accepted
 
