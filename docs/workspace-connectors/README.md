@@ -223,3 +223,20 @@ See [connection setup and supported operations](operations.md) and the
 - [Microsoft Graph overview](https://learn.microsoft.com/en-us/graph/overview)
 - [Microsoft delegated authorization](https://learn.microsoft.com/en-us/graph/auth-v2-user)
 - [Microsoft Graph permissions](https://learn.microsoft.com/en-us/graph/permissions-overview)
+
+### Novice setup GUI sweep — October 17
+
+Hardware profiling now explains its purpose, when to run it and how to select a
+GPU combination. Technical paths and identifiers are behind Details. Secure
+storage keeps a visible Ready state after a successful check; the passive check
+does not unlock the store. Google registration uses a separate six-step dialog
+with Back, Next and JSON import, followed by explicit browser sign-in. Gbot setup
+and Settings use plain instructions that explain the action and its purpose.
+
+The composed Linux `make verify` gate passes: 2,587 frontend tests (6 skipped),
+119 extension tests and 1,073 Rust tests (27 ignored), with library check and
+strict Clippy also passing. The final source pin changes only two mock OAuth
+assertions to preserve account-state checks while observing the new cancelled
+flow status. Original failures and source bindings remain in
+`/ai/gchat/out/gui-novice-setup-20261017/result.json`. This source gate does not
+claim installed visual acceptance or live Google/Microsoft consent.
