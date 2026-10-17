@@ -184,7 +184,7 @@ it('discards unsaved brain settings and a replacement key without saving', async
   expect(screen.getByLabelText('API key')).toHaveValue('')
   expect(screen.getByLabelText('API key')).toHaveAttribute(
     'placeholder',
-    'Saved in vault'
+    'Saved in secure storage'
   )
   fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
   await waitFor(() =>
