@@ -3,7 +3,8 @@ import HeaderPage from '@/containers/HeaderPage'
 import SettingsMenu from '@/containers/SettingsMenu'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { buildApiKeyUpdate } from '@/lib/provider-api-key'
-import { getProviderTitle, getModelDisplayName } from '@/lib/utils'
+import { getProviderTitle, getModelDisplayName, isGinferProvider } from '@/lib/utils'
+import { ginferAdvancedKeys, ginferSettingLabels } from '@/lib/ginfer-settings-labels'
 import {
   createFileRoute,
   Link,
@@ -421,6 +422,129 @@ function ProviderDetail() {
     }
   }
 
+  const renderSetting = (rawSetting: ProviderSetting, settingIndex: number) => {
+    const override = isGinferProvider(providerName) ? ginferSettingLabels[rawSetting.key] : undefined
+    const setting = override ? { ...rawSetting, ...override } : rawSetting
+    // Use the DynamicController component
+    const actionComponent = (
+      <div className="mt-2">
+        <DynamicControllerSetting
+          title={setting.title}
+          controllerType={setting.controller_type}
+          controllerProps={setting.controller_props}
+          onChange={(newValue) => {
+            if (provider) {
+              const newSettings = [...provider.settings]
+              // Handle different value types by forcing the type
+              // Use type assertion to bypass type checking
+
+              ;(
+                newSettings[settingIndex].controller_props as {
+                  value: string | boolean | number
+                }
+              ).value = newValue
+
+              // Create update object with updated settings
+              const updateObj: Partial<ModelProvider> = {
+                settings: newSettings,
+              }
+              // Check if this is an API key or base URL setting and update the corresponding top-level field
+              const settingKey = setting.key
+              if (
+                settingKey === 'api-key' &&
+                typeof newValue === 'string'
+              ) {
+                // Single-sourced with onboarding's cloud dialog
+                // so the two cannot drift on what writing a key
+                // means (settings entry + top-level mirror).
+                Object.assign(
+                  updateObj,
+                  buildApiKeyUpdate(provider, newValue)
+                )
+              } else if (
+                settingKey === 'base-url' &&
+                typeof newValue === 'string'
+              ) {
+                // Trim so a stray leading/trailing space (common
+                // on paste) doesn't leak into request URLs as
+                // `/v1 /models` → 404. Normalise the stored
+                // setting value too, not just the mirror field.
+                const trimmedUrl = newValue.trim()
+                ;(
+                  newSettings[settingIndex]
+                    .controller_props as {
+                    value: string | boolean | number
+                  }
+                ).value = trimmedUrl
+                updateObj.base_url = trimmedUrl
+              }
+
+              updateProvider(providerName, {
+                ...provider,
+                ...updateObj,
+              })
+
+              serviceHub
+                .providers()
+                .updateSettings(
+                  providerName,
+                  updateObj.settings ?? []
+                )
+              serviceHub.models().stopAllModels()
+
+              // Refresh active models after stopping. Use
+              // the shared helper so cloud models tracked
+              // only in UI state aren't wiped.
+              serviceHub
+                .models()
+                .getActiveModels()
+                .then((models) =>
+                  syncActiveModelsFromEngines(models || [])
+                )
+            }
+          }}
+        />
+      </div>
+    )
+
+    return (
+      <CardItem
+        key={settingIndex}
+        title={setting.title}
+        column={
+          setting.controller_type === 'input' &&
+          setting.controller_props.type !== 'number'
+            ? true
+            : false
+        }
+        description={
+          <RenderMarkdown
+            className="![>p]:text-muted-foreground select-none"
+            content={setting.description}
+            components={{
+              // Make links open in a new tab with the active
+              // Sectile brand accent.
+              a: ({ style, ...props }) => {
+                return (
+                  <a
+                    {...props}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: 'var(--primary)', ...style }}
+                  />
+                )
+              },
+              p: ({ ...props }) => (
+                <p {...props} className="mb-0!" />
+              ),
+            }}
+          />
+        }
+        actions={actionComponent}
+      />
+    )
+  }
+
   return (
     <div className="flex flex-col h-svh w-full">
       <HeaderPage>
@@ -449,126 +573,26 @@ function ProviderDetail() {
             <div className="flex flex-col gap-3">
               {/* Settings */}
               <Card>
-                {provider?.settings.map((setting, settingIndex) => {
-                  // Use the DynamicController component
-                  const actionComponent = (
-                    <div className="mt-2">
-                      <DynamicControllerSetting
-                        title={setting.title}
-                        controllerType={setting.controller_type}
-                        controllerProps={setting.controller_props}
-                        onChange={(newValue) => {
-                          if (provider) {
-                            const newSettings = [...provider.settings]
-                            // Handle different value types by forcing the type
-                            // Use type assertion to bypass type checking
-
-                            ;(
-                              newSettings[settingIndex].controller_props as {
-                                value: string | boolean | number
-                              }
-                            ).value = newValue
-
-                            // Create update object with updated settings
-                            const updateObj: Partial<ModelProvider> = {
-                              settings: newSettings,
-                            }
-                            // Check if this is an API key or base URL setting and update the corresponding top-level field
-                            const settingKey = setting.key
-                            if (
-                              settingKey === 'api-key' &&
-                              typeof newValue === 'string'
-                            ) {
-                              // Single-sourced with onboarding's cloud dialog
-                              // so the two cannot drift on what writing a key
-                              // means (settings entry + top-level mirror).
-                              Object.assign(
-                                updateObj,
-                                buildApiKeyUpdate(provider, newValue)
-                              )
-                            } else if (
-                              settingKey === 'base-url' &&
-                              typeof newValue === 'string'
-                            ) {
-                              // Trim so a stray leading/trailing space (common
-                              // on paste) doesn't leak into request URLs as
-                              // `/v1 /models` → 404. Normalise the stored
-                              // setting value too, not just the mirror field.
-                              const trimmedUrl = newValue.trim()
-                              ;(
-                                newSettings[settingIndex]
-                                  .controller_props as {
-                                  value: string | boolean | number
-                                }
-                              ).value = trimmedUrl
-                              updateObj.base_url = trimmedUrl
-                            }
-
-                            updateProvider(providerName, {
-                              ...provider,
-                              ...updateObj,
-                            })
-
-                            serviceHub
-                              .providers()
-                              .updateSettings(
-                                providerName,
-                                updateObj.settings ?? []
-                              )
-                            serviceHub.models().stopAllModels()
-
-                            // Refresh active models after stopping. Use
-                            // the shared helper so cloud models tracked
-                            // only in UI state aren't wiped.
-                            serviceHub
-                              .models()
-                              .getActiveModels()
-                              .then((models) =>
-                                syncActiveModelsFromEngines(models || [])
-                              )
-                          }
-                        }}
-                      />
-                    </div>
-                  )
-
-                  return (
-                    <CardItem
-                      key={settingIndex}
-                      title={setting.title}
-                      column={
-                        setting.controller_type === 'input' &&
-                        setting.controller_props.type !== 'number'
-                          ? true
-                          : false
-                      }
-                      description={
-                        <RenderMarkdown
-                          className="![>p]:text-muted-foreground select-none"
-                          content={setting.description}
-                          components={{
-                            // Make links open in a new tab with the active
-                            // Sectile brand accent.
-                            a: ({ style, ...props }) => {
-                              return (
-                                <a
-                                  {...props}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{ color: 'var(--primary)', ...style }}
-                                />
-                              )
-                            },
-                            p: ({ ...props }) => (
-                              <p {...props} className="mb-0!" />
-                            ),
-                          }}
-                        />
-                      }
-                      actions={actionComponent}
-                    />
-                  )
-                })}
+                {provider?.settings.map((setting, settingIndex) =>
+                  isGinferProvider(providerName) && ginferAdvancedKeys.has(setting.key)
+                    ? null
+                    : renderSetting(setting, settingIndex)
+                )}
+                {provider && isGinferProvider(providerName) && (
+                  <details className="mt-2 rounded-lg border p-3">
+                    <summary className="cursor-pointer text-sm font-medium">
+                      {t('providers:ginferAdvanced')}
+                    </summary>
+                    <p className="my-2 text-xs text-muted-foreground">
+                      {t('providers:ginferAdvancedDesc')}
+                    </p>
+                    {provider.settings.map((setting, settingIndex) =>
+                      ginferAdvancedKeys.has(setting.key)
+                        ? renderSetting(setting, settingIndex)
+                        : null
+                    )}
+                  </details>
+                )}
 
                 <DeleteProvider provider={provider} />
               </Card>
@@ -701,7 +725,18 @@ function ProviderDetail() {
                                 provider={provider}
                                 modelId={model.id}
                               />
+                              {provider && isGinferProvider(provider.provider) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="ml-2"
+                                  onClick={() => navigate({ to: route.hub.index })}
+                                >
+                                  {t('providers:manageInModels')}
+                                </Button>
+                              )}
                               {provider &&
+                                !isGinferProvider(provider.provider) &&
                                 (() => {
                                   // Cloud providers need an API key before
                                   // they can be "started" (registered with the
