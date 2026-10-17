@@ -177,6 +177,34 @@
     @apply bg-background text-foreground font-sans text-sm antialiased overflow-hidden;
   }
 
+  /* Native dropdowns share the app typography and theme, including OS popups. */
+  select {
+    @apply bg-background text-foreground font-sans text-sm font-normal;
+    color-scheme: light;
+  }
+
+  .dark select {
+    color-scheme: dark;
+  }
+
+  select:focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
+  select:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
+  select option,
+  select optgroup {
+    @apply bg-popover text-popover-foreground;
+    font: inherit;
+  }
+
+  select option:disabled {
+    @apply text-muted-foreground;
+  }
+
   ::-ms-reveal {
     display: none;
   }
