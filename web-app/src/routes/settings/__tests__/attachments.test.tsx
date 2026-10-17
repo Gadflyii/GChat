@@ -19,6 +19,7 @@ import {
 import { BaseExtension } from '../../../../../core/src/browser/extension'
 import attachmentSchema from '../../../../../extensions/rag-extension/settings.json'
 import type { SettingComponentProps } from '@gchat/core'
+import settingsTranslations from '@/locales/en/settings.json'
 import { useAttachments } from '@/hooks/useAttachments'
 import { Route } from '../attachments'
 
@@ -49,13 +50,23 @@ vi.mock('@/containers/Card', () => ({
   Card: ({ children }: { children: ReactNode }) => <section>{children}</section>,
   CardItem: ({ title, actions }: { title: string; actions: ReactNode }) => (
     <div role="group" aria-label={title}>
+      <span>{title}</span>
       {actions}
     </div>
   ),
 }))
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) => {
+      const attachmentKey = key.replace('settings:attachments.', '')
+      return (
+        settingsTranslations.attachments[
+          attachmentKey as keyof typeof settingsTranslations.attachments
+        ] ?? key
+      )
+    },
+  }),
 }))
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
@@ -74,6 +85,7 @@ class AttachmentExtension extends BaseExtension {
 }
 
 const STORAGE_KEY = 'attachment-settings-durability-test'
+const text = settingsTranslations.attachments
 const Page = Route.component as ComponentType
 let extension: AttachmentExtension
 let updateSettings: MockInstance<AttachmentExtension['updateSettings']>
@@ -114,7 +126,9 @@ function storedValues() {
 }
 
 function input(title: string) {
-  return within(screen.getByRole('group', { name: title })).getByRole('textbox')
+  const key = title.replace('settings:attachments.', '')
+  const name = text[key as keyof typeof text] ?? title
+  return screen.getByRole('textbox', { name })
 }
 
 async function drainSettingsQueue() {
@@ -152,6 +166,28 @@ afterEach(async () => {
 })
 
 describe('Attachment settings persistence', () => {
+  it('names fields with their visible translated titles and persists a named edit', async () => {
+    const page = await openSettings()
+    const maxFileSize = screen.getByRole('textbox', { name: text.maxFile })
+    const autoInlineRatio = screen.getByRole('textbox', {
+      name: text.autoInlineThreshold,
+    })
+
+    expect(screen.getByText(text.maxFile)).toBeVisible()
+    expect(screen.getByText(text.autoInlineThreshold)).toBeVisible()
+    expect(maxFileSize).toHaveValue('20')
+    expect(autoInlineRatio).toHaveValue('0.75')
+
+    fireEvent.change(maxFileSize, { target: { value: '21' } })
+    page.unmount()
+    await drainSettingsQueue()
+    await openSettings()
+
+    expect(screen.getByRole('textbox', { name: text.maxFile })).toHaveValue('21')
+    expect(storedValues().max_file_size_mb).toBe(21)
+    expect(updateSettings).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the 500 ms typing debounce and saves the latest value once', async () => {
     const page = await openSettings()
     const maxFileSize = input('settings:attachments.maxFile')
@@ -240,7 +276,7 @@ describe('Attachment settings persistence', () => {
     })
     fireEvent.click(
       within(
-        screen.getByRole('group', { name: 'settings:attachments.enable' })
+        screen.getByRole('group', { name: text.enable })
       ).getByRole('switch')
     )
     page.unmount()
@@ -261,7 +297,7 @@ describe('Attachment settings persistence', () => {
     expect(input('settings:attachments.maxFile')).toHaveValue('22')
     expect(
       within(
-        screen.getByRole('group', { name: 'settings:attachments.enable' })
+        screen.getByRole('group', { name: text.enable })
       ).getByRole('switch')
     ).not.toBeChecked()
   })

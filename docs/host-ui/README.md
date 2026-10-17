@@ -1,5 +1,26 @@
 # GInfer host UI
 
+## Attachment field labels — C4
+
+`GUI-SETTINGS-CONTROL-LABELS` also affected attachment numeric fields: their
+visible translated titles were not passed to the shared input controls. This
+caller fix passes each existing title through C6's `DynamicControllerSetting`
+API, giving the fields accessible names without changing values, validation or
+persistence. C6's frozen shared-control change `c6292eeee` merges without
+conflicts; shared controls and provider behavior remain C6-owned.
+
+Acceptance: a rendered page finds fields by their visible translated names,
+edits the named file limit and verifies its persisted value after navigation;
+existing attachment durability checks and full `make verify` must also pass.
+Source is ready, with tests and builds unrun during C3's TIMING hold. Next:
+coordinator verification after the explicit timing return.
+
+Owned source: `/ai/gchat-worktrees/c4-settings-attachment-labels-20261017`,
+branch `fix/c4-settings-attachment-labels-20261017`, from attachment durability
+`16b71ec23`. Evidence belongs to
+`/ai/gchat/out/c4-settings-sweep-20261017/`. No runtime or build resource is
+held, and the unavailable-embeddings finding remains a separate branch.
+
 ## Attachment edits survive navigation — C4
 
 `GUI-SETTINGS-ATTACHMENT-EDIT-LOSS` was reproduced in the current native Linux
