@@ -74,7 +74,7 @@ it('uses chosen storage, retries the shared catalog and resumes saved downloads'
   expect(await screen.findByText('Connection interrupted')).toBeInTheDocument()
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'models', release_ids: [release.sha256] })
   fireEvent.click(screen.getByRole('button', { name: 'Resume downloads' }))
-  await screen.findByText(/Muse · downloading/)
+  await screen.findByText(/Muse · Downloading/)
   expect(screen.getByText(/GInfer checks the downloaded files, then measures the hardware/)).toBeInTheDocument()
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'resume' })
 })

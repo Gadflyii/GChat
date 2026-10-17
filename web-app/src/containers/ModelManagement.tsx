@@ -21,7 +21,7 @@ import { useModelCatalogStore } from '@/stores/model-catalog-store'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
 import { engineCommand, type LocalModelLoadProgress } from '@/services/engines'
 import { HostCard } from '@/containers/EngineHostModels'
-import { formatModelBytes, releaseReadiness, type ModelDownload, type ModelGpu, type ModelRelease } from '@/lib/model-release'
+import { downloadStatusLabel, formatModelBytes, releaseReadiness, type ModelDownload, type ModelGpu, type ModelRelease } from '@/lib/model-release'
 import { switchToModel } from '@/utils/switchModel'
 import { useAppState } from '@/hooks/useAppState'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
@@ -41,12 +41,6 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
   profiling: 'Profiling installed model',
   starting: 'Starting installed model',
 }
-
-const downloadStatusLabels: Record<string, string> = {
-  queued: 'Waiting to start', downloading: 'Downloading', pausing: 'Pausing', paused: 'Paused',
-  verifying: 'Checking the download', installed: 'Installed', failed: 'Failed',
-}
-const downloadStatusLabel = (status: string) => downloadStatusLabels[status] ?? status
 
 function cancelLocalLoad(load: PendingLocalLoad): Promise<unknown> {
   if (load.ready || load.settled || load.cancelRequested) return Promise.resolve()
