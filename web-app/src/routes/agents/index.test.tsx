@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import type { AgentDefinition, AgentRunRecord } from '@/types/agent'
@@ -16,6 +16,7 @@ const listAgentTemplates = vi.hoisted(() => vi.fn())
 const listAgentRuns = vi.hoisted(() => vi.fn())
 const listAgentModelInstances = vi.hoisted(() => vi.fn())
 const getAgentDefinition = vi.hoisted(() => vi.fn())
+const deleteAgentRun = vi.hoisted(() => vi.fn())
 const studioCommand = vi.hoisted(() => vi.fn())
 const botCall = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
@@ -64,6 +65,7 @@ vi.mock('@/services/agent/definitions', () => ({
   listAgentRuns,
   listAgentModelInstances,
   getAgentDefinition,
+  deleteAgentRun,
 }))
 
 vi.mock('@/services/agent/studio', async (original) => ({
@@ -156,6 +158,7 @@ describe('AgentStudioPage', () => {
     listAgentTemplates.mockReset().mockResolvedValue([])
     listAgentRuns.mockReset().mockResolvedValue([])
     getAgentDefinition.mockReset().mockResolvedValue(firstAgent)
+    deleteAgentRun.mockReset().mockResolvedValue(undefined)
     studioCommand.mockReset().mockResolvedValue({
       pools: [], instances: [], usage: {}, aliases: {}, fleetTargets: [],
       fleetHosts: [], fleet: { connected: false, migrationIssues: [] },
@@ -204,6 +207,125 @@ describe('AgentStudioPage', () => {
       fireEvent.click(screen.getByRole('button', { name: action }))
     }
   }
+
+  async function openHistoricalRunActions(run: AgentRunRecord) {
+    fireEvent.keyDown(screen.getByRole('button', {
+      name: `Actions for ${run.definitionName}`,
+    }), { key: 'ArrowDown' })
+    return screen.findByRole('menu')
+  }
+
+  it('keeps both history records deleted when independent deletions finish in reverse order', async () => {
+    const first = deferred<void>()
+    const second = deferred<void>()
+    deleteAgentRun.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    await renderRunHistory()
+
+    fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
+      .getByRole('menuitem', { name: 'Delete', exact: true }))
+    fireEvent.click(within(await openHistoricalRunActions(secondHistoricalRun))
+      .getByRole('menuitem', { name: 'Delete', exact: true }))
+    expect(deleteAgentRun.mock.calls).toEqual([[firstHistoricalRun.id], [secondHistoricalRun.id]])
+
+    await act(async () => second.resolve())
+
+    expect(screen.queryByRole('button', { name: `Actions for ${secondAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `Actions for ${firstAgent.name}` })).toBeInTheDocument()
+
+    await act(async () => first.resolve())
+
+    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: `Actions for ${secondAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.getByText('Completed Agent Studio runs will appear here.')).toBeInTheDocument()
+  })
+
+  it('submits one history deletion for repeated clicks and disables its pending menu action', async () => {
+    const pending = deferred<void>()
+    deleteAgentRun.mockReturnValue(pending.promise)
+    await renderRunHistory()
+    const menu = await openHistoricalRunActions(firstHistoricalRun)
+    const deleteItem = within(menu).getByRole('menuitem', { name: 'Delete', exact: true })
+
+    act(() => {
+      fireEvent.click(deleteItem)
+      fireEvent.click(deleteItem)
+    })
+
+    expect(deleteAgentRun).toHaveBeenCalledOnce()
+    expect(deleteAgentRun).toHaveBeenCalledWith(firstHistoricalRun.id)
+    const pendingMenu = await openHistoricalRunActions(firstHistoricalRun)
+    const deletingItem = within(pendingMenu).getByRole('menuitem', { name: 'Deleting…' })
+    expect(deletingItem).toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(deletingItem)
+    expect(deleteAgentRun).toHaveBeenCalledOnce()
+
+    await act(async () => pending.resolve())
+
+    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.getAllByText(secondHistoricalRun.finalReply).length).toBeGreaterThan(0)
+  })
+
+  it('preserves the other selected history record when a pending deletion succeeds', async () => {
+    const pending = deferred<void>()
+    deleteAgentRun.mockReturnValue(pending.promise)
+    await renderRunHistory()
+    fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
+      .getByRole('menuitem', { name: 'Delete', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant incomplete/ }))
+
+    await act(async () => pending.resolve())
+
+    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.getAllByText(secondHistoricalRun.finalReply).length).toBeGreaterThan(0)
+    expect(screen.queryByText(firstHistoricalRun.finalReply)).not.toBeInTheDocument()
+  })
+
+  it('retains a history record after a failed deletion and enables a successful retry', async () => {
+    const failed = deferred<void>()
+    const retry = deferred<void>()
+    deleteAgentRun.mockReturnValueOnce(failed.promise).mockReturnValueOnce(retry.promise)
+    await renderRunHistory()
+    fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
+      .getByRole('menuitem', { name: 'Delete', exact: true }))
+
+    await act(async () => failed.reject(new Error('History storage is unavailable')))
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('History storage is unavailable'))
+    expect(screen.getByRole('button', { name: `Actions for ${firstAgent.name}` })).toBeInTheDocument()
+    expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
+    const retryMenu = await openHistoricalRunActions(firstHistoricalRun)
+    const retryItem = within(retryMenu).getByRole('menuitem', { name: 'Delete', exact: true })
+    expect(retryItem).not.toHaveAttribute('aria-disabled', 'true')
+    fireEvent.click(retryItem)
+    expect(deleteAgentRun).toHaveBeenCalledTimes(2)
+
+    await act(async () => retry.resolve())
+
+    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
+  })
+
+  it('does not restore a deleted history record from an older pending refresh', async () => {
+    const refresh = deferred<AgentRunRecord[]>()
+    const deletion = deferred<void>()
+    deleteAgentRun.mockReturnValue(deletion.promise)
+    await renderRunHistory()
+    listAgentRuns.mockReturnValueOnce(refresh.promise)
+    const callsBeforeRefresh = listAgentRuns.mock.calls.length
+    fireEvent.click(screen.getByTitle('Refresh runs'))
+    expect(listAgentRuns).toHaveBeenCalledTimes(callsBeforeRefresh + 1)
+    fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
+      .getByRole('menuitem', { name: 'Delete', exact: true }))
+
+    await act(async () => deletion.resolve())
+    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+
+    await act(async () => refresh.resolve([firstHistoricalRun, secondHistoricalRun]))
+
+    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
+    expect(screen.getAllByText(secondHistoricalRun.finalReply).length).toBeGreaterThan(0)
+  })
 
   it.each(['Re-run', 'Continue as new run…'] as const)(
     'does not open delayed %s setup after leaving run history', async (action) => {
