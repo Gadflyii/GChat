@@ -31,9 +31,13 @@ Ron owns confirmation of the Entra redirect configuration and live-consent gate.
 and [account audience decision](../decisions/2026-10-16-allow-personal-microsoft-accounts.md).
 
 Google uses each user's own Desktop OAuth client, with no built-in Google release
-identity or Sectile Google account. Settings guides project creation, API enablement,
-External consent and production publishing, then accepts the client ID and secret
-or imports the downloaded client JSON with a file picker. Personal use follows
+identity or Sectile Google account. **Set up Google** opens a six-step guide in a
+separate dialog, with Back and Next controls for project creation, API enablement,
+the permission screen and Desktop app registration. Importing the downloaded
+client JSON is the recommended save step; a manual client ID and password-masked
+secret remain available as an alternative. The final step confirms that setup is
+saved, then returns to **Choose services** and browser sign-in; saving a registration
+does not claim that an account is connected. Personal use follows
 Google's verification exception, without a paid review. Consent uses the system
 browser and a temporary loopback callback. GChat's protected credential vault
 saves the registration secret and refresh token; access refresh continues after
@@ -119,6 +123,15 @@ consented scopes. Cancellation and disconnect serialize with durable credential
 updates. Cancel can report Connected if the durable sign-in commit has already
 begun. Each provider owns typed request construction and binary content;
 Microsoft responses remove preauthenticated storage URLs before publication.
+
+Workspace Connections keeps sign-in progress visible while waiting for the
+browser and refreshing the saved account list. Connection is confirmed only when
+the durable account appears in **Connected accounts**. The latest outcome for
+each provider survives navigation: failures and cancellation stay visible with a
+clear retry, and an unfinished account refresh offers recovery instead of silently
+returning to an apparently ready Sign in button. Focused UI and native fixtures
+cover these transitions; they do not establish live Google or Microsoft consent,
+provider API access or installed OAuth acceptance.
 
 All three modes resolve the same account before approval and use the same dispatch:
 
@@ -210,3 +223,20 @@ See [connection setup and supported operations](operations.md) and the
 - [Microsoft Graph overview](https://learn.microsoft.com/en-us/graph/overview)
 - [Microsoft delegated authorization](https://learn.microsoft.com/en-us/graph/auth-v2-user)
 - [Microsoft Graph permissions](https://learn.microsoft.com/en-us/graph/permissions-overview)
+
+### Novice setup GUI sweep — October 17
+
+Hardware profiling now explains its purpose, when to run it and how to select a
+GPU combination. Technical paths and identifiers are behind Details. Secure
+storage keeps a visible Ready state after a successful check; the passive check
+does not unlock the store. Google registration uses a separate six-step dialog
+with Back, Next and JSON import, followed by explicit browser sign-in. Gbot setup
+and Settings use plain instructions that explain the action and its purpose.
+
+The composed Linux `make verify` gate passes: 2,587 frontend tests (6 skipped),
+119 extension tests and 1,073 Rust tests (27 ignored), with library check and
+strict Clippy also passing. The final source pin changes only two mock OAuth
+assertions to preserve account-state checks while observing the new cancelled
+flow status. Original failures and source bindings remain in
+`/ai/gchat/out/gui-novice-setup-20261017/result.json`. This source gate does not
+claim installed visual acceptance or live Google/Microsoft consent.

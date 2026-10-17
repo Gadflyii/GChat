@@ -46,8 +46,8 @@ function InterfaceSettings() {
               {/* Accent color — скрыто */}
               {false && (
                 <CardItem
-                  title="Accent color"
-                  description="Customize the accent color of the application."
+                  title="Highlight color"
+                  description="Choose the color used for buttons and other highlighted controls."
                   className="flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-y-2"
                   actions={<AccentColorPicker />}
                 />

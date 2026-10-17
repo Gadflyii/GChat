@@ -97,8 +97,9 @@ function WorkspaceSchedules({
   return (
     <div className="rounded-lg border p-3">
       <p className="my-3 text-sm text-muted-foreground">
-        Scheduled tasks keep running after GChat closes while Gbot service and
-        the assigned inference endpoint are running.
+        Set a time for this bot to carry out a task. Scheduled tasks can keep
+        running after GChat closes, but the Gbot service, the bot’s computer and
+        its model server must stay on and connected.
       </p>
       {stopped && (
         <p role="alert" className="mb-3 text-sm text-destructive">
@@ -116,9 +117,10 @@ function WorkspaceSchedules({
           Scheduled tasks
         </summary>
         <p className="mb-3 text-xs text-muted-foreground">
-          Schedules use this bot’s saved inference assignment and linked
-          accounts. Actions keep their existing approval requirements. Disable
-          prevents future dispatch; stop a running task in its history.
+          Schedules use the model saved in this bot’s brain settings and the
+          accounts you linked to it. Actions still require the same approvals.
+          Disable stops future runs; to stop a task already running, open its
+          task history.
         </p>
         {schedules.map((schedule) => (
           <article
@@ -284,9 +286,10 @@ function WorkspaceSchedules({
             </select>
           </label>
           <p className="text-xs text-muted-foreground">
-            After restart, enabling or a backlog of multiple intervals, run only
-            the latest occurrence or skip the backlog. Unknown dispatch outcomes
-            need review and are never retried automatically.
+            Choose what happens if the computer was off or a scheduled run was
+            missed: run the latest missed task once, or skip it and wait for the
+            next time. If Gbot cannot confirm whether a task started, review it
+            yourself; it will not try that task again automatically.
           </p>
           <Button
             disabled={busy || !!stopped || !assignment || !prompt.trim() || !at}

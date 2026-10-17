@@ -40,6 +40,10 @@ function ExtensionsContent() {
                 </div>
               }
             >
+              <p className="mb-4 text-sm text-muted-foreground">
+                Extensions add features to GChat. The extensions installed with
+                this app and their versions are listed below.
+              </p>
               {extensions.map((item, i) => {
                 return (
                   <CardItem

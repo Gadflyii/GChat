@@ -85,7 +85,9 @@ async function chooseLan(serviceHostId?: string) {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   )
   if (serviceHostId) {
-    fireEvent.click(screen.getByLabelText('Another PC on the LAN'))
+    fireEvent.click(
+      screen.getByLabelText('Another PC on the home or office network (LAN)')
+    )
     fireEvent.change(screen.getByLabelText('Paired service computer'), {
       target: { value: serviceHostId },
     })
@@ -100,7 +102,7 @@ async function chooseLan(serviceHostId?: string) {
 }
 
 function fillConnection() {
-  fireEvent.click(screen.getByLabelText('Use an existing SSH key'))
+  fireEvent.click(screen.getByLabelText('Use an existing SSH key (advanced)'))
   for (const [label, value] of [
     ['SSH host', ' bot.local '],
     ['SSH user', ' bot '],
@@ -134,7 +136,7 @@ it.each([
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     fireEvent.click(screen.getByLabelText(label))
     expect(
-      screen.queryByLabelText('Provider API token')
+      screen.queryByLabelText('Provider API token (access key)')
     ).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Connect this VM' })

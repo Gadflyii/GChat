@@ -159,7 +159,7 @@ export default function CloudCosts({
         />
       )}
       <label className="block space-y-1 text-sm">
-        Provider API token
+        Provider API token (access key)
         <Input
           type="password"
           autoComplete="off"
@@ -169,6 +169,9 @@ export default function CloudCosts({
         />
       </label>
       <p className="text-xs text-muted-foreground">
+        Create this access key in your provider’s account console; it is not
+        your account password. It lets GChat check prices and manage this bot’s
+        computer after your approval.{' '}
         {provider === 'hetzner'
           ? 'Use a Hetzner read-write project token.'
           : 'Allow catalog reads and Droplet, firewall and tag creation, reads and deletion on your DigitalOcean token.'}{' '}

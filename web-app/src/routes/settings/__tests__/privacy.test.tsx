@@ -9,7 +9,7 @@ describe('Privacy settings', () => {
     const Page = Route.component as React.ComponentType
     render(<Page />)
     expect(screen.getByText('No external analytics or crash reporting')).toBeInTheDocument()
-    expect(screen.getByText(/Configured model providers, tools, downloads, and updates/)).toBeInTheDocument()
+    expect(screen.getByText(/on this computer\. Online model providers, connected tools, downloads and updates use the network when you request them/)).toBeInTheDocument()
     expect(screen.queryByRole('switch')).not.toBeInTheDocument()
   })
 })

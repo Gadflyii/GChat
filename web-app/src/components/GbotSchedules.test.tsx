@@ -86,10 +86,10 @@ it('lists this bot schedules, states the background lifetime requirement and dis
   render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
   fireEvent.click(screen.getByText('Scheduled tasks'))
   expect(
-    screen.getByText(
-      'Scheduled tasks keep running after GChat closes while Gbot service and the assigned inference endpoint are running.'
-    )
-  ).toBeInTheDocument()
+    screen.getByText(/Scheduled tasks can keep running after GChat closes/)
+  ).toHaveTextContent(
+    'the Gbot service, the bot’s computer and its model server must stay on and connected.'
+  )
   await screen.findByText('Check the calendar')
   expect(screen.queryByText('Other bot task')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Disable schedule' }))

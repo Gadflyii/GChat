@@ -93,15 +93,16 @@ export default function KvmSetup({
         {initialId
           ? 'Resume the saved separate Linux computer: '
           : 'Review the separate Linux computer before creating it: '}
-        2 CPU threads, 4
-        GiB memory and a 40 GiB guest disk. GChat keeps its generated connection
-        key in the secure vault.
+        2 CPU threads, 4 GiB memory and a 40 GiB virtual disk. This virtual
+        machine gives the bot its own desktop without sharing yours. GChat
+        protects its connection key in secure storage.
       </p>
       <p className="text-sm text-muted-foreground">
-        The approved Debian image, Cua Driver and media bundle must already be
-        staged in the GChat data folder. Setup checks their accepted digests and
-        does not install host packages or download guest assets. Hyper-V remains
-        unfinished.
+        This setup uses Linux KVM. It checks for the required Linux system image
+        and Gbot desktop and media tools in your GChat data folder, then
+        verifies they are the approved files. These files must already be
+        available; this step does not download them or install software on this
+        computer. Windows Hyper-V setup is not available yet.
       </p>
       {!preflight && !error && (
         <p role="status">Checking local VM prerequisites…</p>
@@ -135,6 +136,10 @@ export default function KvmSetup({
       {visibleRecords.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium">Saved local computer setups</p>
+          <p className="text-xs text-muted-foreground">
+            Resume an unfinished setup below to keep its progress. You do not
+            need to create another computer for the same bot.
+          </p>
           {visibleRecords.map((saved) => (
             <div
               key={saved.id}
