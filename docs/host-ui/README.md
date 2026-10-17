@@ -980,6 +980,11 @@ Fixed (one branch each, rows in the open-work list):
   'could not connect'.
 - `GUI-JOURNEY-INTAKE-LOCAL-HOST`: this computer's own host is not '1 paired host'.
 - `GUI-JOURNEY-WIZARD-STEP-COPY`: instructions name the button that is on screen.
+- `GUI-JOURNEY-DISK-SPACE-CRASH`: the model list warns in plain words when the chosen models plus about 2 GB of
+  working space do not fit the free space (and blocks the download when the models alone do not fit); an
+  out-of-space error from the Host (HTTP error, setup status, log) now reads 'The disk is full. Free some space,
+  then try again.' Not done: a maintenance-time out-of-space error is only logged, and the original exit was
+  also caused by the profile-copy loop fixed under `GUI-JOURNEY-PROFILE-INSTALL-LOOP`.
 - `GUI-JOURNEY-PROFILE-PROGRESS-LAYOUT`: the profiling bar and Cancel profiling no longer overlap.
 - `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`: Welcome and Models share `releaseVerified` (`lib/model-release.ts`); a release
   without a tested launch profile is not offered on Welcome (plain empty state) and is not downloadable in Models.
@@ -1002,6 +1007,8 @@ Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`,
 - `GUI-JOURNEY-LOAD-WITHOUT-PROFILE`: Load on a model with no saved startup settings names the model and links to GInfer Hosts.
 
 Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
+`GUI-JOURNEY-LOAD-WITHOUT-PROFILE`, `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`, `GUI-JOURNEY-JARGON`,
+`GUI-JOURNEY-POST-STOP-GPU-BUSY`, `GUI-JOURNEY-UPDATER-404`.
 `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`, `GUI-JOURNEY-JARGON`,
 - `GUI-JOURNEY-JARGON`: plain words for the per-card memory note, the load card list, card names without UUIDs
   ("card n of m" only for identical cards), readable startup model names, the secure-storage button name and the

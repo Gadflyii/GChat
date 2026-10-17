@@ -298,6 +298,15 @@ fn verifier(token: &str) -> Hmac<Sha256> {
     h
 }
 
+/// Turns an out-of-disk-space operating system error into a message a person can act on.
+pub fn plain_disk_error(error: String) -> String {
+    let lower = error.to_lowercase();
+    if lower.contains("no space left on device") || lower.contains("os error 28")
+        || lower.contains("not enough space on the disk") || lower.contains("os error 112") {
+        "The disk is full. Free some space, then try again.".into()
+    } else { error }
+}
+
 pub fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path.parent().ok_or("state path has no parent")?;
     std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -1838,7 +1847,7 @@ impl Host {
             }
         };
         Ok(result
-            .unwrap_or_else(|e| json(StatusCode::BAD_REQUEST, serde_json::json!({"error": e}))))
+            .unwrap_or_else(|e| json(StatusCode::BAD_REQUEST, serde_json::json!({"error": plain_disk_error(e)}))))
     }
     fn load_operation(&self, id: Uuid) -> Arc<LoadOperation> {
         self.load_operations
@@ -6389,4 +6398,16 @@ async fn bounded_body(req: &mut Request<Body>, limit: usize) -> Result<Vec<u8>, 
         bytes.extend_from_slice(&chunk);
     }
     Ok(bytes)
+}
+
+#[cfg(test)]
+mod disk_full_tests {
+    use super::plain_disk_error;
+    #[test]
+    fn disk_full_errors_become_plain_and_others_pass_through() {
+        for raw in ["No space left on device (os error 28)", "write failed: No space left on device"] {
+            assert_eq!(plain_disk_error(raw.into()), "The disk is full. Free some space, then try again.");
+        }
+        assert_eq!(plain_disk_error("Permission denied".into()), "Permission denied");
+    }
 }

@@ -66,3 +66,15 @@ const downloadStatusLabels: Record<string, string> = {
 }
 export const downloadStatusLabel = (status: string) => downloadStatusLabels[status] ?? status
 
+/** Hardware measurement and speed tuning write temporary files next to the models. */
+export const WORKING_SPACE_BYTES = 2 * 1024 ** 3
+
+/** Plain warning when the chosen models plus working space may not fit; `block` when even the download cannot fit. */
+export function diskSpaceWarning(needed: number, free: number | null | undefined): { text: string; block: boolean } | undefined {
+  if (free == null || needed <= 0 || free >= needed + WORKING_SPACE_BYTES) return undefined
+  const block = free < needed
+  return {
+    block,
+    text: `${block ? 'Not enough free disk space.' : 'Free disk space is low.'} The selected models need ${formatModelBytes(needed)}, plus about ${formatModelBytes(WORKING_SPACE_BYTES)} of working space while GInfer measures your hardware. Only ${formatModelBytes(free)} is free in this folder. ${block ? 'Free some space or choose another folder before downloading.' : 'Free some space or choose another folder to avoid running out of disk.'}`,
+  }
+}

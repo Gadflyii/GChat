@@ -399,7 +399,8 @@ impl Host {
                             .find_map(|p| p.error.clone())
                     })
                     .flatten()
-            });
+            })
+            .map(crate::service::plain_disk_error);
         Ok(json!({"step":step,"gpu_uuids":progress.gpu_uuids,
             "hardware_profile":hardware.map(|h|json!(h)).unwrap_or_else(||json!({"status":"unavailable","error":"Hardware profiling is not configured"})),
             "storage":storage,"models":models,"selected_release_ids":progress.selected_release_ids,"catalog_loaded":progress.catalog_loaded,"error":error,
