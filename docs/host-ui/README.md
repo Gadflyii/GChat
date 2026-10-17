@@ -1,5 +1,41 @@
 # GInfer host UI
 
+## Copy result and accessible control — C6
+
+`GUI-COPY-RESULT-ACCESSIBILITY-20261017` fixes the shared Copy button in
+messages, model errors and local API details. It waits for the clipboard
+promise before announcing success, blocks duplicate writes while pending and
+shows a retryable error on failure. The real button has an accessible name and
+a polite success announcement; callers and copied text are unchanged.
+
+Implementation `3fda416dc` passes four rendered cases covering the accessible
+name, pending and same-tick duplicate clicks, successful resolution/reset,
+and rejected, thrown or unavailable clipboard with retry. One `make verify`
+exited 0 at 15:23:31Z October17: 2,955 frontend tests, 119 extension tests,
+59 Node contract tests and 1,076 Rust tests passed; six frontend tests were
+skipped and 27 Rust tests ignored. Lint, types, quality checks and all six
+critical coverage floors passed; lint retains three existing warnings.
+No installed workflow, Engine, model or GPU run was needed.
+
+C6 owns only `web-app/src/containers/CopyButton.tsx`, its dedicated
+`__tests__/CopyButton.test.tsx` and this section. Source is
+`/ai/gchat-worktrees/c6-copy-result-accessibility-20261017`, branch
+`fix/c6-copy-result-accessibility-20261017`, from main `58af0e961`.
+Concise results are retained in
+`/ai/gchat/out/c6-copy-result-accessibility-20261017/{result.json,summary.md}`.
+Verification used S1 CPU72–79 nice10 in pinned image `ad7f9bf020d7`, private
+offline caches and 22 read-only profiles. The private S1 source/dependency/build
+copy is retired; the read-only donor remains untouched. Next: coordinator merge,
+then the next unowned GUI row from Gchat3. New S1 work holds through Codex3's
+announced GMUL TIMING pair. W3 local-path validation uses Gchat3's RC Installed
+Load/cache packet when it arrives, with no separate Load.
+
+Setup correction: root installation succeeded but pruned 40 extension-only
+cache entries, stopping offline extension installation before any tests.
+Refilling the private cache **after** root installation allowed extension setup
+to finish, followed by the still-unrun focused and full gates. Preserve this
+ordering for future offline setup; the cause and correction are in `result.json`.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing
