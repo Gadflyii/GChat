@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { spyConfirm } from '@/test/confirm'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
 import type { EngineSnapshot } from '@/services/engines'
@@ -231,7 +232,7 @@ it('blocks benchmarking for pending changes and confirms before restarting the s
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
   expect(screen.getByRole('alert')).toHaveTextContent('unloads the current model')
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  const confirm = spyConfirm().mockReturnValue(false)
   fireEvent.click(screen.getByRole('button', { name: 'Apply & Restart Server' }))
   expect(mocks.command).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)

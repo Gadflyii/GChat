@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import { confirmAction } from '@/lib/confirm'
 import { useStudioCatalog } from '@/hooks/useStudioCatalog'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -56,9 +57,12 @@ export function AgentWorkerPools() {
     )
       return
     if (
-      !window.confirm(
-        'Delete this pool? Existing runs keep their assignment snapshot; new runs must choose another pool.'
-      )
+      !(await confirmAction({
+        title: 'Delete this pool?',
+        message: 'Existing runs keep their assignment snapshot; new runs must choose another pool.',
+        confirmLabel: 'Delete pool',
+        destructive: true,
+      }))
     )
       return
     busyRef.current = true

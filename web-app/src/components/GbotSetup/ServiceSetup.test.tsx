@@ -1,3 +1,4 @@
+import { spyConfirm } from '@/test/confirm'
 import {
   act,
   cleanup,
@@ -279,7 +280,7 @@ it('requires approved and configured service control before continuing', async (
 
 it('asks the owner to confirm each device approval and revocation', async () => {
   const change = vi.fn().mockResolvedValue(true)
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  const confirm = spyConfirm().mockReturnValue(false)
   const clients = [
     {
       client_id: 'requested',
@@ -300,17 +301,22 @@ it('asks the owner to confirm each device approval and revocation', async () => 
   fireEvent.click(
     screen.getByRole('button', { name: 'Approve Gbot control for Laptop' })
   )
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
   expect(change).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)
   fireEvent.click(
     screen.getByRole('button', { name: 'Approve Gbot control for Laptop' })
   )
-  expect(change).toHaveBeenLastCalledWith('requested', 'approve')
+  await waitFor(() =>
+    expect(change).toHaveBeenLastCalledWith('requested', 'approve')
+  )
   fireEvent.click(
     screen.getByRole('button', { name: 'Revoke Gbot control for Desk' })
+  )
+  await waitFor(() =>
+    expect(change).toHaveBeenLastCalledWith('approved', 'revoke')
   )
   expect(confirm).toHaveBeenLastCalledWith(
     expect.stringContaining('Running bot tasks continue')
   )
-  expect(change).toHaveBeenLastCalledWith('approved', 'revoke')
 })

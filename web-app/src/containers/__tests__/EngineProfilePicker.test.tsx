@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { spyConfirm } from '@/test/confirm'
 import { afterEach, expect, it, vi } from 'vitest'
 import { EngineProfilePicker } from '../EngineProfilePicker'
 import type { EngineSnapshot } from '@/services/engines'
@@ -26,7 +27,7 @@ it('reserves other instances GPUs and requires confirmation before switching the
   expect(screen.getByLabelText('GPU / GPU group')).toBeDisabled()
   const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  const confirm = spyConfirm().mockReturnValue(false)
   fireEvent.click(screen.getByRole('button', { name: 'Apply profile and restart' }))
   expect(launch).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)
@@ -54,7 +55,7 @@ it('preserves saved structured-output OFF when applying a qualified profile', as
     kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
   }
   const launch = vi.fn().mockResolvedValue(undefined)
-  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  spyConfirm().mockReturnValue(true)
   render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
   const structured = screen.getByRole('checkbox', { name: 'Structured outputs' })
   expect(structured).not.toBeChecked()
