@@ -958,7 +958,7 @@ impl AccountsState {
         form.push(("client_id", config.client_id.clone()));
         if config.provider == Provider::Google {
             let secret = self.vault_get("google:registration".into()).await?;
-            if config.has_client_secret && secret.as_ref().is_none_or(|secret| secret.is_empty()) {
+            if config.has_client_secret && secret.as_ref().map_or(true, |secret| secret.is_empty()) {
                 return Err(GOOGLE_SECRET_MISSING.into());
             }
             if let Some(secret) = secret {
