@@ -335,7 +335,9 @@ impl AccountsState {
                 .lock()
                 .map_err(|_| "Sign-in state unavailable")?
                 .values()
-                .filter(|flow| flow.view.status == "waiting")
+                // Keep the latest result for each provider visible after navigation.
+                // A completed browser sign-in can still fail while saving locally;
+                // hiding terminal flows made that look like nothing happened.
                 .map(|flow| flow.view.clone())
                 .collect(),
         })
@@ -2568,6 +2570,10 @@ mod tests {
             let view = state.view().unwrap();
             assert!(view.accounts.is_empty());
             assert!(view.selected_accounts.is_empty());
+            let restored = view.active_flows.iter().find(|saved| saved.flow_id == flow.flow_id).unwrap();
+            assert_eq!(restored.status, "failed");
+            assert!(restored.account_id.is_none());
+            assert!(restored.error.as_deref().unwrap().contains("but saving the account in GChat failed"));
             assert!(vault.values.lock().unwrap().is_empty());
             assert!(state.tokens.lock().unwrap().is_empty());
             server.await.unwrap();
@@ -2742,12 +2748,18 @@ mod tests {
             let connected = settled_auth(&state, &flow).await;
             assert_eq!(connected.status, "connected", "{:?}", connected.error);
             let id = connected.account_id.unwrap();
-            assert!(state
-                .view()
-                .unwrap()
+            let view = state.view().unwrap();
+            assert!(view
                 .accounts
                 .iter()
                 .any(|account| account.id == id && account.subject == expected_subject));
+            let restored = view
+                .active_flows
+                .iter()
+                .find(|saved| saved.flow_id == flow.flow_id)
+                .unwrap();
+            assert_eq!(restored.status, "connected");
+            assert_eq!(restored.account_id.as_deref(), Some(id.as_str()));
             ids.push(id);
         }
         assert_ne!(ids[0], ids[1]);

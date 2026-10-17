@@ -90,12 +90,28 @@ function googleCard() {
 }
 async function ready() {
   render(<WorkspaceConnections />)
-  await screen.findByRole('button', { name: 'Connect Google Workspace' })
+  await screen.findByRole('heading', { name: 'Google Workspace' })
   await waitFor(() =>
     expect(
       screen.getByRole('button', { name: 'Refresh accounts' })
     ).toBeEnabled()
   )
+}
+
+async function openGoogleImport() {
+  const user = userEvent.setup()
+  await user.click(
+    googleCard().getByRole('button', {
+      name: /^(Set up Google|Review Google setup)$/,
+    })
+  )
+  const guide = within(screen.getByRole('dialog'))
+  await user.click(
+    guide.getByRole('button', {
+      name: 'I already have the downloaded JSON file',
+    })
+  )
+  return guide
 }
 
 beforeEach(() => {
@@ -133,85 +149,133 @@ describe('Workspace connections', () => {
       screen.getByRole('button', { name: 'Connect Google Workspace' })
     ).toBeDisabled()
     expect(
-      screen.getByText('Import your Desktop app JSON before connecting.')
+      screen.getByRole('button', { name: 'Set up Google' })
     ).toBeInTheDocument()
     expect(api.beginConnectorAuth).not.toHaveBeenCalled()
   })
 
-  it('guides user-owned Desktop setup with direct project, API and OAuth console links', async () => {
+  it('keeps Google instructions in a sequential pop-out guide with an explicit return path', async () => {
     const view = initialView()
     view.configs[0].client_id = ''
     api.connectorAccounts.mockResolvedValue(view)
     await ready()
-    const google = googleCard()
+    const user = userEvent.setup()
     expect(
-      google.getByText(/GChat does not include a shared Google app/)
+      screen.queryByRole('link', { name: 'Google Cloud Console' })
+    ).not.toBeInTheDocument()
+    await user.click(
+      googleCard().getByRole('button', { name: 'Set up Google' })
+    )
+    const guide = within(screen.getByRole('dialog'))
+    expect(guide.getByText('Step 1 of 6')).toBeInTheDocument()
+    expect(
+      guide.getByText(/GChat does not include a shared Google app/)
     ).toBeInTheDocument()
     expect(
-      google.getByRole('link', { name: 'Google Cloud Console' })
-    ).toHaveAttribute(
-      'href',
-      'https://console.cloud.google.com/projectcreate'
-    )
+      guide.getByRole('link', { name: 'Google Cloud Console' })
+    ).toHaveAttribute('href', 'https://console.cloud.google.com/projectcreate')
+    expect(
+      guide.queryByRole('link', { name: 'Branding' })
+    ).not.toBeInTheDocument()
+    await user.click(guide.getByRole('button', { name: 'Next' }))
+    expect(guide.getByText('Step 2 of 6')).toBeInTheDocument()
+    expect(
+      guide
+        .getAllByRole('link')
+        .filter((link) =>
+          link.getAttribute('href')?.includes('/apis/enableflow;apiid=')
+        )
+    ).toHaveLength(8)
+    await user.click(guide.getByRole('button', { name: 'Next' }))
     for (const [name, page] of [
       ['Branding', 'branding'],
       ['Audience', 'audience'],
-      ['Clients', 'clients'],
     ]) {
-      expect(google.getByRole('link', { name })).toHaveAttribute(
+      expect(guide.getByRole('link', { name })).toHaveAttribute(
         'href',
         `https://console.cloud.google.com/auth/${page}`
       )
     }
     expect(
-      google.getAllByRole('link').filter((link) =>
-        link
-          .getAttribute('href')
-          ?.startsWith('https://console.cloud.google.com/apis/enableflow;apiid=')
-      )
-    ).toHaveLength(8)
-    expect(google.getByText(/choose External/)).toBeInTheDocument()
-    expect(
-      google.getByText(/add your own Google email as a test user/)
+      guide.getByText(/add your own Google email as a test user/)
     ).toBeInTheDocument()
-    expect(google.getByText(/In production/)).toBeInTheDocument()
     expect(
-      google.getByRole('link', {
+      guide.getByRole('link', {
         name: /Testing refresh tokens expire after seven days/,
       })
     ).toBeInTheDocument()
+    await user.click(guide.getByRole('button', { name: 'Next' }))
+    expect(guide.getByRole('link', { name: 'Clients' })).toHaveAttribute(
+      'href',
+      'https://console.cloud.google.com/auth/clients'
+    )
     expect(
-      google.getByText(/This does not bypass an organization block/)
+      guide.getByText(/You do not need to copy a client ID or secret/)
     ).toBeInTheDocument()
-    expect(google.queryByText(/drop it here/i)).not.toBeInTheDocument()
+    await user.click(guide.getByRole('button', { name: 'Next' }))
+    expect(
+      guide.getByLabelText('Import Google Desktop app JSON')
+    ).toBeInTheDocument()
+    expect(
+      guide.queryByRole('button', { name: 'Next' })
+    ).not.toBeInTheDocument()
+    await user.click(guide.getByRole('button', { name: 'Back' }))
+    expect(guide.getByText('Step 4 of 6')).toBeInTheDocument()
+    await user.click(guide.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(
+      googleCard().getByRole('button', { name: 'Set up Google' })
+    ).toBeVisible()
   })
 
   it('imports a Desktop JSON file directly to the native vault without credential fields', async () => {
     await ready()
-    expect(googleCard().getByText(/The app secret goes directly to GChat’s protected credential store/)).toBeInTheDocument()
+    const guide = await openGoogleImport()
+    expect(
+      guide.getByText(
+        /The app secret goes directly to GChat’s protected credential store/
+      )
+    ).toBeInTheDocument()
     api.nativeInvoke.mockResolvedValue(initialView())
     const file = new File(
-      [JSON.stringify({ installed: {
-        client_id: 'downloaded-client.apps.googleusercontent.com',
-        client_secret: 'private-desktop-secret',
-      } })],
+      [
+        JSON.stringify({
+          installed: {
+            client_id: 'downloaded-client.apps.googleusercontent.com',
+            client_secret: 'private-desktop-secret',
+          },
+        }),
+      ],
       'client-secret.json',
       { type: 'application/json' }
     )
-    const input = googleCard().getByLabelText('Import Google Desktop app JSON')
+    const input = guide.getByLabelText('Import Google Desktop app JSON')
     await userEvent.setup().upload(input, file)
-    await waitFor(() => expect(api.nativeInvoke).toHaveBeenCalledWith(
-      'connector_configure',
-      { request: {
-        provider: 'google',
-        client_id: 'downloaded-client.apps.googleusercontent.com',
-        client_secret: 'private-desktop-secret',
-      } }
-    ))
-    await waitFor(() => expect(input).toBeEnabled())
-    expect(input).toHaveValue('')
+    await waitFor(() =>
+      expect(api.nativeInvoke).toHaveBeenCalledWith('connector_configure', {
+        request: {
+          provider: 'google',
+          client_id: 'downloaded-client.apps.googleusercontent.com',
+          client_secret: 'private-desktop-secret',
+        },
+      })
+    )
+    expect(
+      await screen.findByText(
+        /Your Google registration has been saved in GChat/
+      )
+    ).toHaveTextContent('Your account is not connected yet')
+    expect(
+      screen.queryByLabelText('Import Google Desktop app JSON')
+    ).not.toBeInTheDocument()
+    await userEvent
+      .setup()
+      .click(guide.getByRole('button', { name: 'Choose services' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(googleCard().queryByLabelText('Client ID')).not.toBeInTheDocument()
-    expect(googleCard().queryByLabelText('App secret (optional)')).not.toBeInTheDocument()
+    expect(
+      googleCard().queryByLabelText('App secret (optional)')
+    ).not.toBeInTheDocument()
     expect(screen.queryByText(/private-desktop-secret/)).not.toBeInTheDocument()
     expect(api.beginConnectorAuth).not.toHaveBeenCalled()
   })
@@ -226,57 +290,108 @@ describe('Workspace connections', () => {
       [JSON.stringify({ installed: { client_id: 'replacement-client' } })],
       'desktop.json'
     )
-    await userEvent.setup().upload(
-      googleCard().getByLabelText('Import Google Desktop app JSON'), file
+    const guide = await openGoogleImport()
+    await userEvent
+      .setup()
+      .upload(guide.getByLabelText('Import Google Desktop app JSON'), file)
+    await waitFor(() =>
+      expect(api.nativeInvoke).toHaveBeenCalledWith('connector_configure', {
+        request: {
+          provider: 'google',
+          client_id: 'replacement-client',
+          client_secret: '',
+        },
+      })
     )
-    await waitFor(() => expect(api.nativeInvoke).toHaveBeenCalledWith(
-      'connector_configure',
-      { request: { provider: 'google', client_id: 'replacement-client', client_secret: '' } }
-    ))
     expect(screen.queryByText(/replacement-client/)).not.toBeInTheDocument()
     expect(api.beginConnectorAuth).not.toHaveBeenCalled()
   })
 
   it('keeps imported contents and native error details out of validation and saving errors', async () => {
     await ready()
-    const group = googleCard().getByRole('group', { name: 'Google Desktop app JSON import' })
-    const input = googleCard().getByLabelText('Import Google Desktop app JSON')
+    const guide = await openGoogleImport()
+    const group = guide.getByRole('group', {
+      name: 'Google Desktop app JSON import',
+    })
+    const input = guide.getByLabelText('Import Google Desktop app JSON')
     const user = userEvent.setup()
     const webClient = new File(
-      [JSON.stringify({ web: { client_id: 'web-client', client_secret: 'private-file-secret' } })],
+      [
+        JSON.stringify({
+          web: {
+            client_id: 'web-client',
+            client_secret: 'private-file-secret',
+          },
+        }),
+      ],
       'web.json'
     )
     await user.upload(input, webClient)
-    await screen.findByText(/Choose the downloaded Google Desktop app JSON file/)
+    await screen.findByText(
+      /Choose the downloaded Google Desktop app JSON file/
+    )
     expect(api.nativeInvoke).not.toHaveBeenCalled()
     expect(screen.queryByText(/private-file-secret/)).not.toBeInTheDocument()
     await waitFor(() => expect(group).toHaveAttribute('aria-busy', 'false'))
     api.nativeInvoke.mockRejectedValue(new Error('private-native-secret'))
-    await user.upload(input, new File(
-      [JSON.stringify({ installed: { client_id: 'client', client_secret: 'private-file-secret' } })],
-      'desktop.json'
-    ))
+    await user.upload(
+      input,
+      new File(
+        [
+          JSON.stringify({
+            installed: {
+              client_id: 'client',
+              client_secret: 'private-file-secret',
+            },
+          }),
+        ],
+        'desktop.json'
+      )
+    )
     await screen.findByText(/Could not save the Google registration/)
-    expect(screen.queryByText(/private-native-secret|private-file-secret/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/private-native-secret|private-file-secret/)
+    ).not.toBeInTheDocument()
   })
 
   it('rejects multiple files and ignores a second import while one is pending', async () => {
     await ready()
-    const group = googleCard().getByRole('group', { name: 'Google Desktop app JSON import' })
-    const input = googleCard().getByLabelText('Import Google Desktop app JSON')
-    const file = new File([JSON.stringify({ installed: { client_id: 'client' } })], 'desktop.json')
+    const guide = await openGoogleImport()
+    const group = guide.getByRole('group', {
+      name: 'Google Desktop app JSON import',
+    })
+    const input = guide.getByLabelText('Import Google Desktop app JSON')
+    const file = new File(
+      [JSON.stringify({ installed: { client_id: 'client' } })],
+      'desktop.json'
+    )
     fireEvent.change(input, { target: { files: [file, file] } })
-    expect(googleCard().getByRole('alert')).toHaveTextContent('Choose one downloaded Google Desktop app JSON file.')
+    expect(guide.getByRole('alert')).toHaveTextContent(
+      'Choose one downloaded Google Desktop app JSON file.'
+    )
     expect(api.nativeInvoke).not.toHaveBeenCalled()
     let finish!: (view: ConnectorAccountsView) => void
-    api.nativeInvoke.mockImplementation(() => new Promise((resolve) => { finish = resolve }))
+    api.nativeInvoke.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
     fireEvent.change(input, { target: { files: [file] } })
     await waitFor(() => expect(api.nativeInvoke).toHaveBeenCalledTimes(1))
     expect(input).toBeDisabled()
+    expect(group).toHaveAttribute('aria-busy', 'true')
     fireEvent.change(input, { target: { files: [file] } })
     expect(api.nativeInvoke).toHaveBeenCalledTimes(1)
-    await act(async () => { finish(initialView()) })
-    await waitFor(() => expect(group).toHaveAttribute('aria-busy', 'false'))
+    await act(async () => {
+      finish(initialView())
+    })
+    expect(
+      await guide.findByText(/Your Google registration has been saved in GChat/)
+    ).toBeInTheDocument()
+    expect(
+      guide.queryByRole('group', { name: 'Google Desktop app JSON import' })
+    ).not.toBeInTheDocument()
   })
 
   it('omits an empty optional Microsoft tenant so native registration uses common', async () => {
@@ -305,7 +420,9 @@ describe('Workspace connections', () => {
       })
     )
     await waitFor(() =>
-      expect(microsoft.getByLabelText('Tenant (optional)')).toHaveValue('common')
+      expect(microsoft.getByLabelText('Tenant (optional)')).toHaveValue(
+        'common'
+      )
     )
     expect(
       microsoft.getByRole('button', { name: 'Save Microsoft 365 registration' })
@@ -314,7 +431,9 @@ describe('Workspace connections', () => {
 
   it('explains a missing release identity without exposing a default client ID form', async () => {
     const view = initialView()
-    view.configs = view.configs.filter((config) => config.provider !== 'microsoft')
+    view.configs = view.configs.filter(
+      (config) => config.provider !== 'microsoft'
+    )
     api.connectorAccounts.mockResolvedValue(view)
     await ready()
     const microsoft = within(
@@ -331,9 +450,11 @@ describe('Workspace connections', () => {
     const field = microsoft.getByLabelText('Client ID')
     expect(field.closest('details')).not.toHaveAttribute('open')
     expect(api.beginConnectorAuth).not.toHaveBeenCalled()
-    await userEvent.setup().click(
-      microsoft.getByText('Advanced: use your organization’s Microsoft app')
-    )
+    await userEvent
+      .setup()
+      .click(
+        microsoft.getByText('Advanced: use your organization’s Microsoft app')
+      )
     expect(field.closest('details')).toHaveAttribute('open')
     expect(
       microsoft.getByText(/copy its Application \(client\) ID/)
@@ -351,7 +472,9 @@ describe('Workspace connections', () => {
     const microsoft = within(
       screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
     )
-    const signIn = microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    const signIn = microsoft.getByRole('button', {
+      name: 'Sign in with Microsoft',
+    })
     expect(signIn).toBeDisabled()
     expect(
       microsoft.getByText(/The app registration is already set up/)
@@ -404,6 +527,48 @@ describe('Workspace connections', () => {
     ).toBeInTheDocument()
     expect(
       screen.queryByText('Google Workspace account connected.')
+    ).not.toBeInTheDocument()
+  })
+
+  it('lets a missing saved account recover from an old connected flow instead of blocking sign-in', async () => {
+    const view = initialView()
+    view.active_flows = [
+      {
+        flow_id: 'old-connected',
+        provider: 'microsoft',
+        status: 'connected',
+        account_id: 'removed-account',
+      },
+    ]
+    api.connectorAccounts.mockResolvedValue(view)
+    api.beginConnectorAuth.mockResolvedValue({
+      ...waiting,
+      provider: 'microsoft',
+      flow_id: 'replacement-sign-in',
+    })
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    expect(microsoft.getByRole('status')).toHaveTextContent(
+      'Sign-in received. Confirm your saved account.'
+    )
+    expect(
+      microsoft.queryByText('Microsoft 365 account connected.')
+    ).not.toBeInTheDocument()
+    const user = userEvent.setup()
+    await user.click(
+      microsoft.getByRole('button', { name: 'Start sign-in again' })
+    )
+    await user.click(microsoft.getByLabelText('Excel'))
+    await user.click(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    )
+    expect(await microsoft.findByRole('status')).toHaveTextContent(
+      'Complete Microsoft 365 sign-in in your browser.'
+    )
+    expect(
+      microsoft.queryByText('Sign-in received. Confirm your saved account.')
     ).not.toBeInTheDocument()
   })
 
@@ -485,8 +650,11 @@ describe('Workspace connections', () => {
     )
     expect(await screen.findByText(approvalMessage)).toBeInTheDocument()
     expect(
-      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+      microsoft.getByRole('button', { name: 'Try Microsoft sign-in again' })
     ).toBeEnabled()
+    expect(microsoft.getByRole('alert')).toHaveTextContent(
+      'Microsoft 365 was not connected.'
+    )
     expect(api.configureConnector).not.toHaveBeenCalled()
     expect(api.selectConnectorAccount).not.toHaveBeenCalled()
   })
@@ -623,6 +791,215 @@ describe('Workspace connections', () => {
       'google',
       'google-account'
     )
+  })
+
+  it('shows Microsoft browser progress, confirms a durable account and offers another sign-in', async () => {
+    vi.useFakeTimers()
+    const microsoftFlow: ConnectorAuthFlow = {
+      flow_id: 'flow-microsoft',
+      provider: 'microsoft',
+      status: 'waiting',
+    }
+    api.beginConnectorAuth.mockResolvedValue(microsoftFlow)
+    api.connectorAuthStatus.mockResolvedValue({
+      ...microsoftFlow,
+      status: 'connected',
+      account_id: 'ms-account',
+    })
+    let finishAccounts!: (view: ConnectorAccountsView) => void
+    api.connectorAccounts
+      .mockResolvedValueOnce(initialView())
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishAccounts = resolve
+          })
+      )
+    render(<WorkspaceConnections />)
+    await act(async () => {})
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    fireEvent.click(microsoft.getByLabelText('Excel'))
+    await act(async () => {
+      fireEvent.click(
+        microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+      )
+    })
+    expect(
+      microsoft.getByRole('button', { name: 'Waiting for browser sign-in…' })
+    ).toBeDisabled()
+    expect(microsoft.getByRole('status')).toHaveTextContent(
+      'GChat is waiting for the browser response'
+    )
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(microsoft.getByRole('status')).toHaveTextContent(
+      'Finishing your connection…'
+    )
+    expect(
+      microsoft.queryByText('Microsoft 365 account connected.')
+    ).not.toBeInTheDocument()
+    expect(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    ).toBeDisabled()
+    const saved = initialView()
+    saved.accounts = [
+      {
+        id: 'ms-account',
+        provider: 'microsoft',
+        subject: 'subject',
+        display_name: 'Ron Microsoft',
+        email: 'ron@example.test',
+        services: ['excel'],
+        access: 'read_only',
+        granted_scopes: ['Files.ReadWrite'],
+        needs_reconnect: false,
+      },
+    ]
+    await act(async () => {
+      finishAccounts(saved)
+    })
+    expect(microsoft.getByRole('status')).toHaveTextContent(
+      'Microsoft 365 account connected.'
+    )
+    expect(
+      microsoft.getByRole('region', { name: 'Ron Microsoft' })
+    ).toHaveTextContent('ron@example.test')
+    expect(
+      microsoft.getByRole('button', {
+        name: 'Sign in another Microsoft account',
+      })
+    ).toBeEnabled()
+    expect(api.connectorAccounts).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps a completed browser flow recoverable when the saved-account refresh fails', async () => {
+    const flow: ConnectorAuthFlow = {
+      flow_id: 'flow-microsoft',
+      provider: 'microsoft',
+      status: 'connected',
+      account_id: 'ms-account',
+    }
+    api.beginConnectorAuth.mockResolvedValue(flow)
+    api.connectorAccounts
+      .mockResolvedValueOnce(initialView())
+      .mockRejectedValueOnce(new Error('Could not read saved accounts'))
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    const user = userEvent.setup()
+    await user.click(microsoft.getByLabelText('Excel'))
+    await user.click(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    )
+    expect(await microsoft.findByRole('status')).toHaveTextContent(
+      'Sign-in received. Confirm your saved account.'
+    )
+    expect(
+      microsoft.queryByText('Microsoft 365 account connected.')
+    ).not.toBeInTheDocument()
+    expect(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    ).toBeDisabled()
+    const saved = initialView()
+    saved.accounts = [
+      {
+        id: 'ms-account',
+        provider: 'microsoft',
+        subject: 'subject',
+        display_name: 'Ron Microsoft',
+        email: 'ron@example.test',
+        services: ['excel'],
+        access: 'read_only',
+        granted_scopes: ['Files.ReadWrite'],
+        needs_reconnect: false,
+      },
+    ]
+    api.connectorAccounts.mockResolvedValueOnce(saved)
+    await user.click(
+      microsoft.getByRole('button', { name: 'Refresh connected accounts' })
+    )
+    expect(
+      await microsoft.findByText('Microsoft 365 account connected.')
+    ).toBeInTheDocument()
+    expect(
+      microsoft.getByRole('region', { name: 'Ron Microsoft' })
+    ).toBeVisible()
+    expect(
+      screen.queryByText(/Could not read saved accounts/)
+    ).not.toBeInTheDocument()
+  })
+
+  it('restores a failed Microsoft save after navigation and retains actionable retry instructions', async () => {
+    const snapshot = initialView()
+    snapshot.active_flows = [
+      {
+        flow_id: 'ms-save-failed',
+        provider: 'microsoft',
+        status: 'failed',
+        error:
+          'Sign-in was received, but secure storage could not save it. Unlock secure storage and try again.',
+      },
+    ]
+    api.connectorAccounts.mockResolvedValue(snapshot)
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    expect(microsoft.getByRole('alert')).toHaveTextContent(
+      'Microsoft 365 was not connected.'
+    )
+    expect(microsoft.getByRole('alert')).toHaveTextContent(
+      'Unlock secure storage and try again.'
+    )
+    expect(
+      microsoft.queryByText('Microsoft 365 account connected.')
+    ).not.toBeInTheDocument()
+    expect(microsoft.getByText('No connected accounts.')).toBeVisible()
+    await userEvent.setup().click(microsoft.getByLabelText('Excel'))
+    expect(
+      microsoft.getByRole('button', { name: 'Try Microsoft sign-in again' })
+    ).toBeEnabled()
+    expect(api.beginConnectorAuth).not.toHaveBeenCalled()
+    expect(api.connectorAuthStatus).not.toHaveBeenCalled()
+  })
+
+  it('keeps a browser-launch failure attached to its provider and lets the user retry', async () => {
+    api.beginConnectorAuth.mockRejectedValueOnce(
+      new Error(
+        'Could not open the sign-in browser. Check your default browser and try again.'
+      )
+    )
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    const user = userEvent.setup()
+    await user.click(microsoft.getByLabelText('Excel'))
+    await user.click(
+      microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
+    )
+    expect(await microsoft.findByRole('alert')).toHaveTextContent(
+      'Check your default browser and try again.'
+    )
+    expect(
+      microsoft.getByRole('button', { name: 'Try Microsoft sign-in again' })
+    ).toBeEnabled()
+    api.beginConnectorAuth.mockResolvedValueOnce({
+      ...waiting,
+      provider: 'microsoft',
+      flow_id: 'ms-retry',
+    })
+    await user.click(
+      microsoft.getByRole('button', { name: 'Try Microsoft sign-in again' })
+    )
+    expect(microsoft.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      microsoft.getByRole('button', { name: 'Waiting for browser sign-in…' })
+    ).toBeDisabled()
   })
 
   it('refreshes public account metadata only after the native flow reports connected', async () => {

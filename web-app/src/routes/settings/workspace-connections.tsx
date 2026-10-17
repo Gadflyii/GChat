@@ -82,8 +82,18 @@ function GoogleRegistration({
   onImport: (file: File) => Promise<void>
 }) {
   const importing = useRef(false)
+  const [open, setOpen] = useState(false)
+  const [step, setStep] = useState(0)
   const [reading, setReading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const titles = [
+    'Create your Google project',
+    'Turn on the services you need',
+    'Set up the Google permission screen',
+    'Download your app registration',
+    'Import the downloaded file',
+    'Google setup is saved',
+  ]
   const importFiles = async (files: readonly File[]) => {
     if (disabled || importing.current) return
     setError(null)
@@ -95,164 +105,339 @@ function GoogleRegistration({
     setReading(true)
     try {
       await onImport(files[0])
+      setStep(5)
+    } catch (cause) {
+      // The import service returns only sanitized validation/save errors.
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : 'Could not import the Google registration. Choose the downloaded file and try again.'
+      )
     } finally {
       importing.current = false
       setReading(false)
     }
   }
+  const link = (href: string, label: string) => (
+    <a href={href} target="_blank" rel="noreferrer" className="underline">
+      {label}
+    </a>
+  )
   return (
     <div className="mb-4 space-y-3 text-sm">
       <p>
-        Google sign-in needs a Desktop app registration in your own Google Cloud
-        project. GChat does not include a shared Google app. You do not need to
-        copy a client ID or secret into GChat.
+        {configured
+          ? 'Google setup is saved. Choose your services below, then connect your account.'
+          : 'First, set up your Google connection. The guided setup opens one step at a time.'}
       </p>
-      <details open={!configured}>
-        <summary className="cursor-pointer text-foreground">
-          Set up your Google app
-        </summary>
-        <ol className="mt-2 list-decimal space-y-2 pl-5">
-          <li>
-            Create or select a project in{' '}
-            <a
-              href="https://console.cloud.google.com/projectcreate"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Google Cloud Console
-            </a>.
-          </li>
-          <li>
-            In that project, enable the APIs for the services you want:
-            <ul className="mt-1 list-disc pl-5">
-              {googleApis.map(([name, id]) => (
-                <li key={id}>
-                  <a
-                    href={`https://console.cloud.google.com/apis/enableflow;apiid=${id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                  >
-                    {name}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </li>
-          <li>
-            Configure{' '}
-            <a
-              href="https://console.cloud.google.com/auth/branding"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Branding
-            </a>{' '}
-            in Google Auth Platform, then choose External in{' '}
-            <a
-              href="https://console.cloud.google.com/auth/audience"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Audience
-            </a>.
-            While Testing, add your own Google email as a test user. Google’s{' '}
-            <a
-              href="https://developers.google.com/workspace/guides/configure-oauth-consent"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              consent setup guide
-            </a>{' '}
-            explains these settings.
-          </li>
-          <li>
-            Open{' '}
-            <a
-              href="https://console.cloud.google.com/auth/clients"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Clients
-            </a>{' '}
-            → Create client → Desktop app → Create, then download the JSON file,
-            following Google’s{' '}
-            <a
-              href="https://developers.google.com/workspace/gmail/api/quickstart/python#authorize_credentials_for_a_desktop_application"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Desktop app instructions
-            </a>.
-            Import that file below; do not share it.
-          </li>
-          <li>
-            Set the app’s publishing status to In production. With these service
-            permissions,{' '}
-            <a
-              href="https://developers.google.com/identity/protocols/oauth2#expiration"
-              target="_blank"
-              rel="noreferrer"
-              className="underline"
-            >
-              Testing refresh tokens expire after seven days
-            </a>.
-            Publishing does not itself verify your app.
-          </li>
-          <li>
-            Choose your services below and connect. For your own unverified app,
-            Google may offer Advanced → Go to your app (unsafe). Use that option
-            only for your own project when the displayed app, account and
-            permissions are the ones you expect, then review permissions and
-            select Continue. This does not bypass an organization block; your
-            organization may restrict access or require administrator approval.
-          </li>
-        </ol>
-      </details>
-      <div
-        role="group"
-        aria-label="Google Desktop app JSON import"
-        aria-busy={reading}
-        className="space-y-2 rounded border border-border p-3"
+      <Button
+        variant="outline"
+        disabled={disabled}
+        onClick={() => {
+          setError(null)
+          setStep(0)
+          setOpen(true)
+        }}
       >
-        <label className="block">
-          Import Google Desktop app JSON
-          <Input
-            type="file"
-            accept=".json,application/json"
-            disabled={disabled || reading}
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? [])
-              event.target.value = ''
-              void importFiles(files)
-            }}
-          />
-        </label>
-        <p>Choose one downloaded JSON file, up to 64 KB.</p>
-        <p>
-          The app secret goes directly to GChat’s protected credential store.
-          GChat does not display or keep it in this form.
-        </p>
-        {configured ? (
-          <p>
-            Google registration saved. Importing a different registration requires
-            reconnecting existing accounts.
-          </p>
-        ) : (
-          <p>Import your Desktop app JSON before connecting.</p>
-        )}
-        {error && (
-          <p role="alert" className="text-destructive">
-            {error}
-          </p>
-        )}
-      </div>
+        {configured ? 'Review Google setup' : 'Set up Google'}
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          if (!reading) setOpen(next)
+        }}
+      >
+        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Set up Google Workspace</DialogTitle>
+            <DialogDescription>
+              Follow these steps in your browser, then return here. You can
+              close this guide and reopen it later; your Google Cloud changes
+              are kept.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 overflow-y-auto pr-1 text-sm">
+            <p className="text-muted-foreground">
+              Step {step + 1} of {titles.length}
+            </p>
+            <h2 className="text-base font-medium text-foreground">
+              {titles[step]}
+            </h2>
+            {step === 0 && (
+              <div className="space-y-3">
+                <p>
+                  Google sign-in needs an app registration in a Google Cloud
+                  project you control. GChat does not include a shared Google
+                  app. This one-time setup identifies your copy of GChat to
+                  Google; it does not create a new Google account.
+                </p>
+                <ol className="list-decimal space-y-2 pl-5">
+                  <li>
+                    Open{' '}
+                    {link(
+                      'https://console.cloud.google.com/projectcreate',
+                      'Google Cloud Console'
+                    )}{' '}
+                    and sign in with the Google account you want to connect.
+                  </li>
+                  <li>
+                    Enter a project name, such as <strong>My GChat</strong>,
+                    then select <strong>Create</strong>. If you already have a
+                    project for GChat, select it using the project picker at the
+                    top instead.
+                  </li>
+                  <li>
+                    Keep that project selected throughout the following steps,
+                    then return here and select <strong>Next</strong>.
+                  </li>
+                </ol>
+                <p className="text-muted-foreground">
+                  If your organization does not let you create projects, ask its
+                  Google Workspace administrator to help. GChat cannot change
+                  that policy.
+                </p>
+                <Button variant="outline" onClick={() => setStep(4)}>
+                  I already have the downloaded JSON file
+                </Button>
+              </div>
+            )}
+            {step === 1 && (
+              <div className="space-y-3">
+                <p>
+                  Each Google service needs to be enabled in your project before
+                  GChat can use it.
+                </p>
+                <ol className="list-decimal space-y-2 pl-5">
+                  <li>
+                    Open a link below for each service you want to connect.
+                  </li>
+                  <li>
+                    Check that your GChat project is selected at the top of the
+                    Google page, then select <strong>Enable</strong>. If the
+                    page says <strong>Manage</strong>, that service is already
+                    enabled.
+                  </li>
+                  <li>
+                    Return to this guide after enabling your services, then
+                    select <strong>Next</strong>.
+                  </li>
+                </ol>
+                <ul className="grid list-disc gap-2 pl-5 sm:grid-cols-2">
+                  {googleApis.map(([name, id]) => (
+                    <li key={id}>
+                      {link(
+                        `https://console.cloud.google.com/apis/enableflow;apiid=${id}`,
+                        name
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-muted-foreground">
+                  Google Drive is also used to open files for Docs, Sheets and
+                  Slides. Enable Google Drive API if you need those services.
+                </p>
+              </div>
+            )}
+            {step === 2 && (
+              <div className="space-y-3">
+                <p>
+                  This tells Google what name to show when you approve access to
+                  your account.
+                </p>
+                <ol className="list-decimal space-y-2 pl-5">
+                  <li>
+                    Open{' '}
+                    {link(
+                      'https://console.cloud.google.com/auth/branding',
+                      'Branding'
+                    )}
+                    . If shown, select <strong>Get started</strong>. Enter{' '}
+                    <strong>My GChat</strong> as the app name and choose your
+                    email for user support.
+                  </li>
+                  <li>
+                    Select <strong>Next</strong>. For a personal Google account,
+                    choose <strong>External</strong> as the audience. An
+                    organization-only setup can use Internal if its
+                    administrator permits it.
+                  </li>
+                  <li>
+                    Continue to contact information, enter your email, review
+                    the policy and complete <strong>Create</strong>. If setup
+                    was already complete, review those fields instead.
+                  </li>
+                  <li>
+                    Open{' '}
+                    {link(
+                      'https://console.cloud.google.com/auth/audience',
+                      'Audience'
+                    )}
+                    . While Testing, add your own Google email as a test user
+                    using <strong>Add users</strong>, then <strong>Save</strong>
+                    .
+                  </li>
+                  <li>
+                    For a lasting connection, set the publishing status to{' '}
+                    <strong>In production</strong> when Google permits it.{' '}
+                    {link(
+                      'https://developers.google.com/identity/protocols/oauth2#expiration',
+                      'Testing refresh tokens expire after seven days'
+                    )}{' '}
+                    with the service permissions used here, so Testing may
+                    require you to reconnect. Publishing does not itself verify
+                    your app.
+                  </li>
+                </ol>
+                <p>
+                  For more detail, open Google’s{' '}
+                  {link(
+                    'https://developers.google.com/workspace/guides/configure-oauth-consent',
+                    'permission screen setup guide'
+                  )}
+                  . If your organization blocks this setup, ask its
+                  administrator rather than changing organization settings.
+                </p>
+              </div>
+            )}
+            {step === 3 && (
+              <div className="space-y-3">
+                <ol className="list-decimal space-y-2 pl-5">
+                  <li>
+                    Open{' '}
+                    {link(
+                      'https://console.cloud.google.com/auth/clients',
+                      'Clients'
+                    )}{' '}
+                    in the same Google project.
+                  </li>
+                  <li>
+                    Select <strong>Create client</strong>, choose{' '}
+                    <strong>Desktop app</strong> for Application type, enter a
+                    name such as <strong>GChat desktop</strong>, then select{' '}
+                    <strong>Create</strong>.
+                  </li>
+                  <li>
+                    Download the client’s JSON file. If the creation window is
+                    closed, open the new client in the client list and use its
+                    download option.
+                  </li>
+                  <li>
+                    Keep the file private and return to this guide. You do not
+                    need to copy a client ID or secret into GChat. Select{' '}
+                    <strong>Next</strong> to import the file.
+                  </li>
+                </ol>
+                <p>
+                  Need help finding the download? Open Google’s{' '}
+                  {link(
+                    'https://developers.google.com/workspace/gmail/api/quickstart/python#authorize_credentials_for_a_desktop_application',
+                    'Desktop app instructions'
+                  )}
+                  ; only the desktop registration section applies here.
+                </p>
+              </div>
+            )}
+            {step === 4 && (
+              <div
+                role="group"
+                aria-label="Google Desktop app JSON import"
+                aria-busy={reading}
+                className="space-y-3 rounded border border-border p-3"
+              >
+                <p>
+                  Choose the JSON file you downloaded for the Desktop app.
+                  Importing it saves the registration; it does not sign you in
+                  yet.
+                </p>
+                <label className="block">
+                  Import Google Desktop app JSON
+                  <Input
+                    type="file"
+                    accept=".json,application/json"
+                    disabled={disabled || reading}
+                    onChange={(event) => {
+                      const files = Array.from(event.target.files ?? [])
+                      event.target.value = ''
+                      void importFiles(files)
+                    }}
+                  />
+                </label>
+                <p>Choose one downloaded JSON file, up to 64 KB.</p>
+                <p>
+                  The app secret goes directly to GChat’s protected credential
+                  store. GChat does not display or keep it in this form.
+                </p>
+                {configured && (
+                  <p>
+                    Google registration saved. Importing a different
+                    registration requires reconnecting existing accounts.
+                  </p>
+                )}
+                {reading && <p role="status">Saving your Google setup…</p>}
+                {error && (
+                  <p role="alert" className="text-destructive">
+                    {error}
+                  </p>
+                )}
+              </div>
+            )}
+            {step === 5 && (
+              <div className="space-y-3">
+                <p role="status">
+                  Your Google registration has been saved in GChat. Your account
+                  is not connected yet.
+                </p>
+                <ol className="list-decimal space-y-2 pl-5">
+                  <li>
+                    Select <strong>Choose services</strong> below to return to
+                    Workspace connections.
+                  </li>
+                  <li>
+                    Select the Google services you enabled and choose Read only
+                    or Read and write.
+                  </li>
+                  <li>
+                    Select <strong>Connect Google Workspace</strong>, sign in to
+                    the account you added and review Google’s permissions.
+                    Return to GChat and wait for the account to appear under{' '}
+                    <strong>Connected accounts</strong>.
+                  </li>
+                </ol>
+                <p>
+                  For your own unverified app, Google may show{' '}
+                  <strong>Advanced → Go to your app (unsafe)</strong>. Continue
+                  only if you recognize your own project and the displayed
+                  account and permissions. This does not bypass an organization
+                  block. If Google requires administrator approval, ask your
+                  administrator.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 border-t border-border pt-3">
+            <Button
+              variant="outline"
+              disabled={reading}
+              onClick={() =>
+                step === 0 ? setOpen(false) : setStep((current) => current - 1)
+              }
+            >
+              {step === 0 ? 'Close setup' : 'Back'}
+            </Button>
+            {step < 4 && (
+              <Button
+                disabled={disabled}
+                onClick={() => setStep((current) => current + 1)}
+              >
+                Next
+              </Button>
+            )}
+            {step === 5 && (
+              <Button onClick={() => setOpen(false)}>Choose services</Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -263,12 +448,20 @@ type ProviderCardProps = {
   services: ConnectorService[]
   accounts: ConnectorAccount[]
   selectedAccount?: string
+  authFlow?: ConnectorAuthFlow
+  authError?: string
+  refreshing: boolean
+  busy: boolean
   disabled: boolean
   onConfigure: (request: ConfigureConnectorRequest) => Promise<void>
   onImportGoogle: (file: File) => Promise<void>
   onConnect: (request: BeginConnectorAuthRequest) => Promise<void>
   onSelect: (account: ConnectorAccount) => Promise<void>
   onDisconnect: (account: ConnectorAccount) => void
+  onCancelAuth: (flowId: string) => Promise<void>
+  onCheckAuth: () => void
+  onRefreshAccounts: () => Promise<void>
+  onRestartAuth: () => void
 }
 
 function ProviderCard({
@@ -277,12 +470,20 @@ function ProviderCard({
   services,
   accounts,
   selectedAccount,
+  authFlow,
+  authError,
+  refreshing,
+  busy,
   disabled,
   onConfigure,
   onImportGoogle,
   onConnect,
   onSelect,
   onDisconnect,
+  onCancelAuth,
+  onCheckAuth,
+  onRefreshAccounts,
+  onRestartAuth,
 }: ProviderCardProps) {
   const [clientId, setClientId] = useState(config?.client_id ?? '')
   const [tenant, setTenant] = useState(config?.tenant ?? '')
@@ -312,6 +513,26 @@ function ProviderCard({
         )
     ),
   ]
+  const connectedAccount =
+    authFlow?.status === 'connected'
+      ? accounts.find(
+          (account) =>
+            !account.needs_reconnect &&
+            (!authFlow.account_id || account.id === authFlow.account_id)
+        )
+      : undefined
+  const signInLabel =
+    authFlow?.status === 'waiting'
+      ? 'Waiting for browser sign-in…'
+      : authFlow?.status === 'failed' || authError
+        ? `Try ${provider === 'microsoft' ? 'Microsoft' : 'Google'} sign-in again`
+        : accounts.length > 0
+          ? provider === 'microsoft'
+            ? 'Sign in another Microsoft account'
+            : 'Connect another Google account'
+          : provider === 'microsoft'
+            ? 'Sign in with Microsoft'
+            : `Connect ${providerNames[provider]}`
 
   return (
     <Card title={providerNames[provider]}>
@@ -339,19 +560,19 @@ function ProviderCard({
               </li>
               <li>
                 Confirm its Mobile and desktop applications redirect URI is{' '}
-                <code>http://localhost/oauth/callback</code>. A client secret
-                is not needed.
+                <code>http://localhost/oauth/callback</code>. A client secret is
+                not needed.
               </li>
               <li>
                 Enter the directory (tenant) ID if your administrator requires
-                one. Otherwise leave Tenant blank to use common for work,
-                school and personal accounts. The app registration must support
-                your account type.
+                one. Otherwise leave Tenant blank to use common for work, school
+                and personal accounts. The app registration must support your
+                account type.
               </li>
               <li>
-                Save the registration, choose the services you need, then
-                select Sign in with Microsoft. Complete sign-in and any
-                permission approval in your browser.
+                Save the registration, choose the services you need, then select
+                Sign in with Microsoft. Complete sign-in and any permission
+                approval in your browser.
               </li>
             </ol>
             <p>
@@ -411,10 +632,130 @@ function ProviderCard({
           </p>
         </>
       ) : null}
+      {(authFlow || authError) && (
+        <section
+          aria-label={`${providerNames[provider]} sign-in progress`}
+          role={authFlow?.status === 'failed' || authError ? 'alert' : 'status'}
+          className="mb-4 space-y-2 rounded border border-border p-3 text-sm"
+        >
+          {authFlow?.status === 'waiting' && (
+            <>
+              <p className="font-medium">
+                Complete {providerNames[provider]} sign-in in your browser.
+              </p>
+              <p>
+                After approving access, return here. GChat is waiting for the
+                browser response and will show your account under Connected
+                accounts only after saving the connection.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void onCancelAuth(authFlow.flow_id)}
+                >
+                  Cancel {providerNames[provider]} sign-in
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={onCheckAuth}
+                >
+                  Check sign-in status
+                </Button>
+              </div>
+            </>
+          )}
+          {authFlow?.status === 'connected' &&
+            (connectedAccount ? (
+              <>
+                <p className="font-medium">
+                  {providerNames[provider]} account connected.
+                </p>
+                <p>
+                  {connectedAccount.email ||
+                    connectedAccount.display_name ||
+                    'Your account'}{' '}
+                  is saved and appears in Connected accounts below. You can
+                  return to Chat or Gbot and select this account.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium">
+                  {refreshing
+                    ? 'Finishing your connection…'
+                    : 'Sign-in received. Confirm your saved account.'}
+                </p>
+                <p>
+                  Browser sign-in has finished, but GChat has not displayed the
+                  saved account yet. Refresh the account list before continuing.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || refreshing}
+                  onClick={() => void onRefreshAccounts()}
+                >
+                  Refresh connected accounts
+                </Button>
+                {!refreshing && (
+                  <>
+                    <p>
+                      If refreshing still shows no account, start sign-in again
+                      and choose your services below.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={onRestartAuth}
+                    >
+                      Start sign-in again
+                    </Button>
+                  </>
+                )}
+              </>
+            ))}
+          {authFlow?.status === 'cancelled' && (
+            <>
+              <p>Sign-in cancelled.</p>
+              <p>
+                Select the services you need below when you are ready to try
+                again.
+              </p>
+            </>
+          )}
+          {(authFlow?.status === 'failed' || authError) && (
+            <>
+              <p className="font-medium text-destructive">
+                {providerNames[provider]} was not connected.
+              </p>
+              <p>
+                {authError ||
+                  authFlow?.error ||
+                  'GChat could not finish saving the connection.'}
+              </p>
+              <p>
+                Follow the message above, then select the services you need and
+                choose Try {provider === 'microsoft' ? 'Microsoft' : 'Google'}{' '}
+                sign-in again below. A browser success page alone does not mean
+                the account was saved.
+              </p>
+            </>
+          )}
+        </section>
+      )}
       <fieldset disabled={disabled} className="space-y-3">
         <legend className="mb-2 font-medium text-foreground">
           Services to connect
         </legend>
+        <p className="text-sm">
+          Select only the services you want GChat to use. You will review the
+          requested access on the sign-in page before connecting.
+        </p>
         <div className="flex flex-wrap gap-x-5 gap-y-2">
           {services.map((service) => (
             <label key={service.id} className="flex items-center gap-2 text-sm">
@@ -438,9 +779,9 @@ function ProviderCard({
             ['sharepoint', 'teams', 'cloud_pc'].includes(service)
           ) && (
             <p className="text-sm">
-              This needs a work or school account. SharePoint, Teams and
-              Windows 365 Cloud PCs are organization services. Your
-              organization may also need to approve access or assign a license.
+              This needs a work or school account. SharePoint, Teams and Windows
+              365 Cloud PCs are organization services. Your organization may
+              also need to approve access or assign a license.
             </p>
           )}
         <label className="flex items-center gap-3 text-sm">
@@ -457,6 +798,8 @@ function ProviderCard({
           </select>
         </label>
         <p className="text-xs">
+          Choose Read only to let GChat look up information without changing it,
+          or Read and write if you want it to make changes with your approval.
           Read only prevents GChat from writing. Provider consent can include
           broader permissions required for a service.
         </p>
@@ -474,15 +817,16 @@ function ProviderCard({
         )}
         <Button
           disabled={
-            disabled || !config?.client_id || selectedServices.length === 0
+            disabled ||
+            !config?.client_id ||
+            selectedServices.length === 0 ||
+            (authFlow?.status === 'connected' && !connectedAccount)
           }
           onClick={() =>
             void onConnect({ provider, services: selectedServices, access })
           }
         >
-          {provider === 'microsoft'
-            ? 'Sign in with Microsoft'
-            : `Connect ${providerNames[provider]}`}
+          {signInLabel}
         </Button>
       </fieldset>
       <div className="mt-5 border-t border-border pt-3">
@@ -579,6 +923,9 @@ export function WorkspaceConnections() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [flows, setFlows] = useState<ConnectorAuthFlow[]>([])
+  const [authErrors, setAuthErrors] = useState<
+    Partial<Record<ConnectorProvider, string>>
+  >({})
   const [pollingPaused, setPollingPaused] = useState(false)
   const [disconnecting, setDisconnecting] = useState<ConnectorAccount | null>(
     null
@@ -685,10 +1032,22 @@ export function WorkspaceConnections() {
       setFlows((current) =>
         current.filter((flow) => flow.provider !== request.provider)
       )
+      setAuthErrors((current) => ({
+        ...current,
+        [request.provider]: undefined,
+      }))
       setPollingPaused(false)
-      const next = await beginConnectorAuth(request)
-      setFlows((current) => [...current, next])
-      if (next.status === 'connected') await loadAccounts()
+      try {
+        const next = await beginConnectorAuth(request)
+        setFlows((current) => [...current, next])
+        if (next.status === 'connected') await loadAccounts()
+      } catch (cause) {
+        setAuthErrors((current) => ({
+          ...current,
+          [request.provider]: String(cause),
+        }))
+        throw cause
+      }
     })
   const cancel = (flowId: string) =>
     perform('Cancelling sign-in', async () => {
@@ -730,9 +1089,10 @@ export function WorkspaceConnections() {
             </Button>
           </div>
           <p className="text-sm text-muted-foreground">
-            Use the same accounts in Chat, Agent and Code. Sign-in uses your
-            system browser; refresh tokens stay in GChat’s protected credential
-            store.
+            Connect the Google or Microsoft account you want to use in Chat,
+            Agent, Code or Gbot. Choose the services you need below, then sign
+            in through your browser. GChat keeps your saved sign-in in secure
+            storage; you do not enter your account password in GChat.
           </p>
           {error && !disconnecting && (
             <p role="alert" className="text-sm text-destructive">
@@ -748,8 +1108,9 @@ export function WorkspaceConnections() {
           {!loading && !view && (
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">
-                Connect to load saved accounts. Your desktop may ask you to
-                unlock secure storage.
+                Choose Connect account service to check secure storage and show
+                your saved accounts and sign-in options. Your computer may ask
+                you to unlock its password storage first.
               </p>
               <Button
                 disabled={busy !== null}
@@ -763,53 +1124,6 @@ export function WorkspaceConnections() {
               </Button>
             </div>
           )}
-          {flows.map((flow) => (
-            <div
-              key={flow.flow_id}
-              role="status"
-              className="space-y-2 rounded border border-border p-3 text-sm"
-            >
-              {flow.status === 'waiting' && (
-                <>
-                  <p>
-                    Complete {providerNames[flow.provider]} sign-in in your
-                    browser.
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy !== null}
-                      onClick={() => void cancel(flow.flow_id)}
-                    >
-                      Cancel {providerNames[flow.provider]} sign-in
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busy !== null}
-                      onClick={() => {
-                        setError(null)
-                        setPollingPaused(false)
-                        setFlows((current) => [...current])
-                      }}
-                    >
-                      Check sign-in status
-                    </Button>
-                  </div>
-                </>
-              )}
-              {flow.status === 'connected' && (
-                <p>{providerNames[flow.provider]} account connected.</p>
-              )}
-              {flow.status === 'cancelled' && <p>Sign-in cancelled.</p>}
-              {flow.status === 'failed' && (
-                <p className="text-destructive">
-                  {flow.error || 'Sign-in failed. Try connecting again.'}
-                </p>
-              )}
-            </div>
-          ))}
           {view &&
             providers.map((provider) => (
               <ProviderCard
@@ -823,17 +1137,41 @@ export function WorkspaceConnections() {
                   (account) => account.provider === provider
                 )}
                 selectedAccount={view.selected_accounts[provider]}
+                authFlow={flows.find((flow) => flow.provider === provider)}
+                authError={authErrors[provider]}
+                refreshing={loading}
+                busy={busy !== null}
                 disabled={disabled}
+                onCancelAuth={cancel}
+                onCheckAuth={() => {
+                  setError(null)
+                  setPollingPaused(false)
+                  setFlows((current) => [...current])
+                }}
+                onRefreshAccounts={loadAccounts}
+                onRestartAuth={() => {
+                  setFlows((current) =>
+                    current.filter((flow) => flow.provider !== provider)
+                  )
+                  setAuthErrors((current) => ({
+                    ...current,
+                    [provider]: undefined,
+                  }))
+                }}
                 onConfigure={(request) =>
                   perform('Saving registration', async () =>
                     acceptSnapshot(await configureConnector(request))
                   )
                 }
-                onImportGoogle={(file) =>
-                  perform('Importing Google registration', async () =>
+                onImportGoogle={async (file) => {
+                  setBusy('Importing Google registration')
+                  setError(null)
+                  try {
                     acceptSnapshot(await importGoogleDesktopRegistration(file))
-                  )
-                }
+                  } finally {
+                    setBusy(null)
+                  }
+                }}
                 onConnect={connect}
                 onSelect={(account) =>
                   perform('Selecting default account', async () =>
