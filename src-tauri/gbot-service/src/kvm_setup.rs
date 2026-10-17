@@ -1229,7 +1229,7 @@ fn readiness_editor_command(id: WorkspaceId, path: &GuestPath) -> String {
     // away from both the user's settings and their unsaved recovery documents.
     // systemd removes the private runtime directory when this exact unit stops.
     format!(
-        r#"systemctl --user stop {unit}.service 2>/dev/null; systemctl --user reset-failed {unit}.service 2>/dev/null; systemd-run --user --collect --unit={unit} --property=RuntimeDirectory={unit} --property=RuntimeDirectoryMode=0700 --property=RuntimeDirectoryPreserve=no /usr/local/bin/gbot-in-session /bin/sh -c 'set -eu; : "${{RUNTIME_DIRECTORY:?}}"; export GSETTINGS_BACKEND=memory XDG_CONFIG_HOME="$RUNTIME_DIRECTORY/config" XDG_DATA_HOME="$RUNTIME_DIRECTORY/data" XDG_CACHE_HOME="$RUNTIME_DIRECTORY/cache" XDG_STATE_HOME="$RUNTIME_DIRECTORY/state"; exec mousepad --disable-server "$1"' sh {}"#,
+        r#"systemctl --user stop {unit}.service 2>/dev/null; systemctl --user reset-failed {unit}.service 2>/dev/null; systemd-run --user --collect --expand-environment=no --unit={unit} --property=RuntimeDirectory={unit} --property=RuntimeDirectoryMode=0700 --property=RuntimeDirectoryPreserve=no /usr/local/bin/gbot-in-session /bin/sh -c 'set -eu; : "${{RUNTIME_DIRECTORY:?}}"; export GSETTINGS_BACKEND=memory XDG_CONFIG_HOME="$RUNTIME_DIRECTORY/config" XDG_DATA_HOME="$RUNTIME_DIRECTORY/data" XDG_CACHE_HOME="$RUNTIME_DIRECTORY/cache" XDG_STATE_HOME="$RUNTIME_DIRECTORY/state"; exec mousepad --disable-server "$1"' sh {}"#,
         path.0
     )
 }
@@ -2134,6 +2134,7 @@ mod tests {
             assert!(command.contains(&format!(
                 "--unit={unit} --property=RuntimeDirectory={unit} "
             )));
+            assert!(command.contains("systemd-run --user --collect --expand-environment=no "));
             assert!(command.contains("--property=RuntimeDirectoryMode=0700"));
             assert!(command.contains("--property=RuntimeDirectoryPreserve=no"));
             assert!(command.contains(": \"${RUNTIME_DIRECTORY:?}\""));
