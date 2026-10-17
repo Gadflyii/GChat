@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -55,7 +55,12 @@ function WorkspaceSchedules({
   const [policy, setPolicy] = useState<'run_latest' | 'skip_missed'>(
     'run_latest'
   )
-  const [busy, setBusy] = useState(false)
+  const [pending, setPending] = useState<{
+    label: string
+    scheduleId?: string
+  }>()
+  const pendingRef = useRef(false)
+  const busy = !!pending
   const [error, setError] = useState('')
   const [stopped, setStopped] = useState<string | null>(null)
   const refresh = useCallback(async () => {
@@ -81,8 +86,14 @@ function WorkspaceSchedules({
     }
   }, [refresh])
 
-  async function perform(action: () => Promise<unknown>) {
-    setBusy(true)
+  async function perform(
+    label: string,
+    action: () => Promise<unknown>,
+    scheduleId?: string
+  ) {
+    if (pendingRef.current) return
+    pendingRef.current = true
+    setPending({ label, scheduleId })
     setError('')
     try {
       await action()
@@ -90,7 +101,8 @@ function WorkspaceSchedules({
     } catch (cause) {
       setError(String(cause))
     } finally {
-      setBusy(false)
+      pendingRef.current = false
+      setPending(undefined)
     }
   }
 
@@ -110,6 +122,11 @@ function WorkspaceSchedules({
       {error && (
         <p role="alert" className="mb-3 text-sm text-destructive">
           {error}
+        </p>
+      )}
+      {pending && (
+        <p role="status" className="mb-3 text-sm text-muted-foreground">
+          {pending.label}
         </p>
       )}
       <details>
@@ -149,15 +166,24 @@ function WorkspaceSchedules({
               variant="outline"
               disabled={busy}
               onClick={() =>
-                void perform(() =>
-                  gbot('schedules/enabled', {
-                    id: schedule.id,
-                    enabled: !schedule.enabled,
-                  })
+                void perform(
+                  schedule.enabled
+                    ? 'Disabling schedule…'
+                    : 'Enabling schedule…',
+                  () =>
+                    gbot('schedules/enabled', {
+                      id: schedule.id,
+                      enabled: !schedule.enabled,
+                    }),
+                  schedule.id
                 )
               }
             >
-              {schedule.enabled ? 'Disable schedule' : 'Enable schedule'}
+              {pending?.scheduleId === schedule.id
+                ? pending.label
+                : schedule.enabled
+                  ? 'Disable schedule'
+                  : 'Enable schedule'}
             </Button>
             {!!schedule.occurrences.length && (
               <details>
@@ -187,6 +213,7 @@ function WorkspaceSchedules({
           className="mt-3 space-y-3"
           onSubmit={(event) => {
             event.preventDefault()
+            if (pendingRef.current || !assignment || stopped) return
             const timestamp = Math.floor(new Date(at).getTime() / 1000)
             if (
               !Number.isFinite(timestamp) ||
@@ -201,7 +228,7 @@ function WorkspaceSchedules({
               )
               return
             }
-            void perform(async () => {
+            void perform('Creating schedule…', async () => {
               await gbot('schedules/create', {
                 workspace_id: workspaceId,
                 prompt,
@@ -294,7 +321,7 @@ function WorkspaceSchedules({
           <Button
             disabled={busy || !!stopped || !assignment || !prompt.trim() || !at}
           >
-            Create schedule
+            {pending && !pending.scheduleId ? pending.label : 'Create schedule'}
           </Button>
         </form>
       </details>
