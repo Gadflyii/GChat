@@ -23,6 +23,10 @@ vi.mock('@/services/agent/tauri', () => ({
   statAgentWorkspaceFile: native.stat,
   readAgentWorkspaceText: native.read,
 }))
+vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@tauri-apps/api/core')>()),
+  convertFileSrc: (path: string) => `asset://localhost${path}`,
+}))
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
@@ -48,6 +52,7 @@ const firstFile = {
   relativePath: 'notes/first.txt',
 }
 const secondFile = { ...firstFile, relativePath: 'notes/second.txt' }
+const imageFile = { ...firstFile, relativePath: 'images/picture.png' }
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -105,6 +110,85 @@ beforeEach(() => {
 })
 
 describe('Agent workspace file preview recovery', () => {
+  it('recovers an image decode failure by retrying the same file without losing open tabs', async () => {
+    const retry = deferred<AgentWorkspaceFile>()
+    const image = { ...file(imageFile.relativePath), extension: 'png' }
+    native.stat
+      .mockResolvedValueOnce(image)
+      .mockReturnValueOnce(retry.promise)
+    useWorkspacePreviewStore.getState().openArtifact('Review artifact')
+    useWorkspacePreviewStore.getState().openFile(imageFile)
+    render(<AgentWorkspacePreview />)
+
+    const initialImage = await screen.findByRole('img', { name: 'picture.png' })
+    expect(initialImage).toHaveAttribute(
+      'src',
+      `asset://localhost${image.absolutePath}`
+    )
+    fireEvent.error(initialImage)
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not preview this file.'
+    )
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review artifact' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'picture.png' })).toBeVisible()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry preview' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading preview…')
+    expect(native.stat).toHaveBeenNthCalledWith(1, imageFile)
+    expect(native.stat).toHaveBeenNthCalledWith(2, imageFile)
+
+    await complete(retry, image)
+    const recoveredImage = await screen.findByRole('img', {
+      name: 'picture.png',
+    })
+    fireEvent.load(recoveredImage)
+    expect(recoveredImage).toHaveAttribute(
+      'src',
+      `asset://localhost${image.absolutePath}`
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review artifact' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'picture.png' })).toBeVisible()
+    expect(native.read).not.toHaveBeenCalled()
+  })
+
+  it.each(['success', 'failure'] as const)(
+    'does not restore a closed image preview after its retry %s',
+    async (outcome) => {
+      const retry = deferred<AgentWorkspaceFile>()
+      const image = { ...file(imageFile.relativePath), extension: 'png' }
+      native.stat
+        .mockResolvedValueOnce(image)
+        .mockReturnValueOnce(retry.promise)
+      useWorkspacePreviewStore.getState().openFile(imageFile)
+      render(<AgentWorkspacePreview />)
+
+      fireEvent.error(await screen.findByRole('img', { name: 'picture.png' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Retry preview' }))
+      expect(screen.getByRole('status')).toHaveTextContent('Loading preview…')
+      expect(native.stat).toHaveBeenNthCalledWith(2, imageFile)
+      fireEvent.click(screen.getByRole('button', { name: 'Close picture.png' }))
+
+      if (outcome === 'success') {
+        await complete(retry, image)
+      } else {
+        await fail(retry, 'The closed image is no longer available')
+      }
+
+      expect(screen.queryByRole('img')).not.toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'picture.png' })
+      ).not.toBeInTheDocument()
+      expect(useWorkspacePreviewStore.getState().tabs).toEqual([])
+      expect(native.read).not.toHaveBeenCalled()
+    }
+  )
+
   it('retries a failed file stat for the exact selected file and announces loading', async () => {
     const initial = deferred<AgentWorkspaceFile>()
     const retry = deferred<AgentWorkspaceFile>()
