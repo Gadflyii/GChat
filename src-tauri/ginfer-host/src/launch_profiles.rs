@@ -236,25 +236,18 @@ impl LaunchProfile {
     }
 
     pub fn verify_payload(&self, path: &Path) -> Result<(), String> {
-        use sha2::{Digest, Sha256};
-        use std::io::Read;
-        let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
-        if file.metadata().map_err(|e| e.to_string())?.len() != self.artifact_bytes {
-            return Err("profile artifact size mismatch".into());
-        }
-        let mut digest = Sha256::new();
-        let mut buffer = vec![0u8; 1024 * 1024];
-        loop {
-            let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
-            if read == 0 {
-                break;
-            }
-            digest.update(&buffer[..read]);
-        }
-        if hex::encode(digest.finalize()) != self.artifact_sha256 {
-            return Err("profile does not qualify this artifact payload".into());
-        }
-        Ok(())
+        crate::payload_verification::verify(path, &self.artifact_sha256, self.artifact_bytes, None)
+            .map(|_| ())
+            .map_err(profile_verification_error)
+    }
+}
+
+// Keep the existing qualification errors for callers and the Manager UI.
+pub(crate) fn profile_verification_error(error: String) -> String {
+    match error.as_str() {
+        "payload size mismatch" => "profile artifact size mismatch".into(),
+        "SHA256 mismatch" => "profile does not qualify this artifact payload".into(),
+        _ => error,
     }
 }
 
