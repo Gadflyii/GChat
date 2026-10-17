@@ -38,8 +38,12 @@ export function validRelease(value: unknown): value is ModelRelease {
       r.launch_profiles.every(p => p !== null && typeof p === 'object' && !Array.isArray(p))))
 }
 
+/** The one rule for offering a release: well-formed and published with a tested launch profile. Models and Welcome both use it. */
+export const releaseVerified = (release: unknown): release is ModelRelease =>
+  validRelease(release) && !!release.launch_profiles?.length
+
 export function releaseReadiness(release: unknown, gpus: ModelGpu[]) {
-  if (!validRelease(release)) return { available: false, reason: 'Release not published with verified compatibility, size and checksum.', gpuIds: [] as string[] }
+  if (!releaseVerified(release)) return { available: false, reason: 'Release not published with verified compatibility, size and checksum.', gpuIds: [] as string[] }
   if (!gpus.length) return { available: false, reason: 'No NVIDIA GPU detected on this host. Select a paired LAN host.', gpuIds: [] as string[] }
   const groups = new Map<string, ModelGpu[]>()
   for (const gpu of gpus) {

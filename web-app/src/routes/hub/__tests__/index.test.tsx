@@ -42,7 +42,7 @@ vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (s: u
 }) }))
 const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: 'muse', weights_id: 'nvfp4' },
   url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64), bytes: 4096,
-  tp: 1, qualified_sm: ['12.0'], min_vram_mib_per_gpu: 32768, capabilities: ['tools'] }
+  tp: 1, qualified_sm: ['12.0'], min_vram_mib_per_gpu: 32768, capabilities: ['tools'], launch_profiles: [{ id: 'c1' }] }
 describe('host-scoped Models', () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null

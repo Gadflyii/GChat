@@ -986,6 +986,11 @@ Fixed (one branch each, rows in the open-work list):
   then try again.' Not done: a maintenance-time out-of-space error is only logged, and the original exit was
   also caused by the profile-copy loop fixed under `GUI-JOURNEY-PROFILE-INSTALL-LOOP`.
 - `GUI-JOURNEY-PROFILE-PROGRESS-LAYOUT`: the profiling bar and Cancel profiling no longer overlap.
+- `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`: Welcome and Models share `releaseVerified` (`lib/model-release.ts`); a release
+  without a tested launch profile is not offered on Welcome (plain empty state) and is not downloadable in Models.
+
+Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
+`GUI-JOURNEY-LOAD-WITHOUT-PROFILE`, `GUI-JOURNEY-JARGON`,
 - `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`: a failed selected download shows 'Try again' and 'Choose a different model'
   (new first-run action `reselect`, which also discards the failed partial and returns to model choice). A selected
   download deleted on Models releases the whole selection (`first_run::reconcile`), so it no longer pins Welcome or

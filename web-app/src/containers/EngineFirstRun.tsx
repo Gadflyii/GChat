@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { engineCommand, type EngineHardwareProfile } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { plainModelName, plainStartupModelName, gpuCardName } from '@/lib/engine-host-labels'
-import { diskSpaceWarning, downloadStatusLabel, formatModelBytes, type ModelDownload, type ModelRelease } from '@/lib/model-release'
+import { diskSpaceWarning, downloadStatusLabel, formatModelBytes, releaseVerified, type ModelDownload, type ModelRelease } from '@/lib/model-release'
 
 type FirstRun = {
   step: 'gpu' | 'profiling' | 'storage' | 'models' | 'downloads' | 'startup' | 'complete'
@@ -99,7 +99,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       setGpus(flow.gpu_uuids)
     }
     if (!pathEdited.current) setPath(flow.storage.requested_path || flow.storage.recommended_path || flow.storage.path)
-    if (!releasesEdited.current) setReleases(flow.selected_release_ids?.length ? flow.selected_release_ids : flow.models.filter(model => model.recommended).map(model => model.release_id ?? model.release.sha256))
+    if (!releasesEdited.current) setReleases(flow.selected_release_ids?.length ? flow.selected_release_ids : flow.models.filter(model => model.recommended && releaseVerified(model.release)).map(model => model.release_id ?? model.release.sha256))
     // Polls update saved choices and recommendations without replacing edits.
   }, [flow])
   const act = async (args: Record<string, unknown>) => {
@@ -128,6 +128,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const selected = known.filter(gpu => gpus.includes(gpu.uuid))
   const validGroup = [1, 2, 4].includes(gpus.length) && selected.length === gpus.length && selected.every(gpu => gpu.name === selected[0].name && gpu.compute_capability === selected[0].compute_capability)
   const unavailable = error || (localId && errors[localId])
+  const offered = (flow?.models ?? []).filter(model => releaseVerified(model.release))
   const profiling = step === 'profiling'
   const hardware = flow?.hardware_profile
   const selectedScope = hardware?.scope === 'artifact'
@@ -176,8 +177,8 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     </div>}
     {choosing && <fieldset className="space-y-3" disabled={busy}><legend className="font-medium">Choose models to download</legend>
       <p className="text-sm text-muted-foreground">Select a model below, then select {step === 'models' ? 'Download selected models' : 'Save model choices'}. {profiling ? 'Downloads start after the hardware measurement finishes. ' : ''}Recommendations consider your graphics cards and free space. GInfer checks the downloaded files, builds the profile needed by each selected model, and checks memory before it can start.</p>
-      {flow?.models.map(model => { const id = model.release_id ?? model.release.sha256; return <label key={id} className="block rounded border p-3 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={releases.includes(id)} onChange={() => { releasesEdited.current = true; setReleases(toggle(releases, id)) }} />{plainModelName(model.release.name)} · {formatModelBytes(model.release.bytes)}{model.recommended ? ' · Recommended' : ''}</span><span className="mt-1 block text-muted-foreground">{model.reason}</span></label> })}
-      {!flow?.models.length && <p role="status">{flow?.catalog_loaded === false && !flow.error ? 'Loading published model catalog…' : 'No model downloads are available for these graphics cards. Downloads are optional: use an existing .ginfer model from Installed models, or add its folder there. If you expect a download catalog, select Refresh model catalog.'}</p>}
+      {offered.map(model => { const id = model.release_id ?? model.release.sha256; return <label key={id} className="block rounded border p-3 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={releases.includes(id)} onChange={() => { releasesEdited.current = true; setReleases(toggle(releases, id)) }} />{plainModelName(model.release.name)} · {formatModelBytes(model.release.bytes)}{model.recommended ? ' · Recommended' : ''}</span><span className="mt-1 block text-muted-foreground">{model.reason}</span></label> })}
+      {!offered.length && <p role="status">{flow?.catalog_loaded === false && !flow.error ? 'Loading published model catalog…' : 'No model downloads are available for these graphics cards. Downloads are optional: use an existing .ginfer model from Installed models, or add its folder there. If you expect a download catalog, select Refresh model catalog.'}</p>}
       {!profiling && (snapshot?.model_management?.downloads ?? []).filter(job => job.status === 'installed' && job.path && !job.path.startsWith(`${flow?.storage.path}/`) && !job.path.startsWith(`${flow?.storage.path}\\`)).map(job => <div key={job.id} className="space-y-2 rounded border p-3 text-sm"><p>{plainModelName(job.release.name)} is already on this computer. Keep it where it is, or move it to your selected model folder.</p><details><summary className="cursor-pointer">Folder details</summary><p>Current folder: {job.path}</p><p>Selected folder: {flow?.storage.path}</p></details><Button variant="outline" onClick={() => void act({ action: 'move', download_id: job.id })}>Move {plainModelName(job.release.name)} to selected storage</Button></div>)}
       {profiling && !!flow?.selected_release_ids?.length && <p role="status">Model choices saved. Downloads will begin after the hardware measurement and folder check finish.</p>}
       {spaceWarning && <p role="alert" className="text-sm text-destructive">{spaceWarning.text}</p>}
