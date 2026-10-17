@@ -815,6 +815,13 @@ impl HardwareProfiles {
     pub fn busy(&self) -> bool {
         self.state.lock().unwrap().cancel.is_some()
     }
+    /// True while a job other than idle completion owns the profiler. Idle
+    /// completion is not first-run work: first-run maintenance cancels it, and
+    /// counting it as pending work would cancel and restart it without end.
+    pub fn foreground_busy(&self) -> bool {
+        let state = self.state.lock().unwrap();
+        state.cancel.is_some() && state.record.scope != ProfileScope::CompleteRemainingFormats
+    }
     pub fn status(&self, fallback: Option<PathBuf>) -> HardwareProfileStatus {
         self.observation(fallback).0
     }
@@ -2163,6 +2170,37 @@ mod tests {
         let done = observed(&job, |view| view.status == "completed").await;
         assert_ne!(done.job_id, previous_job_id);
         assert!(job.artifact_is_accepted(&gpus, &intent));
+    }
+    #[tokio::test]
+    async fn idle_completion_is_not_foreground_profile_work() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let gpus = vec!["GPU-fixture".to_string()];
+        let cli = directory.path().join("ginfer");
+        job.start_remaining_formats(Some(cli.clone()), gpus.clone())
+            .unwrap();
+        begun(&arguments).await;
+        // First-run maintenance cancels what it counts as pending work. Idle
+        // completion must not count, or it is cancelled and restarted forever,
+        // leaving one private profile copy per cycle.
+        assert!(job.busy());
+        assert!(!job.foreground_busy());
+        job.cancel_background_and_wait().await.unwrap();
+        assert!(!job.busy());
+        std::fs::remove_file(&arguments).unwrap();
+        job.start(HardwareProfileAction::Ensure, Some(cli), gpus)
+            .unwrap();
+        begun(&arguments).await;
+        assert!(job.foreground_busy());
+        request(&host, HardwareProfileAction::Cancel).await.unwrap();
+        observed(&job, |view| view.status == "cancelled").await;
+        assert!(!job.foreground_busy());
     }
     #[tokio::test]
     async fn hardware_profile_background_completion_is_reaped_before_selected_ensure() {

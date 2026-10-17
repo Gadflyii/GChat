@@ -782,7 +782,7 @@ impl Host {
         let Some(job) = job else {
             return needs_maintenance(&progress, &jobs);
         };
-        if job.busy() {
+        if job.foreground_busy() {
             return true;
         }
         for profile in &progress.startup_profiles {
