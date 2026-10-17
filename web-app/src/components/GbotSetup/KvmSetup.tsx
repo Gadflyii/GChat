@@ -33,19 +33,29 @@ export default function KvmSetup({
   const [records, setRecords] = useState<KvmSetupRecord[]>([])
   const [current, setCurrent] = useState<string | null>(initialId ?? null)
   const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
+  const checkPending = useRef(false)
   const newId = useRef(crypto.randomUUID())
   const refresh = useCallback(async () => {
     const saved = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
     setRecords(saved.filter((record) => record.stage !== 'removed'))
   }, [])
   const check = useCallback(async () => {
+    if (checkPending.current) return
+    checkPending.current = true
+    setChecking(true)
+    setPreflight(null)
     setError('')
     try {
-      setPreflight(await gbot<Preflight>('setup/kvm/preflight', {}))
+      const result = await gbot<Preflight>('setup/kvm/preflight', {})
       await refresh()
+      setPreflight(result)
     } catch (cause) {
       setError(String(cause))
+    } finally {
+      checkPending.current = false
+      setChecking(false)
     }
   }, [refresh])
   useEffect(() => {
@@ -105,7 +115,9 @@ export default function KvmSetup({
         computer. Windows Hyper-V setup is not available yet.
       </p>
       {!preflight && !error && (
-        <p role="status">Checking local VM prerequisites…</p>
+        <p role="status" aria-live="polite">
+          Checking local VM prerequisites…
+        </p>
       )}
       {preflight?.issues.map((issue, index) => (
         <div
@@ -119,15 +131,15 @@ export default function KvmSetup({
       <Button
         type="button"
         variant="outline"
-        disabled={busy}
+        disabled={busy || checking}
         onClick={() => void check()}
       >
-        Check prerequisites again
+        {checking ? 'Checking prerequisites…' : 'Check prerequisites again'}
       </Button>
       {!initialId && !current && (
         <Button
           type="button"
-          disabled={busy || !preflight?.ready}
+          disabled={busy || checking || !preflight?.ready}
           onClick={() => void act('start')}
         >
           {busy ? 'Starting setup…' : `Create ${name.trim()}’s computer`}
@@ -158,7 +170,7 @@ export default function KvmSetup({
                 {saved.stage === 'ready' ? (
                   <Button
                     type="button"
-                    disabled={busy}
+                    disabled={busy || checking}
                     onClick={() =>
                       void connected(saved.id).catch((cause) =>
                         setError(String(cause))
@@ -171,7 +183,10 @@ export default function KvmSetup({
                   <Button
                     type="button"
                     disabled={
-                      busy || !preflight?.ready || saved.stage === 'removing'
+                      busy ||
+                      checking ||
+                      !preflight?.ready ||
+                      saved.stage === 'removing'
                     }
                     onClick={() => void act('start', saved)}
                   >
@@ -181,7 +196,7 @@ export default function KvmSetup({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={busy}
+                  disabled={busy || checking}
                   onClick={() => void act('remove', saved)}
                 >
                   Remove owned computer
