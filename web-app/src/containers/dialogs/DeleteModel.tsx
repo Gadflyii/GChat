@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -14,7 +13,7 @@ import { deleteLocalModel } from '@/lib/model-deletion'
 
 import { IconTrash } from '@tabler/icons-react'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 
@@ -28,34 +27,53 @@ export const DialogDeleteModel = ({
   modelId,
 }: DialogDeleteModelProps) => {
   const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
   const [selectedModelId, setSelectedModelId] = useState<string>('')
+  const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const deletionPending = useRef(false)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const serviceHub = useServiceHub()
 
   const removeModel = async () => {
+    if (deletionPending.current) return
+    deletionPending.current = true
+    setDeleting(true)
+    setError(null)
+    // Keep the result bound to the submitted model even if inventory refreshes.
+    const deletingModelId = selectedModelId
     try {
-      await deleteLocalModel(serviceHub, selectedModelId, provider.provider)
+      await deleteLocalModel(serviceHub, deletingModelId, provider.provider)
+      setOpen(false)
       toast.success(
-        t('providers:deleteModel.title', { modelId: selectedModelId }),
+        t('providers:deleteModel.title', { modelId: deletingModelId }),
         {
-          id: `delete-model-${selectedModelId}`,
+          id: `delete-model-${deletingModelId}`,
           description: t('providers:deleteModel.success', {
-            modelId: selectedModelId,
+            modelId: deletingModelId,
           }),
         }
       )
     } catch (error) {
-      // Previously this rejection was dropped on the floor while the model had
-      // already been removed from the cache: the row vanished, the weights
-      // stayed, and it reappeared on the next provider refresh.
+      setError(error instanceof Error ? error.message : String(error))
       console.error('[DialogDeleteModel] deleteModel failed:', error)
       toast.error(
-        t('providers:deleteModel.title', { modelId: selectedModelId }),
+        t('providers:deleteModel.title', { modelId: deletingModelId }),
         {
-          id: `delete-model-${selectedModelId}`,
+          id: `delete-model-${deletingModelId}`,
           description: error instanceof Error ? error.message : String(error),
         }
       )
+    } finally {
+      deletionPending.current = false
+      setDeleting(false)
     }
+  }
+
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (deletionPending.current) return
+    setError(null)
+    setOpen(nextOpen)
   }
 
   // Initialize with the provided model ID or the first model if available
@@ -78,17 +96,33 @@ export const DialogDeleteModel = ({
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <div
-          className="size-6 cursor-pointer flex items-center justify-center rounded transition-all duration-200 ease-in-out"
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="cursor-pointer flex items-center justify-center rounded transition-all duration-200 ease-in-out"
           title={t('providers:deleteModel.delete')}
           aria-label={t('providers:deleteModel.delete')}
         >
           <IconTrash size={18} className="text-muted-foreground" />
-        </div>
+        </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent
+        aria-busy={deleting}
+        showCloseButton={!deleting}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          cancelButtonRef.current?.focus()
+        }}
+        onEscapeKeyDown={(event) => {
+          if (deletionPending.current) event.preventDefault()
+        }}
+        onInteractOutside={(event) => {
+          if (deletionPending.current) event.preventDefault()
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {t('providers:deleteModel.title', { modelId: selectedModel.id })}
@@ -98,22 +132,33 @@ export const DialogDeleteModel = ({
           </DialogDescription>
         </DialogHeader>
 
+        {error !== null && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
         <DialogFooter className="mt-2">
-          <DialogClose asChild>
-            <Button variant="ghost" size="sm">
-              {t('providers:deleteModel.cancel')}
-            </Button>
-          </DialogClose>
-          <DialogClose asChild>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={removeModel}
-              autoFocus
-            >
-              {t('providers:deleteModel.delete')}
-            </Button>
-          </DialogClose>
+          <Button
+            ref={cancelButtonRef}
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => handleOpenChange(false)}
+            disabled={deleting}
+          >
+            {t('providers:deleteModel.cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => void removeModel()}
+            disabled={deleting}
+            aria-busy={deleting}
+            aria-label={t('providers:deleteModel.delete')}
+          >
+            {deleting ? t('common:loading') : t('providers:deleteModel.delete')}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
