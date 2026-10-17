@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentSkillDetail } from '@/services/agent/skills'
 import type { DialogService } from '@/services/dialog/types'
@@ -49,24 +50,6 @@ vi.mock('@/hooks/useAgentSkills', () => ({
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
-}))
-
-vi.mock('@/components/ui/dialog', () => ({
-  Dialog: ({ children, open }: { children: ReactNode; open: boolean }) =>
-    open ? <div role="dialog">{children}</div> : null,
-  DialogContent: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogDescription: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogFooter: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogHeader: ({ children }: { children: ReactNode }) => (
-    <div>{children}</div>
-  ),
-  DialogTitle: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }))
 
 vi.mock('@/components/ui/dropdown-menu', () => ({
@@ -122,10 +105,12 @@ const otherSkill: AgentSkillDetail = {
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((done) => {
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((done, fail) => {
     resolve = done
+    reject = fail
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 function clickMenuEdit(skill: AgentSkillDetail) {
@@ -135,6 +120,16 @@ function clickMenuEdit(skill: AgentSkillDetail) {
   fireEvent.click(
     within(row).getByRole('button', { name: 'common:editSkill' })
   )
+}
+
+function openDeleteConfirmation(skill: AgentSkillDetail) {
+  const row = screen.getByRole('button', {
+    name: `${skill.name} ${skill.description}`,
+  }).parentElement as HTMLElement
+  fireEvent.click(
+    within(row).getByRole('button', { name: 'common:uninstallSkill' })
+  )
+  return screen.getByRole('dialog', { name: 'common:deleteSkill' })
 }
 
 describe('SkillsPage', () => {
@@ -179,6 +174,7 @@ describe('SkillsPage', () => {
         '/tmp/imported.skill'
       )
     )
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 
     fireEvent.click(screen.getByText('common:writeSkillInstructions'))
     expect(screen.getAllByText('common:writeSkillInstructions')).toHaveLength(2)
@@ -213,7 +209,7 @@ describe('SkillsPage', () => {
     })
   })
 
-  it('shows modular skill details without badges and confirms uninstall', () => {
+  it('shows modular skill details without badges and confirms uninstall', async () => {
     render(<SkillsPage />)
 
     expect(
@@ -228,6 +224,93 @@ describe('SkillsPage', () => {
     const dialog = screen.getByRole('dialog')
     fireEvent.click(within(dialog).getByText('common:delete'))
     expect(hookState.value.remove).toHaveBeenCalledWith('custom-skill')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it('focuses Cancel when confirming deletion so Enter does not delete a skill', async () => {
+    const user = userEvent.setup()
+    render(<SkillsPage />)
+    const dialog = openDeleteConfirmation(customSkill)
+
+    await waitFor(() =>
+      expect(within(dialog).getByRole('button', { name: 'common:cancel' })).toHaveFocus()
+    )
+    await user.keyboard('{Enter}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(hookState.value.remove).not.toHaveBeenCalled()
+  })
+
+  it('submits one skill deletion when Delete is activated twice in the same turn', async () => {
+    const deletion = deferred<void>()
+    hookState.value.remove.mockReturnValue(deletion.promise)
+    render(<SkillsPage />)
+    const dialog = openDeleteConfirmation(customSkill)
+    const deleteButton = within(dialog).getByRole('button', { name: 'common:delete' })
+
+    act(() => {
+      deleteButton.click()
+      deleteButton.click()
+    })
+
+    expect(hookState.value.remove).toHaveBeenCalledExactlyOnceWith(customSkill.name)
+    expect(within(dialog).getByRole('button', { name: 'common:loading' })).toBeDisabled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    await act(async () => deletion.resolve(undefined))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(hookState.value.remove).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the delete confirmation open through Escape and Cancel until deletion succeeds', async () => {
+    const deletion = deferred<void>()
+    hookState.value.remove.mockReturnValue(deletion.promise)
+    render(<SkillsPage />)
+    const dialog = openDeleteConfirmation(customSkill)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'common:delete' }))
+
+    const cancel = within(dialog).getByRole('button', { name: 'common:cancel' })
+    expect(cancel).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'common:loading' })).toBeDisabled()
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+    fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' })
+    fireEvent.click(cancel)
+
+    expect(screen.getByRole('dialog', { name: 'common:deleteSkill' })).toBeInTheDocument()
+    expect(hookState.value.remove).toHaveBeenCalledExactlyOnceWith(customSkill.name)
+
+    await act(async () => deletion.resolve(undefined))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps a failed delete confirmation and retries its original skill after selection changes', async () => {
+    const failed = deferred<void>()
+    const retry = deferred<void>()
+    hookState.value.skills = [customSkill, otherSkill]
+    hookState.value.selected = otherSkill
+    hookState.value.remove.mockReturnValueOnce(failed.promise).mockReturnValueOnce(retry.promise)
+    const view = render(<SkillsPage />)
+    const dialog = openDeleteConfirmation(otherSkill)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'common:delete' }))
+    hookState.value.selected = customSkill
+    view.rerender(<SkillsPage />)
+
+    await act(async () => failed.reject(new Error('Could not remove other-skill')))
+
+    expect(screen.getByRole('dialog', { name: 'common:deleteSkill' })).toBeInTheDocument()
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Could not remove other-skill')
+    expect(within(dialog).getByRole('button', { name: 'common:cancel' })).toBeEnabled()
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled()
+    const retryButton = within(dialog).getByRole('button', { name: 'common:delete' })
+    expect(retryButton).toBeEnabled()
+    fireEvent.click(retryButton)
+    expect(hookState.value.remove.mock.calls).toEqual([[otherSkill.name], [otherSkill.name]])
+
+    await act(async () => retry.resolve(undefined))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('keeps malformed bundled skills visible and hides custom actions', () => {
