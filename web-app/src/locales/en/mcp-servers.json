@@ -1,6 +1,6 @@
 {
-  "editServer": "Edit MCP Server",
-  "addServer": "Add MCP Server",
+  "editServer": "Edit tool connection",
+  "addServer": "Add tool connection",
   "browserExtension": {
     "connecting": {
       "checking": "Checking extension status..."
@@ -11,62 +11,63 @@
       "getExtension": "Get Extension"
     }
   },
-  "serverName": "Server Name",
-  "enterServerName": "Enter server name",
-  "command": "Command",
-  "enterCommand": "Enter command (uvx or npx)",
-  "arguments": "Arguments",
+  "serverName": "Connection name",
+  "enterServerName": "A name you will recognize, such as My calendar",
+  "command": "Start command",
+  "enterCommand": "Paste the command from the tool provider",
+  "arguments": "Command options (arguments)",
   "argument": "Argument {{index}}",
-  "envVars": "Environment Variables",
+  "envVars": "Extra settings (environment variables)",
   "key": "Key",
   "value": "Value",
-  "save": "Save",
+  "save": "Save connection",
   "status": "Status",
   "connected": "Connected",
   "disconnected": "Disconnected",
   "deleteServer": {
-    "title": "Delete MCP Server",
-    "description": "Are you sure you want to delete the MCP server {{serverName}}? This action cannot be undone.",
-    "delete": "Delete",
-    "success": "MCP server {{serverName}} deleted successfully"
+    "title": "Remove tool connection?",
+    "description": "Remove {{serverName}} from GChat. To use it again, you will need to add its connection details again.",
+    "delete": "Remove connection",
+    "success": "{{serverName}} connection removed"
   },
   "editJson": {
-    "title": "Edit JSON for MCP Server: {{serverName}}",
-    "titleAll": "Edit All MCP Servers JSON",
-    "placeholder": "Enter JSON configuration",
+    "title": "Advanced connection settings: {{serverName}}",
+    "titleAll": "Advanced settings for all tool connections",
+    "placeholder": "Paste the JSON settings from the tool provider",
     "errorParse": "Failed to parse initial data",
     "errorPaste": "Invalid JSON format in pasted content",
     "errorFormat": "Invalid JSON format",
     "errorServerName": "Server name is required and cannot be empty",
     "errorMissingServerNameKey": "JSON must be structured as {\"serverName\": {config}} - missing server name key",
     "errorInvalidType": "Invalid type '{{type}}' for server '{{serverName}}'. Type must be 'stdio', 'http', or 'sse'",
-    "save": "Save"
+    "save": "Save connection settings"
   },
-  "checkParams": "Please check the parameters according to the tutorial.",
-  "title": "MCP Servers",
+  "checkParams": "Check the connection details against the tool provider’s instructions, then try enabling it again.",
+  "title": "Tool connections (MCP)",
   "experimental": "Experimental",
-  "editAllJson": "Edit All Servers JSON",
-  "findMore": "Find more MCP servers at",
-  "allowPermissions": "Allow All MCP Tool Permissions",
-  "allowPermissionsDesc": "When enabled, all MCP tool calls will be automatically approved without showing permission dialogs. This setting applies globally to all conversations, including new chats.",
-  "noServers": "No MCP servers found",
-  "args": "Args",
-  "env": "Env",
-  "serverStatusActive": "Server {{serverKey}} activated successfully",
-  "serverStatusInactive": "Server {{serverKey}} deactivated successfully",
+  "editAllJson": "Edit advanced connection settings (JSON)",
+  "findMore": "Browse tools that support MCP at",
+  "allowPermissions": "Run connected tools without asking",
+  "allowPermissionsDesc": "Automatically approve tools from these connections in every conversation. Leave this off to review requests before a tool runs.",
+  "noServers": "No tool connections yet. Select Add tool connection to connect a tool from another app or service.",
+  "args": "Command options",
+  "env": "Extra settings",
+  "serverStatusActive": "{{serverKey}} connection turned on",
+  "serverStatusInactive": "{{serverKey}} connection turned off",
   "runtimeSettings": {
-    "title": "Runtime Settings",
-    "description": "Configure how GChat manages and retries MCP servers.",
-    "toolCallTimeout": "Tool call timeout (seconds)",
-    "toolCallTimeoutDesc": "Maximum time to wait for an MCP tool response before timing out."
+    "title": "Tool response settings",
+    "description": "Choose how long GChat waits for connected tools.",
+    "toolCallTimeout": "Time allowed for a tool response (seconds)",
+    "toolCallTimeoutDesc": "How long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer."
   },
   "tabs": {
-    "servers": "Servers",
+    "servers": "Connections",
     "logs": "Logs"
   },
   "logs": {
     "allServers": "All servers",
     "serverFilterLabel": "Filter by server",
-    "noLogs": "No MCP logs yet"
-  }
+    "noLogs": "No connection activity has been recorded yet"
+  },
+  "description": "MCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below."
 }

@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -92,7 +93,12 @@ export default function AddEditCustomCliDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>Environment Variables</DialogTitle>
+          <DialogTitle>Optional extra settings</DialogTitle>
+          <DialogDescription>
+            Leave these empty unless the Claude Code setup instructions ask for
+            them. Copy each setting’s name and value from those instructions,
+            then select Save settings.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -111,13 +117,15 @@ export default function AddEditCustomCliDialog({
           {/* Environment Variables */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-sm">Environment Variables</label>
-              <div
+              <span className="text-sm">Extra settings (environment variables)</span>
+              <button
+                type="button"
+                aria-label="Add an extra setting"
                 className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
                 onClick={handleAddEnv}
               >
                 <IconPlus size={16} className="text-muted-foreground" />
-              </div>
+              </button>
             </div>
 
             {envVars.map((env, index) => (
@@ -125,22 +133,26 @@ export default function AddEditCustomCliDialog({
                 <Input
                   value={env.key}
                   onChange={(e) => handleEnvKeyChange(index, e.target.value)}
-                  placeholder="Key"
+                  placeholder="Setting name"
+                  aria-label={`Setting ${index + 1} name`}
                   className="flex-1"
                 />
                 <Input
                   value={env.value}
                   onChange={(e) => handleEnvValueChange(index, e.target.value)}
-                  placeholder="Value"
+                  placeholder="Setting value"
+                  aria-label={`Setting ${index + 1} value`}
                   className="flex-1"
                 />
                 {envVars.length > 1 && (
-                  <div
+                  <button
+                    type="button"
+                    aria-label={`Remove extra setting ${index + 1}`}
                     className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
                     onClick={() => handleRemoveEnv(index)}
                   >
                     <IconTrash size={16} className="text-destructive" />
-                  </div>
+                  </button>
                 )}
               </div>
             ))}
@@ -158,7 +170,7 @@ export default function AddEditCustomCliDialog({
             }}
             size="sm"
           >
-            Save
+            Save settings
           </Button>
         </DialogFooter>
       </DialogContent>

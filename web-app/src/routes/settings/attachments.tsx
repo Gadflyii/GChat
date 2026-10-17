@@ -286,6 +286,7 @@ function AttachmentsSettings() {
                 description={t('settings:attachments.maxImageSizeDesc')}
                 actions={
                   <select
+                    aria-label={t('settings:attachments.maxImageSize')}
                     className="border-input bg-background rounded-md border px-2 py-1 text-sm"
                     value={maxImageSizePx}
                     onChange={(e) => setMaxImageSizePx(Number(e.target.value))}

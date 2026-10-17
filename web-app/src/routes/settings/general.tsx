@@ -293,7 +293,11 @@ function General() {
           <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
             {/* General */}
             <Card title={t('common:general')}>
-              <CardItem title="Host name" description="Defaults to this computer’s hostname. This name identifies your host in GChat and on the network." actions={<EngineHostName />} />
+              <CardItem
+                title="Computer name"
+                description="Choose a name you will recognize when connecting to this computer from GChat on another device. Leave it unchanged to use this computer’s existing name."
+                actions={<EngineHostName />}
+              />
               <CardItem
                 title={t('settings:general.appVersion')}
                 actions={
