@@ -908,7 +908,15 @@ impl AccountsState {
         if cancellation.is_cancelled() {
             return Err("Sign-in cancelled".into());
         }
-        self.persist_account(account, refresh, token).await?;
+        self.persist_account(account, refresh, token)
+            .await
+            .map_err(|cause| {
+                let provider = match config.provider {
+                    Provider::Google => "Google",
+                    Provider::Microsoft => "Microsoft",
+                };
+                format!("You signed in with {provider}, but saving the account in GChat failed: {cause}")
+            })?;
         Ok(id)
     }
 
@@ -1781,8 +1789,20 @@ async fn callback_code(
                 continue;
             }
         };
-        let message = b"Sign-in received. Return to GChat to see the result.";
-        let reply = format!("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", message.len());
+        // The browser callback arrives before token exchange and durable credential
+        // storage. Never claim that the account is connected on this page, and never
+        // render provider-controlled query values (including codes or error details).
+        let message = r#"<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Return to GChat</title><style>
+:root{color-scheme:light dark;font-family:system-ui,sans-serif;background:#f6f7fb;color:#171927}
+body{margin:0;min-height:100vh;display:grid;place-items:center}.card{max-width:28rem;margin:1.5rem;padding:2.5rem;border:1px solid #dfe2ed;border-radius:1.25rem;background:#fff;text-align:center}
+.brand{display:inline-grid;place-items:center;width:3rem;height:3rem;border-radius:.8rem;background:#5145cd;color:white;font-size:1.8rem;font-weight:700}.name{font-weight:650;margin:.75rem 0 1.5rem}h1{font-size:1.6rem}p{line-height:1.6;color:#53576c}
+@media(prefers-color-scheme:dark){:root{background:#11121a;color:#f3f4fb}.card{background:#1b1d29;border-color:#35384a}p{color:#c2c6d8}}
+</style></head><body><main class="card"><div class="brand" aria-hidden="true">G</div><div class="name">GChat</div>
+<h1>Sign-in received</h1><p>Return to GChat to see whether your account was connected and saved.</p><p>You can close this tab.</p>
+</main></body></html>"#.as_bytes();
+        let reply = format!("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", message.len());
         let _ = stream.write_all(reply.as_bytes()).await;
         let _ = stream.write_all(message).await;
         if parsed.query_pairs().any(|(key, _)| key == "error") {
@@ -1854,6 +1874,7 @@ mod tests {
     struct MemoryVault {
         values: Mutex<BTreeMap<String, String>>,
         gate: Mutex<Option<Arc<VaultGate>>>,
+        write_error: Mutex<Option<String>>,
     }
     #[derive(Default)]
     struct VaultGate {
@@ -1866,6 +1887,9 @@ mod tests {
             Ok(self.values.lock().unwrap().get(key).cloned())
         }
         fn set(&self, key: &str, value: &str) -> Result<(), String> {
+            if let Some(error) = self.write_error.lock().unwrap().clone() {
+                return Err(error);
+            }
             let gate = self.gate.lock().unwrap().clone();
             if let Some(gate) = gate {
                 gate.entered.notify_one();
@@ -2446,6 +2470,110 @@ mod tests {
         mock_oauth_lifecycle(Provider::Microsoft).await;
     }
 
+    #[tokio::test]
+    async fn successful_provider_signin_reports_save_failure_without_publishing_account() {
+        for provider in [Provider::Microsoft, Provider::Google] {
+            let (_directory, mut state, vault) = fixture();
+            let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+                .await
+                .unwrap();
+            let fixture_state = Arc::get_mut(&mut state).unwrap();
+            fixture_state.oauth_base_override =
+                Some(format!("http://{}", listener.local_addr().unwrap()));
+            *fixture_state.http.lock().unwrap() = Some(
+                reqwest::Client::builder()
+                    .no_proxy()
+                    .timeout(Duration::from_secs(5))
+                    .build()
+                    .unwrap(),
+            );
+            state
+                .configure(ConfigureRequest {
+                    provider,
+                    client_id: "fixture-public-client".into(),
+                    tenant: None,
+                    client_secret: None,
+                })
+                .await
+                .unwrap();
+            let cause = "The Windows credential store could not save this credential";
+            *vault.write_error.lock().unwrap() = Some(cause.into());
+            let server = tokio::spawn(async move {
+                for body in [
+                    json!({"access_token":"fixture-private-access","refresh_token":"fixture-private-refresh".repeat(200),"expires_in":3600,"token_type":"Bearer","scope":requested_scopes(provider, &["calendar".into()], Access::ReadOnly).unwrap().join(" ")}),
+                    json!({"sub":"fixture-subject","id":"fixture-subject","name":"Fixture account","displayName":"Fixture account"}),
+                ] {
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let mut request = Vec::new();
+                    loop {
+                        let mut buffer = [0u8; 1024];
+                        let count = stream.read(&mut buffer).await.unwrap();
+                        assert!(count > 0);
+                        request.extend_from_slice(&buffer[..count]);
+                        if let Some(end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+                            let length = String::from_utf8_lossy(&request[..end])
+                                .lines()
+                                .find_map(|line| {
+                                    line.to_ascii_lowercase()
+                                        .strip_prefix("content-length:")
+                                        .and_then(|value| value.trim().parse::<usize>().ok())
+                                })
+                                .unwrap_or(0);
+                            if request.len() >= end + 4 + length {
+                                break;
+                            }
+                        }
+                    }
+                    let body = body.to_string();
+                    stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+                }
+            });
+            let (flow, authorization) = state
+                .begin_auth(AuthRequest {
+                    provider,
+                    services: vec!["calendar".into()],
+                    access: Access::ReadOnly,
+                    account_id: None,
+                })
+                .await
+                .unwrap();
+            let query = Url::parse(&authorization)
+                .unwrap()
+                .query_pairs()
+                .into_owned()
+                .collect::<BTreeMap<_, _>>();
+            let mut callback = Url::parse(&query["redirect_uri"]).unwrap();
+            callback
+                .query_pairs_mut()
+                .append_pair("state", &query["state"])
+                .append_pair("code", "fixture-code");
+            let response = reqwest::Client::builder()
+                .no_proxy()
+                .build()
+                .unwrap()
+                .get(callback)
+                .send()
+                .await
+                .unwrap();
+            assert!(response.status().is_success());
+            assert!(response.text().await.unwrap().contains("Sign-in received"));
+            let result = settled_auth(&state, &flow).await;
+            assert_eq!(result.status, "failed");
+            assert!(result.account_id.is_none());
+            let error = result.error.unwrap();
+            assert!(error.starts_with("You signed in with "));
+            assert!(error.contains("but saving the account in GChat failed"));
+            assert!(error.contains(cause));
+            assert!(!error.contains("fixture-private"));
+            let view = state.view().unwrap();
+            assert!(view.accounts.is_empty());
+            assert!(view.selected_accounts.is_empty());
+            assert!(vault.values.lock().unwrap().is_empty());
+            assert!(state.tokens.lock().unwrap().is_empty());
+            server.await.unwrap();
+        }
+    }
+
     async fn settled_auth(state: &AccountsState, flow: &AuthFlow) -> AuthFlow {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {
@@ -2884,6 +3012,20 @@ mod tests {
         assert!(response.starts_with(b"HTTP/1.1 400"));
         let mut correct = tokio::net::TcpStream::connect(address).await.unwrap();
         correct.write_all(b"GET /oauth/callback?state=bound-state&code=right HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut response = String::new();
+        correct.read_to_string(&mut response).await.unwrap();
+        assert!(response.starts_with("HTTP/1.1 200"));
+        assert!(response.contains("Content-Type: text/html; charset=utf-8"));
+        assert!(response.contains("Cache-Control: no-store"));
+        assert!(response.contains("Referrer-Policy: no-referrer"));
+        assert!(response.contains("Content-Security-Policy: default-src 'none'"));
+        let body = response.split_once("\r\n\r\n").unwrap().1;
+        assert!(body.contains("<title>Return to GChat</title>"));
+        assert!(body.contains("Sign-in received"));
+        assert!(body.contains("see whether your account was connected and saved"));
+        assert!(!body.contains("bound-state"));
+        assert!(!body.contains("code=right"));
+        assert!(!body.contains("<script"));
         assert_eq!(
             tokio::time::timeout(Duration::from_secs(5), worker)
                 .await
@@ -2910,6 +3052,16 @@ mod tests {
         assert!(response.starts_with(b"HTTP/1.1 400"));
         let mut correct = tokio::net::TcpStream::connect(address).await.unwrap();
         correct.write_all(b"GET /oauth/callback?state=bound-state&error=interaction_required&suberror=consent_required&error_description=private-provider-detail HTTP/1.1\r\nHost: localhost\r\n\r\n").await.unwrap();
+        let mut response = String::new();
+        correct.read_to_string(&mut response).await.unwrap();
+        assert!(response.contains("<title>Return to GChat</title>"));
+        for private in [
+            "private-provider-detail",
+            "interaction_required",
+            "bound-state",
+        ] {
+            assert!(!response.contains(private));
+        }
         let error = tokio::time::timeout(Duration::from_secs(5), worker)
             .await
             .unwrap()

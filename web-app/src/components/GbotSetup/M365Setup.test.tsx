@@ -120,6 +120,124 @@ async function checkAssignments() {
   await screen.findByLabelText('Assigned Cloud PC')
 }
 
+it('explains the connected account list and reports an empty refresh without starting sign-in', async () => {
+  vi.mocked(connectorAccounts).mockResolvedValue({ ...accounts(), accounts: [] })
+  mount()
+  await screen.findByLabelText('Microsoft account')
+  expect(
+    screen.getByText(/This list shows Microsoft accounts connected to GChat/)
+  ).toHaveTextContent(
+    'Accounts signed in to Windows or other Microsoft apps are not added automatically.'
+  )
+  expect(
+    screen.getByText(/No Microsoft accounts are connected to GChat yet/)
+  ).toHaveTextContent('Choose Sign in with Microsoft below to add an account.')
+  const check = screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+  expect(check).toBeDisabled()
+  expect(check).toHaveAccessibleDescription(
+    'First sign in to GChat, then choose a connected work or school account above.'
+  )
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+  )
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Microsoft accounts refreshed. No accounts are connected to GChat yet.'
+  )
+  expect(connectorAccounts).toHaveBeenCalledTimes(2)
+  expect(beginConnectorAuth).not.toHaveBeenCalled()
+  expect(gbot).not.toHaveBeenCalled()
+  expect(check).toBeDisabled()
+})
+
+it('reports only connected Microsoft accounts on refresh without choosing one', async () => {
+  const updated = accounts()
+  updated.accounts.push(
+    { ...updated.accounts[0], id: 'second-work', email: 'second@example.test' },
+    { ...updated.accounts[0], id: 'google-account', provider: 'google' }
+  )
+  vi.mocked(connectorAccounts)
+    .mockResolvedValueOnce({ ...accounts(), accounts: [] })
+    .mockResolvedValue(updated)
+  mount()
+  await screen.findByLabelText('Microsoft account')
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+  )
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'Microsoft accounts refreshed. 2 connected accounts are available. Choose an account above.'
+  )
+  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(
+    screen.getByRole('option', { name: 'second@example.test' })
+  ).toBeInTheDocument()
+  expect(screen.getAllByRole('option')).toHaveLength(3)
+  expect(
+    screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+  ).toBeDisabled()
+  expect(beginConnectorAuth).not.toHaveBeenCalled()
+  expect(gbot).not.toHaveBeenCalled()
+})
+
+it.each([
+  {
+    reconnect: false,
+    explanation:
+      'Allow read-only Cloud PC access for this account before checking assigned PCs.',
+  },
+  {
+    reconnect: true,
+    explanation:
+      'Reconnect this account and allow read-only Cloud PC access before checking assigned PCs.',
+  },
+])(
+  'explains the disabled Cloud PC check when reconnect is $reconnect',
+  async ({ reconnect, explanation }) => {
+    const view = accounts(false)
+    view.accounts[0].needs_reconnect = reconnect
+    vi.mocked(connectorAccounts).mockResolvedValue(view)
+    mount()
+    await chooseAccount()
+    const check = screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+    expect(check).toBeDisabled()
+    expect(check).toHaveAccessibleDescription(explanation)
+    expect(gbot).not.toHaveBeenCalled()
+  }
+)
+
+it('keeps Cloud PC discovery unavailable when browser sign-in cannot be saved', async () => {
+  vi.mocked(connectorAccounts).mockResolvedValue({ ...accounts(), accounts: [] })
+  vi.mocked(beginConnectorAuth).mockResolvedValue({
+    flow_id: 'save-failed',
+    provider: 'microsoft',
+    status: 'waiting',
+  })
+  const message =
+    'You signed in with Microsoft, but saving the account in GChat failed: secure credential vault could not be opened with the current credential key'
+  vi.mocked(connectorAuthStatus).mockResolvedValue({
+    flow_id: 'save-failed',
+    provider: 'microsoft',
+    status: 'failed',
+    error: message,
+  })
+  mount()
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Sign in with Microsoft' })
+  )
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Check sign-in status' })
+  )
+  expect(await screen.findByText(message)).toBeInTheDocument()
+  expect(
+    screen.queryByText(/Microsoft account connected\./)
+  ).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(
+    screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+  ).toBeDisabled()
+  expect(connectorAccounts).toHaveBeenCalledOnce()
+  expect(gbot).not.toHaveBeenCalled()
+})
+
 it('requires explicit account, assigned PC, route and dedicated desktop confirmation', async () => {
   vi.mocked(gbot).mockImplementation(async (path) =>
     path === 'setup/m365/assigned' ? [cloudPc] : initial
@@ -511,6 +629,11 @@ it('uses Microsoft accounts on the selected LAN service and keeps sign-in there'
     screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
   )
   await waitFor(() => expect(gbot).toHaveBeenCalledTimes(2))
+  expect(
+    await screen.findByText(
+      'Microsoft accounts refreshed. 1 connected account is available. Choose an account above.'
+    )
+  ).toBeInTheDocument()
   expect(vi.mocked(gbot).mock.calls).toEqual([
     ['setup/m365/accounts'],
     ['setup/m365/accounts'],

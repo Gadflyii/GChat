@@ -57,7 +57,9 @@ fn storage_error(error: jan_utils::credential_store::Error) -> VaultError {
     match error {
         Error::Locked => VaultError::AccessDenied,
         Error::Missing => VaultError::Missing,
-        Error::InvalidData => VaultError::InvalidData,
+        Error::InvalidData | Error::InvalidCredential | Error::CredentialTooLarge => {
+            VaultError::InvalidData
+        }
         Error::Conflict => VaultError::Ambiguous,
         Error::MissingProvider | Error::Unavailable => VaultError::Unavailable,
     }
@@ -169,5 +171,18 @@ mod tests {
             "Secure storage is locked or access is denied"
         );
         assert!(!format!("{locked:?}").contains("fixture-private-key"));
+
+        for error in [
+            jan_utils::credential_store::Error::InvalidCredential,
+            jan_utils::credential_store::Error::CredentialTooLarge,
+        ] {
+            let rejected = storage_error(error);
+            assert_eq!(rejected, VaultError::InvalidData);
+            assert_eq!(
+                rejected.to_string(),
+                "Secure storage rejected the credential data"
+            );
+            assert!(!rejected.to_string().contains("passphrase"));
+        }
     }
 }
