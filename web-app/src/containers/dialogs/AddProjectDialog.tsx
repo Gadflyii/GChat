@@ -265,8 +265,8 @@ export default function AddProjectDialog({
         open={addAssistantDialogOpen}
         onOpenChange={setAddAssistantDialogOpen}
         editingKey={null}
-        onSave={(assistant) => {
-          addAssistant(assistant)
+        onSave={async (assistant) => {
+          await addAssistant(assistant)
           setSelectedAssistantId(assistant.id)
         }}
       />

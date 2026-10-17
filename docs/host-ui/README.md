@@ -1,5 +1,30 @@
 # GInfer host UI
 
+## Assistant save results — C7
+
+`GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing
+that currently publish success before disk persistence and only log failures.
+Save must await persistence, block duplicate submissions/dismissal while pending,
+and preserve the draft with a visible retryable error on failure. Settings and
+the project dialog must await the same result before closing/selecting an
+assistant. Existing sampling values and selection semantics remain unchanged.
+
+Acceptance: focused store and real-dialog regressions for pending, failed,
+retried and successful saves, plus one full `make verify`; commit and push the
+isolated branch merge-ready. No real user-data writes, installed workflow,
+Engine, model, GPU or provider operation belongs to this source change.
+
+Owned source: `/ai/gchat-worktrees/c7-assistant-save-result-20261017`, branch
+`fix/c7-assistant-save-result-20261017`, base `68cc55bba`. Subject plan/results
+are here; concise verification results will be retained in
+`/ai/gchat/out/assistant-save-result-20261017/{result.json,summary.md}`.
+The persistence, editor and both caller changes are implemented, including
+pending/rejection/retry tests in the store, real editor, settings and nested
+project flow. S1 CPU48–55 booking2611 covers the private offline verification
+copy through15:22Z; no Engine or GPU operation. Next: run these focused cases
+and one full `make verify`, then retain concise results and retire that copy.
+Windows host-port collision remains pending Gchat2's installed RC handoff.
+
 ## Global conversation deletion — C7
 
 `GUI-GLOBAL-THREADS-DELETE-SINGLE-SUBMIT-20261017` applies the existing project
@@ -20,10 +45,9 @@ offline caches and 22 retained profiles, with CUDA mask/order unset. The private
 source/cache and stopped container are retired, read-only donor untouched;
 booking2595 canceled, returned14:42Z. Concise evidence is retained in
 `/ai/gchat/out/global-threads-delete-single-submit-20261017/{result.json,summary.md}`.
-The owned tree is `/ai/gchat-worktrees/c7-global-threads-delete-single-submit-20261017`,
-branch `fix/c7-global-threads-delete-single-submit-20261017`, from main `65248d3cc`.
-Subsequent main integration changed documentation only. Next: coordinator merge;
-installed confirmation remains with Gchat3. Windows host-port collision waits
+The branch `fix/c7-global-threads-delete-single-submit-20261017` from main
+`65248d3cc` merged as `38317aca1`; its clean owned worktree is retired.
+Installed confirmation remains with Gchat3. Windows host-port collision waits
 for Gchat2 installed-Windows handoff. No Engine/GPU/model gate applies.
 
 ## Project conversation deletion — C7

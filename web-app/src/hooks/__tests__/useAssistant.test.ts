@@ -49,7 +49,7 @@ describe('useAssistant', () => {
     expect(result.current.currentAssistant).toEqual(defaultAssistant)
   })
 
-  it('should add assistant', () => {
+  it('should add assistant', async () => {
     const { result } = renderHook(() => useAssistant())
 
     const newAssistant = {
@@ -62,15 +62,15 @@ describe('useAssistant', () => {
       parameters: {},
     }
 
-    act(() => {
-      result.current.addAssistant(newAssistant)
+    await act(async () => {
+      await result.current.addAssistant(newAssistant)
     })
 
     expect(result.current.assistants).toHaveLength(2)
     expect(result.current.assistants).toContain(newAssistant)
   })
 
-  it('should update assistant', () => {
+  it('should update assistant', async () => {
     const { result } = renderHook(() => useAssistant())
 
     const updatedAssistant = {
@@ -79,12 +79,188 @@ describe('useAssistant', () => {
       description: 'Updated description',
     }
 
-    act(() => {
-      result.current.updateAssistant(updatedAssistant)
+    await act(async () => {
+      await result.current.updateAssistant(updatedAssistant)
     })
 
     expect(result.current.assistants[0].name).toBe('Updated GChat')
     expect(result.current.assistants[0].description).toBe('Updated description')
+  })
+
+  describe('save persistence', () => {
+    const assistant: Assistant = {
+      id: 'assistant-to-save',
+      name: 'Saved assistant',
+      instructions: 'Help the user',
+      created_at: 1,
+      parameters: {},
+    }
+
+    it('keeps a new assistant unpublished while persistence waits and preserves newer selections', async () => {
+      const persistence = deferred()
+      createAssistant.mockReturnValue(persistence.promise)
+      const { result } = renderHook(() => useAssistant())
+      let save!: Promise<void>
+
+      act(() => {
+        save = result.current.addAssistant(assistant)
+      })
+
+      expect(createAssistant).toHaveBeenCalledExactlyOnceWith(assistant)
+      expect(result.current.assistants).toEqual([defaultAssistant])
+
+      const newerAssistant = { ...assistant, id: 'newer-assistant' }
+      act(() => {
+        result.current.setAssistants([defaultAssistant, newerAssistant])
+        result.current.setCurrentAssistant(newerAssistant)
+        result.current.setPendingAssistant(newerAssistant)
+      })
+
+      await act(async () => {
+        persistence.resolve()
+        await save
+      })
+
+      expect(result.current.assistants).toEqual([
+        defaultAssistant,
+        newerAssistant,
+        assistant,
+      ])
+      expect(result.current.currentAssistant).toEqual(newerAssistant)
+      expect(result.current.pendingAssistant).toEqual(newerAssistant)
+    })
+
+    it('propagates a failed add without publishing it and allows retry', async () => {
+      const error = new Error('Assistant storage is unavailable')
+      createAssistant.mockRejectedValueOnce(error)
+      const { result } = renderHook(() => useAssistant())
+
+      await act(async () => {
+        await expect(result.current.addAssistant(assistant)).rejects.toBe(error)
+      })
+
+      expect(result.current.assistants).toEqual([defaultAssistant])
+      expect(result.current.currentAssistant).toEqual(defaultAssistant)
+      expect(result.current.pendingAssistant).toBeUndefined()
+
+      await act(async () => {
+        await result.current.addAssistant(assistant)
+      })
+
+      expect(createAssistant).toHaveBeenCalledTimes(2)
+      expect(result.current.assistants).toEqual([defaultAssistant, assistant])
+    })
+
+    it('keeps an edited assistant unchanged while persistence waits and refreshes selections chosen during the save', async () => {
+      const persistence = deferred()
+      createAssistant.mockReturnValue(persistence.promise)
+      const { result } = renderHook(() => useAssistant())
+      act(() => {
+        result.current.setAssistants([defaultAssistant, assistant])
+      })
+      const editedAssistant = { ...assistant, name: 'Edited assistant' }
+      let save!: Promise<void>
+
+      act(() => {
+        save = result.current.updateAssistant(editedAssistant)
+      })
+
+      expect(createAssistant).toHaveBeenCalledExactlyOnceWith(editedAssistant)
+      expect(result.current.assistants).toEqual([defaultAssistant, assistant])
+
+      act(() => {
+        result.current.setCurrentAssistant(assistant)
+        result.current.setPendingAssistant(assistant)
+      })
+
+      await act(async () => {
+        persistence.resolve()
+        await save
+      })
+
+      expect(result.current.assistants).toEqual([
+        defaultAssistant,
+        editedAssistant,
+      ])
+      expect(result.current.currentAssistant).toEqual(editedAssistant)
+      expect(result.current.pendingAssistant).toEqual(editedAssistant)
+    })
+
+    it('propagates a failed update without mutating the assistant or selections and allows retry', async () => {
+      const error = new Error('Assistant storage is unavailable')
+      createAssistant.mockRejectedValueOnce(error)
+      const { result } = renderHook(() => useAssistant())
+      act(() => {
+        result.current.setAssistants([defaultAssistant, assistant])
+        result.current.setCurrentAssistant(assistant)
+        result.current.setPendingAssistant(assistant)
+      })
+      const editedAssistant = { ...assistant, name: 'Edited assistant' }
+
+      await act(async () => {
+        await expect(
+          result.current.updateAssistant(editedAssistant)
+        ).rejects.toBe(error)
+      })
+
+      expect(result.current.assistants).toEqual([defaultAssistant, assistant])
+      expect(result.current.currentAssistant).toEqual(assistant)
+      expect(result.current.pendingAssistant).toEqual(assistant)
+
+      await act(async () => {
+        await result.current.updateAssistant(editedAssistant)
+      })
+
+      expect(createAssistant).toHaveBeenCalledTimes(2)
+      expect(result.current.assistants).toEqual([
+        defaultAssistant,
+        editedAssistant,
+      ])
+      expect(result.current.currentAssistant).toEqual(editedAssistant)
+      expect(result.current.pendingAssistant).toEqual(editedAssistant)
+    })
+
+    it('preserves other assistant edits and selections made while an update waits', async () => {
+      const persistence = deferred()
+      createAssistant.mockReturnValue(persistence.promise)
+      const { result } = renderHook(() => useAssistant())
+      act(() => {
+        result.current.setAssistants([defaultAssistant, assistant])
+        result.current.setCurrentAssistant(assistant)
+        result.current.setPendingAssistant(assistant)
+      })
+      const editedAssistant = { ...assistant, name: 'Edited assistant' }
+      let save!: Promise<void>
+
+      act(() => {
+        save = result.current.updateAssistant(editedAssistant)
+      })
+
+      const editedDefault = { ...defaultAssistant, name: 'Updated GChat' }
+      const newerAssistant = { ...assistant, id: 'newer-assistant' }
+      act(() => {
+        result.current.setAssistants([
+          editedDefault,
+          assistant,
+          newerAssistant,
+        ])
+        result.current.setCurrentAssistant(newerAssistant)
+        result.current.setPendingAssistant(newerAssistant)
+      })
+
+      await act(async () => {
+        persistence.resolve()
+        await save
+      })
+
+      expect(result.current.assistants).toEqual([
+        editedDefault,
+        editedAssistant,
+        newerAssistant,
+      ])
+      expect(result.current.currentAssistant).toEqual(newerAssistant)
+      expect(result.current.pendingAssistant).toEqual(newerAssistant)
+    })
   })
 
   it('should delete assistant after persistence succeeds', async () => {
@@ -100,8 +276,8 @@ describe('useAssistant', () => {
       parameters: {},
     }
 
-    act(() => {
-      result.current.addAssistant(assistant2)
+    await act(async () => {
+      await result.current.addAssistant(assistant2)
     })
 
     expect(result.current.assistants).toHaveLength(2)
@@ -211,9 +387,9 @@ describe('useAssistant', () => {
         id: 'assistant-added-during-deletion',
         name: 'Replacement assistant',
       }
-      act(() => {
-        result.current.updateAssistant(editedDefault)
-        result.current.addAssistant(replacement)
+      await act(async () => {
+        await result.current.updateAssistant(editedDefault)
+        await result.current.addAssistant(replacement)
         result.current.setCurrentAssistant(replacement)
         result.current.setDefaultAssistant(replacement.id)
         result.current.setPendingAssistant(replacement)
@@ -310,7 +486,7 @@ describe('useAssistant', () => {
     expect(result.current.assistants).toEqual([])
   })
 
-  it('should update assistant in current assistant if it matches', () => {
+  it('should update assistant in current assistant if it matches', async () => {
     const { result } = renderHook(() => useAssistant())
 
     const updatedDefaultAssistant = {
@@ -318,8 +494,8 @@ describe('useAssistant', () => {
       name: 'Updated GChat Name',
     }
 
-    act(() => {
-      result.current.updateAssistant(updatedDefaultAssistant)
+    await act(async () => {
+      await result.current.updateAssistant(updatedDefaultAssistant)
     })
 
     expect(result.current.currentAssistant.name).toBe(
