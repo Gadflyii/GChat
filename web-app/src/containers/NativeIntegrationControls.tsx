@@ -123,7 +123,7 @@ export function NativeIntegrationControls({ compact = false }: { compact?: boole
             installing it if needed. Turning off stops its terminal and hides
             Hermes; saved settings remain.
           </p>
-          <Link to={route.settings.hermes_agent} className="text-sm text-primary hover:underline">
+          <Link to={route.settings.hermes_agent} className="block text-sm text-primary hover:underline">
             Hermes settings
           </Link>
         </div>
