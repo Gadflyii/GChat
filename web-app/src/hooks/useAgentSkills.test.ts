@@ -174,8 +174,8 @@ describe('useAgentSkills', () => {
     vi.mocked(getAgentSkill)
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
-    let selectingAlpha!: Promise<void>
-    let selectingBeta!: Promise<void>
+    let selectingAlpha!: Promise<AgentSkillDetail | undefined>
+    let selectingBeta!: Promise<AgentSkillDetail | undefined>
     act(() => {
       selectingAlpha = result.current.select(alpha.name)
       selectingBeta = result.current.select(beta.name)
@@ -183,13 +183,13 @@ describe('useAgentSkills', () => {
 
     await act(async () => {
       second.resolve(beta)
-      await selectingBeta
+      expect(await selectingBeta).toEqual(beta)
     })
     expect(result.current.selected).toEqual(beta)
     expect(result.current.error).toBeNull()
     await act(async () => {
       first.resolve(alpha)
-      await selectingAlpha
+      expect(await selectingAlpha).toBeUndefined()
     })
     expect(result.current.selected).toEqual(beta)
     expect(result.current.error).toBeNull()
@@ -205,7 +205,7 @@ describe('useAgentSkills', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     const obsolete = deferred<AgentSkillDetail>()
     vi.mocked(getAgentSkill).mockReturnValueOnce(obsolete.promise)
-    let selectingAlpha!: Promise<void>
+    let selectingAlpha!: Promise<AgentSkillDetail | undefined>
     act(() => {
       selectingAlpha = result.current.select(alpha.name)
     })

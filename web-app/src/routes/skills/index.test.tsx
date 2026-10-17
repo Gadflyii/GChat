@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -112,6 +113,30 @@ const customSkill: AgentSkillDetail = {
   body: '# Instructions',
 }
 
+const otherSkill: AgentSkillDetail = {
+  ...customSkill,
+  name: 'other-skill',
+  description: 'Other skill',
+  body: '# Other instructions',
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
+function clickMenuEdit(skill: AgentSkillDetail) {
+  const row = screen.getByRole('button', {
+    name: `${skill.name} ${skill.description}`,
+  }).parentElement as HTMLElement
+  fireEvent.click(
+    within(row).getByRole('button', { name: 'common:editSkill' })
+  )
+}
+
 describe('SkillsPage', () => {
   beforeEach(() => {
     dialogOpen.mockReset()
@@ -127,7 +152,7 @@ describe('SkillsPage', () => {
       loading: false,
       error: null,
       load: vi.fn(),
-      select: vi.fn(),
+      select: vi.fn().mockResolvedValue(customSkill),
       setEnabled: vi.fn(),
       addCreated: vi.fn().mockResolvedValue(undefined),
       addImported: vi.fn().mockResolvedValue(undefined),
@@ -257,13 +282,13 @@ describe('SkillsPage', () => {
     })
   })
 
-  it('opens Edit only for a custom skill', () => {
+  it('opens Edit only for a custom skill', async () => {
     render(<SkillsPage />)
 
     fireEvent.click(screen.getAllByText('common:editSkill')[0])
 
+    expect(await screen.findByDisplayValue('custom-skill')).toBeDisabled()
     expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('custom-skill')).toBeDisabled()
   })
 
   it('opens Edit from the instructions card', () => {
@@ -275,5 +300,149 @@ describe('SkillsPage', () => {
     fireEvent.click(editButtons[editButtons.length - 1])
 
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('custom-skill')).toBeDisabled()
+    expect(hookState.value.select).not.toHaveBeenCalled()
   })
+
+  it('waits for the requested skill and saves that editor snapshot', async () => {
+    const detail = deferred<AgentSkillDetail | undefined>()
+    hookState.value.skills = [customSkill, otherSkill]
+    hookState.value.select.mockReturnValue(detail.promise)
+    const view = render(<SkillsPage />)
+
+    clickMenuEdit(otherSkill)
+
+    expect(hookState.value.select).toHaveBeenCalledWith('other-skill')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await act(async () => {
+      detail.resolve(otherSkill)
+      await detail.promise
+    })
+
+    const editor = screen.getByRole('dialog')
+    expect(within(editor).getByDisplayValue('other-skill')).toBeDisabled()
+    expect(within(editor).getByDisplayValue('Other skill')).toBeInTheDocument()
+    expect(
+      within(editor).getByDisplayValue('# Other instructions')
+    ).toBeInTheDocument()
+
+    hookState.value.selected = {
+      ...customSkill,
+      description: 'Refreshed custom skill',
+    }
+    view.rerender(<SkillsPage />)
+    fireEvent.change(within(editor).getByLabelText('common:description'), {
+      target: { value: 'Updated other skill' },
+    })
+    fireEvent.click(within(editor).getByRole('button', { name: 'common:save' }))
+
+    await waitFor(() =>
+      expect(hookState.value.update).toHaveBeenCalledWith({
+        name: 'other-skill',
+        description: 'Updated other skill',
+        instructions: '# Other instructions',
+      })
+    )
+  })
+
+  it('keeps Edit closed when detail loading fails and leaves the hook error visible', async () => {
+    const detail = deferred<AgentSkillDetail | undefined>()
+    hookState.value.skills = [customSkill, otherSkill]
+    hookState.value.select.mockReturnValue(detail.promise)
+    const view = render(<SkillsPage />)
+
+    clickMenuEdit(otherSkill)
+    hookState.value.error = 'Could not read other-skill'
+    view.rerender(<SkillsPage />)
+
+    await act(async () => {
+      detail.resolve(undefined)
+      await detail.promise
+    })
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText('Could not read other-skill')).toBeInTheDocument()
+    expect(hookState.value.update).not.toHaveBeenCalled()
+  })
+
+  it('keeps the latest Edit target when an earlier detail request finishes last', async () => {
+    const first = deferred<AgentSkillDetail | undefined>()
+    const second = deferred<AgentSkillDetail | undefined>()
+    hookState.value.skills = [customSkill, otherSkill]
+    hookState.value.select
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    render(<SkillsPage />)
+
+    clickMenuEdit(customSkill)
+    clickMenuEdit(otherSkill)
+
+    await act(async () => {
+      second.resolve(otherSkill)
+      await second.promise
+    })
+    expect(screen.getByDisplayValue('other-skill')).toBeDisabled()
+
+    await act(async () => {
+      first.resolve(customSkill)
+      await first.promise
+    })
+
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(screen.getByDisplayValue('other-skill')).toBeDisabled()
+    expect(screen.queryByDisplayValue('custom-skill')).not.toBeInTheDocument()
+  })
+
+  it.each(['select', 'create', 'upload', 'refresh'] as const)(
+    'cancels a pending Edit after the user chooses %s',
+    async (action) => {
+      const detail = deferred<AgentSkillDetail | undefined>()
+      hookState.value.skills = [customSkill, otherSkill]
+      hookState.value.select.mockReturnValueOnce(detail.promise)
+      render(<SkillsPage />)
+
+      clickMenuEdit(otherSkill)
+
+      if (action === 'select') {
+        fireEvent.click(
+          screen.getByRole('button', {
+            name: `${customSkill.name} ${customSkill.description}`,
+          })
+        )
+      } else if (action === 'create') {
+        fireEvent.click(screen.getByText('common:writeSkillInstructions'))
+      } else if (action === 'upload') {
+        fireEvent.click(screen.getByText('common:uploadASkill'))
+      } else {
+        fireEvent.click(screen.getByTitle('common:refresh'))
+        expect(hookState.value.load).toHaveBeenCalledWith(true)
+      }
+
+      await act(async () => {
+        detail.resolve(otherSkill)
+        await detail.promise
+      })
+
+      expect(
+        screen.queryByText('common:editSkillDescription')
+      ).not.toBeInTheDocument()
+      expect(screen.queryByDisplayValue('other-skill')).not.toBeInTheDocument()
+      if (action === 'create') {
+        expect(
+          within(screen.getByRole('dialog')).getByText(
+            'common:createSkillDescription'
+          )
+        ).toBeInTheDocument()
+      } else if (action === 'upload') {
+        expect(
+          within(screen.getByRole('dialog')).getByText(
+            'common:uploadSkillDescription'
+          )
+        ).toBeInTheDocument()
+      } else {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      }
+    }
+  )
 })
