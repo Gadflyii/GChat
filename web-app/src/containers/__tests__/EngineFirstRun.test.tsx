@@ -454,5 +454,5 @@ it('scrolls the setup card into view after a step is saved', async () => {
   mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('models', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } }) : flow('storage', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } })))
   await act(async () => { render(<EngineFirstRun />) })
   fireEvent.click(await screen.findByRole('button', { name: 'Use this folder' }))
-  await waitFor(() => expect(scroll).toHaveBeenCalled())
+  await waitFor(() => expect(scroll.mock.calls.length).toBeGreaterThan(0))
 })
