@@ -103,6 +103,17 @@ export function BrainSetup({
     }
   }
 
+  function cancelEdits() {
+    if (!saved || disabled || savingRef.current) return
+    onChange({
+      connection: saved.connection,
+      model: saved.model,
+      context_tokens: saved.context_tokens,
+    })
+    setError(undefined)
+    setEditing(false)
+  }
+
   if (saved && !editing) {
     return (
       <section aria-label="Bot brain" className="rounded-lg border p-3">
@@ -378,9 +389,21 @@ export function BrainSetup({
             Saving brain settings…
           </p>
         )}
-        <Button type="submit" disabled={disabled || !valid}>
-          {saving ? 'Saving brain settings…' : 'Save brain settings'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={disabled || !valid}>
+            {saving ? 'Saving brain settings…' : 'Save brain settings'}
+          </Button>
+          {saved && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelEdits}
+            >
+              Cancel edits
+            </Button>
+          )}
+        </div>
       </div>
     </form>
   )

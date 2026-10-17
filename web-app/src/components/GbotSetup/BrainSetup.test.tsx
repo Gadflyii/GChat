@@ -74,6 +74,9 @@ it('offers the next setup step and saves only a complete model assignment', asyn
   render(<Setup save={save} />)
   expect(screen.getByRole('form', { name: 'Set up bot brain' })).toBeVisible()
   expect(screen.getByText('Next: choose a brain')).toBeVisible()
+  expect(
+    screen.queryByRole('button', { name: 'Cancel edits' })
+  ).not.toBeInTheDocument()
   const submit = screen.getByRole('button', { name: 'Save brain settings' })
   expect(submit).toBeDisabled()
   fireEvent.change(screen.getByLabelText('GInfer API URL'), {
@@ -153,6 +156,64 @@ it('keeps failed setup visible with its inputs for retry', async () => {
   ).toBeEnabled()
 })
 
+it('discards unsaved brain settings and a replacement key without saving', async () => {
+  const save = vi.fn().mockResolvedValue(undefined)
+  render(<Setup initial={saved} configured={saved} save={save} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  fireEvent.change(screen.getByLabelText('GInfer API URL'), {
+    target: { value: 'http://another-host/v1' },
+  })
+  fireEvent.change(screen.getByLabelText('Model ID'), {
+    target: { value: 'another-model' },
+  })
+  fireEvent.change(screen.getByLabelText('Model context tokens'), {
+    target: { value: '131072' },
+  })
+  fireEvent.change(screen.getByLabelText('API key'), {
+    target: { value: 'unsaved-key' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel edits' }))
+  expect(screen.getByText('Brain configured')).toBeVisible()
+  expect(save).not.toHaveBeenCalled()
+  expect(call).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  expect(screen.getByLabelText('GInfer API URL')).toHaveValue('http://host/v1')
+  expect(screen.getByLabelText('Model ID')).toHaveValue(saved.model)
+  expect(screen.getByLabelText('Model context tokens')).toHaveValue(262144)
+  expect(screen.getByLabelText('API key')).toHaveValue('')
+  expect(screen.getByLabelText('API key')).toHaveAttribute(
+    'placeholder',
+    'Saved in vault'
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      connection: saved.connection,
+      model: saved.model,
+      context_tokens: saved.context_tokens,
+    })
+  )
+})
+
+it('cancels key removal and clears a failed edit without changing the saved key', async () => {
+  const save = vi.fn().mockRejectedValue(new Error('Vault unavailable'))
+  render(<Setup initial={saved} configured={saved} save={save} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  fireEvent.click(screen.getByLabelText('Remove saved API key'))
+  fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Vault unavailable')
+  expect(save).toHaveBeenCalledExactlyOnceWith({ ...saved, api_key: '' })
+
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel edits' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Remove saved API key')).not.toBeChecked()
+  expect(screen.getByLabelText('API key')).toBeEnabled()
+  expect(screen.getByLabelText('API key')).toHaveValue('')
+  expect(save).toHaveBeenCalledTimes(1)
+})
+
 it('saves only once and shows progress until the saved brain is confirmed', async () => {
   const pending = deferred()
   const save = vi.fn().mockReturnValue(pending.promise)
@@ -170,6 +231,9 @@ it('saves only once and shows progress until the saved brain is confirmed', asyn
   expect(screen.getByRole('status')).toHaveTextContent('Saving brain settings…')
   expect(screen.getByLabelText('GInfer API URL')).toBeDisabled()
   expect(screen.getByLabelText('Model ID')).toBeDisabled()
+  const cancel = screen.getByRole('button', { name: 'Cancel edits' })
+  expect(cancel).toBeDisabled()
+  fireEvent.click(cancel)
   expect(screen.queryByText('Brain configured')).not.toBeInTheDocument()
   fireEvent.submit(form)
   expect(save).toHaveBeenCalledTimes(1)
@@ -204,6 +268,48 @@ const ready = {
   model: 'qwen-smol',
   context_tokens: 262144,
 }
+it('restores the exact saved Host session when connection edits are canceled', async () => {
+  call.mockResolvedValue([ready])
+  const configured: SavedAssignment = {
+    ...saved,
+    connection: { kind: 'paired_host', target: ready.target },
+    model: ready.model,
+    context_tokens: ready.context_tokens,
+    credential_ref: null,
+  }
+  const save = vi.fn().mockResolvedValue(undefined)
+  render(<Setup initial={configured} configured={configured} save={save} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Refresh hosts' })).toBeEnabled()
+  )
+  fireEvent.click(screen.getByLabelText('API endpoint'))
+  fireEvent.change(screen.getByLabelText('GInfer API URL'), {
+    target: { value: 'http://unsaved-host/v1' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel edits' }))
+  expect(save).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Save brain settings' })
+    ).toBeEnabled()
+  )
+  expect(screen.getByLabelText('Paired GInfer Host')).toBeChecked()
+  expect(
+    screen.getByRole('button', { name: 'Ready Host model' })
+  ).toHaveTextContent(ready.model)
+  fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
+  await waitFor(() =>
+    expect(save).toHaveBeenCalledExactlyOnceWith({
+      connection: configured.connection,
+      model: configured.model,
+      context_tokens: configured.context_tokens,
+    })
+  )
+})
+
 it('saves the ready Host session with its served model and context', async () => {
   call.mockResolvedValue([ready])
   const save = vi.fn().mockResolvedValue(undefined)
