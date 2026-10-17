@@ -712,6 +712,7 @@ function MCPServersDesktop() {
         onOpenChange={setOpen}
         editingKey={editingKey}
         initialData={currentConfig}
+        existingNames={Object.keys(mcpServers)}
         onSave={handleSaveServer}
       />
 
