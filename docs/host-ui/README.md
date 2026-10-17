@@ -16,14 +16,27 @@ qualification remains pending Gchat 2's separate installed-app handoff.
 
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
-| C7 / local | `/ai/gchat-worktrees/c7-code-disable-workspace-stop-20261017`, branch `fix/c7-code-disable-workspace-stop-20261017` | Source candidate from `691fdcc10`; backend and frontend implementation in parallel |
-| C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-code-disable-workspace-stop-20261017/` | Private source/dependency/native cache; retire after evidence extraction |
-| C7 / evidence | `/ai/gchat/out/code-disable-workspace-stop-20261017/` | Focused and full verification pending |
+| C7 / local | `/ai/gchat-worktrees/c7-code-disable-workspace-stop-20261017`, branch `fix/c7-code-disable-workspace-stop-20261017` | Tested implementation `6b99bcf84` from `691fdcc10`; ready for coordinator merge |
+| C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-code-disable-workspace-stop-20261017/` | Private source/dependency/native cache retired; 19,816,259,584 allocated bytes reclaimed, donor unchanged |
+| C7 / evidence | `/ai/gchat/out/code-disable-workspace-stop-20261017/{result.json,summary.md}` | Passing focused and composed full verification results retained |
 
 The implementation serializes native Code launch/stop, reaps successful stops,
 and retains failed stop handles for retry. A shared transient disabling state
-blocks delayed UI readiness and restart work. Next: focused and full CPU-only
-verification on S1 CPUs 80–87 in pinned image `ad7f9bf020d7`. No Engine or GPU/model runs.
+blocks delayed UI readiness and restart work. Verification passes on S1 CPUs
+80–87 in pinned image `ad7f9bf020d7`: 55 focused frontend cases, three native
+lifecycle cases, Cargo check and strict Clippy. All `make verify` components pass:
+2,709 frontend tests (six skipped), 119 extension tests and 1,076 Rust tests
+(27 ignored), plus lint, types, quality and coverage checks.
+
+The one `make verify` invocation exited 2 at an unrelated coordinator fixture:
+Docker `--network none` provided no route for its UDP address selection. Retrying
+only that failed case with bridge networking passed, then the five unrun Rust
+suite commands passed. Successful checks were not repeated. Offline setup uses
+the retained per-project Yarn cache with global caching disabled and refills
+extension-only entries after root installation; generated core archive references
+remain confined to the disposable copy. Candidate dependency files are unchanged.
+No Engine or GPU/model run. Next: coordinator merge and Gchat 3's installed
+workflow acceptance; Windows collision still waits for Gchat 2's handoff.
 
 ## Proxy control labels — GUI-PROXY-SETTINGS-ACCESSIBILITY
 
@@ -109,7 +122,8 @@ implementation `eafaedd7c`. Results and concise suite outcomes:
 `/ai/gchat/out/integration-toggle-guidance-20261017/{result.json,summary.md}`.
 Verification ran on S1 CPUs 80–87 with the pinned Rust 1.98 image `ad7f9bf020d7`.
 Private compiler/dependency copies are retired; the authorized donor is unchanged.
-No live job or retained remote build. Next action: coordinator review and merge.
+No live job or retained remote build. The original guidance was merged at
+12:48Z as `2f2c4f028`; its workspace-stop follow-up is recorded above.
 
 ## Profile presentation — OI-077
 
