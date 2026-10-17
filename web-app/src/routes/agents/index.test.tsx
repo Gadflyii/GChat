@@ -239,6 +239,14 @@ describe('AgentStudioPage', () => {
     expect(screen.getByText('Completed Agent Studio runs will appear here.')).toBeInTheDocument()
   })
 
+  it('lets the run history pane fill the page height so its divider reaches the bottom', async () => {
+    listAgentRuns.mockResolvedValue([])
+    await renderRunHistory()
+
+    const pane = screen.getByText('Run history').closest('aside')!.parentElement!
+    expect(pane).toHaveClass('h-full')
+  })
+
   it('submits one history deletion for repeated clicks and disables its pending menu action', async () => {
     const pending = deferred<void>()
     deleteAgentRun.mockReturnValue(pending.promise)
