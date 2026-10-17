@@ -1,5 +1,29 @@
 # Gbot design
 
+## Sleeping icon visual qualification — C7
+
+`GBOT-SLEEPING-ICON-PROPORTIONS-20261017` has merged source that enlarges
+both sleeping Zs by 75% while preserving their relative sizes. The remaining
+deliverable is one ordinary installed visual comparison against the read-only
+`avatar/gbot-avatar.html` and `avatar/gbot-avatar.design.dc.html` references:
+check proportions, animation clipping and readability at ordinary interface
+sizes in light and dark themes. Deadline: October 17, 15:00 UTC.
+
+The retained functional GChat `707724776` / Engine `43b8bbf60` FRESH fixture
+requires Codex 4's normal OFF/XML return and Gchat 2's explicit fixture grant
+before launch. Neither source readiness nor a rendered unit test closes this
+installed visual scope. No model, Start, Ensure, provider or destructive action
+is included. Source changes and fresh full verification are needed only if the
+visual check identifies an actual defect; potential correction is confined to
+`web-app/src/components/GbotAvatar/avatar.css`, with `index.tsx` only if essential.
+
+C7 owns `/ai/gchat-worktrees/c7-gbot-sleeping-visual-20261017`, branch
+`test/c7-gbot-sleeping-visual-20261017`, based on main `1e2d47fa9`. No build,
+artifact copy, running fixture or compute booking has been allocated. Next:
+complete source/design preparation, receive the fixture grant and prior return,
+then book only the minutes of the installed check. Windows host-port collision
+remains separately pending Gchat 2's installed-Windows handoff.
+
 ## Outage reply notification fix — C7
 
 `GCHAT-GBOT-REPLY-OUTAGE-NOTIFICATION` is merge-ready on
