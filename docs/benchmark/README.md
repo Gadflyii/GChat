@@ -16,7 +16,7 @@ Ron selected these version-1 release classes on October 11:
 | --- | --- | --- | --- |
 | Dense Qwen INT | `qwen3.8-27b/groupwise-int-dflash2-q4` | INT8 | Q4 DFlash2, fixed K7 |
 | Dense Qwen NVFP4 | `qwen3.8-27b/nvfp4-dflash2-q4` | NVFP4 | Q4 DFlash2, fixed K7 |
-| Flash SMOL | `qwen3.8-flash-next/smol-q2g64` | INT8 | MTP, fixed K3 |
+| Flash pure 2-bit (smol-q2g64 package) | `qwen3.8-flash-next/smol-q2g64` | INT8 | MTP, fixed K3 |
 | Flash INT | `qwen3.8-flash-next/groupwise-int` | INT8 | MTP, fixed K3 |
 
 The native NVFP4 drafter is historical, not the release drafter. Muse and other
