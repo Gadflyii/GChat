@@ -1527,6 +1527,7 @@ const ChatInput = memo(function ChatInput({
     candidates: Attachment[]
     oversized: string[]
     invalidType: string[]
+    unreadable?: string[]
   }
 
   const prepareImageAttachmentsFromFiles = async (
@@ -1534,6 +1535,7 @@ const ChatInput = memo(function ChatInput({
   ): Promise<ImageValidationOutcome> => {
     const oversized: string[] = []
     const invalidType: string[] = []
+    const unreadable: string[] = []
     const validFiles: File[] = []
 
     for (const file of files) {
@@ -1558,9 +1560,17 @@ const ChatInput = memo(function ChatInput({
           resolve(typeof result === 'string' ? result : null)
         }
         reader.onerror = () => resolve(null)
-        reader.readAsDataURL(file)
+        reader.onabort = () => resolve(null)
+        try {
+          reader.readAsDataURL(file)
+        } catch {
+          resolve(null)
+        }
       })
-      if (!dataUrl) continue
+      if (!dataUrl) {
+        unreadable.push(file.name)
+        continue
+      }
 
       // Downscale oversized images before they enter the conversation so they
       // don't flood the model's context (see "Max image size" setting).
@@ -1587,7 +1597,7 @@ const ChatInput = memo(function ChatInput({
       )
     }
 
-    return { candidates, oversized, invalidType }
+    return { candidates, oversized, invalidType, unreadable }
   }
 
   const prepareImageAttachmentsFromPaths = async (
@@ -1595,6 +1605,7 @@ const ChatInput = memo(function ChatInput({
   ): Promise<ImageValidationOutcome> => {
     const oversized: string[] = []
     const invalidType: string[] = []
+    const unreadable: string[] = []
     const candidates: Attachment[] = []
 
     for (const p of paths) {
@@ -1626,17 +1637,17 @@ const ChatInput = memo(function ChatInput({
         candidates.push(att)
       } catch (e) {
         console.error('Failed to read dropped image', p, e)
-        invalidType.push(p.split(/[\\/]/).pop() || p)
+        unreadable.push(p.split(/[\\/]/).pop() || p)
       }
     }
 
-    return { candidates, oversized, invalidType }
+    return { candidates, oversized, invalidType, unreadable }
   }
 
   const commitImageAttachments = async (
     outcome: ImageValidationOutcome
   ): Promise<void> => {
-    const { candidates, oversized, invalidType } = outcome
+    const { candidates, oversized, invalidType, unreadable = [] } = outcome
 
     for (const att of candidates) {
       if (att.base64) {
@@ -1754,6 +1765,12 @@ const ChatInput = memo(function ChatInput({
     if (invalidType.length > 0) {
       errors.push(
         `Invalid file type${invalidType.length > 1 ? 's' : ''} (only JPEG, JPG, PNG, WEBP allowed): ${invalidType.join(', ')}`
+      )
+    }
+
+    if (unreadable.length > 0) {
+      errors.push(
+        `Could not read images: ${unreadable.join(', ')}. Try choosing the files again.`
       )
     }
 

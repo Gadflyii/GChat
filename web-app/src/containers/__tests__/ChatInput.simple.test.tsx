@@ -1030,6 +1030,69 @@ describe('ChatInput', () => {
     }
   })
 
+  it.each(['error', 'abort', 'empty result', 'synchronous error'] as const)(
+    'retains the draft and other files after an image read %s and recovers when the same file is chosen again',
+    async (failure) => {
+      useModelProvider.setState((state) => ({
+        selectedModel: { ...state.selectedModel!, capabilities: ['vision'] },
+      }))
+      const attachment = createDocumentAttachment({ name: 'notes.txt', path: '/docs/notes.txt' })
+      useChatAttachments.getState().setAttachments(NEW_THREAD_ATTACHMENT_KEY, [attachment])
+      mocks.downscaleImageDataUrl.mockResolvedValue(null)
+      const file = new File(['test'], 'broken.png', { type: 'image/png' })
+      const read = vi.spyOn(FileReader.prototype, 'readAsDataURL')
+        .mockImplementationOnce(function (this: FileReader) {
+          if (failure === 'synchronous error') {
+            throw new DOMException('File unavailable', 'NotReadableError')
+          }
+          this.dispatchEvent(new ProgressEvent(
+            failure === 'empty result' ? 'load' : failure
+          ))
+        })
+        .mockImplementationOnce(function (this: FileReader) {
+          Object.defineProperty(this, 'result', {
+            value: 'data:image/png;base64,dGVzdA==',
+          })
+          this.dispatchEvent(new ProgressEvent('load'))
+        })
+
+      try {
+        const { container } = render(<ChatInput initialMessage />)
+        const input = screen.getByTestId('chat-input')
+        fireEvent.change(input, { target: { value: 'Keep my unfinished question' } })
+        const chooseImage = async () => {
+          fireEvent.keyDown(container.querySelector('button[aria-haspopup="menu"]')!, { key: 'ArrowDown' })
+          const menuItem = await screen.findByRole('menuitem', { name: 'Add Images' })
+          fireEvent.change(menuItem.querySelector('input[type="file"]')!, {
+            target: { files: [file] },
+          })
+        }
+        await chooseImage()
+
+        const error = 'Could not read images: broken.png. Try choosing the files again.'
+        expect(await screen.findByText(error)).toBeVisible()
+        expect(input).toHaveValue('Keep my unfinished question')
+        expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([attachment])
+
+        await chooseImage()
+
+        await waitFor(() => expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([
+          attachment,
+          expect.objectContaining({
+            type: 'image', name: 'broken.png', mimeType: 'image/png', base64: 'dGVzdA==',
+          }),
+        ]))
+        expect(screen.queryByText(error)).not.toBeInTheDocument()
+        expect(input).toHaveValue('Keep my unfinished question')
+        expect(read).toHaveBeenCalledTimes(2)
+        expect(read).toHaveBeenNthCalledWith(1, file)
+        expect(read).toHaveBeenNthCalledWith(2, file)
+      } finally {
+        read.mockRestore()
+      }
+    }
+  )
+
   it('downscales an image before applying the byte limit', async () => {
     const model = {
       id: 'vision-model',

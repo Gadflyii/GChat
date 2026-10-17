@@ -25,6 +25,9 @@ If the image or audio file window fails, GChat shows an error and keeps your
 draft and existing attachments. Use the attachment button again to retry.
 Canceling the file window without choosing a file shows no error.
 
+If an image cannot be read, GChat names the file and asks you to choose it
+again. Your draft and other attachments stay in place.
+
 ## Choosing a skill with the keyboard
 
 Type `/` in the composer to see available skills. Use the up and down arrow
