@@ -9,6 +9,7 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import type { AgentSkillDetail } from '@/services/agent/skills'
 import type { DialogService } from '@/services/dialog/types'
 import { seedServiceHub } from '@/test/service-hub'
@@ -49,7 +50,12 @@ vi.mock('@/hooks/useAgentSkills', () => ({
 
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: { name?: string; defaultValue?: string }) =>
+      key === 'common:enablingSkill' || key === 'common:disablingSkill'
+        ? (options?.defaultValue ?? key).replace('{{name}}', options?.name ?? '')
+        : key,
+  }),
 }))
 
 vi.mock('@/components/ui/dropdown-menu', () => ({
@@ -344,7 +350,9 @@ describe('SkillsPage', () => {
     hookState.value.setEnabled.mockResolvedValue(undefined)
     render(<SkillsPage />)
 
-    fireEvent.click(screen.getByRole('switch', { name: 'common:enableSkill' }))
+    fireEvent.click(
+      screen.getByRole('switch', { name: 'common:enableSkill: custom-skill' })
+    )
 
     await waitFor(() =>
       expect(hookState.value.setEnabled).toHaveBeenCalledWith(
@@ -352,6 +360,123 @@ describe('SkillsPage', () => {
         false
       )
     )
+  })
+
+  it('shows a pending skill toggle and submits rapid duplicate activation only once', async () => {
+    const change = deferred<void>()
+    hookState.value.setEnabled.mockReturnValue(change.promise)
+    render(<SkillsPage />)
+    const toggle = screen.getByRole('switch', {
+      name: 'common:enableSkill: custom-skill',
+    })
+
+    act(() => {
+      toggle.click()
+      toggle.click()
+    })
+
+    expect(hookState.value.setEnabled).toHaveBeenCalledExactlyOnceWith(
+      customSkill.name,
+      false
+    )
+    expect(toggle).toBeDisabled()
+    expect(toggle).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Disabling custom-skill…'
+    )
+
+    await act(async () => change.resolve(undefined))
+
+    expect(toggle).toBeEnabled()
+    expect(toggle).not.toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(hookState.value.setEnabled).toHaveBeenCalledOnce()
+  })
+
+  it('lets another skill finish its toggle while the first skill is still pending', async () => {
+    const first = deferred<void>()
+    const second = deferred<void>()
+    hookState.value.skills = [customSkill, { ...otherSkill, enabled: false }]
+    hookState.value.setEnabled
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise)
+    render(<SkillsPage />)
+    const firstToggle = screen.getByRole('switch', {
+      name: 'common:enableSkill: custom-skill',
+    })
+    const secondToggle = screen.getByRole('switch', {
+      name: 'common:enableSkill: other-skill',
+    })
+
+    fireEvent.click(firstToggle)
+
+    expect(firstToggle).toBeDisabled()
+    expect(secondToggle).toBeEnabled()
+    fireEvent.click(secondToggle)
+    expect(hookState.value.setEnabled.mock.calls).toEqual([
+      [customSkill.name, false],
+      [otherSkill.name, true],
+    ])
+    expect(secondToggle).toBeDisabled()
+    expect(screen.getAllByRole('status').map((status) => status.textContent)).toEqual(
+      ['Disabling custom-skill…', 'Enabling other-skill…']
+    )
+
+    await act(async () => second.resolve(undefined))
+
+    expect(secondToggle).toBeEnabled()
+    expect(firstToggle).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Disabling custom-skill…')
+
+    await act(async () => first.resolve(undefined))
+
+    expect(firstToggle).toBeEnabled()
+    expect(secondToggle).toBeEnabled()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('keeps the persisted skill state after a toggle fails and allows the same change to be retried', async () => {
+    const failed = deferred<void>()
+    const retry = deferred<void>()
+    hookState.value.setEnabled
+      .mockReturnValueOnce(failed.promise)
+      .mockReturnValueOnce(retry.promise)
+    const errorToast = vi.spyOn(toast, 'error').mockReturnValue('skill-toggle-error')
+
+    try {
+      render(<SkillsPage />)
+      const toggle = screen.getByRole('switch', {
+        name: 'common:enableSkill: custom-skill',
+      })
+
+      expect(toggle).toBeChecked()
+      fireEvent.click(toggle)
+      expect(toggle).toBeChecked()
+      expect(toggle).toBeDisabled()
+
+      await act(async () => failed.reject(new Error('Could not disable custom-skill')))
+
+      expect(toggle).toBeChecked()
+      expect(toggle).toBeEnabled()
+      expect(toggle).not.toHaveAttribute('aria-busy', 'true')
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(errorToast).toHaveBeenCalledExactlyOnceWith(
+        'Error: Could not disable custom-skill'
+      )
+      fireEvent.click(toggle)
+      expect(hookState.value.setEnabled.mock.calls).toEqual([
+        [customSkill.name, false],
+        [customSkill.name, false],
+      ])
+      expect(toggle).toBeDisabled()
+
+      await act(async () => retry.resolve(undefined))
+
+      expect(toggle).toBeEnabled()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    } finally {
+      errorToast.mockRestore()
+    }
   })
 
   it('opens a new Agent chat with the selected skill', () => {
