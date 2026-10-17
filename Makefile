@@ -303,6 +303,7 @@ test-rust: stub-resources
 	cargo test --manifest-path src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml
 	cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml
 	cargo test --manifest-path src-tauri/Cargo.toml -p ginfer-manager
+	cargo test --manifest-path src-tauri/Cargo.toml -p gbot-service
 ifeq ($(OS),Windows_NT)
 	powershell -NoProfile -ExecutionPolicy Bypass -File tests/test_ginfer_host_install_windows.ps1 -HostBinary "$(if $(CARGO_TARGET_DIR),$(CARGO_TARGET_DIR),$(CURDIR)/src-tauri/target)/debug/ginfer-host.exe"
 endif
