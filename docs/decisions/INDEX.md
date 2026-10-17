@@ -535,3 +535,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-17** — [Move Linux Gbot sign-in registration with App Data](2026-10-17-move-linux-gbot-sign-in-with-app-data.md)
 - **2026-10-17** — [Use catalog profile settings for Installed Load](2026-10-17-use-catalog-profile-settings-for-installed-load.md)
 - **2026-10-17** — [Isolate Gbot readiness editor state](2026-10-17-isolate-gbot-readiness-editor-state.md)
+- **2026-10-17** — [Default desktop Host to loopback only](2026-10-17-default-desktop-host-to-loopback-only.md)

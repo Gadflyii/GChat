@@ -150,6 +150,11 @@ distribution ABI; release builds still need the supported distribution baseline.
 
 ### Shared local owner
 
+New desktop Hosts listen only on loopback. LAN sharing defaults off; enable
+**Share this host** in GChat or Server Manager to open the separate LAN listener
+and advertise the Host. Existing saved sharing choices are preserved. Enabling
+sharing may require approving an operating-system firewall prompt.
+
 GChat and the no-argument GInfer menu now reuse one per-user host registration:
 `%APPDATA%\GInfer\local-host.json` on Windows, or
 `$XDG_CONFIG_HOME/ginfer/local-host.json` on Linux (default
@@ -239,13 +244,13 @@ multicast; WSL NAT and containers can require explicit port/network configuratio
 
 ## Desktop LAN sharing
 
-GChat desktop hosts share on the LAN by default. In **GInfer Hosts**, the
-**Share this host** checkbox sits beside **Discover nearby GInfer hosts**.
+GChat desktop hosts start with LAN sharing off. In **GInfer Hosts**, enable
+**Share this host** beside **Discover nearby GInfer hosts** to share on the LAN.
 New desktop hosts use the OS hostname. **Settings → General → Host name** lets
 users save a custom display name. The host persists it and updates its LAN
 announcement immediately without changing identity, pairings, or model instances.
 Sharing and browsing are independent; turning browsing off does not hide your host.
-Sharing preferences persist in the host's private state, including an explicit opt-out.
+Sharing preferences persist in the host's private state.
 
 Desktop management stays on loopback TCP 7443. The separate IPv4 LAN listener uses
 TCP 7444 and advertises `_ginfer._tcp.local` through UDP 5353. Permit these ports

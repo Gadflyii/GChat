@@ -64,10 +64,6 @@ pub struct ClientGrant {
     pub name: String,
     pub token_verifier: String,
 }
-fn default_share_lan() -> bool {
-    true
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct Persistent {
     #[serde(default)]
@@ -78,7 +74,7 @@ pub struct Persistent {
     /// Last-known read-only projection from the configured authority, never a catalog.
     #[serde(default)]
     pub fleet_membership: Option<crate::fleet::HostMembershipProjection>,
-    #[serde(default = "default_share_lan")]
+    #[serde(default)]
     pub share_lan: bool,
     #[serde(default)]
     pub management_origin: Option<String>,
@@ -406,7 +402,7 @@ impl Host {
                 management_origin: None,
                 management_notice: None,
                 lan_port: None,
-                share_lan: true,
+                share_lan: false,
                 host_id: Uuid::new_v4(),
                 name,
                 certificate: HostCertificate::generate()?,
