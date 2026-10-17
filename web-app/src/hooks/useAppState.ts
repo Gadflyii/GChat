@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { ThreadMessage } from '@gchat/core'
 import { MCPTool } from '@/types/completion'
+import { useModelLoad } from '@/hooks/useModelLoad'
 
 export type PromptProgress = {
   cache: number
@@ -57,7 +58,16 @@ type AppState = {
   releaseModelStop: () => void
 }
 
-export const useAppState = create<AppState>()((set) => ({
+// A stored model-load error describes the latest failed start only. Once a
+// model becomes active (a later successful load, including one started from
+// GInfer Hosts outside switchToModel) or the server status changes, the error
+// is stale and must no longer disable Send.
+function clearStaleModelLoadError() {
+  const { modelLoadError, setModelLoadError } = useModelLoad.getState()
+  if (modelLoadError) setModelLoadError(undefined)
+}
+
+export const useAppState = create<AppState>()((set, get) => ({
   streamingContent: undefined,
   loadingModel: false,
   tools: [],
@@ -95,7 +105,11 @@ export const useAppState = create<AppState>()((set) => ({
   updateCapabilityToolNames: (names) => {
     set({ capabilityToolNames: new Set(names) })
   },
-  setServerStatus: (value) => set({ serverStatus: value }),
+  setServerStatus: (value) => {
+    const changed = get().serverStatus !== value
+    set({ serverStatus: value })
+    if (changed) clearStaleModelLoadError()
+  },
   setAbortController: (threadId, controller) => {
     set((state) => ({
       abortControllers: {
@@ -178,9 +192,11 @@ export const useAppState = create<AppState>()((set) => ({
     }))
   },
   setActiveModels: (models: string[]) => {
+    const previous = get().activeModels
     set(() => ({
       activeModels: models,
     }))
+    if (models.some((id) => !previous.includes(id))) clearStaleModelLoadError()
   },
   setIntentionalModelStop: (providerName, modelId, stopped) => {
     set((state) => {

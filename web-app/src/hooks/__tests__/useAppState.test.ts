@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { useAppState } from '../useAppState'
+import { useModelLoad } from '../useModelLoad'
 
 
 describe('useAppState', () => {
@@ -166,5 +167,43 @@ describe('useAppState', () => {
     })
 
     expect(result.current.tokenSpeed).toBeUndefined()
+  })
+
+  describe('stale model load errors', () => {
+    const failure = { message: 'Failed to load qwen38_flash_next_180b_smol_mtp: No qualified automatic profile is available.' }
+
+    beforeEach(() => {
+      act(() => {
+        useAppState.setState({ activeModels: [], serverStatus: 'stopped' })
+        useModelLoad.getState().setModelLoadError(failure, 'qwen38_flash_next_180b_smol_mtp')
+      })
+    })
+
+    it('clears the error when a model becomes active through any load path', () => {
+      act(() => {
+        useAppState.getState().setActiveModels(['ginfer/host-1/instance-1'])
+      })
+      expect(useModelLoad.getState().modelLoadError).toBeUndefined()
+      expect(useModelLoad.getState().modelLoadErrorModelId).toBeUndefined()
+    })
+
+    it('keeps the error when no model becomes active', () => {
+      act(() => {
+        useAppState.getState().setActiveModels([])
+      })
+      expect(useModelLoad.getState().modelLoadError).toEqual(failure)
+      expect(useModelLoad.getState().modelLoadErrorModelId).toBe('qwen38_flash_next_180b_smol_mtp')
+    })
+
+    it('clears the error on a server status change but not on a repeated status', () => {
+      act(() => {
+        useAppState.getState().setServerStatus('stopped')
+      })
+      expect(useModelLoad.getState().modelLoadError).toEqual(failure)
+      act(() => {
+        useAppState.getState().setServerStatus('running')
+      })
+      expect(useModelLoad.getState().modelLoadError).toBeUndefined()
+    })
   })
 })
