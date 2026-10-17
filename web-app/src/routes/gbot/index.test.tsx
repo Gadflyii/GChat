@@ -273,10 +273,11 @@ it('explains empty, ready and busy task states without changing task submission'
   expect(screen.getByText('Ready to run this task.')).toBeVisible()
   expect(run).toBeEnabled()
   fireEvent.click(run)
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Sending this task to the bot…'
+  )
   expect(
-    screen.getByText(
-      'Wait for the current operation to finish before running a task.'
-    )
+    screen.getByRole('button', { name: 'Sending…', exact: true })
   ).toBeVisible()
   expect(run).toBeDisabled()
   expect(mocks.call).toHaveBeenCalledWith('tasks/start', {
@@ -1099,6 +1100,70 @@ it('keeps separate bot task drafts and submits each to its own ready bot', async
   expect(
     mocks.call.mock.calls.filter(([path]) => path === 'tasks/start')
   ).toHaveLength(2)
+})
+
+it.each(['', '   '])(
+  'ignores forced empty task submissions (%j)',
+  async (prompt) => {
+    readyTaskBots()
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    const input = screen.getByLabelText('Bot task')
+    fireEvent.change(input, { target: { value: prompt } })
+    fireEvent.submit(input.closest('form')!)
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/start',
+      expect.anything()
+    )
+    expect(
+      screen.queryByText('Sending this task to the bot…')
+    ).not.toBeInTheDocument()
+  }
+)
+
+it('blocks same-tick duplicate tasks, then restores the failed draft for retry', async () => {
+  let reject!: (error: Error) => void
+  const submit = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail
+        })
+    )
+    .mockResolvedValueOnce({})
+  const [identity] = readyTaskBots(submit)
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  const input = screen.getByLabelText('Bot task')
+  fireEvent.change(input, { target: { value: 'Send exactly once' } })
+  const form = input.closest('form')!
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
+  expect(submit).toHaveBeenCalledExactlyOnceWith({
+    identity,
+    prompt: 'Send exactly once',
+  })
+  expect(form).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Sending this task to the bot…'
+  )
+  fireEvent.submit(form)
+  expect(submit).toHaveBeenCalledTimes(1)
+  await act(async () => reject(new Error('Task admission refused')))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeEnabled()
+  )
+  expect(input).toHaveValue('Send exactly once')
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  fireEvent.submit(form)
+  await waitFor(() => expect(input).toHaveValue(''))
+  expect(submit).toHaveBeenCalledTimes(2)
 })
 
 it('keeps a rejected task draft available for retry', async () => {

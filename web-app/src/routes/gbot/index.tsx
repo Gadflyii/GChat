@@ -83,6 +83,8 @@ function GbotPage() {
   const [m365Setups, setM365Setups] = useState<M365SetupRecord[]>([])
   const [setupError, setSetupError] = useState('')
   const [prompts, setPrompts] = useState<Record<string, string>>({})
+  const [submittingTask, setSubmittingTask] = useState<string>()
+  const taskSubmission = useRef(false)
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const setGbotEnabled = useGeneralSetting((state) => state.setGbotEnabled)
@@ -352,6 +354,7 @@ function GbotPage() {
       savedAssignment.context_tokens > 0
   )
   const taskGuidance = (() => {
+    if (submittingTask === workspaceId) return 'Sending this task to the bot…'
     if (busy)
       return 'Wait for the current operation to finish before running a task.'
     if (setupBlocked) {
@@ -1098,17 +1101,29 @@ function GbotPage() {
                   ))}
                   <p
                     id="gbot-task-guidance"
+                    role={submittingTask === workspaceId ? 'status' : undefined}
                     className="text-sm text-muted-foreground"
                   >
                     {taskGuidance}
                   </p>
                   <form
                     className="flex gap-2"
+                    aria-busy={submittingTask === workspaceId}
                     onSubmit={(event) => {
                       event.preventDefault()
-                      if (!identity || !ready || !botHasControl) return
+                      if (
+                        busy ||
+                        taskSubmission.current ||
+                        !identity ||
+                        !ready ||
+                        !botHasControl ||
+                        !prompt.trim()
+                      )
+                        return
                       const submittedIdentity: Identity = identity
                       const submittedPrompt = prompt
+                      taskSubmission.current = true
+                      setSubmittingTask(submittedIdentity.workspace_id)
                       void perform(async () => {
                         await gbot('tasks/start', {
                           identity: submittedIdentity,
@@ -1123,6 +1138,9 @@ function GbotPage() {
                               }
                             : previous
                         )
+                      }).finally(() => {
+                        taskSubmission.current = false
+                        setSubmittingTask(undefined)
                       })
                     }}
                   >
@@ -1143,10 +1161,14 @@ function GbotPage() {
                     <Button
                       aria-describedby="gbot-task-guidance"
                       disabled={
-                        busy || !ready || !prompt.trim() || !botHasControl
+                        busy ||
+                        Boolean(submittingTask) ||
+                        !ready ||
+                        !prompt.trim() ||
+                        !botHasControl
                       }
                     >
-                      Run
+                      {submittingTask === workspaceId ? 'Sending…' : 'Run'}
                     </Button>
                   </form>
                 </fieldset>
