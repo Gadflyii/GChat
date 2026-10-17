@@ -1,5 +1,30 @@
 # GInfer host UI
 
+## Copy result and accessible control — C6
+
+`GUI-COPY-RESULT-ACCESSIBILITY-20261017` fixes the shared Copy button in
+messages, model errors and local API details. It currently reports success
+before the clipboard promise resolves and has no accessible name. The button
+must await the clipboard result, block duplicate writes while pending, announce
+successful copying and show a retryable error when copying fails. Callers and
+the copied text remain unchanged.
+
+Acceptance: rendered tests for the real button's accessible name, pending and
+same-tick duplicate clicks, successful resolution/reset and rejected, thrown or
+unavailable clipboard with retry, followed by one `make verify`. No installed
+workflow, Engine, model, GPU or clipboard write outside mocked tests is needed.
+
+C6 owns only `web-app/src/containers/CopyButton.tsx`, its dedicated
+`__tests__/CopyButton.test.tsx` and this subject section. Source is
+`/ai/gchat-worktrees/c6-copy-result-accessibility-20261017`, branch
+`fix/c6-copy-result-accessibility-20261017`, based on main `58af0e961`.
+Next: run the focused tests and full verification in the retained pinned S1
+container with private writable caches, then publish the isolated branch.
+The planned disposable S1 copy is
+`/media/ron/SSD_RAID/ai/tmp-c6-copy-result-accessibility-20261017/`;
+concise results belong in
+`/ai/gchat/out/c6-copy-result-accessibility-20261017/`. Both are unstarted.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing
