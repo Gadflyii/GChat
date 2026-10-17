@@ -21,13 +21,25 @@ routes and their labels; C7 retains SettingsMenu. Plan/results live here;
 concise results will be retained in
 `/ai/gchat/out/c6-provider-control-labels-20261017/{result.json,summary.md}`.
 
-Current state: implementation and four real rendered regression cases are ready.
-Self-check and `git diff --check` passed; tests remain unrun. No verification job
-or resource is held. New S1 compile/model/I/O waits for Codex3's GMUL TIMING return;
-then reuse the pinned GChat verification image and an owned private cache,
-run focused tests and the full gate once, and retire that disposable copy.
-W3 local-path validation still uses Gchat3's Installed Load packet, without a
-separate Load.
+Implementation `c6292eeee` passes all four rendered regressions. Required
+verification completed on October17: 2,966 frontend tests, 119 extension tests,
+59 Node contracts and 1,079 Rust tests passed; six frontend tests were skipped
+and 27 Rust tests ignored. Types, quality checks and all six coverage floors
+passed. Lint retains three existing warnings and no errors.
+
+The initial `make verify` exited2 because its private offline container lacked
+a non-loopback route: the shared-address Rust fixture reported
+`NetworkUnreachable` at `worker_pools.rs:887`; the other 721 library cases passed.
+Using a private Docker bridge, that one failed case and the five unrun Rust
+commands passed, exit0 at16:03:54Z. Passed gates were retained; no product source
+or dependency changes were required. Future verification containers need this
+private route for the fixture. S1 CPU72–79 nice10 returned16:04Z.
+
+Concise results are retained at the path above. The private verification copy
+is retired after retaining the result; the read-only donor remains untouched.
+Next: coordinator merge and ordinary installed associated-label/navigation
+confirmation. W3 local-path validation still uses Gchat3's sole Installed Load
+packet, without a separate Load.
 
 ## Copy result and accessible control — C6
 
