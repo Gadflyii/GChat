@@ -28,8 +28,10 @@ frozen main revision; the genuine bundled Engine resources are retained
 `5af502f1e59a99205750c9090874e2a0448f199f`, so this is not a current-Engine
 qualification. Local portability remains unproven until local `ldd` resolves.
 
-No C7 desktop, model, build, private runtime copy or booking exists. Await
-Gchat 3's RC Load resource return and Codex 3's pending GMUL timing pair return,
+No C7 desktop, model, build, private runtime copy or booking exists. At 15:42Z,
+Codex 3 entered GMUL timing admission and renewed the S1 staging hold; Gchat 3's
+RC Load bulk-copy hold also remains pending its Ready/terminal handoff. Await
+both returns,
 then book the actual walkthrough and launch
 with separate Host/Inspector ports. Use a private `dbus-run-session` as well as
 fresh HOME/XDG: desktop single-instance ownership uses a session-bus name and
@@ -38,6 +40,12 @@ variables intact. Keep Ron's port 17483 and all existing data
 untouched. Retain concise results under
 `/ai/gchat/out/c7-models-hub-engine-hardware-20261017/` when observations exist;
 release private processes and disposable copies at completion.
+
+Local preparation found an available WSLg display, private Inspector ports and
+37 GB free disk. The six SONAMEs missing from the static local comparison exist
+in a retained local AppImage closure, but no dependency copy or actual local
+`ldd` has run. This is a possible private runtime dependency source, not a
+portability result. No screen, download, Load or profile action is qualified yet.
 
 The source-reading helper mapped the ordinary sequence: Models → Installed /
 Recommended / Downloads; GInfer Hosts → Set up models on this computer;
