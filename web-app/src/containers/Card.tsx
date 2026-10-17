@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
-import { ReactNode } from 'react'
+import { ReactNode, useId } from 'react'
+import { LabelledByContext } from '@/components/ui/labelled-by-context'
 
 type CardProps = {
   title?: string
@@ -29,6 +30,9 @@ export function CardItem({
   column,
   actions,
 }: CardItemProps) {
+  const rowId = useId()
+  const labelId = title ? `${rowId}-title` : undefined
+  const descriptionId = description ? `${rowId}-description` : undefined
   return (
     <>
       <div
@@ -43,9 +47,14 @@ export function CardItem({
         )}
       >
         <div className="space-y-1.5">
-          <h1 className="font-medium text-foreground">{title}</h1>
+          <h1 id={labelId} className="font-medium text-foreground">
+            {title}
+          </h1>
           {description && (
-            <span className="text-muted-foreground leading-normal">
+            <span
+              id={descriptionId}
+              className="text-muted-foreground leading-normal"
+            >
               {description}
             </span>
           )}
@@ -58,7 +67,9 @@ export function CardItem({
               column && 'w-full'
             )}
           >
-            {actions}
+            <LabelledByContext.Provider value={{ labelId, descriptionId }}>
+              {actions}
+            </LabelledByContext.Provider>
           </div>
         )}
       </div>
