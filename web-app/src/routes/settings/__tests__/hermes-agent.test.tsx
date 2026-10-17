@@ -87,6 +87,8 @@ describe('Hermes Agent settings', () => {
         'Choose a model, then select Save connection again.'
       )
     )
+    // The form is left as it was, ready for another try.
+    expect(screen.getByRole('button', { name: 'Save connection' })).toBeEnabled()
     expect(mocks.startServer).not.toHaveBeenCalled()
     expect(mocks.toastInfo).not.toHaveBeenCalled()
     expect(mocks.invoke).not.toHaveBeenCalled()
