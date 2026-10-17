@@ -189,10 +189,10 @@ fn recommendations(
         let fits = capacity.is_some_and(|vram| vram >= release.min_vram_mib_per_gpu
                 && release.bytes <= free);
         let reason = match capacity {
-            None => "GPU memory guidance is unavailable; selected-artifact profiling is still required",
-            Some(vram) if vram < release.min_vram_mib_per_gpu => "Below the published per-GPU VRAM requirement",
-            _ if release.bytes > free => "Not enough live free space in the selected folder",
-            _ => "Meets published GPU VRAM and live disk guidance; selected-artifact profiling and an Engine quote are still required",
+            None => "GInfer could not read your graphics memory. It will measure your hardware before this model can start.",
+            Some(vram) if vram < release.min_vram_mib_per_gpu => "Needs more graphics memory than the selected card has.",
+            _ if release.bytes > free => "Not enough free space in the selected folder.",
+            _ => "Fits your graphics card and free disk space. GInfer still checks the download and measures your hardware before it can start.",
         };
         (release, fits, reason)
     }).collect();
@@ -2370,7 +2370,7 @@ mod tests {
         assert!(choices[2]["reason"]
             .as_str()
             .unwrap()
-            .contains("Below the published per-GPU VRAM requirement"));
+            .contains("Needs more graphics memory than the selected card has."));
     }
 
     #[test]
