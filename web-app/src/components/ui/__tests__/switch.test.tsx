@@ -169,11 +169,12 @@ describe('Switch', () => {
     expect(switchElement).toBeInTheDocument()
   })
 
-  it('handles focus styles', () => {
+  it('shows a visible keyboard focus ring', () => {
     render(<Switch />)
     
     const switchElement = document.querySelector('[data-slot="switch"]')
-    expect(switchElement).toHaveClass('focus-visible:ring-0', 'focus-visible:border-none')
+    expect(switchElement).toHaveClass('focus-visible:ring-[3px]', 'focus-visible:ring-ring/50')
+    expect(switchElement).not.toHaveClass('focus-visible:ring-0')
   })
 
   it('handles checked state styling', () => {
