@@ -1,5 +1,44 @@
 # GChat remediation and code hygiene
 
+## Assistant deletion single submission (C4, October 17)
+
+Repository `/ai/gchat`, branch `fix/c4-assistant-delete-single-submit-20261017`,
+worktree `/ai/gchat-worktrees/c4-assistant-delete-single-submit-20261017`,
+baseline `eb3f7dc3c`. The dialog previously focused Delete and handled Enter
+in addition to native activation. Its caller closed before persistence
+completed, while the store hid failures and removed the assistant immediately.
+
+The dialog now focuses Cancel and uses native activation with a synchronous
+pending guard. Pending deletion disables controls and dismissal and displays
+loading; persistence errors remain visible with retry. The store waits for
+persistence before changing state, then reads the latest assistant list and
+selections. Successful deletion preserves unrelated changes made while it
+waits and keeps the existing built-in fallback when the deleted assistant is
+still selected. The settings caller closes only after success.
+
+Seven real dialog/button interaction cases and 16 hook cases passed, covering
+single submission, pending controls, failure/retry, persistence ordering,
+fallback, and concurrent state changes. Source and tests were implemented in
+parallel with distinct file ownership. No real user data was deleted.
+
+Linux verification passed: lint, typecheck, quality/contract/asset checks,
+coverage floors, 2,818 frontend tests (six skipped), 119 extension tests, and
+1,076 Rust tests (27 ignored). Lint retains three unrelated warnings in
+`ServiceSetup.tsx`, `AgentWorkspaceFiles.tsx`, and `routes/agents/index.tsx`.
+The initial Rust invocation used `--network none`, which invalidated a
+worker-address test requiring a non-loopback route (`worker_pools.rs:887`,
+`NetworkUnreachable`). The complete unchanged Rust stage then passed with
+Docker bridge networking via `make -o verify-fast verify`; the already-passed
+frontend stages were retained. Future full gates need a container route.
+Windows runtime behavior has not been separately exercised.
+
+The private S1 build copy and both exited containers were removed after
+verification; booking 2566 was cancelled and resources returned at 14:19Z.
+Gchat 3's inactive donor remains read-only and retained. The source worktree
+is retained for review; concise results are kept at
+`/ai/gchat/out/c4-assistant-delete-single-submit-20261017/result.json`.
+The next step is the authorized merge; no further run is required.
+
 ## Message deletion single submission (C4, October 17)
 
 Repository `/ai/gchat`, branch `fix/c4-message-delete-single-submit-20261017`,

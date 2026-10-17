@@ -22,7 +22,7 @@ interface AssistantState {
    * since a slider drag emits a change per frame.
    */
   updateAssistantParam: (id: string, key: string, value: unknown) => void
-  deleteAssistant: (id: string) => void
+  deleteAssistant: (id: string) => Promise<void>
   setCurrentAssistant: (assistant: Assistant, saveToStorage?: boolean) => void
   setDefaultAssistant: (id: string) => void
   setAssistants: (assistants: Assistant[]) => void
@@ -181,32 +181,37 @@ export const useAssistant = create<AssistantState>((set, get) => ({
       get().assistants.find((a) => a.id === id)
     )
   },
-  deleteAssistant: (id) => {
-    const state = get()
-    getServiceHub()
+  deleteAssistant: async (id) => {
+    const assistant = get().assistants.find((a) => a.id === id)
+    if (!assistant) return
+    await getServiceHub()
       .assistants()
-      .deleteAssistant(
-        state.assistants.find((e) => e.id === id) as unknown as CoreAssistant
-      )
-      .catch((error) => {
-        console.error('Failed to delete assistant:', error)
-      })
+      .deleteAssistant(assistant as unknown as CoreAssistant)
 
-    // Check if we're deleting the current or default assistant
+    // Selection and other assistants may have changed during persistence.
+    const state = get()
     const wasCurrentAssistant = state.currentAssistant?.id === id
     const wasDefaultAssistant = state.defaultAssistantId === id
 
-    set({ assistants: state.assistants.filter((a) => a.id !== id) })
+    set({
+      assistants: state.assistants.filter((a) => a.id !== id),
+      currentAssistant: wasCurrentAssistant
+        ? defaultAssistant
+        : state.currentAssistant,
+      defaultAssistantId: wasDefaultAssistant
+        ? defaultAssistant.id
+        : state.defaultAssistantId,
+      pendingAssistant:
+        state.pendingAssistant?.id === id ? undefined : state.pendingAssistant,
+    })
 
     // If the deleted assistant was current, fallback to default and update localStorage
     if (wasCurrentAssistant) {
-      set({ currentAssistant: defaultAssistant })
       setLastUsedAssistantId(defaultAssistant.id)
     }
 
     // If the deleted assistant was the default, reset to the built-in default
     if (wasDefaultAssistant) {
-      set({ defaultAssistantId: defaultAssistant.id })
       setDefaultAssistantIdToStorage(defaultAssistant.id)
     }
   },
