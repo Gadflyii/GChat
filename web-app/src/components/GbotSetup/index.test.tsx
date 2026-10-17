@@ -272,13 +272,17 @@ it.each([null, false])(
     ).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Preparing resources…' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Preparing resources…' })
+    )
     expect(selectGbotService).toHaveBeenCalledOnce()
     expect(props.save).not.toHaveBeenCalled()
 
     resources.ready = true
     view.rerender(<GbotSetup {...props} />)
-    expect(screen.getByRole('status')).toHaveTextContent('Selecting Gbot service')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Selecting Gbot service'
+    )
     expect(
       screen.getByRole('button', { name: 'Selecting service…' })
     ).toBeDisabled()
@@ -444,6 +448,103 @@ it('keeps a failed save reviewable and allows retry', async () => {
   expect(screen.getByText('bot@bot.local:22')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
   await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+})
+
+it('selects the service once for same-tick submissions and allows retry after failure', async () => {
+  let fail!: (cause: Error) => void
+  vi.mocked(selectGbotService).mockImplementationOnce(
+    () =>
+      new Promise<void>((_, reject) => {
+        fail = reject
+      })
+  )
+  const save = vi.fn()
+  const cancel = vi.fn()
+  render(<GbotSetup save={save} localReady={vi.fn()} cancel={cancel} />)
+  fireEvent.change(screen.getByLabelText('Bot name'), {
+    target: { value: 'Writer' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  )
+  const form = screen.getByRole('form', { name: 'Set up Gbot' })
+  act(() => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  expect(selectGbotService).toHaveBeenCalledExactlyOnceWith({ kind: 'local' })
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Selecting Gbot service…'
+  )
+  expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  expect(save).not.toHaveBeenCalled()
+  expect(cancel).not.toHaveBeenCalled()
+
+  await act(async () => fail(new Error('Service unavailable')))
+  expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
+  expect(screen.getByText('Step 2 of 5 · Service')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await screen.findByText('Step 3 of 5 · Computer')
+  expect(selectGbotService).toHaveBeenCalledTimes(2)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('saves the reviewed bot once for same-tick submissions with progress and retry', async () => {
+  preparedApi()
+  let fail!: (cause: Error) => void
+  const save = vi
+    .fn()
+    .mockResolvedValue(undefined)
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject
+        })
+    )
+  const cancel = vi.fn()
+  render(<GbotSetup save={save} localReady={vi.fn()} cancel={cancel} />)
+  await chooseLan()
+  fillConnection()
+  fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
+  await checkTools()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  const form = screen.getByRole('form', { name: 'Set up Gbot' })
+  act(() => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  const expected = {
+    name: 'Writer',
+    hostname: 'bot.local',
+    port: '22',
+    user: 'bot',
+    hostKey: 'ssh-ed25519 pinned-key',
+    key: '',
+    passphrase: '',
+    workspaceId: 'saved-bot',
+  }
+  expect(save).toHaveBeenCalledExactlyOnceWith(expected)
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Saving Writer and its computer connection…'
+  )
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Finish later' })).toBeDisabled()
+  expect(cancel).not.toHaveBeenCalled()
+
+  await act(async () => fail(new Error('Vault unavailable')))
+  expect(screen.getByRole('alert')).toHaveTextContent('Vault unavailable')
+  expect(screen.getByText('Step 5 of 5 · Review')).toBeInTheDocument()
+  expect(screen.getByText('bot@bot.local:22')).toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Finish later' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+  expect(save).toHaveBeenLastCalledWith(expected)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 it('verifies the fingerprint, saves a vault key and requires SSH authentication before review', async () => {
