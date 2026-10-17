@@ -77,7 +77,7 @@ async function chooseLan() {
 }
 
 function fillConnection() {
-  fireEvent.click(screen.getByLabelText('Use an existing SSH key'))
+  fireEvent.click(screen.getByLabelText('Use an existing SSH key (advanced)'))
   for (const [label, value] of [
     ['SSH host', ' bot.local '],
     ['SSH user', ' bot '],
@@ -111,7 +111,7 @@ it.each([
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     fireEvent.click(screen.getByLabelText(label))
     expect(
-      screen.queryByLabelText('Provider API token')
+      screen.queryByLabelText('Provider API token (access key)')
     ).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: 'Connect this VM' })
