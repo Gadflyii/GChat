@@ -22,11 +22,18 @@ Object.defineProperty(global, 'IS_WEB_APP', { value: false, writable: true })
 
 // Mock dependencies
 vi.mock('@tanstack/react-router', () => ({
-  Link: ({ children, to, className }: any) => (
-    <a href={to} className={className}>
-      {children}
-    </a>
-  ),
+  Link: ({ children, to, params, search, className }: any) => {
+    const pathname = to.replace(
+      /\$([^/]+)/g,
+      (_match: string, key: string) => encodeURIComponent(params[key])
+    )
+    const query = search ? new URLSearchParams(search).toString() : ''
+    return (
+      <a href={`${pathname}${query ? `?${query}` : ''}`} className={className}>
+        {children}
+      </a>
+    )
+  },
   useMatches: vi.fn(),
   useNavigate: vi.fn(),
 }))
@@ -256,21 +263,18 @@ describe('SettingsMenu', () => {
 
     const openaiProvider = screen
       .getByTestId('provider-avatar-openai')
-      .closest('div')
-    expect(openaiProvider).toBeInTheDocument()
+      .closest('a')
+    expect(openaiProvider).toHaveClass('bg-foreground/20')
   })
 
-  it('navigates to provider when provider is clicked', async () => {
-    const user = userEvent.setup()
+  it('links each provider to its settings route', () => {
     render(<SettingsMenu />)
 
-    // Providers are expanded by default, click directly on a provider
     const openaiProvider = screen
       .getByTestId('provider-avatar-openai')
-      .closest('div[class*="cursor-pointer"]')
-    await user.click(openaiProvider!)
+      .closest('a')
 
-    expect(mockNavigate).toHaveBeenCalled()
+    expect(openaiProvider).toHaveAttribute('href', '/settings/providers/openai')
   })
 
   it('hides ginfer during setup remote provider step', () => {
@@ -288,10 +292,10 @@ describe('SettingsMenu', () => {
     expect(screen.getByTestId('provider-avatar-openai')).toBeInTheDocument()
 
     // ginfer should have 'hidden' class during setup_remote_provider step
-    const llamaCpp = screen
+    const localProvider = screen
       .getByTestId('provider-avatar-ginfer')
-      .closest('div[class*="cursor-pointer"]')
-    expect(llamaCpp?.className).toContain('hidden')
+      .closest('a')
+    expect(localProvider).toHaveClass('hidden')
   })
 
   it('lists the local engine first, then the rest by title', () => {

@@ -68,8 +68,10 @@ function GbotPage() {
   })
   const [serviceReady, setServiceReady] = useState(false)
   const [serviceError, setServiceError] = useState('')
+  const serviceSelectionPending = useRef(false)
   const changeServiceDraft = useCallback(
     (target: ServiceTarget, ready: boolean) => {
+      if (serviceSelectionPending.current) return
       setServiceDraft(target)
       setServiceReady(ready)
     },
@@ -212,7 +214,8 @@ function GbotPage() {
     }
   }
   const chooseService = async () => {
-    if (busy || !serviceReady) return
+    if (busy || serviceSelectionPending.current || !serviceReady) return
+    serviceSelectionPending.current = true
     setBusy(true)
     setServiceError('')
     try {
@@ -238,6 +241,7 @@ function GbotPage() {
     } catch (cause) {
       setServiceError(String(cause))
     } finally {
+      serviceSelectionPending.current = false
       setBusy(false)
     }
   }
@@ -502,7 +506,9 @@ function GbotPage() {
           aria-label="Choose service computer"
           className="space-y-3 overflow-y-auto border-b p-5"
         >
-          <ServiceSetup target={serviceDraft} change={changeServiceDraft} />
+          <fieldset disabled={busy} aria-label="Gbot service selection">
+            <ServiceSetup target={serviceDraft} change={changeServiceDraft} />
+          </fieldset>
           {serviceError && (
             <p role="alert" className="text-sm text-destructive">
               {serviceError}

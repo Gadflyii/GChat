@@ -1,5 +1,271 @@
 # GInfer host UI
 
+## Attachment edits survive navigation — C4
+
+`GUI-SETTINGS-ATTACHMENT-EDIT-LOSS` was reproduced in the current native Linux
+Settings walkthrough: changing the file limit from 20 to 21, leaving within
+100 ms and reopening after 600 ms restores 20. The page discarded its pending
+500 ms write on unmount. Independent extension updates also read and replace
+the same settings document, allowing concurrent writes to lose another edit.
+
+The candidate flushes pending numeric edits together when leaving, retains the
+typing debounce and existing validation, and serializes extension reads/writes
+so reopening waits for persistence. Acceptance: rendered regressions using real
+extension persistence for debounce, quick navigation, delayed reads, concurrent
+controls, validation and retry after a failed write; one full `make verify`.
+No model, Engine, provider request or real user-data operation is in scope.
+
+Source: `/ai/gchat-worktrees/c4-attachment-edit-durability-20261017`, branch
+`fix/c4-attachment-edit-durability-20261017`, integrated source `1788ee4336`.
+All six focused persistence regressions and one full `make verify` pass:
+2,971 frontend tests, 119 extension tests, 1,079 Rust tests and 59 Node
+contracts. Six frontend tests were skipped and 27 Rust tests ignored; lint,
+types, quality checks and all six critical coverage floors passed. Lint retains
+four warnings, including the existing attachment `sel` dependency warning.
+
+Results and the original native screenshots belong to
+`/ai/gchat/out/c4-settings-sweep-20261017/`; the reproduced loss is in
+`attachments-quick-navigation.json`, and passing commands are linked from
+`attachment-fix/result.json`. Retained source permissions were repaired before
+tests began. A stale post-run phase reader failed after both requested commands
+and the container exited 0; its separate error does not replace their results.
+No passing test was repeated. Returned 15:55Z; booking2638 canceled.
+
+The private S1 cache at `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/`
+is retained for the remaining isolated Settings fixes. Next: coordinator merge,
+then replay the accepted Settings changes in the private native app. Provider
+labels are owned separately by C6, provider keyboard navigation by C7;
+unsupported attachment choices and sidebar density remain separate findings in
+Gchat3's shared GUI list.
+
+## Provider settings keyboard navigation — C7
+
+`GUI-SETTINGS-PROVIDER-KEYBOARD` fixes the ordinary Settings provider entries
+observed as clickable divs that keyboard users cannot reach. Use native router
+links for active and hidden providers, keeping the current destinations, remote
+setup search, provider ordering, selected-model marker and sidebar layout.
+Keyboard focus must be visible and Enter must open the selected provider.
+
+Acceptance: focused rendered navigation regressions and one `make verify`, then
+push the isolated branch merge-ready. Existing installed evidence is
+`/ai/gchat/out/c4-settings-sweep-20261017/provider-navigation-semantics.json`;
+the parent retains the ordinary installed keyboard recheck. No provider setup,
+model, GPU, Engine, install or existing user data is involved in this source fix.
+
+Owned tree: `/ai/gchat-worktrees/c7-settings-provider-keyboard-20261017`, branch
+`fix/c7-settings-provider-keyboard-20261017`, base `0099e0a1d`. Implementation
+`da2fe1f1e` passes 20 focused cases, including three real-router keyboard
+regressions. All `make verify` components passed on S1 CPU48–55 nice10:
+lint, types, 59 Node contracts, 2,958 frontend tests, 119 extension tests,
+1,079 Rust tests and all six critical coverage floors. Six frontend tests
+were skipped and 27 Rust tests ignored; lint retains three existing warnings.
+
+The single `make verify` invocation initially stopped because the private cache
+lacked the current core package's `dist` entry point. Building that exact core
+source repaired the fixture; only the failed coverage and unrun Rust targets
+were resumed, and both passed. No passing stage was repeated.
+
+Returned15:35Z; booking2630 canceled. The private verification copy and four
+exited containers were removed, with the read-only donor untouched. Concise
+results are retained in
+`/ai/gchat/out/settings-provider-keyboard-20261017/{result.json,summary.md}`.
+Next: coordinator merge, then Codex4's sidebar-density integration and Gchat3's
+ordinary installed keyboard recheck. The Models/Hub/Engine/Hardware hands-on
+pass waits for Gchat3's RC Load and Codex3's GMUL TIMING pair to return;
+Windows collision remains pending Gchat2's installed RC handoff.
+## Provider field labels — C6
+
+`GUI-SETTINGS-CONTROL-LABELS` gives provider API Key and Base URL inputs
+accessible names from their existing visible setting titles. Password reveal,
+hide and copy actions identify their field and cannot submit an enclosing form.
+Passwords stay masked initially; setting values, editing, clipboard contents and
+numeric adjustment semantics remain unchanged.
+
+Acceptance: rendered regressions for named fields, password actions, form safety
+and existing numeric behavior, followed by one `make verify`; push the isolated
+branch merge-ready. Installed confirmation belongs to Gchat3's GUI acceptance.
+No Engine, GPU, model, provider request or real user-data operation is required.
+
+Source: `/ai/gchat-worktrees/c6-provider-control-labels-20261017`, branch
+`fix/c6-provider-control-labels-20261017`, from main `513f2ab30`. C6 owns the
+shared `dynamicControllerSetting/index.tsx` and `InputControl.tsx`, the dedicated
+`index.test.tsx` and the provider caller's title prop. C4 retains attachment
+routes and their labels; C7 retains SettingsMenu. Plan/results live here;
+concise results will be retained in
+`/ai/gchat/out/c6-provider-control-labels-20261017/{result.json,summary.md}`.
+
+Implementation `c6292eeee` passes all four rendered regressions. Required
+verification completed on October17: 2,966 frontend tests, 119 extension tests,
+59 Node contracts and 1,079 Rust tests passed; six frontend tests were skipped
+and 27 Rust tests ignored. Types, quality checks and all six coverage floors
+passed. Lint retains three existing warnings and no errors.
+
+The initial `make verify` exited2 because its private offline container lacked
+a non-loopback route: the shared-address Rust fixture reported
+`NetworkUnreachable` at `worker_pools.rs:887`; the other 721 library cases passed.
+Using a private Docker bridge, that one failed case and the five unrun Rust
+commands passed, exit0 at16:03:54Z. Passed gates were retained; no product source
+or dependency changes were required. Future verification containers need this
+private route for the fixture. S1 CPU72–79 nice10 returned16:04Z.
+
+Concise results are retained at the path above. The private verification copy
+is retired after retaining the result; the read-only donor remains untouched.
+Next: coordinator merge and ordinary installed associated-label/navigation
+confirmation. W3 local-path validation still uses Gchat3's sole Installed Load
+packet, without a separate Load.
+
+## Copy result and accessible control — C6
+
+`GUI-COPY-RESULT-ACCESSIBILITY-20261017` fixes the shared Copy button in
+messages, model errors and local API details. It waits for the clipboard
+promise before announcing success, blocks duplicate writes while pending and
+shows a retryable error on failure. The real button has an accessible name and
+a polite success announcement; callers and copied text are unchanged.
+
+Implementation `3fda416dc` passes four rendered cases covering the accessible
+name, pending and same-tick duplicate clicks, successful resolution/reset,
+and rejected, thrown or unavailable clipboard with retry. One `make verify`
+exited 0 at 15:23:31Z October17: 2,955 frontend tests, 119 extension tests,
+59 Node contract tests and 1,076 Rust tests passed; six frontend tests were
+skipped and 27 Rust tests ignored. Lint, types, quality checks and all six
+critical coverage floors passed; lint retains three existing warnings.
+No installed workflow, Engine, model or GPU run was needed.
+
+C6 owns only `web-app/src/containers/CopyButton.tsx`, its dedicated
+`__tests__/CopyButton.test.tsx` and this section. Source is
+`/ai/gchat-worktrees/c6-copy-result-accessibility-20261017`, branch
+`fix/c6-copy-result-accessibility-20261017`, from main `58af0e961`.
+Concise results are retained in
+`/ai/gchat/out/c6-copy-result-accessibility-20261017/{result.json,summary.md}`.
+Verification used S1 CPU72–79 nice10 in pinned image `ad7f9bf020d7`, private
+offline caches and 22 read-only profiles. The private S1 source/dependency/build
+copy is retired; the read-only donor remains untouched. Next: coordinator merge,
+then the next unowned GUI row from Gchat3. New S1 work holds through Codex3's
+announced GMUL TIMING pair. W3 local-path validation uses Gchat3's RC Installed
+Load/cache packet when it arrives, with no separate Load.
+
+Setup correction: root installation succeeded but pruned 40 extension-only
+cache entries, stopping offline extension installation before any tests.
+Refilling the private cache **after** root installation allowed extension setup
+to finish, followed by the still-unrun focused and full gates. Preserve this
+ordering for future offline setup; the cause and correction are in `result.json`.
+## Starting a conversation
+
+Your first **Send** creates the conversation before starting the response.
+Repeated Send actions are blocked while creation is pending. If creation fails,
+GChat shows an error and keeps your draft and attached files so you can retry.
+Once the conversation is created, GChat sends the text and files you submitted
+when you pressed Send, even if you have since edited the composer.
+
+## Sending in an existing conversation
+
+**Send** waits for GChat to finish preparing the conversation before starting
+the response. Repeated Send actions are blocked while preparation is pending.
+If preparation fails, GChat shows an error and keeps your draft and attachments
+so you can retry.
+
+Text or attachments you add while an earlier Send is pending stay in the
+composer when that preparation finishes; its completion does not clear your
+newer changes.
+
+## Choosing image or audio attachments
+
+If the image or audio file window fails, GChat shows an error and keeps your
+draft and existing attachments. Use the attachment button again to retry.
+Canceling the file window without choosing a file shows no error.
+
+If an image cannot be read, GChat names the file and asks you to choose it
+again. Your draft and other attachments stay in place.
+
+## Choosing a skill with the keyboard
+
+Type `/` in the composer to see available skills. Use the up and down arrow
+keys to choose a skill, then press Enter or Tab to select it. The selected
+skill stays visible as you move through a long list.
+
+## Assistant save results — C7
+
+`GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing
+that currently publish success before disk persistence and only log failures.
+Save must await persistence, block duplicate submissions/dismissal while pending,
+and preserve the draft with a visible retryable error on failure. Settings and
+the project dialog must await the same result before closing/selecting an
+assistant. Existing sampling values and selection semantics remain unchanged.
+
+Acceptance: focused store and real-dialog regressions for pending, failed,
+retried and successful saves, plus one full `make verify`; commit and push the
+isolated branch merge-ready. No real user-data writes, installed workflow,
+Engine, model, GPU or provider operation belongs to this source change.
+
+Owned source: `/ai/gchat-worktrees/c7-assistant-save-result-20261017`, branch
+`fix/c7-assistant-save-result-20261017`, base `68cc55bba`. Subject plan/results
+are here; concise verification results are retained in
+`/ai/gchat/out/assistant-save-result-20261017/{result.json,summary.md}`.
+Implementation `cc36c51cb` passes all 42 focused store, real-editor, settings
+and nested-project cases. One full `make verify` exited 0 at 15:04:18Z on
+October17: 2,926 frontend tests, 119 extension tests, 59 Node contract tests
+and 1,076 Rust tests passed; six frontend tests were skipped and 27 Rust tests
+ignored. Lint, types, quality checks and all six critical coverage floors passed;
+lint retains three existing warnings.
+
+Verification used S1 CPU48–55 nice10 in pinned image `ad7f9bf020d7`, private
+offline caches and retained read-only profiles. No installed UI, Engine, GPU,
+model, Ensure or install operation ran. Returned15:04Z; booking2611 canceled.
+The private verification source/cache copy and exited container were retired
+at15:06Z; the read-only donor remains untouched. Next: coordinator merge of the isolated branch, then the
+current-main Models/Hub/Engine/Hardware walkthrough with a fresh private home
+after Gchat3's RC Load return, using Codex3's read-only runnable closure.
+Windows host-port collision remains pending Gchat2's installed RC handoff.
+## Folder launcher failure — GCHAT-OPEN-FOLDER-NATIVE-FAILURE-20261017
+
+Open folder and the data-folder shortcut return a clear error when the desktop
+file manager cannot start. A missing Linux `xdg-open` explains how to install
+`xdg-utils` or open the selected folder manually; GChat stays open. Windows
+Explorer keeps its existing handoff behavior. Paths remain literal arguments.
+
+An ordinary model-free XFCE walkthrough on source `68cc55bba` reproduced an
+abort at 15:02:50Z on October17: `xdg-open` was absent and the native command
+used `expect()`. Browse, text preview/retry and View AGENTS.md passed before
+the crash. Evidence and the normal guest return are retained in
+`out/gui-folder-walkthrough-20261017/{result.json,summary.md,open-folder-crash.txt}`.
+Three native regressions cover missing launcher, literal arguments and failed
+exit status. Full Linux verification is required before merge; a corrected
+installed native walkthrough and Windows execution are not yet qualified.
+## Settings walkthrough — C4
+
+`GUI-SETTINGS-SWEEP-20261017` covers every Settings section and all 19 provider
+pages in native Linux GChat from main `77ccd3624`. The private HOME/XDG app in
+the OLD fixture uses no retained profile, model or Engine. Screenshots and
+control results are retained in `/ai/gchat/out/c4-settings-sweep-20261017/`;
+findings belong to Gchat3's single [GUI list](/ai/coordination/flash-next/gui-sweep-20261017.md).
+
+The walkthrough reproduced a visible Hugging Face token, lost attachment numeric
+edits when leaving within the debounce delay, inaccessible provider navigation,
+an overcrowded Settings sidebar, controls lacking associated labels, and an enabled
+attachment embeddings mode whose backend is unavailable. Interface
+preferences persisted, Hardware refresh returned, and the MCP Add dialog canceled
+without saving. Provider keyboard access is transferred to C7; C4 owns token,
+attachment durability, unavailable embedding controls, sidebar and attachment labels,
+each on its own branch. C6 owns provider control labels.
+
+The first fix masks the token by default, adds an associated label and an explicit
+Show/Hide button. Token storage and verification semantics are unchanged. Its 24
+focused General cases pass. All `make verify` components pass: the single invocation
+stopped on an environment-sensitive fake-GPU fixture because the CUDA mask was empty;
+only that fixture and the previously unrun Rust suites were recovered with CUDA
+mask/order unset. Native replay confirmed password by default, Show/Hide preserving
+the value, and clearing the fake token. Screenshots and the qualified verification
+receipt are in `token-fix/result.json` beneath the retained evidence directory.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| C4 / local | `/ai/gchat-worktrees/c4-settings-sweep-20261017`, branch `fix/c4-settings-sweep-20261017` | Token fix and subject record; remaining findings have separate ownership |
+| C4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017` | Private dependency/build cache retained through the Settings fixes; donor read-only |
+| C4 / OLD | `/home/gchat/c4-settings-sweep-20261017` | Private native app/home only; returned 15:30Z, normal OFF and unchanged XML |
+| C4 / evidence | `/ai/gchat/out/c4-settings-sweep-20261017/` | Before screenshots, control outcomes, findings and validation; no real token used |
+
+Token privacy merged as `513f2ab30`; attachment edit durability now passes its focused and full gates. Next: merge attachment durability, then sidebar density and the unavailable document-search controls. Assistant create/update remains C7-owned; existing Engine and
+Hardware work remains with its owners. No model or shared FRESH fixture is in scope.
 ## Models, Hub, Engine and Hardware walkthrough — C7
 
 `GUI-MODELS-HUB-ENGINE-HARDWARE-20261017` is an ordinary first-user walkthrough
@@ -69,10 +335,9 @@ offline caches and 22 retained profiles, with CUDA mask/order unset. The private
 source/cache and stopped container are retired, read-only donor untouched;
 booking2595 canceled, returned14:42Z. Concise evidence is retained in
 `/ai/gchat/out/global-threads-delete-single-submit-20261017/{result.json,summary.md}`.
-The owned tree is `/ai/gchat-worktrees/c7-global-threads-delete-single-submit-20261017`,
-branch `fix/c7-global-threads-delete-single-submit-20261017`, from main `65248d3cc`.
-Subsequent main integration changed documentation only. Next: coordinator merge;
-installed confirmation remains with Gchat3. Windows host-port collision waits
+The branch `fix/c7-global-threads-delete-single-submit-20261017` from main
+`65248d3cc` merged as `38317aca1`; its clean owned worktree is retired.
+Installed confirmation remains with Gchat3. Windows host-port collision waits
 for Gchat2 installed-Windows handoff. No Engine/GPU/model gate applies.
 
 ## Project conversation deletion — C7

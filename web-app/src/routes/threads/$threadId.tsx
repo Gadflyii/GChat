@@ -165,9 +165,6 @@ function ThreadDetail() {
   // Get attachments for this thread
   const attachmentsKey = threadId ?? NEW_THREAD_ATTACHMENT_KEY
   const getAttachments = useChatAttachments((state) => state.getAttachments)
-  const clearAttachmentsForThread = useChatAttachments(
-    (state) => state.clearAttachments
-  )
 
   // Session data for tool call tracking
   const getSessionData = useChatSessions((state) => state.getSessionData)
@@ -546,11 +543,9 @@ function ThreadDetail() {
       const persistReady = useThreads
         .getState()
         .awaitThreadPersistence(threadId)
-      // Documents may be passed explicitly via the initial-message payload
-      // (home → new thread flow). In that case the store has already been
-      // cleared synchronously on send to avoid the chip lingering in the
-      // input. For in-thread sends no payload is provided and we read the
-      // attachments from the store as before.
+      // The composer supplies its captured documents so later edits cannot
+      // become part of a send that is already being prepared. Older initial
+      // message payloads may still need the attachment-store fallback.
       const documentAttachments =
         documentsFromPayload ??
         getAttachments(attachmentsKey).filter((a) => a.type === 'document')
@@ -653,8 +648,8 @@ function ThreadDetail() {
         } catch (error) {
           console.error('Failed to process attachments:', error)
           useOptimisticUserMessage.getState().clear(threadId)
-          // Don't send message if attachment processing failed
-          return
+          // Let the composer retain its draft and explain how to retry.
+          throw error
         }
       }
       ttftMark('beta')
@@ -700,8 +695,7 @@ function ThreadDetail() {
       })
       console.log('[processAndSendMessage] sendMessage called successfully')
 
-      // Clear attachments after sending
-      clearAttachmentsForThread(attachmentsKey)
+      // The composer removes only its submitted attachments after this resolves.
     },
     [
       sendMessage,
@@ -710,7 +704,6 @@ function ThreadDetail() {
       addMessage,
       getAttachments,
       attachmentsKey,
-      clearAttachmentsForThread,
       serviceHub,
       selectedProvider,
       chatMessages.length,
@@ -765,7 +758,8 @@ function ThreadDetail() {
       text: string,
       files?: InitialMessageFile[],
       agentSkillName?: string,
-      agentDefinitionId?: string
+      agentDefinitionId?: string,
+      documents?: Attachment[]
     ) => {
       if (!historyReady) {
         if (historyRestoreError) toast.error('Could not restore conversation context.', { description: historyRestoreError })
@@ -824,7 +818,7 @@ function ThreadDetail() {
       await processAndSendMessage(
         text,
         files,
-        undefined,
+        documents,
         agentSkillName,
         agentDefinitionId
       )

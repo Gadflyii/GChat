@@ -18,9 +18,16 @@ export default function ServiceSetup({
   const errors = useEngineHosts((state) => state.errors)
   const refresh = useEngineHosts((state) => state.refresh)
   const [grant, setGrant] = useState<GbotControlGrant>()
-  const [busy, setBusy] = useState(false)
+  const [pendingAction, setPendingAction] = useState<
+    'request' | 'status' | null
+  >(null)
+  const [checking, setChecking] = useState(
+    target.kind === 'paired_host' && !!target.host_id
+  )
   const [error, setError] = useState('')
   const requestVersion = useRef(0)
+  const activeRequest = useRef<number | null>(null)
+  const busy = pendingAction !== null
   const hostId = target.kind === 'paired_host' ? target.host_id : ''
   const remote = hosts.filter((host) => !host.local)
   useEffect(() => {
@@ -30,7 +37,9 @@ export default function ServiceSetup({
     const version = ++requestVersion.current
     setGrant(undefined)
     setError('')
-    setBusy(false)
+    activeRequest.current = null
+    setPendingAction(null)
+    setChecking(!!hostId)
     if (hostId)
       void gbotControlGrant(hostId, 'status')
         .then((value) => {
@@ -45,13 +54,19 @@ export default function ServiceSetup({
         .catch((cause) => {
           if (requestVersion.current === version) setError(String(cause))
         })
+        .finally(() => {
+          if (requestVersion.current === version) setChecking(false)
+        })
     return () => {
       ++requestVersion.current
     }
   }, [hostId, change])
   const request = async (action: 'request' | 'status') => {
+    if (activeRequest.current !== null) return
     const version = ++requestVersion.current
-    setBusy(true)
+    activeRequest.current = version
+    setPendingAction(action)
+    setChecking(false)
     setError('')
     try {
       const value = await gbotControlGrant(hostId, action)
@@ -64,7 +79,10 @@ export default function ServiceSetup({
     } catch (cause) {
       if (requestVersion.current === version) setError(String(cause))
     } finally {
-      if (requestVersion.current === version) setBusy(false)
+      if (requestVersion.current === version) {
+        activeRequest.current = null
+        setPendingAction(null)
+      }
     }
   }
   return (
@@ -141,13 +159,19 @@ export default function ServiceSetup({
           {hostId && (
             <>
               <p role="status" className="text-sm">
-                {grant?.status === 'approved'
-                  ? 'Gbot control approved for this device.'
-                  : grant?.status === 'pending'
-                    ? 'Waiting for approval on the service computer.'
-                    : grant?.status === 'revoked'
-                      ? 'Gbot control was revoked. Request access again.'
-                      : 'Gbot control needs separate approval from pairing.'}
+                {pendingAction === 'request'
+                  ? 'Requesting Gbot control from the service computer…'
+                  : pendingAction === 'status' || checking
+                    ? 'Checking Gbot control approval…'
+                    : error && !grant
+                      ? 'Could not confirm Gbot control approval. Try again.'
+                      : grant?.status === 'approved'
+                        ? 'Gbot control approved for this device.'
+                        : grant?.status === 'pending'
+                          ? 'Waiting for approval on the service computer.'
+                          : grant?.status === 'revoked'
+                            ? 'Gbot control was revoked. Request access again.'
+                            : 'Gbot control needs separate approval from pairing.'}
               </p>
               {grant?.status !== 'approved' && (
                 <p className="text-sm text-muted-foreground">
@@ -174,11 +198,14 @@ export default function ServiceSetup({
                   )
                 }
               >
-                {busy
-                  ? 'Checking…'
-                  : grant?.status === 'pending' || grant?.status === 'approved'
-                    ? 'Check approval'
-                    : 'Request Gbot control'}
+                {pendingAction === 'request'
+                  ? 'Requesting control…'
+                  : pendingAction === 'status'
+                    ? 'Checking approval…'
+                    : grant?.status === 'pending' ||
+                        grant?.status === 'approved'
+                      ? 'Check approval'
+                      : 'Request Gbot control'}
               </Button>
             </>
           )}

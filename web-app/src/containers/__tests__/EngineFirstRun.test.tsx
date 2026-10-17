@@ -377,6 +377,7 @@ it('cancels wizard profiling and resumes saved work without losing folder or mod
   })
   render(<EngineFirstRun />)
   const folder = await screen.findByLabelText('Model download folder')
+  await waitFor(() => expect(folder).toHaveValue('/fast'))
   fireEvent.change(folder, { target: { value: '/my-models' } })
   fireEvent.click(screen.getByRole('checkbox', { name: /Muse/ }))
   const cancel = screen.getByRole('button', { name: 'Cancel profiling' })
