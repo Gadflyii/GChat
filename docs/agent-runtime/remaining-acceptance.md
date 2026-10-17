@@ -210,12 +210,14 @@ Hermes and Windows remain open. OI-068 remains PARTIAL.
 
 The retained Linux desktop from source `0c3b8f265` ran a real Standard Agent
 with Qwen 27B INT on the local RTX 5090. The packet below records the artifact
-SHA and full settings. After a completed `observation.txt` read and while
-`touch approved-shell-marker.txt` awaited approval, only the desktop received
+SHA and full settings. After a completed `observation.txt` read and while a
+shell action awaited approval, only the desktop received
 SIGKILL at 05:05:31.976Z. Ordinary Runs reopening after relaunch showed the
 original record as INCOMPLETE, with completion and steps not recorded. Its
 working state, transcript and completed tool artifact remained hash-identical;
-the marker was absent and the pending approval did not replay.
+the marker was absent and the pending approval did not replay. The original
+approval display omitted arguments, so its pending command was not independently
+verified.
 
 The Host survived, but the Engine later disappeared; an ordinary new INT Start
 was required. Continue as new run then created a distinct record with fresh
@@ -263,7 +265,8 @@ attempts only without a manual request; lines 200–293 try candidates before th
 fallback at line 295. Its first cut index is also wrong: lines 203–213 select
 `boundaries[len-3]`, then `boundaries[len-2]`, when available. These errors do not
 establish another product defect; model capability remains a possible cause.
-`GCHAT-WORKER-REVIEW-INSTRUCTION-FOLLOWING` stays open. This run had no compaction
+The October 17 disposition closed `GCHAT-WORKER-REVIEW-INSTRUCTION-FOLLOWING`
+as a known model limitation, recorded in the release notes. This run had no compaction
 and adds no checkpoint, restart or post-compaction task acceptance.
 
 Evidence: `/ai/gchat/out/worker-review-guidance-20261015/{result.json,summary.md}`.
