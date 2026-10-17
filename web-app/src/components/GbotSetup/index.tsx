@@ -99,6 +99,7 @@ export default function GbotSetup({
   const [connecting, setConnecting] = useState(false)
   const [service, setService] = useState<ServiceTarget>({ kind: 'local' })
   const [serviceReady, setServiceReady] = useState(false)
+  const serviceChoiceVersion = useRef(0)
   const hosts = useEngineHosts((state) => state.hosts)
   const serviceName =
     service.kind === 'local'
@@ -109,15 +110,17 @@ export default function GbotSetup({
   const preparingService = step === 1 && saving && resources.ready !== true
   useEffect(() => {
     let current = true
+    const version = serviceChoiceVersion.current
     void getGbotServiceTarget()
       .then((target) => {
-        if (current) {
+        if (current && serviceChoiceVersion.current === version) {
           setService(target)
           setServiceReady(target.kind === 'local')
         }
       })
       .catch((cause) => {
-        if (current) setError(String(cause))
+        if (current && serviceChoiceVersion.current === version)
+          setError(String(cause))
       })
     return () => {
       current = false
@@ -125,6 +128,7 @@ export default function GbotSetup({
   }, [])
   const changeService = useCallback((target: ServiceTarget, ready: boolean) => {
     if (submissionPending.current) return
+    ++serviceChoiceVersion.current
     setService(target)
     setServiceReady(ready)
   }, [])
