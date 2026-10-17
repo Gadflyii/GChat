@@ -39,7 +39,9 @@ it('requires consent, stages a command and checks installation before proceeding
   expect(ready).toHaveBeenLastCalledWith(false)
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Check tools' }))
-  await screen.findByRole('status')
+  await screen.findByText(
+    'Tools installed. Continue to connect and check the bot desktop.'
+  )
   expect(
     screen.queryByRole('textbox', { name: 'Bot tools administrator command' })
   ).not.toBeInTheDocument()
@@ -74,7 +76,11 @@ it('hides the old administrator command while checking and replaces it with curr
   expect(
     screen.queryByRole('textbox', { name: 'Bot tools administrator command' })
   ).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Check tools' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Checking tools…' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Prepare tools' })).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Checking tools on the bot computer…'
+  )
 
   completeCheck({
     installed: false,
@@ -85,6 +91,47 @@ it('hides the old administrator command while checking and replaces it with curr
   expect(
     screen.queryByDisplayValue('sudo -- sh "old-install.sh"')
   ).not.toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+})
+
+it('announces preparation, blocks repeat requests and restores controls after failure', async () => {
+  let failPreparation!: (cause: Error) => void
+  const ready = vi.fn()
+  const busy = vi.fn()
+  const api = vi.mocked(gbot).mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        failPreparation = reject
+      })
+  )
+  render(<LanTools workspaceId="bot" ready={ready} busy={busy} />)
+  fireEvent.click(screen.getByRole('checkbox'))
+  const prepare = screen.getByRole('button', { name: 'Prepare tools' })
+  fireEvent.click(prepare)
+  fireEvent.click(prepare)
+  expect(api).toHaveBeenCalledTimes(1)
+  expect(api).toHaveBeenCalledWith('workspaces/ssh/prepare', {
+    workspace_id: 'bot',
+    consent: true,
+  })
+  expect(
+    screen.getByRole('button', { name: 'Preparing tools…' })
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Check tools' })).toBeDisabled()
+  expect(screen.getByRole('checkbox')).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Preparing tools on the bot computer…'
+  )
+  expect(busy).toHaveBeenLastCalledWith(true)
+  expect(ready).toHaveBeenLastCalledWith(false)
+
+  failPreparation(new Error('SSH unavailable'))
+  await screen.findByText('SSH unavailable')
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Prepare tools' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Check tools' })).toBeEnabled()
+  expect(screen.getByRole('checkbox')).toBeEnabled()
+  expect(busy).toHaveBeenLastCalledWith(false)
 })
 
 it('shows the failed step and allows another preparation or installation check', async () => {
