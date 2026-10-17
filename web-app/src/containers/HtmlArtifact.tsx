@@ -69,6 +69,11 @@ function HtmlArtifactComponent({
   const [downloading, setDownloading] = useState(false)
   const [downloadFailed, setDownloadFailed] = useState(false)
   const downloadPendingRef = useRef(false)
+  const [printing, setPrinting] = useState(false)
+  const [printFailed, setPrintFailed] = useState(false)
+  const printPendingRef = useRef(false)
+  const printTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const printCleanupRef = useRef<(() => void) | undefined>(undefined)
   const [frameLoaded, setFrameLoaded] = useState(false)
   const [progress, setProgress] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -214,6 +219,8 @@ function HtmlArtifactComponent({
     const id = artifactIdRef.current
     return () => {
       clearTimeout(copyResetRef.current)
+      clearTimeout(printTimerRef.current)
+      printCleanupRef.current?.()
       if (isPlatformTauri()) {
         invoke('clear_artifact_html', { id }).catch(() => {})
       }
@@ -282,27 +289,41 @@ function HtmlArtifactComponent({
   }, [code])
 
   const handlePrint = useCallback(() => {
+    if (printPendingRef.current) return
     const region = previewWrapRef.current
     if (!region) return
 
+    printPendingRef.current = true
+    setPrinting(true)
+    setPrintFailed(false)
     setTab('preview')
 
     const cleanup = () => {
       region.classList.remove('artifact-print-region')
       document.body.classList.remove('artifact-printing')
-      window.removeEventListener('afterprint', cleanup)
+      window.removeEventListener('afterprint', afterPrint)
+      printPendingRef.current = false
+      printCleanupRef.current = undefined
     }
+    const afterPrint = () => {
+      cleanup()
+      setPrinting(false)
+    }
+    printCleanupRef.current = cleanup
 
     // Defer so the preview tab is mounted/visible before the print snapshot.
-    setTimeout(() => {
+    printTimerRef.current = setTimeout(() => {
+      printTimerRef.current = undefined
       region.classList.add('artifact-print-region')
       document.body.classList.add('artifact-printing')
-      window.addEventListener('afterprint', cleanup)
+      window.addEventListener('afterprint', afterPrint)
       try {
         window.print()
       } catch (error) {
         console.error('Failed to print artifact:', error)
         cleanup()
+        setPrinting(false)
+        setPrintFailed(true)
       }
     }, 60)
   }, [])
@@ -390,6 +411,9 @@ function HtmlArtifactComponent({
                 className="h-7 gap-1 px-2 text-xs"
                 onClick={handlePrint}
                 title="Print / Save as PDF"
+                aria-label="Print HTML"
+                aria-busy={printing}
+                disabled={printing}
               >
                 <Printer size={14} className="shrink-0" />
                 <span className="hidden @[26rem]:inline">Print</span>
@@ -422,6 +446,12 @@ function HtmlArtifactComponent({
       {downloadFailed && (
         <p role="alert" className="px-3 py-2 text-sm text-destructive">
           Could not save the HTML file. Choose Download to try again.
+        </p>
+      )}
+
+      {printFailed && (
+        <p role="alert" className="px-3 py-2 text-sm text-destructive">
+          Could not open printing. Try Print again, or Download the HTML file.
         </p>
       )}
 
