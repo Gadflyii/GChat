@@ -47,6 +47,13 @@ it('offers Max Perf separately and applies only after selection and confirmation
   const refresh = vi.fn().mockResolvedValue(undefined)
   const pending = vi.fn()
   render(<BenchmarkServerSettings sessions={[current]} selected={current} select={vi.fn()} disabled={false} refresh={refresh} onPendingChange={pending} />)
+  const serverGuidance = screen.getByText('Choose the computer and running model you want to benchmark. Selecting a server does not restart it.')
+  const profile = screen.getByLabelText('Max Perf profile')
+  expect(screen.getByRole('heading', { name: 'Choose a running server' })).toBeInTheDocument()
+  expect(serverGuidance.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(screen.getByLabelText('Host / Instance').compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  const applyGuidance = screen.getByText('Choose a Max Perf profile, then select Apply Max Perf & Restart Server. Wait for the server to be ready before selecting Run benchmark.')
+  expect(applyGuidance.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
   expect(screen.getByRole('option', {
     name: 'Untested · C1 · 128K context · Vision + text',
@@ -57,7 +64,7 @@ it('offers Max Perf separately and applies only after selection and confirmation
   fireEvent.change(screen.getByLabelText('Max Perf profile'), { target: { value: choice.value } })
   expect(pending).toHaveBeenLastCalledWith(true)
   expect(mocks.command).not.toHaveBeenCalled()
-  expect(screen.getByText(/drains current requests and restarts/)).toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('Applying this profile waits for current requests to finish, then restarts this server. Chats and other clients using it are affected. Wait for the server to be ready before selecting Run benchmark.')
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
   fireEvent.click(screen.getByRole('button', { name: 'Apply Max Perf & Restart Server' }))
   expect(mocks.command).not.toHaveBeenCalled()
@@ -70,6 +77,35 @@ it('offers Max Perf separately and applies only after selection and confirmation
   await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
   expect(mocks.refreshHosts).toHaveBeenCalledOnce()
   await waitFor(() => expect(pending).toHaveBeenLastCalledWith(false))
+})
+
+it('explains how to load and refresh a server when none are running', () => {
+  render(<BenchmarkServerSettings sessions={[]} select={vi.fn()} disabled={false} refresh={vi.fn()} onPendingChange={vi.fn()} />)
+  expect(screen.getByRole('heading', { name: 'Choose a running server' })).toBeInTheDocument()
+  expect(screen.getByLabelText('Host / Instance')).toHaveValue('')
+  expect(screen.getByText('Open Models, load a model, then select Refresh server to update this list.')).toBeInTheDocument()
+  expect(mocks.command).not.toHaveBeenCalled()
+})
+
+it('clears the pending profile when selecting another server without restarting either server', () => {
+  const current = session()
+  const other = { ...current, target_id: 'remote/server', session_id: 'other-session', display_name: 'Other running server' }
+  const select = vi.fn()
+  const pending = vi.fn()
+  const props = { sessions: [current, other], selected: current, select, disabled: false, refresh: vi.fn(), onPendingChange: pending }
+  const view = render(<BenchmarkServerSettings {...props} />)
+  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash SMOL/ }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Max Perf profile'), { target: { value: choice.value } })
+  expect(pending).toHaveBeenLastCalledWith(true)
+  fireEvent.change(screen.getByLabelText('Host / Instance'), { target: { value: other.target_id } })
+  expect(select).toHaveBeenCalledWith(other.target_id)
+  expect(pending).toHaveBeenLastCalledWith(false)
+  view.rerender(<BenchmarkServerSettings {...props} selected={other} />)
+  view.rerender(<BenchmarkServerSettings {...props} />)
+  expect(screen.getByLabelText('Max Perf profile')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Apply Max Perf & Restart Server' })).toBeDisabled()
+  expect(pending).toHaveBeenLastCalledWith(false)
+  expect(mocks.command).not.toHaveBeenCalled()
 })
 
 it('does not offer missing artifacts, other occupied GPUs or a different GPU group', () => {
