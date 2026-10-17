@@ -43,8 +43,10 @@ export default function LanTools({
   return (
     <div className="space-y-2">
       <p>
-        SSH access verified. Check existing Gbot tools or prepare this dedicated
-        Debian 13 computer.
+        SSH access verified. Gbot needs desktop, browser and media tools so it
+        can see and use this computer. Choose Check tools if they are already
+        installed, or approve installation and choose Prepare tools for this
+        dedicated Debian 13 computer.
       </p>
       <label className="flex items-start gap-2">
         <input
@@ -58,7 +60,9 @@ export default function LanTools({
         browser, driver and media tools.
       </label>
       <p className="text-xs text-muted-foreground">
-        {cloud ? 'GChat installs the pinned tools through the computer’s setup helper.' : 'Sign out of graphical sessions first. Your SSH settings and firewall stay in place.'}
+        {cloud
+          ? 'GChat installs the pinned tools through the computer’s setup helper.'
+          : 'Sign out of graphical sessions first. Your SSH settings and firewall stay in place.'}
       </p>
       <div className="flex flex-wrap gap-2">
         <Button
@@ -81,8 +85,10 @@ export default function LanTools({
       {command && (
         <div className="space-y-2">
           <p>
-            On the bot computer, run this command as the SSH user. Enter your
-            administrator password there, then choose Check tools.
+            Open a terminal on the bot computer and run this command as the SSH
+            user you entered above. Enter that computer’s administrator password
+            there if asked, then return here and choose Check tools. Ask the
+            computer’s owner for help if you cannot install software.
           </p>
           <textarea
             aria-label="Bot tools administrator command"

@@ -167,6 +167,18 @@ export default function M365Setup({
         Settings → Workspace connections. No Cloud PC is purchased or
         provisioned here.
       </p>
+      <ol className="list-decimal space-y-1 pl-5">
+        <li>
+          Sign in with Microsoft using the work or school account that has the
+          Cloud PC.
+        </li>
+        <li>
+          Choose that account below, then choose Check assigned Cloud PCs.
+        </li>
+        <li>
+          Select your Cloud PC and review the connection options before saving.
+        </li>
+      </ol>
       <p className="text-muted-foreground">
         Desktop control is not connected yet. Save your setup and open
         Microsoft’s client to prepare the connection. Gbot desktop viewing and

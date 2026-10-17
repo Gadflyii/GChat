@@ -66,8 +66,9 @@ export default function ServiceSetup({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        The service keeps your bot's tasks and schedules running. Its computer
-        is a separate choice in the next step.
+        The Gbot service coordinates your bots, tasks and schedules. Choose
+        where it runs below; This PC is the easiest choice. In the next step,
+        you will choose the separate desktop where the bot does its work.
       </p>
       <fieldset className="space-y-2" disabled={busy}>
         <legend className="mb-2 text-sm font-medium">
@@ -91,7 +92,7 @@ export default function ServiceSetup({
             onChange={() => change({ kind: 'paired_host', host_id: '' }, false)}
             className="size-4 accent-primary"
           />
-          Another PC on the LAN
+          Another PC on the home or office network (LAN)
         </label>
         {target.kind === 'paired_host' && (
           <label className="block space-y-1 text-sm">
@@ -129,9 +130,9 @@ export default function ServiceSetup({
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            Pair the service computer in GInfer Hosts first. Switching services
-            shows that computer's bots; existing bots stay on their original
-            service.
+            First open GInfer Hosts and pair the computer that will run the
+            service. Return here and choose it from the list. You will see that
+            computer's bots; existing bots stay on their original service.
           </p>
           {hostId && (
             <>
