@@ -383,6 +383,15 @@ export default function AddEditMCPServer({
         }
       })
 
+      if (transportType === 'stdio' && command.trim() === '') {
+        setError('Enter the start command from the tool provider’s setup instructions.')
+        return
+      }
+      if (transportType !== 'stdio' && url.trim() === '') {
+        setError('Enter the web address from the tool provider’s setup instructions.')
+        return
+      }
+
       // Filter out empty args
       const filteredArgs = args.map((arg) => arg.trim()).filter((arg) => arg)
 

@@ -65,6 +65,18 @@ describe('MCP server configuration dialogs', () => {
     expect(screen.getByRole('button', { name: 'Add header' })).toBeVisible()
   })
 
+  it('asks for the missing start command or web address in plain words without calling save', async () => {
+    const save = vi.fn()
+    render(<AddEditMCPServer open editingKey={null} onOpenChange={vi.fn()} onSave={save} />)
+    fireEvent.change(screen.getByLabelText('mcp-servers:serverName'), { target: { value: 'Calendar' } })
+    fireEvent.click(screen.getByRole('button', { name: 'mcp-servers:save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter the start command from the tool provider')
+    fireEvent.click(screen.getByRole('radio', { name: 'Web address (HTTP)' }))
+    fireEvent.click(screen.getByRole('button', { name: 'mcp-servers:save' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Enter the web address from the tool provider'))
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('keeps the form open with the native validation error when saving fails', async () => {
     const close = vi.fn()
     const save = vi.fn().mockRejectedValue(new Error('MCP header name is invalid'))
