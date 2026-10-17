@@ -25,6 +25,27 @@ booking2646 canceled. The private S1 copy and container are retired; the donor
 is unchanged. Results are retained in
 `/ai/gchat/out/hardware-live-stats-wording-20261017/{result.json,summary.md}`.
 Next: coordinator merge. The private-catalog walkthrough continues separately.
+## Chat output reservation on small servers — claude-gchat-rc
+
+`GUI-CHAT-SMALL-CONTEXT-SEND-BLOCKED-20261017` was observed in the private Linux
+RC acceptance of GChat `87628b891` / Engine `e2282c336`: a Flash pure 2-bit
+custom server with 8,192 context reached Ready, but the first chat send was
+refused with "Context settings conflict" before any Engine request. GChat
+reserved its full 8,192-token default output plus 256 safety tokens before
+counting the prompt, and the suggested remedy (lower the requested output
+tokens) has no control in the chat.
+
+The reservation is now planned from the server's context and the counted
+prompt: the requested or default output is kept in full when it fits beside the
+prompt, otherwise it shrinks to what the prompt leaves, never below a quarter of
+the usable context. A prompt beyond its three-quarter share is compacted as
+before. Large servers keep the 8,192 reservation. The reservation alone never
+blocks a send, and no setting is changed.
+
+Owned tree: `/ai/gchat-worktrees/context-output-reserve-20261017`, branch
+`fix/gchat-context-output-reserve-20261017`, from main `dbec106e4`.
+Acceptance: focused smart-context, transport, context-control and error tests,
+then one `make verify`; packaged retest in the next Linux RC.
 ## Empty chat model picker — C3
 
 `GUI-CHAT-MODEL-PICKER-EMPTY-20261017` was observed in a private first-run
