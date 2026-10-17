@@ -245,6 +245,12 @@ If a generated HTML preview cannot load, GChat shows an error. Choose
 **Retry preview** to try again. **Code** remains available so you can read
 the HTML while the preview is unavailable.
 
+## Saving generated HTML
+
+Choose **Download** to select where to save the generated HTML. If saving
+fails, GChat shows an error; choose **Download** again to retry. Canceling
+the save window leaves the generated code available.
+
 ## Choosing a skill with the keyboard
 
 Type `/` in the composer to see available skills. Use the up and down arrow
