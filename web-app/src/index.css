@@ -187,6 +187,24 @@
     color-scheme: dark;
   }
 
+  /* Native checkboxes and radios take the app accent and theme instead of the
+     browser's default white box and blue tick. */
+  input[type='checkbox'],
+  input[type='radio'] {
+    accent-color: var(--primary);
+    color-scheme: light;
+  }
+
+  .dark input[type='checkbox'],
+  .dark input[type='radio'] {
+    color-scheme: dark;
+  }
+
+  input[type='checkbox']:focus-visible,
+  input[type='radio']:focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+
   select:focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
   }

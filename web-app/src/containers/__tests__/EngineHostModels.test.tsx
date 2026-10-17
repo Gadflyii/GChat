@@ -107,6 +107,17 @@ it('checks imported artifact settings without a catalog or download and uses the
   }))
 })
 
+it('does not show a number error before a model is chosen, then reports an emptied context', () => {
+  render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  fireEvent.click(screen.getByText('Server details'))
+  fireEvent.click(screen.getByText('Custom server settings'))
+  expect(screen.queryByText(/Use whole numbers/)).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'imported-model' } })
+  expect(screen.queryByText(/Use whole numbers/)).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Context tokens'), { target: { value: '' } })
+  expect(screen.getByRole('alert')).toHaveTextContent('Use whole numbers')
+})
+
 it.each(['running', 'cancelling'] as const)('allows an imported model quote and Load during %s optional completion', async (status) => {
   const data: EngineSnapshot = { ...importedModelSnapshot, hardware_profile: {
     status, scope: 'complete_remaining_formats', base_complete: true, scope_complete: false, all_formats_complete: false,

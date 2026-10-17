@@ -27,6 +27,7 @@ describe('secure storage intake', () => {
     const setupPanel = screen.getByRole('region', {
       name: 'Secure storage setup',
     })
+    expect(setupPanel).toHaveClass('rounded-xl', 'p-5')
     expect(command).toHaveBeenCalledTimes(1)
     expect(command).toHaveBeenCalledWith('credential_status', { check: false })
     expect(ready).not.toHaveBeenCalledWith(true)

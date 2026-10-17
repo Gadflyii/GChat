@@ -498,10 +498,18 @@ function MCPServersDesktop() {
                         <div className="flex items-center gap-x-2">
                           <div
                             title={serverStatusByName.get(key)?.error}
+                            role={
+                              serverStatusByName.get(key)?.status === 'error' ||
+                              serverStatusByName.get(key)?.status === 'connected'
+                                ? 'img'
+                                : undefined
+                            }
                             aria-label={
                               serverStatusByName.get(key)?.status === 'error'
                                 ? `MCP server error: ${serverStatusByName.get(key)?.error}`
-                                : undefined
+                                : serverStatusByName.get(key)?.status === 'connected'
+                                  ? 'MCP server connected'
+                                  : undefined
                             }
                             className={twMerge(
                               'size-2 rounded-full',
@@ -609,6 +617,9 @@ function MCPServersDesktop() {
                             title={t('mcp-servers:editJson.title', {
                               serverName: key,
                             })}
+                            aria-label={t('mcp-servers:editJson.title', {
+                              serverName: key,
+                            })}
                           >
                             <IconCodeCircle
                               size={18}
@@ -620,6 +631,7 @@ function MCPServersDesktop() {
                             variant="ghost"
                             onClick={() => handleEdit(key)}
                             title={t('mcp-servers:editServer')}
+                            aria-label={`${t('mcp-servers:editServer')}: ${key}`}
                           >
                             <IconPencil
                               size={18}
@@ -631,6 +643,7 @@ function MCPServersDesktop() {
                             variant="ghost"
                             onClick={() => handleDeleteClick(key)}
                             title={t('mcp-servers:deleteServer.title')}
+                            aria-label={`${t('mcp-servers:deleteServer.delete')}: ${key}`}
                           >
                             <IconTrash
                               size={18}
@@ -639,6 +652,7 @@ function MCPServersDesktop() {
                           </Button>
                           <div className="ml-2">
                             <Switch
+                              aria-label={`Use ${key}`}
                               checked={config.active}
                               loading={!!loadingServers[key]}
                               onCheckedChange={(checked) =>

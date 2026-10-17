@@ -125,6 +125,12 @@ function GoogleRegistration({
   }
   const saveManualRegistration = async () => {
     if (disabled || importing.current) return
+    if (!/\.apps\.googleusercontent\.com$/i.test(clientId.trim())) {
+      setError(
+        'That does not look like a Google Desktop client ID. It ends with .apps.googleusercontent.com. Copy it again from Google Auth Platform → Clients.'
+      )
+      return
+    }
     importing.current = true
     setReading(true)
     setError(null)
@@ -929,7 +935,17 @@ function ProviderCard({
             </ul>
           </details>
         )}
+        {Boolean(config?.client_id) && selectedServices.length === 0 && (
+          <p id={`${provider}-select-service`} className="text-sm">
+            Select at least one service above to continue.
+          </p>
+        )}
         <Button
+          aria-describedby={
+            config?.client_id && selectedServices.length === 0
+              ? `${provider}-select-service`
+              : undefined
+          }
           disabled={
             disabled ||
             !config?.client_id ||

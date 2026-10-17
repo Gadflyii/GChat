@@ -71,7 +71,12 @@ export const DialogAddModel = ({ provider, trigger }: DialogAddModelProps) => {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button variant="secondary" size="icon-xs">
+          <Button
+            variant="secondary"
+            size="icon-xs"
+            aria-label={t('providers:addModel.addModel')}
+            title={t('providers:addModel.addModel')}
+          >
             <IconPlus size={18} className="text-muted-foreground" />
           </Button>
         )}

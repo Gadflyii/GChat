@@ -13,6 +13,8 @@ describe('network host intake', () => {
     const connect = vi.fn()
     const view = render(<EngineIntake onConnect={connect} />)
     expect(screen.getByText('Nearby: Lab host')).toBeInTheDocument()
+    // Same card shape as the other first-run cards, so the screen reads as one list.
+    expect(view.container.firstElementChild).toHaveClass('rounded-xl', 'p-5')
     fireEvent.click(screen.getByRole('button', { name: 'Connect a network host' }))
     expect(connect).toHaveBeenCalledOnce()
     view.unmount()

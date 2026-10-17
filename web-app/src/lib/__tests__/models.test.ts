@@ -10,6 +10,7 @@ import {
   ggufShardGroupKey,
   groupGgufShards,
   mergeShardedQuants,
+  runtimeModelDisplayName,
 } from '../models'
 import { ModelCapabilities } from '@/types/models'
 import type { CatalogModel } from '@/services/models/types'
@@ -484,5 +485,21 @@ describe('findCatalogModelForRecommendedRepo', () => {
     expect(
       findCatalogModelForRecommendedRepo([make('foo/bar')], '')
     ).toBeUndefined()
+  })
+})
+
+describe('runtimeModelDisplayName', () => {
+  const hash = 'a'.repeat(64)
+
+  it('uses the manifest name for a local GInfer model stored under a package hash', () => {
+    expect(
+      runtimeModelDisplayName('ginfer', { id: hash, name: 'Qwen 27B 2-bit mix' })
+    ).toBe('Qwen 27B 2-bit mix')
+  })
+
+  it('leaves the id in use when there is no distinct name or another provider', () => {
+    expect(runtimeModelDisplayName('ginfer', { id: hash, name: hash })).toBeUndefined()
+    expect(runtimeModelDisplayName('ginfer', { id: hash })).toBeUndefined()
+    expect(runtimeModelDisplayName('openai', { id: 'gpt-5', name: 'GPT Five' })).toBeUndefined()
   })
 })

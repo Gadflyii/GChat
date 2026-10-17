@@ -338,6 +338,13 @@ function ProviderDetail() {
     }
   }
 
+  // Cloud providers can only start a model after an API key is saved.
+  const providerNeedsApiKey =
+    !!provider &&
+    !isLocalProvider(provider.provider) &&
+    !provider.api_key &&
+    !isKeylessRemoteProvider(provider)
+
   const handleStartModel = async (modelId: string) => {
     if (!provider) return
     setLoadingModels((prev) => [...prev, modelId])
@@ -582,6 +589,8 @@ function ProviderDetail() {
                               size="icon-xs"
                               onClick={handleRefreshModels}
                               disabled={refreshingModels}
+                              aria-label={t('providers:refreshModels')}
+                              title={t('providers:refreshModels')}
                             >
                               {refreshingModels ? (
                                 <IconLoader
@@ -615,6 +624,11 @@ function ProviderDetail() {
                   </div>
                 }
               >
+                {providerNeedsApiKey && (
+                  <p className="mb-2 text-sm text-muted-foreground">
+                    {t('providers:addApiKeyFirstHint')}
+                  </p>
+                )}
                 {provider?.models.filter((m) => m.id !== EMBEDDING_MODEL_ID)
                   .length ? (
                   provider?.models
@@ -692,10 +706,7 @@ function ProviderDetail() {
                                   // Cloud providers need an API key before
                                   // they can be "started" (registered with the
                                   // proxy). Local engines don't.
-                                  const needsApiKey =
-                                    !isLocalProvider(provider.provider) &&
-                                    !provider.api_key &&
-                                    !isKeylessRemoteProvider(provider)
+                                  const needsApiKey = providerNeedsApiKey
                                   const isActive = activeModels.some(
                                     (activeModel) => activeModel === model.id
                                   )
@@ -764,7 +775,7 @@ function ProviderDetail() {
                                             <span>{startButton}</span>
                                           </TooltipTrigger>
                                           <TooltipContent>
-                                            Add API key first
+                                            {t('providers:addApiKeyFirst')}
                                           </TooltipContent>
                                         </Tooltip>
                                       ) : (

@@ -143,6 +143,14 @@ describe('SettingsMenu', () => {
     expect(screen.queryByText('common:privacy')).not.toBeInTheDocument()
   })
 
+  it('names the icon-only add provider button', () => {
+    render(<SettingsMenu />)
+
+    expect(
+      screen.getByRole('button', { name: 'common:addProvider' })
+    ).toBeInTheDocument()
+  })
+
   it('renders keyboard shortcuts and other settings', () => {
     render(<SettingsMenu />)
     expect(screen.getByText('common:keyboardShortcuts')).toBeInTheDocument()

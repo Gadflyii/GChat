@@ -284,6 +284,30 @@ describe('Workspace connections', () => {
     expect(api.beginConnectorAuth).not.toHaveBeenCalled()
   })
 
+  it('rejects a pasted client ID that is not a Google Desktop client ID without saving or clearing the secret', async () => {
+    const empty = initialView()
+    empty.configs[0].client_id = ''
+    api.connectorAccounts.mockResolvedValue(empty)
+    await ready()
+    const user = userEvent.setup()
+    const guide = await openGoogleImport()
+    await user.click(
+      guide.getByText('Paste a Desktop client ID and secret instead')
+    )
+    await user.type(guide.getByLabelText('Google Desktop client ID'), 'abc')
+    const secret = guide.getByLabelText('Google Desktop client secret')
+    await user.type(secret, 'synthetic-desktop-secret')
+    await user.click(
+      guide.getByRole('button', { name: 'Save Google registration' })
+    )
+    await guide.findByText(/does not look like a Google Desktop client ID/)
+    expect(secret).toHaveValue('synthetic-desktop-secret')
+    expect(api.nativeInvoke).not.toHaveBeenCalledWith(
+      'connector_configure',
+      expect.anything()
+    )
+  })
+
   it('saves pasted Desktop credentials, clears the secret before saving, then enables explicit browser sign-in', async () => {
     const empty = initialView()
     empty.configs[0].client_id = ''
@@ -368,7 +392,10 @@ describe('Workspace connections', () => {
     await user.click(
       guide.getByText('Paste a Desktop client ID and secret instead')
     )
-    await user.type(guide.getByLabelText('Google Desktop client ID'), 'client')
+    await user.type(
+      guide.getByLabelText('Google Desktop client ID'),
+      'client.apps.googleusercontent.com'
+    )
     const secret = guide.getByLabelText('Google Desktop client secret')
     await user.type(secret, 'synthetic-private-desktop-secret')
     await user.click(
@@ -580,6 +607,25 @@ describe('Workspace connections', () => {
     ).toBeInTheDocument()
     expect(
       microsoft.queryByLabelText('App secret (optional)')
+    ).not.toBeInTheDocument()
+  })
+
+  it('says why sign-in is disabled until a service is selected', async () => {
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    const signIn = microsoft.getByRole('button', {
+      name: 'Sign in with Microsoft',
+    })
+    expect(signIn).toBeDisabled()
+    expect(signIn).toHaveAccessibleDescription(
+      'Select at least one service above to continue.'
+    )
+    await userEvent.setup().click(microsoft.getAllByRole('checkbox')[0])
+    expect(signIn).toBeEnabled()
+    expect(
+      microsoft.queryByText('Select at least one service above to continue.')
     ).not.toBeInTheDocument()
   })
 

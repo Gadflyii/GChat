@@ -70,6 +70,21 @@ describe('host-scoped Models', () => {
     expect(mocks.switchModel).not.toHaveBeenCalled()
     expect(screen.getByRole('tab', { name: 'Downloads' })).toHaveAttribute('aria-selected', 'true')
   })
+  it('describes downloads and recommendations in plain words', async () => {
+    mocks.command.mockImplementation(async action => action === 'local_model_downloads'
+      ? [{ id: 'job', release, status: 'paused', received: 1024, bytes_per_second: 0, error: null, path: null }] : [])
+    render(<ModelManagement />)
+    expect(screen.getByText(/Load uses the saved hardware profile for the selected graphics cards/)).toBeInTheDocument()
+    expect(screen.getByText(/Choose the graphics cards to load the model onto/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    expect(await screen.findByText('Paused')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Resume download' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete partial download' })).toBeInTheDocument()
+    expect(screen.getByText(/Only one model downloads at a time/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByText(/only recommended once it has been tested on your graphics card/)).toBeInTheDocument()
+    expect(document.body).not.toHaveTextContent(/CUDA_VISIBLE_DEVICES|\bTP\b|VRAM|Smol/)
+  })
   it('disables mutations against an offline host even with saved inventory', async () => {
     const user = userEvent.setup()
     mocks.errors = { remote: 'Connection lost' }

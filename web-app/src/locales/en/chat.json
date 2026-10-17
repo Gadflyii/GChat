@@ -35,10 +35,10 @@
     "documentsNeedTools": "This model cannot read files. Choose a model that can use tools."
   },
   "agentApprovals": {
-    "manualSelected": "Manually",
+    "manualSelected": "Approvals: manual",
     "manual": "Manually approve",
     "manualDescription": "Pause before sensitive actions.",
-    "skipSelected": "Skip",
+    "skipSelected": "Approvals: skipped",
     "skip": "Skip all approvals",
     "skipDescription": "Run without asking."
   },

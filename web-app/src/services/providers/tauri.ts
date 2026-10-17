@@ -11,7 +11,7 @@ import { ExtensionManager } from '@/lib/extension'
 import { fetch as fetchTauri } from '@tauri-apps/plugin-http'
 import { invoke } from '@tauri-apps/api/core'
 import { DefaultProvidersService } from './default'
-import { getModelCapabilities } from '@/lib/models'
+import { getModelCapabilities, runtimeModelDisplayName } from '@/lib/models'
 
 const GINFER_LEGACY_CONTEXT_DEFAULT = 16_384
 const GINFER_SERVER_CONTEXT_FALLBACK = 8_192
@@ -243,6 +243,7 @@ export class TauriProvidersService extends DefaultProvidersService {
                 id: model.id,
                 model: model.id,
                 name: model.name,
+                displayName: runtimeModelDisplayName(providerName, model),
                 description: model.description,
                 capabilities,
                 embedding: model.embedding, // Preserve embedding flag for filtering in UI

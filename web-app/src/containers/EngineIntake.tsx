@@ -15,7 +15,7 @@ export function EngineIntake({ onConnect }: { onConnect: () => void }) {
       )
     : []
   return (
-    <section className="rounded-lg border p-4 space-y-2">
+    <section className="rounded-xl border p-5 space-y-3">
       <h2 className="font-medium">Use a GInfer host on your network</h2>
       <p className="text-sm text-muted-foreground">
         Already running GInfer elsewhere? Connect to its models without

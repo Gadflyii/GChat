@@ -192,6 +192,10 @@ describe('Attachment settings availability', () => {
     expect(
       screen.getByText(text.availableAutoInlineThresholdDesc)
     ).toBeInTheDocument()
+    // The share is typed as a fraction, so the row says so and gives an example.
+    expect(text.availableAutoInlineThresholdDesc).toContain(
+      'from 0.05 to 1, where 0.75 means 75%'
+    )
 
     for (const name of [
       text.topK,

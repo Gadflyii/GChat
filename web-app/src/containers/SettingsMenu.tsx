@@ -251,7 +251,12 @@ const SettingsMenu = () => {
                 {t('common:modelProviders')}
               </span>
               <AddProviderDialog onCreateProvider={createProvider}>
-                <Button variant="ghost" size="icon-xs">
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={t('common:addProvider')}
+                  title={t('common:addProvider')}
+                >
                   <IconPlus size={12} />
                 </Button>
               </AddProviderDialog>

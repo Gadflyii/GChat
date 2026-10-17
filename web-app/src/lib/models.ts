@@ -51,6 +51,18 @@ export const getModelCapabilities = (
  * This utility is to extract cortexso model description from README.md file
  * @returns
  */
+/**
+ * Local GInfer models are stored under a package hash. Their manifest name is
+ * the readable label, so pickers and the Models page show it instead of the id.
+ */
+export const runtimeModelDisplayName = (
+  provider: string,
+  model: { id: string; name?: string }
+): string | undefined =>
+  provider === 'ginfer' && model.name && model.name !== model.id
+    ? model.name
+    : undefined
+
 export const extractDescription = (text?: string) => {
   if (!text) return text
   const normalizedText = removeYamlFrontMatter(text)

@@ -2995,19 +2995,28 @@ const ChatInput = memo(function ChatInput({
       </div>
 
       {message && (
-        <div className="-mt-0.5 mx-2 pb-2 px-3 pt-1.5 rounded-b-lg text-xs text-destructive transition-all duration-200 ease-in-out">
+        <div
+          role="alert"
+          className="-mt-0.5 mx-2 pb-2 px-3 pt-1.5 rounded-b-lg text-xs text-destructive transition-all duration-200 ease-in-out"
+        >
           <div className="flex items-center gap-1 justify-between">
             {message}
-            <IconX
-              className="size-3 text-muted-foreground cursor-pointer"
+            <button
+              type="button"
+              aria-label={t('common:close')}
+              title={t('common:close')}
+              className="rounded p-1 text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
               onClick={() => {
                 setMessage('')
                 // Reset file input to allow re-uploading the same file
                 if (fileInputRef.current) {
                   fileInputRef.current.value = ''
                 }
+                textareaRef.current?.focus()
               }}
-            />
+            >
+              <IconX className="size-3" aria-hidden="true" />
+            </button>
           </div>
         </div>
       )}
