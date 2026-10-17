@@ -424,7 +424,7 @@ impl PreparedVm {
                 .create(true)
                 .truncate(false)
                 .open(path)?;
-            lock.try_lock().map_err(|_| {
+            crate::store::try_lock_settled(&lock).map_err(|_| {
                 io::Error::new(
                     io::ErrorKind::WouldBlock,
                     "VM lifecycle action is already in progress",

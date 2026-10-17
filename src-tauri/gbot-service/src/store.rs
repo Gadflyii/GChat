@@ -29,6 +29,22 @@ pub(crate) struct Store {
     pub(crate) fail_after_publish: std::sync::atomic::AtomicBool,
 }
 
+/// Exclusive advisory lock that tolerates a just-forked child. Another thread's
+/// fork copies this process's descriptors until its exec closes them (all ours
+/// are close-on-exec), and the copy keeps a released lock held for that
+/// moment. A lock still held after the grace period belongs to a real owner.
+pub(crate) fn try_lock_settled(file: &fs::File) -> Result<(), fs::TryLockError> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(500);
+    loop {
+        match file.try_lock() {
+            Err(fs::TryLockError::WouldBlock) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            result => return result,
+        }
+    }
+}
+
 impl Store {
     pub(crate) async fn open(path: PathBuf) -> Result<Self, ServiceError> {
         if path.file_name().is_none() {
@@ -46,7 +62,7 @@ impl Store {
             let lock = options
                 .open(path.with_extension("lock"))
                 .map_err(|_| ServiceError::Persistence)?;
-            lock.try_lock().map_err(|error| match error {
+            try_lock_settled(&lock).map_err(|error| match error {
                 fs::TryLockError::WouldBlock => ServiceError::AlreadyRunning,
                 fs::TryLockError::Error(_) => ServiceError::Persistence,
             })?;
