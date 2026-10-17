@@ -13,4 +13,8 @@ describe('native checkbox and radio theme', () => {
   it('shows a keyboard focus ring on them', () => {
     expect(css).toMatch(/input\[type='checkbox'\]:focus-visible,\s*input\[type='radio'\]:focus-visible/)
   })
+
+  it('drops the spacing under the summary of a collapsed details element', () => {
+    expect(css).toMatch(/details:not\(\[open\]\) > summary\s*\{[^}]*margin-block-end: 0/)
+  })
 })
