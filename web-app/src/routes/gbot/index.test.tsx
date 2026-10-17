@@ -1580,6 +1580,115 @@ it('opens view-only and closes interactive input before handing back to the bot'
   )
 })
 
+it.each(['incomplete', 'unavailable', 'service-unavailable'])(
+  'keeps an open KVM desktop through task refreshes, then blocks %s setup',
+  async (failure) => {
+    const [identity] = readyTaskBots(undefined, {
+      workspaces: [
+        {
+          id: 'one',
+          name: 'Writer',
+          bot_pc: { kind: 'local_vm', hypervisor: 'kvm' },
+        },
+      ],
+    })
+    const call = mocks.call.getMockImplementation()!
+    const updates = new Map<string, () => void>()
+    mocks.listen.mockImplementation(
+      async (event: string, callback: () => void) => {
+        updates.set(event, callback)
+        return () => updates.delete(event)
+      }
+    )
+    let record: KvmSetupRecord = {
+      id: identity.workspace_id,
+      name: 'Writer',
+      stage: 'ready',
+      issue: null,
+    }
+    let status = async () => [record]
+    let statusReads = 0
+    let updated = false
+    let failState = false
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'state' && failState)
+          throw new Error('Gbot service unavailable')
+        if (path === 'setup/kvm/status') {
+          statusReads += 1
+          return status()
+        }
+        if (path === 'view/open')
+          return {
+            lease_id: 'retained-view',
+            ws_url: 'ws://127.0.0.1:3000/media?ticket=scoped',
+            media_session_id: 'media',
+            interactive: false,
+          }
+        if (path === 'tasks')
+          return updated
+            ? [
+                {
+                  id: 'task',
+                  identity,
+                  state: 'running',
+                  messages: [
+                    { role: 'assistant', content: 'Task update received' },
+                  ],
+                },
+              ]
+            : []
+        return call(path, body)
+      }
+    )
+    render(<Page />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'View bot’s desktop' })
+    )
+    await waitFor(() => expect(mocks.mediaStart).toHaveBeenCalledTimes(1))
+    const canvas = screen.getByLabelText('Bot computer desktop')
+    let resolveStatus!: (records: KvmSetupRecord[]) => void
+    status = () =>
+      new Promise<KvmSetupRecord[]>((resolve) => {
+        resolveStatus = resolve
+      })
+    const before = statusReads
+    await act(async () => updates.get('gbot-task-update')!())
+    await waitFor(() => expect(statusReads).toBeGreaterThan(before))
+    expect(canvas).toBeVisible()
+    expect(screen.queryByText('Setup incomplete')).not.toBeInTheDocument()
+    expect(mocks.mediaStop).not.toHaveBeenCalled()
+    expect(mocks.call).not.toHaveBeenCalledWith('view/close', expect.anything())
+
+    updated = true
+    await act(async () => resolveStatus([record]))
+    await screen.findByText('Task update received')
+    expect(screen.getByLabelText('Bot computer desktop')).toBe(canvas)
+    expect(mocks.mediaStart).toHaveBeenCalledTimes(1)
+    expect(mocks.mediaStop).not.toHaveBeenCalled()
+
+    record = { ...record, stage: 'testing_desktop' }
+    status = async () => {
+      if (failure === 'unavailable') throw new Error('Setup status unavailable')
+      return [record]
+    }
+    failState = failure === 'service-unavailable'
+    await act(async () => updates.get('gbot-setup-update')!())
+    await screen.findByText('Setup incomplete')
+    expect(canvas).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Take over' })).toBeDisabled()
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith(
+        'view/close',
+        expect.objectContaining({ identity, lease_id: 'retained-view' })
+      )
+    )
+  }
+)
+
 it.each([false, true])(
   'reconnects paused control before explicit hand-back (disconnect media failure: %s)',
   async (mediaFailure) => {
