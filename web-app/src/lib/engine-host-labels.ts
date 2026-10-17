@@ -1,19 +1,35 @@
 import type { EngineInstance, EngineModel, EngineSnapshot } from '@/services/engines'
 
+/** Trailing package hashes in catalog names, e.g. "Qwen 27B 2-bit mix (483343c2...)". */
+export const plainModelName = (name: string) => name.replace(/\s*\([a-f0-9]{64}\)\s*$/i, '')
+
+const familyName = (modelId: string) => {
+  if (/^qwen3\.8-27b$/i.test(modelId)) return 'Qwen 3.8 27B'
+  if (/^muse-glimmer-30b$/i.test(modelId)) return 'Muse 30B'
+  if (/^qwen3\.8-flash-next/i.test(modelId)) return 'Qwen 3.8 Flash'
+  return modelId.replace(/^muse-glimmer-/i, 'Muse ').replace(/^qwen/i, 'Qwen ').replace(/-/g, ' ').replace(/(\d)b\b/gi, '$1B')
+}
+
+/** The plain name of a package format: "2-bit mix" (Qwen 27B, Muse 30B), "pure 2-bit" (Flash), INT or NVFP4. */
+export function plainWeightsName(modelId: string, weightsId: string): string {
+  const id = weightsId.toLowerCase()
+  if (id.includes('smol')) return /flash/i.test(modelId) ? 'pure 2-bit' : '2-bit mix'
+  if (id.includes('nvfp4')) return 'NVFP4'
+  if (/(^|[-_])(int|groupwise)/.test(id) || id.startsWith('int')) return 'INT'
+  return weightsId.split(/[-_]/).map(part => part.toUpperCase()).join(' ')
+}
+
+/** The speculative-decoding drafter built into a package, for a details line only. */
+export function weightsDrafterDetail(weightsId: string): string | undefined {
+  const match = weightsId.toLowerCase().match(/dflash2?|mtp/)
+  return match ? `Speculative drafter: ${match[0] === 'mtp' ? 'MTP' : match[0] === 'dflash2' ? 'DFlash2' : 'DFlash'}` : undefined
+}
+
+export const identityLabel = (identity: { model_id: string; weights_id: string }) =>
+  `${familyName(identity.model_id)} — ${plainWeightsName(identity.model_id, identity.weights_id)}`
+
 export function hostModelLabel(model: EngineModel): string {
-  const identity = model.metadata.identity
-  const name = identity.model_id
-    .replace(/^muse-glimmer-/i, 'Muse Glimmer ')
-    .replace(/^qwen/i, 'Qwen')
-    .replace(/-/g, ' ')
-    .replace(/(\d)b\b/gi, '$1B')
-  const weights = identity.weights_id.split(/[-_]/).map((part) => {
-    if (part === 'groupwise') return 'Groupwise'
-    if (part === 'dflash2') return 'DFlash2'
-    if (part === 'dflash') return 'DFlash'
-    return part.toUpperCase()
-  }).join(' ')
-  return `${name} · ${weights}`
+  return identityLabel(model.metadata.identity)
 }
 
 /** The instance's name: its own, unless the Host only filled in an id or the package identity. */
