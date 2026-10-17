@@ -16,15 +16,28 @@ controls, validation and retry after a failed write; one full `make verify`.
 No model, Engine, provider request or real user-data operation is in scope.
 
 Source: `/ai/gchat-worktrees/c4-attachment-edit-durability-20261017`, branch
-`fix/c4-attachment-edit-durability-20261017`, base `0099e0a1d`. The route, hook and
-dedicated tests are ready for verification. Results and the original native
-screenshots belong to `/ai/gchat/out/c4-settings-sweep-20261017/`; the reproduced
-loss is in `attachments-quick-navigation.json`. The private S1 cache at
-`/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/` is retained for this gate;
-no build is running. Next: focused tests and full verification after C3's GMUL
-timing return, then merge-ready. Provider labels are owned separately by C6,
-provider keyboard navigation by C7; unsupported attachment choices and sidebar
-density remain separate findings in Gchat3's shared GUI list.
+`fix/c4-attachment-edit-durability-20261017`, integrated source `1788ee4336`.
+All six focused persistence regressions and one full `make verify` pass:
+2,971 frontend tests, 119 extension tests, 1,079 Rust tests and 59 Node
+contracts. Six frontend tests were skipped and 27 Rust tests ignored; lint,
+types, quality checks and all six critical coverage floors passed. Lint retains
+four warnings, including the existing attachment `sel` dependency warning.
+
+Results and the original native screenshots belong to
+`/ai/gchat/out/c4-settings-sweep-20261017/`; the reproduced loss is in
+`attachments-quick-navigation.json`, and passing commands are linked from
+`attachment-fix/result.json`. Retained source permissions were repaired before
+tests began. A stale post-run phase reader failed after both requested commands
+and the container exited 0; its separate error does not replace their results.
+No passing test was repeated. Returned 15:55Z; booking2638 canceled.
+
+The private S1 cache at `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/`
+is retained for the remaining isolated Settings fixes. Next: coordinator merge,
+then replay the accepted Settings changes in the private native app. Provider
+labels are owned separately by C6, provider keyboard navigation by C7;
+unsupported attachment choices and sidebar density remain separate findings in
+Gchat3's shared GUI list.
+
 ## Provider settings keyboard navigation — C7
 
 `GUI-SETTINGS-PROVIDER-KEYBOARD` fixes the ordinary Settings provider entries
@@ -177,7 +190,7 @@ receipt are in `token-fix/result.json` beneath the retained evidence directory.
 | C4 / OLD | `/home/gchat/c4-settings-sweep-20261017` | Private native app/home only; returned 15:30Z, normal OFF and unchanged XML |
 | C4 / evidence | `/ai/gchat/out/c4-settings-sweep-20261017/` | Before screenshots, control outcomes, findings and validation; no real token used |
 
-Next: merge the token fix, then validate attachment edit durability. Assistant create/update remains C7-owned; existing Engine and
+Token privacy merged as `513f2ab30`; attachment edit durability now passes its focused and full gates. Next: merge attachment durability, then sidebar density and the unavailable document-search controls. Assistant create/update remains C7-owned; existing Engine and
 Hardware work remains with its owners. No model or shared FRESH fixture is in scope.
 
 ## Global conversation deletion — C7
