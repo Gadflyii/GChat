@@ -959,7 +959,8 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
             gpu_uuids: Some(vec!["test".into()]),
             ..GinferConfig::default()
         };
-        let sessions = Arc::new(Mutex::new(HashMap::new()));
+        let desktop = crate::state::GinferState::new();
+        let sessions = desktop.ginfer_process.clone();
         let embedding = load(
             sessions.clone(),
             root.path().join("absent-host"),
@@ -989,13 +990,9 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
         .await
         .unwrap();
         assert_ne!(info.port, port);
-        assert_eq!(
-            sessions.lock().await[&info.pid]
-                .owner
-                .connection
-                .instance_id,
-            id
-        );
+        let original_connection = sessions.lock().await[&info.pid].owner.connection.clone();
+        assert_eq!(original_connection.instance_id, id);
+        let original_endpoint = host.processes.lock().await.endpoint(id).unwrap();
         let response = reqwest::Client::new()
             .get(format!("http://127.0.0.1:{}/v1/models", info.port))
             .bearer_auth(&info.api_key)
@@ -1003,8 +1000,27 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
             .await
             .unwrap();
         assert_eq!(response.status(), 200);
+        assert_eq!(response.json::<Value>().await.unwrap()["data"][0]["id"], "muse-glimmer-30b/nvfp4");
+
+        // Desktop cleanup drops client state, not the Host-owned Engine.
         sessions.lock().await.clear();
-        assert!(host.processes.lock().await.endpoint(id).is_ok());
+        drop(sessions);
+        drop(control);
+        drop(desktop);
+        assert_eq!(host.processes.lock().await.endpoint(id).unwrap(), original_endpoint);
+
+        // A reopened desktop authenticates again and discovers the same Ready
+        // session without inheriting the old client's in-memory handles.
+        let desktop = crate::state::GinferState::new();
+        let sessions = desktop.ginfer_process.clone();
+        assert!(sessions.lock().await.is_empty());
+        let control = Arc::new(LocalControl::open(&directory, &origin).unwrap());
+        let reopened = control.snapshot().await.unwrap();
+        assert_eq!(reopened["instances"].as_array().unwrap().len(), 1);
+        assert_eq!(reopened["instances"][0]["instance_id"], id.to_string());
+        assert_eq!(reopened["instances"][0]["session_id"], original_connection.session_id.to_string());
+        assert_eq!(reopened["instances"][0]["status"], "ready");
+        assert_eq!(reopened["instances"][0]["configuration"]["port"], port);
         let automatic = load_on_host(
             sessions.clone(), control.clone(), "desktop-alias".into(),
             artifact.to_string_lossy().into_owned(),
@@ -1042,7 +1058,20 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
         .await
         .unwrap();
         assert_eq!(reconnected.port, info.port);
+        let reconnected_connection = sessions.lock().await[&reconnected.pid].owner.connection.clone();
+        assert_eq!(reconnected_connection.instance_id, original_connection.instance_id);
+        assert_eq!(reconnected_connection.session_id, original_connection.session_id);
+        assert_eq!(reconnected_connection.port, original_connection.port);
+        assert_eq!(host.processes.lock().await.endpoint(id).unwrap(), original_endpoint);
         assert_eq!(host.processes.lock().await.instances().count(), 1);
+        let response = reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{}/v1/models", reconnected.port))
+            .bearer_auth(&reconnected.api_key)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(response.json::<Value>().await.unwrap()["data"][0]["id"], "muse-glimmer-30b/nvfp4");
         let session = sessions.lock().await.remove(&reconnected.pid).unwrap();
         let SessionOwner {
             control,
@@ -1050,6 +1079,8 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
         } = session.owner;
         control.stop_session(&connection).await.unwrap();
         assert!(host.processes.lock().await.endpoint(id).is_err());
+        assert_eq!(control.snapshot().await.unwrap()["instances"][0]["status"], "stopped");
+        assert!(tokio::net::TcpStream::connect(("127.0.0.1", port)).await.is_err());
 
         let active: LaunchRequest = serde_json::from_value(
             host.snapshot().await["instances"][0]["profile"].clone(),

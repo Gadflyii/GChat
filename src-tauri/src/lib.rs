@@ -502,14 +502,8 @@ pub fn run() {
 
             app.handle().plugin(log_builder.build())?;
 
-            // Reap backend processes orphaned by a previous *abnormal* exit
-            // (crash / OOM / Force Quit / SIGKILL — none of which run our
-            // RunEvent::Exit cleanup) before any engine spawns. Single-instance
-            // guarantees these can only be our own leftovers. Kept after logger
-            // init so its actions are recorded in app.log.
-            #[cfg(not(any(target_os = "ios", target_os = "android")))]
-            crate::core::process_reaper::reap_orphan_backends(app.handle());
-
+            // Reconnect to the detached Host without changing its model processes.
+            // The Host owns Engine lifetime, including cleanup after a client exits.
             #[cfg(target_os = "windows")]
             {
                 setup::start_bundled_ginfer_windows(app.handle().clone(), resource_completion);
