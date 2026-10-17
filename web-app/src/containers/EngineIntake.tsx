@@ -6,6 +6,8 @@ import { useEngineDiscovery } from '@/stores/engine-discovery-store'
 export function EngineIntake({ onConnect }: { onConnect: () => void }) {
   const nearby = useEngineHosts((s) => s.nearby)
   const hosts = useEngineHosts((s) => s.hosts)
+  // This computer's own host is not a network host a person paired.
+  const paired = hosts.filter((host) => !host.local)
   const { enabled, ignored } = useEngineDiscovery()
   const visible = enabled
     ? nearby.filter(
@@ -26,9 +28,9 @@ export function EngineIntake({ onConnect }: { onConnect: () => void }) {
           Nearby: {visible.map((host) => host.name).join(', ')}
         </p>
       )}
-      {!!hosts.length && (
+      {!!paired.length && (
         <p className="text-sm">
-          {hosts.length} paired {hosts.length === 1 ? 'host' : 'hosts'}{' '}
+          {paired.length} paired {paired.length === 1 ? 'host' : 'hosts'}{' '}
           available in GInfer Hosts.
         </p>
       )}

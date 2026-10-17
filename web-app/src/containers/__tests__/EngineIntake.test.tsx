@@ -3,12 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { EngineIntake } from '@/containers/EngineIntake'
 import { useEngineDiscovery } from '@/stores/engine-discovery-store'
 
+const mocks = vi.hoisted(() => ({ hosts: [] as { host_id: string; local?: boolean }[] }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (select: (s: unknown) => unknown) => select({
-  hosts: [], nearby: [{ host_id: 'server', name: 'Lab host' }],
+  hosts: mocks.hosts, nearby: [{ host_id: 'server', name: 'Lab host' }],
 }) }))
 
 describe('network host intake', () => {
-  beforeEach(() => useEngineDiscovery.setState({ enabled: true, ignored: {}, notified: [] }))
+  beforeEach(() => {
+    mocks.hosts = []
+    useEngineDiscovery.setState({ enabled: true, ignored: {}, notified: [] })
+  })
   it('offers the network path without requiring local hardware or a model', () => {
     const connect = vi.fn()
     const view = render(<EngineIntake onConnect={connect} />)
@@ -25,5 +29,14 @@ describe('network host intake', () => {
     expect(screen.queryByText('Nearby: Lab host')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Connect a network host' })).toBeEnabled()
     view.unmount()
+  })
+  it('does not call this computer\'s own host a paired network host', () => {
+    mocks.hosts = [{ host_id: 'local', local: true }]
+    const view = render(<EngineIntake onConnect={vi.fn()} />)
+    expect(screen.queryByText(/paired host/)).not.toBeInTheDocument()
+    view.unmount()
+    mocks.hosts = [{ host_id: 'local', local: true }, { host_id: 'lab' }]
+    render(<EngineIntake onConnect={vi.fn()} />)
+    expect(screen.getByText(/1 paired host\s+available in GInfer Hosts\./)).toBeInTheDocument()
   })
 })
