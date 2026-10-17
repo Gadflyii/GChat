@@ -594,7 +594,7 @@ it('resumes saved M365 prerequisites without presenting a connected bot workspac
   )
   await screen.findByRole('region', { name: 'M365 Cloud PC setup' })
   expect(
-    screen.getByText('Step 4 of 4 · Cloud PC prerequisites')
+    screen.getByText('Step 4 of 4 · Prepare your Cloud PC connection')
   ).toBeInTheDocument()
   expect(await screen.findByLabelText('Microsoft account')).toHaveValue(
     record.account_id
