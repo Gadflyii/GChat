@@ -212,7 +212,8 @@ describe('GInfer library model context and names', () => {
     config.value = { model_path: '/linux/models/custom/package.ginfer' }
     vi.mocked(findSessionByModel).mockResolvedValue({ pid: 2, port: 8081 } as any)
     const operationId = 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c'
-    await new GinferExtension().load('custom', { load_operation_id: operationId })
+    const session = await new GinferExtension().load('custom', { load_operation_id: operationId })
+    expect(session).toEqual({ pid: 1, port: 8080 })
     expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
       config: expect.objectContaining({ load_operation_id: operationId }),
     }))
