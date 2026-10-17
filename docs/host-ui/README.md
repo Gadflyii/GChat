@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Data-folder move guidance — GUI-DATA-LOCATION-GUIDANCE
+
+The confirmation dialog explains which files are copied, that external model
+files stay in place, and that the original folder is retained. It asks for an
+empty destination with room for a second copy, explains the restart, and gives
+next steps for a busy service or a failed Host restart. The pending state names
+the copy and asks the user to keep GChat open.
+
+Scope: dialog presentation and its existing General settings tests. Native move,
+rollback, error toast and relaunch behavior remain owned by the existing caller
+and native service. No live user-data move or backend change is authorized here.
+Acceptance: focused rendered move/pending/refusal/completion cases and full
+`make verify`; then push the isolated branch for coordinator merge.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| Codex 6 / local | `/ai/gchat-worktrees/c6-gui-data-location-guidance-20261017`, branch `fix/c6-gui-data-location-guidance-20261017` | Candidate from `fb15341b1`; focused and full verification pass |
+| Codex 6 / evidence | `/ai/gchat/out/c6-gui-data-location-guidance-20261017/` | Result JSON and concise verification summary retained |
+| Codex 6 / S1 | `/media/ron/SSD_RAID/ai/tmp-c6-gui-data-location-guidance-20261017/` | Private source/dependency/build copies retired after verification; CPU 72–79 returned 12:50Z |
+
+Verification passed on S1 in the pinned `gchat-s1-verify` container: all 21
+focused settings cases and full `make verify` (2,579 frontend tests, 119 extension
+tests, critical coverage floors and all supported Rust suites). Setup refreshed
+local-core archive references only in the disposable test copy; candidate
+dependency files are unchanged. No live data move was performed.
+
+Next: coordinator merge of the isolated branch.
+
 ## Profile presentation — OI-077
 
 Ron approved model then card grouping, one recommended measured profile per card,
