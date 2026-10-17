@@ -1851,6 +1851,10 @@ const ChatInput = memo(function ChatInput({
         }
       } catch (error) {
         console.error('Failed to open file dialog:', error)
+        toast.error('Could not attach images', {
+          description:
+            'Try choosing the files again. If the file window does not open, restart GChat.',
+        })
       }
 
       if (textareaRef.current) {
@@ -2087,6 +2091,10 @@ const ChatInput = memo(function ChatInput({
         }
       } catch (error) {
         console.error('Failed to open audio dialog:', error)
+        toast.error('Could not attach audio', {
+          description:
+            'Try choosing the files again. If the file window does not open, restart GChat.',
+        })
       }
       if (textareaRef.current) textareaRef.current.focus()
     } else {

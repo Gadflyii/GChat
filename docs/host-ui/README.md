@@ -19,6 +19,12 @@ Text or attachments you add while an earlier Send is pending stay in the
 composer when that preparation finishes; its completion does not clear your
 newer changes.
 
+## Choosing image or audio attachments
+
+If the image or audio file window fails, GChat shows an error and keeps your
+draft and existing attachments. Use the attachment button again to retry.
+Canceling the file window without choosing a file shows no error.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing

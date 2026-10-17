@@ -979,6 +979,57 @@ describe('ChatInput', () => {
     unmount()
   })
 
+  it.each([
+    { menuItem: 'Add Images', errorTitle: 'Could not attach images' },
+    { menuItem: 'Add audio', errorTitle: 'Could not attach audio' },
+  ])('keeps the draft and files when $menuItem fails and allows a silent cancelled retry', async ({ menuItem, errorTitle }) => {
+    const first = deferred<string[] | null>()
+    const retry = deferred<string[] | null>()
+    const open = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise)
+    seedServiceHub({ dialog: { open } as never })
+    useModelProvider.setState((state) => ({
+      selectedModel: { ...state.selectedModel!, capabilities: ['vision', 'audio'] },
+    }))
+    const attachment = createDocumentAttachment({ name: 'notes.txt', path: '/docs/notes.txt' })
+    useChatAttachments.getState().setAttachments(NEW_THREAD_ATTACHMENT_KEY, [attachment])
+    const failure = vi.spyOn(toast, 'error')
+    try {
+      const { container } = render(<ChatInput initialMessage />)
+      const input = screen.getByTestId('chat-input')
+      fireEvent.change(input, { target: { value: 'Keep my unfinished question' } })
+      const chooseMedia = async () => {
+        fireEvent.keyDown(container.querySelector('button[aria-haspopup="menu"]')!, { key: 'ArrowDown' })
+        fireEvent.click(await screen.findByRole('menuitem', { name: menuItem }))
+      }
+      await chooseMedia()
+      expect(open).toHaveBeenCalledOnce()
+      await act(async () => {
+        first.reject(new Error('Native file window unavailable'))
+        await first.promise.catch(() => undefined)
+      })
+
+      expect(failure).toHaveBeenCalledExactlyOnceWith(errorTitle, {
+        description: expect.stringMatching(/try choosing the files again.*restart GChat/i),
+      })
+      expect(input).toHaveValue('Keep my unfinished question')
+      expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([attachment])
+
+      await chooseMedia()
+      expect(open).toHaveBeenCalledTimes(2)
+      await act(async () => {
+        retry.resolve(null)
+        await retry.promise
+      })
+
+      expect(failure).toHaveBeenCalledOnce()
+      expect(input).toHaveValue('Keep my unfinished question')
+      expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([attachment])
+      expect(mocks.navigate).not.toHaveBeenCalled()
+    } finally {
+      failure.mockRestore()
+    }
+  })
+
   it('downscales an image before applying the byte limit', async () => {
     const model = {
       id: 'vision-model',
