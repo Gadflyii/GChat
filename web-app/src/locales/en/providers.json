@@ -13,6 +13,8 @@
   "importModelError": "Failed to import model:",
   "stop": "Stop",
   "start": "Start",
+  "addApiKeyFirst": "Add an API key first",
+  "addApiKeyFirstHint": "Start is available after you save an API key above.",
   "reload": "Reload",
   "reloadSuccess": "Reloaded {{model}} with the current startup settings.",
   "noModelFound": "No model found",
