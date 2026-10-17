@@ -13,6 +13,7 @@ import GbotDesktopView, {
   type DesktopViewHandle,
 } from '@/components/GbotDesktopView'
 import GbotHumanHelp from '@/components/GbotHumanHelp'
+import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -382,44 +383,16 @@ export default function GbotCompanion() {
                 </p>
               )}
               {approvals.map((approval) => (
-                <article
+                <GbotTaskApproval
                   key={approval.id}
-                  className="space-y-2 rounded-lg border p-3"
-                >
-                  <p className="text-sm font-medium">Bot requests permission</p>
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs">
-                    {JSON.stringify(approval.request.operation, null, 2)}
-                  </pre>
-                  <div className="flex gap-2">
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void perform(() =>
-                          gbot('tasks/approval', {
-                            id: approval.id,
-                            allow: true,
-                          })
-                        )
-                      }
-                    >
-                      Allow
-                    </Button>
-                    <Button
-                      disabled={busy}
-                      variant="outline"
-                      onClick={() =>
-                        void perform(() =>
-                          gbot('tasks/approval', {
-                            id: approval.id,
-                            allow: false,
-                          })
-                        )
-                      }
-                    >
-                      Deny
-                    </Button>
-                  </div>
-                </article>
+                  approval={approval}
+                  busy={busy}
+                  reply={(allow) =>
+                    perform(() =>
+                      gbot('tasks/approval', { id: approval.id, allow })
+                    )
+                  }
+                />
               ))}
               {history.map((task) => (
                 <article

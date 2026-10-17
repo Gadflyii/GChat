@@ -135,6 +135,64 @@ async function mount() {
   return view
 }
 
+it('sends a permission decision for the selected bot and shows its pending state', async () => {
+  tasks = [
+    {
+      id: 'atlas-task',
+      identity: { workspace_id: 'a', session_id: 'sa' },
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [],
+    },
+  ]
+  let approvals = [
+    {
+      id: 'atlas-permission',
+      task_id: 'atlas-task',
+      request: { operation: { kind: 'desktop_input' } },
+    },
+    {
+      id: 'bramble-permission',
+      task_id: 'bramble-task',
+      request: { operation: { kind: 'file_remove' } },
+    },
+  ]
+  const fallback = mocks.call.getMockImplementation()!
+  let finish!: () => void
+  mocks.call.mockImplementation((path: string, body?: unknown) => {
+    if (path === 'tasks/approvals') return Promise.resolve(approvals)
+    if (path === 'tasks/approval')
+      return new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    return fallback(path, body)
+  })
+  await mount()
+  const card = screen.getByRole('article', { name: 'Bot permission request' })
+  expect(within(card).getByText(/desktop_input/)).toBeVisible()
+  expect(screen.queryByText(/file_remove/)).not.toBeInTheDocument()
+  fireEvent.click(
+    within(card).getByRole('button', { name: 'Deny', exact: true })
+  )
+  expect(mocks.call).toHaveBeenCalledWith('tasks/approval', {
+    id: 'atlas-permission',
+    allow: false,
+  })
+  expect(within(card).getByRole('status')).toHaveTextContent(
+    'Denying this action…'
+  )
+  expect(
+    within(card).getByRole('button', { name: 'Allow', exact: true })
+  ).toBeDisabled()
+  approvals = []
+  await act(async () => finish())
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+  )
+})
+
 it('shows preparation and then service loading before deciding whether bots exist', async () => {
   mocks.resources.ready = false
   let finish!: (value: BotState) => void
