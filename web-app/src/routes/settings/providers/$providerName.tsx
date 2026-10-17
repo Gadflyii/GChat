@@ -55,6 +55,7 @@ import { EMBEDDING_MODEL_ID } from '@/constants/models'
 import { getModelCapabilities } from '@/lib/models'
 import { useModelLoad } from '@/hooks/useModelLoad'
 import { switchToModel } from '@/utils/switchModel'
+import { afterGinferSettingSaved } from '@/utils/ginferSettingChange'
 import { restartLocalModel } from '@/utils/restartLocalModel'
 import { useAppState } from '@/hooks/useAppState'
 import { useShallow } from 'zustand/shallow'
@@ -484,12 +485,39 @@ function ProviderDetail() {
                 ...updateObj,
               })
 
-              serviceHub
+              const saved = serviceHub
                 .providers()
                 .updateSettings(
                   providerName,
                   updateObj.settings ?? []
                 )
+
+              if (isGinferProvider(providerName)) {
+                // Live settings save and leave the running model alone;
+                // start-argument settings ask before restarting it.
+                const providerModelIds = new Set(
+                  provider.models.map((m) => m.id)
+                )
+                void Promise.resolve(saved).then(() =>
+                  afterGinferSettingSaved({
+                    key: setting.key,
+                    activeModelIds: useAppState
+                      .getState()
+                      .activeModels.filter((id) => providerModelIds.has(id)),
+                    restart: (id) =>
+                      restartLocalModel(serviceHub, providerName, id),
+                    onError: (error) =>
+                      toast.error(t('providers:stop'), {
+                        description:
+                          error instanceof Error
+                            ? error.message
+                            : String(error),
+                      }),
+                  })
+                )
+                return
+              }
+
               serviceHub.models().stopAllModels()
 
               // Refresh active models after stopping. Use

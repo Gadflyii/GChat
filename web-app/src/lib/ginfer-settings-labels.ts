@@ -58,3 +58,24 @@ export const ginferSettingLabels: Record<string, { title: string; description: s
     description: 'Makes startup and answers a little slower; use only if a model will not start. Applies the next time a model starts.',
   },
 }
+
+/**
+ * GInfer settings that are engine start arguments. They change nothing for a
+ * model that is already running, so applying one means restarting that model.
+ * Every other GInfer setting (Model folder, Auto Unload, Timeout) is read at
+ * the next load or the next request and never needs the running model touched.
+ * Keep in step with buildGinferConfig / binary_path in
+ * extensions/ginfer-extension/src/index.ts.
+ */
+export const ginferRestartKeys = new Set([
+  'binary_path',
+  'vision',
+  'spec',
+  'draft_tokens',
+  'draft_tp',
+  'kv_dtype',
+  'kv_arena_bytes',
+  'prefill_chunk',
+  'max_concurrency',
+  'no_cuda_graph',
+])
