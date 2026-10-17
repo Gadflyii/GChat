@@ -393,3 +393,12 @@ it.each([
     body: expect.objectContaining({ max_context: 65536 }),
   })))
 })
+
+it('explains the busy GPU while the Host finishes speed tuning after Stop', () => {
+  const job = { key: 'k', model_id: 'm', gpu_uuids: ['GPU-one'], max_context: 4096, concurrency: 1,
+    status: 'running' as const, pid: 7, error: null, diagnostic_tail: '' }
+  const { rerender } = render(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, draft_width_calibrations: [job] }} />)
+  expect(screen.getByText(/Finishing GPU speed tuning \(about 1 minute\)/)).toBeVisible()
+  rerender(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, draft_width_calibrations: [{ ...job, status: 'queued' }] }} />)
+  expect(screen.queryByText(/Finishing GPU speed tuning/)).not.toBeInTheDocument()
+})
