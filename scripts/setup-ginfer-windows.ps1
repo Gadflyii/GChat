@@ -7,6 +7,8 @@ param(
     [string]$InstallDirectory = (Join-Path $env:LOCALAPPDATA 'GInfer'),
     [string]$ProviderDirectory = (Join-Path $env:APPDATA 'GInfer\data'),
     [string[]]$GpuUuids = @(),
+    [ValidateRange(1, 65535)]
+    [int]$HostPort = 7443,
     [switch]$NoPath,
     [switch]$Install
 )
@@ -66,6 +68,9 @@ if (-not $env:APPDATA) { throw 'APPDATA is unavailable' }
 $locator = Join-Path $env:APPDATA 'GInfer\local-host.json'
 $configuration = $null
 if (Test-Path -LiteralPath $locator) {
+    if ($PSBoundParameters.ContainsKey('HostPort')) {
+        throw '-HostPort is only supported for a first installation; the existing local Host registration was left unchanged'
+    }
     $registered = Get-Content -LiteralPath $locator -Raw | ConvertFrom-Json
     if ($registered.schema -ne 'ginfer-local-host-v1') { throw 'Unsupported local host locator; existing registration was left unchanged' }
     Write-Output "Existing host will be reused: $locator"
@@ -79,7 +84,7 @@ if (Test-Path -LiteralPath $locator) {
     }
     $configuration = @{
         data_dir = Join-Path $provider 'host'
-        host_url = 'https://127.0.0.1:7443'
+        host_url = "https://127.0.0.1:$HostPort"
         desktop = @{ provider = $provider; engine = Join-Path $destination 'bin\ginfer-serve.exe' }
     }
     Write-Output "Host state and managed models: $provider (created by the host on first launch)"
