@@ -116,7 +116,7 @@ describe('Agent workspace file preview recovery', () => {
     native.stat
       .mockResolvedValueOnce(image)
       .mockReturnValueOnce(retry.promise)
-    useWorkspacePreviewStore.getState().openFile(firstFile)
+    useWorkspacePreviewStore.getState().openArtifact('Review artifact')
     useWorkspacePreviewStore.getState().openFile(imageFile)
     render(<AgentWorkspacePreview />)
 
@@ -130,7 +130,7 @@ describe('Agent workspace file preview recovery', () => {
       'Could not preview this file.'
     )
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'first.txt' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Review artifact' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'picture.png' })).toBeVisible()
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry preview' }))
@@ -150,7 +150,7 @@ describe('Agent workspace file preview recovery', () => {
     )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'first.txt' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Review artifact' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'picture.png' })).toBeVisible()
     expect(native.read).not.toHaveBeenCalled()
   })
