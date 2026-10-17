@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { engineCommand, type EngineHardwareProfile } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
-import { plainModelName } from '@/lib/engine-host-labels'
+import { plainModelName, plainStartupModelName, gpuCardName } from '@/lib/engine-host-labels'
 import { downloadStatusLabel, formatModelBytes, releaseVerified, type ModelDownload, type ModelRelease } from '@/lib/model-release'
 
 type FirstRun = {
@@ -46,6 +46,15 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const pathEdited = useRef(false)
   const releasesEdited = useRef(false)
   const step = flow?.step
+  const card = useRef<HTMLElement>(null)
+  // A step finishing can change the card far below the visible area, so bring
+  // the card back into view; the new step or saved choice is then on screen.
+  const showCard = () => card.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+  const shownStep = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (step && shownStep.current && shownStep.current !== step) showCard()
+    shownStep.current = step
+  }, [step])
   useEffect(() => {
     if (step === 'complete' && !completed.current) { completed.current = true; onComplete?.() }
   }, [step, onComplete])
@@ -99,6 +108,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       const next = await engineCommand<FirstRun>('first_run', { host_id: localId, ...args })
       setFlow(next)
       if (next.step === 'complete') await refresh().catch(() => undefined)
+      else if (args.action) requestAnimationFrame(showCard)
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
   }
   const profileAction = async (action: 'cancel' | 'resume') => {
@@ -129,7 +139,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const overdue = expected != null && elapsed != null && elapsed >= expected
   const minutes = (ms: number) => `${Math.max(0, Math.ceil(ms / 60000))} min`
   const toggle = (values: string[], value: string) => values.includes(value) ? values.filter(v => v !== value) : [...values, value]
-  return <section className="space-y-4 rounded-xl border p-5" aria-label="Set up local GInfer">
+  return <section ref={card} className="scroll-mt-4 space-y-4 rounded-xl border p-5" aria-label="Set up local GInfer">
     <h2 className="font-medium">Set up models on this computer</h2>
     <p className="text-sm text-muted-foreground">Choose the graphics cards and model folder to use, then choose a model. GInfer, the engine that runs your models, measures this hardware and checks that each model can start. Saving this hardware profile helps future model loads and switches finish faster.</p>
     {unavailable && <p role="alert" className="text-sm text-destructive">{unavailable}</p>}
@@ -139,7 +149,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     {step === 'gpu' && !manualOpen && <fieldset disabled={busy} className="space-y-3"><legend className="font-medium">Select graphics cards</legend>
       <p className="text-sm">Select the graphics card you want GInfer to use. You can use 1, 2 or 4 cards of the same model together; each combination needs its own hardware profile. If you have one card, select it below, then select Use selected graphics cards to continue.</p>
       {known.map(gpu => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={() => setGpus(toggle(gpus, gpu.uuid))} />{gpu.display_name ?? gpu.name} · {formatModelBytes(gpu.memory_mib * 1024 ** 2)} graphics memory</label>)}
-      {!!known.length && <details className="text-sm"><summary className="cursor-pointer">Graphics card details</summary>{known.map(gpu => <p key={gpu.uuid}>{gpu.display_name ?? gpu.name}: {gpu.uuid} · NVIDIA compatibility {gpu.compute_capability}</p>)}</details>}
+      {!!known.length && <details className="text-sm"><summary className="cursor-pointer">Graphics card details</summary>{known.map((gpu, i) => <p key={gpu.uuid}>{gpuCardName(known, i)} · NVIDIA compatibility {gpu.compute_capability}</p>)}</details>}
       {!known.length && <p role="alert">No supported NVIDIA graphics cards were found. Check that your card has a compatible NVIDIA driver. You can also use GInfer on another computer.</p>}
       <Button disabled={!validGroup} onClick={() => void act({ action: 'profile', gpu_uuids: gpus })}>Use selected graphics cards</Button>
     </fieldset>}
@@ -174,8 +184,10 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
         <Button variant="outline" onClick={() => void act({ action: 'refresh_catalog' })}>Refresh model catalog</Button>
       </div>
     </fieldset>}
-    {step === 'downloads' && <div className="space-y-3"><h3 className="font-medium">Downloading models</h3>{flow?.selected_downloads.map(job => <div key={job.id} className="space-y-1"><p>{plainModelName(job.release.name)} · {downloadStatusLabel(job.status)} · {(100 * job.received / Math.max(1, job.release.bytes)).toFixed(1)}%</p><progress className="w-full" aria-label={`${plainModelName(job.release.name)} download`} max={job.release.bytes} value={job.received} /><p className="text-xs text-muted-foreground">{(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s</p>{job.error && <p role="alert">{job.error}</p>}</div>)}<p className="text-sm text-muted-foreground">You can close this window while downloads continue. GInfer checks the downloaded files, then measures the hardware needed by your selected models.</p><Button variant="outline" disabled={busy} onClick={() => void act({ action: 'resume' })}>Resume downloads</Button></div>}
-    {step === 'startup' && <div className="space-y-3"><h3 className="font-medium">Review model startup settings</h3><p className="text-sm text-muted-foreground">The recommended settings are filled in for you. Wait for the memory check, then select Finish local setup. Open Advanced settings only if you want to change how much conversation a model remembers or how many requests it can answer together.</p>{!flow?.startup_profiles.length && <p role="status">Preparing settings and checking that each model has enough memory…</p>}{flow?.startup_profiles.map(profile => <div key={profile.download_id} className="space-y-3 rounded border p-3 text-sm"><p className="font-medium">{profile.model_id}</p>{!profile.quote && !profile.error && <p role="status">Checking that this model has enough memory to start…</p>}{profile.quote != null && !profile.error && <p role="status">Ready to start with these settings.</p>}{profile.error && <p role="alert">{profile.error}</p>}<details><summary className="cursor-pointer">Advanced settings and memory details</summary><p>{profile.instance_count} instance(s) · {profile.concurrency} concurrent requests · {profile.max_context.toLocaleString()} tokens · {profile.kv_arena_bytes == null ? 'Automatic GPU KV cache' : `${formatModelBytes(profile.kv_arena_bytes)} GPU KV cache`}</p>
+    {step === 'downloads' && <div className="space-y-3"><h3 className="font-medium">Downloading models</h3>{flow?.selected_downloads.map(job => <div key={job.id} className="space-y-1"><p>{plainModelName(job.release.name)} · {downloadStatusLabel(job.status)} · {(100 * job.received / Math.max(1, job.release.bytes)).toFixed(1)}%</p><progress className="w-full" aria-label={`${plainModelName(job.release.name)} download`} max={job.release.bytes} value={job.received} /><p className="text-xs text-muted-foreground">{(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s</p>{job.error && <p role="alert">{job.error}</p>}</div>)}<p className="text-sm text-muted-foreground">You can close this window while downloads continue. GInfer checks the downloaded files, then measures the hardware needed by your selected models.</p>{flow?.selected_downloads.some(job => job.status === 'failed')
+      ? <div className="space-y-2"><p className="text-sm">The download could not finish. You can try again or choose a different model.</p><div className="flex gap-2"><Button disabled={busy} onClick={() => void act({ action: 'resume' })}>Try again</Button><Button variant="outline" disabled={busy} onClick={() => void act({ action: 'reselect' })}>Choose a different model</Button></div></div>
+      : <Button variant="outline" disabled={busy} onClick={() => void act({ action: 'resume' })}>Resume downloads</Button>}</div>}
+    {step === 'startup' && <div className="space-y-3"><h3 className="font-medium">Review model startup settings</h3><p className="text-sm text-muted-foreground">The recommended settings are filled in for you. Wait for the memory check, then select Finish local setup. Open Advanced settings only if you want to change how much conversation a model remembers or how many requests it can answer together.</p>{!flow?.startup_profiles.length && <p role="status">Preparing settings and checking that each model has enough memory…</p>}{flow?.startup_profiles.map(profile => <div key={profile.download_id} className="space-y-3 rounded border p-3 text-sm"><p className="font-medium">{plainStartupModelName(profile.model_id)}</p>{!profile.quote && !profile.error && <p role="status">Checking that this model has enough memory to start…</p>}{profile.quote != null && !profile.error && <p role="status">Ready to start with these settings.</p>}{profile.error && <p role="alert">{profile.error}</p>}<details><summary className="cursor-pointer">Advanced settings and memory details</summary><p>{profile.instance_count} instance(s) · {profile.concurrency} concurrent requests · {profile.max_context.toLocaleString()} tokens · {profile.kv_arena_bytes == null ? 'Automatic GPU KV cache' : `${formatModelBytes(profile.kv_arena_bytes)} GPU KV cache`}</p>
       <form className="space-y-2" onSubmit={event => { event.preventDefault(); const fields = new FormData(event.currentTarget); void act({ action: 'startup', download_id: profile.download_id, concurrency: Number(fields.get('concurrency')), max_context: Number(fields.get('max_context')), instance_count: Number(fields.get('instance_count')), kv_arena_bytes: fields.get('kv_arena_bytes') ? Number(fields.get('kv_arena_bytes')) : null }) }}>
         <p>Simultaneous requests controls how many messages this model can answer at once. A larger value uses more memory.</p><label className="block">Simultaneous requests<Input name="concurrency" aria-label={`${profile.model_id} concurrent requests`} type="number" min={1} max={8} required defaultValue={profile.concurrency} /></label>
         <p>Conversation limit is the amount of text the model can remember, measured in tokens (small pieces of text). Larger limits need more memory.</p><label className="block">Conversation limit (tokens)<Input name="max_context" aria-label={`${profile.model_id} context tokens`} type="number" min={1} required defaultValue={profile.max_context} /></label>

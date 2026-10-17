@@ -986,7 +986,36 @@ Fixed (one branch each, rows in the open-work list):
 
 Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
 `GUI-JOURNEY-LOAD-WITHOUT-PROFILE`, `GUI-JOURNEY-JARGON`,
+- `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`: a failed selected download shows 'Try again' and 'Choose a different model'
+  (new first-run action `reselect`, which also discards the failed partial and returns to model choice). A selected
+  download deleted on Models releases the whole selection (`first_run::reconcile`), so it no longer pins Welcome or
+  is silently re-downloaded.
+- `GUI-JOURNEY-WELCOME-BELOW-FOLD`: the local setup card scrolls back into view when a step changes or is saved;
+  local model setup now sits above secure storage on Welcome.
+
+Open: `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
+- `GUI-JOURNEY-MODEL-NOT-SELECTED`: when a Host projection has exactly one ready model and no chat model is
+  selected, that model is selected (`engine-hosts-store.ts`); an explicit choice is never replaced.
+
+Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`,
+`GUI-JOURNEY-LOAD-WITHOUT-PROFILE`, `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`, `GUI-JOURNEY-JARGON`,
+- `GUI-JOURNEY-LOAD-WITHOUT-PROFILE`: Load on a model with no saved startup settings names the model and links to GInfer Hosts.
+
+Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
+`GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`, `GUI-JOURNEY-JARGON`,
+- `GUI-JOURNEY-JARGON`: plain words for the per-card memory note, the load card list, card names without UUIDs
+  ("card n of m" only for identical cards), readable startup model names, the secure-storage button name and the
+  sidebar states ('No local model running', 'Local model: loaded', 'Local model: running'). '1 transfers' has another owner.
+
+Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
+`GUI-JOURNEY-LOAD-WITHOUT-PROFILE`, `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`,
 `GUI-JOURNEY-DISK-SPACE-CRASH`, `GUI-JOURNEY-POST-STOP-GPU-BUSY`, `GUI-JOURNEY-UPDATER-404`.
+- `GUI-JOURNEY-POST-STOP-GPU-BUSY`: the Host card shows 'Finishing GPU speed tuning (about 1 minute)' while the Host's
+  existing `draft_width_calibrations` status reports a running job (no Host change).
+
+Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
+`GUI-JOURNEY-LOAD-WITHOUT-PROFILE`, `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`, `GUI-JOURNEY-JARGON`,
+`GUI-JOURNEY-DISK-SPACE-CRASH`, `GUI-JOURNEY-UPDATER-404`.
 
 Method note: release Host and frontend accept only commit-pinned Hugging Face package URLs, so the download
 steps used the release profile with debug assertions, a development frontend and the private loopback catalog

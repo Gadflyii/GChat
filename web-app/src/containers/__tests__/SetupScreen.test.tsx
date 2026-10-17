@@ -54,6 +54,12 @@ describe('model intake', () => {
     expect(mocks.setPending).toHaveBeenCalledWith(false)
     expect(useGeneralSetting.getState().gbotEnabled).toBe(false)
   })
+  it('puts local model setup above secure storage', () => {
+    render(<SetupScreen />)
+    const local = screen.getByRole('button', { name: 'Finish shared local setup' })
+    const storage = screen.getByRole('region', { name: 'Secure storage setup' })
+    expect(local.compareDocumentPosition(storage) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
   it('opens LAN pairing independently of local GPU availability', () => {
     render(<SetupScreen />)
     fireEvent.click(

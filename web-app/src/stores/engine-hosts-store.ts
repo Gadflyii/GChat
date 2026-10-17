@@ -34,6 +34,11 @@ function projectHostModels(hosts: EngineHost[], snapshots: Record<string, Engine
     const projection = { provider: existing.provider, active: existing.active, settings: existing.settings, base_url: existing.base_url, api_key: existing.api_key, models: existing.models }
     if (JSON.stringify(projection) !== JSON.stringify(provider)) providers.updateProvider(provider.provider, provider)
   } else if (provider.models.length) providers.addProvider(provider)
+  // With nothing chosen yet, the one ready model is the chat model; an explicit
+  // choice (any selected model) is never replaced.
+  if (provider.models.length === 1 && !useModelProvider.getState().selectedModel) {
+    useModelProvider.getState().selectModelProvider(provider.provider, provider.models[0].id)
+  }
 }
 
 export const useEngineHosts = create<State>((set, get) => ({

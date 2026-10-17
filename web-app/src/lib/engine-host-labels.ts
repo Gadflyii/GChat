@@ -29,6 +29,19 @@ export function weightsDrafterDetail(weightsId: string): string | undefined {
   return match ? `Speculative drafter: ${match[0] === 'mtp' ? 'MTP' : match[0] === 'dflash2' ? 'DFlash2' : 'DFlash'}` : undefined
 }
 
+/** A startup profile's "model/package" id as a readable name; ids without a package stay as they are. */
+export function plainStartupModelName(id: string): string {
+  const [modelId, weightsId] = id.split('/')
+  return weightsId ? identityLabel({ model_id: modelId, weights_id: weightsId }) : id
+}
+
+/** A graphics card's readable name; "card n of m" is added only when several cards share a name. */
+export function gpuCardName(gpus: { name: string; display_name?: string | null }[], index: number): string {
+  const name = gpus[index].display_name ?? gpus[index].name
+  const same = gpus.filter(gpu => (gpu.display_name ?? gpu.name) === name).length > 1
+  return same ? `${name} (card ${index + 1} of ${gpus.length})` : name
+}
+
 export const identityLabel = (identity: { model_id: string; weights_id: string }) =>
   `${familyName(identity.model_id)} — ${plainWeightsName(identity.model_id, identity.weights_id)}`
 
