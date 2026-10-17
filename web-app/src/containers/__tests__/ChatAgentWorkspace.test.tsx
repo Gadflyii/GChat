@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { AgentTaskSuggestions } from '@/containers/AgentTaskSuggestions'
 import { ConversationApprovalModeSelect } from '@/containers/ConversationApprovalModeSelect'
+import enChat from '@/locales/en/chat.json'
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({
@@ -64,5 +65,24 @@ describe('Chat and Agent workspace controls', () => {
     await user.click(screen.getByText('Skip all approvals'))
 
     expect(onChange).toHaveBeenCalledWith('skip')
+  })
+
+  it('names the approval choice in the composer so it reads without context', () => {
+    const { agentApprovals } = enChat
+    render(
+      <ConversationApprovalModeSelect
+        mode="manual"
+        onChange={vi.fn()}
+        manualSelectedLabel={agentApprovals.manualSelected}
+        manualLabel={agentApprovals.manual}
+        manualDescription={agentApprovals.manualDescription}
+        skipSelectedLabel={agentApprovals.skipSelected}
+        skipLabel={agentApprovals.skip}
+        skipDescription={agentApprovals.skipDescription}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'Approvals: manual' })).toBeInTheDocument()
+    expect(agentApprovals.skipSelected).toBe('Approvals: skipped')
   })
 })
