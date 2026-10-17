@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,6 +35,7 @@ export function AgentSkillEditDialog({
   const [description, setDescription] = useState('')
   const [instructions, setInstructions] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const pending = useRef(false)
 
   useEffect(() => {
     if (!open || !skill) return
@@ -44,7 +45,8 @@ export function AgentSkillEditDialog({
   }, [open, skill])
 
   const submit = async () => {
-    if (!skill) return
+    if (!skill || pending.current) return
+    pending.current = true
     setSubmitting(true)
     try {
       await onUpdate({
@@ -55,12 +57,19 @@ export function AgentSkillEditDialog({
       onOpenChange(false)
     } catch (reason) {
       toast.error(String(reason))
+    } finally {
+      pending.current = false
       setSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!pending.current) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t('common:editSkill')}</DialogTitle>
