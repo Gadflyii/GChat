@@ -509,8 +509,10 @@ including lock, rejected passphrase and unlock after restart. The installed d31
 Linux Secret Service check also passes silent locked-keyring launch and explicit
 saved-Host Connect prompting, with a clear locked-storage error after Cancel.
 A fresh isolated-keyring follow-up also passes ordinary unlock, stored-credential
-retrieval and reconnection after restart. Gbot credential workflows and Windows
-remain unqualified.
+retrieval and reconnection after restart. The installed Linux Gbot local service
+token also passes creation and retrieval after GUI restart, with silent locked
+launch and Gbot navigation. Gbot service-process restart, SSH/provider credential
+use and Windows remain unqualified.
 [Evidence and limits](remaining-acceptance.md#installed-linux-locked-keyring-launch-and-explicit-connect--october-17).
 OI-069's two-Host worker gate and October 15 independent-workstation gate pass.
 Two native Linux clients with distinct grants share one instance-wide worker
