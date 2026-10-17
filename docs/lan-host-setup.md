@@ -66,8 +66,16 @@ carried since GInfer's `llguidance` moved to a Rust build); the packager accepts
 anything under `licenses/` regardless of depth or extension, not only top-level
 `.txt` files. Windows setup accepts these nested license members too, while
 rejecting traversal, malformed paths, and duplicate members before installation.
+Setup also accepts the generator's fixed runtime metadata set: `README.md`,
+`LICENSE`, `VERSION`, `docs/cli.md`, `docs/serving.md`, and
+`docs/release-names/README.md`. Other documentation paths are rejected. Every
+listed file still requires its manifest size and SHA256 to match.
 The Linux packaging regression checks the emitted ZIP against the setup path
-allowlist; native Windows setup remains a separate platform gate. Packaging does
+allowlist. On October 17, a native PowerShell preview of the genuine c440 runtime
+first rejected `docs/cli.md`; the corrected allowlist passed the same bundle.
+The existing native installer regression also passed with documentation and nested
+licenses, using an inert Host fixture. This qualifies native validation and fixture
+installation, not a real Host installation or hardware preparation. Packaging does
 not install or start anything. Extract the combined archive to a local directory
 and run `setup.cmd`: setup displays editable binary and model/state locations, accepts
 Enter for the defaults, then asks for confirmation. It installs for the current
