@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -95,7 +96,137 @@ const definition: AgentDefinition = {
   evaluatorReasoningEffort: 'high',
 }
 
+function deferredSave() {
+  let resolve!: () => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<void>((resolveSave, rejectSave) => {
+    resolve = resolveSave
+    reject = rejectSave
+  })
+  return { promise, resolve, reject }
+}
+
+async function submitWithSavedDefaults() {
+  fireEvent.change(screen.getByLabelText('Task or goal'), {
+    target: { value: 'Review the workspace' },
+  })
+  fireEvent.click(
+    screen.getByRole('checkbox', {
+      name: 'Save these role assignments as defaults',
+    })
+  )
+  const run = screen.getByRole('button', { name: 'Run', exact: true })
+  await waitFor(() => expect(run).toBeEnabled())
+  fireEvent.click(run)
+  expect(mocks.save).toHaveBeenCalledOnce()
+  expect(mocks.start).not.toHaveBeenCalled()
+  return run
+}
+
 describe('Agent Studio run setup', () => {
+  it('does not start after Cancel while saving role defaults', async () => {
+    const save = deferredSave()
+    mocks.save.mockReturnValueOnce(save.promise)
+    const onClose = vi.fn()
+    const onRun = vi.fn()
+    render(
+      <AgentRunSetup
+        definition={definition}
+        onClose={onClose}
+        onRun={onRun}
+      />
+    )
+    await submitWithSavedDefaults()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onClose).toHaveBeenCalledOnce()
+    await act(async () => {
+      save.resolve()
+      await save.promise
+    })
+
+    expect(mocks.start).not.toHaveBeenCalled()
+    expect(onRun).not.toHaveBeenCalled()
+  })
+
+  it('does not start after unmount while saving role defaults', async () => {
+    const save = deferredSave()
+    mocks.save.mockReturnValueOnce(save.promise)
+    const onRun = vi.fn()
+    const { unmount } = render(
+      <AgentRunSetup definition={definition} onClose={vi.fn()} onRun={onRun} />
+    )
+    await submitWithSavedDefaults()
+
+    unmount()
+    await act(async () => {
+      save.resolve()
+      await save.promise
+    })
+
+    expect(mocks.start).not.toHaveBeenCalled()
+    expect(onRun).not.toHaveBeenCalled()
+  })
+
+  it('starts exactly once after saving role defaults successfully', async () => {
+    const save = deferredSave()
+    mocks.save.mockReturnValueOnce(save.promise)
+    const onRun = vi.fn()
+    render(
+      <AgentRunSetup definition={definition} onClose={vi.fn()} onRun={onRun} />
+    )
+    const run = await submitWithSavedDefaults()
+    expect(run).toBeDisabled()
+    fireEvent.click(run)
+    expect(mocks.save).toHaveBeenCalledOnce()
+
+    await act(async () => {
+      save.resolve()
+      await save.promise
+    })
+
+    expect(mocks.start).toHaveBeenCalledOnce()
+    expect(mocks.start.mock.calls[0][1]).toMatchObject({
+      definition_id: definition.id,
+      user_message: 'Review the workspace',
+    })
+    expect(onRun).toHaveBeenCalledOnce()
+  })
+
+  it('allows retry after saving role defaults fails without starting a run', async () => {
+    const failedSave = deferredSave()
+    const retrySave = deferredSave()
+    mocks.save
+      .mockReturnValueOnce(failedSave.promise)
+      .mockReturnValueOnce(retrySave.promise)
+    const onRun = vi.fn()
+    render(
+      <AgentRunSetup definition={definition} onClose={vi.fn()} onRun={onRun} />
+    )
+    const run = await submitWithSavedDefaults()
+
+    await act(async () => {
+      failedSave.reject(new Error('Could not save defaults'))
+      await failedSave.promise.catch(() => undefined)
+    })
+    expect(mocks.start).not.toHaveBeenCalled()
+    expect(onRun).not.toHaveBeenCalled()
+    expect(run).toBeEnabled()
+    expect(screen.getByLabelText('Task or goal')).toHaveValue(
+      'Review the workspace'
+    )
+    fireEvent.click(run)
+    expect(mocks.save).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      retrySave.resolve()
+      await retrySave.promise
+    })
+
+    expect(mocks.start).toHaveBeenCalledOnce()
+    expect(onRun).toHaveBeenCalledOnce()
+  })
+
   it('submits explicit client fleet placement without a current model or changing saved defaults', async () => {
     mocks.current = ''
     render(
