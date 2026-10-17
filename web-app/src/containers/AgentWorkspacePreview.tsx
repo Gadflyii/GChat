@@ -21,6 +21,7 @@ import {
 import { classifyWorkspacePreview } from '@/lib/workspace-preview-kind'
 import { cn } from '@/lib/utils'
 import { HtmlArtifact } from './HtmlArtifact'
+import { Button } from '@/components/ui/button'
 
 type AgentWorkspacePreviewProps = {
   isGenerating?: boolean
@@ -36,6 +37,7 @@ function FilePreview({ tab }: { tab: WorkspaceFilePreviewTab }) {
   const [text, setText] = useState<string>()
   const [truncated, setTruncated] = useState(false)
   const [error, setError] = useState<string>()
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -76,7 +78,7 @@ function FilePreview({ tab }: { tab: WorkspaceFilePreviewTab }) {
     return () => {
       cancelled = true
     }
-  }, [kind, tab.relativePath, tab.rootId, tab.rootPath])
+  }, [attempt, kind, tab.relativePath, tab.rootId, tab.rootPath])
 
   if (kind === 'unsupported') {
     return (
@@ -89,8 +91,29 @@ function FilePreview({ tab }: { tab: WorkspaceFilePreviewTab }) {
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center p-6 text-center text-sm text-destructive">
-        Could not preview this file.
+      <div
+        role="alert"
+        className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm"
+      >
+        <p className="text-destructive">Could not preview this file.</p>
+        <p className="text-muted-foreground">
+          Check that the file is still available, then try again.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setError(undefined)
+            setAttempt((current) => current + 1)
+          }}
+        >
+          Retry preview
+        </Button>
+        <details className="max-w-full text-left text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Details</summary>
+          <p className="mt-2 whitespace-pre-wrap break-words">{error}</p>
+        </details>
       </div>
     )
   }
@@ -136,8 +159,12 @@ function FilePreview({ tab }: { tab: WorkspaceFilePreviewTab }) {
   }
 
   return (
-    <div className="flex h-full items-center justify-center">
-      <IconLoader2 className="size-5 animate-spin text-muted-foreground" />
+    <div role="status" className="flex h-full items-center justify-center gap-2">
+      <IconLoader2
+        aria-hidden="true"
+        className="size-5 animate-spin text-muted-foreground"
+      />
+      <span className="text-sm text-muted-foreground">Loading preview…</span>
     </div>
   )
 }
