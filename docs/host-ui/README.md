@@ -1,5 +1,43 @@
 # GInfer host UI
 
+## Disable OpenCode workspaces — C7
+
+`GUI-CODE-DISABLE-WORKSPACE-STOP-20261017` fixes the integration switch's
+use of the legacy `code` terminal ID while workspace sessions use `code:<path>`.
+Turning OpenCode off must request stop for every app-owned Code session, including
+legacy and workspace slots, while leaving Hermes unchanged. The switch stays on
+until the native stop succeeds, disables repeated clicks during the request, and
+shows a retryable error if stopping fails. No live user terminals are test inputs.
+
+Acceptance: focused native lifecycle and rendered pending/success/failure tests,
+then one full `make verify`; push the isolated branch for coordinator merge.
+Installed GUI workflow belongs to Gchat 3's parent acceptance. Windows collision
+qualification remains pending Gchat 2's separate installed-app handoff.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| C7 / local | `/ai/gchat-worktrees/c7-code-disable-workspace-stop-20261017`, branch `fix/c7-code-disable-workspace-stop-20261017` | Tested implementation `6b99bcf84` from `691fdcc10`; ready for coordinator merge |
+| C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-code-disable-workspace-stop-20261017/` | Private source/dependency/native cache retired; 19,816,259,584 allocated bytes reclaimed, donor unchanged |
+| C7 / evidence | `/ai/gchat/out/code-disable-workspace-stop-20261017/{result.json,summary.md}` | Passing focused and composed full verification results retained |
+
+The implementation serializes native Code launch/stop, reaps successful stops,
+and retains failed stop handles for retry. A shared transient disabling state
+blocks delayed UI readiness and restart work. Verification passes on S1 CPUs
+80–87 in pinned image `ad7f9bf020d7`: 55 focused frontend cases, three native
+lifecycle cases, Cargo check and strict Clippy. All `make verify` components pass:
+2,709 frontend tests (six skipped), 119 extension tests and 1,076 Rust tests
+(27 ignored), plus lint, types, quality and coverage checks.
+
+The one `make verify` invocation exited 2 at an unrelated coordinator fixture:
+Docker `--network none` provided no route for its UDP address selection. Retrying
+only that failed case with bridge networking passed, then the five unrun Rust
+suite commands passed. Successful checks were not repeated. Offline setup uses
+the retained per-project Yarn cache with global caching disabled and refills
+extension-only entries after root installation; generated core archive references
+remain confined to the disposable copy. Candidate dependency files are unchanged.
+No Engine or GPU/model run. Next: coordinator merge and Gchat 3's installed
+workflow acceptance; Windows collision still waits for Gchat 2's handoff.
+
 ## Proxy control labels — GUI-PROXY-SETTINGS-ACCESSIBILITY
 
 Current main already supplies novice proxy instructions and accessible control
@@ -83,8 +121,8 @@ isolated branch; installed workflow qualification remains separate.
 `GUI-INTEGRATION-TOGGLE-GUIDANCE` explains Gbot, OpenCode and Hermes beside
 their persisted switches in Settings and Integrations. Each has a visible
 **Enable** label and an accessible description. Gbot off hides the interface and
-disables sign-in startup while work continues. OpenCode off hides Code; the
-description tells users to use **Stop** first to end running work. Hermes off
+disables sign-in startup while work continues. OpenCode off now stops all Code workspaces before hiding Code, as specified
+in the current disable-workspaces section above. Hermes off
 stops its terminal while retaining saved settings. Enabling the terminal tools
 can install them; enabling Gbot still opens its setup. **Hermes settings** remains
 available. Existing actions, defaults and saved choices are unchanged.
@@ -92,8 +130,8 @@ available. Existing actions, defaults and saved choices are unchanged.
 Acceptance is met: five focused rendered tests and full `make verify` pass.
 The full gate includes lint, frontend types, 2,584 frontend + 119 extension tests,
 coverage checks and all supported Rust suites. Existing saved choices, enabling
-navigation and terminal actions are protected. The separate OpenCode workspace
-Stop defect is unchanged; the copy tells users to stop work before hiding Code.
+navigation and terminal actions are protected. The original guidance shipped separately; the current disable-workspaces
+fix above replaces its temporary Stop-first guidance.
 No Engine, installer, model or Windows acceptance run belongs to this GUI change.
 The Windows host-port collision leaf waits for Gchat 2's installed-app handoff.
 
@@ -103,7 +141,8 @@ implementation `eafaedd7c`. Results and concise suite outcomes:
 `/ai/gchat/out/integration-toggle-guidance-20261017/{result.json,summary.md}`.
 Verification ran on S1 CPUs 80–87 with the pinned Rust 1.98 image `ad7f9bf020d7`.
 Private compiler/dependency copies are retired; the authorized donor is unchanged.
-No live job or retained remote build. Next action: coordinator review and merge.
+No live job or retained remote build. The original guidance was merged at
+12:48Z as `2f2c4f028`; its workspace-stop follow-up is recorded above.
 
 ## Profile presentation — OI-077
 

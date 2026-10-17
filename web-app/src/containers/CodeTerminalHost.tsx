@@ -59,6 +59,11 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 }
 
+function codeCanStart() {
+  const { enabled, disabling } = useCodeTerminalStore.getState()
+  return enabled && !disabling
+}
+
 function currentInstallerProxy() {
   const { proxyEnabled, proxyUrl, proxyUsername, proxyPassword, noProxy } =
     useProxyConfig.getState()
@@ -185,6 +190,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
     defaultModelLocalApiServer,
   } = useLocalApiServer()
   const enabled = useCodeTerminalStore((state) => state.enabled)
+  const disabling = useCodeTerminalStore((state) => state.disabling)
   const setConfiguredWorkspace = useCodeTerminalStore(
     (state) => state.setWorkspace
   )
@@ -225,8 +231,14 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
 
 
   useEffect(() => {
+    if (!enabled || disabling) {
+      bootstrappedRef.current = false
+      setReadiness(undefined)
+      setBusy(false)
+      setProvisionPhase(undefined)
+      return
+    }
     if (
-      !enabled ||
       !attached ||
       !hardwareReady ||
       !hardware.supported ||
@@ -279,6 +291,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
     customOpenCodePath,
     defaultModelLocalApiServer?.model,
     desktopTerminalAvailable,
+    disabling,
     enabled,
     hardware.supported,
     hardwareReady,
@@ -295,6 +308,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
   const updateMode = Boolean(updatePhase || updateResult || updateError)
 
   const startSession = useCallback(async () => {
+    if (!codeCanStart()) return
     if (!workspace) throw new Error(t('code:workspaceUnavailable'))
     const terminal = terminalRef.current
     const rows = Math.max(2, terminal?.rows ?? 24)
@@ -311,6 +325,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
       bridgePolicy: currentBridgePolicy(selectedThreadId),
       executable: customOpenCodePath || undefined,
     })
+    if (!codeCanStart()) return
     updateStatus(next)
     setUpdateRequested(false)
     setUpdateResult(undefined)
@@ -336,6 +351,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
     if (
       bootstrappedRef.current ||
       !enabled ||
+      disabling ||
       !attached ||
       !hardwareReady ||
       !hardware.supported ||
@@ -359,6 +375,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
       .finally(() => setBusy(false))
   }, [
     attached,
+    disabling,
     enabled,
     hardware.supported,
     hardwareReady,
@@ -394,6 +411,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
   }, [generationRef, setError, statusRef, terminalRef, terminalId])
 
   const restart = useCallback(async (update = false) => {
+    if (!codeCanStart()) return
     setBusy(true)
     setError(undefined)
     if (update) {
@@ -405,7 +423,9 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
     try {
       if (statusRef.current.phase === 'running') await stopTerminal(terminalId)
       for (let attempt = 0; attempt < 100; attempt += 1) {
+        if (!codeCanStart()) return
         const current = await getTerminalStatus(terminalId)
+        if (!codeCanStart()) return
         updateStatus(current)
         if (current.phase !== 'running' && current.phase !== 'stopping') break
         if (attempt === 99) {
@@ -413,6 +433,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
         }
         await delay(50)
       }
+      if (!codeCanStart()) return
       bootstrappedRef.current = true
       if (update) {
         setUpdateResult(await updateCode(customOpenCodePath || undefined, setUpdatePhase))
@@ -508,7 +529,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
           />
           <div className="ml-auto flex min-w-0 items-center gap-1.5">
             {running && <Button size="icon-sm" variant="ghost" aria-label="New Code session"
-              disabled={busy || status.phase === 'stopping'} onClick={() => {
+              disabled={busy || disabling || status.phase === 'stopping'} onClick={() => {
                 setConfiguredWorkspace(workspace)
                 useCodeTerminalStore.getState().setSelectedThreadId(undefined)
                 void navigate({ to: '/code', search: {}, replace: true })
@@ -516,7 +537,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
                 void newCodeSession(terminalId).catch(reason => setError(String(reason)))
               }}><IconPlus /></Button>}
             {desktopTerminalAvailable && <CodeBridgePanel visible={visible} workspace={status.cwd ?? workspace} />}
-            {!updateResult && <Button size="sm" variant="outline" disabled={busy || !workspace || !readiness?.installed}
+            {!updateResult && <Button size="sm" variant="outline" disabled={busy || disabling || !enabled || !workspace || !readiness?.installed}
               onClick={() => updateMode ? void restart() : setUpdateRequested(true)}>
               {updateMode ? 'Open Code' : 'Update Code'}
             </Button>}
@@ -532,7 +553,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy || !readiness?.ready}
+                disabled={busy || disabling || !enabled || !readiness?.ready}
                 onClick={() => void restart()}
               >
                 {busy ? (
@@ -573,7 +594,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
       {updateRequested && (
         <div className="flex flex-wrap items-center gap-2 border-t bg-muted/40 px-4 py-3 text-sm">
           <span className="flex-1">Updating stops this Code session. Finish active work first. Your settings, history, workspace and GChat theme are kept.</span>
-          <Button size="sm" disabled={busy} onClick={() => void restart(true)}>Stop and update</Button>
+          <Button size="sm" disabled={busy || disabling || !enabled} onClick={() => void restart(true)}>Stop and update</Button>
           <Button size="sm" variant="ghost" onClick={() => setUpdateRequested(false)}>Cancel</Button>
         </div>
       )}
@@ -595,8 +616,8 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
               <h1 className="font-semibold">{updatePhase ? 'Updating Code' : updateError ? 'Update needs attention' : 'Update Successful'}</h1>
               {(updatePhase || updateError) && <p className="mt-2 text-sm text-muted-foreground">{updatePhase || updateError}</p>}
               {updatePhase && <p className="mt-2 text-xs text-muted-foreground">Keep GChat open until the update finishes.</p>}
-              {updateResult && <Button className="mt-4" disabled={busy} onClick={() => void restart()}>Open Code</Button>}
-              {updateError && <Button className="mt-4" size="sm" disabled={busy} onClick={() => void restart(true)}>Retry update</Button>}
+              {updateResult && <Button className="mt-4" disabled={busy || disabling || !enabled} onClick={() => void restart()}>Open Code</Button>}
+              {updateError && <Button className="mt-4" size="sm" disabled={busy || disabling || !enabled} onClick={() => void restart(true)}>Retry update</Button>}
             </div>
           </div>
         )}

@@ -1,8 +1,8 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { route } from '@/constants/routes'
 import { Switch } from '@/components/ui/switch'
-import { stopTerminal } from '@/services/terminal/tauri'
+import { stopCodeTerminals, stopTerminal } from '@/services/terminal/tauri'
 import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useHermesAgentStore } from '@/stores/hermes-agent-store'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -14,8 +14,30 @@ export function NativeIntegrationControls() {
   const setGbotEnabled = useGeneralSetting(state => state.setGbotEnabled)
   const codeEnabled = useCodeTerminalStore(state => state.enabled)
   const setCodeEnabled = useCodeTerminalStore(state => state.setEnabled)
+  const codeStopping = useCodeTerminalStore(state => state.disabling)
+  const setCodeStopping = useCodeTerminalStore(state => state.setDisabling)
+  const [codeStopError, setCodeStopError] = useState<string>()
   const hermesEnabled = useHermesAgentStore(state => state.enabled)
   const setHermesEnabled = useHermesAgentStore(state => state.setEnabled)
+
+  const changeCodeEnabled = async (enabled: boolean) => {
+    if (useCodeTerminalStore.getState().disabling) return
+    setCodeStopError(undefined)
+    if (enabled) {
+      setCodeEnabled(true)
+      return
+    }
+    setCodeStopping(true)
+    try {
+      await stopCodeTerminals()
+      setCodeEnabled(false)
+    } catch (reason) {
+      setCodeStopError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setCodeStopping(false)
+    }
+  }
+
   return (
     <section className="space-y-3">
       <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -51,20 +73,26 @@ export function NativeIntegrationControls() {
           </label>
           <p id={`${id}-code-description`} className="text-sm leading-relaxed text-muted-foreground">
             A coding assistant in the Code tab. Turning on prepares OpenCode,
-            installing it if needed. Turning off hides Code; use Stop in Code first
-            to end running work.
+            installing it if needed. Turning off stops all running Code workspaces
+            and hides Code; saved settings remain.
           </p>
+          {codeStopping && <p role="status" className="text-sm text-muted-foreground">
+            Stopping all Code workspaces…
+          </p>}
+          {codeStopError && <p id={`${id}-code-error`} role="alert" className="text-sm text-destructive">
+            Could not stop every Code workspace: {codeStopError}. OpenCode is still
+            enabled. Try turning it off again.
+          </p>}
         </div>
         <Switch
           id={`${id}-code`}
           aria-label="OpenCode integration"
-          aria-describedby={`${id}-code-description`}
+          aria-describedby={`${id}-code-description${codeStopError ? ` ${id}-code-error` : ''}`}
+          aria-busy={codeStopping}
           className="mt-0.5"
           checked={codeEnabled}
-          onCheckedChange={enabled => {
-            setCodeEnabled(enabled)
-            if (!enabled) void stopTerminal('code').catch(() => undefined)
-          }}
+          disabled={codeStopping}
+          onCheckedChange={enabled => void changeCodeEnabled(enabled)}
         />
       </div>
       <div className="flex items-start justify-between gap-4 rounded-md border p-3">

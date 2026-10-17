@@ -490,6 +490,82 @@ impl TerminalSlot {
         Ok(())
     }
 
+    fn stop(&self) -> Result<TerminalStatus, String> {
+        // A stop must also own a launch that is still constructing its child.
+        let _spawn_guard = self
+            .spawn_gate
+            .lock()
+            .map_err(|_| format!("{} terminal spawn state is unavailable", self.id.label()))?;
+        #[cfg(windows)]
+        let startup_child;
+        let (status, killer, writer, master) = {
+            let mut session = self.session()?;
+            if session.phase != TerminalPhase::Running {
+                return Ok(session.status());
+            }
+            // Do not relinquish the handles, bridge or Running state until the
+            // termination request succeeds: a denied stop must remain retryable.
+            #[cfg(windows)]
+            session
+                .request_windows_stop()
+                .map_err(|error| format!("Could not stop {} terminal: {error}", self.id.label()))?;
+            #[cfg(not(windows))]
+            if let Some(killer) = session.killer.as_mut() {
+                killer.kill().map_err(|error| {
+                    format!("Could not stop {} terminal: {error}", self.id.label())
+                })?;
+            }
+            #[cfg(windows)]
+            {
+                startup_child = session.startup_child.take();
+            }
+            session.phase = TerminalPhase::Stopping;
+            // Order the command snapshot against the waiter's exit event.
+            session.next_sequence();
+            session.bridge = None;
+            session.flow_paused = false;
+            self.shared.flow_changed.notify_all();
+            (
+                session.status(),
+                session.killer.take(),
+                session.writer.take(),
+                session.master.take(),
+            )
+        };
+        drop(killer);
+        drop(writer);
+        drop(master);
+        #[cfg(windows)]
+        if let Some(child) = startup_child {
+            self.push_thread(start_waiter(
+                self.id.clone(),
+                self.shared.clone(),
+                status.generation,
+                child,
+            ))?;
+        }
+        Ok(status)
+    }
+
+    fn join_threads(&self) -> Result<(), String> {
+        let threads =
+            std::mem::take(&mut *self.threads.lock().map_err(|_| {
+                format!("{} terminal thread state is unavailable", self.id.label())
+            })?);
+        let mut panicked = false;
+        for thread in threads {
+            panicked |= thread.join().is_err();
+        }
+        if panicked {
+            Err(format!(
+                "{} terminal worker failed while stopping",
+                self.id.label()
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
     fn shutdown(&self) {
         #[cfg(windows)]
         let mut startup_child;
@@ -564,6 +640,7 @@ impl TerminalSlot {
 pub struct TerminalState {
     code: Arc<TerminalSlot>,
     code_workspaces: Mutex<HashMap<String, Arc<TerminalSlot>>>,
+    code_lifecycle: Mutex<()>,
     hermes: Arc<TerminalSlot>,
 }
 
@@ -572,12 +649,64 @@ impl Default for TerminalState {
         Self {
             code: Arc::new(TerminalSlot::new(TerminalId::Code)),
             code_workspaces: Mutex::new(HashMap::new()),
+            code_lifecycle: Mutex::new(()),
             hermes: Arc::new(TerminalSlot::new(TerminalId::Hermes)),
         }
     }
 }
 
 impl TerminalState {
+    fn code_launch_guard(&self, id: &TerminalId) -> Result<Option<MutexGuard<'_, ()>>, String> {
+        if id.is_code() {
+            self.code_lifecycle
+                .lock()
+                .map(Some)
+                .map_err(|_| "Code terminal launch state is unavailable".to_owned())
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn stop_code(&self) -> Result<(), String> {
+        // Registering a new workspace and publishing its child belongs to the
+        // same boundary as stopping the family. Hermes has a separate lifetime.
+        let _code_guard = self
+            .code_lifecycle
+            .lock()
+            .map_err(|_| "Code terminal launch state is unavailable".to_owned())?;
+        let mut slots = vec![self.code.clone()];
+        slots.extend(
+            self.code_workspaces
+                .lock()
+                .map_err(|_| "Code workspace registry is unavailable".to_owned())?
+                .values()
+                .cloned(),
+        );
+        let mut errors = Vec::new();
+        let mut stopped = Vec::new();
+        for slot in slots {
+            match slot.stop() {
+                Ok(_) => stopped.push(slot),
+                Err(error) => errors.push(format!("{}: {error}", slot.id.key())),
+            }
+        }
+        // Request every stop before waiting; one refused child must not leave
+        // unrelated Code workspaces running. Success means owned workers reaped.
+        for slot in stopped {
+            if let Err(error) = slot.join_threads() {
+                errors.push(format!("{}: {error}", slot.id.key()));
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "Could not stop all Code terminals: {}",
+                errors.join("; ")
+            ))
+        }
+    }
+
     fn slot(&self, id: TerminalId) -> Arc<TerminalSlot> {
         match id {
             TerminalId::Code => self.code.clone(),
@@ -995,6 +1124,7 @@ pub fn terminal_spawn<R: Runtime>(
     request: TerminalSpawnRequest,
 ) -> Result<TerminalStatus, String> {
     let terminal_id = request.terminal_id;
+    let _code_guard = state.code_launch_guard(&terminal_id)?;
     let slot = state.slot(terminal_id.clone());
     match (&terminal_id, request.launch) {
         (TerminalId::Code | TerminalId::CodeWorkspace(_), TerminalLaunch::Hermes)
@@ -1389,56 +1519,12 @@ pub fn terminal_stop(
     state: State<'_, TerminalState>,
     terminal_id: TerminalId,
 ) -> Result<TerminalStatus, String> {
-    let slot = state.slot(terminal_id.clone());
-    #[cfg(windows)]
-    let startup_child;
-    let (status, killer, writer, master) = {
-        let mut session = slot.session()?;
-        if session.phase != TerminalPhase::Running {
-            return Ok(session.status());
-        }
-        #[cfg(windows)]
-        {
-            session.request_windows_stop().map_err(|error| {
-                format!("Could not stop {} terminal: {error}", terminal_id.label())
-            })?;
-            startup_child = session.startup_child.take();
-        }
-        session.phase = TerminalPhase::Stopping;
-        // Order the command snapshot against the waiter's exit event.
-        session.next_sequence();
-        session.bridge = None;
-        session.flow_paused = false;
-        slot.shared.flow_changed.notify_all();
-        let status = session.status();
-        (
-            status,
-            session.killer.take(),
-            session.writer.take(),
-            session.master.take(),
-        )
-    };
-    #[cfg(not(windows))]
-    let mut killer = killer;
-    #[cfg(not(windows))]
-    if let Some(killer) = killer.as_mut() {
-        killer
-            .kill()
-            .map_err(|error| format!("Could not stop {} terminal: {error}", terminal_id.label()))?;
-    }
-    drop(killer);
-    drop(writer);
-    drop(master);
-    #[cfg(windows)]
-    if let Some(child) = startup_child {
-        slot.push_thread(start_waiter(
-            terminal_id,
-            slot.shared.clone(),
-            status.generation,
-            child,
-        ))?;
-    }
-    Ok(status)
+    state.slot(terminal_id).stop()
+}
+
+#[tauri::command]
+pub fn terminal_stop_code(state: State<'_, TerminalState>) -> Result<(), String> {
+    state.stop_code()
 }
 
 fn opencode_bridge_config(
@@ -1937,6 +2023,205 @@ mod tests {
             state.slot(TerminalId::Hermes).session().unwrap().phase,
             TerminalPhase::Idle
         );
+    }
+
+    #[derive(Debug, Default)]
+    struct ControlledChildState {
+        stopped: bool,
+        deny_stop: bool,
+        waited: bool,
+    }
+
+    #[derive(Debug, Default)]
+    struct ControlledChildShared {
+        state: Mutex<ControlledChildState>,
+        changed: Condvar,
+    }
+
+    #[derive(Debug, Clone, Default)]
+    struct ControlledChild(Arc<ControlledChildShared>);
+
+    impl ChildKiller for ControlledChild {
+        fn kill(&mut self) -> std::io::Result<()> {
+            let mut state = self.0.state.lock().unwrap();
+            if state.deny_stop {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "test child refused termination",
+                ));
+            }
+            state.stopped = true;
+            self.0.changed.notify_all();
+            Ok(())
+        }
+
+        fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
+            Box::new(self.clone())
+        }
+    }
+
+    impl portable_pty::Child for ControlledChild {
+        fn try_wait(&mut self) -> std::io::Result<Option<portable_pty::ExitStatus>> {
+            Ok(self
+                .0
+                .state
+                .lock()
+                .unwrap()
+                .stopped
+                .then(|| portable_pty::ExitStatus::with_exit_code(0)))
+        }
+
+        fn wait(&mut self) -> std::io::Result<portable_pty::ExitStatus> {
+            let state = self.0.state.lock().unwrap();
+            let (mut state, timeout) = self
+                .0
+                .changed
+                .wait_timeout_while(state, std::time::Duration::from_secs(5), |state| {
+                    !state.stopped
+                })
+                .unwrap();
+            if timeout.timed_out() && !state.stopped {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "test child was not terminated",
+                ));
+            }
+            state.waited = true;
+            Ok(portable_pty::ExitStatus::with_exit_code(0))
+        }
+
+        fn process_id(&self) -> Option<u32> {
+            None
+        }
+
+        #[cfg(windows)]
+        fn as_raw_handle(&self) -> Option<std::os::windows::io::RawHandle> {
+            None
+        }
+    }
+
+    fn controlled_terminal(state: &TerminalState, id: TerminalId) -> ControlledChild {
+        let child = ControlledChild::default();
+        let slot = state.slot(id.clone());
+        let generation = {
+            let mut session = slot.session().unwrap();
+            let generation = session.begin_generation();
+            session.killer = Some(child.clone_killer());
+            session.writer = Some(Box::new(Vec::<u8>::new()));
+            session.flow_paused = true;
+            session.bridge = Some(BridgeLease(format!("test-stop-{}", id.key())));
+            generation
+        };
+        slot.push_thread(start_waiter(
+            id,
+            slot.shared.clone(),
+            generation,
+            Box::new(child.clone()),
+        ))
+        .unwrap();
+        child
+    }
+
+    #[test]
+    fn terminal_stop_code_reaps_all_workspaces_and_legacy_but_preserves_hermes() {
+        let state = TerminalState::default();
+        let ids = [
+            TerminalId::Code,
+            TerminalId::CodeWorkspace("workspace-one".into()),
+            TerminalId::CodeWorkspace("workspace-two".into()),
+        ];
+        let children: Vec<_> = ids
+            .iter()
+            .map(|id| controlled_terminal(&state, id.clone()))
+            .collect();
+        let slots: Vec<_> = ids.iter().map(|id| state.slot(id.clone())).collect();
+        let hermes = controlled_terminal(&state, TerminalId::Hermes);
+        let hermes_slot = state.slot(TerminalId::Hermes);
+        let harness = crate::test_support::IpcTestHarness::new(|builder| {
+            builder
+                .manage(state)
+                .invoke_handler(tauri::generate_handler![terminal_stop_code])
+        });
+
+        let result = harness.invoke::<()>("terminal_stop_code", serde_json::json!({}));
+        let untouched = !hermes.0.state.lock().unwrap().stopped;
+        let hermes_status = hermes_slot.session().unwrap().status();
+        // Always finish the owned Hermes waiter before making assertions.
+        hermes_slot.stop().unwrap();
+        hermes_slot.join_threads().unwrap();
+
+        result.unwrap();
+        for (child, slot) in children.iter().zip(slots) {
+            let child = child.0.state.lock().unwrap();
+            assert!(child.stopped && child.waited);
+            assert_eq!(slot.session().unwrap().phase, TerminalPhase::Exited);
+        }
+        assert!(untouched);
+        assert_eq!(hermes_status.phase, TerminalPhase::Running);
+        // Disabling an already stopped family is harmless.
+        harness
+            .invoke::<()>("terminal_stop_code", serde_json::json!({}))
+            .unwrap();
+    }
+
+    #[test]
+    fn terminal_stop_code_reports_failure_and_preserves_retry_ownership() {
+        let state = TerminalState::default();
+        let id = TerminalId::CodeWorkspace("denied-workspace".into());
+        let denied = controlled_terminal(&state, id.clone());
+        denied.0.state.lock().unwrap().deny_stop = true;
+        let other = controlled_terminal(&state, TerminalId::CodeWorkspace("other".into()));
+        let slot = state.slot(id);
+
+        let failure = state.stop_code();
+        let retained = {
+            let session = slot.session().unwrap();
+            session.phase == TerminalPhase::Running
+                && session.sequence == 0
+                && session.flow_paused
+                && session.killer.is_some()
+                && session.writer.is_some()
+                && session.bridge.is_some()
+        };
+        let other_reaped = other.0.state.lock().unwrap().waited;
+        denied.0.state.lock().unwrap().deny_stop = false;
+        // Retry the same child; a failed command must not orphan its stop handle.
+        state.stop_code().unwrap();
+
+        let error = failure.unwrap_err();
+        assert!(error.contains("code:denied-workspace"));
+        assert!(error.contains("test child refused termination"));
+        assert!(retained);
+        assert!(other_reaped, "one refusal must not skip other workspaces");
+        assert!(denied.0.state.lock().unwrap().waited);
+        assert_eq!(slot.session().unwrap().phase, TerminalPhase::Exited);
+    }
+
+    #[test]
+    fn terminal_stop_code_waits_for_in_flight_workspace_launch() {
+        let state = Arc::new(TerminalState::default());
+        let id = TerminalId::CodeWorkspace("in-flight".into());
+        let launch_guard = state.code_launch_guard(&id).unwrap();
+        let stopping = state.clone();
+        let (started, entered) = std::sync::mpsc::channel();
+        let (finished, result) = std::sync::mpsc::channel();
+        let stop = std::thread::spawn(move || {
+            started.send(()).unwrap();
+            finished.send(stopping.stop_code()).unwrap();
+        });
+        entered.recv().unwrap();
+        let premature = result
+            .recv_timeout(std::time::Duration::from_millis(30))
+            .ok();
+        // Match terminal_spawn: register/publish under the family launch guard.
+        let child = controlled_terminal(&state, id);
+        drop(launch_guard);
+        let stopped = result.recv_timeout(std::time::Duration::from_secs(2));
+        stop.join().unwrap();
+
+        assert!(premature.is_none(), "stop passed an unfinished launch");
+        stopped.unwrap().unwrap();
+        assert!(child.0.state.lock().unwrap().waited);
     }
 
     fn output_event(sequence: u64, bytes: usize) -> TerminalEvent {
