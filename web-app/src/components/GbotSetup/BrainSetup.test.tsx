@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -30,6 +31,16 @@ const saved: SavedAssignment = {
   model: 'qwen',
   context_tokens: 262144,
   credential_ref: 'vault-key',
+}
+
+function deferred() {
+  let resolve!: () => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<void>((yes, no) => {
+    resolve = yes
+    reject = no
+  })
+  return { promise, resolve, reject }
 }
 
 function Setup({
@@ -112,20 +123,79 @@ it('keeps the saved key when editing and removes it only by explicit choice', as
 })
 
 it('keeps failed setup visible with its inputs for retry', async () => {
+  const first = deferred()
+  const retry = deferred()
   const save = vi
     .fn()
-    .mockRejectedValueOnce(new Error('Vault unavailable'))
-    .mockResolvedValue(undefined)
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(retry.promise)
   render(<Setup initial={{ ...saved, api_key: 'private-key' }} save={save} />)
   fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
+  expect(screen.getByRole('status')).toHaveTextContent('Saving brain settings…')
+  expect(screen.getByLabelText('API key')).toBeDisabled()
+  await act(async () => first.reject(new Error('Vault unavailable')))
   expect(await screen.findByRole('alert')).toHaveTextContent(
     'Vault unavailable'
   )
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
   expect(screen.getByLabelText('API key')).toHaveValue('private-key')
+  expect(screen.getByLabelText('API key')).toBeEnabled()
   expect(screen.queryByText('Brain configured')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Save brain settings' }))
-  await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+  expect(save).toHaveBeenCalledTimes(2)
+  expect(save.mock.calls[1]).toEqual(save.mock.calls[0])
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Saving brain settings…')
+  await act(async () => retry.resolve())
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Save brain settings' })
+  ).toBeEnabled()
+})
+
+it('saves only once and shows progress until the saved brain is confirmed', async () => {
+  const pending = deferred()
+  const save = vi.fn().mockReturnValue(pending.promise)
+  render(<Setup initial={saved} configured={saved} save={save} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  const form = screen.getByRole('form', { name: 'Set up bot brain' })
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
+  expect(save).toHaveBeenCalledExactlyOnceWith(saved)
+  expect(
+    screen.getByRole('button', { name: 'Saving brain settings…' })
+  ).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Saving brain settings…')
+  expect(screen.getByLabelText('GInfer API URL')).toBeDisabled()
+  expect(screen.getByLabelText('Model ID')).toBeDisabled()
+  expect(screen.queryByText('Brain configured')).not.toBeInTheDocument()
+  fireEvent.submit(form)
+  expect(save).toHaveBeenCalledTimes(1)
+  await act(async () => pending.resolve())
+  expect(screen.getByText('Brain configured')).toBeVisible()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Edit brain' })).toBeEnabled()
+})
+
+it('disables the form without claiming to save during another page action', () => {
+  const save = vi.fn()
+  render(
+    <BrainSetup
+      value={saved}
+      busy
+      computerReady
+      onChange={vi.fn()}
+      onSave={save}
+    />
+  )
+  expect(
+    screen.getByRole('button', { name: 'Save brain settings' })
+  ).toBeDisabled()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  fireEvent.submit(screen.getByRole('form', { name: 'Set up bot brain' }))
+  expect(save).not.toHaveBeenCalled()
 })
 
 const ready = {
@@ -179,7 +249,11 @@ it('keeps an explicitly selected Muse 2-bit mix through refresh and saving', asy
   // Muse INT: 46b5d54ee64ccd278f2a1a4d2c6d5aa9fc9097e8db0c3d165179aee5f2cb5b66.
   const int = {
     ...ready,
-    target: { ...ready.target, instance_id: 'integer', session_id: 'int-session' },
+    target: {
+      ...ready.target,
+      instance_id: 'integer',
+      session_id: 'int-session',
+    },
     model: 'muse-glimmer-30b/groupwise-int-dflash-q4',
   }
   call.mockResolvedValueOnce([mix, int]).mockResolvedValueOnce([int, mix])

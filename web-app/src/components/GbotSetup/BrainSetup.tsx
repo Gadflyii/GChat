@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -36,6 +36,9 @@ export function BrainSetup({
   onSave,
 }: Props) {
   const [editing, setEditing] = useState(!saved)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const disabled = busy || saving
   const [error, setError] = useState<string>()
   const [models, setModels] = useState<PairedModel[]>([])
   const [loading, setLoading] = useState(false)
@@ -84,6 +87,22 @@ export function BrainSetup({
       value.context_tokens > 0
   )
 
+  async function saveBrain() {
+    if (busy || savingRef.current || !valid) return
+    savingRef.current = true
+    setSaving(true)
+    setError(undefined)
+    try {
+      await onSave()
+      setEditing(false)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }
+
   if (saved && !editing) {
     return (
       <section aria-label="Bot brain" className="rounded-lg border p-3">
@@ -97,7 +116,7 @@ export function BrainSetup({
           </div>
           <Button
             variant="outline"
-            disabled={busy}
+            disabled={disabled}
             onClick={() => setEditing(true)}
           >
             Edit brain
@@ -112,13 +131,7 @@ export function BrainSetup({
       className="space-y-4 rounded-lg border p-3"
       onSubmit={(event) => {
         event.preventDefault()
-        if (busy || !valid) return
-        setError(undefined)
-        void onSave().then(
-          () => setEditing(false),
-          (reason: unknown) =>
-            setError(reason instanceof Error ? reason.message : String(reason))
-        )
+        void saveBrain()
       }}
     >
       <div>
@@ -131,7 +144,7 @@ export function BrainSetup({
             : 'Choose a brain now, then connect the bot’s computer before starting a task.'}
         </p>
       </div>
-      <fieldset disabled={busy} className="space-y-3">
+      <fieldset disabled={disabled} className="space-y-3">
         <legend className="text-sm font-medium">1. Where the model runs</legend>
         <p className="text-xs text-muted-foreground">
           Choose a model already running on a paired GInfer Host, or enter the
@@ -179,7 +192,7 @@ export function BrainSetup({
                     type="button"
                     variant="outline"
                     aria-label="Ready Host model"
-                    disabled={busy || loading || !models.length}
+                    disabled={disabled || loading || !models.length}
                   >
                     {selected
                       ? `${selected.host_name} · ${selected.model}`
@@ -212,7 +225,7 @@ export function BrainSetup({
               <Button
                 type="button"
                 variant="outline"
-                disabled={busy || loading}
+                disabled={disabled || loading}
                 onClick={() => setRefresh((count) => count + 1)}
               >
                 Refresh hosts
@@ -310,7 +323,7 @@ export function BrainSetup({
           )
         )}
       </fieldset>
-      <fieldset disabled={busy} className="space-y-3">
+      <fieldset disabled={disabled} className="space-y-3">
         <legend className="text-sm font-medium">2. Model</legend>
         <p className="text-xs text-muted-foreground">
           {paired
@@ -360,8 +373,13 @@ export function BrainSetup({
             {error}
           </p>
         )}
-        <Button type="submit" disabled={busy || !valid}>
-          {busy ? 'Saving…' : 'Save brain settings'}
+        {saving && (
+          <p role="status" className="text-sm text-muted-foreground">
+            Saving brain settings…
+          </p>
+        )}
+        <Button type="submit" disabled={disabled || !valid}>
+          {saving ? 'Saving brain settings…' : 'Save brain settings'}
         </Button>
       </div>
     </form>
