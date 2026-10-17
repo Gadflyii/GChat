@@ -17,12 +17,19 @@ host-port collision remains pending Gchat 2's installed-app handoff.
 
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
-| C7 / local | `/ai/gchat-worktrees/c7-project-threads-delete-single-submit-20261017`, branch `fix/c7-project-threads-delete-single-submit-20261017` | From main `a08e2b053`; dialog implementation and six dedicated regression cases frozen for verification |
-| C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-project-threads-delete-single-submit-20261017/` | Private offline donor copy; CPU80–87 booked 14:00–14:35Z for focused tests and one full verification |
-| C7 / evidence | `/ai/gchat/out/project-threads-delete-single-submit-20261017/` | Focused/full verification result and summary retained here |
+| C7 / local | `/ai/gchat-worktrees/c7-project-threads-delete-single-submit-20261017`, branch `fix/c7-project-threads-delete-single-submit-20261017` | From main `a08e2b053`; dialog implementation and six dedicated regression cases frozen at `79b06e217` |
+| C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-project-threads-delete-single-submit-20261017/` | Private source/dependency/native cache retired after verification; booking 2563 canceled, returned 14:12Z |
+| C7 / evidence | `/ai/gchat/out/project-threads-delete-single-submit-20261017/{result.json,summary.md}` | Passing focused and full verification result retained here |
 
-Next: run the six focused regression cases and one full source gate on booked
-S1 CPUs using the retained offline dependency/toolchain donor; deliver by 14:40Z.
+The six focused rendered regression cases pass. The single full `make verify`
+exited 0 at 14:10:39Z on S1 in pinned image `ad7f9bf020d7`: lint, frontend
+types, contracts and critical coverage floors passed, with 2,796 frontend tests,
+119 extension tests and 1,076 Rust tests. Six frontend tests were skipped and
+27 Rust tests ignored. The gate used private offline caches and 22 retained
+profile catalogs; generated local-core archive references changed only inside
+the disposable copy. Source dependency files and the read-only donor are
+unchanged. The private build copy is retired. Next: coordinator merge of the
+isolated branch; installed confirmation remains with Gchat 3.
 
 ## Disable OpenCode workspaces — C7
 
@@ -40,7 +47,7 @@ qualification remains pending Gchat 2's separate installed-app handoff.
 
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
-| C7 / local | `/ai/gchat-worktrees/c7-code-disable-workspace-stop-20261017`, branch `fix/c7-code-disable-workspace-stop-20261017` | Tested implementation `6b99bcf84` from `691fdcc10`; ready for coordinator merge |
+| C7 / local | `/ai/gchat-worktrees/c7-code-disable-workspace-stop-20261017`, branch `fix/c7-code-disable-workspace-stop-20261017` | Tested implementation `6b99bcf84` from `691fdcc10`; merged in main as `c256d7236` |
 | C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-code-disable-workspace-stop-20261017/` | Private source/dependency/native cache retired; 19,816,259,584 allocated bytes reclaimed, donor unchanged |
 | C7 / evidence | `/ai/gchat/out/code-disable-workspace-stop-20261017/{result.json,summary.md}` | Passing focused and composed full verification results retained |
 
@@ -59,7 +66,7 @@ suite commands passed. Successful checks were not repeated. Offline setup uses
 the retained per-project Yarn cache with global caching disabled and refills
 extension-only entries after root installation; generated core archive references
 remain confined to the disposable copy. Candidate dependency files are unchanged.
-No Engine or GPU/model run. Next: coordinator merge and Gchat 3's installed
+No Engine or GPU/model run. Next: Gchat 3's installed
 workflow acceptance; Windows collision still waits for Gchat 2's handoff.
 
 ## Proxy control labels — GUI-PROXY-SETTINGS-ACCESSIBILITY
