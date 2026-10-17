@@ -124,6 +124,7 @@ export default function GbotSetup({
     }
   }, [])
   const changeService = useCallback((target: ServiceTarget, ready: boolean) => {
+    if (submissionPending.current) return
     setService(target)
     setServiceReady(ready)
   }, [])
@@ -241,7 +242,11 @@ export default function GbotSetup({
           </label>
         </div>
       )}
-      {step === 1 && <ServiceSetup target={service} change={changeService} />}
+      {step === 1 && (
+        <fieldset disabled={saving} aria-label="Gbot service selection">
+          <ServiceSetup target={service} change={changeService} />
+        </fieldset>
+      )}
       {step === 2 && (
         <>
           <fieldset className="space-y-2">
