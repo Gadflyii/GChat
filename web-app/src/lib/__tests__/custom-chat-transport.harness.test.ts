@@ -1031,60 +1031,92 @@ describe('CustomChatTransport production harness', () => {
     )
   })
 
-  it('maps ginfer reasoning state to the OpenAI-compatible reasoning_effort field', async () => {
-    const createModel = vi
-      .spyOn(ModelFactory, 'createModel')
-      .mockImplementation(
-        async () =>
-          fakeStreamingModel([
-            { type: 'stream-start', warnings: [] },
-            {
-              type: 'finish',
-              finishReason: 'stop',
-              usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-            },
-          ])
-      )
-    const transport = new CustomChatTransport()
-    const send = async () =>
-      readChunks(
-        (await transport.sendMessages({
-          chatId: 'chat-1',
-          messages: [userMessage],
-          abortSignal: undefined,
-          trigger: 'submit-message',
-          messageId: undefined,
-        })) as ReadableStream<Record<string, unknown>>
-      )
+  it.each(['ginfer', 'ginfer-lan'] as const)(
+    'maps %s reasoning settings to OpenAI-compatible request overrides',
+    async (providerId) => {
+      const modelId =
+        providerId === 'ginfer-lan'
+          ? 'ginfer/paired-host/ready-instance'
+          : 'fixture-model'
+      useModelProvider.setState({
+        selectedProvider: providerId,
+        selectedModel: { id: modelId, capabilities: [], settings: {} } as never,
+        providers: [
+          {
+            provider: providerId,
+            active: true,
+            api_key: '',
+            base_url: 'http://127.0.0.1:1337/v1',
+            models: [],
+            settings: [],
+          },
+        ] as never,
+      })
+      seedServiceHub({
+        rag: { getTools: vi.fn().mockResolvedValue([]) } as never,
+        app: { getServerStatus: vi.fn().mockResolvedValue(true) } as never,
+      })
+      const invoke = vi
+        .fn<(command: string, args?: InvokeArgs) => unknown>()
+        .mockReturnValue(undefined)
+      mockIPC(invoke)
+      const instances = vi
+        .spyOn(agentDefinitions, 'listAgentModelInstances')
+        .mockResolvedValue([
+          { id: modelId, modelId: 'muse', maxContext: 32768 },
+        ] as never)
+      const createModel = vi
+        .spyOn(ModelFactory, 'createModel')
+        .mockImplementation(
+          async () =>
+            fakeStreamingModel([
+              { type: 'stream-start', warnings: [] },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ])
+        )
+      const transport = new CustomChatTransport()
+      const send = async () =>
+        readChunks(
+          (await transport.sendMessages({
+            chatId: 'chat-1',
+            messages: [userMessage],
+            abortSignal: undefined,
+            trigger: 'submit-message',
+            messageId: undefined,
+          })) as ReadableStream<Record<string, unknown>>
+        )
 
-    useGeneralSetting.setState({
-      disableReasoning: false,
-      reasoningBudget: 'low',
-    })
-    await send()
-    expect(createModel.mock.calls[0]?.[3]).toEqual({
-      reasoning_effort: 'low',
-    })
-
-    useGeneralSetting.setState({ reasoningBudget: 'high' })
-    await send()
-    expect(createModel.mock.calls[1]?.[3]).toEqual({
-      reasoning_effort: 'high',
-    })
-
-    // unlimited → no override; the artifact template default applies
-    useGeneralSetting.setState({ reasoningBudget: 'unlimited' })
-    await send()
-    expect(createModel.mock.calls[2]?.[3]).toBeUndefined()
-
-    // off in either control → ginfer's `none` (direct response)
-    useGeneralSetting.setState({ reasoningBudget: 'medium' })
-    useGeneralSetting.setState({ disableReasoning: true })
-    await send()
-    expect(createModel.mock.calls[3]?.[3]).toEqual({
-      reasoning_effort: 'none',
-    })
-  })
+      try {
+        for (const [disableReasoning, reasoningBudget, expectedOverride] of [
+          [false, 'low', { reasoning_effort: 'low' }],
+          [false, 'medium', { reasoning_effort: 'medium' }],
+          [false, 'high', { reasoning_effort: 'high' }],
+          [false, 'xhigh', { reasoning_effort: 'xhigh' }],
+          // Unlimited leaves the Engine artifact template default unchanged.
+          [false, 'unlimited', undefined],
+          // Either OFF control must avoid contradictory template hints.
+          [true, 'medium', { reasoning_effort: 'none' }],
+          [false, 'off', { reasoning_effort: 'none' }],
+        ] as const) {
+          useGeneralSetting.setState({ disableReasoning, reasoningBudget })
+          await send()
+          const request = createModel.mock.calls.at(-1)
+          expect(request?.[0]).toBe(modelId)
+          expect(request?.[1].provider).toBe(providerId)
+          expect(request?.[3]).toEqual(expectedOverride)
+        }
+        expect(createModel).toHaveBeenCalledTimes(7)
+      } finally {
+        clearMocks()
+        instances.mockRestore()
+        createModel.mockRestore()
+      }
+    }
+  )
 
   it('runs manual compaction as a hidden request and drains its response', async () => {
     const transport = new CustomChatTransport()
