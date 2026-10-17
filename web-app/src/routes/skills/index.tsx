@@ -75,6 +75,8 @@ export function SkillsPage() {
   const editRequest = useRef(0)
   const [createOpen, setCreateOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const pendingSkillToggles = useRef(new Map<string, boolean>())
+  const [togglingSkills, setTogglingSkills] = useState(new Map<string, boolean>())
 
   useEffect(() => {
     return () => {
@@ -95,6 +97,18 @@ export function SkillsPage() {
       await operation()
     } catch (reason) {
       toast.error(String(reason))
+    }
+  }
+
+  const toggleSkill = async (name: string, enabled: boolean) => {
+    if (pendingSkillToggles.current.has(name)) return
+    pendingSkillToggles.current.set(name, enabled)
+    setTogglingSkills(new Map(pendingSkillToggles.current))
+    try {
+      await mutate(() => setEnabled(name, enabled))
+    } finally {
+      pendingSkillToggles.current.delete(name)
+      setTogglingSkills(new Map(pendingSkillToggles.current))
     }
   }
 
@@ -212,6 +226,7 @@ export function SkillsPage() {
         <div className="space-y-2">
           {skills.map((skill) => {
             const canTry = canTrySkill(skill)
+            const toggling = togglingSkills.has(skill.name)
             return (
               <div
                 key={skill.name}
@@ -239,13 +254,32 @@ export function SkillsPage() {
                   <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                     {skill.error || skill.description}
                   </p>
+                  {toggling && (
+                    <span
+                      role="status"
+                      className="mt-1 block text-xs text-muted-foreground"
+                    >
+                      {t(
+                        togglingSkills.get(skill.name)
+                          ? 'common:enablingSkill'
+                          : 'common:disablingSkill',
+                        {
+                          name: skill.name,
+                          defaultValue: togglingSkills.get(skill.name)
+                            ? 'Enabling {{name}}…'
+                            : 'Disabling {{name}}…',
+                        }
+                      )}
+                    </span>
+                  )}
                 </button>
                 <Switch
                   checked={skill.enabled}
-                  disabled={Boolean(skill.error)}
-                  aria-label={t('common:enableSkill')}
+                  disabled={Boolean(skill.error) || toggling}
+                  aria-busy={toggling}
+                  aria-label={`${t('common:enableSkill')}: ${skill.name}`}
                   onCheckedChange={(enabled) =>
-                    void mutate(() => setEnabled(skill.name, enabled))
+                    void toggleSkill(skill.name, enabled)
                   }
                 />
                 <SkillActionsMenu
