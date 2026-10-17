@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { HostCard } from '../EngineHostModels'
 import { engineCommand, type EngineSnapshot, type EngineStartupQuote } from '@/services/engines'
@@ -11,7 +12,7 @@ vi.mock('@/services/engines', async (original) => ({
 }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: () => refreshHosts }))
 vi.mock('../EngineProfilePicker', () => ({ EngineProfilePicker: () => null }))
-vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId }: { hostId: string }) => <section aria-label={`First-run setup for ${hostId}`} /> }))
+vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId, hardwareProfileControls }: { hostId: string; hardwareProfileControls?: ReactNode }) => <section aria-label={`First-run setup for ${hostId}`}>{hardwareProfileControls}</section> }))
 afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 const localHost = { local: true, host_id: 'host', name: 'Host', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
@@ -26,6 +27,26 @@ const importedModelSnapshot: EngineSnapshot = {
 const importedQuote: EngineStartupQuote = {
   model_identity: { model_id: 'qwen3.8-27b', weights_id: 'int8' }, instance_count: 2, kv_arena_bytes: 1048576,
 }
+
+it('keeps local hardware controls in setup and remote hardware controls directly accessible', async () => {
+  const snapshot: EngineSnapshot = { ...importedModelSnapshot, hardware_profile: {
+    status: 'running', pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'],
+    engine_path: '/bin/ginfer', job_id: 'job', pid: 42, reprofile: false,
+    started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+    checkpoint_available: true, diagnostic_tail: '', error: null, available: true,
+  } }
+  const view = render(<HostCard host={localHost} snapshot={snapshot} />)
+  const setup = screen.getByRole('region', { name: 'First-run setup for host' })
+  expect(within(setup).getByRole('progressbar', { name: 'Hardware profiling in progress' })).toBeVisible()
+  fireEvent.click(within(setup).getByRole('button', { name: 'Cancel profiling' }))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('hardware_profile', { host_id: 'host', body: { action: 'cancel' } })
+
+  view.rerender(<HostCard host={{ ...localHost, local: false }} snapshot={snapshot} />)
+  expect(screen.queryByRole('region', { name: 'First-run setup for host' })).not.toBeInTheDocument()
+  expect(screen.getAllByRole('progressbar', { name: 'Hardware profiling in progress' })).toHaveLength(1)
+  expect(screen.getByRole('button', { name: 'Cancel profiling' })).toBeEnabled()
+})
 
 it('shows Host Stop only for a local Host advertising normal-stop capability', () => {
   const { rerender } = render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)

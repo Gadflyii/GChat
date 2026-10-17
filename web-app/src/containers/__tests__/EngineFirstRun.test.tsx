@@ -1,13 +1,24 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { EngineFirstRun } from '../EngineFirstRun'
+import { EngineHardwareProfile } from '../EngineHardwareProfile'
+import type { EngineHardwareProfile as HardwareProfileStatus } from '@/services/engines'
 
 const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), state: {} as Record<string, unknown> }))
-vi.mock('@/services/engines', () => ({ engineCommand: mocks.command }))
+vi.mock('@/services/engines', async importOriginal => ({
+  ...await importOriginal<typeof import('@/services/engines')>(), engineCommand: mocks.command,
+}))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (state: unknown) => unknown) => selector(mocks.state) }))
 const release = { name: 'Muse', sha256: 'a'.repeat(64), bytes: 1024 ** 3 }
 const profile = { download_id: 'download', model_id: 'muse', gpu_uuids: ['GPU-one'], concurrency: 4, max_context: 32768, kv_arena_bytes: null, instance_count: 1, quote: null, error: null }
 const flow = (step: string, extra = {}) => ({ step, gpu_uuids: [], hardware_profile: { status: 'running' }, storage: { path: '/models', recommended_path: '/fast', available_bytes: 1024 ** 4 }, models: [], selected_downloads: [], startup_profiles: [], ...extra })
+const hardwareStatus = (status: HardwareProfileStatus['status']): HardwareProfileStatus => ({
+  status, pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', job_id: 'job', pid: null,
+  reprofile: false, started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+  checkpoint_available: true, diagnostic_tail: '', error: null, available: true,
+})
+const manualControls = (status: HardwareProfileStatus['status'], action = vi.fn().mockResolvedValue(undefined)) =>
+  <EngineHardwareProfile profile={hardwareStatus(status)} gpus={[{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768, compute_capability: '12.0' }]} offline={false} disabled={false} action={action} />
 beforeEach(() => {
   mocks.command.mockReset()
   mocks.refresh.mockReset().mockResolvedValue(undefined)
@@ -295,4 +306,122 @@ it('keeps existing model guidance available when there is no download catalog', 
   expect(screen.getByRole('button', { name: 'Download selected models' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Refresh model catalog' })).toBeEnabled()
   expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+})
+
+it('shows one GPU selection surface and preserves the guided choice across manual recovery', async () => {
+  mocks.command.mockResolvedValue(flow('gpu', { hardware_profile: hardwareStatus('idle') }))
+  await act(async () => { render(<EngineFirstRun hardwareProfileControls={manualControls('idle')} />) })
+  const guided = await screen.findByRole('group', { name: 'Select graphics cards' })
+  fireEvent.click(screen.getByRole('checkbox'))
+  expect(screen.getByRole('button', { name: 'Use selected graphics cards' })).toBeEnabled()
+  expect(screen.getByRole('checkbox')).toBeChecked()
+  expect(screen.getByText('Advanced hardware profile options').closest('details')).not.toHaveAttribute('open')
+  expect(screen.queryByRole('group', { name: 'Select GPU group' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByText('Advanced hardware profile options'))
+  expect(await screen.findByRole('group', { name: 'Select GPU group' })).toBeVisible()
+  await waitFor(() => expect(guided).not.toBeInTheDocument())
+  expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+  expect(screen.getByRole('button', { name: 'Build profile' })).toBeDisabled()
+  fireEvent.click(screen.getByRole('checkbox'))
+  expect(screen.getByRole('button', { name: 'Build profile' })).toBeEnabled()
+  fireEvent.click(screen.getByText('Advanced hardware profile options'))
+  expect(await screen.findByRole('group', { name: 'Select graphics cards' })).toBeVisible()
+  expect(screen.getByRole('checkbox')).toBeChecked()
+  expect(screen.getByRole('button', { name: 'Use selected graphics cards' })).toBeEnabled()
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+})
+
+it('keeps manual profile recovery accessible with an empty catalog and setup errors', async () => {
+  mocks.command.mockResolvedValue(flow('models', { catalog_loaded: true, hardware_profile: hardwareStatus('cancelled') }))
+  const view = render(<EngineFirstRun hardwareProfileControls={manualControls('cancelled')} />)
+  expect(await screen.findByText(/Downloads are optional: use an existing .ginfer model/)).toBeVisible()
+  fireEvent.click(screen.getByText('Advanced hardware profile options'))
+  expect(await screen.findByRole('button', { name: 'Resume profiling' })).toBeEnabled()
+  expect(screen.getByText(/without downloading a model/)).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Download selected models' })).toBeDisabled()
+  view.unmount()
+  mocks.command.mockRejectedValue(new Error('Saved setup unavailable'))
+  render(<EngineFirstRun hardwareProfileControls={manualControls('cancelled')} />)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Saved setup unavailable')
+  fireEvent.click(screen.getByText('Advanced hardware profile options'))
+  expect(await screen.findByRole('button', { name: 'Resume profiling' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Retry local setup' })).toBeEnabled()
+})
+
+it('renders manual progress and Cancel directly after guided setup is complete', async () => {
+  mocks.command.mockResolvedValue(flow('complete'))
+  const action = vi.fn().mockResolvedValue(undefined)
+  render(<EngineFirstRun hardwareProfileControls={manualControls('running', action)} />)
+  expect(await screen.findByRole('region', { name: 'Hardware profile' })).toBeVisible()
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Set up local GInfer' })).not.toBeInTheDocument())
+  expect(screen.queryByText('Advanced hardware profile options')).not.toBeInTheDocument()
+  expect(screen.getByRole('progressbar')).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel profiling' }))
+  expect(action).toHaveBeenCalledExactlyOnceWith('cancel')
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+})
+
+it('cancels wizard profiling and resumes saved work without losing folder or model choices', async () => {
+  let saved = flow('profiling', {
+    gpu_uuids: ['GPU-one'], hardware_profile: hardwareStatus('running'),
+    catalog_loaded: true, models: [{ release, recommended: false, reason: 'Optional download' }],
+  })
+  let finishCancel!: (hardware: HardwareProfileStatus) => void
+  mocks.command.mockImplementation((operation, args) => {
+    if (operation === 'hardware_profile' && args.body.action === 'cancel') return new Promise(resolve => { finishCancel = resolve })
+    if (operation === 'hardware_profile' && args.body.action === 'resume') {
+      saved = { ...saved, hardware_profile: hardwareStatus('running') }
+      return Promise.resolve(saved.hardware_profile)
+    }
+    return Promise.resolve(saved)
+  })
+  render(<EngineFirstRun />)
+  const folder = await screen.findByLabelText('Model download folder')
+  fireEvent.change(folder, { target: { value: '/my-models' } })
+  fireEvent.click(screen.getByRole('checkbox', { name: /Muse/ }))
+  const cancel = screen.getByRole('button', { name: 'Cancel profiling' })
+  fireEvent.click(cancel)
+  expect(cancel).toBeDisabled()
+  fireEvent.click(cancel)
+  expect(mocks.command.mock.calls.filter(([operation]) => operation === 'hardware_profile')).toHaveLength(1)
+  expect(mocks.command).toHaveBeenLastCalledWith('hardware_profile', { host_id: 'local', body: { action: 'cancel' } })
+  await act(async () => { finishCancel(hardwareStatus('cancelling')) })
+  expect(screen.getByText('Stopping hardware profiling…')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Cancelling profiling…' })).toBeDisabled()
+  saved = { ...saved, hardware_profile: hardwareStatus('cancelled') }
+  const resume = await screen.findByRole('button', { name: 'Resume building profile' }, { timeout: 3000 })
+  expect(screen.getByText('Hardware profile cancelled')).toBeVisible()
+  expect(folder).toHaveValue('/my-models')
+  expect(screen.getByRole('checkbox', { name: /Muse/ })).toBeChecked()
+  fireEvent.click(resume)
+  expect(await screen.findByText('Building your hardware profile…')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Cancel profiling' })).toBeEnabled()
+  expect(mocks.command).toHaveBeenLastCalledWith('hardware_profile', { host_id: 'local', body: { action: 'resume' } })
+  expect(folder).toHaveValue('/my-models')
+  expect(screen.getByRole('checkbox', { name: /Muse/ })).toBeChecked()
+})
+
+it('shows a failed Cancel and keeps its retry available while disabling offline cancellation', async () => {
+  mocks.command.mockImplementation(operation => operation === 'hardware_profile'
+    ? Promise.reject(new Error('Host could not stop profiling'))
+    : Promise.resolve(flow('profiling', { hardware_profile: hardwareStatus('running') })))
+  const view = render(<EngineFirstRun />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Cancel profiling' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Host could not stop profiling')
+  expect(screen.getByRole('button', { name: 'Cancel profiling' })).toBeEnabled()
+  mocks.state = { ...mocks.state, errors: { local: 'GInfer offline' } }
+  view.rerender(<EngineFirstRun />)
+  expect(screen.getByRole('button', { name: 'Cancel profiling' })).toBeDisabled()
+})
+
+it('shows only the manual progress controls while advanced options are open', async () => {
+  mocks.command.mockResolvedValue(flow('profiling', { hardware_profile: hardwareStatus('running') }))
+  render(<EngineFirstRun hardwareProfileControls={manualControls('running')} />)
+  expect(await screen.findByRole('progressbar')).toHaveAccessibleName('Hardware profiling')
+  expect(screen.getAllByRole('button', { name: 'Cancel profiling' })).toHaveLength(1)
+  fireEvent.click(screen.getByText('Advanced hardware profile options'))
+  await waitFor(() => expect(screen.getAllByRole('progressbar')).toHaveLength(1))
+  expect(screen.getByRole('progressbar')).toHaveAccessibleName('Hardware profiling in progress')
+  expect(screen.getAllByRole('button', { name: 'Cancel profiling' })).toHaveLength(1)
+  expect(screen.getByLabelText('Model download folder')).toBeVisible()
 })

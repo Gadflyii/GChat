@@ -77,6 +77,8 @@ export function SkillsPage() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const pendingSkillToggles = useRef(new Map<string, boolean>())
   const [togglingSkills, setTogglingSkills] = useState(new Map<string, boolean>())
+  const pendingDownload = useRef(false)
+  const [downloadingSkill, setDownloadingSkill] = useState<string | null>(null)
 
   useEffect(() => {
     return () => {
@@ -142,12 +144,18 @@ export function SkillsPage() {
   }
 
   const download = async (name: string) => {
+    if (pendingDownload.current) return
+    pendingDownload.current = true
+    setDownloadingSkill(name)
     try {
       if (await exportSkill(name)) {
         toast.success(t('common:skillExported'))
       }
     } catch (reason) {
       toast.error(String(reason))
+    } finally {
+      pendingDownload.current = false
+      setDownloadingSkill(null)
     }
   }
 
@@ -272,6 +280,17 @@ export function SkillsPage() {
                       )}
                     </span>
                   )}
+                  {downloadingSkill === skill.name && (
+                    <span
+                      role="status"
+                      className="mt-1 block text-xs text-muted-foreground"
+                    >
+                      {t('common:savingSkill', {
+                        name: skill.name,
+                        defaultValue: 'Saving {{name}}…',
+                      })}
+                    </span>
+                  )}
                 </button>
                 <Switch
                   checked={skill.enabled}
@@ -285,6 +304,7 @@ export function SkillsPage() {
                 <SkillActionsMenu
                   skill={skill}
                   canTry={canTry}
+                  downloading={downloadingSkill !== null}
                   onDownload={() => void download(skill.name)}
                   onTry={() => tryInChat(skill.name)}
                   onEdit={() => void edit(skill.name)}
@@ -435,6 +455,7 @@ function canTrySkill(skill: AgentSkill) {
 type SkillActionsMenuProps = {
   skill: AgentSkill
   canTry: boolean
+  downloading: boolean
   onDownload: () => void
   onTry: () => void
   onEdit: () => void
@@ -444,6 +465,7 @@ type SkillActionsMenuProps = {
 function SkillActionsMenu({
   skill,
   canTry,
+  downloading,
   onDownload,
   onTry,
   onEdit,
@@ -463,7 +485,7 @@ function SkillActionsMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onSelect={onDownload}>
+        <DropdownMenuItem disabled={downloading} onSelect={onDownload}>
           <IconDownload />
           {t('common:downloadSkill')}
         </DropdownMenuItem>
