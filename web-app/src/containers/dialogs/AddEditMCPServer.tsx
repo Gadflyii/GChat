@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -407,17 +408,24 @@ export default function AddEditMCPServer({
                 ? t('mcp-servers:editServer')
                 : t('mcp-servers:addServer')}
             </span>
-            <div
+            <button
+              type="button"
               className={cn(
                 'size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out',
                 isToggled && 'bg-secondary text-primary'
               )}
-              title="Add server by JSON"
+              title="Paste advanced settings (JSON)"
+              aria-label="Paste advanced settings (JSON)"
+              aria-pressed={isToggled}
               onClick={() => setIsToggled(!isToggled)}
             >
               <IconCodeDots className="h-5 w-5 cursor-pointer transition-colors duration-200" />
-            </div>
+            </button>
           </DialogTitle>
+          <DialogDescription>
+            Use the connection details supplied by the tool provider. Give the
+            connection a name, choose how it connects, then select Save connection.
+          </DialogDescription>
         </DialogHeader>
         {isToggled ? (
           <div className="space-y-4">
@@ -457,10 +465,11 @@ export default function AddEditMCPServer({
         ) : (
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm mb-2 inline-block">
+              <label htmlFor="mcp-connection-name" className="text-sm mb-2 inline-block">
                 {t('mcp-servers:serverName')}
               </label>
               <Input
+                id="mcp-connection-name"
                 value={serverName}
                 onChange={(e) => setServerName(e.target.value)}
                 placeholder={t('mcp-servers:enterServerName')}
@@ -470,14 +479,17 @@ export default function AddEditMCPServer({
 
             <div className="space-y-2">
               <label className="text-sm mb-2 inline-block">
-                Transport Type
+                How to connect
               </label>
+              <p className="text-xs text-muted-foreground">
+                Choose the connection type named in the tool provider’s setup instructions.
+              </p>
               <RadioGroup
                 value={transportType}
                 onValueChange={(value) =>
                   setTransportType(value as 'http' | 'sse')
                 }
-                className="flex gap-6"
+                className="flex flex-wrap gap-4"
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="stdio" id="stdio" />
@@ -485,7 +497,7 @@ export default function AddEditMCPServer({
                     htmlFor="stdio"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    STDIO
+                    Local program (STDIO)
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -494,7 +506,7 @@ export default function AddEditMCPServer({
                     htmlFor="http"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    HTTP
+                    Web address (HTTP)
                   </label>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -503,7 +515,7 @@ export default function AddEditMCPServer({
                     htmlFor="sse"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
-                    SSE
+                    Event stream (SSE)
                   </label>
                 </div>
               </RadioGroup>
@@ -511,10 +523,11 @@ export default function AddEditMCPServer({
 
             {transportType === 'stdio' ? (
               <div className="space-y-2">
-                <label className="text-sm mb-2 inline-block">
+                <label htmlFor="mcp-start-command" className="text-sm mb-2 inline-block">
                   {t('mcp-servers:command')}
                 </label>
                 <Input
+                  id="mcp-start-command"
                   value={command}
                   onChange={(e) => setCommand(e.target.value)}
                   placeholder={t('mcp-servers:enterCommand')}
@@ -522,17 +535,21 @@ export default function AddEditMCPServer({
               </div>
             ) : (
               <div className="space-y-2">
-                <label className="text-sm mb-2 inline-block">URL</label>
+                <label htmlFor="mcp-server-address" className="text-sm mb-2 inline-block">Tool server address</label>
                 <Input
+                  id="mcp-server-address"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  placeholder="Enter URL"
+                  placeholder="Paste the tool provider’s server address"
                 />
               </div>
             )}
 
             {transportType === 'stdio' && (
               <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Add command options only if the provider lists them. Keep them in the same order.
+                </p>
                 <div className="flex items-center justify-between">
                   <label className="text-sm">
                     {t('mcp-servers:arguments')}
@@ -581,6 +598,9 @@ export default function AddEditMCPServer({
 
             {transportType === 'stdio' && (
               <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Leave extra settings empty unless the provider supplies a setting name and value, such as an access key.
+                </p>
                 <div className="flex items-center justify-between">
                   <label className="text-sm">{t('mcp-servers:envVars')}</label>
                   <div
@@ -626,7 +646,7 @@ export default function AddEditMCPServer({
               <>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm">Headers</label>
+                    <label className="text-sm">Extra connection details (headers)</label>
                     <div
                       className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
                       onClick={handleAddHeader}
@@ -634,6 +654,9 @@ export default function AddEditMCPServer({
                       <IconPlus size={16} className="text-muted-foreground" />
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Leave these empty unless the tool provider supplies them, for example to sign in with an access key.
+                  </p>
 
                   {headerKeys.map((key, index) => (
                     <div
@@ -669,15 +692,19 @@ export default function AddEditMCPServer({
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm mb-2 inline-block">
-                    Timeout (seconds)
+                  <label htmlFor="mcp-connection-timeout" className="text-sm mb-2 inline-block">
+                    Connection time limit (seconds)
                   </label>
                   <Input
+                    id="mcp-connection-timeout"
                     value={timeout}
                     onChange={(e) => setTimeout(e.target.value)}
-                    placeholder="Enter timeout in seconds"
+                    placeholder="Leave empty to use the default"
                     type="number"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Set this only if the provider recommends a longer wait when connecting.
+                  </p>
                 </div>
               </>
             )}

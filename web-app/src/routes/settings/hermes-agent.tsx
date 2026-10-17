@@ -201,8 +201,8 @@ function HermesAgentIntegration() {
 
     try {
       if (serverStatus === 'stopped') {
-        toast.info('Starting server...', {
-          description: 'Preparing server for Hermes Agent',
+        toast.info('Preparing the Hermes Agent connection…', {
+          description: 'Starting the selected model and the local connection.',
         })
         await startServer()
       }
@@ -216,7 +216,7 @@ function HermesAgentIntegration() {
           .catch(() => null))
 
       if (!modelToUse) {
-        toast.error('No model selected or loaded')
+        toast.error('Choose a model, then select Save connection again.')
         return
       }
 
@@ -239,13 +239,13 @@ function HermesAgentIntegration() {
       setEnabled(true)
 
       toast.success(
-        `Hermes Agent configured (ctx: ${effectiveCtx}). Run \`hermes\` in terminal.`,
+        'Connection saved. Open a terminal and run `hermes` to use GChat.',
         { duration: 8000 }
       )
     } catch (error) {
       console.error('Failed to configure Hermes Agent:', error)
       const errorMsg = error instanceof Error ? error.message : String(error)
-      toast.error('Failed to configure Hermes Agent', {
+      toast.error('Could not save the Hermes Agent connection', {
         description: errorMsg,
       })
     }
@@ -294,15 +294,20 @@ function HermesAgentIntegration() {
                 </div>
               }
             >
+              <p className="mb-4 text-sm text-muted-foreground">
+                Connect the separately installed Hermes Agent app to a model in
+                GChat. Choose a model and select Save connection, then open a
+                terminal and run <code>hermes</code>.
+              </p>
               <CardItem
                 title="Model"
-                description="The model Hermes Agent will use for inference"
+                description="Choose the model Hermes Agent will use to answer requests."
                 actions={
                   <ModelSelector
                     providers={providers}
                     selectedModel={config.model}
                     onSelect={(model) => setModel(model)}
-                    placeholder="Select a model"
+                    placeholder="Choose a model"
                   />
                 }
               />
@@ -319,11 +324,11 @@ function HermesAgentIntegration() {
                       await invoke('clear_hermes_agent_config')
                       toast.success('Hermes Agent settings cleared')
                     } catch (e) {
-                      toast.error(`Failed to clear config: ${e}`)
+                      toast.error(`Could not clear the Hermes Agent connection: ${e}`)
                     }
                   }}
                 >
-                  Reset
+                  Clear connection
                 </Button>
 
                 <Button
@@ -331,7 +336,7 @@ function HermesAgentIntegration() {
                   onClick={handleSaveEnable}
                   disabled={isModelLoading}
                 >
-                  {isModelLoading ? 'Loading model...' : 'Save & Enable'}
+                  {isModelLoading ? 'Loading model…' : 'Save connection'}
                 </Button>
               </div>
             </Card>
@@ -373,6 +378,8 @@ function CopyableField({
           {value}
         </code>
         <button
+          type="button"
+          aria-label={`Copy ${label}`}
           onClick={copy}
           className="shrink-0 p-0.5 rounded hover:bg-secondary/60 text-muted-foreground"
         >
@@ -424,18 +431,19 @@ function ManualConfigPanel({
       header={
         <div className="mb-2 flex items-center gap-2">
           <h2 className="text-foreground font-studio font-medium text-sm">
-            Manual configuration
+            Connection details (advanced)
           </h2>
           <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600">
-            Active
+            Saved
           </span>
         </div>
       }
     >
       <p className="text-xs text-muted-foreground mb-3">
-        These values have been written to{' '}
+        GChat saved these settings in{' '}
         <code className="bg-secondary/50 px-1 rounded">~/.hermes/config.yaml</code>.
-        If you need to configure another machine manually, use the values below.
+        You only need the details below if you are setting up Hermes Agent by
+        hand.
       </p>
 
       <div className="divide-y divide-border/50">
@@ -451,9 +459,10 @@ function ManualConfigPanel({
       <div className="mt-3">
         <div className="flex items-center justify-between mb-1.5">
           <span className="text-xs text-muted-foreground">
-            config.yaml snippet
+            Manual settings (config.yaml)
           </span>
           <button
+            type="button"
             onClick={copyYaml}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
@@ -465,7 +474,7 @@ function ManualConfigPanel({
             ) : (
               <>
                 <IconCopy size={13} />
-                <span>Copy YAML</span>
+                <span>Copy settings</span>
               </>
             )}
           </button>
@@ -482,7 +491,7 @@ function ModelSelector({
   providers,
   selectedModel,
   onSelect,
-  placeholder = 'Select a model',
+  placeholder = 'Choose a model',
 }: {
   providers: ModelProvider[]
   selectedModel: string | null
@@ -584,7 +593,8 @@ function ModelSelector({
               ref={searchInputRef}
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="Search models..."
+              placeholder="Find a model by name"
+              aria-label="Find a model by name"
               className="text-sm font-normal outline-0 w-full"
             />
             {searchValue.length > 0 && (
@@ -599,9 +609,16 @@ function ModelSelector({
           </div>
 
           <div className="max-h-[300px] overflow-y-auto">
-            {Object.keys(groupedModels).length === 0 && searchValue ? (
+            {Object.keys(groupedModels).length === 0 ? (
               <div className="py-3 px-4 text-sm text-muted-foreground">
-                No models found for &quot;{searchValue}&quot;
+                {searchValue ? (
+                  <>No model matches &quot;{searchValue}&quot;. Try another name.</>
+                ) : (
+                  <>
+                    No models are available. Add a model in Model Providers,
+                    then return here.
+                  </>
+                )}
               </div>
             ) : (
               <div className="py-1">

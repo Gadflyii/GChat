@@ -174,8 +174,8 @@ function ClaudeCodeIntegration() {
 
     try {
       if (serverStatus === 'stopped') {
-        toast.info('Starting server...', {
-          description: 'Preparing server for Claude Code',
+        toast.info('Preparing the Claude Code connection…', {
+          description: 'Starting the selected models and the local connection.',
         })
         await startServer()
       }
@@ -192,7 +192,7 @@ function ClaudeCodeIntegration() {
         })),
       })
       toast.success(
-        'Environment variables updated. Please try relaunching Claude Code in a new terminal window.',
+        'Connection saved. Open a new terminal window and start Claude Code to use GChat.',
         {
           duration: 8000,
         }
@@ -200,7 +200,7 @@ function ClaudeCodeIntegration() {
     } catch (error) {
       console.error('Failed to launch Claude Code:', error)
       const errorMsg = error instanceof Error ? error.message : String(error)
-      toast.error('Failed to configure env vars', {
+      toast.error('Could not save the Claude Code connection', {
         description: errorMsg,
       })
     }
@@ -246,39 +246,45 @@ function ClaudeCodeIntegration() {
                 </div>
               }
             >
+              <p className="mb-4 text-sm text-muted-foreground">
+                Connect the separately installed Claude Code app to models in
+                GChat. Choose a model for each role below, then select Save
+                connection. Open a new terminal window and start Claude Code
+                after saving.
+              </p>
               <CardItem
-                title="Large Model"
-                description="Opus"
+                title="Model for the Opus role"
+                description="Choose the GChat model to use when Claude Code requests its Opus role."
                 actions={
                   <HelperModelSelector
                     providers={providers}
                     selectedModel={helperModels.big}
                     onSelect={(model) => setHelperModel('big', model)}
-                    placeholder="Select Big Model"
+                    placeholder="Choose an Opus-role model"
                   />
                 }
               />
               <CardItem
-                title="Medium Model"
-                description="Sonnet"
+                title="Model for the Sonnet role"
+                description="Choose the GChat model to use when Claude Code requests its Sonnet role."
                 actions={
                   <HelperModelSelector
                     providers={providers}
                     selectedModel={helperModels.medium}
                     onSelect={(model) => setHelperModel('medium', model)}
-                    placeholder="Select Medium Model"
+                    placeholder="Choose a Sonnet-role model"
                   />
                 }
               />
               <CardItem
-                title="Small Model"
-                description="Haiku"
+                title="Model for the Haiku role"
+                description="Choose the GChat model to use when Claude Code requests its Haiku role."
                 actions={
                   <HelperModelSelector
                     providers={providers}
                     selectedModel={helperModels.small}
                     onSelect={(model) => setHelperModel('small', model)}
-                    placeholder="Select Small Model"
+                    placeholder="Choose a Haiku-role model"
                   />
                 }
               />
@@ -290,7 +296,7 @@ function ClaudeCodeIntegration() {
                   onClick={() => setIsCustomCliDialogOpen(true)}
                 >
                   <IconPlus className="text-muted-foreground" size={14} />
-                  Environment Variables
+                  Optional extra settings
                 </Button>
                 <div className="flex gap-2">
                   <Button
@@ -302,18 +308,18 @@ function ClaudeCodeIntegration() {
                         await invoke('clear_claude_code_env')
                         toast.success('Claude Code settings cleared')
                       } catch (e) {
-                        toast.error(`Failed to clear env file: ${e}`)
+                        toast.error(`Could not clear the Claude Code connection: ${e}`)
                       }
                     }}
                   >
-                    Reset
+                    Clear connection
                   </Button>
                   <Button
                     size="sm"
                     onClick={handleLaunchClaudeCode}
                     disabled={isModelLoading}
                   >
-                    {isModelLoading ? 'Loading models...' : 'Save & Enable'}
+                    {isModelLoading ? 'Loading models…' : 'Save connection'}
                   </Button>
                 </div>
               </div>
@@ -325,7 +331,7 @@ function ClaudeCodeIntegration() {
                   )}
                   {helperModels.envVars.length > 0 && (
                     <div className="break-all">
-                      Env:{' '}
+                      Extra settings:{' '}
                       {helperModels.envVars
                         .map((env) => `${env.key}=******`)
                         .join(', ')}
@@ -355,7 +361,7 @@ function HelperModelSelector({
   providers,
   selectedModel,
   onSelect,
-  placeholder = 'Select a model',
+  placeholder = 'Choose a model',
 }: {
   providers: ModelProvider[]
   selectedModel: string | null
@@ -467,7 +473,8 @@ function HelperModelSelector({
               ref={searchInputRef}
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="Search models..."
+              placeholder="Find a model by name"
+              aria-label="Find a model by name"
               className="text-sm font-normal outline-0 w-full"
             />
             {searchValue.length > 0 && (
@@ -482,9 +489,16 @@ function HelperModelSelector({
           </div>
 
           <div className="max-h-[300px] overflow-y-auto">
-            {Object.keys(groupedModels).length === 0 && searchValue ? (
+            {Object.keys(groupedModels).length === 0 ? (
               <div className="py-3 px-4 text-sm text-muted-foreground">
-                No models found for &quot;{searchValue}&quot;
+                {searchValue ? (
+                  <>No model matches &quot;{searchValue}&quot;. Try another name.</>
+                ) : (
+                  <>
+                    No models are available. Add a model in Model Providers,
+                    then return here.
+                  </>
+                )}
               </div>
             ) : (
               <div className="py-1">

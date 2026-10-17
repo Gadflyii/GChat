@@ -132,7 +132,12 @@ export function BrainSetup({
         </p>
       </div>
       <fieldset disabled={busy} className="space-y-3">
-        <legend className="text-sm font-medium">1. Inference server</legend>
+        <legend className="text-sm font-medium">1. Where the model runs</legend>
+        <p className="text-xs text-muted-foreground">
+          Choose a model already running on a paired GInfer Host, or enter the
+          address of a GInfer model server you manage. The model is the bot’s
+          brain: it reads your request and decides which actions to take.
+        </p>
         <div className="flex flex-wrap gap-4 text-sm">
           <label className="flex items-center gap-2">
             <input
@@ -215,8 +220,9 @@ export function BrainSetup({
             </div>
             {!loading && !models.length && (
               <p className="text-sm text-muted-foreground">
-                No ready models. Pair a host and start a model in GInfer Hosts,
-                then refresh.
+                No ready models. Open GInfer Hosts, pair the computer that runs
+                your model and start the model there. Then return here and
+                choose Refresh hosts.
               </p>
             )}
             {!loading &&
@@ -236,8 +242,10 @@ export function BrainSetup({
           connection.kind === 'endpoint' && (
             <>
               <p className="text-xs text-muted-foreground">
-                Use a GInfer API endpoint that stays running when GChat closes.
-                GChat’s local port 1337 API stops when GChat exits.
+                An API endpoint is the address of your model server. Ask its
+                owner for the URL and an API key if required. Use a server that
+                stays running when GChat closes; GChat’s local port 1337 API
+                stops when GChat exits.
               </p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="text-sm">
@@ -306,10 +314,11 @@ export function BrainSetup({
         <legend className="text-sm font-medium">2. Model</legend>
         <p className="text-xs text-muted-foreground">
           {paired
-            ? 'Model and served context come from the selected Host instance.'
-            : 'Enter the model ID and context capacity served by that endpoint.'}{' '}
+            ? 'The selected Host fills in the model name and context size for you.'
+            : 'Ask the server owner for its exact model ID and context size, then enter them below.'}{' '}
           For vision and Gbot, prefer Muse INT if it fits your GPU, or Qwen. Use
-          at least 128K context.
+          at least 128K context. Context is the amount of text and task history
+          the model can work with at once.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">

@@ -1,36 +1,103 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentType, ReactNode } from 'react'
-import type { EngineInstance, EngineLaunchProfile, NearbyHost } from '@/services/engines'
+import type {
+  EngineInstance,
+  EngineLaunchProfile,
+  NearbyHost,
+} from '@/services/engines'
 
-const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), error: '', local: false, nearby: [] as NearbyHost[], instances: [] as EngineInstance[] }))
-vi.mock('@tanstack/react-router', () => ({ createFileRoute: () => (options: unknown) => ({ options }) }))
-vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: ReactNode }) => <div>{children}</div> }))
-vi.mock('@/services/engines', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/services/engines')>(), engineCommand: mocks.command,
+const mocks = vi.hoisted(() => ({
+  command: vi.fn(),
+  refresh: vi.fn(),
+  error: '',
+  local: false,
+  nearby: [] as NearbyHost[],
+  instances: [] as EngineInstance[],
 }))
-vi.mock('@/stores/engine-discovery-store', () => ({ useEngineDiscovery: () => ({ enabled: mocks.nearby.length > 0, ignored: {}, setEnabled: vi.fn(), ignore: vi.fn(), restore: vi.fn() }) }))
-vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector?: (state: { refresh: typeof mocks.refresh }) => unknown) => {
-  const state = {
-    hosts: [{ host_id: 'host', name: 'Lab host', base_url: 'https://host:7443', local: mocks.local }],
-    nearby: mocks.nearby, errors: mocks.error ? { host: mocks.error } : {}, refresh: mocks.refresh,
-    refreshing: false, discoveryError: null,
-    snapshots: { host: { host_id: 'host', display_name: 'Lab host', revision: 1, instances: mocks.instances,
-      lan_sharing: { managed: true, enabled: true, active: true, port: 7444 },
-      gpus: [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768 }],
-      models: [{ id: 'model', artifact_set: false, path: '/models/qwen.ginfer', metadata: {
-        identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' }, tp_size: 1, draft_tp: 0, size_bytes: 1024,
-      } }],
-    } },
-  }
-  return selector ? selector(state) : state
-} }))
+vi.mock('@tanstack/react-router', () => ({
+  createFileRoute: () => (options: unknown) => ({ options }),
+}))
+vi.mock('@/containers/HeaderPage', () => ({
+  default: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}))
+vi.mock('@/services/engines', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/engines')>()),
+  engineCommand: mocks.command,
+}))
+vi.mock('@/stores/engine-discovery-store', () => ({
+  useEngineDiscovery: () => ({
+    enabled: mocks.nearby.length > 0,
+    ignored: {},
+    setEnabled: vi.fn(),
+    ignore: vi.fn(),
+    restore: vi.fn(),
+  }),
+}))
+vi.mock('@/stores/engine-hosts-store', () => ({
+  useEngineHosts: (
+    selector?: (state: { refresh: typeof mocks.refresh }) => unknown
+  ) => {
+    const state = {
+      hosts: [
+        {
+          host_id: 'host',
+          name: 'Lab host',
+          base_url: 'https://host:7443',
+          local: mocks.local,
+        },
+      ],
+      nearby: mocks.nearby,
+      errors: mocks.error ? { host: mocks.error } : {},
+      refresh: mocks.refresh,
+      refreshing: false,
+      discoveryError: null,
+      snapshots: {
+        host: {
+          host_id: 'host',
+          display_name: 'Lab host',
+          revision: 1,
+          instances: mocks.instances,
+          lan_sharing: {
+            managed: true,
+            enabled: true,
+            active: true,
+            port: 7444,
+          },
+          gpus: [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768 }],
+          models: [
+            {
+              id: 'model',
+              artifact_set: false,
+              path: '/models/qwen.ginfer',
+              metadata: {
+                identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' },
+                tp_size: 1,
+                draft_tp: 0,
+                size_bytes: 1024,
+              },
+            },
+          ],
+        },
+      },
+    }
+    return selector ? selector(state) : state
+  },
+}))
 import { Route } from './index'
 const Page = Route.options.component as ComponentType
 
 function renderExpandedPage() {
   const view = render(<Page />)
-  fireEvent.click(screen.getByText('Launch Server Instance', { selector: 'summary' }))
+  fireEvent.click(
+    screen.getByText('Launch Server Instance', { selector: 'summary' })
+  )
   fireEvent.click(screen.getByText('Server details', { selector: 'summary' }))
   return view
 }
@@ -40,103 +107,200 @@ beforeEach(() => {
   mocks.local = false
   mocks.nearby = []
   mocks.instances = []
-  mocks.command.mockReset().mockImplementation(async (action: string) => action === 'credential_status'
-    ? { ready: true, platform: 'linux', can_install: false }
-    : action === 'first_run' ? { step: 'complete', gpu_uuids: [], storage: { path: '/models' }, models: [] } : {})
+  mocks.command
+    .mockReset()
+    .mockImplementation(async (action: string) =>
+      action === 'credential_status'
+        ? { ready: true, platform: 'linux', can_install: false }
+        : action === 'first_run'
+          ? {
+              step: 'complete',
+              gpu_uuids: [],
+              storage: { path: '/models' },
+              models: [],
+            }
+          : {}
+    )
   mocks.refresh.mockReset().mockResolvedValue(undefined)
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('Engines host intake and launch controls', () => {
   it('keeps launch and details independently collapsed without hiding host controls', async () => {
     render(<Page />)
-    const launch = screen.getByText('Launch Server Instance', { selector: 'summary' })
+    const launch = screen.getByText('Launch Server Instance', {
+      selector: 'summary',
+    })
     const details = screen.getByText('Server details', { selector: 'summary' })
     expect(launch.closest('details')).not.toHaveAttribute('open')
     expect(details.closest('details')).not.toHaveAttribute('open')
     fireEvent.click(launch)
-    expect(screen.getByRole('combobox', { name: 'Lab host model' })).toBeVisible()
+    expect(
+      screen.getByRole('combobox', { name: 'Lab host model' })
+    ).toBeVisible()
     expect(details.closest('details')).not.toHaveAttribute('open')
     fireEvent.click(details)
     fireEvent.click(launch)
     expect(details.closest('details')).toHaveAttribute('open')
     expect(launch.closest('details')).not.toHaveAttribute('open')
-    await screen.findByText('Secure credential storage is ready for LAN pairing.')
+    await screen.findByText('Secure storage is ready.')
   })
 
   it('shows the automatic local host without a forget action', async () => {
     mocks.local = true
     renderExpandedPage()
     expect(screen.getByText('Local host')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Forget' })).not.toBeInTheDocument()
-    await screen.findByText('Secure credential storage is ready for LAN pairing.')
+    expect(
+      screen.queryByRole('button', { name: 'Forget' })
+    ).not.toBeInTheDocument()
+    await screen.findByText('Secure storage is ready.')
   })
   it('shares independently of discovery', async () => {
     mocks.local = true
     renderExpandedPage()
     const share = screen.getByRole('checkbox', { name: 'Share this host' })
     expect(share).toBeChecked()
-    expect(screen.getByRole('switch', { name: 'Discover nearby GInfer hosts' })).not.toBeChecked()
+    expect(
+      screen.getByRole('switch', { name: 'Discover nearby GInfer hosts' })
+    ).not.toBeChecked()
     fireEvent.click(share)
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('lan_sharing', { host_id: 'host', body: { enabled: false } }))
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('lan_sharing', {
+        host_id: 'host',
+        body: { enabled: false },
+      })
+    )
     await waitFor(() => expect(share).toBeEnabled())
   })
 
   it('does not change sharing on a remote host', async () => {
     renderExpandedPage()
-    expect(screen.getByRole('checkbox', { name: 'Share this host' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Generate pairing code' })).not.toBeInTheDocument()
-    await screen.findByText('Secure credential storage is ready for LAN pairing.')
+    expect(
+      screen.getByRole('checkbox', { name: 'Share this host' })
+    ).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'Generate pairing code' })
+    ).not.toBeInTheDocument()
+    await screen.findByText('Secure storage is ready.')
   })
 
   it('offers Pair and Ignore for a discovered host without requiring address selection', async () => {
-    mocks.nearby = [{ host_id: 'nearby-host', name: 'Server 2', urls: ['https://192.168.1.111:7444', 'https://10.0.0.1:7444'] }]
+    mocks.nearby = [
+      {
+        host_id: 'nearby-host',
+        name: 'Server 2',
+        urls: ['https://192.168.1.111:7444', 'https://10.0.0.1:7444'],
+      },
+    ]
     renderExpandedPage()
-    expect(screen.getByRole('button', { name: 'Ignore', exact: true })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /https:/ })).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Ignore', exact: true })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /https:/ })
+    ).not.toBeInTheDocument()
     const pair = screen.getByRole('button', { name: 'Pair', exact: true })
     await waitFor(() => expect(pair).toBeEnabled())
     fireEvent.click(pair)
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('pair', { host_id: 'nearby-host' }))
-    expect(screen.queryByLabelText('Certificate SHA256')).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('pair', {
+        host_id: 'nearby-host',
+      })
+    )
+    expect(
+      screen.queryByLabelText('Certificate SHA256')
+    ).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Pairing code')).not.toBeInTheDocument()
   })
 
   it('prevents duplicate clicks and allows retry after a pairing failure', async () => {
-    mocks.nearby = [{ host_id: 'nearby-host', name: 'Server 2', urls: ['https://192.168.1.111:7444'] }]
+    mocks.nearby = [
+      {
+        host_id: 'nearby-host',
+        name: 'Server 2',
+        urls: ['https://192.168.1.111:7444'],
+      },
+    ]
     let fail: (error: Error) => void = () => undefined
-    mocks.command.mockImplementation((action: string) => action === 'pair'
-      ? new Promise((_resolve, reject) => { fail = reject })
-      : Promise.resolve({ ready: true, platform: 'linux', can_install: false }))
+    mocks.command.mockImplementation((action: string) =>
+      action === 'pair'
+        ? new Promise((_resolve, reject) => {
+            fail = reject
+          })
+        : Promise.resolve({
+            ready: true,
+            platform: 'linux',
+            can_install: false,
+          })
+    )
     renderExpandedPage()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Pair', exact: true })).toBeEnabled())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Pair', exact: true })
+      ).toBeEnabled()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Pair', exact: true }))
     expect(screen.getByRole('button', { name: 'Pairing…' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Pairing…' }))
-    expect(mocks.command.mock.calls.filter(([action]) => action === 'pair')).toHaveLength(1)
+    expect(
+      mocks.command.mock.calls.filter(([action]) => action === 'pair')
+    ).toHaveLength(1)
     fail(new Error('Host unavailable'))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Pair', exact: true })).toBeEnabled())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Pair', exact: true })
+      ).toBeEnabled()
+    )
   })
 
   it('starts saved instances and confirms a running-instance restart', async () => {
     const profile: EngineLaunchProfile = {
-      model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1,
-      vision: false, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto',
-      kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
+      model_id: 'model',
+      gpu_uuids: ['GPU-one'],
+      max_context: 8192,
+      concurrency: 1,
+      vision: false,
+      structured_outputs: true,
+      spec: 'none',
+      draft_tokens: 0,
+      draft_tp: 0,
+      kv_dtype: 'auto',
+      kv_arena_bytes: null,
+      host_kv_cache_bytes: 0,
+      prefill_chunk: 0,
+      no_cuda_graph: false,
     }
-    mocks.instances = [{ instance_id: 'instance', session_id: null, display_name: 'Saved model',
-      upstream_model_id: 'model', status: 'stopped', configuration: profile, profile }]
+    mocks.instances = [
+      {
+        instance_id: 'instance',
+        session_id: null,
+        display_name: 'Saved model',
+        upstream_model_id: 'model',
+        status: 'stopped',
+        configuration: profile,
+        profile,
+      },
+    ]
     const view = renderExpandedPage()
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
-    expect(screen.getByText('Edit server instance settings').closest('details')).toHaveAttribute('open')
+    expect(
+      screen.getByText('Edit server instance settings').closest('details')
+    ).toHaveAttribute('open')
     expect(screen.getByLabelText('Custom model')).toHaveFocus()
     expect(screen.getByLabelText('Context tokens')).toHaveValue(8192)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }))
     expect(screen.getByRole('button', { name: 'Reload' })).toBeDisabled()
     fireEvent.click(screen.getByRole('button', { name: 'Start' }))
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('start', {
-      host_id: 'host', instance_id: 'instance', body: {},
-    }))
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('start', {
+        host_id: 'host',
+        instance_id: 'instance',
+        body: {},
+      })
+    )
     mocks.instances[0].status = 'ready'
     view.rerender(<Page />)
     expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
@@ -145,148 +309,284 @@ describe('Engines host intake and launch controls', () => {
     expect(mocks.command).not.toHaveBeenCalledWith('restart', expect.anything())
     confirmation.mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('restart', {
-      host_id: 'host', instance_id: 'instance', body: { force: false, expected_session_id: null },
-    }))
-    expect(screen.getByText(/Instance 1 · Saved model .* · ready/, { selector: 'p' })).toBeInTheDocument()
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('restart', {
+        host_id: 'host',
+        instance_id: 'instance',
+        body: { force: false, expected_session_id: null },
+      })
+    )
+    expect(
+      screen.getByText(/Instance 1 · Saved model .* · ready/, { selector: 'p' })
+    ).toBeInTheDocument()
     fireEvent.click(screen.getByText('Server details', { selector: 'summary' }))
-    expect(screen.getByText('Server details').closest('details')).not.toHaveAttribute('open')
+    expect(
+      screen.getByText('Server details').closest('details')
+    ).not.toHaveAttribute('open')
     expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled()
   })
 
   it('labels adjacent selectors and resolves generated instance names without changing command IDs', async () => {
     const profile: EngineLaunchProfile = {
-      model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 131072, concurrency: 4,
-      vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto',
-      kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
+      model_id: 'model',
+      gpu_uuids: ['GPU-one'],
+      max_context: 131072,
+      concurrency: 4,
+      vision: true,
+      structured_outputs: true,
+      spec: 'none',
+      draft_tokens: 0,
+      draft_tp: 0,
+      kv_dtype: 'auto',
+      kv_arena_bytes: null,
+      host_kv_cache_bytes: 0,
+      prefill_chunk: 0,
+      no_cuda_graph: false,
     }
     mocks.instances = ['stopped', 'ready'].map((status, index) => ({
-      instance_id: `internal-id-${index}`, session_id: null, display_name: 'model',
-      upstream_model_id: 'model', status: status as EngineInstance['status'], configuration: profile, profile,
+      instance_id: `internal-id-${index}`,
+      session_id: null,
+      display_name: 'model',
+      upstream_model_id: 'model',
+      status: status as EngineInstance['status'],
+      configuration: profile,
+      profile,
     }))
     renderExpandedPage()
-    const instance = screen.getByRole('combobox', { name: 'Lab host serving instance' })
+    const instance = screen.getByRole('combobox', {
+      name: 'Lab host serving instance',
+    })
     const model = screen.getByRole('combobox', { name: 'Lab host model' })
     expect(instance.closest('label')).toHaveTextContent('Server instance')
     expect(model.closest('label')).toHaveTextContent('Model')
     expect(instance).toHaveValue('internal-id-1')
-    const hardwareProfile = screen.getByRole('combobox', { name: 'Hardware profile' })
+    const hardwareProfile = screen.getByRole('combobox', {
+      name: 'Hardware profile',
+    })
     expect(model.parentElement?.parentElement).toContainElement(hardwareProfile)
-    expect(model.parentElement?.parentElement?.querySelectorAll('select')).toHaveLength(3)
-    expect(model.compareDocumentPosition(hardwareProfile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(instance).toHaveTextContent('Qwen3.8 27B · NVFP4 · 4 concurrent · 131,072 context · GPU 1')
+    expect(
+      model.parentElement?.parentElement?.querySelectorAll('select')
+    ).toHaveLength(3)
+    expect(
+      model.compareDocumentPosition(hardwareProfile) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(instance).toHaveTextContent(
+      'Qwen3.8 27B · NVFP4 · 4 concurrent · 131,072 context · GPU 1'
+    )
     expect(instance).not.toHaveTextContent('internal-id')
     expect(model).toHaveTextContent('Qwen3.8 27B · NVFP4')
     fireEvent.change(instance, { target: { value: 'internal-id-0' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start', exact: true }))
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('start', {
-      host_id: 'host', instance_id: 'internal-id-0', body: {},
-    }))
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('start', {
+        host_id: 'host',
+        instance_id: 'internal-id-0',
+        body: {},
+      })
+    )
   })
 
   it('pairs a manually entered address without a code', async () => {
     renderExpandedPage()
     fireEvent.click(screen.getByText('Enter a host address manually'))
-    fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7443' } })
+    fireEvent.change(screen.getByLabelText('Host address'), {
+      target: { value: 'https://host:7443' },
+    })
     expect(screen.getByRole('button', { name: 'Pair host' })).toBeDisabled()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Pair host' })).toBeEnabled())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Pair host' })).toBeEnabled()
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Pair host' }))
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('pair', {
-      base_url: 'https://host:7443',
-    }))
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('pair', {
+        base_url: 'https://host:7443',
+      })
+    )
   })
 
   it('blocks fractional launch values but allows Qwen Vision with speculation', async () => {
     renderExpandedPage()
     fireEvent.click(screen.getByText('Custom server settings'))
-    fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
+    fireEvent.change(screen.getByLabelText('Custom model'), {
+      target: { value: 'model' },
+    })
     expect(screen.getByLabelText('GPU 1: RTX 5090')).toBeChecked()
     const load = screen.getByRole('button', { name: 'Load model' })
     expect(load).toBeEnabled()
-    fireEvent.change(screen.getByLabelText('Concurrent requests'), { target: { value: '1.5' } })
+    fireEvent.change(screen.getByLabelText('Concurrent requests'), {
+      target: { value: '1.5' },
+    })
     expect(load).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('Use whole numbers')
-    fireEvent.change(screen.getByLabelText('Concurrent requests'), { target: { value: '4' } })
-    fireEvent.change(screen.getByLabelText('Speculative decoding'), { target: { value: 'auto' } })
+    fireEvent.change(screen.getByLabelText('Concurrent requests'), {
+      target: { value: '4' },
+    })
+    fireEvent.change(screen.getByLabelText('Speculative decoding'), {
+      target: { value: 'auto' },
+    })
     expect(load).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Speculative decoding'), { target: { value: 'none' } })
+    fireEvent.change(screen.getByLabelText('Speculative decoding'), {
+      target: { value: 'none' },
+    })
     fireEvent.click(load)
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('launch', {
-      host_id: 'host', body: expect.objectContaining({ model_id: 'model', gpu_uuids: ['GPU-one'], concurrency: 4, spec: 'none' }),
-    }))
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('launch', {
+        host_id: 'host',
+        body: expect.objectContaining({
+          model_id: 'model',
+          gpu_uuids: ['GPU-one'],
+          concurrency: 4,
+          spec: 'none',
+        }),
+      })
+    )
   })
 
   it('retains unavailable host inventory without permitting a new load', async () => {
-    mocks.error = 'error sending request for url (https://192.168.1.111:7444/host/v1/snapshot): tcp connect error: connection refused (os error 10061)'
+    mocks.error =
+      'error sending request for url (https://192.168.1.111:7444/host/v1/snapshot): tcp connect error: connection refused (os error 10061)'
     renderExpandedPage()
     fireEvent.click(screen.getByText('Custom server settings'))
-    fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
+    fireEvent.change(screen.getByLabelText('Custom model'), {
+      target: { value: 'model' },
+    })
     fireEvent.click(screen.getByLabelText('GPU 1: RTX 5090'))
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
-    expect(screen.getByText(/GInfer offline/)).toHaveClass('text-muted-foreground')
+    expect(screen.getByText(/GInfer offline/)).toHaveClass(
+      'text-muted-foreground'
+    )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByText(/error sending request/)).not.toBeInTheDocument()
     expect(mocks.command).not.toHaveBeenCalledWith('launch', expect.anything())
-    await screen.findByText('Secure credential storage is ready for LAN pairing.')
+    await screen.findByText('Secure storage is ready.')
   })
   it('launches structured outputs by default and preserves explicit OFF and Host KV AUTO or zero', async () => {
     renderExpandedPage()
     fireEvent.click(screen.getByText('Custom server settings'))
     fireEvent.click(screen.getByText('Advanced launch settings'))
-    fireEvent.change(screen.getByLabelText('Custom model'), { target: { value: 'model' } })
-    const structured = screen.getByRole('checkbox', { name: 'Structured outputs', exact: true })
-    const cache = screen.getByLabelText('Host KV cache (bytes, blank = automatic, 0 = disabled)')
+    fireEvent.change(screen.getByLabelText('Custom model'), {
+      target: { value: 'model' },
+    })
+    const structured = screen.getByRole('checkbox', {
+      name: 'Structured outputs',
+      exact: true,
+    })
+    const cache = screen.getByLabelText(
+      'Host KV cache (bytes, blank = automatic, 0 = disabled)'
+    )
     const load = screen.getByRole('button', { name: 'Load model' })
     expect(structured).toBeChecked()
     expect(cache).toHaveValue(null)
     fireEvent.click(load)
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('launch', {
-      host_id: 'host', body: expect.objectContaining({ structured_outputs: true, host_kv_cache_bytes: null }),
-    }))
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('launch', {
+        host_id: 'host',
+        body: expect.objectContaining({
+          structured_outputs: true,
+          host_kv_cache_bytes: null,
+        }),
+      })
+    )
     await waitFor(() => expect(load).toBeEnabled())
     fireEvent.click(structured)
     fireEvent.change(cache, { target: { value: '0' } })
     fireEvent.click(load)
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('launch', {
-      host_id: 'host', body: expect.objectContaining({ structured_outputs: false, host_kv_cache_bytes: 0 }),
-    }))
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('launch', {
+        host_id: 'host',
+        body: expect.objectContaining({
+          structured_outputs: false,
+          host_kv_cache_bytes: 0,
+        }),
+      })
+    )
     await waitFor(() => expect(load).toBeEnabled())
     fireEvent.change(cache, { target: { value: '' } })
     fireEvent.click(load)
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('launch', {
-      host_id: 'host', body: expect.objectContaining({ structured_outputs: false, host_kv_cache_bytes: null }),
-    }))
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('launch', {
+        host_id: 'host',
+        body: expect.objectContaining({
+          structured_outputs: false,
+          host_kv_cache_bytes: null,
+        }),
+      })
+    )
   })
 
   it('loads saved structured-output OFF and disabled Host KV cache without resetting them', async () => {
     const profile: EngineLaunchProfile = {
-      model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1,
-      vision: false, structured_outputs: false, spec: 'none', draft_tokens: 0, draft_tp: 0,
-      kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: 0, prefill_chunk: 0, no_cuda_graph: false,
+      model_id: 'model',
+      gpu_uuids: ['GPU-one'],
+      max_context: 8192,
+      concurrency: 1,
+      vision: false,
+      structured_outputs: false,
+      spec: 'none',
+      draft_tokens: 0,
+      draft_tp: 0,
+      kv_dtype: 'auto',
+      kv_arena_bytes: null,
+      host_kv_cache_bytes: 0,
+      prefill_chunk: 0,
+      no_cuda_graph: false,
     }
-    mocks.instances = [{ instance_id: 'instance', session_id: 'session', display_name: 'Saved model',
-      upstream_model_id: 'model', status: 'ready', configuration: profile, profile }]
+    mocks.instances = [
+      {
+        instance_id: 'instance',
+        session_id: 'session',
+        display_name: 'Saved model',
+        upstream_model_id: 'model',
+        status: 'ready',
+        configuration: profile,
+        profile,
+      },
+    ]
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderExpandedPage()
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
     fireEvent.click(screen.getByText('Advanced launch settings'))
-    expect(screen.getByRole('checkbox', { name: 'Structured outputs', exact: true })).not.toBeChecked()
-    expect(screen.getByLabelText('Host KV cache (bytes, blank = automatic, 0 = disabled)')).toHaveValue(0)
-    fireEvent.click(screen.getByRole('button', { name: 'Apply settings and reload' }))
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('reload', {
-      host_id: 'host', instance_id: 'instance', body: expect.objectContaining({ configuration: expect.objectContaining({
-        structured_outputs: false, host_kv_cache_bytes: 0,
-      }) }),
-    }))
+    expect(
+      screen.getByRole('checkbox', { name: 'Structured outputs', exact: true })
+    ).not.toBeChecked()
+    expect(
+      screen.getByLabelText(
+        'Host KV cache (bytes, blank = automatic, 0 = disabled)'
+      )
+    ).toHaveValue(0)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Apply settings and reload' })
+    )
+    await waitFor(() =>
+      expect(mocks.command).toHaveBeenCalledWith('reload', {
+        host_id: 'host',
+        instance_id: 'instance',
+        body: expect.objectContaining({
+          configuration: expect.objectContaining({
+            structured_outputs: false,
+            host_kv_cache_bytes: 0,
+          }),
+        }),
+      })
+    )
   })
   it('blocks pairing when storage is unavailable even after skipping setup', async () => {
-    mocks.command.mockResolvedValue({ ready: false, platform: 'linux', can_install: false })
+    mocks.command.mockResolvedValue({
+      ready: false,
+      platform: 'linux',
+      can_install: false,
+    })
     renderExpandedPage()
     fireEvent.click(screen.getByText('Enter a host address manually'))
-    fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7443' } })
-    await screen.findByText('Secure storage is unavailable. Set it up or unlock it before pairing.')
+    fireEvent.change(screen.getByLabelText('Host address'), {
+      target: { value: 'https://host:7443' },
+    })
+    await screen.findByText(
+      'Secure storage is unavailable. Set it up or unlock it before connecting accounts or computers.'
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Skip for now' }))
     expect(screen.getByRole('button', { name: 'Pair host' })).toBeDisabled()
     expect(mocks.command).not.toHaveBeenCalledWith('pair', expect.anything())
