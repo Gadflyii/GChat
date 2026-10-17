@@ -73,6 +73,16 @@ async function complete(
   })
 }
 
+async function fail(
+  request: ReturnType<typeof deferred<AgentWorkspaceEntry[]>>,
+  message: string
+) {
+  await act(async () => {
+    request.reject(new Error(message))
+    await request.promise.catch(() => undefined)
+  })
+}
+
 afterEach(cleanup)
 beforeEach(() => {
   vi.resetAllMocks()
@@ -334,4 +344,142 @@ describe('Agent workspace empty folder feedback', () => {
     expect(screen.getByRole('status')).toHaveTextContent('This folder is empty.')
     expect(screen.getByRole('button', { name: 'common:refresh' })).toBeEnabled()
   })
+})
+
+describe('Agent workspace folder read recovery', () => {
+  it('shows an initial root error without expanding and retries the same folder with loading feedback', async () => {
+    const initial = deferred<AgentWorkspaceEntry[]>()
+    const retry = deferred<AgentWorkspaceEntry[]>()
+    mocks.list
+      .mockReturnValueOnce(initial.promise)
+      .mockReturnValueOnce(retry.promise)
+    render(files(workspace('/workspace/project')))
+
+    await fail(initial, 'Project folder unavailable')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not load this directory.'
+    )
+    expect(screen.getByText('Could not load this directory.')).toHaveAttribute(
+      'title',
+      'Error: Project folder unavailable'
+    )
+    expect(screen.getByRole('button', { name: 'Expand Project' })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry folder' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…')
+    expect(screen.getByRole('button', { name: 'Collapse Project' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+    expect(mocks.list).toHaveBeenNthCalledWith(2, {
+      rootId: 'primary',
+      rootPath: '/workspace/project',
+      relativePath: undefined,
+    })
+
+    await complete(retry, [entry('recovered.txt')])
+    expect(screen.getByRole('button', { name: 'recovered.txt' })).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
+  })
+
+  it('keeps a failed nested folder directly retryable and caches its recovered contents', async () => {
+    const initialChild = deferred<AgentWorkspaceEntry[]>()
+    const failedRetry = deferred<AgentWorkspaceEntry[]>()
+    const recoveredRetry = deferred<AgentWorkspaceEntry[]>()
+    mocks.list
+      .mockResolvedValueOnce([entry('docs', 'directory')])
+      .mockReturnValueOnce(initialChild.promise)
+      .mockReturnValueOnce(failedRetry.promise)
+      .mockReturnValueOnce(recoveredRetry.promise)
+    render(files(workspace('/workspace/project')))
+
+    fireEvent.click(await screen.findByRole('button', { name: 'docs' }))
+    await fail(initialChild, 'Docs folder denied')
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not load this directory.'
+    )
+    expect(screen.getByRole('button', { name: 'docs' })).toHaveAttribute(
+      'aria-expanded',
+      'true'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry folder' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await fail(failedRetry, 'Docs folder still denied')
+    expect(screen.getByText('Could not load this directory.')).toHaveAttribute(
+      'title',
+      'Error: Docs folder still denied'
+    )
+    expect(screen.getByRole('button', { name: 'Retry folder' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry folder' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…')
+    await complete(recoveredRetry, [entry('docs/recovered.txt')])
+    expect(screen.getByRole('button', { name: 'recovered.txt' })).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    for (const call of [2, 3, 4]) {
+      expect(mocks.list).toHaveBeenNthCalledWith(call, {
+        rootId: 'primary',
+        rootPath: '/workspace/project',
+        relativePath: 'docs',
+      })
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'docs' }))
+    expect(screen.queryByRole('button', { name: 'recovered.txt' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'docs' }))
+    expect(screen.getByRole('button', { name: 'recovered.txt' })).toBeVisible()
+    expect(mocks.list).toHaveBeenCalledTimes(4)
+  })
+
+  it.each(['success', 'failure'] as const)(
+    'ignores a retry %s after switching to another workspace with the same root ID',
+    async (outcome) => {
+      const retry = deferred<AgentWorkspaceEntry[]>()
+      mocks.list
+        .mockRejectedValueOnce(new Error('Old folder unavailable'))
+        .mockReturnValueOnce(retry.promise)
+        .mockResolvedValueOnce([entry('current.txt')])
+      const view = render(files(workspace('/workspace/old')))
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Retry folder' }))
+      expect(screen.getByRole('status')).toHaveTextContent('Loading…')
+      expect(mocks.list).toHaveBeenNthCalledWith(2, {
+        rootId: 'primary',
+        rootPath: '/workspace/old',
+        relativePath: undefined,
+      })
+      view.rerender(files(workspace('/workspace/new')))
+      expect(await screen.findByRole('button', { name: 'current.txt' })).toBeVisible()
+
+      if (outcome === 'success') {
+        await complete(retry, [entry('obsolete.txt')])
+      } else {
+        await fail(retry, 'Obsolete retry denied')
+      }
+      expect(screen.getByRole('button', { name: 'current.txt' })).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'obsolete.txt' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByText('Loading…')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Collapse Project' })).toHaveAttribute(
+        'title',
+        '/workspace/new'
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'current.txt' }))
+      expect(useWorkspacePreviewStore.getState().tabs).toEqual([
+        expect.objectContaining({
+          rootId: 'primary',
+          rootPath: '/workspace/new',
+          relativePath: 'current.txt',
+        }),
+      ])
+    }
+  )
 })
