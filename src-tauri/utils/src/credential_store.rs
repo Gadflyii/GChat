@@ -14,6 +14,8 @@ pub enum Error {
     Unavailable,
     Missing,
     InvalidData,
+    InvalidCredential,
+    CredentialTooLarge,
     Conflict,
 }
 impl std::fmt::Display for Error {
@@ -24,6 +26,8 @@ impl std::fmt::Display for Error {
             Self::Unavailable => "Secure storage did not respond. Restore the selected provider and retry.",
             Self::Missing => "A referenced credential is missing. Recover it or explicitly reconnect before migrating.",
             Self::InvalidData => "The passphrase is incorrect or the encrypted vault is damaged.",
+            Self::InvalidCredential => "Secure storage contains invalid or damaged credential data.",
+            Self::CredentialTooLarge => "The credential exceeds the secure store's size limit.",
             Self::Conflict => "Secure storage changed. Retry with the current store.",
         })
     }
@@ -34,6 +38,12 @@ fn native_error(error: keyring::Error) -> Error {
         keyring::Error::NoEntry => Error::Missing,
         keyring::Error::NoStorageAccess(_) => Error::Locked,
         keyring::Error::Ambiguous(_) => Error::Conflict,
+        keyring::Error::TooLong(_, _) if cfg!(target_os = "windows") => Error::CredentialTooLarge,
+        keyring::Error::BadEncoding(_) | keyring::Error::Invalid(_, _)
+            if cfg!(target_os = "windows") =>
+        {
+            Error::InvalidCredential
+        }
         keyring::Error::BadEncoding(_)
         | keyring::Error::TooLong(_, _)
         | keyring::Error::Invalid(_, _) => Error::InvalidData,

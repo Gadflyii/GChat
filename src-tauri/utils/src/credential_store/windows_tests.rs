@@ -55,7 +55,7 @@ impl Native for MemoryNative {
         let mut records = self.0.lock().unwrap();
         records.write_lengths.push(bytes.len());
         if bytes.len() > 2560 {
-            return Err(Error::InvalidData);
+            return Err(Error::InvalidCredential);
         }
         let manifest = !reference.account.contains(':');
         let fail = match records.fail_write.as_mut() {
@@ -261,7 +261,7 @@ fn a_missing_committed_chunk_fails_closed_instead_of_reading_legacy() {
     let store = WindowsNative::with_backends(storage.clone(), legacy);
     store.put(&reference, &vec![5; 7000]).unwrap();
     storage.delete(&first_chunk(&storage, &reference)).unwrap();
-    assert_eq!(store.get(&reference), Err(Error::InvalidData));
+    assert_eq!(store.get(&reference), Err(Error::InvalidCredential));
 }
 
 #[test]
@@ -274,13 +274,22 @@ fn a_tampered_committed_chunk_fails_closed_instead_of_reading_legacy() {
     store.put(&reference, &vec![6; 7000]).unwrap();
     let chunk = first_chunk(&storage, &reference);
     storage.0.lock().unwrap().values.get_mut(&chunk).unwrap()[0] ^= 1;
-    assert_eq!(store.get(&reference), Err(Error::InvalidData));
+    assert_eq!(store.get(&reference), Err(Error::InvalidCredential));
 }
 
 #[cfg(windows)]
 #[test]
 fn windows_native_oversized_synthetic_credentials_round_trip_and_delete() {
     use rand::RngCore;
+
+    assert_eq!(
+        super::super::native_error(keyring::Error::TooLong("secret".into(), 2560)),
+        Error::CredentialTooLarge
+    );
+    assert_eq!(
+        super::super::native_error(keyring::Error::BadEncoding(vec![0xff])),
+        Error::InvalidCredential
+    );
 
     struct Cleanup(Reference);
     impl Drop for Cleanup {
