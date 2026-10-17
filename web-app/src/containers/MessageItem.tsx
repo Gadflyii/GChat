@@ -621,7 +621,11 @@ export const MessageItem = memo(
                 role="button"
                 tabIndex={0}
                 disabled={!selectedModel}
-                title={t('common:editMessage')}
+                title={
+                  selectedModel
+                    ? t('common:editMessage')
+                    : t('common:editMessageNeedsModel')
+                }
                 aria-label={t('common:editMessage')}
                 onClick={() => setIsEditing(true)}
                 onKeyDown={(e) => {

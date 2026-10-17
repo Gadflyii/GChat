@@ -12,7 +12,7 @@ it('requires review and preserves the source message when saving a memory', asyn
       messageId="message-one"
     />
   )
-  fireEvent.click(screen.getByRole('button', { name: 'Remember this' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save to Memory' }))
   expect(memoryCommand).not.toHaveBeenCalled()
   fireEvent.change(screen.getByLabelText('Title'), {
     target: { value: 'Project test command' },

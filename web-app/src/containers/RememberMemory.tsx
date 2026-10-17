@@ -31,6 +31,7 @@ export function RememberMemory({
       <Button
         size="sm"
         variant="ghost"
+        title="Save a reviewed note from this message to GChat Memory"
         onClick={() => {
           setTitle(text.trim().split('\n')[0].slice(0, 80))
           setContent(text.slice(0, 2000))
@@ -38,7 +39,7 @@ export function RememberMemory({
           setOpen(true)
         }}
       >
-        Remember this
+        Save to Memory
       </Button>
       <Dialog
         open={open}
@@ -48,7 +49,7 @@ export function RememberMemory({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remember this</DialogTitle>
+            <DialogTitle>Save to Memory</DialogTitle>
             <DialogDescription>
               Review a durable fact before saving. Keep only useful, verified
               information; never passwords or secrets.{' '}
