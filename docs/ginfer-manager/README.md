@@ -36,9 +36,9 @@ own Host on port 46543, displayed the collision notice and retained loopback-onl
 sharing. After normal desktop close, normal idle-Host stop and ordinary reopen,
 the GUI connected to the same own Host identity and persisted port. Both TLS
 identities remained unchanged and the independent Host stayed reachable.
-No model, Ensure, Engine test or GPU workload ran. Native Windows and actual
-cross-OS coexistence remain open; this result closes only the current-package
-Linux collision/reopen leaf.
+No model, Ensure, Engine test or GPU workload ran. This result closes only the
+current-package Linux collision/reopen leaf; partial native Windows and actual
+cross-OS runtime evidence follows.
 
 The initial locator-only fixture selected default port 7443 and is invalid
 collision evidence. Normal shutdown followed by setting the private Host state's
@@ -50,37 +50,51 @@ result and short summary: `/ai/gchat/out/c7-host-port-collision-20261017/`.
 Package receipt:
 `/ai/gchat/out/linux-rc-final-20261017/current-0b3aa523c-4f451dded/package-result.json`.
 
-### Remaining Windows/cross-OS leaf
+### Native Windows/cross-OS runtime leaf — October 17
 
-Bubbs resumed C7's leaf at 11:39Z after Ron cleared the Windows prompt.
-Gchat2 is refreshing the RC from current main; its literal install-done and
-local-resource handoff select the installed producer and execution window.
-C7 has no running fixture, Host, GUI, model or resource booking.
+Bubbs lifted the Windows hold at 23:31Z on October 17 after Ron closed his
+hidden desktop. The current instruction requires a private test location, no NSIS
+installation, no shared application data and cleanup by exact PID. The retained
+Windows RC is GChat `ed68c7443` / Engine `e2282c336`; source tests and the accepted
+Linux collision/reopen evidence above will be reused.
 
-Use one genuine Linux/WSL Host on an owned root and nondefault loopback port,
-first confirming that Windows can actually reach that listener and cannot bind
-the same Windows loopback port. WSL forwarding can provide reachability without
-occupying a Windows listener; that alone is not collision evidence. If it does
-not block the bind, use a separate genuine Windows Host for the native collision
-and retain the Linux Host for the actual cross-OS identity/coexistence check.
-The installed
-Windows desktop must keep its own Windows root, UUID and certificate, select
-and persist a free management port, show the collision notice, and reconnect
-with those same values after normal close/idle-Host stop/reopen. The Linux Host
-must remain reachable with its original identity and TLS certificate. Sharing
-stays off; no model, Ensure or Engine workload is needed. This one coexistence
-case supplies the native Windows and cross-OS leaves without repeating the
-accepted Linux-only result or source tests.
+The retained packaged Host binaries ran with explicit private absolute data roots.
+A native Windows foreign Host occupied port 59566; another native root selected
+and saved 59567 with the expected collision notice. Reconnecting to that live root
+preserved its Host UUID, boot UUID and endpoint. Windows also reached the pinned
+Linux Host on 46673 and could not exclusively bind that port. A third native root
+collided there, selected and saved 53463, and reported its own Windows identity.
+All four roots had distinct Host UUIDs and TLS pins. Sharing stayed disabled and
+instances stayed empty. No desktop, NSIS installer, model, Engine process or GPU
+workload ran; deliberately absent Engine paths allowed passive inventory only.
 
-The Windows private-root route must be verified before launch: desktop settings
-use Windows Known Folder APIs, so process-local `APPDATA`/`LOCALAPPDATA`
-overrides alone do not establish isolation. Obtain Gchat2's verified private
-settings/data setup or coordinate a bounded ordinary Settings switch and restore.
-Explicit Host `--data-dir` is supported. Change the occupied preferred origin
-only in the stopped private Host's `host.json`; locator-only seeding remains
-invalid. Preserve Ron's Host, data and default listeners. Next unresolved step:
-receive the installed RC identity, root setup and actual local handoff from
-Gchat2, then book the CPU-only leaf at its actual start.
+The installed service-owner launcher accepted the real native root and rejected a
+private copy of its authority with the production root/platform identity error.
+PS5.1's ErrorActionPreference=Stop intercepted that expected stderr before the
+exit code was collected; follow-up commands must collect expected native failures
+explicitly. The immediate compute handoff then stopped this leaf before normal
+idle-stop/reopen persistence and copied-Linux/independent wrong-platform rejection.
+Those runtime checks remain open; prior source tests were reused, not rerun.
+
+Ordinary Windows desktop configured-root connection and visible collision notice
+also remain open. Known Folder settings, window state, MCP locks and vector DB,
+plus current-user credentials, are not isolated by APPDATA/LOCALAPPDATA overrides.
+The packaged desktop has no general private-root override. No GChat desktop or
+Manager was launched, and Ron's install and shared application data were not used.
+Next action: establish a fully private desktop route or separately authorized user
+profile, then complete the remaining runtime and ordinary desktop acceptance.
+
+Current inventory: owned worktree
+`/ai/gchat-worktrees/c7-host-port-collision-20261017`, branch
+`test/c7-host-port-collision-20261017`; accepted Linux result is retained above.
+Disposed Windows root: `C:\Users\Ron\gchat-c7-port-collision-20261017-2334`.
+Sanitized result JSON and short summary only:
+`/ai/gchat/out/c7-host-port-collision-windows-20261017/`.
+Linux Host PID1624354 and Windows PIDs36520/36192/66388 stopped by verified exact
+PID; wrapper1624347 exited. No private Host processes or test-port listeners
+remained at 23:40:48Z. Booking1392 was cancelled and resources returned23:40Z.
+Private runtime roots, binary copies, tokens and keys were removed; retained RC
+donors remain untouched. No live job, retained build or disposable runtime remains.
 
 ## Installed model GPU selection
 
