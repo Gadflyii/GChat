@@ -3,12 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WorkspacePicker } from '../WorkspacePicker'
 import { invoke } from '@tauri-apps/api/core'
 
-const mocks = vi.hoisted(() => ({ resolve: vi.fn() }))
+const mocks = vi.hoisted(() => ({ resolve: vi.fn(), memory: vi.fn() }))
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }))
 vi.mock('@/services/agent/tauri', () => ({
   resolveConversationWorkspaceRoot: mocks.resolve,
 }))
+vi.mock('@/lib/memory', () => ({ memoryCommand: mocks.memory }))
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -211,4 +212,144 @@ describe('Workspace folder Browse', () => {
       expect(JSON.parse(localStorage.getItem(recentKey)!)).toEqual(['/remembered'])
     }
   )
+})
+
+describe('Workspace AGENTS.md instructions', () => {
+  it('reads once for rapid clicks and shows the returned instructions after the pending state', async () => {
+    const instructions = deferred<{ text: string }>()
+    mocks.memory.mockReturnValue(instructions.promise)
+    render(<WorkspacePicker value="/workspace/current" onChange={vi.fn()} />)
+
+    const viewInstructions = await screen.findByRole('button', {
+      name: 'View AGENTS.md',
+    })
+    act(() => {
+      viewInstructions.click()
+      viewInstructions.click()
+    })
+    expect(mocks.memory).toHaveBeenCalledExactlyOnceWith('instructions', {
+      workspace: '/workspace/current',
+    })
+    expect(
+      screen.getByRole('button', { name: 'Reading AGENTS.md…' })
+    ).toBeDisabled()
+
+    await complete(instructions, { text: 'Run the project checks before saving.' })
+    expect(screen.getByText('Run the project checks before saving.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'View AGENTS.md' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('explains that instructions are optional when the selected folder has no AGENTS.md', async () => {
+    const instructions = deferred<{ text: string }>()
+    mocks.memory.mockReturnValue(instructions.promise)
+    render(<WorkspacePicker value="/workspace/current" onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View AGENTS.md' }))
+    await complete(instructions, { text: '' })
+
+    expect(
+      screen.getByText('No AGENTS.md file; workspace instructions are optional.')
+    ).toBeVisible()
+    expect(screen.getByRole('button', { name: 'View AGENTS.md' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps a failed read retryable and clears its error while reading again', async () => {
+    const failed = deferred<{ text: string }>()
+    const retry = deferred<{ text: string }>()
+    mocks.memory
+      .mockReturnValueOnce(failed.promise)
+      .mockReturnValueOnce(retry.promise)
+    render(<WorkspacePicker value="/workspace/current" onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View AGENTS.md' }))
+    await act(async () => {
+      failed.reject(new Error('Instructions file access denied'))
+      await failed.promise.catch(() => undefined)
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Instructions file access denied'
+    )
+    expect(screen.getByRole('button', { name: 'View AGENTS.md' })).toBeEnabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'View AGENTS.md' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Reading AGENTS.md…' })
+    ).toBeDisabled()
+    await complete(retry, { text: 'Recovered workspace instructions.' })
+
+    expect(screen.getByText('Recovered workspace instructions.')).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'View AGENTS.md' })).toBeEnabled()
+    expect(mocks.memory).toHaveBeenCalledTimes(2)
+    expect(mocks.memory).toHaveBeenLastCalledWith('instructions', {
+      workspace: '/workspace/current',
+    })
+  })
+
+  it.each(['success', 'rejection'] as const)(
+    'ignores an obsolete instructions %s after the workspace changes and keeps the new instructions',
+    async (outcome) => {
+      const oldInstructions = deferred<{ text: string }>()
+      const currentInstructions = deferred<{ text: string }>()
+      mocks.memory
+        .mockReturnValueOnce(oldInstructions.promise)
+        .mockReturnValueOnce(currentInstructions.promise)
+      const view = render(
+        <WorkspacePicker value="/workspace/old" onChange={vi.fn()} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'View AGENTS.md' }))
+
+      view.rerender(
+        <WorkspacePicker value="/workspace/new" onChange={vi.fn()} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'View AGENTS.md' }))
+      expect(mocks.memory).toHaveBeenLastCalledWith('instructions', {
+        workspace: '/workspace/new',
+      })
+      await complete(currentInstructions, {
+      text: 'Instructions for the new workspace.',
+    })
+
+      if (outcome === 'success') {
+        await complete(oldInstructions, { text: 'Obsolete workspace instructions.' })
+      } else {
+        await act(async () => {
+          oldInstructions.reject(new Error('Obsolete instructions denied'))
+          await oldInstructions.promise.catch(() => undefined)
+        })
+      }
+
+      expect(screen.getByText('Instructions for the new workspace.')).toBeVisible()
+      expect(
+      screen.queryByText('Obsolete workspace instructions.')
+    ).not.toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'View AGENTS.md' })).toBeEnabled()
+      expect(mocks.memory).toHaveBeenCalledTimes(2)
+    }
+  )
+
+  it('does not publish pending instructions after the picker unmounts', async () => {
+    const instructions = deferred<{ text: string }>()
+    mocks.memory.mockReturnValue(instructions.promise)
+    const view = render(
+      <WorkspacePicker value="/workspace/current" onChange={vi.fn()} />
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'View AGENTS.md' }))
+    expect(
+      screen.getByRole('button', { name: 'Reading AGENTS.md…' })
+    ).toBeDisabled()
+
+    view.unmount()
+    await complete(instructions, { text: 'Instructions from the closed picker.' })
+
+    expect(
+      screen.queryByText('Instructions from the closed picker.')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.memory).toHaveBeenCalledTimes(1)
+  })
 })
