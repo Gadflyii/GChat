@@ -321,12 +321,14 @@ export default class ginfer_extension extends AIEngine {
         (item) => item.modelId === modelId
       )
       if (!location) throw new Error(`Model ${modelId} does not exist`)
+      let modelLabel = modelId
       let weightsPath = await joinPath([location.modelDir, 'model.ginfer'])
       const modelYmlPath = location.manifestPath
       if (await fs.existsSync(modelYmlPath)) {
         const modelConfig = await invoke<GinferModelConfig>('read_yaml', {
           path: modelYmlPath,
         })
+        if (modelConfig.name) modelLabel = modelConfig.name
         if (modelConfig.model_path) {
           weightsPath = await joinPath([
             await getJanDataFolderPath(),
@@ -336,7 +338,7 @@ export default class ginfer_extension extends AIEngine {
       }
       if (!(await fs.existsSync(weightsPath))) {
         throw new Error(
-          `Model weights not found for ${modelId} (looked at ${weightsPath})`
+          `Model weights not found for ${modelLabel} (looked at ${weightsPath})`
         )
       }
 
@@ -359,7 +361,7 @@ export default class ginfer_extension extends AIEngine {
         })
       } catch (e: any) {
         const msg = e && typeof e.message === 'string' ? e.message : String(e)
-        throw new Error(`Failed to load ${modelId}: ${msg}`)
+        throw new Error(`Failed to load ${modelLabel}: ${msg}`)
       }
 
       return session

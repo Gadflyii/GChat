@@ -353,7 +353,7 @@ async fn load_on_host_inner(
         ).await;
     }
     if config.use_profile_defaults || config.max_context == 0 || config.max_concurrency == 0 {
-        return Err("No qualified automatic profile is available. Select a qualified profile in Engines, or specify both context and concurrency as custom settings.".into());
+        return Err("No qualified automatic profile is available for this model. Open GInfer Hosts and choose Custom server settings to pick a context size and number of concurrent requests, or select a saved hardware profile.".into());
     }
     let occupied: BTreeSet<&str> = snapshot["instances"]
         .as_array()
