@@ -88,6 +88,24 @@ organization requires approval, ask its administrator to approve the requested
 permissions, then retry. Permission and license failures remain distinct from
 network, throttling and server failures.
 
+The Microsoft account list contains accounts connected to GChat. Accounts signed
+in to Windows or other Microsoft applications are not imported automatically.
+**Refresh Microsoft accounts** reloads GChat's connected account list and reports
+how many accounts are available, including when the list is empty; it does not
+start sign-in or discover operating-system accounts. Choose **Sign in with
+Microsoft** to connect an account, then explicitly select it. **Check assigned
+Cloud PCs** becomes available only after the selected account has read-only
+Cloud PC permission and does not need reconnection. For a paired service, the
+accounts belong to the service computer; connect Microsoft there, then refresh.
+
+The browser's **Sign-in received** page confirms that GChat received the callback,
+not that the connection has been saved. Return to GChat and check sign-in status.
+Only **Microsoft account connected** confirms completion. If GChat reports a
+protected credential-store or vault failure, the connection has not been saved;
+the account list can remain empty and Cloud PC discovery stays unavailable.
+Resolve the credential-store problem before retrying sign-in. An accepted
+Microsoft login alone does not establish that GChat can save its credential.
+
 If Microsoft sign-in is unavailable in a build, GChat explains this and disables
 sign-in. Install a release that includes Microsoft sign-in; users do not need to
 find or create an app ID. Development or explicitly unconfigured builds can

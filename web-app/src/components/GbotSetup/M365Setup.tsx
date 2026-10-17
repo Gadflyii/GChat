@@ -88,6 +88,15 @@ export default function M365Setup({
             .toLowerCase() === 'cloudpc.read.all'
       )
   )
+  const checkPrerequisite = !account
+    ? remote
+      ? 'Connect Microsoft to GChat on the service computer, then choose an account above.'
+      : 'First sign in to GChat, then choose a connected work or school account above.'
+    : account.needs_reconnect
+      ? 'Reconnect this account and allow read-only Cloud PC access before checking assigned PCs.'
+      : !permission
+        ? 'Allow read-only Cloud PC access for this account before checking assigned PCs.'
+        : undefined
   const waiting = flow?.status === 'waiting'
   const disabled = working || waiting
   const pc = pcs?.find((item) => item.id === pcId)
@@ -123,11 +132,22 @@ export default function M365Setup({
       }
     }
   }
-  const refreshAccounts = async () => {
+  const refreshAccounts = async (announce = false) => {
     const next = remote
       ? await gbot<ConnectorAccountsView>('setup/m365/accounts')
       : await connectorAccounts()
-    if (active.current) setView(next)
+    if (!active.current) return
+    setView(next)
+    if (announce) {
+      const count = next.accounts.filter(
+        (item) => item.provider === 'microsoft'
+      ).length
+      setNotice(
+        count === 0
+          ? 'Microsoft accounts refreshed. No accounts are connected to GChat yet.'
+          : `Microsoft accounts refreshed. ${count} connected ${count === 1 ? 'account is' : 'accounts are'} available. Choose an account above.`
+      )
+    }
   }
   const acceptFlow = async (next: ConnectorAuthFlow) => {
     if (!active.current) return
@@ -152,6 +172,11 @@ export default function M365Setup({
         Microsoft’s client to prepare the connection. Gbot desktop viewing and
         control still need to be connected.
       </p>
+      <p className="text-muted-foreground">
+        This list shows Microsoft accounts connected to GChat. Accounts signed
+        in to Windows or other Microsoft apps are not added automatically.
+        Connect an account with Microsoft sign-in to add it to this list.
+      </p>
       {!view && !error && <p role="status">Loading Microsoft accounts…</p>}
       {remote && (
         <p role="status" className="text-muted-foreground">
@@ -167,7 +192,7 @@ export default function M365Setup({
         onClick={() =>
           void perform(async () => {
             setPcs(undefined)
-            await refreshAccounts()
+            await refreshAccounts(true)
           })
         }
       >
@@ -191,6 +216,14 @@ export default function M365Setup({
       )}
       {view && (
         <>
+          {accounts.length === 0 && (
+            <p>
+              No Microsoft accounts are connected to GChat yet.{' '}
+              {remote
+                ? 'Connect Microsoft on the service computer, then refresh here.'
+                : 'Choose Sign in with Microsoft below to add an account.'}
+            </p>
+          )}
           <label className="block space-y-1">
             Microsoft account
             <select
@@ -321,6 +354,9 @@ export default function M365Setup({
         type="button"
         variant="outline"
         disabled={disabled || !permission}
+        aria-describedby={
+          checkPrerequisite ? `${id}-cloud-pc-prerequisite` : undefined
+        }
         onClick={() =>
           void perform(async () => {
             setPcs(undefined)
@@ -335,6 +371,11 @@ export default function M365Setup({
       >
         Check assigned Cloud PCs
       </Button>
+      {checkPrerequisite && (
+        <p id={`${id}-cloud-pc-prerequisite`} className="text-muted-foreground">
+          {checkPrerequisite}
+        </p>
+      )}
       {removed && (
         <p role="alert">
           The saved Cloud PC is no longer assigned to this account. Choose an
