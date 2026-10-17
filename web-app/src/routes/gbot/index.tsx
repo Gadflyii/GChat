@@ -99,7 +99,6 @@ function GbotPage() {
   const refresh = useCallback(async () => {
     if (stopped.current) return
     const version = ++refreshVersion.current
-    setSetups(undefined)
     try {
       const target = await getGbotServiceTarget()
       if (stopped.current || version !== refreshVersion.current) return
@@ -136,6 +135,7 @@ function GbotPage() {
         setSetups(kvm)
       } catch (cause) {
         if (stopped.current || version !== refreshVersion.current) return
+        setSetups(undefined)
         setSetupError(String(cause))
       }
       if (!setupOffered.current && kvm !== undefined) {
@@ -164,6 +164,7 @@ function GbotPage() {
       }
     } catch (cause) {
       if (stopped.current || version !== refreshVersion.current) return
+      setSetups(undefined)
       setError(String(cause))
     } finally {
       if (!stopped.current && version === refreshVersion.current)
@@ -225,6 +226,7 @@ function GbotPage() {
       setServiceTarget(serviceDraft)
       setChoosingService(false)
       setState(undefined)
+      setSetups(undefined)
       setTasks([])
       setApprovals([])
       setSelected('')
