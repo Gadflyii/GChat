@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { engineCommand, type EngineHost, type NearbyHost, type EngineSnapshot } from '@/services/engines'
 import { engineAlias } from '@/services/engines'
+import { hostInstanceName } from '@/lib/engine-host-labels'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
 
@@ -23,7 +24,7 @@ function projectHostModels(hosts: EngineHost[], snapshots: Record<string, Engine
     models: hosts.filter(host => !errors[host.host_id]).flatMap(host => (snapshots[host.host_id]?.instances ?? [])
       .filter(instance => instance.status === 'ready')
       .map(instance => ({ id: engineAlias(host.host_id, instance.instance_id),
-        displayName: `${instance.display_name} — ${snapshots[host.host_id].display_name}`,
+        displayName: `${hostInstanceName(instance, snapshots[host.host_id])} — ${snapshots[host.host_id].display_name}`,
         format: 'ginfer', capabilities: ['tools', 'reasoning', ...(instance.configuration.vision ? ['vision'] : [])],
       }))),
   }

@@ -16,12 +16,18 @@ export function hostModelLabel(model: EngineModel): string {
   return `${name} · ${weights}`
 }
 
-export function hostInstanceLabel(instance: EngineInstance, snapshot: EngineSnapshot): string {
+/** The instance's name: its own, unless the Host only filled in an id or the package identity. */
+export function hostInstanceName(instance: EngineInstance, snapshot: EngineSnapshot): string {
   const modelId = instance.profile?.model_id ?? instance.upstream_model_id
-  const model = snapshot.models.find((candidate) => candidate.id === modelId)
+  const model = snapshot.models?.find((candidate) => candidate.id === modelId)
   const generated = !instance.display_name || instance.display_name === modelId ||
-    instance.display_name === instance.instance_id || /[a-f0-9]{24,}|^[a-f0-9-]{36}$/i.test(instance.display_name)
-  const name = generated ? (model ? hostModelLabel(model) : 'Model unavailable') : instance.display_name
+    instance.display_name === instance.instance_id || /[a-f0-9]{24,}|^[a-f0-9-]{36}$/i.test(instance.display_name) ||
+    (!!model && instance.display_name === `${model.metadata.identity.model_id}/${model.metadata.identity.weights_id}`)
+  return generated ? (model ? hostModelLabel(model) : 'Model unavailable') : instance.display_name
+}
+
+export function hostInstanceLabel(instance: EngineInstance, snapshot: EngineSnapshot): string {
+  const name = hostInstanceName(instance, snapshot)
   const config = instance.profile ?? instance.configuration
   const gpuNumbers = config.gpu_uuids.map((uuid) => {
     const index = snapshot.gpus.findIndex((gpu) => gpu.uuid === uuid)
