@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { releaseReadiness, validRelease, type ModelRelease } from './model-release'
+import { formatModelBytes, releaseReadiness, validRelease, type ModelRelease } from './model-release'
 
 const release: ModelRelease = { name: 'Fixture', identity: { model_id: 'fixture', weights_id: 'q4' },
   url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64),
@@ -21,5 +21,9 @@ describe('released model recommendations', () => {
     expect(releaseReadiness(undefined, [gpu]).reason).toContain('not published')
     expect(releaseReadiness(release, [{ ...gpu, compute_capability: undefined }]).available).toBe(false)
     expect(releaseReadiness(release, []).available).toBe(false)
+  })
+  it('shows sizes below 1 GiB in MiB so a starting download is not 0.0 GiB', () => {
+    expect(formatModelBytes(50 * 1024 ** 2)).toBe('50 MiB')
+    expect(formatModelBytes(10667321600)).toBe('9.9 GiB')
   })
 })
