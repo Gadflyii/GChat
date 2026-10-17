@@ -1,5 +1,27 @@
 # GChat installer refresh
 
+## Known issues
+
+For the October 17 release candidate:
+
+- **Complex code reviews:** Workers using 27B models can misstate fine code details
+  even after reading the files. In one matched review per Qwen 27B package, INT
+  gave a more accurate answer than NVFP4; both made factual errors. Check important
+  conclusions against the source. This small comparison does not establish a
+  general ranking of the packages.
+- **Microsoft and Google sign-in:** Live sign-in, consent, reconnect and account
+  operations still need end-to-end checks on Linux and Windows. Microsoft uses
+  GChat's built-in sign-in for work, school and personal accounts; some services
+  require a work or school account. Google requires your own Desktop OAuth client.
+  Follow the [account setup guide](../workspace-connectors/operations.md).
+- **Windows validation:** Changing the App Data location, selecting the fastest
+  of several drives, checking startup settings for imported models, and retaining
+  credentials across a restart still need installed Windows checks. Source changes
+  for these paths await that confirmation. Active agent recovery, Gbot,
+  and physical checks on the other supported GPU families also remain unqualified.
+  The initial [Windows gate](windows-gate-20261016.md) covers a narrower set of
+  checks on an RTX 5090; its results do not qualify every Windows feature.
+
 ## October 16 Windows gate — functional checks complete, findings retained
 
 The [Windows gate packet](windows-gate-20261016.md) binds the current-user NSIS installer to GChat `dcb11c14` and Engine `c440179a` (SM120a), records the upgrade and fresh application-state checks, and lists each PASS, failure and unqualified check. One model started and answered one request; custom-root Host migration and normal detached Host shutdown remain findings. The packet also records the 85m7.168s natural profile, 2365ms native reuse, functional long-chat render and actual idle measurement.
