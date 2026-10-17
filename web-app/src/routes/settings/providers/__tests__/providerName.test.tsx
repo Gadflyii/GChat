@@ -38,7 +38,11 @@ vi.mock('@/containers/dialogs/DeleteModel', () => ({ DialogDeleteModel: () => nu
 vi.mock('@/containers/FavoriteModelAction', () => ({ FavoriteModelAction: () => null }))
 vi.mock('@/containers/dialogs/DeleteProvider', () => ({ default: () => null }))
 vi.mock('@/containers/dialogs/AddModel', () => ({ DialogAddModel: () => null }))
-vi.mock('@/hooks/useModelLoad', () => ({ useModelLoad: () => ({ setModelLoadError: vi.fn() }) }))
+vi.mock('@/hooks/useModelLoad', () => ({
+  useModelLoad: Object.assign(() => ({ setModelLoadError: vi.fn() }), {
+    getState: () => ({ modelLoadError: undefined, setModelLoadError: vi.fn() }),
+  }),
+}))
 vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: () => ({
     getProviderByName: () => state.provider,

@@ -871,3 +871,23 @@ lasted over a minute came from a session without its own unlocked keyring. In a 
 with private dbus, HOME, XDG_RUNTIME_DIR and an unlocked keyring, Check secure storage
 returns "Secure storage is ready." within seconds. Test launches must set the private
 `XDG_RUNTIME_DIR` before starting `gnome-keyring-daemon`, or the daemon talks to the real one.
+
+## Send stays disabled after a failed load — claude-gchat-rc
+
+`GUI-CHAT-STALE-LOAD-ERROR-SEND-20261017` was observed in the private Linux RC
+acceptance of GChat `87628b891` / Engine `e2282c336`. An Installed Load of
+Flash pure 2-bit failed (no qualified automatic profile for the RTX 5090), and
+the same model was then started successfully from GInfer Hosts custom settings.
+New Chat still kept Send disabled with no message while the sidebar said Model
+loaded: the stored load error for the installed model id was never cleared,
+because the Hosts start runs outside `switchToModel` and the running instance
+appears under its Host instance id.
+
+A stored load error now describes only the latest failed start: it is cleared
+when a model newly becomes active through any load path or when the server
+status changes. A new failure is still recorded after its status update.
+
+Owned tree: `/ai/gchat-worktrees/stale-load-error-clear-20261017`, branch
+`fix/gchat-stale-load-error-clear-20261017`, from main `dbec106e4`.
+Acceptance: focused app-state, provider-page and switch-model tests, then one
+`make verify`; packaged retest in the next Linux RC.
