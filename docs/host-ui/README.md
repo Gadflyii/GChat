@@ -396,6 +396,10 @@ If a generated HTML preview cannot load, GChat shows an error. Choose
 **Retry preview** to try again. **Code** remains available so you can read
 the HTML while the preview is unavailable.
 
+When you make the window narrower, the preview panel shrinks so the chat
+keeps room to work in. A panel you already made narrower is never widened
+automatically.
+
 ## Copying generated HTML
 
 Choose **Copy** to copy the generated HTML source. If copying fails, GChat
