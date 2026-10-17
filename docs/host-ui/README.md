@@ -30,20 +30,24 @@ Observed ordinary behavior:
   `fix/c7-hardware-live-stats-wording-20261017`, implementation `2742956bd`,
   across all four translations; its focused and full gates are separate.
 
-The genuine empty catalog and absence of installed models leave download
-verification, Load/Unload, measured profiling and benchmark execution
-**unqualified**. No catalog/model was injected and no expensive operation was
-substituted. This is not Windows/RC or current Engine evidence. Findings and
-limits were sent to Gchat 3's shared GUI list. Windows host-port collision remains
-a separate leaf awaiting Gchat 2's installed-app handoff.
+The initial empty-catalog pass leaves download verification, Load/Unload,
+measured profiling and benchmark execution **unqualified**. At 16:05Z October 17,
+Bubbs authorized continuing those real flows with a private development build
+and a local test catalog listing current NAS packages with their real checksums.
+This catalog is unpublished and does not change the release URL. Next: bind the
+existing catalog schema and exact NAS package metadata, prepare the private build,
+then admit download/profile/load operations on booked resources. Preserve the
+normal checksum, identity and lifecycle checks; no public-catalog qualification
+is implied. Findings and limits go to Gchat 3's shared GUI list. Windows host-port
+collision remains a separate leaf awaiting Gchat 2's installed-app handoff.
 
 Owned source is `/ai/gchat-worktrees/c7-models-hub-engine-hardware-20261017`,
 branch `test/c7-models-hub-engine-hardware-20261017`. Concise rendered results
 are `/ai/gchat/out/c7-models-hub-engine-hardware-20261017/{result.json,summary.md}`.
 Normal desktop close and termination of its verified idle private Host completed;
 returned 16:05Z, booking 1357 canceled. Owned runtime/private copies and transient captures are retired; Codex 3's
-immutable donor remains with its owner. Next: finish the separate wording gate; parent execution leaves need
-an actual catalog/model and resource admission.
+immutable donor remains with its owner. The separate wording gate is running on
+S1 CPU48–55; the approved private-catalog continuation has no live job yet.
 
 ## Global conversation deletion — C7
 
