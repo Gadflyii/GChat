@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { IconLoader2 } from '@tabler/icons-react'
 import { FileTextIcon } from '@/components/animated-icon/file-text'
 import { useTranslation } from '@/i18n/react-i18next-compat'
@@ -21,6 +22,16 @@ export function AgentSkillSlashMenu({
   onActiveIndexChange,
 }: AgentSkillSlashMenuProps) {
   const { t } = useTranslation()
+  const activeOptionRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (open && !loading) {
+      activeOptionRef.current?.scrollIntoView?.({
+        block: 'nearest',
+        inline: 'nearest',
+      })
+    }
+  }, [activeIndex, loading, open, skills])
 
   if (!open) return null
 
@@ -44,6 +55,7 @@ export function AgentSkillSlashMenu({
           {skills.map((skill, index) => (
             <button
               key={skill.name}
+              ref={index === activeIndex ? activeOptionRef : undefined}
               type="button"
               role="option"
               aria-selected={index === activeIndex}

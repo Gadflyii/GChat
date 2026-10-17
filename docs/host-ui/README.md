@@ -108,6 +108,39 @@ cache entries, stopping offline extension installation before any tests.
 Refilling the private cache **after** root installation allowed extension setup
 to finish, followed by the still-unrun focused and full gates. Preserve this
 ordering for future offline setup; the cause and correction are in `result.json`.
+## Starting a conversation
+
+Your first **Send** creates the conversation before starting the response.
+Repeated Send actions are blocked while creation is pending. If creation fails,
+GChat shows an error and keeps your draft and attached files so you can retry.
+Once the conversation is created, GChat sends the text and files you submitted
+when you pressed Send, even if you have since edited the composer.
+
+## Sending in an existing conversation
+
+**Send** waits for GChat to finish preparing the conversation before starting
+the response. Repeated Send actions are blocked while preparation is pending.
+If preparation fails, GChat shows an error and keeps your draft and attachments
+so you can retry.
+
+Text or attachments you add while an earlier Send is pending stay in the
+composer when that preparation finishes; its completion does not clear your
+newer changes.
+
+## Choosing image or audio attachments
+
+If the image or audio file window fails, GChat shows an error and keeps your
+draft and existing attachments. Use the attachment button again to retry.
+Canceling the file window without choosing a file shows no error.
+
+If an image cannot be read, GChat names the file and asks you to choose it
+again. Your draft and other attachments stay in place.
+
+## Choosing a skill with the keyboard
+
+Type `/` in the composer to see available skills. Use the up and down arrow
+keys to choose a skill, then press Enter or Tab to select it. The selected
+skill stays visible as you move through a long list.
 
 ## Assistant save results — C7
 

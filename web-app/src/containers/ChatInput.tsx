@@ -141,8 +141,9 @@ type ChatInputProps = {
     text: string,
     files?: InitialMessageFile[],
     agentSkillName?: string,
-    agentDefinitionId?: string
-  ) => void
+    agentDefinitionId?: string,
+    documents?: Attachment[]
+  ) => void | Promise<void>
   onStop?: () => void
   chatStatus?: ChatStatus
   submissionReady?: boolean
@@ -164,6 +165,9 @@ const ChatInput = memo(function ChatInput({
   const [agentSkillTokenWidth, setAgentSkillTokenWidth] = useState(0)
   const [isFocused, setIsFocused] = useState(false)
   const [rows, setRows] = useState(1)
+  const [isSubmittingMessage, setIsSubmittingMessage] = useState(false)
+  const submittingMessageRef = useRef(false)
+  const composerLifetimeRef = useRef({})
   const serviceHub = useServiceHub()
   const abortControllers = useAppState((state) => state.abortControllers)
   const loadingModel = useAppState((state) => state.loadingModel)
@@ -239,6 +243,12 @@ const ChatInput = memo(function ChatInput({
   }
 
   const conversationKey = initialMessage ? TEMPORARY_CHAT_ID : (currentThreadId ?? TEMPORARY_CHAT_ID)
+  useLayoutEffect(() => {
+    composerLifetimeRef.current = {}
+    return () => {
+      composerLifetimeRef.current = {}
+    }
+  }, [conversationKey])
   const activeSkill = useConversationPolicy((state) => state.activeSkills[conversationKey])
   const activeDefinition = useConversationPolicy((state) => state.activeDefinitions[conversationKey])
   const { skills: agentSkills, loading: agentSkillsLoading } =
@@ -504,7 +514,9 @@ const ChatInput = memo(function ChatInput({
   const autoInlineContextRatio = useAttachments((s) => s.autoInlineContextRatio)
 
   // Derived: any document currently processing (ingestion in progress)
-  const attachmentsKey = currentThreadId ?? NEW_THREAD_ATTACHMENT_KEY
+  const attachmentsKey = initialMessage
+    ? NEW_THREAD_ATTACHMENT_KEY
+    : (currentThreadId ?? NEW_THREAD_ATTACHMENT_KEY)
   const attachments = useChatAttachments(
     useCallback(
       (state) => state.getAttachments(attachmentsKey),
@@ -553,13 +565,14 @@ const ChatInput = memo(function ChatInput({
 
   useEffect(() => {
     if (
+      !initialMessage &&
       currentThreadId &&
       lastTransferredThreadId.current !== currentThreadId
     ) {
       transferAttachments(NEW_THREAD_ATTACHMENT_KEY, currentThreadId)
       lastTransferredThreadId.current = currentThreadId
     }
-  }, [currentThreadId, transferAttachments])
+  }, [currentThreadId, initialMessage, transferAttachments])
 
   const updateAttachmentProcessing = useCallback(
     (
@@ -634,8 +647,9 @@ const ChatInput = memo(function ChatInput({
     })
   }
 
-  const handleSendMessage = async (prompt: string) => {
-    if (!submissionReady) return
+  const submitMessage = async (prompt: string) => {
+    const submittedDraft = prompt
+    const submittedLifetime = composerLifetimeRef.current
     if (isCompactCommand(prompt)) {
       if (attachments.length) {
         toast.error('Remove attachments before running /compact.')
@@ -643,7 +657,12 @@ const ChatInput = memo(function ChatInput({
       }
       if (onSubmit) await onSubmit(prompt)
       else toast.info('Nothing to compact yet.')
-      setPrompt('')
+      if (
+        composerLifetimeRef.current === submittedLifetime &&
+        usePrompt.getState().prompt === submittedDraft
+      ) {
+        setPrompt('')
+      }
       return
     }
     useConversationPolicy.getState().setActiveDefinition(conversationKey, selectedAgentDefinitionId)
@@ -719,11 +738,23 @@ const ChatInput = memo(function ChatInput({
         }))
 
       const submissionFiles = files.length > 0 ? files : undefined
-      onSubmit(prompt, submissionFiles, skillName,
-        skillName === 'agent-builder' || selectedAgentDefinitionId === 'general' ? undefined : selectedAgentDefinitionId)
-      setPrompt('')
-      setSelectedAgentSkill(null)
-      clearAttachmentsForThread(attachmentsKey)
+      await onSubmit(
+        prompt,
+        submissionFiles,
+        skillName,
+        skillName === 'agent-builder' || selectedAgentDefinitionId === 'general'
+          ? undefined
+          : selectedAgentDefinitionId,
+        attachments.filter((attachment) => attachment.type === 'document')
+      )
+      if (composerLifetimeRef.current === submittedLifetime) {
+        if (usePrompt.getState().prompt === submittedDraft) setPrompt('')
+        setSelectedAgentSkill((current) => current === selectedAgentSkill ? null : current)
+      }
+      const submittedIds = new Set(attachments.map((attachment) => attachment.id))
+      setAttachmentsForThread(attachmentsKey, (current) =>
+        current.filter((attachment) => !submittedIds.has(attachment.id))
+      )
     } else {
       // No onSubmit provided - create a new thread and navigate to it
       // Store the initial message in sessionStorage for the thread page to read
@@ -745,9 +776,8 @@ const ChatInput = memo(function ChatInput({
           url: att.dataUrl!,
         }))
 
-      // Snapshot documents synchronously before any await/navigation so the
-      // store can be cleared immediately while we still know what to forward
-      // to the new thread page.
+      // Snapshot documents before any await/navigation so later edits stay
+      // separate from the first message forwarded to the new thread page.
       const docsSnapshot = attachments
         .filter((att) => att.type === 'document')
         .map((att) => ({ ...att }))
@@ -760,13 +790,18 @@ const ChatInput = memo(function ChatInput({
         agentDefinitionId: selectedAgentDefinitionId === 'general' ? undefined : selectedAgentDefinitionId,
       }
 
-      // Clear input UI immediately so the chip and text disappear in the
-      // same frame as the click. Otherwise the chip lingers under the new
-      // thread's key (transferAttachments runs during await createThread)
-      // until processAttachmentsForSend finishes indexing the document.
-      setPrompt('')
-      setSelectedAgentSkill(null)
-      clearAttachmentsForThread(attachmentsKey)
+      // Keep the draft until conversation creation succeeds. Newer edits
+      // remain available for the next message rather than entering this one.
+      const clearSubmittedDraft = () => {
+        if (composerLifetimeRef.current === submittedLifetime) {
+          if (usePrompt.getState().prompt === submittedDraft) setPrompt('')
+          setSelectedAgentSkill((current) => current === selectedAgentSkill ? null : current)
+        }
+        const submittedIds = new Set(attachments.map((attachment) => attachment.id))
+        setAttachmentsForThread(attachmentsKey, (current) =>
+          current.filter((attachment) => !submittedIds.has(attachment.id))
+        )
+      }
 
       // #region agent log
       ttftPreBegin('home-submit-click', {
@@ -815,6 +850,7 @@ const ChatInput = memo(function ChatInput({
         // image data URLs can exceed the per-origin quota and silently abort
         // navigation with QuotaExceededError.
         useInitialMessage.getState().set(TEMPORARY_CHAT_ID, messagePayload)
+        clearSubmittedDraft()
         if (conversationKey !== TEMPORARY_CHAT_ID) {
           useConversationPolicy
             .getState()
@@ -873,6 +909,7 @@ const ChatInput = memo(function ChatInput({
         ttftPreBegin('after-createThread', { newThreadId: newThread.id })
         // #endregion
 
+        clearSubmittedDraft()
         // Clear selected assistant after creating thread
         setSelectedAssistant(undefined)
 
@@ -937,6 +974,23 @@ const ChatInput = memo(function ChatInput({
           params: { threadId: newThread.id },
         })
       }
+    }
+  }
+
+  const handleSendMessage = async (draft: string) => {
+    if (!submissionReady || submittingMessageRef.current) return
+    // A ref also blocks repeated Enter/click events before React renders.
+    submittingMessageRef.current = true
+    setIsSubmittingMessage(true)
+    try {
+      await submitMessage(draft)
+    } catch (error) {
+      toast.error('Could not send message. Your draft is still here.', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      submittingMessageRef.current = false
+      setIsSubmittingMessage(false)
     }
   }
 
@@ -1473,6 +1527,7 @@ const ChatInput = memo(function ChatInput({
     candidates: Attachment[]
     oversized: string[]
     invalidType: string[]
+    unreadable?: string[]
   }
 
   const prepareImageAttachmentsFromFiles = async (
@@ -1480,6 +1535,7 @@ const ChatInput = memo(function ChatInput({
   ): Promise<ImageValidationOutcome> => {
     const oversized: string[] = []
     const invalidType: string[] = []
+    const unreadable: string[] = []
     const validFiles: File[] = []
 
     for (const file of files) {
@@ -1504,9 +1560,17 @@ const ChatInput = memo(function ChatInput({
           resolve(typeof result === 'string' ? result : null)
         }
         reader.onerror = () => resolve(null)
-        reader.readAsDataURL(file)
+        reader.onabort = () => resolve(null)
+        try {
+          reader.readAsDataURL(file)
+        } catch {
+          resolve(null)
+        }
       })
-      if (!dataUrl) continue
+      if (!dataUrl) {
+        unreadable.push(file.name)
+        continue
+      }
 
       // Downscale oversized images before they enter the conversation so they
       // don't flood the model's context (see "Max image size" setting).
@@ -1533,7 +1597,7 @@ const ChatInput = memo(function ChatInput({
       )
     }
 
-    return { candidates, oversized, invalidType }
+    return { candidates, oversized, invalidType, unreadable }
   }
 
   const prepareImageAttachmentsFromPaths = async (
@@ -1541,6 +1605,7 @@ const ChatInput = memo(function ChatInput({
   ): Promise<ImageValidationOutcome> => {
     const oversized: string[] = []
     const invalidType: string[] = []
+    const unreadable: string[] = []
     const candidates: Attachment[] = []
 
     for (const p of paths) {
@@ -1572,17 +1637,17 @@ const ChatInput = memo(function ChatInput({
         candidates.push(att)
       } catch (e) {
         console.error('Failed to read dropped image', p, e)
-        invalidType.push(p.split(/[\\/]/).pop() || p)
+        unreadable.push(p.split(/[\\/]/).pop() || p)
       }
     }
 
-    return { candidates, oversized, invalidType }
+    return { candidates, oversized, invalidType, unreadable }
   }
 
   const commitImageAttachments = async (
     outcome: ImageValidationOutcome
   ): Promise<void> => {
-    const { candidates, oversized, invalidType } = outcome
+    const { candidates, oversized, invalidType, unreadable = [] } = outcome
 
     for (const att of candidates) {
       if (att.base64) {
@@ -1703,6 +1768,12 @@ const ChatInput = memo(function ChatInput({
       )
     }
 
+    if (unreadable.length > 0) {
+      errors.push(
+        `Could not read images: ${unreadable.join(', ')}. Try choosing the files again.`
+      )
+    }
+
     if (errors.length > 0) {
       setMessage(errors.join(' | '))
       if (fileInputRef.current) {
@@ -1797,6 +1868,10 @@ const ChatInput = memo(function ChatInput({
         }
       } catch (error) {
         console.error('Failed to open file dialog:', error)
+        toast.error('Could not attach images', {
+          description:
+            'Try choosing the files again. If the file window does not open, restart GChat.',
+        })
       }
 
       if (textareaRef.current) {
@@ -2033,6 +2108,10 @@ const ChatInput = memo(function ChatInput({
         }
       } catch (error) {
         console.error('Failed to open audio dialog:', error)
+        toast.error('Could not attach audio', {
+          description:
+            'Try choosing the files again. If the file window does not open, restart GChat.',
+        })
       }
       if (textareaRef.current) textareaRef.current.focus()
     } else {
@@ -2519,6 +2598,7 @@ const ChatInput = memo(function ChatInput({
                       // - Prompt is not empty
                       if (
                         submissionReady &&
+                        !isSubmittingMessage &&
                         (isCompactCommand(prompt) || !isStreaming) &&
                         prompt.trim() &&
                         (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady))
@@ -2875,15 +2955,24 @@ const ChatInput = memo(function ChatInput({
                     size="icon-sm"
                     disabled={
                       !submissionReady ||
+                      isSubmittingMessage ||
                       !prompt.trim() ||
                       (!isCompactCommand(prompt) &&
                         (isAttachmentPipelineBusy || blockSendUntilModelReady))
                     }
                     data-test-id="send-message-button"
+                    aria-label={
+                      isSubmittingMessage ? 'Preparing message' : 'Send message'
+                    }
+                    aria-busy={isSubmittingMessage}
                     onClick={() => handleSendMessage(prompt)}
                     className="rounded-full mr-1 mb-1"
                   >
-                    <ArrowRight className="text-primary-fg" />
+                    {isSubmittingMessage ? (
+                      <IconLoader2 className="animate-spin" />
+                    ) : (
+                      <ArrowRight className="text-primary-fg" />
+                    )}
                   </Button>
                 )}
               </div>
