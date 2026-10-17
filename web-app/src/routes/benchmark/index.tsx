@@ -532,24 +532,24 @@ function BenchmarkPage() {
               <section className="rounded-xl border border-border/70 bg-card p-5 shadow-sm">
                 <div className="mb-4">
                   <h2 className="font-medium">Benchmarks</h2>
-                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">Each preset calls the GInfer engine’s benchmark endpoint with a repeating prompt to exercise its new K/V engine, K/V prefix cache, DFlash2 performance when enabled, and kernels tuned for each GPU architecture (SM) and model. Benchmarks use the selected server’s loaded model and profile.</p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">A benchmark measures how fast the model loaded on the selected server reads a prompt and writes an answer. Each preset sends a repeating prompt, which lets the engine reuse its cache and, when enabled, its speculative decoding. It uses the model and settings already loaded on that server.</p>
                   <h3 className="mt-4 text-sm font-medium">Scores captured</h3>
                   <dl className="mt-2 grid gap-x-6 gap-y-3 text-sm md:grid-cols-2">
                     <div>
                       <dt className="font-medium">Cold PP · prompt processing</dt>
-                      <dd className="mt-1 leading-relaxed text-muted-foreground">The rate at which the engine actually computes prompt tokens across measured cold-prefill waves, in tokens per second (t/s). If the prompt was already cached and no complete cold measurement is available, the score shows —.</dd>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">How fast the engine reads a new prompt that it has not seen before, in tokens per second (t/s). If the prompt was already cached and no fresh reading was possible, the score shows —.</dd>
                     </div>
                     <div>
                       <dt className="font-medium">Warm PP / request · effective prompt processing</dt>
-                      <dd className="mt-1 leading-relaxed text-muted-foreground">Warm PP / request divides logical prompt tokens by summed native prefill durations for fully cached measured waves. Cached TTFT separately reports time to first token. Missing cache or timer observations show —. Saved v1 results retain their historical input/TTFT PP definition.</dd>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">How fast the engine reads a prompt it has already cached, per request. Cached TTFT is the time until the first word of the answer appears. A missing measurement shows —. Results saved by older versions keep their original definition.</dd>
                     </div>
                     <div>
                       <dt className="font-medium">C1–C8 · concurrent requests</dt>
-                      <dd className="mt-1 leading-relaxed text-muted-foreground">C1 runs one request at a time; C4 runs four together; C8 runs eight together. Available concurrency depends on the loaded profile. Per-request TG is the aggregate generation rate divided by the number of concurrent requests—not a guarantee that every request runs at exactly that rate.</dd>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">C1 runs one request at a time; C4 runs four together; C8 runs eight together. Which of these are available depends on how the model was loaded. The per-request rate is the total divided by the number of requests, so each request may be a little faster or slower.</dd>
                     </div>
                     <div>
                       <dt className="font-medium">TG · aggregate token generation</dt>
-                      <dd className="mt-1 leading-relaxed text-muted-foreground">The combined generation speed across all requests at the selected concurrency, measured from the engine’s decode work. For example, 800 t/s at C4 means 200 t/s per request on average. The first token produced during prompt processing is excluded.</dd>
+                      <dd className="mt-1 leading-relaxed text-muted-foreground">The combined speed at which the engine writes answers across all requests at the selected concurrency. For example, 800 t/s at C4 means about 200 t/s for each request. The first token, produced while reading the prompt, is not counted.</dd>
                     </div>
                   </dl>
                   <p className="mt-3 text-xs leading-relaxed text-muted-foreground">Repeating prompts highlight cache reuse and speculative decoding. These are synthetic best-case benchmarks, not predictions of everyday chat or agent performance.</p>

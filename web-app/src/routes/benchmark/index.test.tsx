@@ -96,6 +96,12 @@ it('keeps saved results visible without an online server', async () => {
   expect(screen.getByText('Saved Muse run')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
 })
+it('explains what a benchmark measures without engine internals', async () => {
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Benchmarks' })
+  expect(screen.getByText(/measures how fast the model loaded on the selected server reads a prompt and writes an answer/)).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent(/K\/V engine|native prefill|prefill waves|benchmark endpoint/)
+})
 afterEach(() => { cleanup(); vi.restoreAllMocks(); localStorage.removeItem(localStorageKey.gbenchReceipts) })
 
 it('previews saved native v2 as public v1 offline while keeping publication disabled', async () => {
