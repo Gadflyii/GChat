@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import {
   DropdownMenu,
   DropdownMenuPortal,
@@ -109,6 +110,47 @@ describe('DropdownMenu Components', () => {
   })
 
   describe('DropdownMenuContent', () => {
+    it('keeps themed portal typography and keyboard selection independent of its trigger', async () => {
+      const user = userEvent.setup()
+      function WorkerChoice() {
+        const [selected, setSelected] = useState('No worker selected')
+        return (
+          <div className="font-mono text-xl font-bold">
+          <output aria-label="Selected worker">{selected}</output>
+          <DropdownMenu>
+            <DropdownMenuTrigger>Choose worker</DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem disabled>Unavailable worker</DropdownMenuItem>
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>Available workers</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent>
+                  <DropdownMenuItem onSelect={() => setSelected('GPU worker')}>GPU worker</DropdownMenuItem>
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          </div>
+        )
+      }
+      render(<WorkerChoice />)
+
+      await user.tab()
+      await user.keyboard('{ArrowDown}')
+      const content = screen.getByRole('menu')
+      expect(content).toHaveClass('font-sans', 'text-sm', 'font-normal', 'bg-popover', 'text-popover-foreground')
+      expect(screen.getByRole('menuitem', { name: 'Unavailable worker' })).toHaveAttribute('aria-disabled', 'true')
+      const available = screen.getByRole('menuitem', { name: 'Available workers' })
+      expect(available).toHaveFocus()
+      await user.keyboard('{ArrowRight}')
+      const worker = await screen.findByRole('menuitem', { name: 'GPU worker' })
+      expect(worker.closest('[data-slot="dropdown-menu-sub-content"]')).toHaveClass('font-sans', 'text-sm', 'font-normal', 'bg-popover', 'text-popover-foreground')
+      await waitFor(() => expect(worker).toHaveFocus())
+      await user.keyboard('{Enter}')
+      expect(screen.getByRole('status', { name: 'Selected worker' })).toHaveTextContent('GPU worker')
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Choose worker' })).toHaveFocus()
+    })
+
     it('renders DropdownMenuContent with correct styling and data-slot', async () => {
       const user = userEvent.setup()
 
