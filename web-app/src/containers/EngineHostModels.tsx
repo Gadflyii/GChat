@@ -11,6 +11,7 @@ import { EngineProfilePicker } from '@/containers/EngineProfilePicker'
 import { EngineHardwareProfile } from '@/containers/EngineHardwareProfile'
 import { EngineFirstRun } from '@/containers/EngineFirstRun'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
+import { formatModelBytes } from '@/lib/model-release'
 
 const advancedFieldLabels = { draft_tokens: 'Draft tokens', draft_tp: 'Draft TP', prefill_chunk: 'Prefill chunk' } as const
 
@@ -203,7 +204,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             .catch(error => { if (quoteRevision.current === revision) setStartupQuote({ key, error: String(error) }) })
             .finally(() => setBusy(false))
         }}>Check startup settings</Button>
-        {currentQuote?.result && <p role="status" className="text-sm">Verified artifact: {currentQuote.result.model_identity.model_id} / {currentQuote.result.model_identity.weights_id}. {currentQuote.result.instance_count} instance(s). {currentQuote.result.kv_arena_bytes === null ? 'Automatic KV; a solo startup must measure graph memory before sharing.' : `${currentQuote.result.kv_arena_bytes.toLocaleString()} bytes GPU KV per instance.`} This check did not start a model.</p>}
+        {currentQuote?.result && <p role="status" className="text-sm">Verified artifact: {currentQuote.result.model_identity.model_id} / {currentQuote.result.model_identity.weights_id}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'instance' : 'instances'}. {currentQuote.result.kv_arena_bytes === null ? 'Automatic KV; a solo startup must measure graph memory before sharing.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU memory for the conversation cache (KV) per instance.`} This check did not start a model.</p>}
         {currentQuote?.error && <p role="alert" className="text-sm text-destructive">{currentQuote.error}</p>}
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
