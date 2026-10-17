@@ -46,6 +46,15 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const pathEdited = useRef(false)
   const releasesEdited = useRef(false)
   const step = flow?.step
+  const card = useRef<HTMLElement>(null)
+  // A step finishing can change the card far below the visible area, so bring
+  // the card back into view; the new step or saved choice is then on screen.
+  const showCard = () => card.current?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+  const shownStep = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    if (step && shownStep.current && shownStep.current !== step) showCard()
+    shownStep.current = step
+  }, [step])
   useEffect(() => {
     if (step === 'complete' && !completed.current) { completed.current = true; onComplete?.() }
   }, [step, onComplete])
@@ -99,6 +108,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       const next = await engineCommand<FirstRun>('first_run', { host_id: localId, ...args })
       setFlow(next)
       if (next.step === 'complete') await refresh().catch(() => undefined)
+      else if (args.action) requestAnimationFrame(showCard)
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
   }
   const profileAction = async (action: 'cancel' | 'resume') => {
@@ -128,7 +138,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const overdue = expected != null && elapsed != null && elapsed >= expected
   const minutes = (ms: number) => `${Math.max(0, Math.ceil(ms / 60000))} min`
   const toggle = (values: string[], value: string) => values.includes(value) ? values.filter(v => v !== value) : [...values, value]
-  return <section className="space-y-4 rounded-xl border p-5" aria-label="Set up local GInfer">
+  return <section ref={card} className="scroll-mt-4 space-y-4 rounded-xl border p-5" aria-label="Set up local GInfer">
     <h2 className="font-medium">Set up models on this computer</h2>
     <p className="text-sm text-muted-foreground">Choose the graphics cards and model folder to use, then choose a model. GInfer, the engine that runs your models, measures this hardware and checks that each model can start. Saving this hardware profile helps future model loads and switches finish faster.</p>
     {unavailable && <p role="alert" className="text-sm text-destructive">{unavailable}</p>}
