@@ -13,6 +13,7 @@ struct Records {
     fail_write: Option<(bool, usize)>,
     fail_delete: bool,
     write_lengths: Vec<usize>,
+    before_chunk_get: Option<Box<dyn FnOnce() + Send>>,
 }
 
 #[derive(Default)]
@@ -29,6 +30,10 @@ impl MemoryNative {
 
     fn fail_next_delete(&self) {
         self.0.lock().unwrap().fail_delete = true;
+    }
+
+    fn before_next_chunk_get(&self, action: impl FnOnce() + Send + 'static) {
+        self.0.lock().unwrap().before_chunk_get = Some(Box::new(action));
     }
 
     fn is_empty(&self) -> bool {
@@ -48,6 +53,16 @@ impl Native for MemoryNative {
     }
 
     fn get(&self, reference: &Reference) -> Result<Option<Vec<u8>>, Error> {
+        let action = if reference.account.contains(':') {
+            self.0.lock().unwrap().before_chunk_get.take()
+        } else {
+            None
+        };
+        // A second handle may replace the published generation after a reader
+        // fetched its manifest. Never invoke that writer while holding the lock.
+        if let Some(action) = action {
+            action();
+        }
         Ok(self.0.lock().unwrap().values.get(reference).cloned())
     }
 
@@ -170,6 +185,58 @@ fn replacement_and_deletion_remove_chunked_and_legacy_credentials() {
         storage.is_empty(),
         "replacement generations must not remain"
     );
+    storage.assert_bounded_writes();
+}
+
+#[test]
+fn a_reader_retries_a_generation_replaced_before_its_first_chunk_read() {
+    let storage = Arc::new(MemoryNative::default());
+    let legacy = Arc::new(MemoryNative::default());
+    let reference = Reference::new("app.gchat.microsoft", "concurrent-replacement");
+    let writer = Arc::new(WindowsNative::with_backends(
+        storage.clone(),
+        legacy.clone(),
+    ));
+    writer.put(&reference, &vec![1; 7000]).unwrap();
+    let retired_chunk = first_chunk(&storage, &reference);
+    let replacement: Vec<u8> = (0..9103).map(|index| (index % 251) as u8).collect();
+    let replacement_for_write = replacement.clone();
+    let reference_for_write = reference.clone();
+    storage.before_next_chunk_get(move || {
+        writer
+            .put(&reference_for_write, &replacement_for_write)
+            .unwrap();
+    });
+
+    let reader = WindowsNative::with_backends(storage.clone(), legacy);
+    assert_eq!(reader.get(&reference).unwrap(), Some(replacement));
+    assert_eq!(storage.get(&retired_chunk).unwrap(), None);
+    storage.assert_bounded_writes();
+}
+
+#[test]
+fn repeated_replacement_during_a_read_returns_a_bounded_conflict() {
+    let storage = Arc::new(MemoryNative::default());
+    let legacy = Arc::new(MemoryNative::default());
+    let reference = Reference::new("app.gchat.microsoft", "repeated-concurrent-replacement");
+    let writer = Arc::new(WindowsNative::with_backends(
+        storage.clone(),
+        legacy.clone(),
+    ));
+    writer.put(&reference, &vec![1; 7000]).unwrap();
+    let storage_for_write = storage.clone();
+    let reference_for_write = reference.clone();
+    storage.before_next_chunk_get(move || {
+        writer.put(&reference_for_write, &vec![2; 8000]).unwrap();
+        storage_for_write.before_next_chunk_get(move || {
+            writer.put(&reference_for_write, &vec![3; 9000]).unwrap();
+        });
+    });
+
+    let reader = WindowsNative::with_backends(storage.clone(), legacy);
+    assert_eq!(reader.get(&reference), Err(Error::Conflict));
+    // The conflict belongs to this raced read; the last committed value survives.
+    assert_eq!(reader.get(&reference).unwrap(), Some(vec![3; 9000]));
     storage.assert_bounded_writes();
 }
 
