@@ -301,8 +301,8 @@ measured profiling and benchmark execution **unqualified**. At 16:05Z October 17
 Bubbs authorized continuing those real flows with a private development build
 and a local test catalog listing current NAS packages with their real checksums.
 This catalog is unpublished and does not change the release URL. Next: bind the
-existing catalog schema and exact NAS package metadata, prepare the private build,
-then admit download/profile/load operations on booked resources. Preserve the
+existing catalog schema and exact NAS package metadata, verify the development-only
+transport, and prepare the private build before booked download/profile/load operations. Preserve the
 normal checksum, identity and lifecycle checks; no public-catalog qualification
 is implied. Findings and limits go to Gchat 3's shared GUI list. Windows host-port
 collision remains a separate leaf awaiting Gchat 2's installed-app handoff.
@@ -312,8 +312,8 @@ branch `test/c7-models-hub-engine-hardware-20261017`. Concise rendered results
 are `/ai/gchat/out/c7-models-hub-engine-hardware-20261017/{result.json,summary.md}`.
 Normal desktop close and termination of its verified idle private Host completed;
 returned 16:05Z, booking 1357 canceled. Owned runtime/private copies and transient captures are retired; Codex 3's
-immutable donor remains with its owner. The separate wording gate is running on
-S1 CPU48–55; the approved private-catalog continuation has no live job yet.
+immutable donor remains with its owner. The separate wording fix passed six focused tests and one full `make verify`
+(4,171 passed), returned 16:12Z, and is merge-ready at `2490b5286`.
 
 ## Global conversation deletion — C7
 
@@ -599,3 +599,23 @@ Retain both Windows installers and adjacent checksums in `out/windows/`.
 The native task is removed; accepted compiler/dependency caches remain. Candidate
 retirement and merge/push status are recorded in `out/offline-host-status-20261001/handoff.json`.
 Next interactive check: the paired offline host card in the updated Windows app.
+
+
+### Private local catalog continuation — C7
+
+The frontend development build and debug Host accept an explicitly configured
+HTTP `127.0.0.1` catalog and package URLs from that exact origin only. Private
+Host requests disable proxying and redirects. Existing package integrity and
+hardware/profile checks remain active; release builds keep their published
+HTTPS policy. The [decision](../decisions/2026-10-17-allow-private-development-model-catalog.md)
+records the boundary. Focused frontend and Host regressions plus one full
+`make verify` are required before the ordinary UI pass.
+
+Build a debug desktop and Host with the embedded frontend built using
+`NODE_ENV=development` and `VITE_MODEL_CATALOG_URL=http://127.0.0.1:19361/catalog.json`.
+At launch set `GINFER_MODEL_CATALOG_URL` to the same URL. Use retained genuine
+Engine resources read-only and a new private home; the development build does
+not qualify the public catalog or the retained Engine as current.
+Next: complete the focused/full verification and private runnable build,
+create the unpublished catalog from real NAS metadata, then use ordinary
+Download/Installed/Hosts controls on admitted resources.

@@ -20,26 +20,75 @@ use tokio::{
 };
 use uuid::Uuid;
 
-/// The same publication catalog used by GChat; unpublished entries are never downloads.
-pub async fn published_releases() -> Result<Vec<Release>, String> {
-    let url = std::env::var("GINFER_MODEL_CATALOG_URL").ok()
-        .or_else(|| option_env!("VITE_MODEL_CATALOG_URL").map(str::to_owned));
-    let Some(url) = url else { return Ok(Vec::new()); };
-    let value: serde_json::Value = reqwest::Client::builder().https_only(true)
-        .timeout(Duration::from_secs(30)).build().map_err(|e| e.to_string())?
-        .get(url).send().await.map_err(|e| e.to_string())?
-        .error_for_status().map_err(|e| e.to_string())?
-        .json().await.map_err(|e| e.to_string())?;
-    catalog_releases(&value)
+/// A private catalog is an explicit development-only loopback transport, never a
+/// production publication or a relaxation of package verification.
+fn private_catalog_url(configured: Option<&str>) -> Option<reqwest::Url> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let url = reqwest::Url::parse(configured?).ok()?;
+    (url.scheme() == "http"
+        && url.host_str() == Some("127.0.0.1")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none())
+        .then_some(url)
 }
 
-fn catalog_releases(value: &serde_json::Value) -> Result<Vec<Release>, String> {
+fn private_package_url(url: &reqwest::Url, catalog: Option<&reqwest::Url>) -> bool {
+    cfg!(debug_assertions)
+        && catalog.is_some_and(|catalog| {
+            url.origin() == catalog.origin()
+                && url.username().is_empty()
+                && url.password().is_none()
+                && url.query().is_none()
+                && url.fragment().is_none()
+                && url.path().ends_with(".ginfer")
+        })
+}
+
+fn download_client_builder(private_loopback: bool) -> reqwest::ClientBuilder {
+    let private_loopback = cfg!(debug_assertions) && private_loopback;
+    let builder = reqwest::Client::builder().https_only(!private_loopback);
+    if private_loopback {
+        // Neither a proxy nor a redirect may move a private transfer off the
+        // explicitly configured loopback origin.
+        builder.no_proxy().redirect(reqwest::redirect::Policy::none())
+    } else {
+        builder
+    }
+}
+
+/// The same publication catalog used by GChat, or an explicit debug-only local catalog.
+pub async fn published_releases() -> Result<Vec<Release>, String> {
+    let configured = std::env::var("GINFER_MODEL_CATALOG_URL").ok();
+    let private_catalog = private_catalog_url(configured.as_deref());
+    let url = configured
+        .or_else(|| option_env!("VITE_MODEL_CATALOG_URL").map(str::to_owned));
+    let Some(url) = url else { return Ok(Vec::new()); };
+    fetch_catalog_releases(&url, private_catalog.as_ref()).await
+}
+
+async fn fetch_catalog_releases(url: &str, private_catalog: Option<&reqwest::Url>) -> Result<Vec<Release>, String> {
+    let response = download_client_builder(private_catalog.is_some())
+        .timeout(Duration::from_secs(30)).build().map_err(|e| e.to_string())?
+        .get(url).send().await.map_err(|e| e.to_string())?
+        .error_for_status().map_err(|e| e.to_string())?;
+    if private_catalog.is_some() && response.status().is_redirection() {
+        return Err("private catalog redirects are not allowed".into());
+    }
+    let value = response.json().await.map_err(|e| e.to_string())?;
+    catalog_releases(&value, private_catalog)
+}
+
+fn catalog_releases(value: &serde_json::Value, private_catalog: Option<&reqwest::Url>) -> Result<Vec<Release>, String> {
     let models = value["models"].as_array().ok_or("publication catalog requires models")?;
     let mut releases = BTreeMap::new();
     for model in models.iter().filter(|m| m["library_name"] == "ginfer") {
         for release in model["releases"].as_array().into_iter().flatten() {
             let release: Release = serde_json::from_value(release.clone()).map_err(|e| e.to_string())?;
-            release.validate()?;
+            release.validate_for_catalog(private_catalog)?;
             releases.insert(release.sha256.clone(), release);
         }
     }
@@ -81,6 +130,11 @@ impl Release {
             })
     }
     pub fn validate(&self) -> Result<(), String> {
+        let configured = std::env::var("GINFER_MODEL_CATALOG_URL").ok();
+        let private_catalog = private_catalog_url(configured.as_deref());
+        self.validate_for_catalog(private_catalog.as_ref())
+    }
+    fn validate_for_catalog(&self, private_catalog: Option<&reqwest::Url>) -> Result<(), String> {
         let mut profile_ids = std::collections::BTreeSet::new();
         for profile in &self.launch_profiles {
             profile.validate()?;
@@ -93,7 +147,7 @@ impl Release {
         }
         let url = reqwest::Url::parse(&self.url).map_err(|e| e.to_string())?;
         let segments: Vec<_> = url.path().split('/').filter(|p| !p.is_empty()).collect();
-        if url.scheme() != "https"
+        if !private_package_url(&url, private_catalog) && (url.scheme() != "https"
             || url.host_str() != Some("huggingface.co")
             || !url.username().is_empty()
             || url.password().is_some()
@@ -103,7 +157,7 @@ impl Release {
             || segments[2] != "resolve"
             || segments[3].len() != 40
             || !segments[3].bytes().all(|b| b.is_ascii_hexdigit())
-            || !url.path().ends_with(".ginfer")
+            || !url.path().ends_with(".ginfer"))
         {
             return Err(
                 "release must reference a commit-pinned HTTPS Hugging Face .ginfer package".into(),
@@ -567,11 +621,14 @@ impl ModelDownloads {
             job.status = "downloading".into();
             job.clone()
         };
+        let configured = std::env::var("GINFER_MODEL_CATALOG_URL").ok();
+        let private_catalog = private_catalog_url(configured.as_deref());
+        let private_loopback = reqwest::Url::parse(&job.release.url).ok()
+            .is_some_and(|url| private_package_url(&url, private_catalog.as_ref()));
         let client = match client {
             Some(client) => client,
-            None => reqwest::Client::builder()
+            None => download_client_builder(private_loopback)
                 .connect_timeout(Duration::from_secs(30))
-                .https_only(true)
                 .build()
                 .map_err(|e| e.to_string())?,
         };
@@ -1383,10 +1440,131 @@ time.sleep(60)
             {"library_name":"ginfer","releases":[release]},
             {"library_name":"ginfer","model_name":"not-published"}
         ]});
-        assert_eq!(catalog_releases(&catalog).unwrap().len(), 1);
+        assert_eq!(catalog_releases(&catalog, None).unwrap().len(), 1);
         let mut bad = catalog;
         bad["models"][0]["releases"][0]["sha256"] = serde_json::json!("invalid");
-        assert!(catalog_releases(&bad).is_err());
+        assert!(catalog_releases(&bad, None).is_err());
+    }
+
+    #[test]
+    fn private_catalog_requires_explicit_debug_loopback_url() {
+        assert!(private_catalog_url(None).is_none());
+        assert_eq!(
+            private_catalog_url(Some("http://127.0.0.1:19341/catalog.json")).is_some(),
+            cfg!(debug_assertions)
+        );
+        for url in [
+            "https://127.0.0.1:19341/catalog.json",
+            "http://localhost:19341/catalog.json",
+            "http://127.0.0.2:19341/catalog.json",
+            "http://192.168.1.1:19341/catalog.json",
+            "file:///tmp/catalog.json",
+            "http://user@127.0.0.1:19341/catalog.json",
+            "http://user:password@127.0.0.1:19341/catalog.json",
+            "http://127.0.0.1:19341/catalog.json?private=true",
+            "http://127.0.0.1:19341/catalog.json#private",
+        ] {
+            assert!(private_catalog_url(Some(url)).is_none(), "{url}");
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn private_catalog_admits_only_exact_origin_packages() {
+        let catalog = private_catalog_url(Some("http://127.0.0.1:19341/catalog.json")).unwrap();
+        let (mut release, _) = fixture();
+        // Published packages remain valid with or without the development opt-in.
+        release.validate_for_catalog(None).unwrap();
+        release.validate_for_catalog(Some(&catalog)).unwrap();
+        release.url = "http://127.0.0.1:19341/packages/model.ginfer".into();
+        release.validate_for_catalog(Some(&catalog)).unwrap();
+        assert!(release.validate_for_catalog(None).is_err());
+        let value = serde_json::json!({"models":[{"library_name":"ginfer","releases":[release]}]});
+        assert_eq!(catalog_releases(&value, Some(&catalog)).unwrap().len(), 1);
+        assert!(catalog_releases(&value, None).is_err());
+        for url in [
+            "http://127.0.0.1:19342/packages/model.ginfer",
+            "http://127.0.0.1/packages/model.ginfer",
+            "http://localhost:19341/packages/model.ginfer",
+            "http://127.0.0.2:19341/packages/model.ginfer",
+            "https://127.0.0.1:19341/packages/model.ginfer",
+            "file:///tmp/model.ginfer",
+            "http://127.0.0.1:19341/packages/model.gguf",
+            "http://user@127.0.0.1:19341/packages/model.ginfer",
+            "http://user:password@127.0.0.1:19341/packages/model.ginfer",
+            "http://127.0.0.1:19341/packages/model.ginfer?token=value",
+            "http://127.0.0.1:19341/packages/model.ginfer#fragment",
+        ] {
+            release.url = url.into();
+            assert!(release.validate_for_catalog(Some(&catalog)).is_err(), "{url}");
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    fn private_catalog_preserves_integrity_and_profile_requirements() {
+        let catalog = private_catalog_url(Some("http://127.0.0.1:19341/catalog.json")).unwrap();
+        let (mut release, _) = fixture();
+        release.url = "http://127.0.0.1:19341/model.ginfer".into();
+        release.validate_for_catalog(Some(&catalog)).unwrap();
+        let mut invalid = release.clone();
+        invalid.launch_profiles[0].artifact_sha256 = "0".repeat(64);
+        assert!(invalid.validate_for_catalog(Some(&catalog)).is_err());
+        release.launch_profiles.clear();
+        let mut invalid = release.clone();
+        invalid.sha256 = "invalid".into();
+        assert!(invalid.validate_for_catalog(Some(&catalog)).is_err());
+        let mut invalid = release.clone();
+        invalid.bytes = 0;
+        assert!(invalid.validate_for_catalog(Some(&catalog)).is_err());
+        let mut invalid = release.clone();
+        invalid.tp = 3;
+        assert!(invalid.validate_for_catalog(Some(&catalog)).is_err());
+        let mut invalid = release.clone();
+        invalid.identity.model_id.clear();
+        assert!(invalid.validate_for_catalog(Some(&catalog)).is_err());
+        let mut invalid = release.clone();
+        invalid.qualified_sm.clear();
+        assert!(invalid.validate_for_catalog(Some(&catalog)).is_err());
+        let mut invalid = release;
+        invalid.min_vram_mib_per_gpu = 0;
+        assert!(invalid.validate_for_catalog(Some(&catalog)).is_err());
+    }
+
+    #[cfg(debug_assertions)]
+    #[tokio::test]
+    async fn private_catalog_and_package_transport_do_not_follow_redirects() {
+        use hyper::{service::service_fn, Body, Response};
+        for path in ["catalog.json", "model.ginfer"] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let origin = format!("http://{}", listener.local_addr().unwrap());
+            let catalog = private_catalog_url(Some(&format!("{origin}/catalog.json"))).unwrap();
+            let url = reqwest::Url::parse(&format!("{origin}/{path}")).unwrap();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                hyper::server::conn::Http::new().serve_connection(stream, service_fn(|_| async {
+                    Ok::<_, std::convert::Infallible>(Response::builder().status(302)
+                        .header("location", "http://127.0.0.1:1/must-not-follow.ginfer")
+                        .body(Body::empty()).unwrap())
+                })).await.unwrap();
+            });
+            if path == "catalog.json" {
+                let error = tokio::time::timeout(Duration::from_secs(5),
+                    fetch_catalog_releases(url.as_str(), Some(&catalog)))
+                    .await.unwrap().unwrap_err();
+                assert!(error.contains("redirects are not allowed"));
+            } else {
+                let client = download_client_builder(private_package_url(&url, Some(&catalog)))
+                    .build().unwrap();
+                let response = tokio::time::timeout(Duration::from_secs(5), client.get(url.clone()).send())
+                    .await.unwrap().unwrap();
+                assert_eq!(response.status(), reqwest::StatusCode::FOUND);
+                assert_eq!(response.url(), &url);
+                drop(response);
+                drop(client);
+            }
+            tokio::time::timeout(Duration::from_secs(5), server).await.unwrap().unwrap();
+        }
     }
 
     #[tokio::test]

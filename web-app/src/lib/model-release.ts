@@ -25,8 +25,17 @@ export function validRelease(value: unknown): value is ModelRelease {
   const r = value as ModelRelease
   try {
     const u = new URL(r.url)
-    if (u.protocol !== 'https:' || u.hostname !== 'huggingface.co' || u.username || u.password || u.search || u.hash ||
-      !/^\/[^/]+\/[^/]+\/resolve\/[a-fA-F0-9]{40}\/.+\.ginfer$/.test(u.pathname)) return false
+    if (u.username || u.password || u.search || u.hash) return false
+    const published = u.protocol === 'https:' && u.hostname === 'huggingface.co' &&
+      /^\/[^/]+\/[^/]+\/resolve\/[a-fA-F0-9]{40}\/.+\.ginfer$/.test(u.pathname)
+    let privateDevelopment = false
+    if (!published && import.meta.env.DEV && import.meta.env.VITE_MODEL_CATALOG_URL) {
+      const catalog = new URL(import.meta.env.VITE_MODEL_CATALOG_URL)
+      privateDevelopment = catalog.protocol === 'http:' && catalog.hostname === '127.0.0.1' &&
+        !catalog.username && !catalog.password && !catalog.search && !catalog.hash &&
+        u.origin === catalog.origin && u.pathname.endsWith('.ginfer')
+    }
+    if (!published && !privateDevelopment) return false
   } catch { return false }
   return typeof r.name === 'string' && r.name.trim().length > 0 && r.name.length <= 160 &&
     typeof r.identity?.model_id === 'string' && typeof r.identity?.weights_id === 'string' &&

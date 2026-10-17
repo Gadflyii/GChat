@@ -539,3 +539,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-17** — [Isolate Gbot readiness editor state](2026-10-17-isolate-gbot-readiness-editor-state.md)
 - **2026-10-17** — [Default desktop Host to loopback only](2026-10-17-default-desktop-host-to-loopback-only.md)
 - **2026-10-17** — [Chunk Windows native credentials](2026-10-17-chunk-windows-native-credentials.md)
+
+- **2026-10-17** — [Allow an explicit private development model catalog](2026-10-17-allow-private-development-model-catalog.md)
