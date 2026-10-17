@@ -57,6 +57,8 @@ export default function GbotCompanion() {
   const pageState = useGbotPage()
   const [owner] = useState(gbotControlOwner)
   const [busy, setBusy] = useState(false)
+  const [submittingTask, setSubmittingTask] = useState<string>()
+  const taskSubmission = useRef(false)
   const desktop = useRef<DesktopViewHandle>(null)
   const panel = useRef<HTMLElement>(null)
   const wasVisible = useRef(false)
@@ -531,11 +533,21 @@ export default function GbotCompanion() {
           {tab === 'conversation' && (
             <form
               className="shrink-0 space-y-2 border-t p-4"
+              aria-busy={submittingTask === workspaceId}
               onSubmit={(event) => {
                 event.preventDefault()
-                if (!identity || !ready || !botHasControl || !draft.trim())
+                if (
+                  busy ||
+                  taskSubmission.current ||
+                  !identity ||
+                  !ready ||
+                  !botHasControl ||
+                  !draft.trim()
+                )
                   return
                 const submitted = draft
+                taskSubmission.current = true
+                setSubmittingTask(workspaceId)
                 void perform(async () => {
                   const request = useGbotPage
                     .getState()
@@ -549,6 +561,9 @@ export default function GbotCompanion() {
                   const current = useGbotCompanion.getState()
                   if (current.drafts[workspaceId] === submitted)
                     current.setDraft(workspaceId, '')
+                }).finally(() => {
+                  taskSubmission.current = false
+                  setSubmittingTask(undefined)
                 })
               }}
             >
@@ -593,6 +608,11 @@ export default function GbotCompanion() {
                   state.setDraft(workspaceId, event.target.value)
                 }
               />
+              {submittingTask === workspaceId && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Sending this task to the bot…
+                </p>
+              )}
               <div className="flex items-center justify-between gap-2">
                 <Link
                   to={route.gbot.index}
@@ -602,9 +622,15 @@ export default function GbotCompanion() {
                   Gbot settings
                 </Link>
                 <Button
-                  disabled={busy || !ready || !botHasControl || !draft.trim()}
+                  disabled={
+                    busy ||
+                    Boolean(submittingTask) ||
+                    !ready ||
+                    !botHasControl ||
+                    !draft.trim()
+                  }
                 >
-                  Send
+                  {submittingTask === workspaceId ? 'Sending…' : 'Send'}
                 </Button>
               </div>
             </form>
