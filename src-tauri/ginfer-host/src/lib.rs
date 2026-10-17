@@ -12,6 +12,7 @@ pub mod local_inference;
 pub mod local_host;
 pub mod local_host_registry;
 pub mod model_downloads;
+pub mod payload_verification;
 pub mod model_storage;
 pub mod max_perf;
 pub mod response_route;
