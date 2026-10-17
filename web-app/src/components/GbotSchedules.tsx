@@ -31,6 +31,22 @@ export default function GbotSchedules({
   workspaceId: string
   assignment?: SavedAssignment
 }) {
+  return (
+    <WorkspaceSchedules
+      key={workspaceId}
+      workspaceId={workspaceId}
+      assignment={assignment}
+    />
+  )
+}
+
+function WorkspaceSchedules({
+  workspaceId,
+  assignment,
+}: {
+  workspaceId: string
+  assignment?: SavedAssignment
+}) {
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [prompt, setPrompt] = useState('')
   const [at, setAt] = useState('')
