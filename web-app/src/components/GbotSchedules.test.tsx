@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -51,6 +52,16 @@ beforeEach(() => {
   )
 })
 afterEach(cleanup)
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (cause: unknown) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
 
 it('shows a stopped scheduler outside the collapsed panel and prevents creating a schedule', async () => {
   request.mockResolvedValue({
@@ -138,4 +149,108 @@ it('requires a saved bot inference assignment before schedule creation', async (
   expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
   expect(screen.getByLabelText('Scheduled task prompt')).toBeDisabled()
   await screen.findByText('Check the calendar')
+})
+
+it('removes the previous bot schedules and draft immediately while the new bot loads', async () => {
+  const next = deferred<{ schedules: typeof schedule[]; stopped: null }>()
+  request
+    .mockResolvedValueOnce({ schedules: [schedule], stopped: null })
+    .mockReturnValueOnce(next.promise)
+  const view = render(
+    <GbotSchedules workspaceId="bot-one" assignment={assignment} />
+  )
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Only for bot one' },
+  })
+  fireEvent.change(screen.getByLabelText('Schedule start time'), {
+    target: { value: '2030-01-02T09:00' },
+  })
+
+  view.rerender(
+    <GbotSchedules
+      workspaceId="bot-two"
+      assignment={{ ...assignment, workspace_id: 'bot-two' }}
+    />
+  )
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+
+  expect(screen.queryByText('Check the calendar')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Disable schedule' })).toBeNull()
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
+  expect(screen.getByLabelText('Schedule start time')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
+  await act(async () =>
+    next.resolve({
+      schedules: [
+        { ...schedule, id: 'two', workspace_id: 'bot-two', prompt: 'Bot two task' },
+      ],
+      stopped: null,
+    })
+  )
+  expect(screen.getByText('Bot two task')).toBeInTheDocument()
+  expect(screen.queryByText('Check the calendar')).not.toBeInTheDocument()
+})
+
+it('ignores a previous bot schedule response after the current list is ready', async () => {
+  const previous = deferred<{ schedules: typeof schedule[]; stopped: null }>()
+  request
+    .mockReturnValueOnce(previous.promise)
+    .mockResolvedValueOnce({
+      schedules: [
+        { ...schedule, id: 'two', workspace_id: 'bot-two', prompt: 'Bot two task' },
+      ],
+      stopped: null,
+    })
+  const view = render(<GbotSchedules workspaceId="bot-one" />)
+  view.rerender(<GbotSchedules workspaceId="bot-two" />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Bot two task')
+
+  await act(async () => previous.resolve({ schedules: [schedule], stopped: null }))
+
+  expect(screen.getByText('Bot two task')).toBeInTheDocument()
+  expect(screen.queryByText('Check the calendar')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Disable schedule' }))
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith('schedules/enabled', {
+      id: 'two',
+      enabled: false,
+    })
+  )
+})
+
+it('keeps the new bot usable when the previous bot pending action fails', async () => {
+  const previousAction = deferred<unknown>()
+  request
+    .mockResolvedValueOnce({ schedules: [schedule], stopped: null })
+    .mockReturnValueOnce(previousAction.promise)
+    .mockResolvedValueOnce({ schedules: [], stopped: null })
+  const view = render(
+    <GbotSchedules workspaceId="bot-one" assignment={assignment} />
+  )
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  fireEvent.click(screen.getByRole('button', { name: 'Disable schedule' }))
+  expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeDisabled()
+
+  view.rerender(
+    <GbotSchedules
+      workspaceId="bot-two"
+      assignment={{ ...assignment, workspace_id: 'bot-two' }}
+    />
+  )
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Only for bot two' },
+  })
+  await act(async () => previousAction.reject(new Error('Old bot unavailable')))
+
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Only for bot two'
+  )
+  expect(screen.getByLabelText('Scheduled task prompt')).toBeEnabled()
+  expect(screen.queryByText('Check the calendar')).not.toBeInTheDocument()
 })
