@@ -19,6 +19,8 @@ export type DeleteModelActionProps = {
   modelId: string
   /** Local provider that owns the files. */
   provider: string
+  /** Readable name for the dialog and messages; the id is a package hash for local GInfer models. */
+  label?: string
   /** Called after the files are gone, before the provider list is refreshed. */
   onDeleted?: () => void
 }
@@ -33,6 +35,7 @@ export type DeleteModelActionProps = {
 export function DeleteModelAction({
   modelId,
   provider,
+  label,
   onDeleted,
 }: DeleteModelActionProps) {
   const { t } = useTranslation()
@@ -46,21 +49,21 @@ export function DeleteModelAction({
     try {
       await deleteLocalModel(serviceHub, modelId, provider)
       onDeleted?.()
-      toast.success(t('common:deleteModel.title', { modelId }), {
+      toast.success(t('common:deleteModel.title', { modelId: label ?? modelId }), {
         id: `delete-model-${modelId}`,
-        description: t('common:deleteModel.success', { modelId }),
+        description: t('common:deleteModel.success', { modelId: label ?? modelId }),
       })
       setOpen(false)
     } catch (error) {
       console.error('[DeleteModelAction] deleteModel failed:', error)
-      toast.error(t('common:deleteModel.title', { modelId }), {
+      toast.error(t('common:deleteModel.title', { modelId: label ?? modelId }), {
         id: `delete-model-${modelId}`,
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
       setDeleting(false)
     }
-  }, [modelId, onDeleted, provider, serviceHub, t])
+  }, [label, modelId, onDeleted, provider, serviceHub, t])
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -78,7 +81,7 @@ export function DeleteModelAction({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {t('common:deleteModel.title', { modelId })}
+            {t('common:deleteModel.title', { modelId: label ?? modelId })}
           </DialogTitle>
           <DialogDescription>
             {t('common:deleteModel.description')}

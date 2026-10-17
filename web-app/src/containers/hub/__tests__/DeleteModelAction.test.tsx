@@ -10,7 +10,12 @@ import type { ProvidersService } from '@/services/providers/types'
 import { seedServiceHub } from '@/test/service-hub'
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: { modelId?: string }) =>
+      key === 'common:deleteModel.title' && options?.modelId
+        ? `${key}:${options.modelId}`
+        : key,
+  }),
 }))
 
 const toastSuccess = vi.fn()
@@ -79,6 +84,18 @@ describe('DeleteModelAction', () => {
     await waitFor(() =>
       expect(deleteModel).toHaveBeenCalledWith('Qwen3-4B-Q4_K_M', 'llamacpp')
     )
+  })
+
+  it('names the model by its readable label, not its package hash, in the confirmation', async () => {
+    const hash = 'a'.repeat(64)
+    render(
+      <DeleteModelAction modelId={hash} label="Qwen 27B 2-bit mix" provider="llamacpp" />
+    )
+    await openConfirm()
+    expect(
+      screen.getByText('common:deleteModel.title:Qwen 27B 2-bit mix')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(hash))).not.toBeInTheDocument()
   })
 
   it('drops the model from the provider list and from favorites', async () => {
