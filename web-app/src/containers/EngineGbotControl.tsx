@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button'
+import { confirmAction } from '@/lib/confirm'
 import type { EngineSnapshot } from '@/services/engines'
 
 export function EngineGbotControl({
@@ -36,11 +37,13 @@ export function EngineGbotControl({
             <Button
               variant="outline"
               disabled={disabled}
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  window.confirm(
-                    `Allow ${client.name} to control this computer's Gbot service, bots, accounts and desktops?`
-                  )
+                  await confirmAction({
+                    title: 'Allow Gbot control?',
+                    message: `Allow ${client.name} to control this computer's Gbot service, bots, accounts and desktops?`,
+                    confirmLabel: 'Allow',
+                  })
                 )
                   void change(client.client_id, 'approve')
               }}
@@ -52,11 +55,14 @@ export function EngineGbotControl({
             <Button
               variant="outline"
               disabled={disabled}
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  window.confirm(
-                    `Revoke ${client.name}'s Gbot control? Its connected desktop views will close. Running bot tasks continue.`
-                  )
+                  await confirmAction({
+                    title: 'Revoke Gbot control?',
+                    message: `Revoke ${client.name}'s Gbot control? Its connected desktop views will close. Running bot tasks continue.`,
+                    confirmLabel: 'Revoke',
+                    destructive: true,
+                  })
                 )
                   void change(client.client_id, 'revoke')
               }}

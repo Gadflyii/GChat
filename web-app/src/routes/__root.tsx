@@ -9,6 +9,7 @@ import { DataProvider } from '@/providers/DataProvider'
 import { route } from '@/constants/routes'
 import { ExtensionProvider } from '@/providers/ExtensionProvider'
 import { ToasterProvider } from '@/providers/ToasterProvider'
+import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
 import { useOnboardingModelReminder } from '@/hooks/useOnboardingModelReminder'
 import { PromptOnboardingModel } from '@/containers/PromptOnboardingModel'
 import { useLeftPanel } from '@/hooks/useLeftPanel'
@@ -156,6 +157,7 @@ function RootLayout() {
         <ThemeProvider />
         <InterfaceProvider />
         <ToasterProvider />
+        <ConfirmDialogHost />
         <TranslationProvider>
           <ExtensionProvider>
             <DataProvider />

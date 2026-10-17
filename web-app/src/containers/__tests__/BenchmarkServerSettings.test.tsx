@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { spyConfirm } from '@/test/confirm'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { BenchmarkServerSettings } from '../BenchmarkServerSettings'
 import type { EngineSnapshot } from '@/services/engines'
@@ -65,7 +66,7 @@ it('offers Max Perf separately and applies only after selection and confirmation
   expect(pending).toHaveBeenLastCalledWith(true)
   expect(mocks.command).not.toHaveBeenCalled()
   expect(screen.getByRole('alert')).toHaveTextContent('Applying this profile waits for current requests to finish, then restarts this server. Chats and other clients using it are affected. Wait for the server to be ready before selecting Run benchmark.')
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  const confirm = spyConfirm().mockReturnValue(false)
   fireEvent.click(screen.getByRole('button', { name: 'Apply Max Perf & Restart Server' }))
   expect(mocks.command).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)

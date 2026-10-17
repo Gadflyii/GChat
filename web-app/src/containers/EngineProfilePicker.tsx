@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { confirmAction } from '@/lib/confirm'
 import { Button } from '@/components/ui/button'
 import { hardwareProfileBlocksLaunch, type EngineSnapshot } from '@/services/engines'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
@@ -133,9 +134,9 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
         : matching.length ? 'No saved profile fits this model on the selected graphics cards. Choose a different group of cards or install a matching profile. A running instance keeps its cards; start a new instance to use another group.'
           : 'No saved hardware profile fits this exact model on this computer yet. Build one in Advanced hardware profile options, or install the matching model and profile, then refresh. You can also start it now with the custom settings below.'
     }</p>}
-    {(!currentSettings || pending) && <Button disabled={controlsDisabled || !selected || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={() => {
+    {(!currentSettings || pending) && <Button disabled={controlsDisabled || !selected || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={async () => {
       if (!selected || controlsDisabled) return
-      if (restarting && !window.confirm('Switch this instance to the selected model and profile? Serving restarts after its current requests drain.')) return
+      if (restarting && !await confirmAction({ title: 'Switch model?', message: 'Switch this instance to the selected model and profile? Serving restarts after its current requests drain.', confirmLabel: 'Switch and restart' })) return
       void launch({ profile_id: selected.entry.profile.id, model_id: selected.entry.model_id,
         gpu_uuids: selected.group, instance_id: instanceId || null, force: false, structured_outputs: structuredOutputs,
         ...(instanceId ? { expected_session_id: snapshot.instances.find(i => i.instance_id === instanceId)?.session_id } : {}) })

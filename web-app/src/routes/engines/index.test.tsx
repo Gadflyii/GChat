@@ -1,3 +1,4 @@
+import { spyConfirm } from '@/test/confirm'
 import {
   cleanup,
   fireEvent,
@@ -306,7 +307,7 @@ describe('Engines host intake and launch controls', () => {
     mocks.instances[0].status = 'ready'
     view.rerender(<Page />)
     expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
-    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const confirmation = spyConfirm().mockReturnValue(false)
     fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
     expect(mocks.command).not.toHaveBeenCalledWith('restart', expect.anything())
     confirmation.mockReturnValue(true)
@@ -560,7 +561,7 @@ describe('Engines host intake and launch controls', () => {
         profile,
       },
     ]
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    spyConfirm().mockReturnValue(true)
     renderExpandedPage()
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
     fireEvent.click(screen.getByText('Advanced launch settings'))
