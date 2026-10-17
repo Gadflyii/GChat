@@ -1,7 +1,12 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const native = vi.hoisted(() => ({ invoke: vi.fn(), tauri: false }))
+const native = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  save: vi.fn(),
+  writeFile: vi.fn(),
+  tauri: false,
+}))
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -9,10 +14,10 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 
 vi.mock('@tauri-apps/api/core', () => ({ invoke: native.invoke }))
 
-vi.mock('@gchat/core', () => ({ fs: { writeFileSync: vi.fn() } }))
+vi.mock('@gchat/core', () => ({ fs: { writeFileSync: native.writeFile } }))
 
 vi.mock('@/hooks/useServiceHub', () => ({
-  getServiceHub: () => ({ dialog: () => ({ save: vi.fn() }) }),
+  getServiceHub: () => ({ dialog: () => ({ save: native.save }) }),
 }))
 
 vi.mock('@/lib/platform/utils', () => ({
@@ -73,6 +78,8 @@ describe('HtmlArtifact', () => {
   beforeEach(() => {
     native.tauri = false
     native.invoke.mockReset().mockResolvedValue(undefined)
+    native.save.mockReset().mockResolvedValue(null)
+    native.writeFile.mockReset().mockResolvedValue(undefined)
     scrollTops = []
     Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
       configurable: true,
@@ -239,5 +246,130 @@ describe('HtmlArtifact', () => {
     expect(native.invoke).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.queryByTitle('HTML preview')).not.toBeInTheDocument()
+  })
+
+  it('shows a failed Save dialog and lets Download retry the same HTML', async () => {
+    native.tauri = true
+    const picker = deferred<string | null>()
+    const retryPicker = deferred<string | null>()
+    native.save
+      .mockReturnValueOnce(picker.promise)
+      .mockReturnValueOnce(retryPicker.promise)
+    const code = '<main>Keep this downloadable document</main>'
+    render(<HtmlArtifact code={code} />)
+    const download = screen.getByRole('button', { name: 'Download HTML' })
+
+    fireEvent.click(download)
+    await act(async () => {
+      picker.reject(new Error('The Save dialog is unavailable'))
+      await picker.promise.catch(() => undefined)
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not save the HTML file. Choose Download to try again.'
+    )
+    expect(download).toBeEnabled()
+    expect(native.writeFile).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Code', exact: true }))
+    expect(codePane()).toBeVisible()
+    expect(codePane()).toHaveTextContent(code)
+
+    fireEvent.click(download)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(download).toBeDisabled()
+    await act(async () => {
+      retryPicker.resolve('/exports/recovered.html')
+      await retryPicker.promise
+    })
+
+    expect(native.save).toHaveBeenCalledTimes(2)
+    expect(native.writeFile).toHaveBeenCalledExactlyOnceWith(
+      '/exports/recovered.html',
+      code
+    )
+    expect(download).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps Download pending through writing and retries a failed write with the exact source', async () => {
+    native.tauri = true
+    const writing = deferred<void>()
+    const retryWriting = deferred<void>()
+    native.save.mockResolvedValue('/exports/review.html')
+    native.writeFile
+      .mockReturnValueOnce(writing.promise)
+      .mockReturnValueOnce(retryWriting.promise)
+    const code = '<!doctype html><html><body>Exact saved source</body></html>'
+    render(<HtmlArtifact code={code} />)
+    const download = screen.getByRole('button', { name: 'Download HTML' })
+
+    fireEvent.click(download)
+    await waitFor(() => expect(native.writeFile).toHaveBeenCalledOnce())
+    expect(download).toBeDisabled()
+    expect(download).toHaveAttribute('aria-busy', 'true')
+    fireEvent.click(download)
+    expect(native.save).toHaveBeenCalledOnce()
+    await rejectRegistration(writing, 'Permission denied')
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not save the HTML file. Choose Download to try again.'
+    )
+    expect(download).toBeEnabled()
+    fireEvent.click(download)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await waitFor(() => expect(native.writeFile).toHaveBeenCalledTimes(2))
+    expect(native.writeFile).toHaveBeenNthCalledWith(
+      1,
+      '/exports/review.html',
+      code
+    )
+    expect(native.writeFile).toHaveBeenNthCalledWith(
+      2,
+      '/exports/review.html',
+      code
+    )
+    expect(download).toBeDisabled()
+    await act(async () => {
+      retryWriting.resolve(undefined)
+      await retryWriting.promise
+    })
+
+    expect(download).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('opens one Save dialog for rapid Download clicks and treats cancellation silently', async () => {
+    native.tauri = true
+    const picker = deferred<string | null>()
+    native.save.mockReturnValueOnce(picker.promise)
+    render(<HtmlArtifact code="<p>Cancel keeps the document</p>" />)
+    const download = screen.getByRole('button', { name: 'Download HTML' })
+
+    act(() => {
+      fireEvent.click(download)
+      fireEvent.click(download)
+    })
+
+    expect(native.save).toHaveBeenCalledExactlyOnceWith({
+      defaultPath: 'artifact.html',
+      filters: [{ name: 'HTML File', extensions: ['html'] }],
+    })
+    expect(download).toBeDisabled()
+    expect(download).toHaveAttribute('aria-busy', 'true')
+    expect(native.writeFile).not.toHaveBeenCalled()
+    await act(async () => {
+      picker.resolve(null)
+      await picker.promise
+    })
+
+    expect(download).toBeEnabled()
+    expect(download).toHaveAttribute('aria-busy', 'false')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(native.writeFile).not.toHaveBeenCalled()
+    fireEvent.click(download)
+    await waitFor(() => expect(download).toBeEnabled())
+    expect(native.save).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(native.writeFile).not.toHaveBeenCalled()
   })
 })
