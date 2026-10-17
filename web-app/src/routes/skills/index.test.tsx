@@ -682,6 +682,24 @@ describe('SkillsPage', () => {
     )
   })
 
+  it('shows the load error instead of claiming no skills are installed', () => {
+    hookState.value.skills = []
+    hookState.value.error = 'Gbot service exited before becoming ready'
+    render(<SkillsPage />)
+
+    expect(
+      screen.getByText('Gbot service exited before becoming ready')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('common:skillsEmpty')).not.toBeInTheDocument()
+  })
+
+  it('says no skills are installed only when loading succeeded with none', () => {
+    hookState.value.skills = []
+    render(<SkillsPage />)
+
+    expect(screen.getByText('common:skillsEmpty')).toBeInTheDocument()
+  })
+
   it('keeps Edit closed when detail loading fails and leaves the hook error visible', async () => {
     const detail = deferred<AgentSkillDetail | undefined>()
     hookState.value.skills = [customSkill, otherSkill]
