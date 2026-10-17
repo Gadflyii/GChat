@@ -30,10 +30,10 @@
     "providerUnavailable": "Agent mode is available only with a local llama.cpp model."
   },
   "agentApprovals": {
-    "manualSelected": "Manually",
+    "manualSelected": "Approvals: manual",
     "manual": "Manually approve",
     "manualDescription": "Pause before sensitive actions.",
-    "skipSelected": "Skip",
+    "skipSelected": "Approvals: skipped",
     "skip": "Skip all approvals",
     "skipDescription": "Run without asking."
   },
