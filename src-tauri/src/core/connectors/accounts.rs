@@ -23,6 +23,12 @@ const RECONNECT_REQUIRED: &str =
     "Provider credentials expired or registration rejected; reconnect in Settings";
 const GOOGLE_RECONNECT_REQUIRED: &str =
     "Your Google sign-in has expired or access was removed. Open Settings → Workspace connections and reconnect your Google account.";
+const GOOGLE_REGISTRATION_REQUIRED: &str =
+    "Google rejected the app registration. Open Settings → Workspace connections, save the client ID and secret from your own Google Desktop app, then reconnect.";
+const GOOGLE_SECRET_MISSING: &str =
+    "The saved Google client secret is missing. Open Settings → Workspace connections and save your Google Desktop client details again.";
+const GOOGLE_CONSENT_DENIED: &str =
+    "Google sign-in was not approved. Try again in your browser. If your app is in Testing, add your Google account as a test user; if your organization blocks access, ask its administrator.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -515,9 +521,12 @@ impl AccountsState {
         }
         let key = format!("{}:registration", request.provider.as_str());
         let previous = self.vault_get(key.clone()).await?;
+        let same_client = self.view()?.configs.iter().any(|config| {
+            config.provider == request.provider && config.client_id == request.client_id.trim()
+        });
         let secret = request
             .client_secret
-            .or_else(|| previous.clone())
+            .or_else(|| previous.clone().filter(|_| same_client))
             .filter(|value| !value.is_empty());
         match &secret {
             Some(value) => self.vault_set(key.clone(), value.clone()).await?,
@@ -956,7 +965,11 @@ impl AccountsState {
     ) -> Result<TokenResponse, String> {
         form.push(("client_id", config.client_id.clone()));
         if config.provider == Provider::Google {
-            if let Some(secret) = self.vault_get("google:registration".into()).await? {
+            let secret = self.vault_get("google:registration".into()).await?;
+            if config.has_client_secret && secret.as_ref().map_or(true, |secret| secret.is_empty()) {
+                return Err(GOOGLE_SECRET_MISSING.into());
+            }
+            if let Some(secret) = secret {
                 form.push(("client_secret", secret));
             }
         }
@@ -979,10 +992,14 @@ impl AccountsState {
                     Some("invalid_grant" | "invalid_client" | "unauthorized_client")
                 )
             {
-                if config.provider == Provider::Google
-                    && response.get("error").and_then(Value::as_str) == Some("invalid_grant")
-                {
-                    return Err(GOOGLE_RECONNECT_REQUIRED.into());
+                if config.provider == Provider::Google {
+                    return Err(
+                        if response.get("error").and_then(Value::as_str) == Some("invalid_grant") {
+                            GOOGLE_RECONNECT_REQUIRED.into()
+                        } else {
+                            GOOGLE_REGISTRATION_REQUIRED.into()
+                        },
+                    );
                 }
                 return Err(RECONNECT_REQUIRED.into());
             }
@@ -1806,6 +1823,9 @@ body{margin:0;min-height:100vh;display:grid;place-items:center}.card{max-width:2
         let _ = stream.write_all(reply.as_bytes()).await;
         let _ = stream.write_all(message).await;
         if parsed.query_pairs().any(|(key, _)| key == "error") {
+            if provider == Provider::Google {
+                return Err(GOOGLE_CONSENT_DENIED.into());
+            }
             if provider == Provider::Microsoft {
                 let errors = parsed
                     .query_pairs()
@@ -2461,6 +2481,152 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn google_registration_does_not_reuse_another_clients_secret() {
+        let (_directory, state, vault) = fixture();
+        for (client_id, secret, expected) in [
+            (
+                "fixture-public-client",
+                Some("desktop-secret"),
+                Some("desktop-secret"),
+            ),
+            ("fixture-public-client", None, Some("desktop-secret")),
+            ("different-desktop-client", None, None),
+        ] {
+            let view = state
+                .configure(ConfigureRequest {
+                    provider: Provider::Google,
+                    client_id: client_id.into(),
+                    tenant: None,
+                    client_secret: secret.map(str::to_owned),
+                })
+                .await
+                .unwrap();
+            assert_eq!(
+                vault.get("google:registration").unwrap().as_deref(),
+                expected
+            );
+            assert_eq!(view.configs[0].has_client_secret, expected.is_some());
+        }
+    }
+
+    #[tokio::test]
+    async fn google_missing_saved_secret_fails_before_token_request() {
+        let (_directory, state, _vault) = fixture();
+        let mut config = state.view().unwrap().configs.remove(0);
+        config.has_client_secret = true;
+        assert_eq!(
+            state
+                .exchange(&config, Vec::new(), &CancellationToken::new())
+                .await
+                .err()
+                .unwrap(),
+            GOOGLE_SECRET_MISSING
+        );
+    }
+
+    #[tokio::test]
+    async fn google_restart_refresh_uses_vault_and_retains_unrotated_refresh_token() {
+        let (directory, state, vault) = fixture();
+        state
+            .configure(ConfigureRequest {
+                provider: Provider::Google,
+                client_id: "fixture-public-client".into(),
+                tenant: None,
+                client_secret: Some("desktop-secret".into()),
+            })
+            .await
+            .unwrap();
+        state
+            .persist_account(
+                account("first", Access::ReadOnly),
+                "durable-refresh".into(),
+                token(),
+            )
+            .await
+            .unwrap();
+        drop(state);
+
+        let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let reopened = AccountsState {
+            vault: vault.clone(),
+            oauth_base_override: Some(format!("http://{}", listener.local_addr().unwrap())),
+            http: Mutex::new(Some(reqwest::Client::builder().no_proxy().build().unwrap())),
+            ..AccountsState::default()
+        };
+        reopened.initialize(directory.path().into()).unwrap();
+        assert!(reopened.tokens.lock().unwrap().is_empty());
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let (end, length) = loop {
+                let mut buffer = [0u8; 1024];
+                let count = stream.read(&mut buffer).await.unwrap();
+                assert!(count > 0);
+                request.extend_from_slice(&buffer[..count]);
+                if let Some(end) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&request[..end]);
+                    assert!(headers.starts_with("POST /token "));
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .and_then(|length| length.trim().parse::<usize>().ok())
+                        })
+                        .unwrap();
+                    if request.len() >= end + 4 + length {
+                        break (end, length);
+                    }
+                }
+            };
+            let body = std::str::from_utf8(&request[end + 4..end + 4 + length]).unwrap();
+            let form = Url::parse(&format!("http://fixture/?{body}"))
+                .unwrap()
+                .query_pairs()
+                .into_owned()
+                .collect::<BTreeMap<_, _>>();
+            assert_eq!(form["grant_type"], "refresh_token");
+            assert_eq!(form["client_id"], "fixture-public-client");
+            assert_eq!(form["client_secret"], "desktop-secret");
+            assert_eq!(form["refresh_token"], "durable-refresh");
+            // Google normally returns no replacement refresh token here.
+            let body =
+                json!({"access_token":"restarted-access","expires_in":3600,"token_type":"Bearer"})
+                    .to_string();
+            stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+        });
+        let (access, _) = tokio::time::timeout(
+            Duration::from_secs(5),
+            reopened.token("first", &CancellationToken::new()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(access, "restarted-access");
+        assert_eq!(
+            vault.get("account:first").unwrap().as_deref(),
+            Some("durable-refresh")
+        );
+        assert_eq!(
+            vault.get("google:registration").unwrap().as_deref(),
+            Some("desktop-secret")
+        );
+        let metadata =
+            std::fs::read_to_string(directory.path().join("workspace-connections.json")).unwrap();
+        let public = serde_json::to_string(&reopened.view().unwrap()).unwrap();
+        for secret in ["desktop-secret", "durable-refresh", "restarted-access"] {
+            assert!(!metadata.contains(secret));
+            assert!(!public.contains(secret));
+        }
+        tokio::time::timeout(Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test]
     async fn google_mock_oauth_connects_refreshes_isolates_and_revokes() {
         mock_oauth_lifecycle(Provider::Google).await;
     }
@@ -2784,7 +2950,7 @@ mod tests {
         assert_eq!(
             denied.error.as_deref(),
             Some(match provider {
-                Provider::Google => "Provider sign-in was denied or cancelled",
+                Provider::Google => GOOGLE_CONSENT_DENIED,
                 Provider::Microsoft => "Microsoft sign-in was not approved. Try again in your browser. If your organization requires administrator approval, ask its administrator to approve GChat.",
             })
         );
@@ -2881,6 +3047,14 @@ mod tests {
                 (429, json!({"error":"invalid_grant"})),
                 (503, json!({"error":"invalid_client"})),
                 (
+                    400,
+                    json!({"error":"invalid_client","error_description":"secret must not be exposed"}),
+                ),
+                (
+                    403,
+                    json!({"error":"unauthorized_client","error_description":"secret must not be exposed"}),
+                ),
+                (
                     200,
                     json!({"access_token":"rotated-access","refresh_token":"rotated-refresh","expires_in":3600,"token_type":"Bearer","scope":"https://www.googleapis.com/auth/calendar.readonly"}),
                 ),
@@ -2937,6 +3111,18 @@ mod tests {
             assert_eq!(
                 state.token("first", &cancellation).await.unwrap_err(),
                 format!("Provider token authorization failed (HTTP {status})")
+            );
+            assert!(!state.view().unwrap().accounts[0].needs_reconnect);
+            assert!(!original_lease.is_cancelled());
+            assert_eq!(
+                vault.get("account:first").unwrap().as_deref(),
+                Some("original-refresh")
+            );
+        }
+        for _ in 0..2 {
+            assert_eq!(
+                state.token("first", &cancellation).await.unwrap_err(),
+                GOOGLE_REGISTRATION_REQUIRED
             );
             assert!(!state.view().unwrap().accounts[0].needs_reconnect);
             assert!(!original_lease.is_cancelled());
