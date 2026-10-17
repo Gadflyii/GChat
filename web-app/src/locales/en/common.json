@@ -59,6 +59,8 @@
   "uploadSkill": "Upload skill",
   "uploadSkillDescription": "Upload a skill definition.",
   "dropSkillToUpload": "Drag and drop or click to upload",
+  "choosingSkill": "Choose a skill file…",
+  "chooseSkillFailed": "Could not open the file chooser. Try again or drag a skill file here.",
   "uploadingSkill": "Uploading skill…",
   "uploadOneSkill": "Upload one skill at a time",
   "skillFiles": "Skill files",
