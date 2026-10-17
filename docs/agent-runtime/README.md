@@ -504,9 +504,14 @@ Evidence: `/ai/gchat/out/gchat-focused-burndown-20261013/dri3/result.json`.
 [Credential-store tiers](../decisions/2026-10-13-credential-store-tiers.md) is the
 approved shared-store design. Linux now supports Secret Service or an explicit
 passphrase-encrypted vault; WSL uses these Linux tiers until the Windows helper
-release gate. The native Linux missing-provider/passphrase setup gate passes, including
-lock, rejected passphrase and unlock after restart; physical locked desktop-provider
-and Windows release checks remain owed. Evidence is in the acceptance record.
+release gate. The native Linux missing-provider/passphrase setup gate passes,
+including lock, rejected passphrase and unlock after restart. The installed d31
+Linux Secret Service check also passes silent locked-keyring launch and explicit
+saved-Host Connect prompting, with a clear locked-storage error after Cancel.
+A fresh isolated-keyring follow-up also passes ordinary unlock, stored-credential
+retrieval and reconnection after restart. Gbot credential workflows and Windows
+remain unqualified.
+[Evidence and limits](remaining-acceptance.md#installed-linux-locked-keyring-launch-and-explicit-connect--october-17).
 OI-069's two-Host worker gate and October 15 independent-workstation gate pass.
 Two native Linux clients with distinct grants share one instance-wide worker
 limit: the second queues, queued cancellation completes, and a fresh request

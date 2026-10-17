@@ -515,8 +515,9 @@ locked, rejects an incorrect passphrase, and unlocks. Restart retains the select
 vault in its locked state; entering the correct passphrase unlocks it again.
 Evidence: `out/secret-store-installed-20261013/result.json`. No product source
 change or rebuild was needed. The private fixture is retired; no model ran.
-Physical locked desktop-keyring behavior was not replayed; prior focused cases
-cover provider errors. Windows helper/lifetime checks remain at the release gate.
+That gate did not replay locked Secret Service behavior; the separate October 17
+installed-package check below covers its bounded launch and Connect behavior.
+Windows helper/lifetime checks remain at the release gate.
 
 Completed GCHAT-MULTI-WORKER-CARD-RESTORE: source `177d574e6` restores
 all saved workers once, merges live progress by run ID and preserves answers.
@@ -531,8 +532,49 @@ Completed GCHAT-SECRET-STORE Linux tiers merged to main `ca45da2a0`.
 Core 5, Chat 8, Manager 3 and Gbot 1 focused cases, check, strict Clippy,
 frontend types/lint pass; lock adds nine edges, no package/version changes.
 Evidence: `out/secret-store-20261013/result.json`; native missing-provider and
-passphrase setup acceptance is recorded above. Physical locked desktop-provider
-and release-only Windows helper/lifetime checks remain owed.
+passphrase setup acceptance is recorded above. The separate installed-package
+check below covers locked-provider launch, explicit Connect prompting and
+stored-credential retrieval after restart. Release-only Windows helper/lifetime
+checks remain pending.
+
+## Installed Linux locked-keyring launch and explicit Connect — October 17
+
+The retained Debian XFCE guest ran the installed d31 DEB with a private D-Bus
+session and synthetic Secret Service, preserving the original keyring and bots.
+Ordinary Pair wrote a credential and connected. After normal close, locking the
+login collection and restarting `/usr/bin/gchat`, plain launch and navigation to
+Hosts left the collection locked, without an app Secret Service call or prompt.
+
+Ordinary saved Connect at 07:56:00.480Z then requested Unlock and Prompt. The
+D-Bus sender mapped to the running `/usr/bin/gchat` process, and the desktop
+showed Unlock Login Keyring. Two keyboard submissions of the retained synthetic
+password were rejected; that attempt did not qualify GetSecret or reconnection.
+Ordinary Cancel at 07:57:59.013702Z returned the explicit error: "Secure storage
+is locked. Unlock the selected store before continuing." The app and private
+services stopped normally, and the original guest was shut down and returned at
+07:58Z. Evidence:
+`/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-retrieval-20261017/{result.json,summary.md}`.
+
+A follow-up on the same installed d31 executable, SHA256
+`51d77b8502e4785aa22b6bae14c0f86794e73b0b64686cfe686d6a1e4f9e2ce4`,
+used a new isolated known-password login keyring. Ordinary Pair succeeded at
+08:19:48.515Z; normal close and locked restart followed at 08:20:13Z. Plain launch
+and Hosts navigation made no app Secret Service calls before Connect; the saved
+card was visible and the collection still locked at 08:23:50.587Z.
+
+Ordinary saved Connect at 08:23:58.275Z opened Unlock Login Keyring. Sender
+`:1.64` mapped live to `/usr/bin/gchat` PID 1945. One ordinary password submission
+unlocked the collection; GetSecret occurred at 08:24:13.979500Z and the saved Host
+showed Connected at 08:24:23.065Z. Normal app close and owned private-service exit
+completed at 08:24:45Z. Evidence:
+`/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-retrieval-known-password-20261017/result.json`.
+The earlier rejected-password fixture remains recorded separately above.
+
+This passes installed Linux locked launch, explicit saved-Connect prompting,
+ordinary unlock and stored-credential reconnection after restart, alongside the
+earlier Cancel result. It does not qualify a fresh install, Gbot credential
+workflow or native Windows. This check used synthetic credentials and a private
+remote Host, with no model or GPU workload.
 
 Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
 Two concurrent workers finished; a third queued at full capacity and was cancelled.
