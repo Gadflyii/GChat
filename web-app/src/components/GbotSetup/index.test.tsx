@@ -772,7 +772,11 @@ it('verifies the fingerprint, saves a vault key and requires SSH authentication 
     })
   )
   expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Continue' })).toHaveAccessibleDescription(
+    'Continue turns on once Check SSH access succeeds. Add the public key to the bot computer first.'
+  )
   await checkTools()
+  expect(screen.getByRole('button', { name: 'Continue' })).not.toHaveAccessibleDescription()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
   await waitFor(() =>

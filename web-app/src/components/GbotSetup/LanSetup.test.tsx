@@ -122,6 +122,28 @@ it('names an existing-key import while it runs and keeps the entered key in the 
   expect(busy).toHaveBeenLastCalledWith(false)
 })
 
+it('says why Create bot key is off until the identity is checked and the fingerprint confirmed', async () => {
+  vi.mocked(gbot).mockResolvedValueOnce(identity)
+  setup()
+  const create = screen.getByRole('button', { name: 'Create bot key' })
+  expect(create).toBeDisabled()
+  expect(create).toHaveAccessibleDescription(
+    'To create the bot key, first choose Check computer identity.'
+  )
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Check computer identity' })
+  )
+  const confirm = await screen.findByRole('checkbox', {
+    name: 'I verified this fingerprint on the bot computer',
+  })
+  expect(create).toHaveAccessibleDescription(
+    'Confirm the fingerprint above to turn on Create bot key.'
+  )
+  fireEvent.click(confirm)
+  expect(create).toBeEnabled()
+  expect(create).not.toHaveAccessibleDescription()
+})
+
 it('names new-key creation only after the user has verified the computer identity', async () => {
   const request = deferred<{ id: string }>()
   const api = vi
