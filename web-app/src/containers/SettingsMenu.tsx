@@ -210,9 +210,14 @@ const SettingsMenu = () => {
 
                       return (
                         <div key={provider.provider}>
-                          <div
+                          <Link
+                            to={route.settings.providers}
+                            params={{ providerName: provider.provider }}
+                            {...(stepSetupRemoteProvider
+                              ? { search: { step: 'setup_remote_provider' } }
+                              : {})}
                             className={cn(
-                              'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground',
+                              'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                               isActive && 'bg-foreground/20',
                               // hidden for the local provider during setup
                               // remote provider
@@ -220,25 +225,12 @@ const SettingsMenu = () => {
                                 stepSetupRemoteProvider &&
                                 'hidden'
                             )}
-                            onClick={() =>
-                              navigate({
-                                to: route.settings.providers,
-                                params: {
-                                  providerName: provider.provider,
-                                },
-                                ...(stepSetupRemoteProvider
-                                  ? {
-                                      search: { step: 'setup_remote_provider' },
-                                    }
-                                  : {}),
-                              })
-                            }
                           >
                             <ProvidersAvatar provider={provider} />
                             <div className="truncate">
                               <span>{getProviderTitle(provider.provider)}</span>
                             </div>
-                          </div>
+                          </Link>
                         </div>
                       )
                     })}
@@ -273,24 +265,20 @@ const SettingsMenu = () => {
                     match.params.providerName === provider.provider
                 )
                 return (
-                  <div
+                  <Link
                     key={provider.provider}
+                    to={route.settings.providers}
+                    params={{ providerName: provider.provider }}
+                    {...(stepSetupRemoteProvider
+                      ? { search: { step: 'setup_remote_provider' } }
+                      : {})}
                     className={cn(
-                      'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground',
+                      'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                       isRouteActive && 'bg-foreground/20',
                       provider.provider === LOCAL_GINFER_PROVIDER &&
                         stepSetupRemoteProvider &&
                         'hidden'
                     )}
-                    onClick={() =>
-                      navigate({
-                        to: route.settings.providers,
-                        params: { providerName: provider.provider },
-                        ...(stepSetupRemoteProvider
-                          ? { search: { step: 'setup_remote_provider' } }
-                          : {}),
-                      })
-                    }
                   >
                     <ProvidersAvatar provider={provider} />
                     <div className="truncate">
@@ -304,7 +292,7 @@ const SettingsMenu = () => {
                         className="size-2 rounded-full bg-green-500 shrink-0"
                       />
                     )}
-                  </div>
+                  </Link>
                 )
               })}
 
@@ -335,24 +323,20 @@ const SettingsMenu = () => {
                           match.params.providerName === provider.provider
                       )
                       return (
-                        <div
+                        <Link
                           key={provider.provider}
+                          to={route.settings.providers}
+                          params={{ providerName: provider.provider }}
                           className={cn(
-                            'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-muted-foreground',
+                            'flex px-2 items-center gap-1.5 cursor-pointer hover:bg-secondary/60 py-1 w-full rounded-sm text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                             isRouteActive && 'bg-foreground/20'
                           )}
-                          onClick={() =>
-                            navigate({
-                              to: route.settings.providers,
-                              params: { providerName: provider.provider },
-                            })
-                          }
                         >
                           <ProvidersAvatar provider={provider} />
                           <div className="truncate flex-1">
                             <span>{getProviderTitle(provider.provider)}</span>
                           </div>
-                        </div>
+                        </Link>
                       )
                     })}
                 </>
