@@ -114,7 +114,7 @@ export function CredentialSetup({
   if (status?.ready && !intent)
     return (
       <section
-        className="rounded-lg border p-4 space-y-3"
+        className="rounded-xl border p-5 space-y-3"
         aria-label="Secure storage setup"
       >
         <h3 className="font-medium">Secure storage</h3>
@@ -153,7 +153,7 @@ export function CredentialSetup({
   if (skipped)
     return (
       <section
-        className="rounded-lg border p-4 space-y-3"
+        className="rounded-xl border p-5 space-y-3"
         aria-label="Secure storage setup"
       >
         <h3 className="font-medium">Secure storage</h3>
@@ -168,7 +168,7 @@ export function CredentialSetup({
     )
   return (
     <section
-      className="rounded-lg border p-4 space-y-3"
+      className="rounded-xl border p-5 space-y-3"
       aria-label="Secure storage setup"
     >
       <h3 className="font-medium">Secure storage</h3>
