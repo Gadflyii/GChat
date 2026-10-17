@@ -216,6 +216,17 @@
     color-scheme: dark;
   }
 
+  /* Draw native selects like the app's inputs instead of the OS's grey button.
+     The chevron is a mid-grey that reads on both themes. */
+  select {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    padding-inline-end: 2rem;
+  }
+
   /* Native checkboxes and radios take the app accent and theme instead of the
      browser's default white box and blue tick. */
   input[type='checkbox'],
