@@ -295,6 +295,13 @@ Type `/` in the composer to see available skills. Use the up and down arrow
 keys to choose a skill, then press Enter or Tab to select it. The selected
 skill stays visible as you move through a long list.
 
+## Creating and editing skills
+
+After you choose **Create** or **Save**, the button shows **Creating skill…**
+or **Saving skill…** until the request finishes. Wait for the dialog to close
+before using the saved skill. If saving fails, your entries stay in the dialog
+and the button becomes available so you can try again.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing

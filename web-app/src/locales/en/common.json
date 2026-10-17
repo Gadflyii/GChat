@@ -62,6 +62,8 @@
   "choosingSkill": "Choose a skill file…",
   "chooseSkillFailed": "Could not open the file chooser. Try again or drag a skill file here.",
   "uploadingSkill": "Uploading skill…",
+  "creatingSkill": "Creating skill…",
+  "savingSkill": "Saving skill…",
   "uploadOneSkill": "Upload one skill at a time",
   "skillFiles": "Skill files",
   "skillFileRequirements": "File requirements",

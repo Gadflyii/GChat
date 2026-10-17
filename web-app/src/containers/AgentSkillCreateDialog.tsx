@@ -133,6 +133,7 @@ export function AgentSkillCreateDialog({
             {t('common:cancel')}
           </Button>
           <Button
+            aria-busy={submitting}
             disabled={
               submitting ||
               normalizeSkillName(name).replace(/-+$/, '').length < 2 ||
@@ -141,7 +142,7 @@ export function AgentSkillCreateDialog({
             }
             onClick={() => void submit()}
           >
-            {t('common:create')}
+            {submitting ? t('common:creatingSkill') : t('common:create')}
           </Button>
         </DialogFooter>
       </DialogContent>
