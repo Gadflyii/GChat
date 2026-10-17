@@ -885,7 +885,7 @@ impl HostProcesses {
                 job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids)?;
             if !profile.profile_path.is_file() {
                 return Err(
-                    "Install the hardware profile for this GPU group before loading a model".into(),
+                    "This computer has no hardware profile for these graphics cards yet. Build one first: on GInfer Hosts, use Set up models on this computer, or Advanced hardware profile options, then Build profile.".into(),
                 );
             }
         }

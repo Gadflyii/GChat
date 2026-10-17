@@ -265,14 +265,21 @@ pub async fn request(
         .await
         .map_err(String::from)
 }
+/// The host's own sentence, without the JSON quotes a `Value` prints around a string.
+fn host_error(status: reqwest::StatusCode, body: &Value) -> String {
+    let detail = match body.get("error") {
+        Some(Value::String(text)) => text.clone(),
+        Some(other) => other.to_string(),
+        None => body.to_string(),
+    };
+    format!("host returned {status}: {detail}")
+}
+
 async fn response_json(response: reqwest::Response) -> Result<Value, String> {
     let status = response.status();
     let body = response.json::<Value>().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Err(format!(
-            "host returned {status}: {}",
-            body.get("error").unwrap_or(&body)
-        ));
+        return Err(host_error(status, &body));
     }
     Ok(body)
 }
@@ -1034,6 +1041,19 @@ mod registration_tests {
         assert!(validate_data_folder_move(&current, &destination).unwrap_err().contains("empty"));
         assert_eq!(std::fs::read(destination.join("ginfer/host/host.json")).unwrap(), b"foreign state");
         assert!(validate_data_folder_move(&current, std::path::Path::new("relative")).is_err());
+    }
+
+    #[test]
+    fn host_errors_read_as_plain_sentences_without_json_quoting() {
+        let status = reqwest::StatusCode::BAD_REQUEST;
+        assert_eq!(
+            host_error(status, &json!({"error": "Build a profile first."})),
+            "host returned 400 Bad Request: Build a profile first."
+        );
+        assert_eq!(
+            host_error(status, &json!({"error": {"code": 7}})),
+            r#"host returned 400 Bad Request: {"code":7}"#
+        );
     }
 
     #[tokio::test]
