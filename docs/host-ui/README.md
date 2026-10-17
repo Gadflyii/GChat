@@ -1,5 +1,23 @@
 # GInfer host UI
 
+## Proxy control labels — GUI-PROXY-SETTINGS-ACCESSIBILITY
+
+Current main already supplies novice proxy instructions and accessible control
+names. This follow-up keeps credential labels visible after typing, associates
+each field and switch with its existing instructions, and connects the named
+Show/Hide password button to the password field. Existing configuration values
+and setters remain unchanged; locales and network behavior are outside this fix.
+
+Acceptance: rendered tests for named controls and instructions, exact setting
+edits, independent switches, and keyboard password reveal; then full
+`make verify` and an isolated merge-ready branch. Next: finish the dedicated
+tests and run the focused/full gate. No build or test has started.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| Codex 6 / local | `/ai/gchat-worktrees/c6-proxy-settings-accessibility-20261017`, branch `fix/c6-proxy-settings-accessibility-20261017` | Candidate from `eaf131aed`; route and dedicated tests only |
+| Codex 6 / evidence | `/ai/gchat/out/c6-proxy-settings-accessibility-20261017/` | Planned result JSON and concise summary; no live job |
+
 ## Data-folder move guidance — GUI-DATA-LOCATION-GUIDANCE
 
 The confirmation dialog explains which files are copied, that external model

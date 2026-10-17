@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { Input } from '@/components/ui/input'
 import { EyeOff, Eye } from 'lucide-react'
-import { useCallback, useState } from 'react'
+import { useCallback, useId, useState } from 'react'
 import { useProxyConfig } from '@/hooks/useProxyConfig'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,6 +17,7 @@ export const Route = createFileRoute(route.settings.https_proxy as any)({
 
 function HTTPSProxyContent() {
   const { t } = useTranslation()
+  const proxyId = useId()
   const [showPassword, setShowPassword] = useState(false)
   const {
     proxyUrl,
@@ -56,10 +57,13 @@ function HTTPSProxyContent() {
               header={
                 <div className="flex items-center justify-between">
                   <h1 className="text-foreground font-studio font-medium text-base mb-2">
-                    {t('settings:httpsProxy.proxy')}
+                    <label htmlFor={`${proxyId}-enabled`}>
+                      {t('settings:httpsProxy.proxy')}
+                    </label>
                   </h1>
                   <Switch
-                    aria-label={t('settings:httpsProxy.proxy')}
+                    id={`${proxyId}-enabled`}
+                    aria-describedby={`${proxyId}-url-description`}
                     checked={proxyEnabled}
                     onCheckedChange={toggleProxy}
                   />
@@ -67,13 +71,20 @@ function HTTPSProxyContent() {
               }
             >
               <CardItem
-                title={t('settings:httpsProxy.proxyUrl')}
+                title={
+                  <label htmlFor={`${proxyId}-url`}>
+                    {t('settings:httpsProxy.proxyUrl')}
+                  </label>
+                }
                 className="block"
                 description={
                   <div className="space-y-2">
-                    <p>{t('settings:httpsProxy.proxyUrlDesc')}</p>
+                    <p id={`${proxyId}-url-description`}>
+                      {t('settings:httpsProxy.proxyUrlDesc')}
+                    </p>
                     <Input
-                      aria-label={t('settings:httpsProxy.proxyUrl')}
+                      id={`${proxyId}-url`}
+                      aria-describedby={`${proxyId}-url-description`}
                       className="w-full"
                       placeholder={t('settings:httpsProxy.proxyUrlPlaceholder')}
                       value={proxyUrl}
@@ -87,36 +98,59 @@ function HTTPSProxyContent() {
                 className="block"
                 description={
                   <div className="space-y-2">
-                    <p>{t('settings:httpsProxy.authenticationDesc')}</p>
+                    <p id={`${proxyId}-authentication-description`}>
+                      {t('settings:httpsProxy.authenticationDesc')}
+                    </p>
                     <div className="flex gap-2">
-                      <Input
-                        aria-label={t('settings:httpsProxy.username')}
-                        placeholder={t('settings:httpsProxy.username')}
-                        value={proxyUsername}
-                        onChange={(e) => setProxyUsername(e.target.value)}
-                      />
-                      <div className="relative shrink-0 w-1/2">
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <label htmlFor={`${proxyId}-username`}>
+                          {t('settings:httpsProxy.username')}
+                        </label>
                         <Input
-                          aria-label={t('settings:httpsProxy.password')}
-                          type={showPassword ? 'text' : 'password'}
-                          placeholder={t('settings:httpsProxy.password')}
-                          className="pr-16"
-                          value={proxyPassword}
-                          onChange={(e) => setProxyPassword(e.target.value)}
+                          id={`${proxyId}-username`}
+                          aria-describedby={`${proxyId}-authentication-description`}
+                          placeholder={t('settings:httpsProxy.username')}
+                          value={proxyUsername}
+                          onChange={(e) => setProxyUsername(e.target.value)}
                         />
-                        <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
-                          <button
-                            type="button"
-                            aria-label={showPassword ? 'Hide proxy password' : 'Show proxy password'}
-                            onClick={() => setShowPassword(!showPassword)}
-                            className="p-1 rounded hover:bg-foreground/5 text-foreground/70"
-                          >
-                            {showPassword ? (
-                              <EyeOff size={16} />
-                            ) : (
-                              <Eye size={16} />
-                            )}
-                          </button>
+                      </div>
+                      <div className="min-w-0 w-1/2 space-y-1">
+                        <label htmlFor={`${proxyId}-password`}>
+                          {t('settings:httpsProxy.password')}
+                        </label>
+                        <div className="relative">
+                          <Input
+                            id={`${proxyId}-password`}
+                            aria-describedby={`${proxyId}-authentication-description`}
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder={t('settings:httpsProxy.password')}
+                            className="pr-16"
+                            value={proxyPassword}
+                            onChange={(e) => setProxyPassword(e.target.value)}
+                          />
+                          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
+                            <button
+                              type="button"
+                              aria-label={
+                                showPassword
+                                  ? t('settings:httpsProxy.hidePassword', {
+                                      defaultValue: 'Hide proxy password',
+                                    })
+                                  : t('settings:httpsProxy.showPassword', {
+                                      defaultValue: 'Show proxy password',
+                                    })
+                              }
+                              aria-controls={`${proxyId}-password`}
+                              onClick={() => setShowPassword(!showPassword)}
+                              className="p-1 rounded hover:bg-foreground/5 text-foreground/70"
+                            >
+                              {showPassword ? (
+                                <EyeOff size={16} />
+                              ) : (
+                                <Eye size={16} />
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -124,13 +158,20 @@ function HTTPSProxyContent() {
                 }
               />
               <CardItem
-                title={t('settings:httpsProxy.noProxy')}
+                title={
+                  <label htmlFor={`${proxyId}-no-proxy`}>
+                    {t('settings:httpsProxy.noProxy')}
+                  </label>
+                }
                 className="block"
                 description={
                   <div className="space-y-2">
-                    <p>{t('settings:httpsProxy.noProxyDesc')}</p>
+                    <p id={`${proxyId}-no-proxy-description`}>
+                      {t('settings:httpsProxy.noProxyDesc')}
+                    </p>
                     <Input
-                      aria-label={t('settings:httpsProxy.noProxy')}
+                      id={`${proxyId}-no-proxy`}
+                      aria-describedby={`${proxyId}-no-proxy-description`}
                       placeholder={t('settings:httpsProxy.noProxyPlaceholder')}
                       value={noProxy}
                       onChange={(e) => setNoProxy(e.target.value)}
@@ -139,11 +180,20 @@ function HTTPSProxyContent() {
                 }
               />
               <CardItem
-                title={t('settings:httpsProxy.ignoreSsl')}
-                description={t('settings:httpsProxy.ignoreSslDesc')}
+                title={
+                  <label htmlFor={`${proxyId}-ignore-ssl`}>
+                    {t('settings:httpsProxy.ignoreSsl')}
+                  </label>
+                }
+                description={
+                  <span id={`${proxyId}-ignore-ssl-description`}>
+                    {t('settings:httpsProxy.ignoreSslDesc')}
+                  </span>
+                }
                 actions={
                   <Switch
-                    aria-label={t('settings:httpsProxy.ignoreSsl')}
+                    id={`${proxyId}-ignore-ssl`}
+                    aria-describedby={`${proxyId}-ignore-ssl-description`}
                     checked={proxyIgnoreSSL}
                     onCheckedChange={(checked) => setProxyIgnoreSSL(checked)}
                   />
