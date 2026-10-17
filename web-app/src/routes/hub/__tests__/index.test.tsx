@@ -54,6 +54,11 @@ describe('host-scoped Models', () => {
     expect(screen.queryByRole('button', { name: /Download to/ })).not.toBeInTheDocument()
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
   })
+  it('keeps the host selector clear of the window edge', () => {
+    render(<ModelManagement />)
+    const header = screen.getByRole('heading', { name: 'Models' }).parentElement
+    expect(header).toHaveClass('pr-4')
+  })
   it.each([true, null, false])('downloads to the selected host without invoking a local transfer (local runtime ready: %s)', async ready => {
     mocks.resources = { ready, error: '' }
     const user = userEvent.setup()
