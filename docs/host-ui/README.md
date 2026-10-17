@@ -14,8 +14,17 @@ Owned tree: `/ai/gchat-worktrees/c7-hardware-live-stats-wording-20261017`, branc
 Acceptance: corrected localized wording, the existing rendered Hardware tests,
 and one `make verify`; then push merge-ready. No new test for a static string,
 Engine/model/GPU execution, backend behavior or resource installation change.
-Next: complete the focused and full verification in the private cached S1 copy.
-Walkthrough observations remain in the separate Models/Hub/Hardware branch.
+Implementation `2742956bd` passes all six existing rendered Hardware tests.
+One full `make verify` exited 0 at 16:11:49Z October 17: 3,092 JavaScript
+and 1,079 Rust tests passed, six were skipped and 27 ignored. Lint and types
+passed; lint retains four existing warnings. No Engine or model was run.
+
+Verification used S1 CPU48–55 nice10 in pinned image `ad7f9bf020d7`, private
+offline caches and retained read-only launch profiles. Returned 16:12Z;
+booking2646 canceled. The private S1 copy and container are retired; the donor
+is unchanged. Results are retained in
+`/ai/gchat/out/hardware-live-stats-wording-20261017/{result.json,summary.md}`.
+Next: coordinator merge. The private-catalog walkthrough continues separately.
 
 ## Attachment edits survive navigation — C4
 
