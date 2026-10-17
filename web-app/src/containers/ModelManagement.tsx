@@ -216,7 +216,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const partialBytes = downloads.filter(j => j.status !== 'installed').reduce((n, j) => n + j.received, 0)
 
   return <div className="flex h-full flex-col">
-    <HeaderPage><div className="flex w-full flex-wrap items-center justify-between gap-3"><h1>Models</h1>
+    <HeaderPage><div className="flex w-full flex-wrap items-center justify-between gap-3 pr-4"><h1>Models</h1>
       <div className="flex items-center gap-2 text-sm">Host
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
