@@ -117,22 +117,48 @@ function toolSummaryFetch(options: { fail?: boolean; empty?: boolean } = {}) {
 describe('smart GInfer context', () => {
   beforeEach(() => clearSmartContextCacheForTests())
 
-  it.each([{}, { max_tokens: 8192 }, { max_completion_tokens: 8192 }])('reports incompatible output reservation before tokenizing or compacting: %j', async (output) => {
+  it.each([{}, { max_tokens: 8192 }, { max_completion_tokens: 8192 }])('sends a fitting prompt on an 8192-context server and reserves only the output it leaves: %j', async (output) => {
     const body = { model: 'qwen', messages: [{ role: 'user', content: 'Dispatch two workers.' }], ...output }
-    const fetcher = vi.fn()
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ input_tokens: 1859 })))
+    const usages: unknown[] = []
+    const prepared = await prepareGInferContextRequest(completionUrl, body, headers, fetcher, {
+      threadId: 'small-server-reservation', configuredContextTokens: 8192,
+      onUsage: (usage) => usages.push(usage),
+    })
+    expect(JSON.parse(prepared.body)).toEqual(body)
+    expect(prepared.report).toBeUndefined()
+    expect(fetcher).toHaveBeenCalledTimes(1)
+    // 8192 - 256 safety - 1859 prompt tokens stay available for the answer.
+    expect(usages).toEqual([{ inputTokens: 1859, contextTokens: 8192, reservedOutputTokens: 6077 }])
+  })
+
+  it('keeps a quarter of a small server for the answer and gives the prompt the rest', async () => {
+    const body = { model: 'qwen', messages: [{ role: 'user', content: 'One very long request.' }] }
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ input_tokens: 7000 })))
+    const usages: unknown[] = []
     const failure = await prepareGInferContextRequest(completionUrl, body, headers, fetcher, {
-      threadId: 'reservation-conflict', configuredContextTokens: 8192,
+      threadId: 'small-server-long-prompt', configuredContextTokens: 8192,
+      onUsage: (usage) => usages.push(usage),
     }).catch((error: SmartContextError) => error)
+    expect(usages).toEqual([{ inputTokens: 7000, contextTokens: 8192, reservedOutputTokens: 1984 }])
+    // A single current turn cannot be compacted; the limit is the prompt's
+    // three-quarter share (7936 usable - 1984 answer), not the output setting.
     expect(failure).toBeInstanceOf(SmartContextError)
+    expect(failure).toMatchObject({ code: 'context_turn_too_large', details: { inputTokens: 7000, inputBudget: 5952 } })
     const error = failure as SmartContextError
-    expect(error).toMatchObject({ code: 'context_output_conflict', details: {
-      configuredContextTokens: 8192, reservedOutputTokens: 8192, inputBudget: -256,
-    } })
-    expect(error.message).toContain('Increase the server context or lower the requested output tokens')
-    expect(fetcher).not.toHaveBeenCalled()
-    expect(body).toEqual({ model: 'qwen', messages: [{ role: 'user', content: 'Dispatch two workers.' }], ...output })
     expect(getSmartContextFailure({ responseBody: await smartContextErrorResponse(error).text() }))
-      .toEqual({ code: 'context_output_conflict', message: error.message })
+      .toEqual({ code: 'context_turn_too_large', message: error.message })
+  })
+
+  it('keeps the full default reservation when a large server has room', async () => {
+    const body = { model: 'qwen', messages: [{ role: 'user', content: 'Dispatch two workers.' }] }
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ input_tokens: 1859 })))
+    const usages: unknown[] = []
+    await prepareGInferContextRequest(completionUrl, body, headers, fetcher, {
+      threadId: 'large-server-reservation', configuredContextTokens: 131072,
+      onUsage: (usage) => usages.push(usage),
+    })
+    expect(usages).toEqual([{ inputTokens: 1859, contextTokens: 131072, reservedOutputTokens: 8192 }])
   })
 
   it.each([[262144, {}], [8192, { max_tokens: 1024 }]])('keeps a fitting request unchanged at %i context', async (configuredContextTokens, output) => {

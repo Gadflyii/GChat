@@ -71,8 +71,7 @@ export function logChatWarning(
     ...context,
     formatDecision: promptDecision ?? (errorName === 'AI_InvalidPromptError' ? 'invalid-prompt'
       : errorName === 'AI_TypeValidationError' ? 'value-schema-rejected' : context.conversion),
-    displayDecision: smart?.code === 'context_output_conflict' ? 'context-settings-conflict'
-      : contextError ? 'context-window-full'
+    displayDecision: contextError ? 'context-window-full'
       : accessError ? 'model-access-error'
         : memoryError ? 'out-of-memory' : 'error-generating-response',
     classificationTrigger: completion ? trigger
