@@ -7,6 +7,7 @@ import { IconMinus, IconPlus } from '@tabler/icons-react'
 import { cn } from '@/lib/utils'
 
 type InputControl = {
+  label?: string
   type?: string
   placeholder?: string
   value: string | number
@@ -19,6 +20,7 @@ type InputControl = {
 }
 
 export function InputControl({
+  label,
   type = 'text',
   placeholder = '',
   value = '',
@@ -64,6 +66,7 @@ export function InputControl({
     return (
       <ButtonGroup className={className}>
         <Input
+          aria-label={label}
           value={stringValue || undefined}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
@@ -103,6 +106,7 @@ export function InputControl({
       )}
     >
       <Input
+        aria-label={label}
         type={inputType}
         placeholder={placeholder}
         value={stringValue}
@@ -117,21 +121,30 @@ export function InputControl({
           inputActions.includes('unobscure') &&
           type === 'password' && (
             <button
+              type="button"
+              aria-label={`${showPassword ? 'Hide' : 'Show'} ${label || 'password'}`}
+              aria-pressed={showPassword}
               onClick={() => setShowPassword(!showPassword)}
               className="p-1 rounded text-muted-foreground"
             >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showPassword ? (
+                <EyeOff aria-hidden="true" size={16} />
+              ) : (
+                <Eye aria-hidden="true" size={16} />
+              )}
             </button>
           )}
         {hasInputActions && inputActions.includes('copy') && (
           <button
+            type="button"
+            aria-label={`${isCopied ? 'Copied' : 'Copy'} ${label || 'value'}`}
             onClick={copyToClipboard}
             className="p-1 rounded  text-muted-foreground"
           >
             {isCopied ? (
-              <CopyCheck className="text-primary" size={16} />
+              <CopyCheck aria-hidden="true" className="text-primary" size={16} />
             ) : (
-              <Copy size={16} />
+              <Copy aria-hidden="true" size={16} />
             )}
           </button>
         )}
