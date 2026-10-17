@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import type { AgentDefinition, AgentRunRecord } from '@/types/agent'
 import { Route } from './index'
 import GbotCompanion from '@/containers/GbotCompanion'
@@ -14,6 +15,8 @@ const navigate = vi.hoisted(() => vi.fn())
 const listAgentTemplates = vi.hoisted(() => vi.fn())
 const listAgentRuns = vi.hoisted(() => vi.fn())
 const listAgentModelInstances = vi.hoisted(() => vi.fn())
+const getAgentDefinition = vi.hoisted(() => vi.fn())
+const studioCommand = vi.hoisted(() => vi.fn())
 const botCall = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
 vi.mock('@/services/gbot', async (original) => ({
@@ -60,6 +63,12 @@ vi.mock('@/services/agent/definitions', () => ({
   listAgentTemplates,
   listAgentRuns,
   listAgentModelInstances,
+  getAgentDefinition,
+}))
+
+vi.mock('@/services/agent/studio', async (original) => ({
+  ...(await original<object>()),
+  studioCommand,
 }))
 
 const editableDraft: AgentDefinition = {
@@ -91,6 +100,41 @@ const secondAgent: AgentDefinition = {
   instructions: 'Research the selected topic.',
 }
 
+const firstHistoricalRun: AgentRunRecord = {
+  schemaVersion: 3,
+  id: 'review-history',
+  runId: 'review-run',
+  sessionId: 'review-session',
+  definitionId: firstAgent.id,
+  definitionName: firstAgent.name,
+  userMessage: 'Review the authentication files.',
+  kind: 'standard',
+  status: 'incomplete',
+  finishReason: 'max_steps',
+  startedAtMs: 1000,
+  finishedAtMs: 2000,
+  totalSteps: 25,
+  maxSteps: 25,
+  workspace: '/work/review',
+  outputWorkspace: '/outputs/review',
+  finalReply: 'Authentication review is unfinished.',
+  defaultModelInstanceId: 'qwen',
+  stages: [],
+}
+
+const secondHistoricalRun: AgentRunRecord = {
+  ...firstHistoricalRun,
+  id: 'research-history',
+  runId: 'research-run',
+  sessionId: 'research-session',
+  definitionId: secondAgent.id,
+  definitionName: secondAgent.name,
+  userMessage: 'Research the deployment options.',
+  workspace: '/work/research',
+  outputWorkspace: '/outputs/research',
+  finalReply: 'Deployment research needs another source.',
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   let reject!: (reason: Error) => void
@@ -103,6 +147,7 @@ function deferred<T>() {
 
 describe('AgentStudioPage', () => {
   beforeEach(() => {
+    vi.spyOn(toast, 'error').mockReturnValue('test-error')
     useGbotPage.setState({ page: null, sharing: null, requests: {} })
     useGbotCompanion.getState().reset()
     useGeneralSetting.setState({ gbotEnabled: true })
@@ -110,6 +155,11 @@ describe('AgentStudioPage', () => {
     navigate.mockReset()
     listAgentTemplates.mockReset().mockResolvedValue([])
     listAgentRuns.mockReset().mockResolvedValue([])
+    getAgentDefinition.mockReset().mockResolvedValue(firstAgent)
+    studioCommand.mockReset().mockResolvedValue({
+      pools: [], instances: [], usage: {}, aliases: {}, fleetTargets: [],
+      fleetHosts: [], fleet: { connected: false, migrationIssues: [] },
+    })
     listAgentModelInstances.mockReset().mockResolvedValue([
       { id: 'qwen', modelId: 'qwen', port: 8123 },
       { id: 'muse', modelId: 'muse', port: 8124 },
@@ -125,11 +175,137 @@ describe('AgentStudioPage', () => {
     }
   })
 
+  afterEach(() => {
+    vi.mocked(toast.error).mockRestore()
+  })
+
   async function renderSavedAgents() {
     definitionState.value.definitions = [firstAgent, secondAgent]
     render(<AgentStudioPage />)
     await screen.findByDisplayValue(firstAgent.name)
   }
+
+  async function renderRunHistory() {
+    listAgentRuns.mockResolvedValue([firstHistoricalRun, secondHistoricalRun])
+    const view = render(<AgentStudioPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Runs', exact: true }))
+    fireEvent.click(await screen.findByRole('button', { name: /Review assistant incomplete/ }))
+    expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
+    return view
+  }
+
+  async function prepareHistoricalRun(action: 'Re-run' | 'Continue as new run…') {
+    if (action === 'Re-run') {
+      fireEvent.keyDown(screen.getByRole('button', {
+        name: `Actions for ${firstAgent.name}`,
+      }), { key: 'ArrowDown' })
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Re-run' }))
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: action }))
+    }
+  }
+
+  it.each(['Re-run', 'Continue as new run…'] as const)(
+    'does not open delayed %s setup after leaving run history', async (action) => {
+      const pending = deferred<AgentDefinition>()
+      getAgentDefinition.mockReturnValue(pending.promise)
+      await renderRunHistory()
+
+      await prepareHistoricalRun(action)
+      expect(screen.getByRole('status')).toHaveTextContent('Preparing run…')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+      expect(screen.queryByText('Preparing run…')).not.toBeInTheDocument()
+
+      await act(async () => pending.resolve(firstAgent))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Runs', exact: true }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    }
+  )
+
+  it('keeps the latest selected run task and workspace when an older preparation finishes later', async () => {
+    const first = deferred<AgentDefinition>()
+    const second = deferred<AgentDefinition>()
+    getAgentDefinition.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    await renderRunHistory()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant incomplete/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+    expect(getAgentDefinition.mock.calls).toEqual([[firstAgent.id], [secondAgent.id]])
+
+    await act(async () => second.resolve(secondAgent))
+
+    expect(screen.getByRole('dialog', { name: `Run ${secondAgent.name}` })).toBeInTheDocument()
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).toContain(secondHistoricalRun.userMessage)
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).toContain(secondHistoricalRun.finalReply)
+    expect(screen.getByLabelText('Workspace')).toHaveValue(secondHistoricalRun.workspace)
+
+    await act(async () => first.resolve(firstAgent))
+
+    expect(screen.getByRole('dialog', { name: `Run ${secondAgent.name}` })).toBeInTheDocument()
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).toContain(secondHistoricalRun.userMessage)
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).not.toContain(firstHistoricalRun.userMessage)
+    expect(screen.getByLabelText('Workspace')).toHaveValue(secondHistoricalRun.workspace)
+  })
+
+  it.each(['section', 'run selection'] as const)(
+    'suppresses a stale preparation error after changing %s', async (change) => {
+      const pending = deferred<AgentDefinition>()
+      getAgentDefinition.mockReturnValue(pending.promise)
+      await renderRunHistory()
+      fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+
+      if (change === 'section') {
+        fireEvent.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+      } else {
+        fireEvent.click(screen.getByRole('button', { name: /Research assistant incomplete/ }))
+      }
+      await act(async () => pending.reject(new Error('Old definition is unavailable')))
+
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.queryByText('Preparing run…')).not.toBeInTheDocument()
+    }
+  )
+
+  it('reports the current preparation error and lets the user retry the same run', async () => {
+    const failed = deferred<AgentDefinition>()
+    const retry = deferred<AgentDefinition>()
+    getAgentDefinition.mockReturnValueOnce(failed.promise).mockReturnValueOnce(retry.promise)
+    await renderRunHistory()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+
+    await act(async () => failed.reject(new Error('Definition storage is unavailable')))
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Definition storage is unavailable'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('Preparing run…')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing run…')
+
+    await act(async () => retry.resolve(firstAgent))
+
+    expect(screen.getByRole('dialog', { name: `Run ${firstAgent.name}` })).toBeInTheDocument()
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).toContain(firstHistoricalRun.userMessage)
+    expect(screen.getByLabelText('Workspace')).toHaveValue(firstHistoricalRun.workspace)
+    expect(getAgentDefinition).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not report a pending preparation failure after Studio unmounts', async () => {
+    const pending = deferred<AgentDefinition>()
+    getAgentDefinition.mockReturnValue(pending.promise)
+    const view = await renderRunHistory()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+
+    view.unmount()
+    await act(async () => pending.reject(new Error('Definition lookup finished after leaving Studio')))
+
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
 
   async function askAboutDraft() {
     const tasks: Task[] = []
