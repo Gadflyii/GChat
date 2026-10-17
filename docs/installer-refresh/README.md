@@ -22,9 +22,94 @@ For the October 17 release candidate:
   The initial [Windows gate](windows-gate-20261016.md) covers a narrower set of
   checks on an RTX 5090; its results do not qualify every Windows feature.
 
-## October 17 current Linux RC — packages and OLD lifecycle verified
+## October 17 current Linux RC — packages verified, Flash High blocked
 
 The unsigned, unpublished app-only refresh uses GChat
+`e9cf3b1a444f6884456bc88ed3ddeacd27b75cb6` with unchanged Engine
+`4f451dded472516ac561b67efdacf9673f776967` (SM80/86/89/120a). It includes the
+merged optional-completion correction: explicit **Cancel profiling** durably
+parks `complete_remaining_formats` work until an explicit Resume or preparation
+of another model. Loading a model can still pause optional work for later
+resumption. Optional completion, including its cancelling state, no longer
+blocks Load for an accepted selected artifact; foreground profiling still does.
+A new Host must revalidate the selected artifact before serving it.
+
+The Cancel/Load correction at candidate `92ab`, merged via `db670f614`, passed
+full `make verify`: 2,553 frontend tests (6 skipped), 119 extension tests and
+1,057 Rust tests (27 ignored).
+Focused React, Manager UI and Host hardware-profile tests, Host `cargo check`
+and strict Clippy also pass. The source binding and terminal receipts are in
+`/ai/gchat/out/background-profile-load-20261017/gate/`. This gate is separate
+from the e9cf package build and does not qualify the Flash High-reasoning GUI
+consumer.
+
+The corrected e9cf native rebuild, package assembly and complete archive check
+pass, and both NTFS destination SHA256 values match. An earlier attempt used
+stale db670 native outputs and was disqualified before archive checking or
+transfer. Flash High GUI acceptance is **BLOCKED** by Engine startup capacity.
+Gchat 2's current native input-only check **PASSES**, with resources returned at
+11:12Z. Its receipt is
+`/ai/gchat/out/gbot-desktop-keyboard-shortcuts-20261017/native-e9cf3b1a4/result.json`,
+SHA256 `7f52019c6b7e7e25d632e1276ab4e3c7057313390d2a804eb2c13ab637b43ea3`.
+Current RC receipts are under
+`/ai/gchat/out/linux-rc-final-20261017/current-e9cf3b1a4-4f451dded/`.
+
+The exact e9cf/4f AppImage's retained local RTX 5090 fixture now confirms the
+optional-completion Cancel behavior: one Cancel at 10:56:25Z ended the job as
+`cancelled` after 136.338 seconds, with `completion_failed: true`; the native
+child was absent and no replacement job started. It remained cancelled for
+more than five minutes across Refresh and Models navigation, and both Installed
+Load buttons were enabled.
+One Flash Installed Load at 10:56:51Z stopped before Engine Start
+with: "No qualified automatic profile is available. Select a qualified profile
+in Engines, or specify both context and concurrency as custom settings."
+This admission limitation remains separate from the corrected Cancel/Load UI.
+
+Before this attempt, the retained accepted main profile covered Qwen NVFP4 and
+had `cpu_expert_rates: []`; Flash had never been accepted in this fixture. For Flash
+pure 2-bit (SHA256
+`8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`),
+one custom **Check startup settings** at 10:58:58Z failed before Start with
+missing `q2g64` CPU expert rows for T=1..64, cold and warm. This does not
+establish a new defect. The 10:59:12Z DOM result is retained in
+`/ai/gchat/out/linux-rc-final-20261017/local5090-e9cf3b1a4-4f451dded-flash-high/gui-dom-evidence.jsonl`.
+At 11:03:25Z, ordinary GUI **Resume profiling** was explicitly clicked once to
+reuse the saved checkpoint; this was neither an automatic restart nor full
+Ensure. Resume **PASSED** in 94.066 seconds: native profiling retained four
+completed node/format groups and completed w8, nvfp4 and nvfp4-gmul. The canonical
+profile now has 5,568 CPU rows, SHA256
+`11837975fe55b9e77891eeab962f562b61bb48c869e26d3a4b6ecf3b794fa20a`.
+Evidence is retained in
+`/ai/gchat/out/linux-rc-final-20261017/local5090-e9cf3b1a4-4f451dded-flash-high/explicit-resume-completed.json`.
+The second startup quote was accepted and enabled Load; it did not establish
+Ready. Ordinary custom Load
+was clicked at 11:07:07.941Z; its selected-Flash native Ensure completed in
+19.468 seconds, with state `loaded`, scope `artifact`, the `q2g64` requirement
+complete and `all_formats_complete: true`. Evidence is retained in
+`/ai/gchat/out/linux-rc-final-20261017/local5090-e9cf3b1a4-4f451dded-flash-high/flash-artifact-ensure-completed.json`.
+Engine startup **FAILED** before Ready at 11:09:59.069Z in the
+`post-graph-warm` capacity check on rank 0: free device memory was 1,064,505,344
+bytes against 1,073,741,824 bytes of required headroom, a shortfall of 9,236,480
+bytes (`retained_graph_bytes=0`, `transient_peak_bytes=8065024`). No GUI request
+was sent; Flash High was **NOT RUN**. Package/archive checks pass, but this
+outcome does not establish RC acceptance. The observed failure comes from
+Engine's [startup-capacity guard](https://github.com/SectileLabs/ginfer/blob/4f451dded472516ac561b67efdacf9673f776967/src/targets/qwen3_8_flash_next/impl/runtime/startup_capacity.h#L123-L130),
+called by the [post-graph-warm check](https://github.com/SectileLabs/ginfer/blob/4f451dded472516ac561b67efdacf9673f776967/src/targets/qwen3_8_flash_next/impl/runtime/concurrent_program.cpp#L3887-L3901).
+The allocation cause remains unknown.
+
+| Package | Bytes | SHA256 |
+| --- | ---: | --- |
+| `GChat_2.0.42+rc20261017.gchate9cf3b1a4.engine4f451dded_amd64.deb` | 2,793,379,678 | `8373d240d81ceb4b5b9ed358d98fc437eab4b1f36a6e1f0051cc7b42c9fb5b35` |
+| `GChat_2.0.42_rc20261017.gchate9cf3b1a4.engine4f451dded_amd64.AppImage` | 2,907,314,680 | `c86b0efb858b6aae932977ba291c5a28b6e39daf405fb47bd9e94a33712e237f` |
+
+The packages are retained in
+`/mnt/c/Users/Ron/gchat-windows-gate-20261016/linux-rc-current-e9cf3b1a4-4f451dded/`.
+The retained Engine runtime set is reused; no new Engine build, full Ensure or
+fresh-install qualification is claimed.
+
+## October 17 previous Linux RC — c5f packages and OLD lifecycle verified
+
+The unsigned, unpublished app-only refresh used GChat
 `c5f125d2544f22adb7f7c3952d0fa4e9582f5b43` and unchanged Engine
 `4f451dded472516ac561b67efdacf9673f776967` (SM80/86/89/120a). The source tree
 matches the verified Gbot Quit cache correction candidate: full `make verify`
@@ -56,8 +141,8 @@ The packaged Flash pure 2-bit package (SHA256
 **High-reasoning consumer check remains OPEN**. The c5f/4f attempt was blocked
 before model Start or any request: automatic `complete-remaining-formats`
 profiling disabled Load, and profiling immediately restarted after Cancel.
-A source fix is underway; no corrected candidate has yet been installed or
-qualified.
+The merged correction and subsequent capacity-blocked consumer attempt are
+described above; this blocked c5f attempt does not qualify the corrected candidate.
 
 Historical acceptance on GChat `0b3aa523c` with the same Engine reached Ready
 through one ordinary Installed Load on the local RTX 5090, then answered one
