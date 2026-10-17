@@ -1,5 +1,11 @@
 # GInfer host UI
 
+## Retrying an image preview
+
+If a workspace image cannot be displayed, GChat shows an error instead of an
+empty preview. Check that the file is still available, then choose **Retry
+preview**. The same file stays selected while GChat tries again.
+
 ## Provider settings keyboard navigation — C7
 
 `GUI-SETTINGS-PROVIDER-KEYBOARD` fixes the ordinary Settings provider entries
