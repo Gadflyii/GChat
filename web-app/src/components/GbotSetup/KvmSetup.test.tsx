@@ -106,3 +106,71 @@ it('creates only after confirmation, shows event progress and retries the same o
     call.mock.calls.filter(([path]) => path.endsWith('/start'))[1][1]
   ).toEqual(first)
 })
+
+it('shows a pending recheck once and clears earlier readiness when it fails', async () => {
+  let rejectCheck!: (reason: Error) => void
+  const pendingCheck = new Promise((_, reject) => {
+    rejectCheck = reject
+  })
+  let checks = 0
+  call.mockImplementation((path) => {
+    if (path.endsWith('preflight')) {
+      checks += 1
+      return checks === 2
+        ? pendingCheck
+        : Promise.resolve({ ready: true, issues: [] })
+    }
+    return Promise.resolve([])
+  })
+  render(<KvmSetup name="Writer" connected={vi.fn()} />)
+  const create = screen.getByRole('button', {
+    name: 'Create Writer’s computer',
+  })
+  await waitFor(() => expect(create).toBeEnabled())
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Check prerequisites again' })
+  )
+  const checking = screen.getByRole('button', {
+    name: 'Checking prerequisites…',
+  })
+  expect(checking).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Checking local VM prerequisites…'
+  )
+  expect(create).toBeDisabled()
+  fireEvent.click(checking)
+  fireEvent.click(create)
+  expect(checks).toBe(2)
+  expect(call.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  rejectCheck(new Error('The Gbot service is unavailable.'))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'The Gbot service is unavailable.'
+  )
+  expect(create).toBeDisabled()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Check prerequisites again' })
+  )
+  await waitFor(() => expect(create).toBeEnabled())
+  expect(checks).toBe(3)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('does not retain a successful preflight when refreshing saved setups fails', async () => {
+  call.mockImplementation((path) =>
+    path.endsWith('preflight')
+      ? Promise.resolve({ ready: true, issues: [] })
+      : Promise.reject(new Error('Saved setups could not be read.'))
+  )
+  render(<KvmSetup name="Writer" connected={vi.fn()} />)
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Saved setups could not be read.'
+  )
+  expect(
+    screen.getByRole('button', { name: 'Create Writer’s computer' })
+  ).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Check prerequisites again' })
+  ).toBeEnabled()
+  expect(call.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+})
