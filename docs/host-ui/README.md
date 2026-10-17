@@ -11,11 +11,14 @@ embeddings choice is displayed as unavailable and kept until explicitly changed;
 hidden settings and supported attachment behavior remain intact. No backend or
 shared control-label change belongs to this branch.
 
-Acceptance: rendered checks for available choices/help, saved-mode recovery,
-preserved hidden preferences, navigation durability and visible numeric bounds,
-then full `make verify`. The candidate includes current main and the accepted
-attachment-durability fix. Next: focused and full verification after the
-sidebar gate, then the final private native replay.
+All 11 focused rendered cases and one full `make verify` pass: 2,982 frontend
+tests, 119 extension tests, 1,079 Rust tests and 59 Node contracts. Six frontend
+tests were skipped and 27 Rust tests ignored; lint has no errors and four
+warnings. Types, quality checks and all six coverage floors passed. Saved-mode
+recovery, hidden preferences, quick navigation and numeric bounds are covered.
+The candidate includes current main and the accepted attachment-durability fix.
+Returned 16:13Z; booking2650 canceled. Next: final integrated private native
+replay, retaining screenshots alongside the original finding.
 
 Owned source: `/ai/gchat-worktrees/c4-settings-attachment-availability-20261017`,
 branch `fix/c4-settings-attachment-availability-20261017`. The original evidence is retained in
