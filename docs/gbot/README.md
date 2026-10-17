@@ -1,5 +1,33 @@
 # Gbot design
 
+## Sleeping icon visual qualification — C7
+
+`GBOT-SLEEPING-ICON-PROPORTIONS-20261017`: the ordinary installed functional
+GChat `707724776` / Engine `43b8bbf60` FRESH check passed at 36px (sidebar and
+companion) and 40px (Gbot settings heading), in both Light and Dark themes on
+October 17. Both sleeping Zs remain readable and unclipped through their rise
+and fade. No correction is needed at those observed sizes.
+
+Both read-only design references use `0.16em / 0.12em`; the merged component
+uses `0.28em / 0.21em`, preserving the small-to-large ratio of 0.75. The installed
+animation retains that proportion. The 24px saved-bot list was unavailable
+because this fixture's Gbot service was disconnected. That size remains
+unqualified; no service or bot was created to extend the granted scope.
+
+Evidence: `/ai/gchat/out/gbot-sleeping-icon-proportions-20261017/result.json`,
+with the retained light/dark companion and settings screenshots beside it.
+Codex 4 returned the fixture at 14:23 UTC; Gchat 2's visual-only grant preceded
+C7's 14:24–14:30 check. The original Dark theme was restored, the AppImage
+closed normally, and the VM shut down normally with its original XML unchanged.
+S1 CPU booking 2584 was canceled: returned 14:30Z. No model, Start, Ensure,
+provider, source edit or fresh build/test gate was used.
+
+Owned source: `/ai/gchat-worktrees/c7-gbot-sleeping-visual-20261017`, branch
+`test/c7-gbot-sleeping-visual-20261017`, based on main `1e2d47fa9`; no build or
+artifact copy was allocated. Next: Gchat 3 integrates this bounded visual result
+and retains any 24px remainder. Windows host-port collision remains separately
+pending Gchat 2's installed-Windows handoff.
+
 ## Outage reply notification fix — C7
 
 `GCHAT-GBOT-REPLY-OUTAGE-NOTIFICATION` is merge-ready on
