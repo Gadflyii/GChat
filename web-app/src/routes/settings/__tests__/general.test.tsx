@@ -77,6 +77,7 @@ vi.mock('@/hooks/useGeneralSetting', () => ({
 // Create a controllable mock
 const mockCheckForUpdate = vi.fn()
 const mockOpenerOpen = vi.fn()
+const mockOpenLogsWindow = vi.fn()
 const mockRevealItemInDir = vi.fn()
 const mockRelocateDataFolder = vi.fn()
 const mockGetDataFolder = vi.fn()
@@ -298,7 +299,7 @@ describe('General Settings Route', () => {
         emit: mockEmitEvent,
       } as ReturnType<ServiceHub['events']>,
       window: {
-        openLogsWindow: vi.fn(),
+        openLogsWindow: mockOpenLogsWindow,
       } as ReturnType<ServiceHub['window']>,
       opener: {
         open: mockOpenerOpen,
@@ -308,6 +309,7 @@ describe('General Settings Route', () => {
     // Reset the mock to return a promise that resolves immediately by default
     mockCheckForUpdate.mockResolvedValue(null)
     mockOpenerOpen.mockResolvedValue(undefined)
+    mockOpenLogsWindow.mockResolvedValue(undefined)
     mockRevealItemInDir.mockResolvedValue(undefined)
     mockRelocateDataFolder.mockResolvedValue(undefined)
     mockGetDataFolder.mockResolvedValue('/test/data/folder')
@@ -750,46 +752,71 @@ describe('General Settings Route', () => {
     )
   })
 
-  it('should handle logs window opening', async () => {
+  it('reports a failed logs window action and allows a successful retry', async () => {
+    const error = new Error('Window could not be created')
+    mockOpenLogsWindow.mockRejectedValueOnce(error)
     const Component = GeneralRoute.component as React.ComponentType
     await act(async () => {
       render(<Component />)
     })
 
-    const buttons = screen.getAllByTestId('button')
-    const openLogsButton = buttons.find((button) =>
-      button.textContent?.includes('openLogs')
+    const openLogsButton = screen.getByRole('button', {
+      name: 'settings:general.openLogs',
+    })
+
+    await act(async () => {
+      fireEvent.click(openLogsButton)
+    })
+
+    expect(mockOpenLogsWindow).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      'Could not open logs. Try again or open the logs folder.',
+      { description: String(error) }
     )
 
-    if (openLogsButton) {
-      expect(openLogsButton).toBeInTheDocument()
-      // Test that button is interactive
-      await act(async () => {
-        fireEvent.click(openLogsButton)
-      })
-      expect(openLogsButton).toBeInTheDocument()
-    }
+    await act(async () => {
+      fireEvent.click(openLogsButton)
+    })
+
+    expect(mockOpenLogsWindow).toHaveBeenCalledTimes(2)
+    expect(toast.error).toHaveBeenCalledTimes(1)
   })
 
-  it('should handle reveal logs folder', async () => {
+  it('reports a failed reveal logs action and retries the same logs folder', async () => {
+    const error = 'File manager is unavailable'
+    mockRevealItemInDir.mockRejectedValueOnce(error)
     const Component = GeneralRoute.component as React.ComponentType
     await act(async () => {
       render(<Component />)
     })
 
-    const buttons = screen.getAllByTestId('button')
-    const revealLogsButton = buttons.find((button) =>
-      button.textContent?.includes('showInFileExplorer')
+    const revealLogsButton = screen.getByRole('button', {
+      name: 'settings:general.showInFileExplorer',
+    })
+
+    await act(async () => {
+      fireEvent.click(revealLogsButton)
+    })
+
+    expect(mockRevealItemInDir).toHaveBeenNthCalledWith(
+      1,
+      '/test/data/folder/logs'
+    )
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      'Could not open the logs folder. Try again.',
+      { description: error }
     )
 
-    if (revealLogsButton) {
-      expect(revealLogsButton).toBeInTheDocument()
-      // Test that button is interactive
-      await act(async () => {
-        fireEvent.click(revealLogsButton)
-      })
-      expect(revealLogsButton).toBeInTheDocument()
-    }
+    await act(async () => {
+      fireEvent.click(revealLogsButton)
+    })
+
+    expect(mockRevealItemInDir).toHaveBeenCalledTimes(2)
+    expect(mockRevealItemInDir).toHaveBeenNthCalledWith(
+      2,
+      '/test/data/folder/logs'
+    )
+    expect(toast.error).toHaveBeenCalledTimes(1)
   })
 
   it('should show correct file explorer text for Windows', async () => {

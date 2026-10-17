@@ -1,5 +1,24 @@
 # GInfer host UI
 
+## Logs action failure feedback — C4
+
+`GUI-SETTINGS-LOGS-ERROR-FEEDBACK` fixes General settings' **Open Logs** and
+**Reveal Logs** actions. Both previously caught native errors only in the
+console, leaving the user with no explanation. A failed action now shows an
+error toast with the native detail and a retry or alternative-folder action.
+The existing buttons stay usable after failure; log locations and successful
+native operations are unchanged. English messages use the existing translation
+fallback for languages without the new strings.
+
+Owned source: `/ai/gchat-worktrees/c4-settings-logs-errors-20261017`, branch
+`fix/c4-settings-logs-errors-20261017`, based on main `498b55b47`.
+Acceptance: rendered tests for both native failures and successful retries,
+focused lint/tests and one `make verify`. No model, Engine, installed fixture,
+provider request or user-data operation is required. Evidence is retained in
+`/ai/gchat/out/c4-settings-logs-errors-20261017/`.
+Next: run the focused and full verification using an inactive read-only cache
+copy; retire the owned generated copy after collecting the concise result.
+
 ## Hardware live statistics wording — C7
 
 `GUI-HARDWARE-LIVE-STATS-WORDING-20261017` corrects the Hardware and system

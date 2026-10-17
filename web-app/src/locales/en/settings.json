@@ -241,6 +241,8 @@
     "changeLocation": "Choose another folder",
     "openLogs": "Open Logs",
     "revealLogs": "Reveal Logs",
+    "openLogsFailed": "Could not open logs. Try again or open the logs folder.",
+    "revealLogsFailed": "Could not open the logs folder. Try again.",
     "factoryResetTitle": "Reset GChat and delete its data?",
     "factoryResetDesc": "This removes your GChat settings, chats and downloaded models. This cannot be undone. Choose Cancel to keep your data.",
     "cancel": "Cancel",
