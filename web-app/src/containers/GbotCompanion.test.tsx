@@ -169,6 +169,7 @@ it('sends a permission decision for the selected bot and shows its pending state
   })
   await mount()
   const card = screen.getByRole('article', { name: 'Bot permission request' })
+  fireEvent.click(within(card).getByText('Action details'))
   expect(within(card).getByText(/desktop_input/)).toBeVisible()
   expect(screen.queryByText(/file_remove/)).not.toBeInTheDocument()
   fireEvent.click(
