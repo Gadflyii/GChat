@@ -124,6 +124,9 @@ describe('Interface Settings Route', () => {
     expect(screen.getByTestId('header-page')).toBeInTheDocument()
     expect(screen.getByTestId('settings-menu')).toBeInTheDocument()
     expect(screen.getByText('common:settings')).toBeInTheDocument()
+    expect(
+      screen.getByText('Choose the theme and text size GChat uses.')
+    ).toBeInTheDocument()
   })
 
   it('should render interface controls', () => {

@@ -86,7 +86,11 @@ function AssistantContent() {
       <div className="flex h-[calc(100%-60px)]">
         <div className="flex size-full">
           <SettingsMenu />
-          <div className="flex flex-col gap-4 p-4 pt-4 w-full overflow-y-auto">
+          <div className="flex flex-col gap-4 p-4 pt-0 w-full overflow-y-auto">
+            <p className="text-sm text-muted-foreground">
+              An assistant sets the instructions GChat follows in a chat. Choose
+              which one starts new chats, or add your own.
+            </p>
             {/* Default Assistant */}
             <Card>
               <CardItem
