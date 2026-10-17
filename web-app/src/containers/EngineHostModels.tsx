@@ -115,6 +115,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       }}>{hostStopping ? 'Quitting…' : 'Stop Host and Quit'}</Button>}
     </div>
     {hostStopError && <p role="alert" className="text-sm text-destructive">{hostStopError}</p>}
+    {!error && snapshot?.draft_width_calibrations?.some(job => job.status === 'running') && <p role="status" className="text-sm text-muted-foreground">Finishing GPU speed tuning (about 1 minute). Your graphics card is busy until it finishes. Starting a model stops the tuning.</p>}
     {hostStopping && <p role="status" className="text-sm text-muted-foreground">Host is stopping. Quitting GChat…</p>}
     {!host.local && !snapshot && <p className="text-sm text-muted-foreground">Choose Connect to use this saved host. Your desktop may ask you to unlock its stored credential.</p>}
     {host.local ? <EngineFirstRun hostId={host.host_id} hardwareProfileControls={hardwareProfileControls} /> : hardwareProfileControls}

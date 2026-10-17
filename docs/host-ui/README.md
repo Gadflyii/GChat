@@ -981,10 +981,12 @@ Fixed (one branch each, rows in the open-work list):
 - `GUI-JOURNEY-INTAKE-LOCAL-HOST`: this computer's own host is not '1 paired host'.
 - `GUI-JOURNEY-WIZARD-STEP-COPY`: instructions name the button that is on screen.
 - `GUI-JOURNEY-PROFILE-PROGRESS-LAYOUT`: the profiling bar and Cancel profiling no longer overlap.
+- `GUI-JOURNEY-POST-STOP-GPU-BUSY`: the Host card shows 'Finishing GPU speed tuning (about 1 minute)' while the Host's
+  existing `draft_width_calibrations` status reports a running job (no Host change).
 
 Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-FAILED-DOWNLOAD-STUCK`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
 `GUI-JOURNEY-LOAD-WITHOUT-PROFILE`, `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`, `GUI-JOURNEY-JARGON`,
-`GUI-JOURNEY-DISK-SPACE-CRASH`, `GUI-JOURNEY-POST-STOP-GPU-BUSY`, `GUI-JOURNEY-UPDATER-404`.
+`GUI-JOURNEY-DISK-SPACE-CRASH`, `GUI-JOURNEY-UPDATER-404`.
 
 Method note: release Host and frontend accept only commit-pinned Hugging Face package URLs, so the download
 steps used the release profile with debug assertions, a development frontend and the private loopback catalog
