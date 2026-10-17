@@ -26,4 +26,10 @@ describe('native checkbox and radio theme', () => {
     // p-2 or px-2 sit in a later layer than this base rule and would win otherwise.
     expect(css).toMatch(/\n  select \{[^}]*padding-inline-end: 2rem !important/)
   })
+
+  it('themes native progress bars and animates an indeterminate one, honouring reduced motion', () => {
+    expect(css).toMatch(/progress::-webkit-progress-value\s*\{[^}]*background-color: var\(--primary\)/)
+    expect(css).toMatch(/progress:not\(\[value\]\)\s*\{[^}]*animation: native-progress-indeterminate/)
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*progress:not\(\[value\]\)\s*\{[^}]*animation: none/)
+  })
 })
