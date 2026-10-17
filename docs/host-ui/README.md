@@ -14,9 +14,9 @@ both layouts, one full `make verify`, and a native screenshot at the original
 window size showing the provider section. Source is
 `/ai/gchat-worktrees/c4-settings-sidebar-density-20261017`, branch
 `fix/c4-settings-sidebar-density-20261017`. Evidence belongs to
-`/ai/gchat/out/c4-settings-sweep-20261017/sidebar-density/`. Source preparation is
-in progress; no build or native runtime has started. Next: verification after
-C3's timing return, then private native replay with the fixture owner's grant.
+`/ai/gchat/out/c4-settings-sweep-20261017/sidebar-density/`. The candidate includes the tested attachment-durability fix and current main.
+Next: focused and full verification using the retained private S1 cache, then
+private native replay with the fixture owner's grant; C3 returned at 15:49Z.
 No Engine, model, provider request or real user-data action is in scope.
 ## Attachment edits survive navigation — C4
 
