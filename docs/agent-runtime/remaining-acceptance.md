@@ -233,6 +233,38 @@ at 05:22:44.255Z and normal desktop/Host exit completed; owned resources were
 returned at 05:23Z. Evidence:
 `/ai/gchat/out/oi068-process-death-20261017/{result.json,summary.md}`.
 
+## OI-068 native idle Host termination and continuation — October 17
+
+The retained d31 AppImage with Engine `db265e6b2` ran Qwen 27B NVFP4 on the
+local RTX 5090. The packet below records binary and model SHA256 values and full
+settings. After a successful file read and at genuine shell approval, the idle
+managed Host received SIGTERM at 08:05:54.345399Z. Ordinary Stop followed within
+one second; at 08:05:59.576Z the UI showed CANCELLED with no pending approval or
+marker. The original run `229ae658-a07f-4ae8-b63d-2d15e24f58f9` later reopened as
+CANCELLED with two steps.
+
+The managed Host was replaced automatically, followed by an explicit ordinary
+Start of the same model profile. Continue as new run preserved the goal and
+workspace and created distinct run `1742924f-e69f-49aa-986b-33018f96d358` and session
+identities. Fresh Allow once at 08:08:07.287Z executed one `touch` with exit code
+zero. The new run reopened as FINISHED with five steps, separately from the
+cancelled original. All four original archive files remained hash- and
+size-identical.
+
+The new model reply incorrectly said the cancelled run created the marker,
+claimed no new changes and called itself a resumed original run. The transcript
+instead shows that this distinct new run created the marker after fresh approval.
+The recovery pass rests on observed tools, artifacts and run identities; it is
+not a factual-accuracy pass.
+
+This qualifies idle Host SIGTERM, cancellation and explicit new-run recovery.
+Abrupt crash, loss during in-flight inference, automatic resume, power loss and
+Windows remain unqualified; OI-068 remains PARTIAL. Normal model Stop at
+08:08:57.619Z, desktop close and idle Host Stop completed; owned resources were
+returned at 08:09Z. Evidence:
+`/ai/gchat/out/oi068-process-death-20261017/{host-loss-result.json,host-loss-summary.md}`;
+result SHA256 `deee51b6ef02fa3629865694916ecaa7fc3d6cbd9e0820864d4a381fa1a2581c`.
+
 ## Native attachment chooser current tools — October 17
 
 In an existing private conversation on the same desktop, the document reader
@@ -819,7 +851,7 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. October 17 desktop-only process death retained the original incomplete record and unchanged artifacts without replay; explicitly approved Continue finished as a distinct record. One native task passed at 241364 measured input tokens with configured context 262144, reserve 20480, correct three-code Reply and zero compactions; saved Result reopening and normal Stop passed. | Automatic continuation, exactly-once execution and broader Host/Engine or power-loss recovery; Windows/Hermes at release. The original harder review is a known accuracy limitation in the release notes. The measured input gate does not qualify literal 262144 input tokens or fresh-install packaging. Read-range defect tracked separately. Do not replay passing gates. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. October 17 desktop-only process death retained the original incomplete record and unchanged artifacts without replay; explicitly approved Continue finished as a distinct record. A separate idle Host SIGTERM plus ordinary Stop cancelled without executing the pending command; explicit same-profile Start and fresh approval finished a distinct new run while original archives stayed unchanged. Its final model narrative was inaccurate. One native task passed at 241364 measured input tokens with configured context 262144, reserve 20480, correct three-code Reply and zero compactions; saved Result reopening and normal Stop passed. | Automatic continuation, exactly-once execution, abrupt Host/Engine failure, mid-inference loss and power-loss recovery; Windows/Hermes at release. The original harder review is a known accuracy limitation in the release notes. The measured input gate does not qualify literal 262144 input tokens or fresh-install packaging. Read-range defect tracked separately. Do not replay passing gates. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
 | GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |
