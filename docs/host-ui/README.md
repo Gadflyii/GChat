@@ -1,5 +1,29 @@
 # GInfer host UI
 
+## Project conversation deletion — C7
+
+`GUI-PROJECT-THREADS-DELETE-SINGLE-SUBMIT-20261017` makes the project's
+Delete all confirmation safe to operate with the keyboard: Cancel receives
+initial focus, explicit Delete uses native button activation once, and pending
+deletion blocks repeated submissions and dismissal. A rejected operation stays
+open with its error and permits retry. The existing deletion callback, project
+scope, translations and success notification remain the contract.
+
+Acceptance: rendered keyboard, repeated activation, pending, success and retry
+tests, then one full `make verify`; commit and push an isolated merge-ready
+branch. No real conversation deletion, Engine, model or GPU operation.
+Installed confirmation belongs to Gchat 3's parent GUI qualification. Windows
+host-port collision remains pending Gchat 2's installed-app handoff.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| C7 / local | `/ai/gchat-worktrees/c7-project-threads-delete-single-submit-20261017`, branch `fix/c7-project-threads-delete-single-submit-20261017` | From main `a08e2b053`; dialog implementation and six dedicated regression cases frozen for verification |
+| C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-project-threads-delete-single-submit-20261017/` | Private offline donor copy; CPU80–87 booked 14:00–14:35Z for focused tests and one full verification |
+| C7 / evidence | `/ai/gchat/out/project-threads-delete-single-submit-20261017/` | Focused/full verification result and summary retained here |
+
+Next: run the six focused regression cases and one full source gate on booked
+S1 CPUs using the retained offline dependency/toolchain donor; deliver by 14:40Z.
+
 ## Disable OpenCode workspaces — C7
 
 `GUI-CODE-DISABLE-WORKSPACE-STOP-20261017` fixes the integration switch's
