@@ -714,6 +714,12 @@ registered. Leaving setup or closing the client retains its name, progress and
 any issue. Choose **Resume setup** on that saved computer to continue with the
 same identity; setup checks must still finish before the computer is Ready.
 
+The Linux setup document check opens its own editor with temporary settings and
+recovery storage, preserving the user's editor session and unsaved documents.
+It still requires the expected document window, desktop input, save and exact
+file readback before declaring the computer Ready. See the
+[editor isolation decision](../decisions/2026-10-17-isolate-gbot-readiness-editor-state.md).
+
 A saved local computer may need setup checks again after service restart while
 human control remains paused. The original owner can choose **Hand back** when
 the saved setup and live control session match. Hand back closes human media and
