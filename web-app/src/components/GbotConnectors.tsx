@@ -127,8 +127,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
         <>
           {!settings.accounts.length && (
             <p id={noAccountsId} className="text-sm text-muted-foreground">
-              No accounts are connected to GChat yet. Connect one in Settings →
-              Workspace connections, then refresh this list.
+              No accounts are connected to GChat yet.
             </p>
           )}
           <div className="space-y-3">
