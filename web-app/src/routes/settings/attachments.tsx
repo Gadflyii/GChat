@@ -17,6 +17,16 @@ import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 // keeps the original resolution (no limit).
 const IMAGE_SIZE_PRESETS = [0, 768, 1024, 1536, 2048, 3072] as const
 
+// GInfer does not provide embeddings. Keep the extension's persisted settings,
+// but do not offer controls that cannot affect a supported document workflow.
+const DOCUMENT_SEARCH_SETTINGS = new Set([
+  'retrieval_limit',
+  'retrieval_threshold',
+  'chunk_size_chars',
+  'overlap_chars',
+  'search_mode',
+])
+
 const NUMERIC_SETTING_FIELDS = {
   max_file_size_mb: 'maxFileSizeMB',
   retrieval_limit: 'retrievalLimit',
@@ -176,6 +186,8 @@ function AttachmentsSettings() {
     [sel.saveSettings, flushPending]
   )
 
+  const visibleDefs = defs.filter((d) => !DOCUMENT_SEARCH_SETTINGS.has(d.key))
+
   return (
     <div className="flex flex-col h-svh w-full">
       <HeaderPage>
@@ -188,7 +200,13 @@ function AttachmentsSettings() {
         <div className="p-4 pt-0 w-full overflow-y-auto">
           <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
             <Card title={t('common:attachments') || 'Attachments'}>
-              {defs.map((d) => {
+              <CardItem
+                title={t('settings:attachments.documentSearchUnavailable')}
+                description={t(
+                  'settings:attachments.documentSearchUnavailableDesc'
+                )}
+              />
+              {visibleDefs.map((d) => {
                 // Use local value if typing, else use store value
                 const storeValue = (() => {
                   switch (d.key) {
@@ -253,9 +271,16 @@ function AttachmentsSettings() {
                 }
 
                 const title = d.titleKey ? t(d.titleKey) : d.title
-                const description = d.descriptionKey
-                  ? t(d.descriptionKey)
-                  : d.description
+                const description =
+                  d.key === 'parse_mode'
+                    ? t('settings:attachments.availableParseModeDesc')
+                    : d.key === 'auto_inline_context_ratio'
+                      ? t(
+                          'settings:attachments.availableAutoInlineThresholdDesc'
+                        )
+                      : d.descriptionKey
+                        ? t(d.descriptionKey)
+                        : d.description
 
                 return (
                   <CardItem
@@ -263,12 +288,49 @@ function AttachmentsSettings() {
                     title={title}
                     description={description}
                     actions={
-                      <DynamicControllerSetting
-                        title={title}
-                        controllerType={d.controllerType}
-                        controllerProps={props}
-                        onChange={(val) => debouncedSet(d.key, val, d)}
-                      />
+                      d.key === 'parse_mode' ? (
+                        <div className="space-y-2">
+                          <select
+                            aria-label={title}
+                            className="border-input bg-background rounded-md border px-2 py-1 text-sm"
+                            value={String(normalizedValue)}
+                            onChange={(event) =>
+                              debouncedSet(d.key, event.target.value, d)
+                            }
+                          >
+                            {normalizedValue === 'embeddings' && (
+                              <option value="embeddings" disabled>
+                                {t(
+                                  'settings:attachments.savedDocumentSearchUnavailable'
+                                )}
+                              </option>
+                            )}
+                            <option value="auto">
+                              {t('settings:attachments.parseModeAuto')}
+                            </option>
+                            <option value="inline">
+                              {t('settings:attachments.parseModeInline')}
+                            </option>
+                            <option value="prompt">
+                              {t('settings:attachments.parseModePrompt')}
+                            </option>
+                          </select>
+                          {normalizedValue === 'embeddings' && (
+                            <p className="text-sm text-muted-foreground">
+                              {t(
+                                'settings:attachments.savedDocumentSearchUnavailableDesc'
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <DynamicControllerSetting
+                          title={title}
+                          controllerType={d.controllerType}
+                          controllerProps={props}
+                          onChange={(val) => debouncedSet(d.key, val, d)}
+                        />
+                      )
                     }
                   />
                 )
