@@ -1948,7 +1948,7 @@ time.sleep(60)
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
         write_sleeper_with_startup_quote(&engine);
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
+        crate::service::write_selected_profile_fixture(&provider.join("bin/ginfer"));
         let hardware = crate::hardware_profile::group_profile_path(
             &provider.join("host"), &["GPU-test".into()],
         );
@@ -2046,7 +2046,7 @@ time.sleep(60)
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
         write_sleeper_with_startup_quote(&engine);
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
+        crate::service::write_selected_profile_fixture(&provider.join("bin/ginfer"));
         let hardware = crate::hardware_profile::group_profile_path(
             &provider.join("host"), &["GPU-test".into()],
         );
@@ -2207,7 +2207,7 @@ time.sleep(60)
         std::fs::create_dir_all(engine.parent().unwrap()).unwrap();
         write_sleeper_with_startup_quote(&engine);
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::write(provider.join("bin/ginfer"), b"fixture profiling CLI").unwrap();
+        crate::service::write_selected_profile_fixture(&provider.join("bin/ginfer"));
         let hardware = crate::hardware_profile::group_profile_path(
             &provider.join("host"), &["GPU-test".into()],
         );

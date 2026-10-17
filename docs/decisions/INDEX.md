@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-17** — [Scope Installed Load hardware profiling to its model](2026-10-17-scope-installed-load-profiling-and-await-preparation.md)
+
 - **2026-10-17** — [Reuse verified model payloads with file identity](2026-10-17-reuse-verified-model-payloads-with-file-identity.md)
 
 - **2026-10-16** — [Hand off the owned Host during an App Data move](2026-10-16-handoff-owned-host-during-app-data-move.md)

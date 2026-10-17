@@ -155,6 +155,7 @@ it('saves folder and model choices during profiling and restores them after reop
   })
   const view = render(<EngineFirstRun />)
   const folder = await screen.findByLabelText('Model download folder')
+  await waitFor(() => expect(folder).toHaveValue('/fast'))
   expect(screen.getByRole('checkbox', { name: /Muse/ })).not.toBeChecked()
   fireEvent.change(folder, { target: { value: '/queued-models' } })
   fireEvent.click(screen.getByRole('button', { name: 'Save folder choice' }))

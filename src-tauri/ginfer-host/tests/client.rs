@@ -496,7 +496,33 @@ time.sleep(60)
     )
     .unwrap();
     std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
-    std::fs::write(root.path().join("ginfer"), b"fixture profiling CLI").unwrap();
+    let profiling_cli = root.path().join("ginfer");
+    std::fs::write(
+        &profiling_cli,
+        r#"#!/usr/bin/env python3
+import hashlib, json, pathlib, sys
+args = sys.argv[1:]
+def arg(name, default=None):
+    return args[args.index(name)+1] if name in args else default
+assert args[0] == 'profile-hardware'
+model = pathlib.Path(arg('--model'))
+contents = model.read_bytes()
+directory_size = int.from_bytes(contents[8:16], 'little')
+directory_sha = hashlib.sha256(contents[16:16+directory_size]).hexdigest()
+output = pathlib.Path(arg('--hardware-profile'))
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps(dict(schema_version=2)))
+spec = arg('--spec', 'auto')
+artifact = dict(path=str(model), directory_sha256=directory_sha, tp=int(arg('--tp')),
+    draft_tp=int(arg('--draft-tp', '0')), spec=spec,
+    draft_tokens=int(arg('--draft-tokens', '0' if spec in ('auto', 'none') else '3')))
+print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact', state='loaded',
+    hardware_profile=str(output), complete=True, base_complete=True,
+    all_formats_complete=False, missing_rows=[], artifact=artifact)))
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&profiling_cli, std::fs::Permissions::from_mode(0o700)).unwrap();
     let hardware = ginfer_host::hardware_profile::group_profile_path(
         &root.path().join("host"), &["GPU-inert".into()],
     );

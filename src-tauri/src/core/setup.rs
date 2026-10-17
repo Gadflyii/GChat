@@ -241,7 +241,6 @@ pub(crate) fn start_bundled_ginfer_linux<R: Runtime>(
         match result {
             Ok(true) => {
                 log::info!("Installed the bundled GInfer Linux runtimes");
-                prepare_hardware_after_runtime_install(app);
             }
             Ok(false) => log::info!("Bundled GInfer Linux runtimes are already current"),
             Err(error) => log::error!("Bundled Linux resource installation failed: {error}"),
@@ -307,18 +306,6 @@ pub async fn prepare_installed_hardware_from_resources(
     crate::core::engine_hosts::prepare_installed_hardware_from_paths(
         data_folder, resource_directory, (!gpu_uuids.is_empty()).then_some(gpu_uuids),
     ).await
-}
-
-#[cfg(all(not(feature = "cli"), any(target_os = "windows", target_os = "linux")))]
-fn prepare_hardware_after_runtime_install<R: Runtime>(app: tauri::AppHandle<R>) {
-    // Installation hands work to the shared Host. Unchanged ordinary startup
-    // never requests measurement, and the desktop does not own the profiler.
-    tauri::async_runtime::spawn(async move {
-        match crate::core::engine_hosts::prepare_installed_hardware(app).await {
-            Ok(status) => log::info!("Installed runtime hardware preparation: {}", status.status),
-            Err(error) => log::warn!("Installed runtime hardware preparation failed: {error}"),
-        }
-    });
 }
 
 fn bundled_extensions_fingerprint(pre_install_path: &Path) -> Result<String, String> {
@@ -508,7 +495,6 @@ pub(crate) fn start_bundled_ginfer_windows<R: Runtime>(
         match result {
             Ok(true) => {
                 log::info!("Installed the bundled GInfer Windows runtime");
-                prepare_hardware_after_runtime_install(app);
             }
             Ok(false) => log::info!("Bundled GInfer Windows runtime is already current"),
             Err(error) => log::error!("Bundled Windows resource installation failed: {error}"),
