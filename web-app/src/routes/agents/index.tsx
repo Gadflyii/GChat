@@ -372,6 +372,9 @@ function AgentStudioPage() {
   }, [])
   const [templates, setTemplates] = useState<AgentTemplate[]>([])
   const [runs, setRuns] = useState<AgentRunRecord[]>([])
+  const historyRequest = useRef(0)
+  const deletingRuns = useRef(new Set<string>())
+  const [deletingRunIds, setDeletingRunIds] = useState(new Set<string>())
   const [modelInstances, setModelInstances] = useState<AgentModelInstance[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -392,6 +395,7 @@ function AgentStudioPage() {
   useEffect(() => () => {
     ++draftRevision.current
     ++runSetupRequest.current
+    ++historyRequest.current
     useGbotPage.getState().clear(pageId)
   }, [pageId])
 
@@ -402,18 +406,28 @@ function AgentStudioPage() {
   }, [definitions, draft, setDraft])
 
   useEffect(() => {
+    const request = ++historyRequest.current
+    let active = true
     void Promise.all([listAgentTemplates(), listAgentRuns()])
       .then(([nextTemplates, nextRuns]) => {
+        if (!active) return
         setTemplates(nextTemplates)
-        setRuns(nextRuns)
-        setSelectedRunId((current) =>
-          nextRuns.some((run) => run.id === current)
-            ? current
-            : (nextRuns[0]?.id ?? null)
-        )
+        if (request === historyRequest.current) setRuns(nextRuns)
       })
-      .catch((reason) => toast.error(String(reason)))
+      .catch((reason) => {
+        if (request === historyRequest.current) toast.error(String(reason))
+      })
+    return () => {
+      active = false
+      if (request === historyRequest.current) ++historyRequest.current
+    }
   }, [historyRevision])
+
+  useEffect(() => {
+    setSelectedRunId((current) =>
+      runs.some((run) => run.id === current) ? current : (runs[0]?.id ?? null)
+    )
+  }, [runs])
 
   useEffect(() => {
     if (view !== 'definitions') return
@@ -425,6 +439,18 @@ function AgentStudioPage() {
   }, [view])
 
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
+
+  const refreshRuns = async () => {
+    const request = ++historyRequest.current
+    try {
+      const nextRuns = await listAgentRuns()
+      if (request === historyRequest.current) setRuns(nextRuns)
+    } catch (reason) {
+      if (request === historyRequest.current) {
+        toast.error(`Could not refresh runs: ${String(reason)}`)
+      }
+    }
+  }
 
   const selectView = (next: StudioView) => {
     invalidateRunSetup()
@@ -555,16 +581,19 @@ function AgentStudioPage() {
   }
 
   const deleteRun = async (run: AgentRunRecord) => {
+    if (deletingRuns.current.has(run.id)) return
+    deletingRuns.current.add(run.id)
+    setDeletingRunIds(new Set(deletingRuns.current))
     try {
       await deleteAgentRun(run.id)
-      const remaining = runs.filter((candidate) => candidate.id !== run.id)
-      setRuns(remaining)
-      setSelectedRunId((current) =>
-        current === run.id ? (remaining[0]?.id ?? null) : current
-      )
+      ++historyRequest.current
+      setRuns((current) => current.filter((candidate) => candidate.id !== run.id))
       toast.success('Run deleted')
     } catch (reason) {
       toast.error(`Could not delete run: ${String(reason)}`)
+    } finally {
+      deletingRuns.current.delete(run.id)
+      setDeletingRunIds(new Set(deletingRuns.current))
     }
   }
 
@@ -579,18 +608,7 @@ function AgentStudioPage() {
             return
           }
           selectView(section)
-          if (section === 'runs') {
-            void listAgentRuns()
-              .then((nextRuns) => {
-                setRuns(nextRuns)
-                setSelectedRunId(
-                  (current) => current ?? nextRuns[0]?.id ?? null
-                )
-              })
-              .catch((reason) =>
-                toast.error(`Could not refresh runs: ${String(reason)}`)
-              )
-          }
+          if (section === 'runs') void refreshRuns()
         }}
       />
 
@@ -763,6 +781,7 @@ function AgentStudioPage() {
           <RunInspector
             runs={runs}
             selected={selectedRun}
+            deletingRunIds={deletingRunIds}
             onSelect={(id) => {
               invalidateRunSetup()
               setSelectedRunId(id)
@@ -770,20 +789,7 @@ function AgentStudioPage() {
             onRerun={(run) => void rerun(run)}
             onContinue={(run) => void rerun(run, true)}
             onDelete={(run) => void deleteRun(run)}
-            onRefresh={() => {
-              void listAgentRuns()
-                .then((nextRuns) => {
-                  setRuns(nextRuns)
-                  setSelectedRunId((current) =>
-                    nextRuns.some((run) => run.id === current)
-                      ? current
-                      : (nextRuns[0]?.id ?? null)
-                  )
-                })
-                .catch((reason) =>
-                  toast.error(`Could not refresh runs: ${String(reason)}`)
-                )
-            }}
+            onRefresh={() => void refreshRuns()}
           />
         </div>
       )}
@@ -1989,6 +1995,7 @@ function DefinitionInspector({
 function RunInspector({
   runs,
   selected,
+  deletingRunIds,
   onSelect,
   onRefresh,
   onRerun,
@@ -1997,6 +2004,7 @@ function RunInspector({
 }: {
   runs: AgentRunRecord[]
   selected: AgentRunRecord | null
+  deletingRunIds: ReadonlySet<string>
   onSelect: (id: string) => void
   onRefresh: () => void
   onRerun: (run: AgentRunRecord) => void
@@ -2066,6 +2074,11 @@ function RunInspector({
                     ? 'Completion not recorded'
                     : `${run.totalSteps} steps`}
                 </div>
+                {deletingRunIds.has(run.id) && (
+                  <p role="status" className="mt-1 text-xs text-muted-foreground">
+                    Deleting…
+                  </p>
+                )}
               </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -2080,14 +2093,14 @@ function RunInspector({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
-                    disabled={!run.userMessage.trim()}
+                    disabled={!run.userMessage.trim() || deletingRunIds.has(run.id)}
                     onSelect={() => onRerun(run)}
                   >
                     <IconRepeat /> Re-run
                   </DropdownMenuItem>
                   {run.status !== 'finished' && (
                     <DropdownMenuItem
-                      disabled={!run.userMessage.trim()}
+                      disabled={!run.userMessage.trim() || deletingRunIds.has(run.id)}
                       onSelect={() => onContinue(run)}
                     >
                       Continue as new run…
@@ -2095,9 +2108,10 @@ function RunInspector({
                   )}
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
+                    disabled={deletingRunIds.has(run.id)}
                     onSelect={() => onDelete(run)}
                   >
-                    <IconTrash /> Delete
+                    <IconTrash /> {deletingRunIds.has(run.id) ? 'Deleting…' : 'Delete'}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
