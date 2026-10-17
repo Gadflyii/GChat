@@ -50,6 +50,33 @@ result and short summary: `/ai/gchat/out/c7-host-port-collision-20261017/`.
 Package receipt:
 `/ai/gchat/out/linux-rc-final-20261017/current-0b3aa523c-4f451dded/package-result.json`.
 
+### Remaining Windows/cross-OS leaf
+
+Bubbs resumed C7's leaf at 11:39Z after Ron cleared the Windows prompt.
+Gchat2 is refreshing the RC from current main; its literal install-done and
+local-resource handoff select the installed producer and execution window.
+C7 has no running fixture, Host, GUI, model or resource booking.
+
+Use one genuine Linux/WSL Host on an owned root and nondefault loopback port,
+first confirming that Windows can actually reach that listener. The installed
+Windows desktop must keep its own Windows root, UUID and certificate, select
+and persist a free management port, show the collision notice, and reconnect
+with those same values after normal close/idle-Host stop/reopen. The Linux Host
+must remain reachable with its original identity and TLS certificate. Sharing
+stays off; no model, Ensure or Engine workload is needed. This one coexistence
+case supplies the native Windows and cross-OS leaves without repeating the
+accepted Linux-only result or source tests.
+
+The Windows private-root route must be verified before launch: desktop settings
+use Windows Known Folder APIs, so process-local `APPDATA`/`LOCALAPPDATA`
+overrides alone do not establish isolation. Obtain Gchat2's verified private
+settings/data setup or coordinate a bounded ordinary Settings switch and restore.
+Explicit Host `--data-dir` is supported. Change the occupied preferred origin
+only in the stopped private Host's `host.json`; locator-only seeding remains
+invalid. Preserve Ron's Host, data and default listeners. Next unresolved step:
+receive the installed RC identity, root setup and actual local handoff from
+Gchat2, then book the CPU-only leaf at its actual start.
+
 ## Installed model GPU selection
 
 The Installed page keeps the selected GPU UUIDs through Load and verifies them
