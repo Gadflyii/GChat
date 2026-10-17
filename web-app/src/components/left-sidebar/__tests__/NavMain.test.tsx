@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocation } from '@tanstack/react-router'
 import { NavMain } from '../NavMain'
@@ -6,11 +6,33 @@ import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useAgentRun } from '@/hooks/useAgentRun'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
+import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
+import { useEngineHosts } from '@/stores/engine-hosts-store'
+import type { EngineHost, EngineSnapshot } from '@/services/engines'
+import type { ModelDownload } from '@/lib/model-release'
 
 const codeState = vi.hoisted(() => ({ enabled: true }))
 const hermesState = vi.hoisted(() => ({ enabled: true }))
 const generalState = vi.hoisted(() => ({ integrationsBadgeSeen: true, gbotEnabled: false }))
 const actions = vi.hoisted(() => ({ navigate: vi.fn(), resetAgentSession: vi.fn() }))
+
+const localHost: EngineHost = {
+  host_id: 'local-host', local: true, name: 'This computer',
+  base_url: 'https://127.0.0.1:7443', certificate_sha256: 'a'.repeat(64), client_id: 'local-client',
+}
+const verifyingDownload: ModelDownload = {
+  id: 'qwen-download', status: 'verifying', received: 1024, bytes_per_second: 0, error: null, path: null,
+  release: {
+    name: 'Qwen3.8-27B', identity: { model_id: 'qwen3.8-27b', weights_id: 'groupwise-int-dflash2-q4' },
+    url: `https://huggingface.co/SectileLabs/Qwen3.8-27B/resolve/${'a'.repeat(40)}/model.ginfer`,
+    sha256: 'a'.repeat(64), bytes: 1024, tp: 1, qualified_sm: ['12.0'],
+    min_vram_mib_per_gpu: 16384, capabilities: ['text'],
+  },
+}
+const downloadSnapshot = (hostId: string, downloads: ModelDownload[]): EngineSnapshot => ({
+  host_id: hostId, display_name: hostId, revision: 1, gpus: [], models: [], instances: [],
+  model_management: { version: 1, managed_root: '/models', engine_presets_available: false, downloads },
+})
 
 vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
@@ -95,6 +117,8 @@ describe('NavMain', () => {
     useGbotCompanion.getState().reset()
     useConversationPolicy.getState().clearAll()
     useAgentRun.getState().clearAll()
+    useLocalModelDownloads.setState({ jobs: [], error: null })
+    useEngineHosts.setState({ hosts: [localHost], snapshots: {}, errors: {} })
     actions.navigate.mockReset()
     actions.resetAgentSession.mockReset()
     vi.mocked(useLocation).mockReturnValue({ pathname: '/' } as never)
@@ -107,6 +131,49 @@ describe('NavMain', () => {
     expect(screen.getByText('common:projects.new')).toBeInTheDocument()
     expect(screen.getByText('common:models')).toBeInTheDocument()
     expect(screen.getByTestId('history-search')).toBeInTheDocument()
+  })
+
+  it('counts a local verifying download once when the local Host snapshot mirrors it', () => {
+    useLocalModelDownloads.setState({ jobs: [verifyingDownload] })
+    useEngineHosts.setState({ snapshots: {
+      [localHost.host_id]: downloadSnapshot(localHost.host_id, [verifyingDownload]),
+    } })
+
+    render(<NavMain />)
+
+    expect(screen.getByTitle('Active or incomplete model transfers')).toHaveTextContent(/^1 transfers$/)
+  })
+
+  it('counts an additional remote download of the same model separately', () => {
+    const remoteHost = { ...localHost, host_id: 'remote-host', local: false, name: 'Remote computer' }
+    const remoteDownload = { ...verifyingDownload, id: 'remote-qwen-download' }
+    useLocalModelDownloads.setState({ jobs: [verifyingDownload] })
+    useEngineHosts.setState({
+      hosts: [localHost, remoteHost],
+      snapshots: {
+        [localHost.host_id]: downloadSnapshot(localHost.host_id, [verifyingDownload]),
+        [remoteHost.host_id]: downloadSnapshot(remoteHost.host_id, [
+          remoteDownload, { ...remoteDownload, id: 'installed-remote-download', status: 'installed' },
+        ]),
+      },
+    })
+
+    render(<NavMain />)
+
+    expect(screen.getByTitle('Active or incomplete model transfers')).toHaveTextContent(/^2 transfers$/)
+  })
+
+  it('removes an installed local transfer while its local Host snapshot remains stale', () => {
+    useLocalModelDownloads.setState({ jobs: [verifyingDownload] })
+    useEngineHosts.setState({ snapshots: {
+      [localHost.host_id]: downloadSnapshot(localHost.host_id, [verifyingDownload]),
+    } })
+    render(<NavMain />)
+    expect(screen.getByTitle('Active or incomplete model transfers')).toHaveTextContent(/^1 transfers$/)
+
+    act(() => useLocalModelDownloads.setState({ jobs: [{ ...verifyingDownload, status: 'installed' }] }))
+
+    expect(screen.queryByTitle('Active or incomplete model transfers')).not.toBeInTheDocument()
   })
 
   it('starts ordinary Chat and resets selections without requiring a native task reset', async () => {
