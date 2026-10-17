@@ -133,6 +133,7 @@ it('preserves a typed storage override when the shared catalog finishes loading'
   })))
   render(<EngineFirstRun />)
   const folder = await screen.findByLabelText('Model download folder')
+  await waitFor(() => expect(folder).toHaveValue('/fast'))
   fireEvent.change(folder, { target: { value: '/my-selected-disk' } })
   await screen.findByText('Recommended: /new-recommendation', {}, { timeout: 3000 })
   expect(folder).toHaveValue('/my-selected-disk')
