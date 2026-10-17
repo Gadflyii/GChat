@@ -35,6 +35,9 @@ export function WorkspacePicker({
   const [readingInstructions, setReadingInstructions] = useState(false)
   const readingInstructionsRef = useRef(false)
   const instructionsGeneration = useRef(0)
+  const [openingFolder, setOpeningFolder] = useState(false)
+  const openingFolderRef = useRef(false)
+  const folderOpenGeneration = useRef(0)
   const [choosing, setChoosing] = useState(false)
   const choosingRef = useRef(false)
   const choiceGeneration = useRef(0)
@@ -49,6 +52,9 @@ export function WorkspacePicker({
   useEffect(() => {
     choiceGeneration.current += 1
     instructionsGeneration.current += 1
+    folderOpenGeneration.current += 1
+    openingFolderRef.current = false
+    setOpeningFolder(false)
     readingInstructionsRef.current = false
     setReadingInstructions(false)
   }, [value, personalWhenEmpty])
@@ -146,6 +152,28 @@ export function WorkspacePicker({
       }
     }
   }
+  const openFolder = async () => {
+    if (!resolved || openingFolderRef.current) return
+    openingFolderRef.current = true
+    setOpeningFolder(true)
+    setError('')
+    const generation = folderOpenGeneration.current
+    const workspaceGeneration = choiceGeneration.current
+    const isCurrentRequest = () =>
+      mounted.current && generation === folderOpenGeneration.current
+    try {
+      await invoke('open_file_explorer', { path: resolved })
+    } catch (e) {
+      if (isCurrentRequest() && workspaceGeneration === choiceGeneration.current) {
+        setError(`Could not open the folder. Try Open folder again. ${String(e)}`)
+      }
+    } finally {
+      if (isCurrentRequest()) {
+        openingFolderRef.current = false
+        setOpeningFolder(false)
+      }
+    }
+  }
   return (
     <div className="space-y-2 text-sm">
       <label htmlFor={id}>
@@ -191,13 +219,11 @@ export function WorkspacePicker({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
-                void invoke('open_file_explorer', { path: resolved }).catch(
-                  (e) => setError(String(e))
-                )
-              }
+              disabled={openingFolder}
+              aria-busy={openingFolder}
+              onClick={() => void openFolder()}
             >
-              Open folder
+              {openingFolder ? 'Opening folder…' : 'Open folder'}
             </Button>
             <Button
               type="button"
