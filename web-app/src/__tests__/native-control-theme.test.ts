@@ -17,4 +17,8 @@ describe('native checkbox and radio theme', () => {
   it('drops the spacing under the summary of a collapsed details element', () => {
     expect(css).toMatch(/details:not\(\[open\]\) > summary\s*\{[^}]*margin-block-end: 0/)
   })
+
+  it('draws native selects like inputs, with their own chevron', () => {
+    expect(css).toMatch(/\n  select \{[^}]*appearance: none[^}]*background-image: url\("data:image\/svg\+xml/)
+  })
 })
