@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -11,6 +12,7 @@ import {
   gbot,
   getGbotServiceTarget,
   type M365SetupRecord,
+  type ServiceTarget,
 } from '@/services/gbot'
 import {
   beginConnectorAuth,
@@ -119,6 +121,130 @@ async function checkAssignments() {
   )
   await screen.findByLabelText('Assigned Cloud PC')
 }
+
+it.each([
+  { kind: 'local' },
+  { kind: 'paired_host', host_id: 'remote-host' },
+] as const)(
+  'waits for the $kind service and its account list before enabling Refresh',
+  async (target) => {
+    let resolveTarget!: (value: ServiceTarget) => void
+    const pendingTarget = new Promise<ServiceTarget>((resolve) => {
+      resolveTarget = resolve
+    })
+    let resolveAccounts!: (value: ConnectorAccountsView) => void
+    const pendingAccounts = new Promise<ConnectorAccountsView>((resolve) => {
+      resolveAccounts = resolve
+    })
+    vi.mocked(getGbotServiceTarget).mockReturnValue(pendingTarget)
+    vi.mocked(connectorAccounts).mockReturnValue(pendingAccounts)
+    vi.mocked(gbot).mockReturnValue(pendingAccounts)
+    mount()
+    const refresh = screen.getByRole('button', {
+      name: 'Refresh Microsoft accounts',
+    })
+    expect(refresh).toBeDisabled()
+    fireEvent.click(refresh)
+    expect(getGbotServiceTarget).toHaveBeenCalledOnce()
+    expect(connectorAccounts).not.toHaveBeenCalled()
+    expect(gbot).not.toHaveBeenCalled()
+    await act(async () => resolveTarget(target))
+    expect(refresh).toBeDisabled()
+    if (target.kind === 'local') {
+      expect(connectorAccounts).toHaveBeenCalledOnce()
+      expect(gbot).not.toHaveBeenCalled()
+    } else {
+      expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/m365/accounts')
+      expect(connectorAccounts).not.toHaveBeenCalled()
+    }
+    fireEvent.click(refresh)
+    expect(getGbotServiceTarget).toHaveBeenCalledOnce()
+    await act(async () => resolveAccounts(accounts()))
+    await screen.findByLabelText('Microsoft account')
+    expect(refresh).toBeEnabled()
+    fireEvent.click(refresh)
+    await screen.findByText(
+      'Microsoft accounts refreshed. 1 connected account is available. Choose an account above.'
+    )
+    expect(getGbotServiceTarget).toHaveBeenCalledTimes(2)
+    if (target.kind === 'local') {
+      expect(connectorAccounts).toHaveBeenCalledTimes(2)
+      expect(gbot).not.toHaveBeenCalled()
+    } else {
+      expect(gbot).toHaveBeenCalledTimes(2)
+      expect(connectorAccounts).not.toHaveBeenCalled()
+      expect(
+        screen.getByRole('button', { name: 'Sign in with Microsoft' })
+      ).toBeDisabled()
+    }
+    expect(beginConnectorAuth).not.toHaveBeenCalled()
+  }
+)
+
+it.each([
+  { kind: 'local' },
+  { kind: 'paired_host', host_id: 'remote-host' },
+] as const)(
+  'retries failed service resolution before refreshing $kind accounts',
+  async (target) => {
+    let resolveTarget!: (value: ServiceTarget) => void
+    const pendingTarget = new Promise<ServiceTarget>((resolve) => {
+      resolveTarget = resolve
+    })
+    vi.mocked(getGbotServiceTarget)
+      .mockRejectedValueOnce(new Error('Service selection unavailable'))
+      .mockReturnValueOnce(pendingTarget)
+    vi.mocked(gbot).mockResolvedValue(accounts())
+    mount()
+    await screen.findByText('Error: Service selection unavailable')
+    const refresh = screen.getByRole('button', {
+      name: 'Refresh Microsoft accounts',
+    })
+    expect(refresh).toBeEnabled()
+    expect(connectorAccounts).not.toHaveBeenCalled()
+    expect(gbot).not.toHaveBeenCalled()
+    fireEvent.click(refresh)
+    expect(refresh).toBeDisabled()
+    expect(getGbotServiceTarget).toHaveBeenCalledTimes(2)
+    expect(connectorAccounts).not.toHaveBeenCalled()
+    expect(gbot).not.toHaveBeenCalled()
+    await act(async () => resolveTarget(target))
+    await screen.findByText(
+      'Microsoft accounts refreshed. 1 connected account is available. Choose an account above.'
+    )
+    expect(refresh).toBeEnabled()
+    expect(screen.queryByText('Error: Service selection unavailable')).toBeNull()
+    if (target.kind === 'local') {
+      expect(connectorAccounts).toHaveBeenCalledOnce()
+      expect(gbot).not.toHaveBeenCalled()
+    } else {
+      expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/m365/accounts')
+      expect(connectorAccounts).not.toHaveBeenCalled()
+    }
+    expect(beginConnectorAuth).not.toHaveBeenCalled()
+  }
+)
+
+it('does not load accounts when setup closes during service resolution', async () => {
+  let resolveTarget!: (value: ServiceTarget) => void
+  vi.mocked(getGbotServiceTarget).mockReturnValue(
+    new Promise<ServiceTarget>((resolve) => {
+      resolveTarget = resolve
+    })
+  )
+  mount()
+  expect(
+    screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+  ).toBeDisabled()
+  cleanup()
+  await act(async () => resolveTarget({ kind: 'local' }))
+  expect(
+    screen.queryByRole('button', { name: 'Refresh Microsoft accounts' })
+  ).not.toBeInTheDocument()
+  expect(connectorAccounts).not.toHaveBeenCalled()
+  expect(gbot).not.toHaveBeenCalled()
+  expect(beginConnectorAuth).not.toHaveBeenCalled()
+})
 
 it('explains the connected account list and reports an empty refresh without starting sign-in', async () => {
   vi.mocked(connectorAccounts).mockResolvedValue({ ...accounts(), accounts: [] })
