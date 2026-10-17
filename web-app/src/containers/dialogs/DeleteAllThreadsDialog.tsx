@@ -7,7 +7,6 @@ import {
   DialogContent,
   DialogTitle,
   DialogDescription,
-  DialogClose,
   DialogFooter,
   DialogHeader,
 } from '@/components/ui/dialog'
@@ -30,9 +29,13 @@ export function DeleteAllThreadsDialog({
   const navigate = useNavigate()
   const [isOpen, setIsOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const deleteButtonRef = useRef<HTMLButtonElement>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const deletionPending = useRef(false)
 
   const handleOpenChange = (open: boolean) => {
+    if (deletionPending.current) return
+    setErrorMessage(null)
     setIsOpen(open)
     if (!open && onDropdownClose) {
       onDropdownClose()
@@ -40,8 +43,10 @@ export function DeleteAllThreadsDialog({
   }
 
   const handleDeleteAll = async () => {
-    if (deleting) return
+    if (deletionPending.current) return
+    deletionPending.current = true
     setDeleting(true)
+    setErrorMessage(null)
     try {
       await onDeleteAll()
       setIsOpen(false)
@@ -52,8 +57,11 @@ export function DeleteAllThreadsDialog({
       })
       setTimeout(() => { navigate({ to: route.home }) }, 0)
     } catch (error) {
-      toast.error('Could not delete conversations.', { description: String(error) })
+      const message = String(error)
+      setErrorMessage(message)
+      toast.error('Could not delete conversations.', { description: message })
     } finally {
+      deletionPending.current = false
       setDeleting(false)
     }
   }
@@ -70,9 +78,17 @@ export function DeleteAllThreadsDialog({
         </DropdownMenuItem>
       </DialogTrigger>
       <DialogContent
+        aria-busy={deleting}
+        showCloseButton={!deleting}
         onOpenAutoFocus={(e) => {
           e.preventDefault()
-          deleteButtonRef.current?.focus()
+          cancelButtonRef.current?.focus()
+        }}
+        onEscapeKeyDown={(e) => {
+          if (deletionPending.current) e.preventDefault()
+        }}
+        onInteractOutside={(e) => {
+          if (deletionPending.current) e.preventDefault()
         }}
       >
         <DialogHeader>
@@ -82,22 +98,34 @@ export function DeleteAllThreadsDialog({
           <DialogDescription>
             {t('common:dialogs.deleteAllThreads.description')}
           </DialogDescription>
+          {errorMessage && (
+            <p role="alert" className="text-destructive text-sm">
+              {errorMessage}
+            </p>
+          )}
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="ghost" size="sm" className="w-full sm:w-auto">
-                {t('common:cancel')}
-              </Button>
-            </DialogClose>
             <Button
-              ref={deleteButtonRef}
-              variant="destructive"
-              onClick={handleDeleteAll}
+              ref={cancelButtonRef}
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full sm:w-auto"
               disabled={deleting}
+              onClick={() => handleOpenChange(false)}
+            >
+              {t('common:cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteAll()}
+              disabled={deleting}
+              aria-busy={deleting}
               size="sm"
               className="w-full sm:w-auto"
               aria-label={t('common:deleteAll')}
             >
-              {t('common:deleteAll')}
+              {t(deleting ? 'common:loading' : 'common:deleteAll')}
             </Button>
           </DialogFooter>
         </DialogHeader>
