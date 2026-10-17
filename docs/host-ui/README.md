@@ -84,6 +84,41 @@ the crash. Evidence and the normal guest return are retained in
 Three native regressions cover missing launcher, literal arguments and failed
 exit status. Full Linux verification is required before merge; a corrected
 installed native walkthrough and Windows execution are not yet qualified.
+## Settings walkthrough — C4
+
+`GUI-SETTINGS-SWEEP-20261017` covers every Settings section and all 19 provider
+pages in native Linux GChat from main `77ccd3624`. The private HOME/XDG app in
+the OLD fixture uses no retained profile, model or Engine. Screenshots and
+control results are retained in `/ai/gchat/out/c4-settings-sweep-20261017/`;
+findings belong to Gchat3's single [GUI list](/ai/coordination/flash-next/gui-sweep-20261017.md).
+
+The walkthrough reproduced a visible Hugging Face token, lost attachment numeric
+edits when leaving within the debounce delay, inaccessible provider navigation,
+an overcrowded Settings sidebar, controls lacking associated labels, and an enabled
+attachment embeddings mode whose backend is unavailable. Interface
+preferences persisted, Hardware refresh returned, and the MCP Add dialog canceled
+without saving. Provider keyboard access is transferred to C7; C4 owns token,
+attachment durability, unavailable embedding controls, sidebar and attachment labels,
+each on its own branch. C6 owns provider control labels.
+
+The first fix masks the token by default, adds an associated label and an explicit
+Show/Hide button. Token storage and verification semantics are unchanged. Its 24
+focused General cases pass. All `make verify` components pass: the single invocation
+stopped on an environment-sensitive fake-GPU fixture because the CUDA mask was empty;
+only that fixture and the previously unrun Rust suites were recovered with CUDA
+mask/order unset. Native replay confirmed password by default, Show/Hide preserving
+the value, and clearing the fake token. Screenshots and the qualified verification
+receipt are in `token-fix/result.json` beneath the retained evidence directory.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| C4 / local | `/ai/gchat-worktrees/c4-settings-sweep-20261017`, branch `fix/c4-settings-sweep-20261017` | Token fix and subject record; remaining findings have separate ownership |
+| C4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017` | Private dependency/build cache retained through the Settings fixes; donor read-only |
+| C4 / OLD | `/home/gchat/c4-settings-sweep-20261017` | Private native app/home only; returned 15:30Z, normal OFF and unchanged XML |
+| C4 / evidence | `/ai/gchat/out/c4-settings-sweep-20261017/` | Before screenshots, control outcomes, findings and validation; no real token used |
+
+Next: merge the token fix, then validate attachment edit durability. Assistant create/update remains C7-owned; existing Engine and
+Hardware work remains with its owners. No model or shared FRESH fixture is in scope.
 
 ## Global conversation deletion — C7
 
