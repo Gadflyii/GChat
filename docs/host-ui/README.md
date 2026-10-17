@@ -360,6 +360,12 @@ Text or attachments you add while an earlier Send is pending stay in the
 composer when that preparation finishes; its completion does not clear your
 newer changes.
 
+## Reading workspace folders
+
+If GChat cannot read your workspace folder, the **Files** panel opens so you
+can see the problem. Choose **Retry folder** to try again. You can close the
+panel while you work; another failed check will not keep reopening it.
+
 ## Choosing image or audio attachments
 
 If the image or audio file window fails, GChat shows an error and keeps your

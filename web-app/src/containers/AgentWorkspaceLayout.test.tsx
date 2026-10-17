@@ -11,10 +11,11 @@ const panelLayouts = vi.hoisted(() => ({ values: [] as number[][] }))
 const artifactPreview = vi.hoisted(() => ({ command: vi.fn() }))
 const workspace = vi.hoisted(() => ({
   entries: [{ name: 'output.txt', path: 'output.txt', kind: 'file' }],
+  list: vi.fn(),
 }))
 const agentWorkspace = {
   primaryRoot: {
-    id: 'primary',
+    rootId: 'primary',
     path: '/workspace',
     name: 'workspace',
     canEdit: true,
@@ -28,7 +29,7 @@ vi.mock('@/hooks/useMediaQuery', () => ({
 }))
 
 vi.mock('@/services/agent/tauri', () => ({
-  listAgentWorkspace: vi.fn(async () => workspace.entries),
+  listAgentWorkspace: workspace.list,
 }))
 
 vi.mock('@/lib/codeHighlighter', () => ({
@@ -79,6 +80,16 @@ vi.mock('./ArtifactPanel', () => ({
   ArtifactPanel: () => <div>Artifact panel</div>,
 }))
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
 describe('AgentWorkspaceLayout', () => {
   beforeEach(() => {
     artifactPreview.command.mockReset().mockImplementation((command: string) => {
@@ -93,6 +104,7 @@ describe('AgentWorkspaceLayout', () => {
     workspace.entries = [
       { name: 'output.txt', path: 'output.txt', kind: 'file' },
     ]
+    workspace.list.mockReset().mockImplementation(async () => workspace.entries)
     useArtifactStore.getState().close()
     useWorkspacePreviewStore.getState().reset()
   })
@@ -223,6 +235,159 @@ describe('AgentWorkspaceLayout', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open files sidebar' }))
     expect(await screen.findByText('Files')).toBeInTheDocument()
+  })
+
+  it('opens Files when initial primary-folder discovery fails', async () => {
+    workspace.list.mockRejectedValueOnce(new Error('Permission denied'))
+    render(
+      <AgentWorkspaceLayout
+        threadId="thread"
+        workspace={agentWorkspace}
+        onAddExternal={onAddExternal}
+        refreshKey={0}
+      >
+        <div>Chat</div>
+      </AgentWorkspaceLayout>
+    )
+
+    expect(await screen.findByText('Files')).toBeInTheDocument()
+    expect(workspace.list).toHaveBeenCalledExactlyOnceWith({
+      rootId: 'primary',
+      rootPath: '/workspace',
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Open files sidebar' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps visible Files open when folder discovery fails on refresh', async () => {
+    const refresh = deferred<typeof workspace.entries>()
+    const { rerender } = render(
+      <AgentWorkspaceLayout
+        threadId="thread"
+        workspace={agentWorkspace}
+        onAddExternal={onAddExternal}
+        refreshKey={0}
+      >
+        <div>Chat</div>
+      </AgentWorkspaceLayout>
+    )
+    expect(await screen.findByText('Files')).toBeInTheDocument()
+    workspace.list.mockReturnValueOnce(refresh.promise)
+
+    rerender(
+      <AgentWorkspaceLayout
+        threadId="thread"
+        workspace={agentWorkspace}
+        onAddExternal={onAddExternal}
+        refreshKey={1}
+      >
+        <div>Chat</div>
+      </AgentWorkspaceLayout>
+    )
+    await act(async () => {
+      refresh.reject(new Error('Folder is unavailable'))
+      await refresh.promise.catch(() => undefined)
+    })
+
+    expect(screen.getByText('Files')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Open files sidebar' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('respects manually closed Files across repeated discovery failures', async () => {
+    workspace.list.mockRejectedValue(new Error('Permission denied'))
+    const { rerender } = render(
+      <AgentWorkspaceLayout
+        threadId="thread"
+        workspace={agentWorkspace}
+        onAddExternal={onAddExternal}
+        refreshKey={0}
+      >
+        <div>Chat</div>
+      </AgentWorkspaceLayout>
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Close files sidebar' })
+    )
+    await waitFor(() => {
+      expect(screen.queryByText('Files')).not.toBeInTheDocument()
+    })
+
+    for (const refreshKey of [1, 2]) {
+      await act(async () => {
+        rerender(
+          <AgentWorkspaceLayout
+            threadId="thread"
+            workspace={agentWorkspace}
+            onAddExternal={onAddExternal}
+            refreshKey={refreshKey}
+          >
+            <div>Chat</div>
+          </AgentWorkspaceLayout>
+        )
+      })
+      expect(screen.queryByText('Files')).not.toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Open files sidebar' })
+      ).toBeInTheDocument()
+    }
+    expect(workspace.list).toHaveBeenCalledTimes(3)
+  })
+
+  it('ignores a previous folder discovery rejection after switching workspace', async () => {
+    const previous = deferred<typeof workspace.entries>()
+    workspace.list
+      .mockReturnValueOnce(previous.promise)
+      .mockResolvedValueOnce([])
+    const { rerender } = render(
+      <AgentWorkspaceLayout
+        threadId="thread"
+        workspace={agentWorkspace}
+        onAddExternal={onAddExternal}
+        refreshKey={0}
+      >
+        <div>Chat</div>
+      </AgentWorkspaceLayout>
+    )
+    const nextWorkspace = {
+      primaryRoot: {
+        rootId: 'next',
+        path: '/next',
+        name: 'next',
+        canEdit: true,
+      },
+      externalRoots: [],
+    }
+
+    await act(async () => {
+      rerender(
+        <AgentWorkspaceLayout
+          threadId="thread"
+          workspace={nextWorkspace}
+          onAddExternal={onAddExternal}
+          refreshKey={0}
+        >
+          <div>Next chat</div>
+        </AgentWorkspaceLayout>
+      )
+    })
+    expect(workspace.list).toHaveBeenNthCalledWith(2, {
+      rootId: 'next',
+      rootPath: '/next',
+    })
+
+    await act(async () => {
+      previous.reject(new Error('Old folder is unavailable'))
+      await previous.promise.catch(() => undefined)
+    })
+
+    expect(screen.getByText('Next chat')).toBeInTheDocument()
+    expect(screen.queryByText('Files')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Open files sidebar' })
+    ).toBeInTheDocument()
   })
 
   it('opens the files sidebar when an empty workspace gains an entry', async () => {
