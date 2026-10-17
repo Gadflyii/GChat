@@ -273,8 +273,9 @@ it('explains empty, ready and busy task states without changing task submission'
   expect(screen.getByText('Ready to run this task.')).toBeVisible()
   expect(run).toBeEnabled()
   fireEvent.click(run)
-  expect(screen.getByRole('status')).toHaveTextContent(
-    'Sending this task to the bot…'
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
   )
   expect(
     screen.getByRole('button', { name: 'Sending…', exact: true })
@@ -1148,8 +1149,9 @@ it('blocks same-tick duplicate tasks, then restores the failed draft for retry',
   })
   expect(form).toHaveAttribute('aria-busy', 'true')
   expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
-  expect(screen.getByRole('status')).toHaveTextContent(
-    'Sending this task to the bot…'
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
   )
   fireEvent.submit(form)
   expect(submit).toHaveBeenCalledTimes(1)
