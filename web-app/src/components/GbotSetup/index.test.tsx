@@ -220,7 +220,7 @@ it('asks separately where the service runs and where the bot computer lives', as
     target: { value: 'Writer' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  expect(screen.getByText('Step 2 of 5 · Service')).toBeInTheDocument()
+  expect(screen.getByText('Step 2 · Service')).toBeInTheDocument()
   expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
   expect(screen.queryByLabelText(/A separate local VM/)).not.toBeInTheDocument()
   await waitFor(() =>
@@ -229,7 +229,7 @@ it('asks separately where the service runs and where the bot computer lives', as
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   await screen.findByLabelText(/Cloud hosted/)
   expect(selectGbotService).toHaveBeenCalledWith({ kind: 'local' })
-  expect(screen.getByText('Step 3 of 5 · Computer')).toBeInTheDocument()
+  expect(screen.getByText('Step 3 · Computer')).toBeInTheDocument()
   expect(
     screen.queryByLabelText('This PC (recommended)')
   ).not.toBeInTheDocument()
@@ -287,14 +287,32 @@ it.each([null, false])(
     expect(
       screen.getByRole('button', { name: 'Selecting service…' })
     ).toBeDisabled()
-    expect(screen.getByText('Step 2 of 5 · Service')).toBeInTheDocument()
+    expect(screen.getByText('Step 2 · Service')).toBeInTheDocument()
     await act(async () => finish())
-    expect(screen.getByText('Step 3 of 5 · Computer')).toBeInTheDocument()
+    expect(screen.getByText('Step 3 · Computer')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(screen.getByLabelText('Bot name')).toHaveValue('Writer')
   }
 )
+
+it('numbers steps without a total that changes with the computer choice', async () => {
+  render(<GbotSetup save={vi.fn()} localReady={vi.fn()} cancel={vi.fn()} />)
+  fireEvent.change(screen.getByLabelText('Bot name'), {
+    target: { value: 'Writer' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await screen.findByLabelText(/Cloud hosted/)
+  for (const choice of [/Cloud hosted/, /M365 Cloud PC/, /separate local VM/]) {
+    fireEvent.click(screen.getByLabelText(choice))
+    expect(screen.getByText('Step 3 · Computer')).toBeInTheDocument()
+    expect(screen.queryByText(/ of [45]/)).not.toBeInTheDocument()
+  }
+})
 
 it('retains the resource failure and directs restart without offering another selection', async () => {
   resources.ready = false
@@ -485,11 +503,11 @@ it('selects the service once for same-tick submissions and allows retry after fa
 
   await act(async () => fail(new Error('Service unavailable')))
   expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
-  expect(screen.getByText('Step 2 of 5 · Service')).toBeInTheDocument()
+  expect(screen.getByText('Step 2 · Service')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  await screen.findByText('Step 3 of 5 · Computer')
+  await screen.findByText('Step 3 · Computer')
   expect(selectGbotService).toHaveBeenCalledTimes(2)
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
@@ -558,12 +576,12 @@ it.each(['success', 'failure'])(
 
     if (outcome === 'success') {
       await act(async () => finish())
-      expect(screen.getByText('Step 3 of 5 · Computer')).toBeInTheDocument()
+      expect(screen.getByText('Step 3 · Computer')).toBeInTheDocument()
       fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     } else {
       await act(async () => fail(new Error('Service unavailable')))
       expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
-      expect(screen.getByText('Step 2 of 5 · Service')).toBeInTheDocument()
+      expect(screen.getByText('Step 2 · Service')).toBeInTheDocument()
     }
     const restoredComputer = screen.getByLabelText('Paired service computer')
     expect(restoredComputer).toBeEnabled()
@@ -573,7 +591,7 @@ it.each(['success', 'failure'])(
       expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
     )
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    await screen.findByText('Step 3 of 5 · Computer')
+    await screen.findByText('Step 3 · Computer')
     expect(selectGbotService).toHaveBeenLastCalledWith({
       kind: 'paired_host',
       host_id: 'other-host',
@@ -620,7 +638,7 @@ it.each(['late result', 'late failure', 'result after selection'])(
     )
     if (outcome === 'result after selection') {
       fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-      await screen.findByText('Step 3 of 5 · Computer')
+      await screen.findByText('Step 3 · Computer')
     }
     await act(async () => {
       if (outcome === 'late failure') fail(new Error('Saved service unavailable'))
@@ -634,7 +652,7 @@ it.each(['late result', 'late failure', 'result after selection'])(
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-    await screen.findByText('Step 3 of 5 · Computer')
+    await screen.findByText('Step 3 · Computer')
     expect(selectGbotService).toHaveBeenLastCalledWith({
       kind: 'paired_host',
       host_id: 'service-host',
@@ -669,7 +687,7 @@ it('restores and checks the saved service when no new choice was made', async ()
   )
   expect(gbotControlGrant).toHaveBeenCalledWith('service-host', 'status')
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  await screen.findByText('Step 3 of 5 · Computer')
+  await screen.findByText('Step 3 · Computer')
   expect(selectGbotService).toHaveBeenCalledExactlyOnceWith({
     kind: 'paired_host',
     host_id: 'service-host',
@@ -720,7 +738,7 @@ it('saves the reviewed bot once for same-tick submissions with progress and retr
 
   await act(async () => fail(new Error('Vault unavailable')))
   expect(screen.getByRole('alert')).toHaveTextContent('Vault unavailable')
-  expect(screen.getByText('Step 5 of 5 · Review')).toBeInTheDocument()
+  expect(screen.getByText('Step 5 · Review')).toBeInTheDocument()
   expect(screen.getByText('bot@bot.local:22')).toBeInTheDocument()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Finish later' })).toBeEnabled()

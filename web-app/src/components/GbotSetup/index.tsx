@@ -219,11 +219,7 @@ export default function GbotSetup({
       <div>
         <h3 className="font-medium">Set up your bot</h3>
         <p className="text-sm text-muted-foreground">
-          Step {step + 1} of{' '}
-          {['local', 'cloud', 'm365'].includes(computer) && !guidedCloud
-            ? 4
-            : 5}{' '}
-          ·{' '}
+          Step {step + 1} ·{' '}
           {step === 3 && computer === 'local'
             ? 'Review and setup'
             : step === 3 && computer === 'cloud' && !guidedCloud
