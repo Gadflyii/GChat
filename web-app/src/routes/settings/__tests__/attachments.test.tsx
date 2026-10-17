@@ -371,7 +371,6 @@ describe('Attachment settings persistence', () => {
     })
     fireEvent.click(
       within(screen.getByRole('group', { name: text.enable })).getByRole('switch')
-
     )
     page.unmount()
     render(<Page />)
@@ -391,7 +390,6 @@ describe('Attachment settings persistence', () => {
     expect(input('maxFile')).toHaveValue('22')
     expect(
       within(screen.getByRole('group', { name: text.enable })).getByRole('switch')
-
     ).not.toBeChecked()
   })
 
