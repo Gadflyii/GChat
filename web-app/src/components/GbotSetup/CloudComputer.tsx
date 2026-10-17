@@ -1,7 +1,16 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { gbot, type CloudReview, type SshIdentity } from '@/services/gbot'
 import LanTools from './LanTools'
+
+const actionLabels = {
+  create: 'Creating cloud computer…',
+  check: 'Checking cloud computer…',
+  identity: 'Checking SSH identity…',
+  access: 'Verifying SSH access…',
+  connect: 'Connecting bot desktop…',
+  delete: 'Deleting cloud computer…',
+} as const
 
 export default function CloudComputer({
   review,
@@ -22,21 +31,31 @@ export default function CloudComputer({
   const [billing, setBilling] = useState(false)
   const [remove, setRemove] = useState(false)
   const [working, setWorking] = useState(false)
+  const [action, setAction] = useState<keyof typeof actionLabels>()
+  const pending = useRef(false)
   const [error, setError] = useState('')
   const [identity, setIdentity] = useState<SshIdentity>()
   const [verified, setVerified] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [tools, setTools] = useState(false)
   const deployment = review.deployment
-  const run = async (action: () => Promise<void>) => {
+  const run = async (
+    kind: keyof typeof actionLabels,
+    operation: () => Promise<void>
+  ) => {
+    if (pending.current) return
+    pending.current = true
+    setAction(kind)
     setWorking(true)
     busy(true)
     setError('')
     try {
-      await action()
+      await operation()
     } catch (cause) {
       setError(String(cause instanceof Error ? cause.message : cause))
     } finally {
+      pending.current = false
+      setAction(undefined)
       setWorking(false)
       busy(false)
     }
@@ -89,7 +108,7 @@ export default function CloudComputer({
             type="button"
             disabled={working || !canCreate || !billing || !sources.trim()}
             onClick={() =>
-              void run(async () => {
+              void run('create', async () => {
                 update(
                   await gbot<CloudReview>('setup/cloud/create', {
                     id: review.id,
@@ -104,7 +123,9 @@ export default function CloudComputer({
               })
             }
           >
-            Create cloud computer
+            {action === 'create'
+              ? actionLabels.create
+              : 'Create cloud computer'}
           </Button>
         </>
       )}
@@ -135,7 +156,7 @@ export default function CloudComputer({
             variant="outline"
             disabled={working}
             onClick={() =>
-              void run(async () => {
+              void run('check', async () => {
                 update(
                   await gbot<CloudReview>('setup/cloud/check', {
                     id: review.id,
@@ -144,7 +165,7 @@ export default function CloudComputer({
               })
             }
           >
-            Check progress
+            {action === 'check' ? actionLabels.check : 'Check progress'}
           </Button>
           {deployment.phase === 'running' && (
             <div className="space-y-2">
@@ -153,7 +174,7 @@ export default function CloudComputer({
                 variant="outline"
                 disabled={working}
                 onClick={() =>
-                  void run(async () => {
+                  void run('identity', async () => {
                     setAuthenticated(false)
                     setTools(false)
                     setVerified(false)
@@ -166,7 +187,9 @@ export default function CloudComputer({
                   })
                 }
               >
-                Check SSH identity
+                {action === 'identity'
+                  ? actionLabels.identity
+                  : 'Check SSH identity'}
               </Button>
               {identity && (
                 <>
@@ -196,7 +219,7 @@ export default function CloudComputer({
                     variant="outline"
                     disabled={working || !verified || authenticated}
                     onClick={() =>
-                      void run(async () => {
+                      void run('access', async () => {
                         await gbot('setup/cloud/attach', {
                           id: review.id,
                           pinned_host_key: identity.public_key,
@@ -209,7 +232,9 @@ export default function CloudComputer({
                       })
                     }
                   >
-                    Verify SSH access
+                    {action === 'access'
+                      ? actionLabels.access
+                      : 'Verify SSH access'}
                   </Button>
                 </>
               )}
@@ -219,6 +244,7 @@ export default function CloudComputer({
                   cloud
                   ready={setTools}
                   busy={(value) => {
+                    pending.current = value
                     setWorking(value)
                     busy(value)
                   }}
@@ -228,7 +254,7 @@ export default function CloudComputer({
                 type="button"
                 disabled={working || !tools}
                 onClick={() =>
-                  void run(async () => {
+                  void run('connect', async () => {
                     await gbot('connect', {
                       workspace_id: review.id,
                       session_id: crypto.randomUUID(),
@@ -237,7 +263,9 @@ export default function CloudComputer({
                   })
                 }
               >
-                Connect bot desktop
+                {action === 'connect'
+                  ? actionLabels.connect
+                  : 'Connect bot desktop'}
               </Button>
             </div>
           )}
@@ -258,7 +286,7 @@ export default function CloudComputer({
               variant="outline"
               disabled={working || !remove}
               onClick={() =>
-                void run(async () => {
+                void run('delete', async () => {
                   update(
                     await gbot<CloudReview>('setup/cloud/delete', {
                       id: review.id,
@@ -269,13 +297,20 @@ export default function CloudComputer({
                 })
               }
             >
-              Delete cloud computer
+              {action === 'delete'
+                ? actionLabels.delete
+                : 'Delete cloud computer'}
             </Button>
           </div>
         </>
       )}
       {deployment?.phase === 'deleted' && (
         <p role="status">Computer and owned provider resources deleted.</p>
+      )}
+      {action && (
+        <p role="status" aria-live="polite">
+          {actionLabels[action]}
+        </p>
       )}
       {error && (
         <p role="alert" className="text-destructive">
