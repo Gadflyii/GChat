@@ -166,10 +166,7 @@ it.each(['missing', 'connection', 'model', 'context'])(
     const run = screen.getByRole('button', { name: 'Run', exact: true })
     expect(run).toBeDisabled()
     fireEvent.click(run)
-    expect(mocks.call).not.toHaveBeenCalledWith(
-      'tasks/start',
-      expect.anything()
-    )
+    expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
   }
 )
 
@@ -181,9 +178,7 @@ it('explains unsaved brain changes while retaining the task draft', async () => 
     target: { value: 'Write a note' },
   })
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Run', exact: true })
-    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
   )
   fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
   fireEvent.change(screen.getByLabelText('Model ID'), {
@@ -193,9 +188,7 @@ it('explains unsaved brain changes while retaining the task draft', async () => 
     screen.getByText('Save the brain settings above before running a task.')
   ).toBeVisible()
   expect(screen.getByLabelText('Bot task')).toHaveValue('Write a note')
-  expect(
-    screen.getByRole('button', { name: 'Run', exact: true })
-  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
   expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
 })
 
@@ -240,21 +233,17 @@ it.each([
       'control/hand-back',
       expect.anything()
     )
-    expect(mocks.call).not.toHaveBeenCalledWith(
-      'tasks/start',
-      expect.anything()
-    )
+    expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
   }
 )
 
 it('explains a task runner issue before suggesting brain or task changes', async () => {
   readyTaskBots(undefined, { assignments: [] })
   const call = mocks.call.getMockImplementation()!
-  mocks.call.mockImplementation(
-    (path: string, body: Record<string, unknown>) =>
-      path === 'tasks'
-        ? Promise.reject(new Error('Task runner connection lost'))
-        : call(path, body)
+  mocks.call.mockImplementation((path: string, body: Record<string, unknown>) =>
+    path === 'tasks'
+      ? Promise.reject(new Error('Task runner connection lost'))
+      : call(path, body)
   )
   render(<Page />)
   await screen.findByText('Error: Task runner connection lost')
@@ -263,9 +252,7 @@ it('explains a task runner issue before suggesting brain or task changes', async
       'The task runner is unavailable. Resolve the task runner issue above before running a task.'
     )
   ).toBeVisible()
-  expect(
-    screen.getByRole('button', { name: 'Run', exact: true })
-  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
   expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
 })
 
@@ -297,10 +284,10 @@ it('explains empty, ready and busy task states without changing task submission'
     prompt: 'Write a note',
   })
   await act(async () => finish())
-  await waitFor(() => expect(screen.getByLabelText('Bot task')).toHaveValue(''))
-  expect(
-    await screen.findByText('Enter a task, then choose Run.')
-  ).toBeVisible()
+  await waitFor(() =>
+    expect(screen.getByLabelText('Bot task')).toHaveValue('')
+  )
+  expect(await screen.findByText('Enter a task, then choose Run.')).toBeVisible()
 })
 
 it('explicitly recovers an orphaned paused owner while keeping hand-back and setup resume separate', async () => {
@@ -729,9 +716,7 @@ it('resumes a saved cloud price review without creating a workspace or offering 
   expect(
     await screen.findByRole('region', { name: 'Cloud cost review' })
   ).toBeInTheDocument()
-  expect(screen.getByLabelText('Provider API token (access key)')).toHaveValue(
-    ''
-  )
+  expect(screen.getByLabelText('Provider API token (access key)')).toHaveValue('')
   expect(
     mocks.call.mock.calls.some(
       ([path]) => path === 'workspaces/ssh' || path === 'workspaces'
@@ -1101,9 +1086,7 @@ it('keeps separate bot task drafts and submits each to its own ready bot', async
   fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
   expect(screen.getByLabelText('Bot task')).toHaveValue('Find sources')
   await waitFor(() =>
-    expect(
-      screen.getByRole('button', { name: 'Run', exact: true })
-    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
   )
   fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
   await waitFor(() => {
@@ -1132,9 +1115,7 @@ it('keeps a rejected task draft available for retry', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
   await waitFor(() => {
     expect(submit).toHaveBeenCalledTimes(1)
-    expect(
-      screen.getByRole('button', { name: 'Run', exact: true })
-    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
   })
   expect(screen.getByLabelText('Bot task')).toHaveValue('Keep this draft')
   fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
@@ -1180,9 +1161,7 @@ it.each([false, true])(
     })
     await act(async () => finish())
     await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: 'Run', exact: true })
-      ).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
     )
     expect(screen.getByLabelText('Bot task')).toHaveValue('Researcher draft')
     fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
