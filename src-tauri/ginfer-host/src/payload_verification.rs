@@ -70,23 +70,23 @@ impl PayloadVerification {
     }
 }
 
-/// `None` requests a full verification, including for an explicit Verify action.
+/// An empty receipt set requests a full verification, including explicit Verify.
 /// A receipt is reusable only for the same expected digest and complete file
 /// fingerprint. Platforms/filesystems without stable identity always hash.
-pub(crate) fn verify(
+pub(crate) fn verify<'a>(
     path: &Path,
     sha256: &str,
     bytes: u64,
-    previous: Option<&PayloadVerification>,
+    previous: impl IntoIterator<Item = &'a PayloadVerification>,
 ) -> Result<PayloadVerification, String> {
     verify_with_hasher(path, sha256, bytes, previous, hash_payload)
 }
 
-fn verify_with_hasher(
+fn verify_with_hasher<'a>(
     path: &Path,
     sha256: &str,
     bytes: u64,
-    previous: Option<&PayloadVerification>,
+    previous: impl IntoIterator<Item = &'a PayloadVerification>,
     hash: impl FnOnce(&mut File) -> Result<String, String>,
 ) -> Result<PayloadVerification, String> {
     let mut file = File::open(path).map_err(|e| e.to_string())?;
@@ -94,8 +94,8 @@ fn verify_with_hasher(
     if before.bytes != bytes {
         return Err("payload size mismatch".into());
     }
-    let cached = previous.is_some_and(|record| {
-        record.sha256 == sha256 && before.reusable() && record.fingerprint == before
+    let cached = before.reusable() && previous.into_iter().any(|record| {
+        record.sha256 == sha256 && record.fingerprint == before
     });
     let actual_sha256 = if cached { None } else { Some(hash(&mut file)?) };
     if fingerprint(&file)? != before {
@@ -307,6 +307,20 @@ mod tests {
         })
         .unwrap();
         assert_eq!(record, reused);
+    }
+
+    #[test]
+    fn fresh_install_receipt_can_replace_a_stale_host_receipt_without_reading() {
+        let (_directory, path, sha256) = fixture();
+        let stale = verify(&path, &sha256, 8, None).unwrap();
+        OpenOptions::new().write(true).open(&path).unwrap()
+            .set_times(FileTimes::new().set_modified(UNIX_EPOCH + Duration::from_secs(1))).unwrap();
+        let fresh = verify(&path, &sha256, 8, None).unwrap();
+        assert_ne!(stale, fresh);
+        let reused = verify_with_hasher(&path, &sha256, 8, [&stale, &fresh], |_| {
+            panic!("a fresh install receipt must supersede the stale Host record")
+        }).unwrap();
+        assert_eq!(reused, fresh);
     }
 
     #[test]

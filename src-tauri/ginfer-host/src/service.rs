@@ -658,14 +658,14 @@ impl Host {
     async fn verify_qualified_payload(
         &self, payload: PathBuf, sha256: String, bytes: u64,
     ) -> Result<(), String> {
-        let previous = self.data.lock().await.payload_verifications.get(&payload).cloned();
-        let previous = match previous {
-            Some(record) => Some(record),
-            None => self.downloads.installed_verification(&payload, &sha256, bytes).await,
-        };
+        let mut previous: Vec<_> = self.data.lock().await.payload_verifications
+            .get(&payload).cloned().into_iter().collect();
+        if let Some(installed) = self.downloads.installed_verification(&payload, &sha256, bytes).await {
+            previous.push(installed);
+        }
         let path = payload.clone();
         let verification = tokio::task::spawn_blocking(move || {
-            crate::payload_verification::verify(&path, &sha256, bytes, previous.as_ref())
+            crate::payload_verification::verify(&path, &sha256, bytes, previous.iter())
         }).await.map_err(|e| e.to_string())?
             .map_err(crate::launch_profiles::profile_verification_error)?;
         let mut data = self.data.lock().await;
