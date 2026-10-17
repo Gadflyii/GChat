@@ -5,23 +5,26 @@
 `GUI-GLOBAL-THREADS-DELETE-SINGLE-SUBMIT-20261017` applies the existing project
 confirmation behavior to global Delete all: Cancel initially focused, synchronous
 single submission, blocked dismissal while pending, and a visible retryable
-error. Preserve global deletion scope, notification and success-only deferred
-home navigation. No actual conversation deletion is authorized.
+error. Global deletion scope, success notification and deferred home navigation
+are preserved. No real conversation deletion was performed.
 
-Acceptance: focused rendered keyboard/repeated activation/pending/success/retry
-cases and one full `make verify`, then isolated commit/push merge-ready by
-15:15 UTC October17. Installed confirmation remains with Gchat3. Windows
-host-port collision still waits for Gchat2 installed-Windows handoff.
+Implementation `6d8c84f60` passes six rendered keyboard, repeated activation,
+pending, success and retry cases. One full `make verify` exited 0 at 14:41:36Z
+October17: 2,870 frontend tests, 119 extension tests, 59 Node contract tests and
+1,076 Rust tests passed; six frontend tests were skipped and 27 Rust tests
+ignored. Lint, types, quality checks and all six critical coverage floors passed;
+lint retains three unrelated existing warnings.
 
-Owned tree `/ai/gchat-worktrees/c7-global-threads-delete-single-submit-20261017`,
-branch `fix/c7-global-threads-delete-single-submit-20261017`, base main
-`65248d3cc`. Implementation and dedicated test are separate agent-owned files.
-Implementation and six rendered regression cases are ready. S1 CPU32–39 are
-booked as2595 from14:33–15:08 UTC for private offline staging, focused cases and
-one full CPU-only gate in pinned image `ad7f9bf020d7`. The read-only
-`tmp-gchat3-linux-rc-20261016` dependency/native cache donor is preserved;
-owned disposable gate root is `tmp-c7-global-threads-delete-single-submit-20261017`
-on S1. No model/GUI or GPU operation. Next: run focused tests, then full verify.
+Verification used S1 CPU32–39 nice10 in pinned image `ad7f9bf020d7`, private
+offline caches and 22 retained profiles, with CUDA mask/order unset. The private
+source/cache and stopped container are retired, read-only donor untouched;
+booking2595 canceled, returned14:42Z. Concise evidence is retained in
+`/ai/gchat/out/global-threads-delete-single-submit-20261017/{result.json,summary.md}`.
+The owned tree is `/ai/gchat-worktrees/c7-global-threads-delete-single-submit-20261017`,
+branch `fix/c7-global-threads-delete-single-submit-20261017`, from main `65248d3cc`.
+Subsequent main integration changed documentation only. Next: coordinator merge;
+installed confirmation remains with Gchat3. Windows host-port collision waits
+for Gchat2 installed-Windows handoff. No Engine/GPU/model gate applies.
 
 ## Project conversation deletion — C7
 
