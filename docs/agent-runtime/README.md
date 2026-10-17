@@ -13,9 +13,11 @@ Studio reopening also pass after normal exit. Interrupted-run history now has a
 the [October 17 native desktop-death check](#native-desktop-process-death-and-new-run-continuation--october-17)
 also passes incomplete-history discovery and explicitly approved new-run
 continuation. A separate [idle Host termination check](#native-idle-host-termination-and-explicit-new-run-continuation--october-17)
-passes Stop cancellation and explicit new-run recovery. Automatic resume, abrupt
-Host/Engine failure, mid-inference loss, power-loss recovery and Windows remain
-unqualified; OI-068 remains PARTIAL.
+passes Stop cancellation and explicit new-run recovery. An
+[in-flight Engine-loss check](#native-in-flight-engine-loss-and-new-run-recovery--october-17)
+passes visible failure and explicit restart/new-run recovery. Automatic resume,
+abrupt Host failure, power-loss recovery and Windows remain unqualified;
+OI-068 remains PARTIAL.
 
 ## Client tools and native request capability errors — release scope
 
@@ -163,8 +165,8 @@ Standard Agent also read a file and reached shell approval before normal window
 Close. The cancelled record, original task and completed read survived same-data
 relaunch and ordinary Studio Runs reopening; the unapproved command never ran.
 The separate [October 17 desktop-death check](#native-desktop-process-death-and-new-run-continuation--october-17)
-passes its bounded scope, as does the idle Host termination check below. Abrupt
-Host/Engine failure, mid-inference loss and power-loss recovery remain unqualified.
+passes its bounded scope, as do the idle Host termination and in-flight Engine-loss
+checks below. Abrupt Host failure and power-loss recovery remain unqualified.
 [Evidence and remaining scope](remaining-acceptance.md#oi-068-studio-worker-exit-persistence--october-15).
 
 ## Interrupted Studio run history — October 16
@@ -208,9 +210,10 @@ rerun passed. That environment failure and both logs are retained under
 `out/studio-pending-drop-cleanup-20261016/`.
 The separate native desktop-death check below passes incomplete-history
 discovery and explicit new-run continuation; the later idle Host termination
-check covers Stop and a fresh run after managed Host replacement. Automatic
-resume, abrupt Host/Engine failure, mid-inference loss and power-loss recovery
-remain unqualified; the normal-close acceptance above remains valid.
+check covers Stop and a fresh run after managed Host replacement. The in-flight
+Engine-loss check below covers visible failure and an explicit new run. Automatic
+resume, abrupt Host failure and power-loss recovery remain unqualified; the
+normal-close acceptance above remains valid.
 See the [decision](../decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 
 ## Native desktop process-death and new-run continuation — October 17
@@ -226,8 +229,9 @@ Ordinary Continue as new run created a distinct run with fresh folder and shell
 approvals. The approved `touch` succeeded once. The model requested another
 `touch`, which the human denied; the new run finished in eight steps and reopened
 as FINISHED while the original remained INCOMPLETE. This qualifies that explicit
-continuation path, not automatic resume or exactly-once execution. Host/Engine
-loss, power loss and Windows are not qualified; OI-068 remains PARTIAL.
+continuation path, not automatic resume or exactly-once execution. Separate Host
+and Engine checks below cover their bounded recovery paths. Power loss and Windows
+remain unqualified; OI-068 remains PARTIAL.
 [Settings, evidence and limits](remaining-acceptance.md#oi-068-native-desktop-process-death-and-continuation--october-17).
 
 ## Native idle Host termination and explicit new-run continuation — October 17
@@ -245,10 +249,27 @@ retained their hashes and sizes. Its final reply falsely attributed the marker
 to the cancelled run and claimed no new changes. Recovery is qualified by the
 observed tool outcomes and run identities, not that reply's factual accuracy.
 
-This passes idle Host SIGTERM, Stop and explicit new-run recovery only. Abrupt
-crash, mid-inference loss, automatic resume, power loss and Windows remain
-unqualified; OI-068 remains PARTIAL.
+This passes idle Host SIGTERM, Stop and explicit new-run recovery only. The separate
+Engine-loss check below covers an interrupted inference. Abrupt Host failure,
+automatic resume, power loss and Windows remain unqualified; OI-068 remains PARTIAL.
 [Settings, evidence and limits](remaining-acceptance.md#oi-068-native-idle-host-termination-and-continuation--october-17).
+
+## Native in-flight Engine loss and new-run recovery — October 17
+
+On the retained d31 Linux AppImage, the Engine alone was killed while Ready with
+one active request. The original Standard Agent run visibly failed with a
+connection-closed error and zero completed steps. It did not retry automatically.
+
+An ordinary Start of the same saved model profile followed by a separate Run
+completed the read-only goal in two steps: read `observation.txt`, then Reply with
+its exact contents. Ordinary Runs showed the original FAILED record and the
+distinct FINISHED record. Normal model Stop and desktop exit followed.
+
+This qualifies visible failure and explicit same-profile restart/new-run recovery.
+Automatic resume, abrupt Host failure, power loss and Windows remain unqualified;
+OI-068 remains PARTIAL. Configured context was 131072; the explicit KV arena
+limited the Engine's request context to 77824, so this was a short recovery task.
+[Settings, evidence and limits](remaining-acceptance.md#oi-068-native-in-flight-engine-loss-and-explicit-restart--october-17).
 
 ## Native attachment chooser uses current tools — October 17
 
@@ -510,9 +531,11 @@ Linux Secret Service check also passes silent locked-keyring launch and explicit
 saved-Host Connect prompting, with a clear locked-storage error after Cancel.
 A fresh isolated-keyring follow-up also passes ordinary unlock, stored-credential
 retrieval and reconnection after restart. The installed Linux Gbot local service
-token also passes creation and retrieval after GUI restart, with silent locked
-launch and Gbot navigation. Gbot service-process restart, SSH/provider credential
-use and Windows remain unqualified.
+token also passes creation and retrieval after GUI and normal service-process
+restart, with silent locked launch and Gbot navigation. Synthetic SSH-key import
+and stored-key retrieval after GUI restart also pass, displaying the same public key.
+SSH authentication/provider credential use, crash recovery and Windows remain
+unqualified.
 [Evidence and limits](remaining-acceptance.md#installed-linux-locked-keyring-launch-and-explicit-connect--october-17).
 OI-069's two-Host worker gate and October 15 independent-workstation gate pass.
 Two native Linux clients with distinct grants share one instance-wide worker

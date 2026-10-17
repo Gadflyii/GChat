@@ -265,6 +265,34 @@ returned at 08:09Z. Evidence:
 `/ai/gchat/out/oi068-process-death-20261017/{host-loss-result.json,host-loss-summary.md}`;
 result SHA256 `deee51b6ef02fa3629865694916ecaa7fc3d6cbd9e0820864d4a381fa1a2581c`.
 
+## OI-068 native in-flight Engine loss and explicit restart — October 17
+
+The retained d31 AppImage with Engine `db265e6b2` ran Qwen 27B NVFP4
+(artifact SHA256 `4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6`)
+on the local RTX 5090. The same saved profile
+used C1, context 131072 and KV arena 5368709120 bytes; the effective maximum
+request context was 77824. Engine PID302373 received SIGKILL at
+09:56:54.380021Z after a fresh Ready observation with one active request.
+Run `937ca287-5623-4a0f-a472-f0a2509044ae` failed with zero completed model
+steps and an explicit connection-closed error.
+
+An ordinary Start of the same profile at 09:58:33Z was followed by distinct
+run `0bb48385-189d-4585-9bc1-1fbbdca72180`. It used `os.fs.read` and finished
+with a Reply after two steps at 09:59:14Z, reproducing the observation file's
+exact contents. Ordinary Runs history showed the original FAILED record and
+the new FINISHED record, and reopening the latter preserved its reply.
+
+This passes bounded in-flight Engine-loss reporting and explicit restart/new-run
+recovery. It does not qualify automatic replay or resume, power-loss recovery,
+literal 262144-token input, Hermes or Windows; OI-068 remains PARTIAL. Normal UI
+Stop at 09:59:50Z reached stopped at 10:00:00Z; normal desktop close exited zero,
+then the idle Host received SIGTERM with all instances stopped and no active
+requests. Owned resources were returned at 10:00Z.
+Evidence under `/ai/gchat/out/oi068-process-death-20261017/`:
+`engine-loss-result.json` (SHA256
+`72edd92d65eea0cbf2ddb3152b5ddc616205493355bb99cbc6542f93776be218`) and
+`engine-loss-{fault,recovery-monitor-1,recovery-finished-ui,recovery-history-opened,normal-stop}.json`.
+
 ## Native attachment chooser current tools — October 17
 
 In an existing private conversation on the same desktop, the document reader
@@ -593,12 +621,42 @@ reconnected, with the same service UUID and endpoint and the original service
 process still alive. Ordinary Quit Gbot service and normal desktop close left
 both processes absent at 08:41:54.564547Z.
 
+The separate service-process restart check also passes. After normal Quit of
+service PID1645 and guest/private-keyring-daemon restart, new desktop PID1453's
+locked launch and Gbot navigation stayed silent. One ordinary Start at 08:57:53Z
+waited for bundled-resource validation, then prompted at 09:01:37Z. Sender
+`:1.16` mapped live to new service PID1770. Ordinary unlock at 09:01:48Z was
+followed by two GetSecret calls and no CreateItem; the same service UUID
+reconnected by 09:01:55Z. Normal service Quit and desktop close completed at
+09:02:16Z, and the guest was normally shut down and returned at 09:02Z. Evidence:
+`/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-gbot-service-restart-20261017/result.json`.
+
 This qualifies local service-token creation, persistence and retrieval across
-GUI restart, alongside silent locked launch and navigation. Service-process
-restart, SSH/provider credentials, bot control/tasks, fresh installation and
-native Windows remain unqualified. No model, GPU workload, bot or task ran.
-Evidence:
+GUI and normal service-process restart, alongside silent locked launch and
+navigation. Crash recovery, SSH authentication/provider credential use, bot
+control/tasks, fresh installation and native Windows remain unqualified. No model,
+GPU workload, bot or task ran. Prior GUI-restart evidence:
 `/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-gbot-credential-20261017/result.json`.
+
+### Gbot synthetic SSH-key follow-up
+
+The installed d31 GUI imported a synthetic SSH key at 09:13:11Z, with CreateItem
+and GetSecret observed, and displayed the matching public key at 09:13:29Z.
+After normal desktop close, keyring lock and desktop restart as PID1871, plain
+launch and Gbot navigation made no Secret Service method calls before explicit
+Start at 09:15:05Z. After bundled-resource validation, the service-token prompt
+at 09:16:58Z mapped sender `:1.33` to the restarted desktop. Ordinary unlock and
+GetSecret reconnected the service by 09:17:52Z.
+
+The keyring was locked again at 09:17:59Z before ordinary Set up SSH access.
+That action requested Unlock and Prompt from sender `:1.37`, mapped live to
+surviving Gbot service PID1602. Ordinary unlock at 09:18:08Z reopened setup;
+its displayed public key at 09:18:14Z exactly matched the original. This passes
+key import, persistence and stored-key retrieval for public-key derivation across
+GUI restart. It does not qualify SSH network connection, authentication, provider
+credentials, bot control or tasks. No model ran. Normal service Quit and desktop
+close completed at 09:18:57Z; the guest shut down normally and returned at 09:20Z.
+Evidence: `/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-ssh-roundtrip-20261017/{result.json,summary.md}`.
 
 Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
 Two concurrent workers finished; a third queued at full capacity and was cancelled.
