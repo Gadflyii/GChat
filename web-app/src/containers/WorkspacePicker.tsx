@@ -32,6 +32,9 @@ export function WorkspacePicker({
   const [resolved, setResolved] = useState('')
   const [error, setError] = useState('')
   const [instructions, setInstructions] = useState<string>()
+  const [readingInstructions, setReadingInstructions] = useState(false)
+  const readingInstructionsRef = useRef(false)
+  const instructionsGeneration = useRef(0)
   const [choosing, setChoosing] = useState(false)
   const choosingRef = useRef(false)
   const choiceGeneration = useRef(0)
@@ -45,6 +48,9 @@ export function WorkspacePicker({
   }, [])
   useEffect(() => {
     choiceGeneration.current += 1
+    instructionsGeneration.current += 1
+    readingInstructionsRef.current = false
+    setReadingInstructions(false)
   }, [value, personalWhenEmpty])
   useEffect(() => {
     let cancelled = false
@@ -108,6 +114,38 @@ export function WorkspacePicker({
       if (mounted.current) setChoosing(false)
     }
   }
+  const readInstructions = async () => {
+    if (!resolved || readingInstructionsRef.current) return
+    readingInstructionsRef.current = true
+    setReadingInstructions(true)
+    setInstructions(undefined)
+    setError('')
+    const generation = instructionsGeneration.current
+    const workspaceGeneration = choiceGeneration.current
+    const isCurrentRequest = () =>
+      mounted.current && generation === instructionsGeneration.current
+    const isCurrentWorkspace = () =>
+      isCurrentRequest() && workspaceGeneration === choiceGeneration.current
+    try {
+      const result = await memoryCommand<{ text: string }>('instructions', {
+        workspace: resolved,
+      })
+      if (isCurrentWorkspace()) {
+        setInstructions(
+          result.text || 'No AGENTS.md file; workspace instructions are optional.'
+        )
+      }
+    } catch (e) {
+      if (isCurrentWorkspace()) {
+        setError(`Could not read AGENTS.md. Try View AGENTS.md again. ${String(e)}`)
+      }
+    } finally {
+      if (isCurrentRequest()) {
+        readingInstructionsRef.current = false
+        setReadingInstructions(false)
+      }
+    }
+  }
   return (
     <div className="space-y-2 text-sm">
       <label htmlFor={id}>
@@ -165,20 +203,11 @@ export function WorkspacePicker({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
-                void memoryCommand<{ text: string }>('instructions', {
-                  workspace: resolved,
-                })
-                  .then((r) =>
-                    setInstructions(
-                      r.text ||
-                        'No AGENTS.md file; workspace instructions are optional.'
-                    )
-                  )
-                  .catch((e) => setError(String(e)))
-              }
+              disabled={readingInstructions}
+              aria-busy={readingInstructions}
+              onClick={() => void readInstructions()}
             >
-              View AGENTS.md
+              {readingInstructions ? 'Reading AGENTS.md…' : 'View AGENTS.md'}
             </Button>
           </div>
         </div>
