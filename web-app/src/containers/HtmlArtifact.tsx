@@ -59,6 +59,10 @@ function HtmlArtifactComponent({
   const { t } = useTranslation('chat')
   const [tab, setTab] = useState<ArtifactTab>('preview')
   const [copied, setCopied] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
+  const copyPendingRef = useRef(false)
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [previewUrl, setPreviewUrl] = useState<string>('')
   const [previewFailed, setPreviewFailed] = useState(false)
   const [previewRetry, setPreviewRetry] = useState(0)
@@ -209,6 +213,7 @@ function HtmlArtifactComponent({
   useEffect(() => {
     const id = artifactIdRef.current
     return () => {
+      clearTimeout(copyResetRef.current)
       if (isPlatformTauri()) {
         invoke('clear_artifact_html', { id }).catch(() => {})
       }
@@ -220,13 +225,22 @@ function HtmlArtifactComponent({
   }, [])
 
   const handleCopy = useCallback(async () => {
-    if (!navigator?.clipboard?.writeText) return
+    if (copyPendingRef.current) return
+    copyPendingRef.current = true
+    clearTimeout(copyResetRef.current)
+    setCopying(true)
+    setCopied(false)
+    setCopyFailed(false)
     try {
       await navigator.clipboard.writeText(code)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      copyResetRef.current = setTimeout(() => setCopied(false), 2000)
     } catch (error) {
       console.error('Failed to copy artifact code:', error)
+      setCopyFailed(true)
+    } finally {
+      copyPendingRef.current = false
+      setCopying(false)
     }
   }, [code])
 
@@ -348,6 +362,9 @@ function HtmlArtifactComponent({
                 className="h-7 gap-1 px-2 text-xs"
                 onClick={handleCopy}
                 title="Copy code"
+                aria-label="Copy HTML"
+                aria-busy={copying}
+                disabled={copying}
               >
                 <CopyIcon size={14} className="shrink-0" />
                 <span className="hidden @[26rem]:inline">
@@ -392,6 +409,15 @@ function HtmlArtifactComponent({
           )}
         </div>
       </div>
+
+      <span role="status" aria-live="polite" className="sr-only">
+        {copied ? 'HTML copied.' : ''}
+      </span>
+      {copyFailed && (
+        <p role="alert" className="px-3 py-2 text-sm text-destructive">
+          Could not copy the HTML. Try Copy again, or select the text in Code.
+        </p>
+      )}
 
       {downloadFailed && (
         <p role="alert" className="px-3 py-2 text-sm text-destructive">
