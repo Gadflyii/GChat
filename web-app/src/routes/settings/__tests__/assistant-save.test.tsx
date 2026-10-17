@@ -127,4 +127,11 @@ describe('Assistant settings persistence', () => {
       expect(other).not.toHaveBeenCalled()
     }
   )
+
+  it('explains an empty assistant list after the last one is deleted', () => {
+    mocks.assistants.splice(0, mocks.assistants.length)
+    const Page = Route.options.component as ComponentType
+    render(<Page />)
+    expect(screen.getByText('assistants:noAssistants')).toBeInTheDocument()
+  })
 })

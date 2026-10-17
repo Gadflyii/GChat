@@ -118,6 +118,11 @@ function AssistantContent() {
                 }
               />
               <h1 className="text-foreground font-studio font-medium text-sm mt-4 mb-4">{t('assistants:allAssistants')}</h1>
+              {sortedAssistants.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {t('assistants:noAssistants')}
+                </p>
+              )}
               {sortedAssistants.map((assistant) => (
                 <div
                   className="group flex items-center gap-3 px-3 py-3 rounded-lg my-1 bg-secondary/20 hover:bg-secondary dark:hover:bg-secondary/20 transition-colors"

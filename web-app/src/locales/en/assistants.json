@@ -37,6 +37,7 @@
   "defaultAssistantSection": "Default Assistant",
   "defaultAssistantDesc": "Used when starting a new chat",
   "allAssistants": "All Assistants",
+  "noAssistants": "You have no assistants. New chats use GChat’s built-in instructions. Select Add Assistant to create your own.",
   "none": "None",
   "noAssistants": "No assistants available",
   "samplingTrigger": "Sampling — {{name}}",
