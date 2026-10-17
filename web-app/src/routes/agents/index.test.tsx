@@ -898,4 +898,16 @@ describe('AgentStudioPage', () => {
     )
     expect(screen.getByLabelText('Model instance')).toHaveValue('qwen')
   })
+  it('ties every editor field label to its control', async () => {
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+
+    const identifier = await screen.findByLabelText('Identifier')
+    expect(identifier).toHaveAttribute('placeholder', 'created-from-name')
+    expect(screen.getByLabelText('Description')).toBeInstanceOf(HTMLInputElement)
+    const contract = screen.getByLabelText('Output contract')
+    expect(contract).toBeInstanceOf(HTMLTextAreaElement)
+    expect(contract).toHaveAccessibleDescription(/Optional/)
+    expect(screen.getByLabelText('Name')).toBeInstanceOf(HTMLInputElement)
+  })
 })
