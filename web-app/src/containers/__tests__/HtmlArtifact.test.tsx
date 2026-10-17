@@ -75,9 +75,11 @@ async function rejectRegistration(
 describe('HtmlArtifact', () => {
   let scrollTops: number[]
   let clipboardDescriptor: PropertyDescriptor | undefined
+  let printDescriptor: PropertyDescriptor | undefined
 
   beforeEach(() => {
     clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
+    printDescriptor = Object.getOwnPropertyDescriptor(window, 'print')
     native.tauri = false
     native.invoke.mockReset().mockResolvedValue(undefined)
     native.save.mockReset().mockResolvedValue(null)
@@ -97,6 +99,12 @@ describe('HtmlArtifact', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
+    if (printDescriptor) {
+      Object.defineProperty(window, 'print', printDescriptor)
+    } else {
+      delete (window as unknown as Record<string, unknown>).print
+    }
     if (clipboardDescriptor) {
       Object.defineProperty(navigator, 'clipboard', clipboardDescriptor)
     } else {
@@ -480,5 +488,111 @@ describe('HtmlArtifact', () => {
     expect(screen.getByRole('status')).toHaveTextContent('HTML copied.')
     expect(writeText).toHaveBeenCalledOnce()
     unmount()
+  })
+
+  it('keeps the source available after printing fails and lets Print retry', async () => {
+    native.tauri = true
+    vi.useFakeTimers()
+    const print = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('Printing is unavailable')
+      })
+      .mockImplementationOnce(() => undefined)
+    Object.defineProperty(window, 'print', {
+      configurable: true,
+      value: print,
+    })
+    const code = '<article>Keep this printable source</article>'
+    const { unmount } = render(<HtmlArtifact code={code} />)
+    const printButton = screen.getByRole('button', { name: 'Print HTML' })
+
+    fireEvent.click(printButton)
+    await act(async () => {
+      vi.advanceTimersByTime(60)
+    })
+
+    expect(print).toHaveBeenCalledOnce()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not open printing. Try Print again, or Download the HTML file.'
+    )
+    expect(printButton).toBeEnabled()
+    expect(document.body).not.toHaveClass('artifact-printing')
+    fireEvent.click(screen.getByRole('button', { name: 'Code', exact: true }))
+    expect(codePane()).toBeVisible()
+    expect(codePane()).toHaveTextContent(code)
+
+    fireEvent.click(printButton)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(printButton).toBeDisabled()
+    await act(async () => {
+      vi.advanceTimersByTime(60)
+    })
+
+    expect(print).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    act(() => window.dispatchEvent(new Event('afterprint')))
+    expect(printButton).toBeEnabled()
+    expect(document.body).not.toHaveClass('artifact-printing')
+    unmount()
+  })
+
+  it('opens one print dialog for rapid Print clicks and stays busy until printing finishes', async () => {
+    native.tauri = true
+    vi.useFakeTimers()
+    const print = vi.fn()
+    Object.defineProperty(window, 'print', {
+      configurable: true,
+      value: print,
+    })
+    const { unmount } = render(<HtmlArtifact code="<p>Print only once</p>" />)
+    const printButton = screen.getByRole('button', { name: 'Print HTML' })
+
+    act(() => {
+      fireEvent.click(printButton)
+      fireEvent.click(printButton)
+    })
+
+    expect(print).not.toHaveBeenCalled()
+    expect(printButton).toBeDisabled()
+    expect(printButton).toHaveAttribute('aria-busy', 'true')
+    await act(async () => {
+      vi.advanceTimersByTime(60)
+    })
+
+    expect(print).toHaveBeenCalledOnce()
+    expect(printButton).toBeDisabled()
+    expect(document.body).toHaveClass('artifact-printing')
+    fireEvent.click(printButton)
+    expect(print).toHaveBeenCalledOnce()
+    act(() => window.dispatchEvent(new Event('afterprint')))
+
+    expect(printButton).toBeEnabled()
+    expect(printButton).toHaveAttribute('aria-busy', 'false')
+    expect(document.body).not.toHaveClass('artifact-printing')
+    expect(document.querySelector('.artifact-print-region')).toBeNull()
+    unmount()
+  })
+
+  it('cancels the delayed print when the artifact closes before printing starts', async () => {
+    native.tauri = true
+    vi.useFakeTimers()
+    const print = vi.fn()
+    Object.defineProperty(window, 'print', {
+      configurable: true,
+      value: print,
+    })
+    const { unmount } = render(<HtmlArtifact code="<p>Closed before print</p>" />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Print HTML' }))
+    expect(print).not.toHaveBeenCalled()
+    unmount()
+    await act(async () => {
+      vi.advanceTimersByTime(60)
+    })
+
+    expect(print).not.toHaveBeenCalled()
+    expect(document.body).not.toHaveClass('artifact-printing')
+    expect(document.querySelector('.artifact-print-region')).toBeNull()
   })
 })
