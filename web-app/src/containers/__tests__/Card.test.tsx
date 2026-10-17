@@ -60,4 +60,19 @@ describe('CardItem', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'General' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: 'Language' })).toBeInTheDocument()
   })
+
+  it('lets a row wrap its actions under the text and shrink long text instead of clipping', () => {
+    render(
+      <CardItem
+        title="Data folder"
+        description="A long path"
+        actions={<button>Choose another folder</button>}
+      />
+    )
+
+    const text = screen.getByText('A long path').parentElement!
+    const row = text.parentElement!
+    expect(row).toHaveClass('flex-wrap')
+    expect(text).toHaveClass('min-w-0', 'flex-1')
+  })
 })

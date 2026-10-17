@@ -437,7 +437,7 @@ function General() {
                       &nbsp;
                     </span>
                     <div className="flex items-center gap-2 mt-1 ">
-                      <div className="truncate">
+                      <div className="min-w-0 truncate">
                         <span
                           title={janDataFolder}
                           className="bg-secondary text-xs p-1 rounded-sm"

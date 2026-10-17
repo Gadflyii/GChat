@@ -37,16 +37,16 @@ export function CardItem({
     <>
       <div
         className={cn(
-          'flex justify-between mt-2 first:mt-0 border-b border-border/40 pb-3 last:border-none last:pb-0 gap-8',
+          'flex flex-wrap justify-between mt-2 first:mt-0 border-b border-border/40 pb-3 last:border-none last:pb-0 gap-x-8 gap-y-3',
           descriptionOutside && 'border-0',
           align === 'start' && 'items-start',
           align === 'center' && 'items-center',
           align === 'end' && 'items-end',
-          column && 'flex-col gap-y-0 items-start',
+          column && 'flex-col flex-nowrap gap-y-0 items-start',
           className
         )}
       >
-        <div className="space-y-1.5">
+        <div className={cn('min-w-0 space-y-1.5', !column && 'flex-1 basis-60')}>
           <h3 id={labelId} className="font-medium text-foreground">
             {title}
           </h3>
