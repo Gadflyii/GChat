@@ -26,6 +26,7 @@ const GbotDesktopView = forwardRef<
   const [status, setStatus] = useState<MediaStatus>('connecting')
   const [error, setError] = useState('')
   const canvas = useRef<HTMLCanvasElement>(null)
+  const returnKeyboard = useRef<HTMLButtonElement>(null)
   const stopMedia = useRef<(() => void) | null>(null)
   useImperativeHandle(
     ref,
@@ -83,6 +84,7 @@ const GbotDesktopView = forwardRef<
           onStatus: (value) => {
             if (!cancelled) setStatus(value)
           },
+          onInputEscape: () => returnKeyboard.current?.focus(),
         })
         session.start()
       } catch (cause) {
@@ -120,6 +122,16 @@ const GbotDesktopView = forwardRef<
         <span role="status" className="text-muted-foreground">
           {status}
         </span>
+        {interactive && (
+          <Button
+            ref={returnKeyboard}
+            variant="outline"
+            size="sm"
+            onClick={() => canvas.current?.blur()}
+          >
+            Return keyboard to GChat
+          </Button>
+        )}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -153,6 +165,12 @@ const GbotDesktopView = forwardRef<
         className="block max-h-[65vh] w-full rounded bg-black object-contain"
       />
       <p className="text-xs text-muted-foreground">
+        {interactive && (
+          <>
+            Click the desktop to send keys to the bot. Press Ctrl+Alt+Shift+Esc
+            or click Return keyboard to GChat to use app shortcuts again.{' '}
+          </>
+        )}
         Take over pauses the bot and enables desktop input. Hand back ends your
         input before the bot resumes.
       </p>

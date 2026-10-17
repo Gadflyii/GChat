@@ -399,6 +399,9 @@ it('releases desktop input, audio and leases on hide, then reopens without resta
   fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
   fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
   await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1))
+  expect(
+    screen.queryByRole('button', { name: 'Return keyboard to GChat' })
+  ).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
   expect(mocks.stop).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Hide bot pane' }))
@@ -419,6 +422,69 @@ it('releases desktop input, audio and leases on hide, then reopens without resta
     screen.getByRole('button', { name: 'Desktop', exact: true })
   ).toHaveAttribute('aria-pressed', 'true')
   await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(2))
+})
+
+it('returns keyboard focus from a human desktop without closing the view or handing control back', async () => {
+  await mount()
+  const identity = snapshot.live_sessions[0]
+  snapshot = {
+    ...snapshot,
+    controls: [
+      {
+        identity,
+        owner: sessionStorage.getItem('gbot-control-owner'),
+        state: 'human',
+      },
+    ],
+  }
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state') return snapshot
+    if (path === 'tasks') return tasks
+    if (path === 'tasks/approvals') return []
+    if (path === 'view/open')
+      return {
+        lease_id: 'human-lease',
+        ws_url: 'ws://127.0.0.1/mock',
+        media_session_id: 'human-media',
+        interactive: true,
+      }
+    return {}
+  })
+  await act(async () => {
+    await useGbotCompanion.getState().refresh()
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+  await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1))
+  const desktop = within(screen.getByRole('region', { name: 'Bot desktop' }))
+  const returnKeyboard = desktop.getByRole('button', {
+    name: 'Return keyboard to GChat',
+  })
+  const canvas = desktop.getByLabelText('Bot computer desktop')
+  expect(desktop.getByText('You have control')).toBeInTheDocument()
+  expect(desktop.getByText(/Press Ctrl\+Alt\+Shift\+Esc/)).toBeInTheDocument()
+  const options = mocks.start.mock.calls[0][0] as MediaSessionOptions
+  expect(options.interactive).toBe(true)
+  expect(options.onInputEscape).toBeTypeOf('function')
+  canvas.focus()
+  expect(document.activeElement).toBe(canvas)
+  mocks.call.mockClear()
+
+  act(() => options.onInputEscape?.())
+
+  expect(document.activeElement).toBe(returnKeyboard)
+  expect(desktop.getByRole('status')).toHaveTextContent(/^streaming$/)
+  expect(desktop.getByRole('button', { name: 'Close view' })).toBeEnabled()
+  expect(desktop.getByText('You have control')).toBeInTheDocument()
+  expect(mocks.start).toHaveBeenCalledTimes(1)
+  expect(mocks.stop).not.toHaveBeenCalled()
+  expect(mocks.call).not.toHaveBeenCalled()
+
+  canvas.focus()
+  fireEvent.click(returnKeyboard)
+  expect(document.activeElement).not.toBe(canvas)
+  expect(mocks.stop).not.toHaveBeenCalled()
+  expect(mocks.call).not.toHaveBeenCalled()
 })
 
 it('closes a late desktop ticket after hiding and never starts its media session', async () => {
