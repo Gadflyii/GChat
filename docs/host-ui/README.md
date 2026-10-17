@@ -825,3 +825,28 @@ Retain both Windows installers and adjacent checksums in `out/windows/`.
 The native task is removed; accepted compiler/dependency caches remain. Candidate
 retirement and merge/push status are recorded in `out/offline-host-status-20261001/handoff.json`.
 Next interactive check: the paired offline host card in the updated Windows app.
+
+## Claude GUI pass, October 17 (Linux, private isolated session)
+
+Found in a first-run native Linux session and fixed one branch each. Each has focused
+tests; the first nine passed one combined `make verify`.
+
+- `GUI-CHAT-HINT-DISMISS`: composer hint is `role="alert"` with a real Close button.
+- `GUI-SETTINGS-PROVIDER-START-HINT`: visible reason Start is disabled without an API key.
+- `GUI-CHAT-APPROVAL-WORDING`: composer reads "Approvals: manual / skipped".
+- `GUI-CHAT-ATTACH-MENU`: plus button named; disabled documents item says why.
+- `GUI-SETTINGS-SWITCH-DROPDOWN-NAMES`: switches and dropdowns named by their row title.
+- `GUI-SETTINGS-ICON-BUTTON-NAMES`: Downloads, Add provider, Add model, Refresh named.
+- `GUI-SETTINGS-HERMES-SAVE-NO-MODEL`: Save with no model does not start the server.
+- `GUI-SETTINGS-ATTACH-RATIO-WORDING`: states the 0.05 to 1 fraction input.
+- `GUI-SETUP-CARD-SPACING`: first-run cards share one shape.
+- `GUI-CHAT-THREAD-ACTIONS-NAME`: each thread's menu button is named "More actions for <title>".
+- `GUI-CHAT-MEMORY-EDIT-WORDING`: "Remember this" is now "Save to Memory"; the disabled Edit button's tooltip says to select a model.
+- `GUI-SIDEBAR-SERVER-NAME`: the sidebar status reads "Local API server stopped / running".
+- `GUI-SETTINGS-HEADING-LEVELS`: card titles are `h2` and row titles `h3` instead of all `h1`.
+
+`GUI-SETUP-SECURE-STORAGE-CHECKING` did not reproduce. The "Checking..." state that
+lasted over a minute came from a session without its own unlocked keyring. In a session
+with private dbus, HOME, XDG_RUNTIME_DIR and an unlocked keyring, Check secure storage
+returns "Secure storage is ready." within seconds. Test launches must set the private
+`XDG_RUNTIME_DIR` before starting `gnome-keyring-daemon`, or the daemon talks to the real one.
