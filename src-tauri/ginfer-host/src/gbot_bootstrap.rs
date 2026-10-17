@@ -270,6 +270,19 @@ pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String
     wait_for_service(root, child).await
 }
 
+/// The service writes its own failure reason as the last log line; show it so the
+/// person sees why it stopped without opening the file.
+fn last_log_reason(log: &Path) -> String {
+    let Ok(text) = std::fs::read_to_string(log) else {
+        return String::new();
+    };
+    let Some(line) = text.lines().rev().map(str::trim).find(|line| !line.is_empty()) else {
+        return String::new();
+    };
+    let reason = line.strip_prefix("Gbot service failed: ").unwrap_or(line);
+    format!(": {}", reason.chars().take(300).collect::<String>())
+}
+
 async fn wait_for_service(
     root: &Path,
     mut child: Option<tokio::process::Child>,
@@ -296,7 +309,8 @@ async fn wait_for_service(
             // A concurrent starter may own the service after our child loses the lock.
             if let Ok(_owner) = ServiceOwner::acquire(&directory) {
                 return Err(format!(
-                    "Gbot service exited before becoming ready ({status}); see {}",
+                    "Gbot service exited before becoming ready ({status}){}; see {}",
+                    last_log_reason(&directory.join("service.log")),
                     directory.join("service.log").display()
                 ));
             }
@@ -338,6 +352,35 @@ mod tests {
             assert!(error.contains(&format!("exit status: {code}")), "{error}");
             assert!(error.contains("service.log"), "{error}");
         }
+    }
+
+    #[tokio::test]
+    async fn exit_error_shows_the_last_service_log_reason() {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("gbot");
+        std::fs::create_dir_all(&directory).unwrap();
+        std::fs::write(
+            directory.join("service.log"),
+            "old line\nGbot service failed: Gbot secure storage: Secure storage is unavailable\n\n",
+        )
+        .unwrap();
+        let child = tokio::process::Command::new("/bin/sh")
+            .args(["-c", "exit 1"])
+            .spawn()
+            .unwrap();
+        let error = tokio::time::timeout(
+            Duration::from_secs(3),
+            wait_for_service(root.path(), Some(child)),
+        )
+        .await
+        .unwrap()
+        .err()
+        .unwrap();
+        assert!(
+            error.contains("(exit status: 1): Gbot secure storage: Secure storage is unavailable; see "),
+            "{error}"
+        );
+        assert!(!error.contains("old line"), "{error}");
     }
 
     #[tokio::test]
