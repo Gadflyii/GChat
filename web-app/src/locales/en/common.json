@@ -95,6 +95,7 @@
   "deleteAll": "Delete All",
   "star": "Star",
   "rename": "Rename",
+  "threadActionsFor": "More actions for {{title}}",
   "delete": "Delete",
   "copied": "Copied!",
   "dataFolder": "Data Folder",
