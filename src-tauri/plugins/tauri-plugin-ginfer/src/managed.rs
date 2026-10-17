@@ -686,8 +686,10 @@ mod tests {
     #[test]
     fn installed_load_never_reuses_a_resident_on_the_wrong_or_hidden_gpu() {
         let requested = LaunchOptions::default();
-        let mut config = GinferConfig::default();
-        config.gpu_uuids = Some(vec!["GPU-one".into()]);
+        let mut config = GinferConfig {
+            gpu_uuids: Some(vec!["GPU-one".into()]),
+            ..Default::default()
+        };
         let mut launch = LaunchRequest {
             instance_id: None, qualified_profile_id: None, benchmark_profile: None,
             model_id: Uuid::nil(), gpu_uuids: vec!["GPU-zero".into()],
