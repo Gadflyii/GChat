@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import ServiceSetup from './ServiceSetup'
 import { EngineGbotControl } from '@/containers/EngineGbotControl'
 import { gbotControlGrant, type GbotControlGrant } from '@/services/gbot'
@@ -25,6 +25,10 @@ vi.mock('@/stores/engine-hosts-store', () => ({
     }),
 }))
 vi.mock('@/services/gbot', () => ({ gbotControlGrant: vi.fn() }))
+beforeEach(() => {
+  refresh.mockResolvedValue(undefined)
+})
+
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
