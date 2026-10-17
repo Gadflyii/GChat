@@ -1,5 +1,13 @@
 import { incompleteOutcomeMessage } from '@/lib/agent-outcome'
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import {
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { continuationTask } from '@/lib/agent-continuation'
 import { AgentRunSetup } from '@/containers/AgentRunSetup'
@@ -2354,15 +2362,37 @@ function Field({
   children: React.ReactNode
   className?: string
 }) {
+  const id = useId()
+  // Tie the visible label (and help) to its single control so screen readers and
+  // clicking the label reach it, instead of relying on the control's own aria-label.
+  const only = isValidElement<{ id?: string; 'aria-describedby'?: string }>(
+    children
+  )
+    ? children
+    : null
+  const controlId = only ? (only.props.id ?? `${id}-control`) : undefined
+  const control = only
+    ? cloneElement(only, {
+        id: controlId,
+        ...(help && !only.props['aria-describedby']
+          ? { 'aria-describedby': `${id}-help` }
+          : {}),
+      })
+    : children
   return (
     <div className={className}>
-      <Label className="mb-1.5 block">{label}</Label>
+      <Label className="mb-1.5 block" htmlFor={controlId}>
+        {label}
+      </Label>
       {help && (
-        <div className="mb-2 text-xs leading-relaxed text-muted-foreground">
+        <div
+          id={`${id}-help`}
+          className="mb-2 text-xs leading-relaxed text-muted-foreground"
+        >
           {help}
         </div>
       )}
-      {children}
+      {control}
     </div>
   )
 }
