@@ -34,6 +34,7 @@ export function normalizeGinferConfig(config: any): GinferConfig {
     throw new Error("Choose at least one unique GPU")
   }
   return {
+    ...(value.use_profile_defaults === true ? { use_profile_defaults: true } : {}),
     vision: value.vision === undefined ? true : asBool(value.vision),
     spec: asString(value.spec, 'auto'),
     draft_tokens: asNumber(value.draft_tokens),

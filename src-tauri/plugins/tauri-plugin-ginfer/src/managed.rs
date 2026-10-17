@@ -17,6 +17,9 @@ use tokio::sync::Mutex;
 use uuid::Uuid;
 
 fn options(config: &GinferConfig) -> Result<LaunchOptions, String> {
+    if config.use_profile_defaults {
+        return Ok(LaunchOptions::default());
+    }
     let bytes = config.kv_arena_bytes.trim();
     Ok(LaunchOptions {
         vision: config.vision,
@@ -126,7 +129,7 @@ fn selected_profile(
             let profile: LaunchProfile = serde_json::from_value(entry["profile"].clone()).ok()?;
             let group = selected_group(&entry["gpu_groups"], config, visible)?;
             let p = &profile.options;
-            ((config.max_context == 0 || config.max_context == profile.max_context)
+            (config.use_profile_defaults || ((config.max_context == 0 || config.max_context == profile.max_context)
                 && (config.max_concurrency == 0 || config.max_concurrency == profile.concurrency)
                 && requested.vision == p.vision
                 && requested.no_cuda_graph == p.no_cuda_graph
@@ -136,10 +139,33 @@ fn selected_profile(
                 && (requested.draft_tokens == 0 || requested.draft_tokens == p.draft_tokens)
                 && (requested.prefill_chunk == 0 || requested.prefill_chunk == p.prefill_chunk)
                 && (requested.kv_arena_bytes.is_none()
-                    || requested.kv_arena_bytes == p.kv_arena_bytes))
+                    || requested.kv_arena_bytes == p.kv_arena_bytes)))
                 .then_some((profile, group))
         })
         .max_by_key(|(profile, _)| (profile.max_context, profile.concurrency))
+}
+
+fn profile_request(
+    model: Uuid,
+    profile: &LaunchProfile,
+    gpu_uuids: Vec<String>,
+    config: &GinferConfig,
+    requested: &LaunchOptions,
+) -> LaunchRequest {
+    let mut options = profile.options.clone();
+    if !config.use_profile_defaults {
+        options.structured_outputs = requested.structured_outputs;
+    }
+    LaunchRequest {
+        benchmark_profile: None,
+        instance_id: None,
+        qualified_profile_id: (options == profile.options).then(|| profile.id.clone()),
+        model_id: model,
+        gpu_uuids,
+        max_context: profile.max_context,
+        concurrency: profile.concurrency,
+        options,
+    }
 }
 
 fn matches_resident(
@@ -234,6 +260,14 @@ async fn load_on_host(
         else { Err("CUDA_DEVICE_ORDER must be valid Unicode".to_string()) }
     })?;
     let visible = visible_selection(&snapshot, &config, mask.as_deref(), device_order.as_deref())?;
+    let selected = selected_profile(&snapshot, model.id, &config, &requested, &visible);
+    let automatic_launch = if config.use_profile_defaults {
+        selected.as_ref().map(|(profile, group)| {
+            profile_request(model.id, profile, group.clone(), &config, &requested)
+        })
+    } else {
+        None
+    };
     let residents: Vec<_> = snapshot["instances"]
         .as_array()
         .into_iter()
@@ -242,7 +276,17 @@ async fn load_on_host(
         .filter_map(|i| {
             let launch: LaunchRequest = serde_json::from_value(i["profile"].clone()).ok()?;
             let id: Uuid = serde_json::from_value(i["instance_id"].clone()).ok()?;
-            (launch.model_id == model.id && matches_resident(&launch, &config, &requested, &visible))
+            let settings_match = if config.use_profile_defaults {
+                automatic_launch.as_ref().is_some_and(|expected| {
+                    launch.gpu_uuids == expected.gpu_uuids
+                        && launch.max_context == expected.max_context
+                        && launch.concurrency == expected.concurrency
+                        && launch.options == expected.options
+                })
+            } else {
+                matches_resident(&launch, &config, &requested, &visible)
+            };
+            (launch.model_id == model.id && settings_match)
                 .then_some((id, launch))
         })
         .collect();
@@ -252,31 +296,18 @@ async fn load_on_host(
     if let Some((id, launch)) = residents.into_iter().next() {
         return attach(sessions, control, launch, id, model_id, model_path, timeout).await;
     }
-    if let Some((profile, gpu_uuids)) =
-        selected_profile(&snapshot, model.id, &config, &requested, &visible)
-    {
+    if let Some((profile, gpu_uuids)) = selected {
+        let mut launch = profile_request(model.id, &profile, gpu_uuids, &config, &requested);
         let result = control.request("/host/v1/profile-launch", Some(serde_json::json!({
-            "profile_id": profile.id, "model_id": model.id, "gpu_uuids": gpu_uuids,
-            "structured_outputs": requested.structured_outputs,
+            "profile_id": profile.id, "model_id": model.id, "gpu_uuids": launch.gpu_uuids,
+            "structured_outputs": launch.options.structured_outputs,
         }))).await?;
         let instance_id: Uuid = serde_json::from_value(result["instance_id"].clone())
             .map_err(|e| e.to_string())?;
-        let changed = profile.options.structured_outputs != requested.structured_outputs;
-        let mut options = profile.options;
-        options.structured_outputs = requested.structured_outputs;
-        let launch = LaunchRequest {
-            benchmark_profile: None,
-            instance_id: Some(instance_id),
-            qualified_profile_id: if changed { None } else { Some(profile.id) },
-            model_id: model.id,
-            gpu_uuids,
-            max_context: profile.max_context,
-            concurrency: profile.concurrency,
-            options,
-        };
+        launch.instance_id = Some(instance_id);
         return attach(sessions, control, launch, instance_id, model_id, model_path, timeout).await;
     }
-    if config.max_context == 0 || config.max_concurrency == 0 {
+    if config.use_profile_defaults || config.max_context == 0 || config.max_concurrency == 0 {
         return Err("No qualified automatic profile is available. Select a qualified profile in Engines, or specify both context and concurrency as custom settings.".into());
     }
     let occupied: BTreeSet<&str> = snapshot["instances"]
@@ -558,6 +589,73 @@ mod tests {
     }
 
     #[test]
+    fn installed_profile_defaults_select_the_screened_cap_without_model_overrides() {
+        let model = Uuid::new_v4();
+        let profile: LaunchProfile = serde_json::from_value(serde_json::json!({
+            "id": "rtx-pro6000-flash-next-smol-q2g64-tp1-c8-128k-int8-screened",
+            "name": "RTX PRO 6000 Flash Next — screened, not full-context qualified",
+            "platform": "linux",
+            "identity": {"model_id":"qwen3.8-flash-next", "weights_id":"smol-q2g64"},
+            "artifact_sha256":"8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08",
+            "artifact_bytes": 1, "tp": 1, "draft_tp": 0,
+            "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+            "compute_capability": "12.0", "vram_tier_gib": 96,
+            "min_memory_mib_per_gpu": 95000, "max_context": 131072, "concurrency": 8,
+            "options": {"vision":false, "structured_outputs":true, "spec":"mtp",
+                "draft_policy":"fixed", "draft_tokens":3, "kv_dtype":"int8"},
+            "qualification": {"tier":"screened-startup", "evidence":"pm-v2-20261015-caaddfaa",
+                "engine_revision":"caaddfaa", "free_bytes_per_gpu":18581880832u64,
+                "full_context_requests":0, "smoke_requests":8}
+        })).unwrap();
+        profile.validate().unwrap();
+        let snapshot = serde_json::json!({"launch_profiles":[{
+            "model_id":model, "profile":profile, "gpu_groups":[["GPU-one"]]
+        }]});
+        let visible = vec!["GPU-zero".into(), "GPU-one".into()];
+        let mut config = GinferConfig {
+            max_context: 262144, vision: true, gpu_uuids: Some(vec!["GPU-one".into()]),
+            ..Default::default()
+        };
+        // The RC treated the library's native-context/Vision defaults as overrides.
+        assert!(selected_profile(&snapshot, model, &config, &options(&config).unwrap(), &visible).is_none());
+        config.use_profile_defaults = true;
+        config.kv_arena_bytes = "saved custom value".into();
+        let requested = options(&config).unwrap();
+        let (selected, group) = selected_profile(&snapshot, model, &config, &requested, &visible).unwrap();
+        let launch = profile_request(model, &selected, group, &config, &requested);
+        assert_eq!((launch.max_context, launch.concurrency), (131072, 8));
+        assert_eq!(launch.options, profile.options);
+        assert_eq!(launch.qualified_profile_id.as_deref(), Some(profile.id.as_str()));
+        assert_eq!(launch.gpu_uuids, vec!["GPU-one"]);
+        assert!(!launch.options.vision);
+        assert_eq!(selected.qualification.tier, ginfer_host::launch_profiles::QualificationTier::ScreenedStartup);
+
+        // Automatic intent cannot select a different GPU or an invisible group.
+        config.gpu_uuids = Some(vec!["GPU-zero".into()]);
+        assert!(selected_profile(&snapshot, model, &config, &requested, &visible).is_none());
+        config.gpu_uuids = Some(vec!["GPU-one".into()]);
+        assert!(selected_profile(&snapshot, model, &config, &requested, &["GPU-zero".into()]).is_none());
+
+        // Other callers keep their explicit settings and the existing exact-match rules.
+        config.use_profile_defaults = false;
+        config.kv_arena_bytes = "auto".into();
+        config.max_context = 131072;
+        config.max_concurrency = 8;
+        config.vision = false;
+        let requested = options(&config).unwrap();
+        assert!(selected_profile(&snapshot, model, &config, &requested, &visible).is_some());
+        config.max_context = 262144;
+        assert!(selected_profile(&snapshot, model, &config, &requested, &visible).is_none());
+
+        // Preserve catalog OFF too; Host's profile-launch default is ON if omitted.
+        let mut text_profile = profile;
+        text_profile.options.structured_outputs = false;
+        config.use_profile_defaults = true;
+        assert!(!profile_request(model, &text_profile, vec!["GPU-one".into()], &config, &requested)
+            .options.structured_outputs);
+    }
+
+    #[test]
     fn multi_gpu_catalog_selection_preserves_visible_rank_order() {
         let visible: Vec<String> = ["GPU-three", "GPU-one", "GPU-two", "GPU-zero"]
             .into_iter().map(String::from).collect();
@@ -774,6 +872,14 @@ time.sleep(30)
             .unwrap();
         assert_eq!(response.status(), 200);
         sessions.lock().await.clear();
+        assert!(host.processes.lock().await.endpoint(id).is_ok());
+        let automatic = load_on_host(
+            sessions.clone(), control.clone(), "desktop-alias".into(),
+            artifact.to_string_lossy().into_owned(),
+            GinferConfig { use_profile_defaults: true, ..config.clone() }, 5,
+        ).await.unwrap_err();
+        assert!(automatic.contains("No qualified automatic profile"));
+        assert_eq!(host.processes.lock().await.instances().count(), 1);
         assert!(host.processes.lock().await.endpoint(id).is_ok());
         let changed = GinferConfig {
             max_context: 16384,
