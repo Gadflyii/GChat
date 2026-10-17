@@ -279,7 +279,7 @@
       "renameSuccess": "Projekt zmieniono z \"{{oldName}}\" na \"{{newName}}\""
     },
     "noConversationsIn": "Brak Rozmów w {{projectName}}",
-    "startNewConversation": "Rozpocznij nową rozmowę z {{projectName}} poniżej",
+    "startNewConversation": "Rozpocznij nową rozmowę z {{projectName}} powyżej",
     "conversationsIn": "Rozmowy w {{projectName}}",
     "conversationsDescription": "Kliknij na dowolną rozmowę aby kontynuować czat, lub rozpocznij nową poniżej.",
     "thread": "wątek",

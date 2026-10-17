@@ -285,7 +285,7 @@
       "renameSuccess": "Projekt von \"{{oldName}}\" zu \"{{newName}}\" umbenannt"
     },
     "noConversationsIn": "Keine Gespräche in {{projectName}}",
-    "startNewConversation": "Starten Sie ein neues Gespräch mit {{projectName}} unten",
+    "startNewConversation": "Starten Sie ein neues Gespräch mit {{projectName}} oben",
     "conversationsIn": "Gespräche in {{projectName}}",
     "conversationsDescription": "Klicken Sie auf ein Gespräch, um weiterzuchatten, oder starten Sie unten ein neues.",
     "thread": "Thread",

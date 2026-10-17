@@ -285,7 +285,7 @@
       "renameSuccess": "Projekt byl přejmenován z \"{{oldName}}\" na \"{{newName}}\""
     },
     "noConversationsIn": "Žádné konverzace v {{projectName}}",
-    "startNewConversation": "Začněte novou konverzaci s {{projectName}} níže",
+    "startNewConversation": "Začněte novou konverzaci s {{projectName}} výše",
     "conversationsIn": "Konverzace v {{projectName}}",
     "conversationsDescription": "Kliknutím na kteroukoli konverzaci pokračujte v chatování nebo začněte novou níže.",
     "thread": "vlákno",
