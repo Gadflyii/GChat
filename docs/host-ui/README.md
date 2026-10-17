@@ -1,5 +1,13 @@
 # GInfer host UI
 
+## Starting a conversation
+
+Your first **Send** creates the conversation before starting the response.
+Repeated Send actions are blocked while creation is pending. If creation fails,
+GChat shows an error and keeps your draft and attached files so you can retry.
+Once the conversation is created, GChat sends the text and files you submitted
+when you pressed Send, even if you have since edited the composer.
+
 ## Sending in an existing conversation
 
 **Send** waits for GChat to finish preparing the conversation before starting

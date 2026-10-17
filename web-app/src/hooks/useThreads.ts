@@ -319,7 +319,9 @@ export const useThreads = create<ThreadState>()((set, get) => ({
 
     pendingThreadPersistence.set(
       newThread.id,
-      persistPromise.then(() => {})
+      // The createThread caller handles failures. The separate readiness
+      // signal must not leave an unobserved rejected promise behind.
+      persistPromise.then(() => {}, () => {})
     )
 
     const createdThread = await persistPromise

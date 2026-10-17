@@ -225,6 +225,128 @@ describe('ChatInput', () => {
     expect(parseDocumentMock).not.toHaveBeenCalled()
   })
 
+  it('retains the first-message draft, document and skill after conversation creation fails and lets the user retry', async () => {
+    const first = deferred<Thread>()
+    const retry = deferred<Thread>()
+    const createThread = vi.fn<(thread: Thread) => Promise<Thread>>()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(retry.promise)
+    seedServiceHub({ threads: { createThread } as never })
+    agentSkills.value = [{ name: 'agent-builder', description: 'Build agents', version: '1.2.0', requiresTools: [], requiresScripts: [], dangerous: false, platforms: null, enabled: true, compatible: true, reserved: false, unavailableReasons: [], error: null }]
+    const attachment = { ...createDocumentAttachment({ name: 'notes.txt', path: '/docs/notes.txt' }), id: 'home-notes', processed: true }
+    useChatAttachments.getState().setAttachments(NEW_THREAD_ATTACHMENT_KEY, [attachment])
+    const failure = vi.spyOn(toast, 'error')
+    try {
+      render(<ChatInput initialMessage preselectedAgentSkillName="agent-builder" />)
+      const input = screen.getByTestId('chat-input')
+      fireEvent.change(input, { target: { value: 'Review the attached notes' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+      expect(createThread).toHaveBeenCalledOnce()
+      expect(useThreads.getState().currentThreadId).toBe(createThread.mock.calls[0][0].id)
+      expect(input).toHaveValue('Review the attached notes')
+      expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([attachment])
+      expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/agent-builder')
+
+      await act(async () => {
+        first.reject(new Error('Conversation could not be saved'))
+        await first.promise.catch(() => undefined)
+      })
+
+      expect(failure).toHaveBeenCalledWith('Could not send message. Your draft is still here.', {
+        description: 'Conversation could not be saved',
+      })
+      expect(input).toHaveValue('Review the attached notes')
+      expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([attachment])
+      expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/agent-builder')
+      expect(mocks.navigate).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+      expect(createThread).toHaveBeenCalledTimes(2)
+      const created = createThread.mock.calls[1][0]
+      expect(created.title).toBe('Review the attached notes')
+      await act(async () => {
+        retry.resolve(created)
+        await retry.promise
+      })
+
+      expect(useInitialMessage.getState().byThread[created.id]).toMatchObject({
+        text: 'Review the attached notes', documents: [attachment], agentSkillName: 'agent-builder',
+      })
+      expect(mocks.navigate).toHaveBeenCalledOnce()
+      expect(input).toHaveValue('')
+      expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([])
+      expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    } finally {
+      failure.mockRestore()
+    }
+  })
+
+  it('creates only one conversation for repeated first-message Send and Enter while persistence is pending', async () => {
+    const pending = deferred<Thread>()
+    const createThread = vi.fn<(thread: Thread) => Promise<Thread>>().mockReturnValue(pending.promise)
+    seedServiceHub({ threads: { createThread } as never })
+    render(<ChatInput initialMessage />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: 'Start one conversation' } })
+    const send = screen.getByRole('button', { name: 'Send message' })
+    act(() => {
+      fireEvent.click(send)
+      fireEvent.click(send)
+      fireEvent.keyDown(input, { key: 'Enter' })
+    })
+
+    expect(createThread).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Preparing message' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Preparing message' })).toHaveAttribute('aria-busy', 'true')
+    expect(input).toHaveValue('Start one conversation')
+    expect(mocks.navigate).not.toHaveBeenCalled()
+    const created = createThread.mock.calls[0][0]
+    await act(async () => {
+      pending.resolve(created)
+      await pending.promise
+    })
+
+    expect(mocks.navigate).toHaveBeenCalledOnce()
+    expect(useInitialMessage.getState().byThread[created.id]).toMatchObject({ text: 'Start one conversation' })
+    expect(input).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('forwards only the first-message snapshot and keeps text and files added during conversation creation', async () => {
+    const pending = deferred<Thread>()
+    const createThread = vi.fn<(thread: Thread) => Promise<Thread>>().mockReturnValue(pending.promise)
+    seedServiceHub({ threads: { createThread } as never })
+    const sent = { ...createDocumentAttachment({ name: 'notes.txt', path: '/docs/sent/notes.txt' }), id: 'home-sent', processed: true }
+    const newer = { ...createDocumentAttachment({ name: 'notes.txt', path: '/docs/new/notes.txt' }), id: 'home-new', processed: true }
+    useChatAttachments.getState().setAttachments(NEW_THREAD_ATTACHMENT_KEY, [sent])
+    render(<ChatInput initialMessage />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: 'Review the first file' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(createThread).toHaveBeenCalledOnce()
+    const created = createThread.mock.calls[0][0]
+    expect(useThreads.getState().currentThreadId).toBe(created.id)
+    expect(input).toBeEnabled()
+    fireEvent.change(input, { target: { value: 'My next question' } })
+    act(() => useChatAttachments.getState().setAttachments(NEW_THREAD_ATTACHMENT_KEY, (attachments) => [...attachments, newer]))
+    expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([sent, newer])
+
+    await act(async () => {
+      pending.resolve(created)
+      await pending.promise
+    })
+
+    expect(created.title).toBe('Review the first file')
+    expect(useInitialMessage.getState().byThread[created.id]).toMatchObject({
+      text: 'Review the first file', documents: [sent],
+    })
+    expect(input).toHaveValue('My next question')
+    expect(useChatAttachments.getState().getAttachments(NEW_THREAD_ATTACHMENT_KEY)).toEqual([newer])
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+    expect(mocks.navigate).toHaveBeenCalledOnce()
+  })
+
   it.each([
     { change: 'catalog arrives and reader is re-enabled', initiallyReady: false, initiallyDisabled: true, ready: true, disabled: false, nativeReference: true },
     { change: 'reader disappears', initiallyReady: true, initiallyDisabled: false, ready: false, disabled: false, nativeReference: false },

@@ -514,7 +514,9 @@ const ChatInput = memo(function ChatInput({
   const autoInlineContextRatio = useAttachments((s) => s.autoInlineContextRatio)
 
   // Derived: any document currently processing (ingestion in progress)
-  const attachmentsKey = currentThreadId ?? NEW_THREAD_ATTACHMENT_KEY
+  const attachmentsKey = initialMessage
+    ? NEW_THREAD_ATTACHMENT_KEY
+    : (currentThreadId ?? NEW_THREAD_ATTACHMENT_KEY)
   const attachments = useChatAttachments(
     useCallback(
       (state) => state.getAttachments(attachmentsKey),
@@ -563,13 +565,14 @@ const ChatInput = memo(function ChatInput({
 
   useEffect(() => {
     if (
+      !initialMessage &&
       currentThreadId &&
       lastTransferredThreadId.current !== currentThreadId
     ) {
       transferAttachments(NEW_THREAD_ATTACHMENT_KEY, currentThreadId)
       lastTransferredThreadId.current = currentThreadId
     }
-  }, [currentThreadId, transferAttachments])
+  }, [currentThreadId, initialMessage, transferAttachments])
 
   const updateAttachmentProcessing = useCallback(
     (
@@ -773,9 +776,8 @@ const ChatInput = memo(function ChatInput({
           url: att.dataUrl!,
         }))
 
-      // Snapshot documents synchronously before any await/navigation so the
-      // store can be cleared immediately while we still know what to forward
-      // to the new thread page.
+      // Snapshot documents before any await/navigation so later edits stay
+      // separate from the first message forwarded to the new thread page.
       const docsSnapshot = attachments
         .filter((att) => att.type === 'document')
         .map((att) => ({ ...att }))
@@ -788,13 +790,18 @@ const ChatInput = memo(function ChatInput({
         agentDefinitionId: selectedAgentDefinitionId === 'general' ? undefined : selectedAgentDefinitionId,
       }
 
-      // Clear input UI immediately so the chip and text disappear in the
-      // same frame as the click. Otherwise the chip lingers under the new
-      // thread's key (transferAttachments runs during await createThread)
-      // until processAttachmentsForSend finishes indexing the document.
-      setPrompt('')
-      setSelectedAgentSkill(null)
-      clearAttachmentsForThread(attachmentsKey)
+      // Keep the draft until conversation creation succeeds. Newer edits
+      // remain available for the next message rather than entering this one.
+      const clearSubmittedDraft = () => {
+        if (composerLifetimeRef.current === submittedLifetime) {
+          if (usePrompt.getState().prompt === submittedDraft) setPrompt('')
+          setSelectedAgentSkill((current) => current === selectedAgentSkill ? null : current)
+        }
+        const submittedIds = new Set(attachments.map((attachment) => attachment.id))
+        setAttachmentsForThread(attachmentsKey, (current) =>
+          current.filter((attachment) => !submittedIds.has(attachment.id))
+        )
+      }
 
       // #region agent log
       ttftPreBegin('home-submit-click', {
@@ -843,6 +850,7 @@ const ChatInput = memo(function ChatInput({
         // image data URLs can exceed the per-origin quota and silently abort
         // navigation with QuotaExceededError.
         useInitialMessage.getState().set(TEMPORARY_CHAT_ID, messagePayload)
+        clearSubmittedDraft()
         if (conversationKey !== TEMPORARY_CHAT_ID) {
           useConversationPolicy
             .getState()
@@ -901,6 +909,7 @@ const ChatInput = memo(function ChatInput({
         ttftPreBegin('after-createThread', { newThreadId: newThread.id })
         // #endregion
 
+        clearSubmittedDraft()
         // Clear selected assistant after creating thread
         setSelectedAssistant(undefined)
 
@@ -970,8 +979,6 @@ const ChatInput = memo(function ChatInput({
 
   const handleSendMessage = async (draft: string) => {
     if (!submissionReady || submittingMessageRef.current) return
-    if (!onSubmit) return submitMessage(draft)
-
     // A ref also blocks repeated Enter/click events before React renders.
     submittingMessageRef.current = true
     setIsSubmittingMessage(true)
