@@ -1264,6 +1264,60 @@ impl HostProcesses {
     }
 }
 
+#[cfg(test)]
+mod runtime_dispatch_tests {
+    use super::*;
+
+    #[test]
+    fn windows_runtime_set_dispatches_all_supported_gpu_generations() {
+        let directory = tempfile::tempdir().unwrap();
+        let provider = directory.path();
+        let root = provider.join("windows");
+        for image in ["sm86", "sm89", "sm120a"] {
+            let bin = root.join(image).join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            std::fs::write(bin.join("ginfer-serve.exe"), image).unwrap();
+        }
+        let set = serde_json::json!({
+            "schema": "ginfer-windows-runtime-set-v1",
+            "platform": "windows-x64",
+            "source_commit": "1111111111111111111111111111111111111111",
+            "runtimes": { "8.6": "sm86", "8.9": "sm89", "12.0": "sm120a" }
+        });
+        let set_path = root.join("runtime-set.json");
+        std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        let runtimes = crate::local_host::desktop_runtimes_for(provider, "windows").unwrap();
+        let mut host = HostProcesses::new(
+            provider.join("unused-default.exe"),
+            BTreeSet::from(["GPU-30".into(), "GPU-40".into(), "GPU-50".into(), "GPU-80".into()]),
+            Duration::from_secs(10),
+        ).unwrap();
+        host.configure_runtimes(runtimes, BTreeMap::from([
+            ("GPU-30".into(), "8.6".into()),
+            ("GPU-40".into(), "8.9".into()),
+            ("GPU-50".into(), "12.0".into()),
+            ("GPU-80".into(), "8.0".into()),
+        ])).unwrap();
+        for (gpu, image) in [("GPU-30", "sm86"), ("GPU-40", "sm89"), ("GPU-50", "sm120a")] {
+            assert_eq!(host.executable_for(&[gpu.into()]).unwrap(),
+                &root.join(image).join("bin/ginfer-serve.exe"));
+        }
+        assert!(host.executable_for(&["GPU-80".into()]).unwrap_err().contains("No engine runtime"));
+        assert!(host.executable_for(&["GPU-30".into(), "GPU-40".into()])
+            .unwrap_err().contains("one compute architecture"));
+        assert!(host.executable_for(&["GPU-unknown".into()])
+            .unwrap_err().contains("no known compute capability"));
+
+        let mut incomplete = set.clone();
+        incomplete["runtimes"].as_object_mut().unwrap().remove("8.6");
+        std::fs::write(&set_path, serde_json::to_vec(&incomplete).unwrap()).unwrap();
+        assert!(crate::local_host::desktop_runtimes_for(provider, "windows").is_err());
+        std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        std::fs::remove_file(root.join("sm89/bin/ginfer-serve.exe")).unwrap();
+        assert!(crate::local_host::desktop_runtimes_for(provider, "windows").is_err());
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     #[test]

@@ -233,7 +233,9 @@ reports the exact missing path and requires the accepted release resources.
 See [the asset delivery decision](docs/decisions/2026-10-12-deliver-pinned-gbot-guest-resources.md).
 
 Linux first launch installs engines into `<data>/ginfer/linux/{sm80,sm86,sm89,sm120a}`
-and the host into `<data>/ginfer/bin`. Model storage remains `<data>/ginfer/models`.
-The host selects the engine matching the selected GPU's compute capability.
+and the host into `<data>/ginfer/bin`. Windows installs engines into
+`<data>/ginfer/windows/{sm86,sm89,sm120a}`. Model storage remains
+`<data>/ginfer/models`. The host selects the engine matching the selected GPU's
+compute capability.
 AppImage engine files are inserted after linuxdeploy so its ELF rewriting cannot
 invalidate their manifests or pull NVIDIA driver libraries into the package.

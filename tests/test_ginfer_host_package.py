@@ -3,6 +3,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
 import tarfile
 import tempfile
 import unittest
@@ -17,6 +19,102 @@ runtime_spec = importlib.util.spec_from_file_location(
     'linux_runtime_set', SCRIPT.with_name('stage-linux-runtime-set.py'))
 runtime_set = importlib.util.module_from_spec(runtime_spec)
 runtime_spec.loader.exec_module(runtime_set)
+
+
+POWERSHELL = shutil.which('powershell') or shutil.which('pwsh')
+
+
+@unittest.skipUnless(POWERSHELL, 'PowerShell required for Windows release input validation')
+class WindowsReleaseInputs(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        self.commit = 'a' * 40
+        self.catalog = self.root / 'windows profiles.json'
+        self.catalog.write_text(json.dumps({
+            'schema': 'ginfer-launch-profiles-v1',
+            'profiles': [{'platform': 'windows', 'id': 'fixture'}],
+        }))
+        self.archives = [self.archive(arch) for arch in ('86', '89', '120a')]
+
+    def archive(self, architecture, *, manifest_changes=None, entry_changes=None,
+                payload_changes=None, omit=(), extra=None):
+        payload = {'bin/ginfer.exe': b'fixture CLI; never executed',
+                   'bin/ginfer-serve.exe': b'fixture server; never executed',
+                   'docs/cli.md': b'fixture documentation'}
+        entries = [{'path': name, 'bytes': len(data),
+                    'sha256': hashlib.sha256(data).hexdigest()}
+                   for name, data in payload.items() if name not in omit]
+        if entry_changes:
+            entries[0].update(entry_changes)
+        manifest = {
+            'schema': 'ginfer-windows-runtime-v1', 'platform': 'windows-x64',
+            'source_commit': self.commit, 'source_dirty': False,
+            'cuda_architecture': f'sm_{architecture}', 'files': entries,
+        }
+        manifest.update(manifest_changes or {})
+        payload.update(payload_changes or {})
+        payload.update(extra or {})
+        target = self.root / f'sm{architecture}-{len(list(self.root.glob("*.zip")))}.zip'
+        with zipfile.ZipFile(target, 'w') as archive:
+            archive.writestr('runtime-manifest.json', json.dumps(manifest))
+            for name, data in payload.items():
+                if name not in omit:
+                    archive.writestr(name, data)
+        return target
+
+    def validate(self, archives=None, commit=None):
+        command = [POWERSHELL, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+                   str(SCRIPT.with_name('build-windows-release.ps1')),
+                   '-GinferRuntimeArchives', ';'.join(map(str, self.archives if archives is None else archives)),
+                   '-GinferProfileCatalogs', str(self.catalog), '-ValidateInputsOnly']
+        if commit:
+            command.extend(['-GinferSourceCommit', commit])
+        return subprocess.run(command, capture_output=True, text=True, timeout=30)
+
+    def assertRejected(self, archive, message):
+        result = self.validate([archive, *self.archives[1:]])
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn(message, result.stdout + result.stderr)
+
+    def test_complete_same_commit_set_passes_in_any_order(self):
+        result = self.validate(list(reversed(self.archives)), self.commit)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('Verified SM86, SM89 and SM120a', result.stdout)
+        # No signing credentials, server execution or resource staging is needed.
+        result = self.validate()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_exact_architecture_set_is_required(self):
+        result = self.validate(self.archives[:2])
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('exactly three', result.stdout + result.stderr)
+        self.assertRejected(self.archives[1], 'Duplicate GInfer runtime architecture')
+        self.assertRejected(self.archive('80'), 'exact SM86, SM89 or SM120a')
+
+    def test_platform_and_clean_same_commit_are_required(self):
+        for change, message in [
+            ({'platform': 'linux-x64'}, 'must be windows-x64'),
+            ({'source_dirty': True}, 'clean exact Engine commit'),
+            ({'source_dirty': 'false'}, 'clean exact Engine commit'),
+            ({'source_commit': 'source-export'}, 'clean exact Engine commit'),
+            ({'source_commit': 'b' * 40}, 'All GInfer archives must come from clean revision'),
+        ]:
+            with self.subTest(change=change):
+                self.assertRejected(self.archive('86', manifest_changes=change), message)
+        result = self.validate(commit='c' * 40)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('All GInfer archives must come from clean revision', result.stdout + result.stderr)
+
+    def test_every_payload_size_and_hash_is_checked(self):
+        self.assertRejected(self.archive('86', entry_changes={'bytes': 0}), 'file size mismatch')
+        self.assertRejected(self.archive('86', entry_changes={'sha256': '0' * 64}), 'hash mismatch')
+        self.assertRejected(self.archive('86', payload_changes={'docs/cli.md': b'changed docs'}), 'file size mismatch')
+
+    def test_required_executables_and_closed_payload_are_checked(self):
+        self.assertRejected(self.archive('86', omit=('bin/ginfer.exe',)), 'missing bin/ginfer.exe')
+        self.assertRejected(self.archive('86', extra={'unlisted.dll': b'not declared'}), 'unlisted payload files')
 
 
 class LinuxRuntimeSet(unittest.TestCase):

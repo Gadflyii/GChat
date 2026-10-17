@@ -415,11 +415,16 @@ test-all: install-and-build install-rust-targets
 		$(if $(filter 1,$(REQUIRE)),--require-live,)
 
 # Full Windows release build (local, no code signing).
-# Mirrors CI pipeline from release.yml: CPU-only backend, NSIS + MSI installers.
+# Requires the clean Engine SM86, SM89 and SM120a producer-final archives.
+# Pass GINFER_RUNTIME_ARCHIVES="path86;path89;path120a" and GINFER_SOURCE_COMMIT.
+# PREPARED_ENVIRONMENT=1 requires existing tools and skips workstation setup.
 # Output: src-tauri/target/release/bundle/nsis/*.exe
 build-windows-release:
 ifeq ($(OS),Windows_NT)
-	powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1
+	powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 \
+		-GinferRuntimeArchives "$(GINFER_RUNTIME_ARCHIVES)" \
+		$(if $(GINFER_SOURCE_COMMIT),-GinferSourceCommit "$(GINFER_SOURCE_COMMIT)",) \
+		$(if $(filter 1,$(PREPARED_ENVIRONMENT)),-PreparedEnvironment,)
 else
 	@echo "This target is for Windows only."
 endif

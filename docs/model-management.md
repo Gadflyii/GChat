@@ -343,12 +343,23 @@ validated as part of the separately supplied engine runtime archive. Bundling th
 executable is started on demand by desktop model loading. It is not yet installed
 as an automatic OS service by the desktop installer.
 
-For an engine refresh, first build the selected clean GInfer revision with
-`packaging/windows/build.ps1 -Architecture 120a` in the engine repository. Pass
-that explicit archive to GChat's `scripts/build-windows-release.ps1` with
-`-GinferRuntimeArchive <archive>` and `-GinferSourceCommit <full-commit-id>`.
-The revision option rejects a stale or dirty engine archive; file hashes,
-platform, architecture and the server help smoke check are verified separately.
+For a Windows engine refresh, build the same selected clean GInfer revision with
+`packaging/windows/build.ps1 -Architecture 86`, `-Architecture 89` and
+`-Architecture 120a` in the engine repository. Pass the three explicit archive
+paths to GChat's `scripts/build-windows-release.ps1` as
+`-GinferRuntimeArchives 'C:\path\sm86.zip;C:\path\sm89.zip;C:\path\sm120a.zip'`
+and `-GinferSourceCommit <full-commit-id>`. The builder requires exactly those
+three architectures from one clean commit and verifies every payload's size and
+SHA-256 before building. `-ValidateInputsOnly` runs that complete archive and
+profile-catalog gate without staging resources or building the app. The full
+build smoke-tests each server and bundles the three runtime directories under
+`resources/ginfer/windows/`, with a `ginfer-windows-runtime-set-v1` descriptor.
+The desktop selects the matching runtime for the detected graphics card.
+Pass `-PreparedEnvironment` (or `PREPARED_ENVIRONMENT=1` through Make) on a
+prepared workstation to require `node`, `cargo` and `yarn` on the supplied PATH
+and skip prerequisite installation, NVM and Corepack setup. Existing tools also
+skip bootstrap in the default mode. Yarn install options apply only to the build
+process and do not change the user configuration.
 Do not reuse a previous campaign archive when refreshing the engine. Existing
 capacity-profile evidence does not automatically qualify a changed engine.
 

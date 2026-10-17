@@ -7,25 +7,32 @@ title: "Bundle the producer-final GInfer runtime in Windows installers"
 
 - **Context:** GChat is an all-in-one local client whose only inference backend is
   GInfer, but the Windows builder still emitted installers without an engine. The
-  native GInfer port now produces a closed Windows x64 / `sm_120a` runtime archive
-  with its server, dependent DLLs, licenses, hashes, and build provenance. Building
-  GInfer inside GChat would blur repository ownership, while downloading it after
+  native GInfer port produces closed Windows x64 / `sm_86`, `sm_89` and `sm_120a`
+  runtime archives with their servers, dependent DLLs, licenses, hashes and build
+  provenance. Building GInfer inside GChat would blur repository ownership, while downloading it after
   install would make the Windows package incomplete and could decouple the client
   from the engine revision it was tested with.
-- **Decision:** The Windows release builder requires a producer-final GInfer runtime
-  archive, verifies its platform, CUDA architecture, byte sizes, and SHA-256
-  manifest, smoke-tests `ginfer-serve.exe`, and bundles the verified runtime as a
-  Tauri resource. On application startup GChat installs a changed runtime under
-  `<data>/ginfer/bin` before any engine can start, using a staged directory and a
-  binary-directory swap that restores the previous binary set if activation fails.
-  The install preserves
-  `<data>/ginfer/models` and skips all file work when the installed manifest is
+- **Decision:** The Windows release builder requires all three producer-final GInfer
+  runtime archives from the same clean Engine commit, verifies their exact
+  platform, CUDA architectures, byte sizes and SHA-256 manifests, smoke-tests
+  each `ginfer-serve.exe`, and bundles them as Tauri resources. Its explicit
+  `-GinferRuntimeArchives` input is three archive paths separated by semicolons.
+  `-ValidateInputsOnly` verifies the same complete inputs without staging or
+  building. The `resources/ginfer/windows/runtime-set.json` descriptor uses
+  `ginfer-windows-runtime-set-v1`, platform `windows-x64`, the Engine commit and
+  the exact mapping `8.6: sm86`, `8.9: sm89`, `12.0: sm120a`; each directory holds
+  its producer-final `ginfer-windows-runtime-v1` payload. On application startup
+  GChat installs the runtime set under `<data>/ginfer/windows/` before any engine
+  can start, then selects the matching graphics architecture. Each engine runs
+  from its own `{sm86,sm89,sm120a}/bin` directory; the GChat-owned Host executable
+  remains separate under `<data>/ginfer/bin`. Staged installation preserves
+  `<data>/ginfer/models` and skips file work when the installed manifests are
   already current. Generated runtime binaries remain ignored and are never
   committed to GChat.
 - **Consequences:** NSIS and MSI are self-contained and the desktop application and
   `gchat-cli` resolve the same matched `ginfer-serve.exe`. The installer is larger
-  and a GInfer archive is now a required Windows release input. A GInfer update
-  requires rebuilding GChat, which keeps release qualification tied to an exact
+  and three matched GInfer archives are required Windows release inputs. A GInfer
+  update requires rebuilding GChat, which keeps release qualification tied to an exact
   engine payload instead of a mutable post-install download.
 - **Owner:** @Gadflyii
 - **Links:** `scripts/build-windows-release.ps1`,

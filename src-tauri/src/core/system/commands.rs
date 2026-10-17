@@ -735,7 +735,9 @@ fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::
     let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
     #[cfg(target_os = "linux")]
     let engine = provider.join("linux/sm120a/bin").join(executable);
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    let engine = provider.join("windows/sm120a/bin").join(executable);
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     let engine = provider.join("bin").join(executable);
     let configuration = serde_json::json!({
         "data_dir": provider.join("host"),
@@ -5234,7 +5236,9 @@ mod tests {
         let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
         #[cfg(target_os = "linux")]
         let expected = replacement.join("linux/sm120a/bin").join(executable);
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(target_os = "windows")]
+        let expected = replacement.join("windows/sm120a/bin").join(executable);
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
         let expected = replacement.join("bin").join(executable);
         assert_eq!(desktop.engine, expected);
     }

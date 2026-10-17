@@ -1,5 +1,43 @@
 # GChat installer refresh
 
+## WINDOWS-MULTIARCH — active implementation
+
+Gchat 3 owns `fix/windows-multiarch-20261017`, based on GChat main `9e75fc31e`.
+Deliverable: the Windows installer carries separate SM86, SM89 and SM120a
+Engine runtimes from one current Engine revision, and the Host selects the
+runtime matching the selected GPU. Use the existing native Windows publisher
+and desktop packaging tooling. Acceptance requires a native Windows package
+build, dispatch checks covering all three supported capabilities and rejection
+of unsupported/mixed groups, full GChat verification, and Codex 8 review before
+reporting merge-ready. Native compilation is explicitly authorized; Ron's
+installed app, settings and sign-in session are excluded. Compilation and
+mocked dispatch do not establish physical inference qualification on RTX 30/40.
+
+Implementation now covers three-archive validation/staging, verified atomic
+installation under `ginfer/windows`, and GPU-selected Host dispatch. Native
+PowerShell 5.1 archive-input tests pass (5 tests, including rejection cases).
+The prepared-toolchain option avoids workstation bootstrap/settings changes.
+
+Current inventory (Gchat 3 owns these candidate paths):
+
+| Host | Path / purpose | Status |
+| --- | --- | --- |
+| Local WSL | `/ai/gchat-worktrees/windows-multiarch-20261017`, source branch | Implementation; review pending |
+| S1 `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-windows-multiarch-20261017`, verification source/logs | Focused tests + full `make verify` running from 23:42Z, CPUs112–119; container `gchat3-windows-multiarch-verify-20261017`, `verify.log` |
+| Native `RON-9950X3D2` | `E:\gchat3-windows-multiarch-20261017`, Engine source/build/stage and GChat package | Planned; awaits Codex 4 GPU return before WSL-quiet build |
+
+All three Engine images are pinned to current recovered Engine
+`b76ce57a3cc4823f127a1ce718da454ef1f3510f`. Reuse the existing native publisher,
+prepared CUDA/MSVC/vcpkg dependencies and durable memory guard, with builds on
+E:. The existing Ninja compile pool bounds compiler memory while retaining
+`cmake --build … -j`. Next: native three-image/package build and native dispatch
+test, then Codex 8 review and architecture startup-path sign-off.
+
+The RC of record remains Linux release `ed68c7443` + Engine `e2282c336` PASS,
+with its Windows installer built and awaiting Ron's Windows sign-in result.
+Refresh both RCs after that report; this candidate does not replace that record.
+Older dated sections below retain their historical scope.
+
 ## Known issues
 
 For the October 17 release candidate:
