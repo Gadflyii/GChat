@@ -9,7 +9,8 @@ vi.mock('@/services/engines', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/engines')>(), engineCommand: mocks.command,
 }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (state: unknown) => unknown) => selector(mocks.state) }))
-const release = { name: 'Muse', sha256: 'a'.repeat(64), bytes: 1024 ** 3 }
+const release = { name: 'Muse', identity: { model_id: 'muse', weights_id: 'q4' }, url: `https://huggingface.co/test/muse/resolve/${'c'.repeat(40)}/muse.ginfer`,
+  sha256: 'a'.repeat(64), bytes: 1024 ** 3, tp: 1, qualified_sm: ['8.6'], min_vram_mib_per_gpu: 16384, capabilities: [], launch_profiles: [{ id: 'c1' }] }
 const profile = { download_id: 'download', model_id: 'muse', gpu_uuids: ['GPU-one'], concurrency: 4, max_context: 32768, kv_arena_bytes: null, instance_count: 1, quote: null, error: null }
 const flow = (step: string, extra = {}) => ({ step, gpu_uuids: [], hardware_profile: { status: 'running' }, storage: { path: '/models', recommended_path: '/fast', available_bytes: 1024 ** 4 }, models: [], selected_downloads: [], startup_profiles: [], ...extra })
 const hardwareStatus = (status: HardwareProfileStatus['status']): HardwareProfileStatus => ({
@@ -445,4 +446,11 @@ it('shows only the manual progress controls while advanced options are open', as
   expect(screen.getByRole('progressbar')).toHaveAccessibleName('Hardware profiling in progress')
   expect(screen.getAllByRole('button', { name: 'Cancel profiling' })).toHaveLength(1)
   expect(screen.getByLabelText('Model download folder')).toBeVisible()
+})
+
+it('does not offer a catalog model that has no tested launch profile', async () => {
+  mocks.command.mockResolvedValue(flow('models', { catalog_loaded: true, models: [{ release: { ...release, launch_profiles: [] }, recommended: true, reason: 'Fits your graphics card and free disk space.' }] }))
+  render(<EngineFirstRun hostId="local" />)
+  await screen.findByText(/No model downloads are available/)
+  expect(screen.queryByRole('checkbox', { name: /Muse/ })).toBeNull()
 })

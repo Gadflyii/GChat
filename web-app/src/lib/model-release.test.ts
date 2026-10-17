@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { formatModelBytes, releaseReadiness, validRelease, type ModelRelease } from './model-release'
+import { formatModelBytes, releaseReadiness, releaseVerified, validRelease, type ModelRelease } from './model-release'
 
 const release: ModelRelease = { name: 'Fixture', identity: { model_id: 'fixture', weights_id: 'q4' },
   url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64),
-  bytes: 4096, tp: 1, qualified_sm: ['8.6'], min_vram_mib_per_gpu: 16384, capabilities: ['tools'] }
+  bytes: 4096, tp: 1, qualified_sm: ['8.6'], min_vram_mib_per_gpu: 16384, capabilities: ['tools'],
+  launch_profiles: [{ id: 'c1' }] }
 const gpu = { uuid: 'one', name: 'Fixture GPU', memory_mib: 16384, compute_capability: '8.6' }
 describe('released model recommendations', () => {
   it('matches actual SM and per-GPU memory, not marketing names', () => {
@@ -21,6 +22,11 @@ describe('released model recommendations', () => {
     expect(releaseReadiness(undefined, [gpu]).reason).toContain('not published')
     expect(releaseReadiness(release, [{ ...gpu, compute_capability: undefined }]).available).toBe(false)
     expect(releaseReadiness(release, []).available).toBe(false)
+  })
+  it('does not offer a release that has no tested launch profile', () => {
+    const untested = { ...release, launch_profiles: [] }
+    expect(releaseVerified(untested)).toBe(false)
+    expect(releaseReadiness(untested, [gpu]).available).toBe(false)
   })
   it('shows sizes below 1 GiB in MiB so a starting download is not 0.0 GiB', () => {
     expect(formatModelBytes(50 * 1024 ** 2)).toBe('50 MiB')
