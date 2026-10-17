@@ -5384,7 +5384,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             .is_success());
         let snapshot = host.snapshot().await;
         assert_eq!(snapshot["instances"][0]["profile"]["concurrency"], 4);
-        assert!(snapshot["instances"][0]["profile"]["qualified_profile_id"].is_null());
+        assert_eq!(snapshot["instances"][0]["profile"]["qualified_profile_id"], qualified.id);
         assert_ne!(snapshot["instances"][0]["session_id"], session);
         assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
         let saved: serde_json::Value =
