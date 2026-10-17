@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
+import GbotTaskActions from '@/components/GbotTaskActions'
 import HumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
@@ -1007,40 +1008,20 @@ function GbotPage() {
                         <span className="text-sm capitalize">
                           {task.state.replaceAll('_', ' ')}
                         </span>
-                        {['running', 'waiting_for_human'].includes(
-                          task.state
-                        ) ? (
-                          <Button
-                            variant="ghost"
-                            disabled={busy}
-                            onClick={() =>
-                              void perform(() =>
-                                gbot('tasks/cancel', { id: task.id })
-                              )
-                            }
-                          >
-                            Stop
-                          </Button>
-                        ) : (
-                          [
-                            'ready',
-                            'paused',
-                            'interrupted',
-                            'cancelled',
-                          ].includes(task.state) && (
-                            <Button
-                              variant="ghost"
-                              disabled={busy || !ready || !botHasControl}
-                              onClick={() =>
-                                void perform(() =>
-                                  gbot('tasks/resume', { id: task.id })
-                                )
-                              }
-                            >
-                              Resume
-                            </Button>
-                          )
-                        )}
+                        <GbotTaskActions
+                          taskState={task.state}
+                          busy={busy}
+                          ready={ready}
+                          botHasControl={botHasControl}
+                          stopLabel="Stop"
+                          resumeLabel="Resume"
+                          size="default"
+                          onAction={(action) =>
+                            perform(() =>
+                              gbot(`tasks/${action}`, { id: task.id })
+                            )
+                          }
+                        />
                       </div>
                       {task.messages
                         .filter(

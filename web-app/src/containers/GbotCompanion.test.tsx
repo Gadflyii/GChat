@@ -1001,3 +1001,57 @@ it('holds task and desktop admission until the KVM setup becomes Ready', async (
     screen.getByRole('button', { name: 'Send', exact: true })
   ).toBeEnabled()
 })
+
+it('stops only the selected bot task and keeps progress through the state refresh', async () => {
+  tasks = [
+    {
+      id: 'atlas-task',
+      identity: snapshot.live_sessions[0],
+      state: 'running',
+      messages: [{ role: 'user', content: 'Atlas task' }],
+      help_requests: [],
+    },
+    {
+      id: 'bramble-task',
+      identity: { workspace_id: 'b', session_id: 'sb' },
+      state: 'running',
+      messages: [{ role: 'user', content: 'Bramble task' }],
+      help_requests: [],
+    },
+  ]
+  await mount()
+  const original = mocks.call.getMockImplementation()!
+  let finish!: () => void
+  let finishRefresh!: (value: BotState) => void
+  mocks.call.mockImplementation((path: string, body?: unknown) => {
+    if (path === 'tasks/cancel')
+      return new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    if (path === 'state')
+      return new Promise<BotState>((resolve) => {
+        finishRefresh = resolve
+      })
+    return original(path, body)
+  })
+  const stop = screen.getByRole('button', { name: 'Stop task' })
+  act(() => {
+    fireEvent.click(stop)
+    fireEvent.click(stop)
+  })
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'tasks/cancel')
+  ).toEqual([['tasks/cancel', { id: 'atlas-task' }]])
+  expect(screen.getByRole('status')).toHaveTextContent('Stopping this task…')
+  expect(screen.queryByText('Bramble task')).not.toBeInTheDocument()
+  await act(async () => finish())
+  await waitFor(() => expect(finishRefresh).toBeTypeOf('function'))
+  expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled()
+  tasks = [{ ...tasks[0], state: 'cancelled' }, tasks[1]]
+  await act(async () => finishRefresh(snapshot))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Resume task' })).toBeEnabled()
+  )
+  expect(screen.queryByText('Stopping this task…')).not.toBeInTheDocument()
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/resume', expect.anything())
+})
