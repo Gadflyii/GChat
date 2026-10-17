@@ -52,7 +52,9 @@ export function releaseReadiness(release: unknown, gpus: ModelGpu[]) {
   return { available: true, reason: release.tp === 1 ? 'Qualified hardware match. The engine validates the package when loading.' : 'Hardware matches; peer connectivity must pass the engine’s TP check before loading.', gpuIds: group.slice(0, release.tp).map(g => g.uuid) }
 }
 
-export const formatModelBytes = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GiB`
+// Below 1 GiB, GiB with one decimal reads 0.0 for the first ~50 MiB of a download.
+export const formatModelBytes = (bytes: number) => bytes < 1024 ** 3
+  ? `${Math.round(bytes / 1024 ** 2)} MiB` : `${(bytes / 1024 ** 3).toFixed(1)} GiB`
 
 const downloadStatusLabels: Record<string, string> = {
   queued: 'Waiting to start', downloading: 'Downloading', pausing: 'Pausing', paused: 'Paused',

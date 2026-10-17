@@ -60,7 +60,7 @@ it('uses chosen storage, retries the shared catalog and resumes saved downloads'
   render(<EngineFirstRun />)
   expect(await screen.findByText('Disk measurement unavailable')).toBeInTheDocument()
   fireEvent.click(screen.getByText('Choose another folder'))
-  expect(screen.getByRole('button', { name: '/full · 0.0 GiB free' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: '/full · 0 MiB free' })).toBeDisabled()
   await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast'))
   fireEvent.change(screen.getByLabelText('Model download folder'), { target: { value: '/chosen' } })
   expect(screen.getByLabelText('Model download folder')).toHaveValue('/chosen')
