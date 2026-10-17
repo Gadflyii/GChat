@@ -113,11 +113,6 @@ function WorkspaceSchedules({
 
   return (
     <div className="rounded-lg border p-3">
-      <p className="my-3 text-sm text-muted-foreground">
-        Set a time for this bot to carry out a task. Scheduled tasks can keep
-        running after GChat closes, but the Gbot service, the bot’s computer and
-        its model server must stay on and connected.
-      </p>
       {stopped && (
         <p role="alert" className="mb-3 text-sm text-destructive">
           Scheduling has stopped: {stopped}. Quit and start Gbot service to
@@ -138,6 +133,11 @@ function WorkspaceSchedules({
         <summary className="mb-3 cursor-pointer text-sm">
           Scheduled tasks
         </summary>
+        <p className="mb-3 text-sm text-muted-foreground">
+          Set a time for this bot to carry out a task. Scheduled tasks can keep
+          running after GChat closes, but the Gbot service, the bot’s computer
+          and its model server must stay on and connected.
+        </p>
         <p className="mb-3 text-xs text-muted-foreground">
           Schedules use the model saved in this bot’s brain settings and the
           accounts you linked to it. Actions still require the same approvals.
