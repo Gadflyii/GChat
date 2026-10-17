@@ -45,22 +45,22 @@ const computers = [
   [
     'local',
     'A separate local VM',
-    'Create a separate Linux KVM guest with approved local assets. Hyper-V setup remains unfinished.',
+    'Create a separate Linux desktop inside this computer using KVM. Requires Linux and the prepared setup files; Windows Hyper-V setup is not available yet.',
   ],
   [
     'lan',
     'Another computer on the LAN',
-    'Connect an existing dedicated bot computer or VM with the Cua guest tools.',
+    'Connect a separate computer or virtual machine on your home or office network. It needs SSH access and Gbot desktop tools.',
   ],
   [
     'cloud',
     'Cloud hosted',
-    'Create your own Hetzner or DigitalOcean VM, or attach a dedicated Azure, AWS or Google Cloud VM.',
+    'Rent a separate computer from Hetzner or DigitalOcean, or connect one you created in Azure, AWS or Google Cloud. Your provider bills you separately.',
   ],
   [
     'm365',
     'M365 Cloud PC',
-    'Select an existing assigned Cloud PC and save its connection prerequisites.',
+    'Prepare a Windows 365 Cloud PC assigned to your work or school account. Desktop control is not available yet; this saves the connection setup.',
   ],
 ] as const
 const steps = ['Name', 'Service', 'Computer', 'Connection', 'Review']
@@ -214,20 +214,26 @@ export default function GbotSetup({
             : step === 3 && computer === 'cloud' && !guidedCloud
               ? 'Create and connect'
               : step === 3 && computer === 'm365'
-                ? 'Cloud PC prerequisites'
+                ? 'Prepare your Cloud PC connection'
                 : steps[step]}
         </p>
       </div>
       {step === 0 && (
-        <label className="block space-y-1 text-sm">
-          Bot name
-          <Input
-            autoFocus
-            required
-            value={connection.name}
-            onChange={(event) => update('name', event.target.value)}
-          />
-        </label>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Give your bot a name so you can recognize its computer, tasks and
+            schedules later. You will choose its computer and model next.
+          </p>
+          <label className="block space-y-1 text-sm">
+            Bot name
+            <Input
+              autoFocus
+              required
+              value={connection.name}
+              onChange={(event) => update('name', event.target.value)}
+            />
+          </label>
+        </div>
       )}
       {step === 1 && <ServiceSetup target={service} change={changeService} />}
       {step === 2 && (
@@ -266,8 +272,9 @@ export default function GbotSetup({
             ))}
           </fieldset>
           <p className="text-xs text-muted-foreground">
-            Use a dedicated computer or VM. The bot must not share your own
-            desktop.
+            Give the bot its own desktop to keep its actions separate from your
+            personal work. A virtual machine (VM) is a separate computer running
+            inside another computer.
           </p>
         </>
       )}
@@ -331,10 +338,11 @@ export default function GbotSetup({
           </dl>
           <p className="text-sm text-muted-foreground">
             {connection.workspaceId
-              ? 'The bot key is saved in GChat’s vault and SSH access is verified.'
-              : 'Save imports the private key into GChat’s vault.'}{' '}
-            No accounts are inherited. Next, connect the computer, follow
-            “Choose a brain”, and check its desktop before running a task.
+              ? 'The secure connection key is saved in GChat’s protected storage and SSH access is verified.'
+              : 'Save protects the private connection key in GChat’s secure storage.'}{' '}
+            The bot can only use accounts you explicitly link to it. Next,
+            connect the computer, follow “Choose a brain” to select its model,
+            and check its desktop before running a task.
           </p>
         </>
       )}
