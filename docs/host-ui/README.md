@@ -1,5 +1,32 @@
 # GInfer host UI
 
+## Integration switch guidance — C7
+
+`GUI-INTEGRATION-TOGGLE-GUIDANCE` explains Gbot, OpenCode and Hermes beside
+their persisted switches in Settings and Integrations. Each has a visible
+**Enable** label and an accessible description. Gbot off hides the interface and
+disables sign-in startup while work continues. OpenCode off hides Code; the
+description tells users to use **Stop** first to end running work. Hermes off
+stops its terminal while retaining saved settings. Enabling the terminal tools
+can install them; enabling Gbot still opens its setup. **Hermes settings** remains
+available. Existing actions, defaults and saved choices are unchanged.
+
+Acceptance is met: five focused rendered tests and full `make verify` pass.
+The full gate includes lint, frontend types, 2,584 frontend + 119 extension tests,
+coverage checks and all supported Rust suites. Existing saved choices, enabling
+navigation and terminal actions are protected. The separate OpenCode workspace
+Stop defect is unchanged; the copy tells users to stop work before hiding Code.
+No Engine, installer, model or Windows acceptance run belongs to this GUI change.
+The Windows host-port collision leaf waits for Gchat 2's installed-app handoff.
+
+Owned source: `/ai/gchat-worktrees/c7-integration-toggle-guidance-20261017`,
+branch `fix/c7-integration-toggle-guidance-20261017`, base `fb15341b1`, tested
+implementation `eafaedd7c`. Results and concise suite outcomes:
+`/ai/gchat/out/integration-toggle-guidance-20261017/{result.json,summary.md}`.
+Verification ran on S1 CPUs 80–87 with the pinned Rust 1.98 image `ad7f9bf020d7`.
+Private compiler/dependency copies are retired; the authorized donor is unchanged.
+No live job or retained remote build. Next action: coordinator review and merge.
+
 ## Profile presentation — OI-077
 
 Ron approved model then card grouping, one recommended measured profile per card,
