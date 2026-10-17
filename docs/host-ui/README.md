@@ -1,5 +1,27 @@
 # GInfer host UI
 
+## Available attachment settings — C4
+
+`GUI-SETTINGS-UNAVAILABLE-EMBEDDINGS` was observed in the native Linux
+walkthrough: Settings offered document-search ingestion and retrieval controls
+although GInfer embeddings are feature-disabled. The page now offers Automatic,
+Include document text and Ask me each time, explains their unavailable search
+fallback, and hides the inactive retrieval, chunk and search controls. A saved
+embeddings choice is displayed as unavailable and kept until explicitly changed;
+hidden settings and supported attachment behavior remain intact. No backend or
+shared control-label change belongs to this branch.
+
+Acceptance: rendered checks for available choices/help, saved-mode recovery,
+preserved hidden preferences, navigation durability and visible numeric bounds,
+then full `make verify`. Source is ready; tests and builds remain unrun during
+C3's timing hold. Next: coordinator verification after actual timing return.
+
+Owned source: `/ai/gchat-worktrees/c4-settings-attachment-availability-20261017`,
+branch `fix/c4-settings-attachment-availability-20261017`, based on durability
+`16b71ec23`. The original evidence is retained in
+`/ai/gchat/out/c4-settings-sweep-20261017/{attachment-parse-options.json,settings-attachment-unsupported-mode.png}`.
+No new build, runtime, model or fixture resource is allocated.
+
 ## Attachment edits survive navigation — C4
 
 `GUI-SETTINGS-ATTACHMENT-EDIT-LOSS` was reproduced in the current native Linux
