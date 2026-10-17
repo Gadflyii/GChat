@@ -44,7 +44,7 @@ export function EngineHardwareProfile({ profile, gpus, offline, disabled, action
       <Button variant="outline" disabled={blocked || running} onClick={() => setChoice([...group.gpu_uuids])}>Select group to re-profile</Button>
     </section>)}
     {running && <progress aria-label="Hardware profiling in progress" className="w-full" />}
-    <p className="text-sm text-muted-foreground">Recent full installs took 22–73 minutes; time varies by hardware. Closing this window leaves the Host job running. Model launches wait until profiling stops.</p>
+    <p className="text-sm text-muted-foreground">Recent full installs took 22–73 minutes; time varies by hardware. Closing this window leaves the Host job running. {profile.scope === 'complete_remaining_formats' ? 'The selected model is ready; loading a model pauses this optional work. Cancel keeps it stopped until you resume profiling or prepare another model.' : 'Model launches wait until profiling stops.'}</p>
     {profile.status === 'completed' && <p className="text-sm text-muted-foreground">Hardware profiling completed. This does not qualify a model or its full-context capacity.</p>}
     {resumable && <p className="text-sm text-muted-foreground">{profile.checkpoint_available
       ? 'A saved checkpoint is available. Resume validates its inputs before continuing; checkpoint presence alone does not prove compatibility.'

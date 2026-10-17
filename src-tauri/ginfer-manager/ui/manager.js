@@ -103,6 +103,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   const badge = (status) => h('span', { class: `badge ${status}` }, text(status, 'unknown'))
   const online = (host) => host?.online === true
   const profiling = (host) => ['running', 'cancelling'].includes(host?.snapshot?.hardware_profile?.status)
+  const profilingBlocksLaunch = (host) => profiling(host) && host.snapshot.hardware_profile.scope !== 'complete_remaining_formats'
   function observation() {
     if (indexedView === state.view) return indexes
     const hosts = array(state.view.hosts)
@@ -408,7 +409,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
   }
 
   function launchDialog(host, instance = null) {
-    if (profiling(host)) return
+    if (profilingBlocksLaunch(host)) return
     const snapshot = host.snapshot || {}
     const models = array(snapshot.models)
     const modelById = firstMap(models, (entry) => entry.id)
@@ -468,12 +469,12 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
     }
     function updateQuoteAvailability() {
       const latest = observation().hosts.get(host.host_id)
-      quoteButton.disabled = quotePending || !online(latest) || profiling(latest)
+      quoteButton.disabled = quotePending || !online(latest) || profilingBlocksLaunch(latest)
       quoteControls.hidden = !!instance || mode !== 'custom'
     }
     function requireOnlineHost() {
       const latest = observation().hosts.get(host.host_id)
-      if (!online(latest) || profiling(latest)) throw new Error('Wait until the Host is online and hardware profiling has stopped before checking or launching a model.')
+      if (!online(latest) || profilingBlocksLaunch(latest)) throw new Error('Wait until the Host is online and hardware profiling has stopped before checking or launching a model.')
     }
     function placementSettings(form) {
       const count = instance ? 1 : Number(fieldValue(form, 'instance_count'))
@@ -684,7 +685,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       return h('div', {}, label, content)
     })
     const execute = async (operation) => {
-      if (operation === 'start' && profiling(observation().hosts.get(host.host_id))) return
+      if (operation === 'start' && profilingBlocksLaunch(observation().hosts.get(host.host_id))) return
       try { await run(hostRequest(host, 'instance', { instance_id: instance.instance_id, operation,
         expected_session_id: instance.session_id ?? null, force: false }), operation === 'start' ? 'Model starting' : 'Instance stopped') }
       catch { /* The native error remains visible. */ }
@@ -697,12 +698,12 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         h('details', { class: 'instance-diagnostic', 'data-section': diagnosticKey, open: state.sections.get(diagnosticKey) ?? false },
           h('summary', {}, currentFailure ? 'Startup or runtime error details' : 'Previous startup error'),
           h('pre', { class: 'mono' }, instance.last_error))) : null,
-      h('div', { class: 'actions' }, button('Start', () => execute('start'), !online(host) || profiling(host) || running),
+      h('div', { class: 'actions' }, button('Start', () => execute('start'), !online(host) || profilingBlocksLaunch(host) || running),
         button('Stop', () => execute('stop'), !online(host) || !running || instance.status === 'stopping'),
         button('Reload', () => {
           const latest = observation().instances.get(instanceKey({ host_id: host.host_id, instance_id: instance.instance_id }))
           launchDialog(latest?.host || host, latest?.instance || instance)
-        }, !online(host) || profiling(host) || instance.status === 'stopping' || !array(host.snapshot?.models).length)))
+        }, !online(host) || profilingBlocksLaunch(host) || instance.status === 'stopping' || !array(host.snapshot?.models).length)))
   }
 
   function hardwareProfileSection(host) {
@@ -749,7 +750,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         h('p', { class: 'muted mono' }, group.profile_path),
         button('Select group to re-profile', () => { state.profileGroups.set(host.host_id, [...group.gpu_uuids]); render() }, blocked || running))),
       running ? h('progress', { 'aria-label': 'Hardware profiling in progress' }) : null,
-      note('Recent full installs took 22–73 minutes; time varies by hardware. Closing this window leaves the Host job running. Model launches wait until profiling stops.'),
+      note('Recent full installs took 22–73 minutes; time varies by hardware. Closing this window leaves the Host job running. Model launches wait for foreground profiling; idle completion yields to launches.'),
       profile.status === 'completed' ? note('Hardware profiling completed. This does not qualify a model or its full-context capacity.') : null,
       array(host.snapshot?.draft_width_calibrations).length ? h('section', { 'aria-label': 'Draft-width calibration' },
         h('h3', {}, 'Draft-width calibration'),
@@ -1097,7 +1098,7 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         host.local && host.snapshot?.can_stop_host ? button('Stop Host and Quit', () => confirm(
           'Stop Host and Quit', 'Stop this computer’s idle desktop Host and quit Manager. Stop loaded models and wait for setup work to finish first.',
           hostRequest(host, 'stop_host'), 'Host stopping'), !online(host)) : null,
-        button('Start a model…', () => launchDialog(host), !online(host) || profiling(host) || !array(host.snapshot?.models).length, 'primary'))),
+        button('Start a model…', () => launchDialog(host), !online(host) || profilingBlocksLaunch(host) || !array(host.snapshot?.models).length, 'primary'))),
       !online(host) ? h('div', { class: 'empty' }, h('strong', {}, host.offline ? 'GInfer offline' : 'GInfer unavailable'), 'Last-known inventory is shown. Controls are disabled until the host reconnects.',
         host.error && !host.offline ? h('p', { class: 'section-error' }, host.error) : null) : null,
       firstRunSection(host), hardwareProfileSection(host),

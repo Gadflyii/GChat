@@ -97,6 +97,10 @@ export type EngineHardwareProfile = {
 export const hardwareProfileBusy = (profile?: EngineHardwareProfile) =>
   profile?.status === 'running' || profile?.status === 'cancelling'
 
+// Optional completion yields to launch; the Host validates the selected model's formats.
+export const hardwareProfileBlocksLaunch = (profile?: EngineHardwareProfile) =>
+  hardwareProfileBusy(profile) && profile?.scope !== 'complete_remaining_formats'
+
 export type EngineDraftWidthCalibration = {
   key: string; model_id: string; gpu_uuids: string[]; max_context: number; concurrency: number;
   status: 'queued' | 'running' | 'cancelling' | 'completed' | 'failed';

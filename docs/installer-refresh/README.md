@@ -53,7 +53,11 @@ task execution or control transfer.
 
 The packaged Flash pure 2-bit package (SHA256
 `8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`)
-**High-reasoning consumer check remains OPEN**.
+**High-reasoning consumer check remains OPEN**. The c5f/4f attempt was blocked
+before model Start or any request: automatic `complete-remaining-formats`
+profiling disabled Load, and profiling immediately restarted after Cancel.
+A source fix is underway; no corrected candidate has yet been installed or
+qualified.
 
 Historical acceptance on GChat `0b3aa523c` with the same Engine reached Ready
 through one ordinary Installed Load on the local RTX 5090, then answered one

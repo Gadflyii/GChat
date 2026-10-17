@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { hardwareProfileBusy, type EngineSnapshot } from '@/services/engines'
+import { hardwareProfileBlocksLaunch, type EngineSnapshot } from '@/services/engines'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 import { profileOptionLabel, profilePresentation } from '../../../src-tauri/ginfer-manager/ui/profile-presentation.js'
 
@@ -32,7 +32,7 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
   const [modelChoice, setModelChoice] = useState<{ instanceId: string; modelId: string } | null>(null)
   const modelId = modelChoice?.instanceId === instanceId ? modelChoice.modelId
     : instance?.profile?.model_id ?? snapshot.models[0]?.id ?? ''
-  const controlsDisabled = disabled || hardwareProfileBusy(snapshot.hardware_profile)
+  const controlsDisabled = disabled || hardwareProfileBlocksLaunch(snapshot.hardware_profile)
   const [choice, setChoice] = useState('')
   const [showAllProfiles, setShowAllProfiles] = useState(false)
   const [gpuChoice, setGpuChoice] = useState<{ instanceId: string; key: string } | null>(null)

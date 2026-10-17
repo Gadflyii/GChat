@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { EngineProfilePicker } from './EngineProfilePicker'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
-import { engineAlias, engineCommand, hardwareProfileBusy } from '@/services/engines'
+import { engineAlias, engineCommand, hardwareProfileBlocksLaunch } from '@/services/engines'
 import type { BenchmarkSessionInfo } from '@/services/benchmark/tauri'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 import { Button } from '@/components/ui/button'
@@ -66,7 +66,7 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
   </label>
   if (!host || !snapshot || !instance) return <div className="rounded-lg border p-4">{selector}<p className="mt-2 text-sm text-muted-foreground">Select a managed online instance to change its model or profile.</p></div>
   const maxPerfDisabled = disabled || busy || !!errors[host.host_id] || instance.status !== 'ready'
-    || hardwareProfileBusy(snapshot.hardware_profile) || !selected?.session_id || selected.session_id !== instance.session_id
+    || hardwareProfileBlocksLaunch(snapshot.hardware_profile) || !selected?.session_id || selected.session_id !== instance.session_id
   return <div className="space-y-3">
     <div className="space-y-3 rounded-lg border p-4">
       <h3 className="font-medium">GBench Max Perf</h3>

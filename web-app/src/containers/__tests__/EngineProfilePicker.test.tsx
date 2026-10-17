@@ -281,6 +281,30 @@ it('holds profile launches when the Host reports hardware profiling in progress'
   expect(launch).not.toHaveBeenCalled()
 })
 
+it.each(['running', 'cancelling'] as const)('launches a selected profile during %s optional completion', async (status) => {
+  const data = snapshot()
+  data.instances = []
+  data.hardware_profile = { status, scope: 'complete_remaining_formats', base_complete: true,
+    pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', job_id: 'job', pid: 42, reprofile: false,
+    started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+    checkpoint_available: true, diagnostic_tail: '', error: null, available: true }
+  const launch = vi.fn(async () => {
+    view.rerender(<EngineProfilePicker snapshot={{ ...data, instances: [{
+      instance_id: 'loaded', session_id: 'session', display_name: 'Muse', upstream_model_id: 'muse', status: 'ready',
+      configuration: { gpu_uuids: ['GPU-one'], max_context: 32768, concurrency: 4 },
+    }] }} disabled={false} launch={launch} />)
+  })
+  const view = render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
+  expect(screen.getByLabelText('Hardware profile')).toBeEnabled()
+  const option = screen.getByRole('option', { name: 'Recommended · Tested · C4 · 32K context · Text only' }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
+  expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
+  expect(await screen.findByRole('option', { name: /Muse.*ready/ })).toBeInTheDocument()
+  expect(launch).toHaveBeenCalledWith({ profile_id: 'fixture-c4', model_id: 'model', gpu_uuids: ['GPU-one'],
+    instance_id: null, force: false, structured_outputs: true })
+})
+
 it('labels screened PRO settings without recommending or increasing their witnessed context', () => {
   const data = snapshot()
   data.instances = []
