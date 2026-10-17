@@ -256,6 +256,11 @@ Choose **Download** to select where to save the generated HTML. If saving
 fails, GChat shows an error; choose **Download** again to retry. Canceling
 the save window leaves the generated code available.
 
+## Printing generated HTML
+
+Choose **Print / Save as PDF** to open the print window. If opening it
+fails, try **Print / Save as PDF** again or use **Download** to save the HTML.
+
 ## Choosing a skill with the keyboard
 
 Type `/` in the composer to see available skills. Use the up and down arrow
