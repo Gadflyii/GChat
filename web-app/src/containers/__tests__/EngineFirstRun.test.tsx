@@ -95,7 +95,7 @@ it('observes verified downloads before selected profiling and retains its retry 
     return Promise.resolve(saved)
   })
   const view = render(<EngineFirstRun />)
-  expect(await screen.findByText(/Muse · verifying/)).toBeInTheDocument()
+  expect(await screen.findByText(/Muse · Checking the download/)).toBeInTheDocument()
   expect(screen.queryByText(/Building your hardware profile/)).not.toBeInTheDocument()
   saved = flow('profiling', {
     gpu_uuids: ['GPU-one'], selected_downloads: [installed],
