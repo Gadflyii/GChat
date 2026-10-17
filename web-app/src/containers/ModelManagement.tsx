@@ -19,7 +19,8 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useModelCatalogStore } from '@/stores/model-catalog-store'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
-import { engineCommand, type LocalModelLoadProgress } from '@/services/engines'
+import { engineAlias, engineCommand, type LocalModelLoadProgress } from '@/services/engines'
+import { controlLocalHostModel } from '@/utils/localHostModel'
 import { HostCard } from '@/containers/EngineHostModels'
 import { downloadStatusLabel, formatModelBytes, releaseReadiness, type ModelDownload, type ModelGpu, type ModelRelease } from '@/lib/model-release'
 import { switchToModel } from '@/utils/switchModel'
@@ -100,6 +101,15 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const downloads = local ? localDownloads : snapshot?.model_management?.downloads ?? []
   const managementAvailable = local || snapshot?.model_management?.version === 1
   const localModels = providers.find(p => p.provider === 'ginfer')?.models ?? []
+  // A model started from GInfer Hosts is a Host instance, not a desktop-loaded model; match it by its weights file.
+  const localHost = hosts.find(h => h.local)
+  const localSnapshot = localHost && !hostErrors[localHost.host_id] ? snapshots[localHost.host_id] : undefined
+  const hostInstanceOf = (path?: string) => {
+    const hostModel = path ? localSnapshot?.models.find(h => h.path === path) : undefined
+    const instance = hostModel && localSnapshot?.instances.find(i =>
+      (i.status === 'ready' || i.status === 'starting') && i.profile?.model_id === hostModel.id)
+    return localHost && instance ? engineAlias(localHost.host_id, instance.instance_id) : undefined
+  }
   const filteredModels = localModels.filter(m => (m.displayName ?? m.id).toLowerCase().includes(query.toLowerCase()))
   const releases = useMemo(() => catalog.filter(m => m.library_name === 'ginfer').flatMap(m =>
     (m.releases?.length ? m.releases : [undefined]).map(release => ({
@@ -216,6 +226,10 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
     if (!result?.success) throw new Error(result?.error ?? 'The engine did not confirm that this model stopped.')
     syncActiveModelsFromEngines(await service.models().getActiveModels())
   })
+  const stopHostInstance = (alias: string) => act(async () => {
+    await controlLocalHostModel(alias, 'stop')
+    syncActiveModelsFromEngines(await service.models().getActiveModels())
+  })
   const totalInstalled = local ? localDownloads.filter(j => j.status === 'installed').reduce((n, j) => n + j.release.bytes, 0)
     : snapshot?.models.reduce((n, m) => n + m.metadata.size_bytes, 0) ?? 0
   const partialBytes = downloads.filter(j => j.status !== 'installed').reduce((n, j) => n + j.received, 0)
@@ -278,7 +292,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
           {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Choose available GPUs. A saved GPU may no longer be connected.' : 'Waiting for fresh GPU information.'}</p>}
         </fieldset>}
         {local ? <>{!filteredModels.length && <div className="rounded-xl border p-8 text-center"><p>No installed models found.</p><Button className="mt-3" onClick={() => setTab('Recommended')}>Find a recommended model</Button></div>}
-          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{m.displayName ?? m.id}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) ? 'Running' : 'Installed'} · {m.capabilities?.join(' · ') || 'GInfer model'}. Load uses the saved hardware profile for the selected graphics cards. For custom settings, open GInfer Hosts.</p></div><div className="flex gap-2"><Button disabled={busy || !localLoadReady || invalidGpuSelection || activeModels.includes(m.id)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !activeModels.includes(m.id)} onClick={() => void stopLocal(m.id)}>Stop</Button><DeleteModelAction modelId={m.id} provider="ginfer" /></div></section>)}</>
+          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{m.displayName ?? m.id}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) || hostInstanceOf(m.path) ? 'Running' : 'Installed'} · {m.capabilities?.join(' · ') || 'GInfer model'}. Load uses the saved hardware profile for the selected graphics cards. For custom settings, open GInfer Hosts.</p></div><div className="flex gap-2"><Button disabled={busy || !localLoadReady || invalidGpuSelection || activeModels.includes(m.id) || !!hostInstanceOf(m.path)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !(activeModels.includes(m.id) || hostInstanceOf(m.path))} onClick={() => void (activeModels.includes(m.id) ? stopLocal(m.id) : stopHostInstance(hostInstanceOf(m.path)!))}>Stop</Button><DeleteModelAction modelId={m.id} provider="ginfer" /></div></section>)}</>
           : host ? <HostCard key={host.host_id} host={host} snapshot={snapshot} error={hostErrors[destination]} /> : <p>Select a paired host in GInfer Hosts.</p>}
         {!local && snapshot?.model_management && <details><summary className="cursor-pointer text-sm">Managed storage and removal</summary><p className="my-2 text-sm text-muted-foreground">External model roots are read-only. Stop instances before removing a managed package.</p>{snapshot.models.filter(m => downloads.some(j => j.status === 'installed' && j.path === m.path)).map(m => <div key={m.id} className="flex items-center justify-between gap-3 border-b py-2"><span>{m.metadata.identity.model_id} · {formatModelBytes(m.metadata.size_bytes)}</span><Button variant="outline" disabled={busy || offline} onClick={() => { if (window.confirm(`Remove ${m.metadata.identity.model_id} from ${host?.name}? The package will need downloading again.`)) void act(() => engineCommand('remove_model', { host_id: destination, body: { model_id: m.id } })) }}>Remove package</Button></div>)}</details>}
       </>}
