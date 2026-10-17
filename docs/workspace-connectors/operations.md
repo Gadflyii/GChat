@@ -1,8 +1,8 @@
 # Workspace connection setup and operations
 
-This describes the implemented source. Focused checks pass; live Windows/Linux
-sign-in acceptance requires registered clients and approved test accounts. The
-installed application does not yet contain these connectors. See
+These instructions describe the current implementation. Focused source checks
+pass; live Windows/Linux sign-in acceptance remains a separate release gate with
+approved test accounts and registrations. See
 [current delivery status](README.md).
 
 ## Connect an account
@@ -73,10 +73,12 @@ and [unverified-app warnings](https://developers.google.com/data-manager/api/dev
 For Microsoft, select **Sign in with Microsoft**. The release registration uses
 the `common` tenant and accepts work, school and personal Microsoft accounts,
 including Outlook.com, Hotmail and personal OneDrive. Available services still
-depend on the account. SharePoint and Windows 365 Cloud PC need a work or school
-account; GChat explains that requirement when those services are selected or the
-provider reports an unsupported account. It does not guess account type from an
+depend on the account. SharePoint, Teams and Windows 365 Cloud PC need a work or
+school account; GChat explains that requirement when those services are selected
+or the provider reports an unsupported account. It does not guess account type from an
 email address or treat every permission failure as a personal account.
+Calendar free/busy and Teams online meetings also need a supported work or school
+account; ordinary personal calendar operations remain available where supported.
 
 In Gbot Cloud PC setup, use the work or school account with an assigned Windows
 365 Cloud PC, complete browser sign-in and any MFA or administrator approval,
@@ -86,9 +88,10 @@ organization requires approval, ask its administrator to approve the requested
 permissions, then retry. Permission and license failures remain distinct from
 network, throttling and server failures.
 
-If Microsoft sign-in is not configured in the release, GChat explains this and
-disables sign-in. Users do not need to find or create an app ID. This remains
-useful for development or explicitly unconfigured builds.
+If Microsoft sign-in is unavailable in a build, GChat explains this and disables
+sign-in. Install a release that includes Microsoft sign-in; users do not need to
+find or create an app ID. Development or explicitly unconfigured builds can
+still use an existing approved registration through the advanced option below.
 
 Organizations with an existing approved registration can expand **Advanced: use
 your organization's Microsoft app** in Settings. Copy its Application (client) ID
@@ -125,6 +128,29 @@ temporary localhost port, following Microsoft's loopback-port matching rules.
 and personal Microsoft accounts**. The repository confirms the requested URL
 and audience, but cannot verify the portal's saved redirect configuration.
 No Microsoft client secret is required. Live consent remains Ron's release gate.
+
+### If sign-in needs attention
+
+- **Permission approval or a security step:** finish sign-in in the browser and
+  review the requested permissions. If a work or school organization requires
+  administrator approval, ask its administrator to approve GChat, then retry.
+  A personal Microsoft account does not need an organization administrator.
+- **A work or school account is required:** choose that account for SharePoint,
+  Teams or Windows 365 Cloud PC. If you already use one, have the organization's
+  administrator check service permissions and any required license. This message
+  does not mean GChat determined your account type from your email address.
+- **Sign-in expired, access removed or registration rejected:** use
+  **Settings → Workspace connections → Reconnect** for the affected account.
+  For Google, also check whether your own app is still in Testing, where these
+  refresh tokens expire after seven days.
+- **Temporary connection, rate-limit or server failure:** retry the operation
+  later. A temporary failure, including a token response with HTTP 429 or 503,
+  does not remove the saved credential or mark the account for reconnection.
+  Recreating an app registration or disconnecting the account is unnecessary.
+
+Recognized Microsoft permission and security errors use fixed guidance instead
+of displaying the provider's raw response. Other failures can include an HTTP
+status; a status alone does not establish an account-type or consent problem.
 
 ### Grants and stored credentials
 

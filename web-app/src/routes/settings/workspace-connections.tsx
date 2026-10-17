@@ -344,8 +344,9 @@ function ProviderCard({
               </li>
               <li>
                 Enter the directory (tenant) ID if your administrator requires
-                one. Otherwise leave Tenant blank to use the app’s supported
-                account audience.
+                one. Otherwise leave Tenant blank to use common for work,
+                school and personal accounts. The app registration must support
+                your account type.
               </li>
               <li>
                 Save the registration, choose the services you need, then
@@ -400,8 +401,8 @@ function ProviderCard({
         <>
           <p className="mb-3 text-sm">
             {config?.client_id
-              ? 'Choose the services you need, then sign in with Microsoft in your browser. You do not need to enter an app ID.'
-              : 'Microsoft sign-in is not configured in this GChat release yet. You do not need to find or create an app ID. Use an updated release when sign-in is available, or use the advanced option if your organization already has an approved app.'}
+              ? 'Choose the services you need, then sign in with Microsoft in your browser. The app registration is already set up; you do not need to enter an app ID.'
+              : 'Microsoft sign-in is unavailable in this GChat build. You do not need to find or create an app ID. Install a release that includes Microsoft sign-in, or use the advanced option if your organization already has an approved app.'}
           </p>
           <p className="mb-3 text-sm">
             Connect a work, school or personal Microsoft account, including
