@@ -159,7 +159,7 @@ function WorkspaceSection({
                 </DropdownMenu>
               )}
             </div>
-            {rootExpanded &&
+            {(rootExpanded || rootState?.error) &&
               (!rootState ? (
                 <div className="py-2 pl-10 text-xs text-sidebar-foreground/70">
                   Loading…
@@ -361,6 +361,7 @@ export function AgentWorkspaceFiles({
     if (state?.loading) {
       return (
         <div
+          role="status"
           className="py-2 pr-2 text-xs text-sidebar-foreground/70"
           style={{ paddingLeft: `${54 + depth * 16}px` }}
         >
@@ -371,11 +372,30 @@ export function AgentWorkspaceFiles({
     if (state?.error) {
       return (
         <div
+          role="alert"
           className="py-2 pr-3 text-xs text-destructive"
           style={{ paddingLeft: `${54 + depth * 16}px` }}
-          title={state.error}
         >
-          Could not load this directory.
+          <p title={state.error}>Could not load this directory.</p>
+          <p className="mt-1 text-sidebar-foreground/70">
+            Check that the folder is still available, then try again.
+          </p>
+          <button
+            type="button"
+            className="mt-2 rounded-md border border-sidebar-border px-2 py-1 text-sidebar-foreground outline-none ring-sidebar-ring hover:bg-sidebar-foreground/8 focus-visible:ring-2"
+            onClick={() => {
+              setExpanded((current) =>
+                new Set(current).add(entryKey(root.rootId, path))
+              )
+              void loadDirectory(root, path)
+            }}
+          >
+            Retry folder
+          </button>
+          <details className="mt-2 text-sidebar-foreground/70">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="mt-1 whitespace-pre-wrap break-words">{state.error}</p>
+          </details>
         </div>
       )
     }
