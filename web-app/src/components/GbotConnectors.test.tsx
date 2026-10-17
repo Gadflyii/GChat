@@ -326,3 +326,20 @@ it('handles a pending refresh failure after unmount without resurrecting its acc
   expect(screen.getByRole('checkbox', { name: /Work Microsoft/ })).not.toBeChecked()
   expect(request).toHaveBeenCalledTimes(3)
 })
+
+it('disables Save linked accounts with a visible reason when no accounts exist', async () => {
+  request.mockResolvedValue(connectors([], []))
+  mount()
+  const reason = await screen.findByText(/No accounts are connected to GChat yet/)
+  const save = screen.getByRole('button', { name: 'Save linked accounts' })
+  expect(save).toBeDisabled()
+  expect(save).toHaveAccessibleDescription(/No accounts are connected to GChat yet/)
+  expect(reason).toBeVisible()
+})
+
+it('keeps Save enabled to unlink a disconnected account when none are connected', async () => {
+  request.mockResolvedValue(connectors(['gone'], []))
+  mount()
+  await screen.findByText(/Disconnected account \(gone\)/)
+  expect(screen.getByRole('button', { name: 'Save linked accounts' })).toBeEnabled()
+})
