@@ -126,6 +126,8 @@ interface AddEditMCPServerProps {
   editingKey: string | null
   initialData?: MCPServerConfig
   onSave: (servers: MCPServers) => Promise<void>
+  /** Names already in use, so adding never silently replaces one. */
+  existingNames?: string[]
 }
 
 export default function AddEditMCPServer({
@@ -134,6 +136,7 @@ export default function AddEditMCPServer({
   editingKey,
   initialData,
   onSave,
+  existingNames,
 }: AddEditMCPServerProps) {
   const { t } = useTranslation()
   const [serverName, setServerName] = useState('')
@@ -383,6 +386,10 @@ export default function AddEditMCPServer({
         }
       })
 
+      if (!editingKey && existingNames?.includes(serverName.trim())) {
+        setError(`A tool connection named “${serverName.trim()}” already exists. Choose another name, or edit the existing one.`)
+        return
+      }
       if (transportType === 'stdio' && command.trim() === '') {
         setError('Enter the start command from the tool provider’s setup instructions.')
         return

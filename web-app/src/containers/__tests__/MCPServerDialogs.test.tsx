@@ -77,6 +77,15 @@ describe('MCP server configuration dialogs', () => {
     expect(save).not.toHaveBeenCalled()
   })
 
+  it('does not let a new connection silently replace one with the same name', async () => {
+    const save = vi.fn()
+    render(<AddEditMCPServer open editingKey={null} existingNames={['Exa']} onOpenChange={vi.fn()} onSave={save} />)
+    fireEvent.change(screen.getByLabelText('mcp-servers:serverName'), { target: { value: 'Exa' } })
+    fireEvent.click(screen.getByRole('button', { name: 'mcp-servers:save' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('A tool connection named “Exa” already exists')
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it('keeps the form open with the native validation error when saving fails', async () => {
     const close = vi.fn()
     const save = vi.fn().mockRejectedValue(new Error('MCP header name is invalid'))
