@@ -9,6 +9,7 @@ import {
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import GbotAvatar from '@/components/GbotAvatar'
+import GbotTaskActions from '@/components/GbotTaskActions'
 import GbotDesktopView, {
   type DesktopViewHandle,
 } from '@/components/GbotDesktopView'
@@ -426,37 +427,15 @@ export default function GbotCompanion() {
                 >
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>{task.state.replaceAll('_', ' ')}</span>
-                    {['running', 'waiting_for_human'].includes(task.state) ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() =>
-                          void perform(() =>
-                            gbot('tasks/cancel', { id: task.id })
-                          )
-                        }
-                      >
-                        Stop task
-                      </Button>
-                    ) : (
-                      ['ready', 'paused', 'interrupted', 'cancelled'].includes(
-                        task.state
-                      ) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy || !ready || !botHasControl}
-                          onClick={() =>
-                            void perform(() =>
-                              gbot('tasks/resume', { id: task.id })
-                            )
-                          }
-                        >
-                          Resume task
-                        </Button>
-                      )
-                    )}
+                    <GbotTaskActions
+                      taskState={task.state}
+                      busy={busy}
+                      ready={ready}
+                      botHasControl={botHasControl}
+                      onAction={(action) =>
+                        perform(() => gbot(`tasks/${action}`, { id: task.id }))
+                      }
+                    />
                   </div>
                   {task.messages
                     .filter(
