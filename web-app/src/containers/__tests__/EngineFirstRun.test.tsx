@@ -67,6 +67,7 @@ it('uses chosen storage, retries the shared catalog and resumes saved downloads'
   fireEvent.click(screen.getByRole('button', { name: 'Use this folder' }))
   expect(await screen.findByText('Loading published model catalog…')).toBeInTheDocument()
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'storage', path: '/chosen' })
+  expect(screen.getByRole('button', { name: 'Refresh model catalog' }).parentElement).toHaveClass('flex', 'gap-2')
   fireEvent.click(screen.getByRole('button', { name: 'Refresh model catalog' }))
   const download = await screen.findByRole('button', { name: 'Download selected models' })
   await waitFor(() => expect(download).toBeEnabled())
