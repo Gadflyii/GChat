@@ -1,5 +1,34 @@
 # GInfer host UI
 
+## Provider field labels — C6
+
+`GUI-SETTINGS-CONTROL-LABELS` gives provider API Key and Base URL inputs
+accessible names from their existing visible setting titles. Password reveal,
+hide and copy actions identify their field and cannot submit an enclosing form.
+Passwords stay masked initially; setting values, editing, clipboard contents and
+numeric adjustment semantics remain unchanged.
+
+Acceptance: rendered regressions for named fields, password actions, form safety
+and existing numeric behavior, followed by one `make verify`; push the isolated
+branch merge-ready. Installed confirmation belongs to Gchat3's GUI acceptance.
+No Engine, GPU, model, provider request or real user-data operation is required.
+
+Source: `/ai/gchat-worktrees/c6-provider-control-labels-20261017`, branch
+`fix/c6-provider-control-labels-20261017`, from main `513f2ab30`. C6 owns the
+shared `dynamicControllerSetting/index.tsx` and `InputControl.tsx`, the dedicated
+`index.test.tsx` and the provider caller's title prop. C4 retains attachment
+routes and their labels; C7 retains SettingsMenu. Plan/results live here;
+concise results will be retained in
+`/ai/gchat/out/c6-provider-control-labels-20261017/{result.json,summary.md}`.
+
+Current state: implementation and four real rendered regression cases are ready.
+Self-check and `git diff --check` passed; tests remain unrun. No verification job
+or resource is held. New S1 compile/model/I/O waits for Codex3's GMUL TIMING return;
+then reuse the pinned GChat verification image and an owned private cache,
+run focused tests and the full gate once, and retire that disposable copy.
+W3 local-path validation still uses Gchat3's Installed Load packet, without a
+separate Load.
+
 ## Copy result and accessible control — C6
 
 `GUI-COPY-RESULT-ACCESSIBILITY-20261017` fixes the shared Copy button in

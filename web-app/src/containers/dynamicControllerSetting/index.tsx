@@ -34,6 +34,7 @@ type DynamicControllerProps = {
 }
 
 export function DynamicControllerSetting({
+  title,
   className,
   controllerType,
   controllerProps,
@@ -42,6 +43,7 @@ export function DynamicControllerSetting({
   if (controllerType === 'input') {
     return (
       <InputControl
+        label={title}
         type={controllerProps.type}
         placeholder={controllerProps.placeholder}
         value={
