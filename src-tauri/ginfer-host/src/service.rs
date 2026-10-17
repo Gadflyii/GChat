@@ -1330,6 +1330,13 @@ impl Host {
         request: &LaunchRequest,
     ) -> Result<crate::hardware_profile::ArtifactProfileIntent, String> {
         let launch = self.prepare_launch(request).await?;
+        self.selected_profile_intent_for_launch(&launch).await
+    }
+
+    async fn selected_profile_intent_for_launch(
+        &self,
+        launch: &EngineLaunch,
+    ) -> Result<crate::hardware_profile::ArtifactProfileIntent, String> {
         let artifact = launch.artifact.clone();
         let artifact_set = launch.artifact_set;
         let tp = launch.tp;
@@ -1360,15 +1367,55 @@ impl Host {
             package_sha256,
             tp: launch.tp,
             draft_tp: launch.options.draft_tp,
-            spec: launch.options.spec,
+            spec: launch.options.spec.clone(),
             draft_tokens: (launch.options.draft_tokens != 0).then_some(launch.options.draft_tokens),
         })
     }
+    /// The caller owns lifecycle, but never the processes mutex while waiting.
+    /// Only native acceptance in this Host process admits the selected artifact.
+    pub(crate) async fn ensure_selected_profile(&self, launch: &EngineLaunch) -> Result<(), String> {
+        self.stop_background_profile().await?;
+        let (job, cli, has_children) = {
+            let processes = self.processes.lock().await;
+            (processes.hardware_profile.clone(), processes.profiling_cli(&launch.gpu_uuids), processes.has_children())
+        };
+        let Some(job) = job else { return Ok(()); };
+        let intent = self.selected_profile_intent_for_launch(launch).await?;
+        let busy = job.busy();
+        let status = job.status(cli.clone());
+        let same_group = job.group().into_iter().collect::<std::collections::BTreeSet<_>>()
+            == launch.gpu_uuids.iter().cloned().collect::<std::collections::BTreeSet<_>>();
+        if busy && (!same_group || status.scope != "artifact" || status.selected_artifact.as_ref() != Some(&intent)) {
+            return Err("Another hardware profiling job reserves this host; wait for it or cancel it before loading this model".into());
+        }
+        if !busy && job.artifact_is_accepted(&launch.gpu_uuids, &intent) { return Ok(()); }
+        if has_children {
+            return Err("Stop running models before profiling this selected artifact, then retry Load".into());
+        }
+        if !busy {
+            job.start_scoped(crate::hardware_profile::HardwareProfileAction::Ensure, cli.clone(), launch.gpu_uuids.clone(), intent.clone())?;
+        }
+        let job_id = job.status(cli.clone()).job_id;
+        loop {
+            let status = job.status(cli.clone());
+            if status.job_id != job_id || status.scope != "artifact" || status.selected_artifact.as_ref() != Some(&intent) {
+                return Err("Selected hardware profiling job changed before model loading".into());
+            }
+            if !job.busy() {
+                if job.artifact_is_accepted(&launch.gpu_uuids, &intent) { return Ok(()); }
+                return Err(format!("Selected hardware profiling {}: {}", status.status,
+                    status.error.as_deref().unwrap_or("use the hardware profiling controls to resume or retry before loading")));
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    }
+
     pub async fn launch(&self, request: LaunchRequest) -> Result<Uuid, String> {
         self.place(request, 1).await
     }
     async fn place(&self, request: LaunchRequest, remaining: u32) -> Result<Uuid, String> {
         let _lifecycle = self.lifecycle.lock().await;
+        self.stop_background_profile().await?;
         let launch = self.prepare_launch(&request).await?;
         self.start_placement(request, launch, remaining).await
     }
@@ -1377,7 +1424,7 @@ impl Host {
     async fn start_placement(&self, request: LaunchRequest, launch: EngineLaunch, remaining: u32) -> Result<Uuid, String> {
         use crate::engine_registry::InstanceStatus;
         if remaining == 0 { return Err("remaining instances must be positive".into()); }
-        self.stop_background_profile().await?;
+        self.ensure_selected_profile(&launch).await?;
         self.processes.lock().await.validate_launch(&launch, false)?;
         let sharing = self.processes.lock().await.reserved_gpus(None)
             .iter().any(|gpu| launch.gpu_uuids.contains(gpu));
@@ -2336,6 +2383,8 @@ impl Host {
                         benchmark_profile:None,model_id:selection.model_id,gpu_uuids:selection.gpu_uuids,
                         max_context:profile.max_context,concurrency:profile.concurrency,options:profile.options}
                 };
+                // Reap idle completion before payload verification or scoped calibration.
+                self.stop_background_profile().await?;
                 let mut launch = self.prepare_launch(&request).await?;
                 let enabled = selection.structured_outputs.unwrap_or(true);
                 if enabled != request.options.structured_outputs {
@@ -2353,7 +2402,7 @@ impl Host {
                 }
                 request.options.kv_arena_bytes = selection.kv_arena_bytes;
                 launch.options.kv_arena_bytes = selection.kv_arena_bytes;
-                self.stop_background_profile().await?;
+                self.ensure_selected_profile(&launch).await?;
                 self.processes
                     .lock()
                     .await
@@ -3199,18 +3248,57 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
 }
 
 #[cfg(all(test, unix))]
+fn write_selected_profile_fixture(path: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::write(path, r#"#!/usr/bin/env python3
+import hashlib, json, pathlib, sys, time
+root = pathlib.Path(__file__).parent
+args = sys.argv[1:]
+def arg(name, default=None):
+    return args[args.index(name)+1] if name in args else default
+assert args[0] == 'profile-hardware'
+with (root/'profile-calls.jsonl').open('a') as calls:
+    calls.write(json.dumps(args)+'\n')
+(root/'profile-argv.json').write_text(json.dumps(args))
+(root/'profile-started').touch()
+while (root/'hold-profile').exists() and not (root/'release-profile').exists():
+    time.sleep(.01)
+if (root/'fail-profile').exists():
+    print('fixture selected calibration failed', file=sys.stderr)
+    sys.exit(23)
+model = pathlib.Path(arg('--model'))
+contents = model.read_bytes()
+directory_size = int.from_bytes(contents[8:16], 'little')
+directory_sha = hashlib.sha256(contents[16:16+directory_size]).hexdigest()
+output = pathlib.Path(arg('--hardware-profile'))
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps(dict(schema_version=2)))
+spec = arg('--spec', 'auto')
+artifact = dict(path=str(model), directory_sha256=directory_sha, tp=int(arg('--tp')),
+    draft_tp=int(arg('--draft-tp', '0')), spec=spec,
+    draft_tokens=int(arg('--draft-tokens', '0' if spec in ('auto', 'none') else '3')))
+print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact', state='loaded',
+    hardware_profile=str(output), complete=True, base_complete=True,
+    all_formats_complete=False, missing_rows=[], artifact=artifact)))
+"#).unwrap();
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[cfg(all(test, unix))]
 mod resource_tests {
     use super::*;
     use std::{future::Future, os::unix::fs::PermissionsExt};
 
     async fn fixture() -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
         let dir = tempfile::tempdir().unwrap();
-        let engine = dir.path().join("engine");
+        let engine = dir.path().join("ginfer-serve");
         std::fs::write(&engine, r#"#!/usr/bin/env python3
-import json, sys, time
+import json, pathlib, sys, time
+root = pathlib.Path(__file__).parent
 args = sys.argv[1:]
 def arg(name): return args[args.index(name)+1]
 if '--quote-only' in args:
+    (root/'quote-started').touch()
     model, weights = arg('--model-id').split('/', 1)
     print(json.dumps(dict(schema='ginfer-startup-quote-v1', model_id=model, weights_id=weights,
         tensor_parallel_size=1, ranks=[dict(rank=0, free_bytes=4294967296, weights_bytes=8192,
@@ -3218,9 +3306,11 @@ if '--quote-only' in args:
         kv_arena_alignment_bytes=256, headroom_bytes=int(arg('--kv-arena-headroom-bytes')),
         startup_peak_bytes=12288)])))
     sys.exit(0)
+(root/'serve-started').touch()
 time.sleep(60)
 "#).unwrap();
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
+        super::write_selected_profile_fixture(&dir.path().join("ginfer"));
         let models = dir.path().join("models");
         std::fs::create_dir(&models).unwrap();
         let metadata = serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
@@ -3259,6 +3349,57 @@ time.sleep(60)
             options: LaunchOptions::default(),
         };
         (dir, host, request)
+    }
+
+    #[tokio::test]
+    async fn installed_load_waits_for_selected_scope_before_quote_and_reuses_acceptance() {
+        let (dir, host, request) = fixture().await;
+        std::fs::write(dir.path().join("hold-profile"), b"").unwrap();
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let loading_host = host.clone();
+        let loading_request = request.clone();
+        let loading = tokio::spawn(async move { loading_host.launch(loading_request).await });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !dir.path().join("profile-started").is_file() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.unwrap();
+        let snapshot = tokio::time::timeout(Duration::from_secs(1), host.snapshot()).await.unwrap();
+        assert!(snapshot["instances"].as_array().unwrap().is_empty());
+        assert!(job.busy());
+        assert_eq!(job.status(None).scope, "artifact");
+        assert!(!dir.path().join("quote-started").exists());
+        assert!(!dir.path().join("serve-started").exists());
+        std::fs::write(dir.path().join("release-profile"), b"").unwrap();
+        let id = tokio::time::timeout(Duration::from_secs(5), loading).await.unwrap().unwrap().unwrap();
+        let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
+        let model_index = args.iter().position(|arg| arg == "--model").unwrap();
+        assert_eq!(args[model_index + 1], dir.path().join("models/model.ginfer").canonicalize().unwrap().to_str().unwrap());
+        assert!(args.iter().any(|arg| arg == "--json"));
+        assert!(!args.iter().any(|arg| arg == "--complete-remaining-formats"));
+        assert!(!job.busy());
+        let launch = host.prepare_launch(&request).await.unwrap();
+        assert!(job.artifact_is_accepted(&request.gpu_uuids, &host.selected_profile_intent_for_launch(&launch).await.unwrap()));
+        let _lifecycle = host.lifecycle.lock().await;
+        host.ensure_selected_profile(&launch).await.unwrap();
+        assert_eq!(std::fs::read_to_string(dir.path().join("profile-calls.jsonl")).unwrap().lines().count(), 1);
+        assert!(host.processes.lock().await.instances().any(|instance| instance.instance_id == id));
+        host.processes.lock().await.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn installed_load_failed_selected_profile_never_quotes_or_spawns() {
+        let (dir, host, request) = fixture().await;
+        std::fs::write(dir.path().join("fail-profile"), b"").unwrap();
+        let error = host.launch(request).await.unwrap_err();
+        assert!(error.contains("fixture selected calibration failed"), "{error}");
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        assert!(!job.busy());
+        assert_eq!(job.status(None).status, "failed");
+        assert!(!dir.path().join("quote-started").exists());
+        assert!(!dir.path().join("serve-started").exists());
+        assert!(!host.processes.lock().await.has_children());
+        assert!(host.data.lock().await.profiles.is_empty());
     }
 
     #[tokio::test]
@@ -3313,7 +3454,7 @@ time.sleep(60)
             "canonical_reconstructed_target_sha256":"c".repeat(64),
             "canonical_reconstructed_draft_sha256":null,"artifacts":declarations,
         })).unwrap()).unwrap();
-        let executable = dir.path().join("engine");
+        let executable = dir.path().join("ginfer-serve");
         let gpus = host.gpus.clone();
         drop(host);
         let host = Host::open(dir.path().join("state"), "Ignored".into(), executable,
@@ -3338,7 +3479,6 @@ time.sleep(60)
         let (dir, host, mut request) = fixture().await;
         request.options.spec = "none".into();
         let engine = dir.path().join("ginfer-serve");
-        std::fs::copy(dir.path().join("engine"), &engine).unwrap();
         host.processes.lock().await.configure_executable(engine.clone()).unwrap();
         let cli = dir.path().join("ginfer");
         let pid_path = dir.path().join("profile-pid");
@@ -3378,7 +3518,7 @@ time.sleep(60)
         let (directory, host, request) = fixture().await;
         host.enable_normal_stop();
         let launch = host.prepare_launch(&request).await.unwrap();
-        let mut processes = HostProcesses::new(directory.path().join("engine"),
+        let mut processes = HostProcesses::new(directory.path().join("ginfer-serve"),
             host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(), Duration::from_secs(600)).unwrap();
         processes.configure_runtimes(Default::default(), host.gpus.iter().filter_map(|gpu| {
             gpu.compute_capability.as_ref().map(|sm| (gpu.uuid.clone(), sm.clone()))
@@ -3405,7 +3545,7 @@ time.sleep(60)
         let (dir, host, mut request) = fixture().await;
         host.processes.lock().await.hardware_profile = None;
         host.launch_profiles.write().await.clear();
-        std::fs::write(dir.path().join("engine"), r#"#!/usr/bin/env python3
+        std::fs::write(dir.path().join("ginfer-serve"), r#"#!/usr/bin/env python3
 import json, os, pathlib, sys
 args = sys.argv[1:]
 def arg(name): return args[args.index(name)+1]
@@ -3511,7 +3651,7 @@ print(json.dumps(quote))
     #[tokio::test]
     async fn local_inventory_startup_quote_rejects_changed_and_unknown_identity_before_engine() {
         let (dir, host, mut request) = fixture().await;
-        std::fs::write(dir.path().join("engine"), r#"#!/usr/bin/env python3
+        std::fs::write(dir.path().join("ginfer-serve"), r#"#!/usr/bin/env python3
 import pathlib, sys
 pathlib.Path(__file__).with_name('unexpected-engine').write_text('ran')
 sys.exit(1)
@@ -3539,7 +3679,7 @@ sys.exit(1)
         let (dir, host, mut request) = fixture().await;
         // Exercise the real command/HTTP/Ready path with a controlled engine.
         // Its ledger represents physical allocations, not Host accounting.
-        std::fs::write(dir.path().join("engine"), r#"#!/usr/bin/env python3
+        std::fs::write(dir.path().join("ginfer-serve"), r#"#!/usr/bin/env python3
 import http.server, json, os, pathlib, sys
 args = sys.argv[1:]
 def arg(name): return args[args.index(name) + 1]
@@ -3612,7 +3752,7 @@ http.server.HTTPServer(('127.0.0.1', port), Handler).serve_forever()
         let snapshot = host.snapshot().await;
         assert_eq!(snapshot["instances"].as_array().unwrap().iter().filter(|instance| instance["status"] == "ready").count(), 3);
         host.processes.lock().await.shutdown().await.unwrap();
-        let reopened = Host::open(dir.path().join("state"), "Test".into(), dir.path().join("engine"),
+        let reopened = Host::open(dir.path().join("state"), "Test".into(), dir.path().join("ginfer-serve"),
             vec![dir.path().join("models")], vec![], host.gpus.clone()).await.unwrap();
         let snapshot = reopened.snapshot().await;
         let restored: BTreeSet<_> = snapshot["instances"].as_array().unwrap().iter()
@@ -3625,7 +3765,7 @@ http.server.HTTPServer(('127.0.0.1', port), Handler).serve_forever()
     async fn profile_and_saved_launches_quote_current_settings_without_persisting_auto_bytes() {
         let (dir, host, request) = fixture().await;
         host.processes.lock().await.hardware_profile = None;
-        std::fs::write(dir.path().join("engine"), r#"#!/usr/bin/env python3
+        std::fs::write(dir.path().join("ginfer-serve"), r#"#!/usr/bin/env python3
 import http.server, json, os, pathlib, sys
 args = sys.argv[1:]
 def arg(name): return args[args.index(name)+1]
@@ -4010,7 +4150,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             // Preserve the Host hardware owner for measured Scan.
             let hardware = host.processes.lock().await.hardware_profile.clone();
             let mut synthetic = HostProcesses::new(
-                dir.path().join("engine"),
+                dir.path().join("ginfer-serve"),
                 host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
                 Duration::from_secs(600),
             ).unwrap();
@@ -4193,7 +4333,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let (dir, host, mut request) = fixture().await;
         let hardware = host.processes.lock().await.hardware_profile.clone();
         let mut synthetic = HostProcesses::new(
-            dir.path().join("engine"),
+            dir.path().join("ginfer-serve"),
             host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
             Duration::from_secs(600),
         ).unwrap();
@@ -4478,7 +4618,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             serde_json::to_vec(&BTreeMap::from([(id, download)])).unwrap(),
         )
         .unwrap();
-        let executable = dir.path().join("engine");
+        let executable = dir.path().join("ginfer-serve");
         drop(host);
         let broken = dir.path().join("models/broken.ginfer");
         std::fs::write(&broken, b"invalid fixture").unwrap();
@@ -4623,7 +4763,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let launch = host.prepare_launch(&request).await.unwrap();
         // CPU children exercise reservations without native hardware admission.
         let mut processes = HostProcesses::new(
-            dir.path().join("engine"),
+            dir.path().join("ginfer-serve"),
             host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
             Duration::from_secs(600),
         ).unwrap();
@@ -4670,7 +4810,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let hardware = host.processes.lock().await.hardware_profile.clone();
         // Synthetic children measure projection without hardware admission.
         let mut synthetic = HostProcesses::new(
-            dir.path().join("engine"),
+            dir.path().join("ginfer-serve"),
             host.gpus.iter().map(|gpu| gpu.uuid.clone()).collect(),
             Duration::from_secs(600),
         ).unwrap();
@@ -4880,7 +5020,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         std::fs::create_dir(&models).unwrap();
         let engine = dir.path().join("ginfer-serve");
         write_engine_fixture(&engine);
-        std::fs::write(dir.path().join("ginfer"), b"fixture profiling CLI").unwrap();
+        super::write_selected_profile_fixture(&dir.path().join("ginfer"));
         let hardware = crate::hardware_profile::group_profile_path(&state, &["GPU-test".into()]);
         std::fs::create_dir_all(hardware.parent().unwrap()).unwrap();
         std::fs::write(hardware, br#"{"schema_version":2}"#).unwrap();
@@ -5062,7 +5202,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let dir = tempfile::tempdir().unwrap();
         let engine = dir.path().join("ginfer-serve");
         write_engine_fixture(&engine);
-        std::fs::write(dir.path().join("ginfer"), b"fixture profiling CLI").unwrap();
+        super::write_selected_profile_fixture(&dir.path().join("ginfer"));
         for gpu in ["GPU-test", "GPU-second"] {
             let path = crate::hardware_profile::group_profile_path(
                 &dir.path().join("state"), &[gpu.to_owned()],

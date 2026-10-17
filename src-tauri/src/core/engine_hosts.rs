@@ -371,21 +371,6 @@ async fn ensure_desktop_host<R: tauri::Runtime>(
     local.ensure_shared_running().await
 }
 
-/// Called only after a verified runtime installation changes its payload.
-pub async fn prepare_installed_hardware<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
-    use tauri::Manager;
-    crate::core::setup::wait_for_bundled_resources(&app).await?;
-    let _access = data_folder_access().read().await;
-    prepare_installed_hardware_unlocked(
-        crate::core::app::commands::get_jan_data_folder_path(app.clone()),
-        app.path().resource_dir().map_err(|e| e.to_string())?,
-        None,
-    )
-    .await
-}
-
 pub async fn prepare_installed_hardware_from_paths(
     data_folder: std::path::PathBuf,
     resource_directory: std::path::PathBuf,

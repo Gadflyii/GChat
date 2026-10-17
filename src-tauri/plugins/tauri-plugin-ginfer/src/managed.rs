@@ -733,7 +733,28 @@ time.sleep(30)
         )
         .unwrap();
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
-        std::fs::write(root.path().join("ginfer"), b"fixture profiling CLI").unwrap();
+        let profiling_cli = root.path().join("ginfer");
+        std::fs::write(&profiling_cli, r#"#!/usr/bin/env python3
+import hashlib, json, pathlib, sys
+args = sys.argv[1:]
+def arg(name, default=None):
+    return args[args.index(name) + 1] if name in args else default
+# The resident fixture must pass the same selected-artifact preparation as
+# production. It cannot calibrate hardware or load weights.
+model = pathlib.Path(arg('--model')).resolve()
+with model.open('rb') as source:
+    prefix = source.read(16)
+    directory = source.read(int.from_bytes(prefix[8:], 'little'))
+output = pathlib.Path(arg('--hardware-profile'))
+output.write_text(json.dumps(dict(schema_version=2)))
+print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
+    hardware_profile=str(output), state='loaded', complete=True,
+    base_complete=True, all_formats_complete=False, missing_rows=[],
+    artifact=dict(path=str(model), directory_sha256=hashlib.sha256(directory).hexdigest(),
+        tp=int(arg('--tp')), draft_tp=int(arg('--draft-tp', '0')),
+        spec=arg('--spec'), draft_tokens=int(arg('--draft-tokens', '0'))))))
+"#).unwrap();
+        std::fs::set_permissions(&profiling_cli, std::fs::Permissions::from_mode(0o700)).unwrap();
         let artifact = root.path().join("model.ginfer");
         let metadata =
             serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},
