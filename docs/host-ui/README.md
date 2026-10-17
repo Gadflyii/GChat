@@ -1,5 +1,30 @@
 # GInfer host UI
 
+## Disable OpenCode workspaces — C7
+
+`GUI-CODE-DISABLE-WORKSPACE-STOP-20261017` fixes the integration switch's
+use of the legacy `code` terminal ID while workspace sessions use `code:<path>`.
+Turning OpenCode off must request stop for every app-owned Code session, including
+legacy and workspace slots, while leaving Hermes unchanged. The switch stays on
+until the native stop succeeds, disables repeated clicks during the request, and
+shows a retryable error if stopping fails. No live user terminals are test inputs.
+
+Acceptance: focused native lifecycle and rendered pending/success/failure tests,
+then one full `make verify`; push the isolated branch for coordinator merge.
+Installed GUI workflow belongs to Gchat 3's parent acceptance. Windows collision
+qualification remains pending Gchat 2's separate installed-app handoff.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| C7 / local | `/ai/gchat-worktrees/c7-code-disable-workspace-stop-20261017`, branch `fix/c7-code-disable-workspace-stop-20261017` | Source candidate from `691fdcc10`; backend and frontend implementation in parallel |
+| C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-code-disable-workspace-stop-20261017/` | Private source/dependency/native cache; retire after evidence extraction |
+| C7 / evidence | `/ai/gchat/out/code-disable-workspace-stop-20261017/` | Focused and full verification pending |
+
+The implementation serializes native Code launch/stop, reaps successful stops,
+and retains failed stop handles for retry. A shared transient disabling state
+blocks delayed UI readiness and restart work. Next: focused and full CPU-only
+verification on S1 CPUs 80–87 in pinned image `ad7f9bf020d7`. No Engine or GPU/model runs.
+
 ## Proxy control labels — GUI-PROXY-SETTINGS-ACCESSIBILITY
 
 Current main already supplies novice proxy instructions and accessible control
@@ -64,8 +89,8 @@ isolated branch; installed workflow qualification remains separate.
 `GUI-INTEGRATION-TOGGLE-GUIDANCE` explains Gbot, OpenCode and Hermes beside
 their persisted switches in Settings and Integrations. Each has a visible
 **Enable** label and an accessible description. Gbot off hides the interface and
-disables sign-in startup while work continues. OpenCode off hides Code; the
-description tells users to use **Stop** first to end running work. Hermes off
+disables sign-in startup while work continues. OpenCode off now stops all Code workspaces before hiding Code, as specified
+in the current disable-workspaces section above. Hermes off
 stops its terminal while retaining saved settings. Enabling the terminal tools
 can install them; enabling Gbot still opens its setup. **Hermes settings** remains
 available. Existing actions, defaults and saved choices are unchanged.
@@ -73,8 +98,8 @@ available. Existing actions, defaults and saved choices are unchanged.
 Acceptance is met: five focused rendered tests and full `make verify` pass.
 The full gate includes lint, frontend types, 2,584 frontend + 119 extension tests,
 coverage checks and all supported Rust suites. Existing saved choices, enabling
-navigation and terminal actions are protected. The separate OpenCode workspace
-Stop defect is unchanged; the copy tells users to stop work before hiding Code.
+navigation and terminal actions are protected. The original guidance shipped separately; the current disable-workspaces
+fix above replaces its temporary Stop-first guidance.
 No Engine, installer, model or Windows acceptance run belongs to this GUI change.
 The Windows host-port collision leaf waits for Gchat 2's installed-app handoff.
 

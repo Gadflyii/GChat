@@ -7,8 +7,10 @@ import { useModelProvider } from '@/hooks/useModelProvider'
 
 const integrationMocks = vi.hoisted(() => ({
   setOpenCodeEnabled: vi.fn(),
+  setOpenCodeDisabling: vi.fn(),
   setHermesEnabled: vi.fn(),
   stopTerminal: vi.fn(() => Promise.resolve()),
+  stopCodeTerminals: vi.fn(() => Promise.resolve()),
   gbotEnabled: false,
   setGbotEnabled: vi.fn(),
 }))
@@ -59,11 +61,15 @@ vi.mock('@/hooks/useModelProvider', () => ({
 }))
 
 vi.mock('@/stores/code-terminal-store', () => ({
-  useCodeTerminalStore: (selector: (state: unknown) => unknown) =>
-    selector({
+  useCodeTerminalStore: Object.assign(
+    (selector: (state: unknown) => unknown) => selector({
       enabled: true,
+      disabling: false,
       setEnabled: integrationMocks.setOpenCodeEnabled,
+      setDisabling: integrationMocks.setOpenCodeDisabling,
     }),
+    { getState: () => ({ disabling: false }) }
+  ),
 }))
 
 vi.mock('@/stores/hermes-agent-store', () => ({
@@ -73,6 +79,7 @@ vi.mock('@/stores/hermes-agent-store', () => ({
 
 vi.mock('@/services/terminal/tauri', () => ({
   stopTerminal: integrationMocks.stopTerminal,
+  stopCodeTerminals: integrationMocks.stopCodeTerminals,
 }))
 
 vi.mock('@/containers/dialogs', () => ({

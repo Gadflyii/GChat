@@ -187,6 +187,7 @@ pub fn run() {
         core::terminal::terminal_resize,
         core::terminal::terminal_set_flow,
         core::terminal::terminal_stop,
+        core::terminal::terminal_stop_code,
         core::terminal::code_workspace_resolve,
         core::terminal::terminal_update_bridge_policy,
         core::code_sessions::code_session_select,
