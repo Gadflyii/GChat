@@ -39,22 +39,36 @@ settings, the explicit apply/restart step, and the effect on chats using that
 server; selecting a server alone never restarts it. Confirmation and session
 guards remain required.
 
-The October 17 guidance change is on
-`fix/c4-benchmark-settings-guidance-20261017` in
-`/ai/gchat-worktrees/c4-benchmark-settings-guidance-20261017`. The focused
-settings/benchmark route tests pass (16 tests), and every Linux `make verify`
-stage passes: lint, typecheck, quality/registry checks, Manager assets,
+The October 17 guidance change `2237dcd9f` is merged as `cf897a875`.
+Its 16 focused settings/benchmark route tests and every Linux `make verify`
+stage passed: lint, typecheck, quality/registry checks, Manager assets,
 2,581 frontend tests, 119 extension tests, six coverage floors and all Rust
 suites. Completed stages were retained while Rust invocation issues were
 corrected using container init, normal networking and unset CUDA visibility;
-no product code changed to accommodate those fixtures. Launch settings,
-benchmark controls and submission behavior remain unchanged.
-
-The verification result and logs are retained at
+no product code changed for those fixtures. Evidence is retained at
 `/ai/gchat/out/c4-benchmark-settings-guidance-20261017/result.json`.
-The owned S1 copied source and caches were removed after verification;
-the inactive Gchat 3 donor remains unchanged. S1 returned 12:59Z.
-The branch is ready for merge.
+The owned S1 copy and caches were removed; the inactive Gchat 3 donor was
+preserved. S1 returned 12:59Z.
+
+The October 17 installed recheck at 14:23Z used the ordinary functional Linux
+GChat `707724776` / Engine `43b8bbf60` AppImage on FRESH
+`40130784-cfe4-4473-92ff-4b60c326ca58`; it is not an RC qualification.
+C4 opened Benchmark with the existing accessibility tools. The screenshot
+confirms “Choose a running server”, the guidance that selection does not
+restart it, and “Open Models, load a model, then select Refresh server”.
+No running instance was available in the selector, so checking editable Engine
+profile/current values and harmless edit → Cancel → reopen is **BLOCKED** on an
+owner-provided existing accessible Engine instance. This partial installed
+observation does not replace the source verification above.
+
+No setup, instance creation, model action, Start, Ensure, benchmark, Save,
+provider change or deletion was performed. After ACPI shutdown the fixture was
+OFF, original XML SHA256
+`ce3cc7316fb5e7ab7090693e98821591d786b2e12276d35a69cf628159a66bb0`
+was restored, and profile state was unchanged; returned 14:23Z. Installed evidence
+is `/ai/gchat/out/c4-benchmark-settings-guidance-20261017/installed-recheck/result.json`
+and its adjacent `benchmark.png`. The next action is the remaining no-save
+workflow when the owner supplies an existing accessible Engine instance.
 
 Standard records the selected Host session and profile version. Every native
 report must match those facts and the same configuration across all three points.
