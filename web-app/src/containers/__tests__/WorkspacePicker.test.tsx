@@ -353,3 +353,139 @@ describe('Workspace AGENTS.md instructions', () => {
     expect(mocks.memory).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('Opening the workspace folder', () => {
+  it('opens the resolved folder once for rapid clicks and stays busy until the explorer responds', async () => {
+    const explorer = deferred<void>()
+    vi.mocked(invoke).mockReturnValue(explorer.promise)
+    mocks.resolve.mockResolvedValue({ path: '/canonical/project' })
+    render(<WorkspacePicker value="/typed/../project" onChange={vi.fn()} />)
+
+    const open = await screen.findByRole('button', { name: 'Open folder' })
+    act(() => {
+      open.click()
+      open.click()
+    })
+
+    expect(invoke).toHaveBeenCalledExactlyOnceWith('open_file_explorer', {
+      path: '/canonical/project',
+    })
+    const pending = screen.getByRole('button', { name: 'Opening folder…' })
+    expect(pending).toBeDisabled()
+    expect(pending).toHaveAttribute('aria-busy', 'true')
+
+    await complete(explorer, undefined)
+    expect(screen.getByRole('button', { name: 'Open folder' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('explains explorer failures and retries the same selected folder without retaining the error', async () => {
+    const failed = deferred<void>()
+    const retry = deferred<void>()
+    vi.mocked(invoke)
+      .mockReturnValueOnce(failed.promise)
+      .mockReturnValueOnce(retry.promise)
+    render(<WorkspacePicker value="/workspace/current" onChange={vi.fn()} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }))
+    await act(async () => {
+      failed.reject(new Error('Explorer unavailable'))
+      await failed.promise.catch(() => undefined)
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not open the folder. Try Open folder again. Error: Explorer unavailable'
+    )
+    expect(screen.getByRole('button', { name: 'Open folder' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Open folder' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Opening folder…' })).toBeDisabled()
+    expect(invoke).toHaveBeenCalledTimes(2)
+    expect(invoke).toHaveBeenNthCalledWith(1, 'open_file_explorer', {
+      path: '/workspace/current',
+    })
+    expect(invoke).toHaveBeenNthCalledWith(2, 'open_file_explorer', {
+      path: '/workspace/current',
+    })
+
+    await complete(retry, undefined)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open folder' })).toBeEnabled()
+  })
+
+  it.each(['success', 'rejection'] as const)(
+    'ignores an old explorer %s after changing workspaces without clearing the newer pending open',
+    async (outcome) => {
+      const oldExplorer = deferred<void>()
+      const currentExplorer = deferred<void>()
+      vi.mocked(invoke)
+        .mockReturnValueOnce(oldExplorer.promise)
+        .mockReturnValueOnce(currentExplorer.promise)
+      const view = render(
+        <WorkspacePicker value="/workspace/old" onChange={vi.fn()} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }))
+
+      view.rerender(
+        <WorkspacePicker value="/workspace/new" onChange={vi.fn()} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }))
+      expect(invoke).toHaveBeenNthCalledWith(1, 'open_file_explorer', {
+        path: '/workspace/old',
+      })
+      expect(invoke).toHaveBeenNthCalledWith(2, 'open_file_explorer', {
+        path: '/workspace/new',
+      })
+
+      if (outcome === 'success') {
+        await complete(oldExplorer, undefined)
+      } else {
+        await act(async () => {
+          oldExplorer.reject(new Error('Obsolete explorer failure'))
+          await oldExplorer.promise.catch(() => undefined)
+        })
+      }
+
+      const pending = screen.getByRole('button', { name: 'Opening folder…' })
+      expect(pending).toBeDisabled()
+      expect(pending).toHaveAttribute('aria-busy', 'true')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.getByText('/workspace/new')).toBeVisible()
+      fireEvent.click(pending)
+      expect(invoke).toHaveBeenCalledTimes(2)
+
+      await complete(currentExplorer, undefined)
+      expect(screen.getByRole('button', { name: 'Open folder' })).toBeEnabled()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    }
+  )
+
+  it.each(['success', 'rejection'] as const)(
+    'safely settles an explorer %s after the picker unmounts',
+    async (outcome) => {
+      const explorer = deferred<void>()
+      const onChange = vi.fn()
+      vi.mocked(invoke).mockReturnValue(explorer.promise)
+      const view = render(
+        <WorkspacePicker value="/workspace/current" onChange={onChange} />
+      )
+      fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }))
+      view.unmount()
+
+      if (outcome === 'success') {
+        await complete(explorer, undefined)
+      } else {
+        await act(async () => {
+          explorer.reject(new Error('Closed picker explorer failure'))
+          await explorer.promise.catch(() => undefined)
+        })
+      }
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(onChange).not.toHaveBeenCalled()
+      expect(invoke).toHaveBeenCalledExactlyOnceWith('open_file_explorer', {
+        path: '/workspace/current',
+      })
+    }
+  )
+})
