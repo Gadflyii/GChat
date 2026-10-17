@@ -1,5 +1,26 @@
 # GInfer host UI
 
+## Provider settings keyboard navigation — C7
+
+`GUI-SETTINGS-PROVIDER-KEYBOARD` fixes the ordinary Settings provider entries
+observed as clickable divs that keyboard users cannot reach. Use native router
+links for active and hidden providers, keeping the current destinations, remote
+setup search, provider ordering, selected-model marker and sidebar layout.
+Keyboard focus must be visible and Enter must open the selected provider.
+
+Acceptance: focused rendered navigation regressions and one `make verify`, then
+push the isolated branch merge-ready. Existing installed evidence is
+`/ai/gchat/out/c4-settings-sweep-20261017/provider-navigation-semantics.json`;
+the parent retains the ordinary installed keyboard recheck. No provider setup,
+model, GPU, Engine, install or existing user data is involved in this source fix.
+
+Owned tree: `/ai/gchat-worktrees/c7-settings-provider-keyboard-20261017`, branch
+`fix/c7-settings-provider-keyboard-20261017`, base `0099e0a1d`. Root owns
+`SettingsMenu.tsx`; a parallel helper owns the existing and dedicated navigation
+tests. Source/tests and CPU-only verification are in progress; deadline 15:50Z
+October17. The Models/Hub/Engine/Hardware hands-on pass remains pending Gchat3's
+RC Load return and Windows collision remains pending Gchat2's install.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing
