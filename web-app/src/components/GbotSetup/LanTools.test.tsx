@@ -40,8 +40,51 @@ it('requires consent, stages a command and checks installation before proceeding
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Check tools' }))
   await screen.findByRole('status')
+  expect(
+    screen.queryByRole('textbox', { name: 'Bot tools administrator command' })
+  ).not.toBeInTheDocument()
   expect(ready).toHaveBeenLastCalledWith(true)
   expect(busy).toHaveBeenLastCalledWith(false)
+})
+
+it('hides the old administrator command while checking and replaces it with current instructions', async () => {
+  let completeCheck!: (value: {
+    installed: boolean
+    command: string | null
+    issue: null
+  }) => void
+  vi.mocked(gbot)
+    .mockResolvedValueOnce({
+      installed: false,
+      command: 'sudo -- sh "old-install.sh"',
+      issue: null,
+    })
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          completeCheck = resolve
+        })
+    )
+  render(<LanTools workspaceId="bot" ready={vi.fn()} busy={vi.fn()} />)
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Prepare tools' }))
+  await screen.findByDisplayValue('sudo -- sh "old-install.sh"')
+
+  fireEvent.click(screen.getByRole('button', { name: 'Check tools' }))
+  expect(
+    screen.queryByRole('textbox', { name: 'Bot tools administrator command' })
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Check tools' })).toBeDisabled()
+
+  completeCheck({
+    installed: false,
+    command: 'sudo -- sh "current-install.sh"',
+    issue: null,
+  })
+  await screen.findByDisplayValue('sudo -- sh "current-install.sh"')
+  expect(
+    screen.queryByDisplayValue('sudo -- sh "old-install.sh"')
+  ).not.toBeInTheDocument()
 })
 
 it('shows the failed step and allows another preparation or installation check', async () => {
