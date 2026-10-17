@@ -11,10 +11,34 @@ use tokio::sync::Mutex;
 mod background;
 mod cloud;
 mod inference;
+#[cfg(any(windows, test))]
+mod login_windows;
 #[cfg(target_os = "linux")]
 pub(crate) use background::credential_control;
 pub use background::run_service_mode;
 pub(crate) use background::Client;
+#[cfg(target_os = "linux")]
+use ginfer_host::gbot_login as login;
+#[cfg(windows)]
+use login_windows as login;
+
+pub(crate) fn with_relocated_startup<T>(
+    current: &Path,
+    destination: &Path,
+    resources: &Path,
+    commit: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
+    #[cfg(windows)]
+    {
+        let updated = ginfer_host::gbot_bootstrap::Bootstrap::capture(destination, resources)?;
+        login_windows::relocate(current, &updated, commit)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (current, destination, resources);
+        commit()
+    }
+}
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
@@ -410,22 +434,27 @@ impl GbotState {
         app: &AppHandle<R>,
         target: ServiceTarget,
     ) -> Result<(), String> {
+        #[cfg(not(windows))]
         let root = self.root(app).await?;
         if let ServiceTarget::PairedHost { host_id } = &target {
             let hosts = crate::core::engine_hosts::shared_client().await?;
             hosts.gbot_grant(*host_id, "claim").await?;
             hosts.gbot_call(*host_id, "/v1/state", Value::Null).await?;
         }
+        #[cfg(windows)]
+        let _data_folder = crate::core::engine_hosts::data_folder_access().read().await;
+        #[cfg(windows)]
+        let root = self.root(app).await?;
         let mut connection = self.connection.lock().await;
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         {
             let bootstrap = ginfer_host::gbot_bootstrap::Bootstrap::capture(
                 &root,
                 &app.path().resource_dir().map_err(|e| e.to_string())?,
             )?;
-            ginfer_host::gbot_login::reconcile(
+            login::reconcile(
                 &bootstrap,
-                ginfer_host::gbot_login::enabled(&root)? && target == ServiceTarget::Local,
+                login::enabled(&root)? && target == ServiceTarget::Local,
             )?;
         }
         save_service_target(&root, &target)?;
@@ -497,24 +526,26 @@ pub async fn gbot_service_set_enabled<R: Runtime>(
     state: State<'_, GbotState>,
     enabled: bool,
 ) -> Result<(), String> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     {
+        #[cfg(windows)]
+        let _data_folder = crate::core::engine_hosts::data_folder_access().read().await;
         let root = state.root(&app).await?;
         let _connection = state.connection.lock().await;
         let bootstrap = ginfer_host::gbot_bootstrap::Bootstrap::capture(
             &root,
             &app.path().resource_dir().map_err(|e| e.to_string())?,
         )?;
-        ginfer_host::gbot_login::configure(
+        login::configure(
             &bootstrap,
             enabled,
             service_target(&root)? == ServiceTarget::Local,
         )
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", windows)))]
     {
         let _ = (app, state, enabled);
-        Ok(())
+        Err("Gbot sign-in startup is not supported on this platform yet".into())
     }
 }
 #[tauri::command]

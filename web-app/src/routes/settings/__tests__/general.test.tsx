@@ -4,6 +4,7 @@ import { Route as GeneralRoute } from '../general'
 import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
+import { toast } from 'sonner'
 
 // Mock all the dependencies
 vi.mock('@/containers/SettingsMenu', () => ({
@@ -54,12 +55,6 @@ vi.mock('@/containers/LanguageSwitcher', () => ({
   default: () => <div data-testid="language-switcher">Language Switcher</div>,
 }))
 
-vi.mock('@/containers/dialogs/ChangeDataFolderLocation', () => ({
-  default: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="change-data-folder-dialog">{children}</div>
-  ),
-}))
-
 const mockSetPreloadModelOnStartup = vi.hoisted(() => vi.fn())
 const mockNavigate = vi.hoisted(() => vi.fn())
 
@@ -78,6 +73,11 @@ vi.mock('@/hooks/useGeneralSetting', () => ({
 const mockCheckForUpdate = vi.fn()
 const mockOpenerOpen = vi.fn()
 const mockRevealItemInDir = vi.fn()
+const mockRelocateDataFolder = vi.fn()
+const mockGetDataFolder = vi.fn()
+const mockStopAllModels = vi.fn()
+const mockEmitEvent = vi.fn()
+const mockOpenDirectory = vi.fn()
 
 vi.mock('@/hooks/useAppUpdater', () => ({
   useAppUpdater: () => ({
@@ -251,12 +251,6 @@ vi.mock('@/constants/windows', () => ({
   },
 }))
 
-vi.mock('@/types/events', () => ({
-  SystemEvent: {
-    KILL_SIDECAR: 'kill-sidecar',
-  },
-}))
-
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => mockNavigate,
   createFileRoute: (path: string) => (config: any) => ({
@@ -294,17 +288,17 @@ describe('General Settings Route', () => {
     seedServiceHub({
       app: {
         factoryReset: vi.fn(),
-        getGchatDataFolder: vi.fn().mockResolvedValue('/test/data/folder'),
-        relocateGchatDataFolder: vi.fn(),
+        getGchatDataFolder: mockGetDataFolder,
+        relocateGchatDataFolder: mockRelocateDataFolder,
       } as ReturnType<ServiceHub['app']>,
       models: {
-        stopAllModels: vi.fn(),
+        stopAllModels: mockStopAllModels,
       } as ReturnType<ServiceHub['models']>,
       dialog: {
-        open: vi.fn().mockResolvedValue('/test/path'),
+        open: mockOpenDirectory,
       } as ReturnType<ServiceHub['dialog']>,
       events: {
-        emit: vi.fn(),
+        emit: mockEmitEvent,
       } as ReturnType<ServiceHub['events']>,
       window: {
         openLogsWindow: vi.fn(),
@@ -318,6 +312,9 @@ describe('General Settings Route', () => {
     mockCheckForUpdate.mockResolvedValue(null)
     mockOpenerOpen.mockResolvedValue(undefined)
     mockRevealItemInDir.mockResolvedValue(undefined)
+    mockRelocateDataFolder.mockResolvedValue(undefined)
+    mockGetDataFolder.mockResolvedValue('/test/data/folder')
+    mockOpenDirectory.mockResolvedValue('/test/new-data')
   })
 
   it('should render the general settings page', async () => {
@@ -474,6 +471,132 @@ describe('General Settings Route', () => {
     // Test that component renders without errors
     expect(screen.getByTestId('header-page')).toBeInTheDocument()
     expect(screen.getByTestId('settings-menu')).toBeInTheDocument()
+  })
+
+  const openDataFolderConfirmation = async () => {
+    const Component = GeneralRoute.component as React.ComponentType
+    await act(async () => {
+      render(<Component />)
+    })
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'settings:general.changeLocation' })
+      )
+    })
+    return screen.getByRole('button', {
+      name: 'settings:dialogs.changeDataFolder.changeLocation',
+    })
+  }
+
+  it('awaits one native data move before changing the path or relaunching, without stopping active work', async () => {
+    let finishMove!: () => void
+    mockRelocateDataFolder.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishMove = resolve
+        })
+    )
+    const confirm = await openDataFolderConfirmation()
+
+    await act(async () => {
+      fireEvent.click(confirm)
+      fireEvent.click(confirm)
+    })
+
+    expect(mockRelocateDataFolder).toHaveBeenCalledExactlyOnceWith(
+      '/test/new-data'
+    )
+    expect(mockStopAllModels).not.toHaveBeenCalled()
+    expect(mockEmitEvent).not.toHaveBeenCalled()
+    expect(window.core?.api?.relaunch).not.toHaveBeenCalled()
+    expect(screen.getByTitle('/test/data/folder')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'common:loading' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: 'settings:dialogs.changeDataFolder.cancel',
+      })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: 'settings:general.changeLocation',
+      })
+    ).toBeDisabled()
+
+    await act(async () => {
+      finishMove()
+    })
+
+    expect(screen.getByTitle('/test/new-data')).toBeInTheDocument()
+    expect(window.core?.api?.relaunch).toHaveBeenCalledTimes(1)
+    expect(
+      screen.queryByText('settings:dialogs.changeDataFolder.title')
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [
+      'Host is busy: model load in progress',
+      'Host is busy: model load in progress',
+    ],
+    [
+      new Error('Failed to copy data: access denied'),
+      'Failed to copy data: access denied',
+    ],
+  ])(
+    'keeps the old data path and offers retry after native refusal: %s',
+    async (failure, message) => {
+      mockRelocateDataFolder.mockRejectedValueOnce(failure)
+      const confirm = await openDataFolderConfirmation()
+
+      await act(async () => {
+        fireEvent.click(confirm)
+      })
+
+      expect(toast.error).toHaveBeenCalledWith(message)
+      expect(screen.getByTitle('/test/data/folder')).toBeInTheDocument()
+      expect(screen.queryByTitle('/test/new-data')).not.toBeInTheDocument()
+      expect(window.core?.api?.relaunch).not.toHaveBeenCalled()
+      expect(mockStopAllModels).not.toHaveBeenCalled()
+      expect(mockEmitEvent).not.toHaveBeenCalled()
+      expect(
+        screen.getByRole('button', {
+          name: 'settings:dialogs.changeDataFolder.changeLocation',
+        })
+      ).toBeEnabled()
+
+      await act(async () => {
+        fireEvent.click(confirm)
+      })
+
+      expect(mockRelocateDataFolder).toHaveBeenCalledTimes(2)
+      expect(screen.getByTitle('/test/new-data')).toBeInTheDocument()
+      expect(window.core?.api?.relaunch).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('shows the committed data path when the Host restart fails, without relaunching', async () => {
+    const message =
+      'Data moved to /test/new-data; Host restart failed: startup timed out'
+    mockRelocateDataFolder.mockRejectedValueOnce(message)
+    const confirm = await openDataFolderConfirmation()
+    mockGetDataFolder.mockResolvedValue('/test/new-data')
+
+    await act(async () => {
+      fireEvent.click(confirm)
+    })
+
+    expect(mockGetDataFolder).toHaveBeenCalledTimes(2)
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(message)
+    expect(screen.getByTitle('/test/new-data')).toBeInTheDocument()
+    expect(screen.queryByTitle('/test/data/folder')).not.toBeInTheDocument()
+    expect(window.core?.api?.relaunch).not.toHaveBeenCalled()
+    expect(mockStopAllModels).not.toHaveBeenCalled()
+    expect(mockEmitEvent).not.toHaveBeenCalled()
+    expect(
+      screen.getByRole('button', {
+        name: 'settings:dialogs.changeDataFolder.changeLocation',
+      })
+    ).toBeEnabled()
   })
 
   it('should handle copy to clipboard', async () => {

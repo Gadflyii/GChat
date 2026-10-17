@@ -225,6 +225,19 @@ and regressions below the committed coverage floor for critical production
 files. Existing exceptions live in `tests/test-quality-allowlist.json`; do not
 add one when the test can assert a persisted, rendered, or serialized outcome.
 
+The credential-store restart regression starts a writer, a reader/deleter, and a
+final reader as separate, sequential processes. On Linux it exercises both the
+Linux store and the native-only store used by Windows, using a persistent fake
+provider with synthetic credentials. Run it directly with:
+
+```bash
+cargo test --manifest-path src-tauri/utils/Cargo.toml --lib credential_store::tests::native_credentials_survive_process_restart_and_deletion_through_the_seam -- --exact
+```
+
+This covers store behavior across process restarts, including binary credentials,
+service/account isolation, and deletion. It does not qualify Secret Service or
+Windows Credential Manager persistence; those require native acceptance.
+
 Rust command tests use two layers:
 
 - File-store and domain tests call path-based functions directly with `TempDir`.

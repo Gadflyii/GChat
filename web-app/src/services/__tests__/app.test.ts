@@ -92,12 +92,25 @@ describe('TauriAppService', () => {
     expect(ipcHandler).toHaveBeenCalledWith('get_app_configurations', {})
   })
 
-  it('routes data-folder relocation through APIs and TauriCoreService', async () => {
+  it('invokes exactly one native data-folder transaction without a separate config update', async () => {
     ipcHandler.mockReturnValue(undefined)
 
     await appService.relocateGchatDataFolder('/new/path/to/gchat/data')
 
     expect(ipcHandler).toHaveBeenCalledWith('change_app_data_folder', {
+      newDataFolder: '/new/path/to/gchat/data',
+    })
+    expect(ipcHandler).toHaveBeenCalledTimes(1)
+  })
+
+  it('propagates a native busy refusal without updating app configuration', async () => {
+    ipcHandler.mockRejectedValue('Host is busy: model load in progress')
+
+    await expect(
+      appService.relocateGchatDataFolder('/new/path/to/gchat/data')
+    ).rejects.toBe('Host is busy: model load in progress')
+
+    expect(ipcHandler).toHaveBeenCalledExactlyOnceWith('change_app_data_folder', {
       newDataFolder: '/new/path/to/gchat/data',
     })
   })

@@ -129,7 +129,7 @@ mod tests {
         let with_negative = [-1, b'A' as i8, b'B' as i8, 0];
         let result = parse_c_string(&with_negative);
         // Should convert negative to unsigned byte
-        assert!(result.len() > 0);
+        assert!(!result.is_empty());
         assert!(result.contains('A'));
         assert!(result.contains('B'));
     }

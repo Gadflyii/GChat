@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-16** — [Hand off the owned Host during an App Data move](2026-10-16-handoff-owned-host-during-app-data-move.md)
+- **2026-10-16** — [Register per-user Windows Gbot sign-in startup](2026-10-16-register-windows-gbot-sign-in-startup.md)
 - **2026-10-16** — [Project native v2 results into the public v1 report](2026-10-16-project-native-v2-into-public-v1.md)
 
 - **2026-10-16** — [Stop the owned idle Windows desktop Host normally](2026-10-16-stop-owned-idle-windows-desktop-host.md)

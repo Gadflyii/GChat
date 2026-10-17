@@ -1,6 +1,5 @@
 //! Per-user credential selection shared by Chat, Manager, connectors and Gbot.
 use serde::{Deserialize, Serialize};
-#[cfg(target_os = "linux")]
 use std::sync::Arc;
 use std::{
     path::{Path, PathBuf},
@@ -173,50 +172,246 @@ pub fn shared() -> Result<&'static Store, Error> {
     STORE.get().ok_or(Error::Unavailable)
 }
 
-#[cfg(not(target_os = "linux"))]
-pub struct Store {
-    root: PathBuf,
-    native: NativeProvider,
-}
-#[cfg(not(target_os = "linux"))]
-impl Store {
-    pub fn new(root: &Path) -> Self {
-        Self {
-            root: root.join("credentials"),
-            native: NativeProvider,
+#[cfg(any(not(target_os = "linux"), test))]
+mod native_store {
+    use super::*;
+
+    pub struct Store {
+        root: PathBuf,
+        native: Arc<dyn Native>,
+    }
+    impl Store {
+        pub fn new(root: &Path) -> Self {
+            Self {
+                root: root.join("credentials"),
+                native: Arc::new(NativeProvider),
+            }
+        }
+        #[cfg(test)]
+        pub(super) fn with_native(root: &Path, native: Arc<dyn Native>) -> Self {
+            Self {
+                native,
+                ..Self::new(root)
+            }
+        }
+        pub(super) fn root(&self) -> PathBuf {
+            self.root.clone()
+        }
+        pub fn get(
+            &self,
+            service: &str,
+            account: &str,
+        ) -> Result<Option<Zeroizing<Vec<u8>>>, Error> {
+            self.native
+                .get(&Reference::new(service, account))
+                .map(|bytes| bytes.map(Zeroizing::new))
+        }
+        pub fn put(&self, service: &str, account: &str, bytes: &[u8]) -> Result<(), Error> {
+            self.native.put(&Reference::new(service, account), bytes)
+        }
+        pub fn delete(&self, service: &str, account: &str) -> Result<(), Error> {
+            self.native.delete(&Reference::new(service, account))
+        }
+        pub fn require_ready(&self) -> Result<(), Error> {
+            self.native.probe()
+        }
+        pub fn status(&self) -> Status {
+            // Availability is checked explicitly when a credential is needed.
+            Status {
+                ready: false,
+                tier: Some(Tier::Native),
+                state: "unchecked".into(),
+                can_create: false,
+                error: None,
+                migrating: false,
+            }
         }
     }
-    fn root(&self) -> PathBuf {
-        self.root.clone()
-    }
-    pub fn get(&self, service: &str, account: &str) -> Result<Option<Zeroizing<Vec<u8>>>, Error> {
-        self.native
-            .get(&Reference::new(service, account))
-            .map(|bytes| bytes.map(Zeroizing::new))
-    }
-    pub fn put(&self, service: &str, account: &str, bytes: &[u8]) -> Result<(), Error> {
-        self.native.put(&Reference::new(service, account), bytes)
-    }
-    pub fn delete(&self, service: &str, account: &str) -> Result<(), Error> {
-        self.native.delete(&Reference::new(service, account))
-    }
-    pub fn require_ready(&self) -> Result<(), Error> {
-        self.native.probe()
-    }
-    pub fn status(&self) -> Status {
-        // Availability is checked explicitly when a credential is needed.
-        Status {
-            ready: false,
-            tier: Some(Tier::Native),
-            state: "unchecked".into(),
-            can_create: false,
-            error: None,
-            migrating: false,
-        }
-    }
 }
+#[cfg(not(target_os = "linux"))]
+pub use native_store::Store;
 
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
 pub use linux::Store;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{collections::BTreeMap, fs, io::Write, process::Command};
+
+    // Synthetic test records only. This replaces the OS service, never its Store adapter.
+    struct PersistentNative {
+        path: PathBuf,
+    }
+    impl PersistentNative {
+        fn records(&self) -> Result<BTreeMap<String, Vec<u8>>, Error> {
+            match fs::read(&self.path) {
+                Ok(bytes) => serde_json::from_slice(&bytes).map_err(|_| Error::InvalidData),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+                Err(_) => Err(Error::Unavailable),
+            }
+        }
+        fn save(&self, records: &BTreeMap<String, Vec<u8>>) -> Result<(), Error> {
+            let bytes = serde_json::to_vec(records).map_err(|_| Error::InvalidData)?;
+            let mut file = fs::File::create(&self.path).map_err(|_| Error::Unavailable)?;
+            file.write_all(&bytes)
+                .and_then(|_| file.sync_all())
+                .map_err(|_| Error::Unavailable)
+        }
+    }
+    impl Native for PersistentNative {
+        fn present(&self) -> Result<bool, Error> {
+            Ok(true)
+        }
+        fn get(&self, reference: &Reference) -> Result<Option<Vec<u8>>, Error> {
+            Ok(self.records()?.get(&reference.identity()?).cloned())
+        }
+        fn put(&self, reference: &Reference, bytes: &[u8]) -> Result<(), Error> {
+            let mut records = self.records()?;
+            records.insert(reference.identity()?, bytes.into());
+            self.save(&records)
+        }
+        fn delete(&self, reference: &Reference) -> Result<(), Error> {
+            let mut records = self.records()?;
+            records.remove(&reference.identity()?);
+            self.save(&records)
+        }
+    }
+
+    fn round_trip_phase(
+        phase: &str,
+        get: impl Fn(&Reference) -> Result<Option<Zeroizing<Vec<u8>>>, Error>,
+        put: impl Fn(&Reference, &[u8]) -> Result<(), Error>,
+        delete: impl Fn(&Reference) -> Result<(), Error>,
+    ) {
+        let records = [
+            (
+                Reference::new("app.gchat.ginfer-host", "same-account"),
+                b"fixture-token".as_slice(),
+            ),
+            (
+                Reference::new("app.gchat.gbot", "same-account"),
+                b"\0\xfffixture-key".as_slice(),
+            ),
+            (
+                Reference::new("app.gchat.ginfer-host", "other-account"),
+                b"other-token".as_slice(),
+            ),
+        ];
+        match phase {
+            "write" => {
+                for (reference, bytes) in &records {
+                    assert!(get(reference).unwrap().is_none());
+                    put(reference, bytes).unwrap();
+                }
+            }
+            "read-delete" => {
+                for (reference, bytes) in &records {
+                    assert_eq!(get(reference).unwrap().unwrap().as_slice(), *bytes);
+                }
+                delete(&records[0].0).unwrap();
+                assert!(get(&records[0].0).unwrap().is_none());
+                for (reference, bytes) in &records[1..] {
+                    assert_eq!(get(reference).unwrap().unwrap().as_slice(), *bytes);
+                    delete(reference).unwrap();
+                }
+            }
+            "missing" => {
+                for (reference, _) in &records {
+                    assert!(get(reference).unwrap().is_none());
+                }
+            }
+            _ => panic!("unknown credential restart phase"),
+        }
+    }
+
+    #[test]
+    fn native_credentials_survive_process_restart_and_deletion_through_the_seam() {
+        const ROOT: &str = "GCHAT_CREDENTIAL_RESTART_TEST_ROOT";
+        const PHASE: &str = "GCHAT_CREDENTIAL_RESTART_TEST_PHASE";
+        const ADAPTER: &str = "GCHAT_CREDENTIAL_RESTART_TEST_ADAPTER";
+        const TEST: &str = "credential_store::tests::native_credentials_survive_process_restart_and_deletion_through_the_seam";
+        if let Some(root) = std::env::var_os(ROOT) {
+            let root = PathBuf::from(root);
+            let phase = std::env::var(PHASE).unwrap();
+            let provider = Arc::new(PersistentNative {
+                path: root.join("provider.json"),
+            });
+            match std::env::var(ADAPTER).unwrap().as_str() {
+                "native-only" => {
+                    let store = native_store::Store::with_native(&root, provider);
+                    assert_eq!(store.root(), root.join("credentials"));
+                    assert_eq!(store.status().state, "unchecked");
+                    if phase == "write" {
+                        store.require_ready().unwrap();
+                    }
+                    round_trip_phase(
+                        &phase,
+                        |r| store.get(&r.service, &r.account),
+                        |r, bytes| store.put(&r.service, &r.account, bytes),
+                        |r| store.delete(&r.service, &r.account),
+                    );
+                }
+                #[cfg(target_os = "linux")]
+                "linux" => {
+                    let store = linux::Store::with_native(&root, provider);
+                    assert_eq!(store.root(), root.join("credentials"));
+                    assert_eq!(store.status().state, "unchecked");
+                    if phase == "write" {
+                        store.require_ready().unwrap();
+                    }
+                    round_trip_phase(
+                        &phase,
+                        |r| store.get(&r.service, &r.account),
+                        |r, bytes| store.put(&r.service, &r.account, bytes),
+                        |r| store.delete(&r.service, &r.account),
+                    );
+                }
+                _ => panic!("unknown credential restart adapter"),
+            }
+            fs::write(
+                root.join(format!("{phase}.done")),
+                std::process::id().to_string(),
+            )
+            .unwrap();
+            return;
+        }
+
+        let adapters = [
+            "native-only",
+            #[cfg(target_os = "linux")]
+            "linux",
+        ];
+        for adapter in adapters {
+            let directory = tempfile::tempdir().unwrap();
+            // Each output() waits and reaps the preceding process before the next starts.
+            // Only the fake provider's file and the real Store metadata cross the boundary.
+            for phase in ["write", "read-delete", "missing"] {
+                let result = Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", TEST, "--nocapture"])
+                    .env(ROOT, directory.path())
+                    .env(PHASE, phase)
+                    .env(ADAPTER, adapter)
+                    .output()
+                    .unwrap();
+                assert!(
+                    result.status.success(),
+                    "{adapter}/{phase}: {}{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr)
+                );
+                assert!(
+                    String::from_utf8_lossy(&result.stdout).contains("test result: ok. 1 passed;"),
+                    "{adapter}/{phase} must execute exactly the selected test"
+                );
+                let pid: u32 = fs::read_to_string(directory.path().join(format!("{phase}.done")))
+                    .unwrap()
+                    .parse()
+                    .unwrap();
+                assert_ne!(pid, std::process::id(), "phase must run in another process");
+            }
+        }
+    }
+}

@@ -108,6 +108,38 @@ Unlike the upstream layout there is no legacy-folder baggage: the fork is clean-
 
 ### Custom data folder
 
+Change the App Data location under **Settings → General → App Data → Change
+location**. Choose a separate, empty absolute folder; the current folder, its
+parents, its children and aliases of the same folder are refused. An earlier
+refusal may leave only the empty `ginfer/host/host.lock` hierarchy, which is
+allowed for retry.
+
+The native move coordinates with the desktop-managed Host on Linux and Windows.
+If the configured old root owns a running Host, the move requests authenticated
+idle Stop and waits for actual ownership release. A model load, active model,
+download, profiling, calibration or setup transaction causes a refusal; the move
+does not unload models or force-stop work. An unused Host remains unstarted.
+Both old and destination Host ownership locks stay held during the copy and
+configuration/locator handoff. The copy keeps the existing generated-cache
+exclusions and skips the exact Host lock file so it cannot replace a held lock.
+The copied Host UUID and certificate must match the source. Discovery changes
+only if it still selects the old desktop owner; another installation's locator
+is preserved.
+
+Before commit, a copy/configuration/registration failure keeps or restores the
+old selection and restarts the old Host only if the move stopped it. A rollback
+or recovery failure is reported explicitly. After commit, failure to restart the
+Host leaves App Data at the new saved location: Settings refreshes that location,
+shows the restart error and does not relaunch GChat. A successful move relaunches
+the app; a previously running Host is restarted under the new root after both
+ownership locks are released.
+
+The old data is retained, including after a successful move; a failed copy can
+also leave a partial destination. Existing absolute model, download and artifact
+paths in saved state remain exactly as recorded. Moving App Data does not rewrite
+those paths or relocate their referenced external files. Keep the old files
+needed by those paths.
+
 GInfer and GChat share a per-user host locator: `%APPDATA%\GInfer\local-host.json`
 on Windows, or `$XDG_CONFIG_HOME/ginfer/local-host.json` on Linux (default
 `~/.config/ginfer/local-host.json`). It records the selected Host's state directory,
@@ -145,7 +177,7 @@ Direct development/test Cargo builds with unset selection produce an explicit
 empty catalog, not inferred presets or stale build resources; the Windows release
 wrapper does not allow this. Changing selected files triggers regeneration.
 
-If a user has relocated the data folder via `Settings → Advanced → Change data folder location` (`change_app_data_folder`), the uninstaller and `make clean-windows-all` **do not** delete that custom path — only the default `%APPDATA%\GChat\` is cleaned. Removing a custom data folder is the user's responsibility.
+If a user has relocated the data folder via `Settings → General → App Data → Change location` (`change_app_data_folder`), the uninstaller and `make clean-windows-all` **do not** delete that custom path — only the default `%APPDATA%\GChat\` is cleaned. Removing a custom data folder is the user's responsibility.
 
 ## Release signing (updater)
 

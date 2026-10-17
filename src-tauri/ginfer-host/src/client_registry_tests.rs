@@ -117,6 +117,148 @@ async fn cached_stop_busy_or_invalid_ack_restores_attachment_admission() {
 }
 
 #[tokio::test]
+async fn relocation_reserves_both_roots_without_discovery_or_bootstrap() {
+    use std::task::{Context, Poll, Waker};
+    let root = tempfile::tempdir().unwrap();
+    let previous = root.path().join("old/host");
+    let destination = root.path().join("new/host");
+    let foreign = root.path().join("foreign/host");
+    let client = Client::new(Some(root.path().join("must-not-create.json")), Arc::new(MetadataOnlyVault));
+    *client.local_owner.lock().await = (Some(foreign.clone()), Some(desktop_owner_for_stop(&foreign)));
+    let relocation = client.prepare_local_relocation_with(&previous, &destination,
+        |_| async { panic!("A stopped root must not receive a Stop request") }).await.unwrap();
+    assert!(!relocation.had_running_host());
+    assert!(crate::service_owner::ServiceOwner::acquire(&previous).is_err());
+    assert!(crate::service_owner::ServiceOwner::acquire(&destination).is_err());
+    let mut polling = Box::pin(client.attach_local());
+    assert!(matches!(polling.as_mut().poll(&mut Context::from_waker(Waker::noop())), Poll::Pending));
+    drop(polling);
+    drop(relocation);
+    let _source = crate::service_owner::ServiceOwner::acquire(&previous).unwrap();
+    let _target = crate::service_owner::ServiceOwner::acquire(&destination).unwrap();
+    assert_eq!(client.local_owner.lock().await.1.as_ref().unwrap().directory(), foreign);
+    assert!(client.state.lock().await.path.is_none());
+    assert!(!root.path().join("must-not-create.json").exists());
+    assert!(!foreign.exists());
+}
+
+#[tokio::test]
+async fn relocation_refuses_invalid_ownership_without_sending_stop() {
+    let root = tempfile::tempdir().unwrap();
+    let invalid_root = root.path().join("not-a-directory");
+    std::fs::write(&invalid_root, "preserved source").unwrap();
+    let invalid_lock = root.path().join("invalid-lock");
+    std::fs::create_dir_all(invalid_lock.join("host.lock")).unwrap();
+    let client = Client::new(None, Arc::new(MetadataOnlyVault));
+    for previous in [&invalid_root, &invalid_lock] {
+        let destination = root.path().join("new/host");
+        let error = client.prepare_local_relocation_with(previous, &destination,
+            |_| async { panic!("An ownership filesystem error must not send Stop") }).await.err().unwrap();
+        assert!(error.contains("Cannot inspect Host ownership"));
+        let _target = crate::service_owner::ServiceOwner::acquire(&destination).unwrap();
+    }
+    assert_eq!(std::fs::read(&invalid_root).unwrap(), b"preserved source");
+    assert!(invalid_lock.join("host.lock").is_dir());
+    assert!(client.local_owner.lock().await.1.is_none());
+    assert!(!*client.local_attachment.lock().await);
+    assert!(client.state.lock().await.path.is_none());
+}
+
+#[tokio::test]
+async fn relocation_refuses_busy_host_and_waits_for_actual_ownership_release() {
+    use std::task::{Context, Poll, Waker};
+    let root = tempfile::tempdir().unwrap();
+    let previous = root.path().join("old/host");
+    let destination = root.path().join("new/host");
+    let source_owner = crate::service_owner::ServiceOwner::acquire(&previous).unwrap();
+    std::fs::write(previous.join("preserved-model.ginfer"), "original model").unwrap();
+    let client = Client::new(None, Arc::new(MetadataOnlyVault));
+    *client.local_owner.lock().await = (Some(previous.clone()), Some(desktop_owner_for_stop(&previous)));
+    let error = client.prepare_local_relocation_with(&previous, &destination,
+        |_| async { Err("Host is busy: model load in progress".into()) }).await.err().unwrap();
+    assert!(error.contains("model load in progress"));
+    assert!(!*client.local_attachment.lock().await);
+    // A successful HTTP ACK alone is insufficient: the old process still owns
+    // its state until its normal shutdown actually releases this real lock.
+    let mut preparing = Box::pin(client.prepare_local_relocation_with(&previous, &destination,
+        |_| async { Ok(json!({"stopping":true})) }));
+    assert!(matches!(preparing.as_mut().poll(&mut Context::from_waker(Waker::noop())), Poll::Pending));
+    assert!(crate::service_owner::ServiceOwner::acquire(&destination).is_err());
+    drop(preparing);
+    assert_eq!(std::fs::read(previous.join("preserved-model.ginfer")).unwrap(), b"original model");
+    assert_eq!(client.local_owner.lock().await.1.as_ref().unwrap().directory(), previous);
+    assert!(client.state.lock().await.path.is_none());
+    let _target = crate::service_owner::ServiceOwner::acquire(&destination).unwrap();
+    drop(source_owner);
+}
+
+#[tokio::test]
+async fn relocation_commits_copied_identity_and_releases_both_roots_before_restart() {
+    let root = tempfile::tempdir().unwrap();
+    let previous = root.path().join("old/host");
+    let destination = root.path().join("new/host");
+    let host = crate::service::Host::open(previous.clone(), "Relocation fixture".into(),
+        root.path().join("must-not-load"), vec![], vec![], vec![]).await.unwrap();
+    let before = host.snapshot().await;
+    let source_owner = crate::service_owner::ServiceOwner::acquire(&previous).unwrap();
+    let client = Client::new(None, Arc::new(MetadataOnlyVault));
+    *client.local_owner.lock().await = (Some(previous.clone()), Some(desktop_owner_for_stop(&previous)));
+    let expected = previous.clone();
+    let relocation = client.prepare_local_relocation_with(&previous, &destination,
+        move |directory| async move {
+            assert_eq!(directory, expected);
+            drop(source_owner);
+            Ok(json!({"stopping":true}))
+        }).await.unwrap();
+    assert!(relocation.had_running_host());
+    std::fs::copy(previous.join("host.json"), destination.join("host.json")).unwrap();
+    let crate::local_host_registry::Owner::Desktop(local) = desktop_owner_for_stop(&destination) else { unreachable!() };
+    let running = relocation.commit_with(*local, |old, new| {
+        assert_eq!(old, previous);
+        assert_eq!(new.directory, destination);
+        assert!(crate::service_owner::ServiceOwner::acquire(&previous).is_err());
+        assert!(crate::service_owner::ServiceOwner::acquire(&destination).is_err());
+        // A concurrently selected foreign locator is left intact, but the
+        // desktop still adopts its explicitly configured new local root.
+        Ok(false)
+    }).unwrap();
+    assert!(running);
+    assert_eq!(client.local_owner.lock().await.1.as_ref().unwrap().directory(), destination);
+    assert!(!*client.local_attachment.lock().await);
+    let _source = crate::service_owner::ServiceOwner::acquire(&previous).unwrap();
+    let _target = crate::service_owner::ServiceOwner::acquire(&destination).unwrap();
+    assert_eq!(host.snapshot().await, before);
+    assert_eq!(std::fs::read(previous.join("host.json")).unwrap(), std::fs::read(destination.join("host.json")).unwrap());
+    assert!(client.state.lock().await.path.is_none());
+}
+
+#[tokio::test]
+async fn relocation_rejects_identity_or_registration_failure_without_changing_selection() {
+    let root = tempfile::tempdir().unwrap();
+    let previous = root.path().join("old/host");
+    let destination = root.path().join("new/host");
+    let _host = crate::service::Host::open(previous.clone(), "Relocation fixture".into(),
+        root.path().join("must-not-load"), vec![], vec![], vec![]).await.unwrap();
+    let client = Client::new(None, Arc::new(MetadataOnlyVault));
+    *client.local_owner.lock().await = (Some(previous.clone()), Some(desktop_owner_for_stop(&previous)));
+    let relocation = client.prepare_local_relocation(&previous, &destination).await.unwrap();
+    let crate::local_host_registry::Owner::Desktop(local) = desktop_owner_for_stop(&destination) else { unreachable!() };
+    let error = relocation.commit_with(*local, |_, _| panic!("Invalid copied identity must not change registration")).unwrap_err();
+    assert!(error.contains("identity does not match"));
+    assert_eq!(client.local_owner.lock().await.1.as_ref().unwrap().directory(), previous);
+
+    let relocation = client.prepare_local_relocation(&previous, &destination).await.unwrap();
+    std::fs::copy(previous.join("host.json"), destination.join("host.json")).unwrap();
+    let crate::local_host_registry::Owner::Desktop(local) = desktop_owner_for_stop(&destination) else { unreachable!() };
+    assert!(relocation.commit_with(*local, |_, _| Err("registration is changing".into())).unwrap_err().contains("registration is changing"));
+    assert_eq!(client.local_owner.lock().await.1.as_ref().unwrap().directory(), previous);
+    let _source = crate::service_owner::ServiceOwner::acquire(&previous).unwrap();
+    let _target = crate::service_owner::ServiceOwner::acquire(&destination).unwrap();
+    assert!(!*client.local_attachment.lock().await);
+    assert!(client.state.lock().await.path.is_none());
+}
+
+#[tokio::test]
 async fn desktop_clients_keep_their_selected_local_owner_without_credentials() {
     use crate::local_host_registry::Owner;
     let root = tempfile::tempdir().unwrap();
