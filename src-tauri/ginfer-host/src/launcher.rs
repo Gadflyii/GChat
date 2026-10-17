@@ -549,15 +549,32 @@ impl LocalControl {
         })
     }
 
-    pub async fn request(&self, path: &str, body: Option<Value>) -> Result<Value, String> {
+    fn prepare_request(&self, path: &str, body: Option<Value>,
+    ) -> Result<reqwest::RequestBuilder, String> {
         let url = self.origin.join(path).map_err(|e| e.to_string())?;
+        // Match FleetClient: placement can include the first full artifact
+        // verification and model-scoped calibration before Engine startup.
+        // Do not abandon a legitimate Host operation at the control deadline.
+        let placement = body.is_some()
+            && matches!(
+                path,
+                "/host/v1/instances" | "/host/v1/profile-launch" | "/host/v1/startup-quote"
+            );
         let request = match body {
             Some(body) => self.client.post(url).json(&body),
             None => self.client.get(url),
-        };
-        let response = request
-            .bearer_auth(&self.token)
-            .timeout(Duration::from_secs(600))
+        }
+        .bearer_auth(&self.token);
+        Ok(if placement {
+            request
+        } else {
+            request.timeout(Duration::from_secs(600))
+        })
+    }
+
+    pub async fn request(&self, path: &str, body: Option<Value>) -> Result<Value, String> {
+        let response = self
+            .prepare_request(path, body)?
             .send()
             .await
             .map_err(|e| format!("Cannot reach ginfer-host: {e}"))?;
@@ -995,6 +1012,67 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_placement_waits_for_verification_and_profiling_without_control_deadline() {
+        let control = LocalControl {
+            client: pinned_client(&"00".repeat(32)).unwrap(),
+            origin: "https://127.0.0.1:17443".parse().unwrap(),
+            token: "private-control-token".into(),
+            host_id: uuid::Uuid::new_v4(),
+            fingerprint: "00".repeat(32),
+        };
+        for path in [
+            "/host/v1/profile-launch",
+            "/host/v1/instances",
+            "/host/v1/startup-quote",
+        ] {
+            let request = control
+                .prepare_request(path, Some(json!({})))
+                .unwrap()
+                .build()
+                .unwrap();
+            assert_eq!(request.method(), reqwest::Method::POST);
+            assert_eq!(
+                request.timeout(),
+                None,
+                "first-load preparation may exceed 600 seconds: {path}"
+            );
+            assert_eq!(
+                request.headers()[reqwest::header::AUTHORIZATION],
+                "Bearer private-control-token"
+            );
+            // A read of the same resource does not inherit the placement exemption.
+            let read = control
+                .prepare_request(path, None)
+                .unwrap()
+                .build()
+                .unwrap();
+            assert_eq!(read.timeout(), Some(&Duration::from_secs(600)));
+        }
+        for (path, body) in [
+            ("/host/v1/snapshot", None),
+            (
+                "/host/v1/local-artifacts",
+                Some(json!({"path":"model.ginfer"})),
+            ),
+            (
+                "/host/v1/instances/00000000-0000-0000-0000-000000000000/stop",
+                Some(json!({})),
+            ),
+        ] {
+            let request = control
+                .prepare_request(path, body)
+                .unwrap()
+                .build()
+                .unwrap();
+            assert_eq!(
+                request.timeout(),
+                Some(&Duration::from_secs(600)),
+                "bounded operation: {path}"
+            );
+        }
+    }
 
     #[tokio::test]
     async fn installed_service_configuration_keeps_its_own_host_despite_discovery() {

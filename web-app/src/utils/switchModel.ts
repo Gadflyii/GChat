@@ -38,7 +38,9 @@ function isLocalEngineProvider(providerName: string): boolean {
 // / `SERVER_START_WATCHDOG_MS` (see `@/lib/utils`) are a last-resort safety
 // net, not a replacement for fixing the underlying stall: on expiry the
 // `catch` block below runs exactly as it would for any other failure
-// (status reset, toast) instead of leaving the app stuck.
+// (status reset, toast) instead of leaving the app stuck. Installed Load has
+// native operation-scoped progress and cancellation, so its legitimate profile
+// preparation is allowed to run to completion without this fallback deadline.
 const LOCAL_API_SERVER_START_TIMEOUT_CODE = 'LOCAL_API_SERVER_START_TIMEOUT'
 
 /** Re-tags a `withTimeout` expiry with the ATO-270-specific error code used
@@ -59,6 +61,10 @@ function taggedWithTimeout<T>(
     }
     throw error
   })
+}
+
+function throwIfLoadCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException('Model load cancelled', 'AbortError')
 }
 
 function setLastUsedModel(provider: string, model: string) {
@@ -298,7 +304,9 @@ export async function switchToModel(params: {
   isAutoStart?: boolean
   gpuUuids?: string[]
   options?: StartModelOptions
+  signal?: AbortSignal
 }): Promise<void> {
+  throwIfLoadCancelled(params.signal)
   if (params.isAutoStart && isIntentionallyStopped(params.providerName, params.modelId)) return
   // Claim a slot in the queue. `mySeq` lets us detect if a newer switch was
   // enqueued behind us while we waited for earlier ones to finish.
@@ -311,6 +319,7 @@ export async function switchToModel(params: {
   }
 
   const run = async (): Promise<void> => {
+    throwIfLoadCancelled(params.signal)
     if (params.isAutoStart && isIntentionallyStopped(params.providerName, params.modelId)) return
     // Supersession: another switch was requested after this one while we were
     // waiting our turn. That later request is the user's real intent, so drop
@@ -332,6 +341,7 @@ export async function switchToModel(params: {
 
     if (
       !params.options?.useProfileDefaults &&
+      !params.options?.loadOperationId &&
       params.gpuUuids === undefined &&
       await isTargetModelAlreadyServing(params)
     ) {
@@ -410,8 +420,10 @@ async function doSwitchToModel(params: {
   isAutoStart?: boolean
   gpuUuids?: string[]
   options?: StartModelOptions
+  signal?: AbortSignal
 }): Promise<void> {
-  const { modelId, providerName, serviceHub, isAutoStart, gpuUuids, options } = params
+  const { modelId, providerName, serviceHub, isAutoStart, gpuUuids, options, signal } = params
+  throwIfLoadCancelled(signal)
 
   const { setServerStatus, setActiveModels, updateLoadingModel } =
     useAppState.getState()
@@ -480,6 +492,7 @@ async function doSwitchToModel(params: {
     // 1. Stop ALL local engines. This is a no-op for cloud
     //    but guarantees only one model is ever "active" globally.
     await serviceHub.models().stopAllModels()
+    throwIfLoadCancelled(signal)
     setActiveModels([])
     console.log('[switchToModel] All local models stopped')
 
@@ -490,6 +503,7 @@ async function doSwitchToModel(params: {
     } catch {
       // Server may not have been running — that's fine
     }
+    throwIfLoadCancelled(signal)
 
     // 3. Resolve the provider definition.
     const allProviders = useModelProvider.getState().providers
@@ -499,15 +513,20 @@ async function doSwitchToModel(params: {
     }
 
     if (isLocal) {
-      await taggedWithTimeout(
-        options !== undefined
+      const load = options !== undefined
           ? serviceHub.models().startModel(provider, modelId, true, gpuUuids, options)
           : gpuUuids === undefined
             ? serviceHub.models().startModel(provider, modelId, true)
-            : serviceHub.models().startModel(provider, modelId, true, gpuUuids),
-        MODEL_LOAD_WATCHDOG_MS,
+            : serviceHub.models().startModel(provider, modelId, true, gpuUuids)
+      // Keep the lifecycle queue owned until native cancellation has reaped its
+      // children. Racing this promise against AbortSignal would let the next
+      // switch start while the cancelled load was still cleaning up.
+      await (options?.loadOperationId ? load : taggedWithTimeout(
+        load, MODEL_LOAD_WATCHDOG_MS,
         `Timed out waiting for model "${modelId}" to finish loading.`
-      )
+      ))
+      // A successful native load may win the cancellation race and be Ready.
+      // Publish that session normally; scoped cancellation never stops Ready.
       console.log('[switchToModel] Local model started:', modelId)
       await settleAfterLocalStart(serviceHub, providerName, modelId)
     } else {
@@ -595,6 +614,7 @@ async function doSwitchToModel(params: {
     // terminal codes (missing model/binary) are never auto-retried; others back
     // off. Explicit user switches bypass `shouldAttemptAutoStart`, so a manual
     // retry is always possible.
+    if (signal?.aborted) throw new DOMException('Model load cancelled', 'AbortError')
     recordAutoStartFailure(providerName, modelId, toErrorObject(error).code ?? null)
 
     reportModelLoadError(error, providerName, isAutoStart, modelId)

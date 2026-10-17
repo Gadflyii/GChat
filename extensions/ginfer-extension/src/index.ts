@@ -139,11 +139,12 @@ export default class ginfer_extension extends AIEngine {
   }
 
   private buildGinferConfig(
-    perLoad?: { max_context?: number; gpu_uuids?: string[]; use_profile_defaults?: boolean }
+    perLoad?: { max_context?: number; gpu_uuids?: string[]; use_profile_defaults?: boolean; load_operation_id?: string }
   ): GinferConfig {
     const cfg = this.config ?? {}
     return {
       ...(perLoad?.use_profile_defaults === true ? { use_profile_defaults: true } : {}),
+      ...(perLoad?.load_operation_id === undefined ? {} : { load_operation_id: perLoad.load_operation_id }),
       vision: cfg.vision !== false,
       spec: String(cfg.spec ?? 'auto'),
       draft_tokens: Number(cfg.draft_tokens) || 0,
@@ -285,7 +286,7 @@ export default class ginfer_extension extends AIEngine {
     bypassAutoUnload?: boolean
   ): Promise<SessionInfo> {
     if (this.loadingModels.has(modelId)) {
-      if (settings?.gpu_uuids !== undefined || settings?.use_profile_defaults === true) {
+      if (settings?.gpu_uuids !== undefined || settings?.use_profile_defaults === true || settings?.load_operation_id !== undefined) {
         throw new Error("A load is already in progress; wait before changing GPUs")
       }
       return this.loadingModels.get(modelId)!
@@ -293,7 +294,7 @@ export default class ginfer_extension extends AIEngine {
 
     const loadingPromise = (async () => {
       const existing = await findSessionByModel(modelId)
-      if (existing && settings?.gpu_uuids === undefined && settings?.use_profile_defaults !== true) {
+      if (existing && settings?.gpu_uuids === undefined && settings?.use_profile_defaults !== true && settings?.load_operation_id === undefined) {
         return existing
       }
 

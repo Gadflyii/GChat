@@ -27,6 +27,10 @@ function asString(v: any, defaultValue = ''): string {
 
 export function normalizeGinferConfig(config: any): GinferConfig {
   const value = config ?? {}
+  if (value.load_operation_id !== undefined &&
+      (typeof value.load_operation_id !== 'string' || !value.load_operation_id.trim())) {
+    throw new Error('A model load operation needs a nonempty identifier')
+  }
   if (value.gpu_uuids !== undefined &&
       (!Array.isArray(value.gpu_uuids) || value.gpu_uuids.length === 0 ||
        value.gpu_uuids.some((id: unknown) => typeof id !== "string" || !id.trim()) ||
@@ -35,6 +39,7 @@ export function normalizeGinferConfig(config: any): GinferConfig {
   }
   return {
     ...(value.use_profile_defaults === true ? { use_profile_defaults: true } : {}),
+    ...(value.load_operation_id === undefined ? {} : { load_operation_id: value.load_operation_id }),
     vision: value.vision === undefined ? true : asBool(value.vision),
     spec: asString(value.spec, 'auto'),
     draft_tokens: asNumber(value.draft_tokens),

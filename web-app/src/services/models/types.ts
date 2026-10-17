@@ -117,6 +117,8 @@ export type PreflightReason =
 
 export interface StartModelOptions {
   useProfileDefaults?: boolean
+  /** Owns progress and cancellation for one Installed Load attempt. */
+  loadOperationId?: string
 }
 
 export interface ModelsService {

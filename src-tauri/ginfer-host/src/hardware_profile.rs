@@ -1439,6 +1439,47 @@ impl HardwareProfiles {
         });
         request_error.map_or(Ok(()), Err)
     }
+    /// Cancel only the profiler started by this operation. A late route/drop
+    /// must not cancel a newer job or discard work queued by another owner.
+    pub(crate) fn cancel_job(&self, job_id: Uuid) -> bool {
+        self.cancel_job_locked(&mut self.state.lock().unwrap(), job_id)
+    }
+    fn cancel_job_locked(&self, state: &mut State, job_id: Uuid) -> bool {
+        if state.record.view.job_id != Some(job_id) {
+            return false;
+        }
+        let Some(cancel) = &state.cancel else {
+            return false;
+        };
+        cancel.send_replace(true);
+        if state.record.view.status != "cancelling" {
+            state.record.view.status = "cancelling".into();
+            self.revision.fetch_add(1, Ordering::SeqCst);
+            // Failure to persist the status must not prevent the live owner
+            // from receiving cancellation and reaping its child.
+            let _ = self.save(&state.record);
+        }
+        true
+    }
+    /// Explicit route cancellation waits for the matching child's existing
+    /// termination/reap task, without waiting on an unrelated replacement job.
+    pub(crate) async fn cancel_job_and_wait(&self, job_id: Uuid) -> Result<(), String> {
+        loop {
+            let idle = self.idle.notified();
+            tokio::pin!(idle);
+            idle.as_mut().enable();
+            {
+                let mut state = self.state.lock().unwrap();
+                if !self.cancel_job_locked(&mut state, job_id) {
+                    return Ok(());
+                }
+                if let Some(error) = &state.reap_error {
+                    return Err(error.clone());
+                }
+            }
+            idle.await;
+        }
+    }
     /// Reap idle completion before foreground work. The caller may hold the Host
     /// lifecycle lock, but must not hold this worker's state mutex. The worker
     /// has no Host dependency. A failed wait retains its admission reservation.
@@ -2569,6 +2610,119 @@ mod tests {
         assert_eq!(view.duration_source, None);
         assert_eq!(view.elapsed_ms, None);
     }
+    #[tokio::test]
+    async fn hardware_profile_route_cancellation_reaps_only_its_job_and_retains_pending_work() {
+        let (directory, host, arguments) = fixture().await;
+        request(&host, HardwareProfileAction::Refresh)
+            .await
+            .unwrap();
+        begun(&arguments).await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let running = observed(&job, |view| view.checkpoint_available).await;
+        let job_id = running.job_id.unwrap();
+        let pending = Configuration {
+            gpu_uuids: vec!["GPU-second".into()],
+            engine: directory.path().join("ginfer"),
+            profile_path: directory.path().join("second-hardware.json"),
+        };
+        {
+            let mut state = job.state.lock().unwrap();
+            state.record.pending.push(pending.clone());
+            state.record.view.pending_gpu_groups = vec![pending.gpu_uuids.clone()];
+        }
+        let unrelated = Uuid::new_v4();
+        assert!(!job.cancel_job(unrelated));
+        job.cancel_job_and_wait(unrelated).await.unwrap();
+        {
+            let state = job.state.lock().unwrap();
+            assert!(!*state.cancel.as_ref().unwrap().borrow());
+            assert_eq!(state.record.view.status, "running");
+        }
+        assert!(job.cancel_job(job_id));
+        tokio::time::timeout(Duration::from_secs(2), job.cancel_job_and_wait(job_id))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!job.busy());
+        let state = job.state.lock().unwrap();
+        assert_eq!(state.record.view.status, "cancelled");
+        assert!(state.record.pending == vec![pending.clone()]);
+        assert_eq!(
+            state.record.view.pending_gpu_groups,
+            vec![pending.gpu_uuids]
+        );
+    }
+
+    #[tokio::test]
+    async fn hardware_profile_late_route_cancellation_does_not_cancel_a_resumed_job() {
+        let (directory, host, arguments) = fixture().await;
+        request(&host, HardwareProfileAction::Refresh)
+            .await
+            .unwrap();
+        begun(&arguments).await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let first = observed(&job, |view| view.checkpoint_available).await;
+        let first_id = first.job_id.unwrap();
+        job.cancel_job_and_wait(first_id).await.unwrap();
+        job.start(
+            HardwareProfileAction::Resume,
+            Some(directory.path().join("ginfer")),
+            vec!["GPU-fixture".into()],
+        )
+        .unwrap();
+        let resumed_id = job.status(None).job_id.unwrap();
+        assert_ne!(first_id, resumed_id);
+        assert!(!job.cancel_job(first_id));
+        job.cancel_job_and_wait(first_id).await.unwrap();
+        {
+            let state = job.state.lock().unwrap();
+            assert_eq!(state.record.view.job_id, Some(resumed_id));
+            assert_eq!(state.record.view.status, "running");
+            assert!(!*state.cancel.as_ref().unwrap().borrow());
+        }
+        tokio::time::timeout(Duration::from_secs(2), job.cancel_job_and_wait(resumed_id))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(!job.busy());
+    }
+
+    #[tokio::test]
+    async fn hardware_profile_route_cancellation_propagates_only_its_reap_error() {
+        let directory = tempfile::tempdir().unwrap();
+        let job = HardwareProfiles::open(directory.path().to_owned(), Arc::new(AtomicU64::new(0)))
+            .unwrap();
+        let job_id = Uuid::new_v4();
+        let (cancel, receiver) = watch::channel(false);
+        {
+            let mut state = job.state.lock().unwrap();
+            state.record.view.job_id = Some(job_id);
+            state.record.view.status = "running".into();
+            state.cancel = Some(cancel);
+            state.reap_error = Some("Cannot reap native profiler: fixture".into());
+        }
+        job.cancel_job_and_wait(Uuid::new_v4()).await.unwrap();
+        assert!(!*receiver.borrow());
+        assert_eq!(
+            job.cancel_job_and_wait(job_id).await.unwrap_err(),
+            "Cannot reap native profiler: fixture"
+        );
+        assert!(*receiver.borrow());
+        assert!(job.busy());
+    }
+
     #[tokio::test]
     async fn hardware_profile_owned_job_cancel_resume_preserves_forced_recipe_and_exclusion() {
         let (directory, host, arguments) = fixture().await;

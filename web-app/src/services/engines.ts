@@ -5,6 +5,14 @@ export type EngineHost = {
   host_id: string; name: string; base_url: string; certificate_sha256: string; client_id: string
 }
 export type NearbyHost = { host_id: string; name: string; urls: string[] }
+export type LocalModelLoadProgress = {
+  operation_id: string
+  status: 'queued' | 'running' | 'ready' | 'cancelled' | 'failed'
+  phase: 'preparing' | 'verification' | 'profiling' | 'starting'
+  detail?: string
+  completed_bytes?: number
+  total_bytes?: number
+}
 export type EngineModel = {
   id: string; path: string; artifact_set: boolean;
   metadata: { identity: { model_id: string; weights_id: string }; tp_size: number; draft_tp: number; size_bytes: number; nvfp4_kv_available?: boolean }

@@ -385,6 +385,7 @@ export class DefaultModelsService implements ModelsService {
     const loadedModels = await engine.getLoadedModels()
     if (
       !options?.useProfileDefaults &&
+      !options?.loadOperationId &&
       gpuUuids === undefined &&
       loadedModels.includes(model)
     ) return undefined
@@ -412,14 +413,16 @@ export class DefaultModelsService implements ModelsService {
       const settings = options?.useProfileDefaults
         ? {
             use_profile_defaults: true,
+            ...(options.loadOperationId ? { load_operation_id: options.loadOperationId } : {}),
             ...(gpuUuids === undefined ? {} : { gpu_uuids: [...gpuUuids] }),
           }
-        : (Number.isFinite(maxContext) && maxContext > 0) || gpuUuids !== undefined
+        : (Number.isFinite(maxContext) && maxContext > 0) || gpuUuids !== undefined || options?.loadOperationId
           ? {
               ...(Number.isFinite(maxContext) && maxContext > 0
                 ? { max_context: maxContext }
                 : {}),
               ...(gpuUuids === undefined ? {} : { gpu_uuids: [...gpuUuids] }),
+              ...(options?.loadOperationId ? { load_operation_id: options.loadOperationId } : {}),
             }
           : undefined
 

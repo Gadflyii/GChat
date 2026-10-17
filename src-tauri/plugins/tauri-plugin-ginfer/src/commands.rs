@@ -15,6 +15,8 @@ use tokio::sync::Mutex;
 pub struct GinferConfig {
     /// Installed Load requests the complete catalog profile, without custom overrides.
     pub use_profile_defaults: bool,
+    /// A cancellable desktop Installed Load, scoped independently of saved launch settings.
+    pub load_operation_id: Option<uuid::Uuid>,
     pub vision: bool,
     pub spec: String,
     pub draft_tokens: u32,
@@ -31,6 +33,7 @@ impl Default for GinferConfig {
     fn default() -> Self {
         Self {
             use_profile_defaults: false,
+            load_operation_id: None,
             vision: true,
             spec: "auto".into(),
             draft_tokens: 0,

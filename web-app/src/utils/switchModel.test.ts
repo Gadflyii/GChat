@@ -1,5 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServiceHub } from '@/services'
+import { MODEL_LOAD_WATCHDOG_MS } from '@/lib/utils'
 import {
   isExplicitSwitchPending,
   runModelStop,
@@ -120,6 +121,126 @@ describe('switchToModel', () => {
         stopServer,
       },
     } as typeof window.core
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('does not start an Installed Load that was cancelled while queued', async () => {
+    appState.serverStatus = 'stopped'
+    let releaseStart = () => {}
+    const models = {
+      getActiveModels: vi.fn().mockResolvedValue(['broken-model']),
+      stopAllModels: vi.fn().mockResolvedValue(undefined),
+      startModel: vi.fn(() => new Promise<void>((resolve) => { releaseStart = resolve })),
+    }
+    const serviceHub = {
+      app: () => ({ getServerStatus: vi.fn().mockResolvedValue(false) }),
+      models: () => models,
+    } as unknown as ServiceHub
+    const first = switchToModel({
+      modelId: 'broken-model', providerName: 'ginfer', serviceHub,
+      options: { useProfileDefaults: true },
+    })
+    await vi.waitFor(() => expect(models.startModel).toHaveBeenCalledOnce())
+
+    const controller = new AbortController()
+    const queued = switchToModel({
+      modelId: 'queued-model', providerName: 'ginfer', serviceHub,
+      options: { useProfileDefaults: true, loadOperationId: 'queued-operation' },
+      signal: controller.signal,
+    }).catch((error: unknown) => error)
+    controller.abort()
+    releaseStart()
+    await first
+
+    expect(await queued).toMatchObject({ name: 'AbortError' })
+    expect(models.startModel).toHaveBeenCalledOnce()
+    expect(models.stopAllModels).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a scoped Installed Load pending beyond the fallback watchdog', async () => {
+    vi.useFakeTimers()
+    appState.serverStatus = 'stopped'
+    let rejectStart = (_error: Error) => {}
+    const failure = new Error('native preparation failed after its long-running profile')
+    const models = {
+      getActiveModels: vi.fn().mockResolvedValue([]),
+      stopAllModels: vi.fn().mockResolvedValue(undefined),
+      startModel: vi.fn(() => new Promise<void>((_resolve, reject) => { rejectStart = reject })),
+    }
+    const serviceHub = {
+      models: () => models,
+    } as unknown as ServiceHub
+    let settled = false
+    const outcome = switchToModel({
+      modelId: 'long-profile-model', providerName: 'ginfer', serviceHub,
+      options: { useProfileDefaults: true, loadOperationId: 'long-operation' },
+    }).catch((error: unknown) => error).finally(() => { settled = true })
+
+    await vi.advanceTimersByTimeAsync(0)
+    expect(models.startModel).toHaveBeenCalledOnce()
+    await vi.advanceTimersByTimeAsync(MODEL_LOAD_WATCHDOG_MS + 1)
+    expect(settled).toBe(false)
+
+    rejectStart(failure)
+    expect(await outcome).toBe(failure)
+    expect(models.startModel).toHaveBeenCalledOnce()
+  })
+
+  it('holds the lifecycle queue until native cancellation cleanup settles', async () => {
+    appState.serverStatus = 'stopped'
+    const controller = new AbortController()
+    let rejectStart = (_error: Error) => {}
+    const models = {
+      getActiveModels: vi.fn().mockResolvedValue([]),
+      stopAllModels: vi.fn().mockResolvedValue(undefined),
+      startModel: vi.fn(() => new Promise<void>((_resolve, reject) => { rejectStart = reject })),
+    }
+    const serviceHub = { models: () => models } as unknown as ServiceHub
+    const outcome = switchToModel({
+      modelId: 'cancelled-profile-model', providerName: 'ginfer', serviceHub,
+      options: { useProfileDefaults: true, loadOperationId: 'cancelled-operation' },
+      signal: controller.signal,
+    }).catch((error: unknown) => error)
+    await vi.waitFor(() => expect(models.startModel).toHaveBeenCalledOnce())
+    controller.abort()
+    const stop = vi.fn().mockResolvedValue(undefined)
+    const queuedStop = runModelStop(stop)
+    await Promise.resolve()
+    expect(stop).not.toHaveBeenCalled()
+
+    rejectStart(new Error('native operation cancelled'))
+    expect(await outcome).toMatchObject({ name: 'AbortError' })
+    await queuedStop
+    expect(stop).toHaveBeenCalledOnce()
+    expect(shouldAttemptAutoStart('ginfer', 'cancelled-profile-model')).toBe(true)
+  })
+
+  it('publishes a Ready native session when it wins the cancellation race', async () => {
+    appState.serverStatus = 'stopped'
+    const controller = new AbortController()
+    let releaseStart = () => {}
+    const models = {
+      getActiveModels: vi.fn().mockResolvedValue(['broken-model']),
+      stopAllModels: vi.fn().mockResolvedValue(undefined),
+      startModel: vi.fn(() => new Promise<void>((resolve) => { releaseStart = resolve })),
+    }
+    const serviceHub = { models: () => models } as unknown as ServiceHub
+    const pending = switchToModel({
+      modelId: 'broken-model', providerName: 'ginfer', serviceHub,
+      options: { useProfileDefaults: true, loadOperationId: 'ready-operation' },
+      signal: controller.signal,
+    })
+    await vi.waitFor(() => expect(models.startModel).toHaveBeenCalledOnce())
+    controller.abort()
+    releaseStart()
+    await pending
+
+    expect(appState.setActiveModels).toHaveBeenCalledWith(['broken-model'])
+    expect(models.stopAllModels).toHaveBeenCalledOnce()
+    expect(isExplicitSwitchPending('ginfer', 'broken-model')).toBe(false)
   })
 
   it('forwards the selected GPU even when the same model is already serving', async () => {
