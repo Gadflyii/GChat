@@ -39,6 +39,18 @@ fn options(config: &GinferConfig) -> Result<LaunchOptions, String> {
     })
 }
 
+fn canonical_gpu_selection(mut config: GinferConfig) -> GinferConfig {
+    if let Some(selected) = &mut config.gpu_uuids {
+        for uuid in selected {
+            // Desktop hardware IDs omit this prefix; Host inventory and CUDA use it.
+            if !uuid.starts_with("GPU-") {
+                uuid.insert_str(0, "GPU-");
+            }
+        }
+    }
+    config
+}
+
 fn visible_selection(
     snapshot: &Value,
     config: &GinferConfig,
@@ -211,6 +223,7 @@ async fn load_on_host(
         .register_model(std::path::Path::new(&model_path))
         .await?;
     let snapshot = control.snapshot().await?;
+    let config = canonical_gpu_selection(config);
     let requested = options(&config)?;
     let mask = std::env::var("CUDA_VISIBLE_DEVICES").map(Some).or_else(|error| {
         if matches!(error, std::env::VarError::NotPresent) { Ok(None) }
@@ -464,6 +477,37 @@ mod tests {
     }
 
     #[test]
+    fn installed_load_canonicalizes_bare_and_prefixed_uuids_before_selection() {
+        let snapshot = ordered_snapshot();
+        let groups = serde_json::json!([["GPU-zero", "GPU-one"]]);
+        for selected in [
+            vec!["one", "zero"],
+            vec!["GPU-one", "GPU-zero"],
+            vec!["one", "GPU-zero"],
+        ] {
+            let config = canonical_gpu_selection(GinferConfig {
+                gpu_uuids: Some(selected.into_iter().map(String::from).collect()),
+                ..Default::default()
+            });
+            let visible = visible_selection(&snapshot, &config, None, None).unwrap();
+            let expected = vec!["GPU-one".to_string(), "GPU-zero".to_string()];
+            assert_eq!(config.gpu_uuids.as_ref().unwrap(), &expected);
+            assert_eq!(selected_group(&groups, &config, &visible), Some(expected.clone()));
+            assert!(group_matches(&expected, &config, &visible));
+            assert!(visible_selection(&snapshot, &config, Some("0"), Some("PCI_BUS_ID")).is_err());
+            assert!(visible_selection(&snapshot, &config, Some("GPU-one"), None).is_err());
+        }
+        for selected in [vec!["one", "GPU-one"], vec!["gone"]] {
+            let config = canonical_gpu_selection(GinferConfig {
+                gpu_uuids: Some(selected.into_iter().map(String::from).collect()),
+                ..Default::default()
+            });
+            assert!(visible_selection(&snapshot, &config, None, None).is_err());
+        }
+        assert!(canonical_gpu_selection(GinferConfig::default()).gpu_uuids.is_none());
+    }
+
+    #[test]
     fn installed_load_intersects_visibility_and_rejects_missing_saved_gpu() {
         let snapshot = ordered_snapshot();
         let mut config = GinferConfig::default();
@@ -682,6 +726,7 @@ time.sleep(30)
             max_context: 8192,
             max_concurrency: 1,
             spec: "none".into(),
+            gpu_uuids: Some(vec!["test".into()]),
             ..GinferConfig::default()
         };
         let sessions = Arc::new(Mutex::new(HashMap::new()));
@@ -750,7 +795,10 @@ time.sleep(30)
             control,
             "desktop-alias".into(),
             artifact.to_string_lossy().into_owned(),
-            config,
+            GinferConfig {
+                gpu_uuids: Some(vec!["GPU-test".into()]),
+                ..config
+            },
             5,
         )
         .await
