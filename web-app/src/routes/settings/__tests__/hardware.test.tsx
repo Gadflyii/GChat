@@ -224,7 +224,7 @@ describe('Hardware Settings', () => {
     render(<Component />)
 
     await waitFor(() => {
-      expect(screen.getByText('GPUs')).toBeInTheDocument()
+      expect(screen.getByText('settings:hardware.gpus')).toBeInTheDocument()
       expect(screen.getByText('RTX 3080')).toBeInTheDocument()
     })
   })
@@ -235,7 +235,7 @@ describe('Hardware Settings', () => {
     render(<Component />)
 
     await waitFor(() => {
-      expect(screen.queryByText('GPUs')).not.toBeInTheDocument()
+      expect(screen.queryByText('settings:hardware.gpus')).not.toBeInTheDocument()
     })
   })
 })

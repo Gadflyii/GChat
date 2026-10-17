@@ -92,8 +92,8 @@ export function LocalApiServerPanel() {
 
   const toggleAPIServer = async () => {
     if (serverStatus === 'stopped') {
-      toast.info('Starting server...', {
-        description: `Attempting to start server on port ${serverPort}`,
+      toast.info('Starting the local API server…', {
+        description: `Preparing the model and opening the connection on port ${serverPort}.`,
       })
 
       setShowApiKeyError(false)
@@ -115,7 +115,7 @@ export function LocalApiServerPanel() {
       )
         .then(async (result) => {
           if (result.status === 'no_model_available') {
-            throw new Error('No model available to load')
+            throw new Error('Choose a default model in Model Providers, then try Start server again.')
           }
 
           const activeModels = await serviceHub.models().getActiveModels()
@@ -170,8 +170,8 @@ export function LocalApiServerPanel() {
               : String(error)
 
           if (errorMsg.includes('Address already in use')) {
-            toast.error('Port has been occupied', {
-              description: `Port ${serverPort} is already in use. Please try a different port.`,
+            toast.error('This port is already in use', {
+              description: `Open Connection settings and choose a port other than ${serverPort}, then try Start server again.`,
             })
           } else if (
             errorMsg.includes('Invalid or inaccessible model path')
@@ -335,6 +335,7 @@ export function LocalApiServerPanel() {
                 </p>
               </div>
               <Switch
+                aria-label={t('settings:localApiServer.autoStart')}
                 checked={enableOnStartup}
                 onCheckedChange={setEnableOnStartup}
               />
@@ -349,6 +350,7 @@ export function LocalApiServerPanel() {
                 </p>
               </div>
               <Switch
+                aria-label={t('settings:localApiServer.cors')}
                 checked={corsEnabled}
                 onCheckedChange={setCorsEnabled}
                 disabled={isServerRunning}
@@ -364,6 +366,7 @@ export function LocalApiServerPanel() {
                 </p>
               </div>
               <Switch
+                aria-label={t('settings:localApiServer.verboseLogs')}
                 checked={verboseLogs}
                 onCheckedChange={setVerboseLogs}
                 disabled={isServerRunning}
@@ -379,11 +382,14 @@ export function LocalApiServerPanel() {
     <div className="flex flex-col gap-4 gap-y-3 w-full">
       <Card
         header={
-          <div className="mb-3 flex w-full items-start justify-between gap-2 border-b pb-2">
-            <div className="space-y-1">
+          <div className="mb-3 flex flex-wrap w-full items-start justify-between gap-3 border-b pb-2">
+            <div className="space-y-1 flex-1 min-w-64">
               <h1 className="text-base font-medium text-foreground font-studio">
                 {t('settings:localApiServer.title')}
               </h1>
+              <p className="text-sm text-muted-foreground max-w-xl">
+                {t('settings:localApiServer.description')}
+              </p>
               {isServerRunning && (
                 <span className="text-xs font-mono flex items-center gap-1">
                   <a

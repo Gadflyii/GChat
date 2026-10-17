@@ -4,6 +4,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -86,6 +87,10 @@ export default function EditJsonMCPserver({
               ? t('mcp-servers:editJson.title', { serverName })
               : t('mcp-servers:editJson.titleAll')}
           </DialogTitle>
+          <DialogDescription>
+            Use the JSON connection settings supplied by the tool provider. Saving
+            replaces the settings shown here.
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           <div className="border  rounded-md overflow-hidden!">

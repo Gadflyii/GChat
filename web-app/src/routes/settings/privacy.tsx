@@ -24,7 +24,12 @@ function Privacy() {
         <SettingsMenu />
         <div className="p-4 pt-0 w-full overflow-y-auto">
           <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
-            <Card title="Privacy"><CardItem title="No external analytics or crash reporting" description="GChat keeps diagnostic logs and performance metrics locally. Configured model providers, tools, downloads, and updates still use the network when requested." /></Card>
+            <Card title="Privacy">
+              <CardItem
+                title="No external analytics or crash reporting"
+                description="GChat keeps records used to investigate problems and measure performance on this computer. Online model providers, connected tools, downloads and updates use the network when you request them."
+              />
+            </Card>
           </div>
         </div>
       </div>
