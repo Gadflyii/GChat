@@ -17,11 +17,27 @@ is included. Source changes and fresh full verification are needed only if the
 visual check identifies an actual defect; potential correction is confined to
 `web-app/src/components/GbotAvatar/avatar.css`, with `index.tsx` only if essential.
 
+The source comparison is complete: both reference HTMLs use `0.16em / 0.12em`
+Zs; the merged component uses `0.28em / 0.21em`, retaining the small-to-large
+ratio of 0.75. The 36px sidebar/companion size therefore renders 10.08px and
+7.56px glyphs; the ordinary settings list and heading use 24px and 40px avatars.
+The alternating 3.2-second animation must be observed through its rise and fade;
+an initially transparent frame does not show a missing glyph. This is preparation,
+not installed visual evidence.
+
+Gchat 2 granted the existing FRESH domain
+`40130784-cfe4-4473-92ff-4b60c326ca58` on S1 for this visual-only check at
+14:18 UTC. Use the retained ordinary AppImage under
+`/home/gchat/gchat2-functional-707-43b/`, normal profile and existing guest bridge;
+reuse only the launch portion of the owner's existing procedure. Codex 4's
+benchmark check precedes this check and its OFF/original-XML return is still
+pending. No fixture access or launch is authorized by the clock alone.
+
 C7 owns `/ai/gchat-worktrees/c7-gbot-sleeping-visual-20261017`, branch
 `test/c7-gbot-sleeping-visual-20261017`, based on main `1e2d47fa9`. No build,
 artifact copy, running fixture or compute booking has been allocated. Next:
-complete source/design preparation, receive the fixture grant and prior return,
-then book only the minutes of the installed check. Windows host-port collision
+receive Codex 4's fixture return, then book only the minutes of the installed
+check and restore the original theme and domain XML afterward. Windows host-port collision
 remains separately pending Gchat 2's installed-Windows handoff.
 
 ## Outage reply notification fix — C7
