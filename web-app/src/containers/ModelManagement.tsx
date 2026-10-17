@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { confirmAction } from '@/lib/confirm'
 import { IconChevronDown } from '@tabler/icons-react'
 import { toast } from 'sonner'
+import { Link } from '@tanstack/react-router'
+import { route } from '@/constants/routes'
 import HeaderPage from '@/containers/HeaderPage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -47,6 +49,7 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
 
 const managementTabs = ['Installed', 'Recommended', 'Downloads'] as const
 
+const NO_SETTINGS = ' has no saved startup settings yet. Open GInfer Hosts and choose settings for it, then load it again.'
 const errorMessage = (e: unknown) => e instanceof Error ? e.message : String(e).replace(/^Error: /, '')
 
 function cancelLocalLoad(load: PendingLocalLoad): Promise<unknown> {
@@ -207,6 +210,12 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
         signal: load.controller.signal,
         ...(selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
       load.ready = true
+    } catch (e) {
+      if (/No qualified automatic profile/.test(errorMessage(e))) {
+        const m = localModels.find(x => x.id === modelId)
+        throw new Error(plainModelName(m?.displayName ?? modelId) + NO_SETTINGS)
+      }
+      throw e
     } finally {
       load.settled = true
       if (loadRef.current === load) loadRef.current = null
@@ -268,7 +277,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
             ;(event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
           }}>{t}</Button>)}
       </div><Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : 'Refresh installed models'}</Button></div>
-      {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]}{offline ? ' · Saved inventory may be out of date.' : ''}</p>}
+      {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]}{error?.endsWith(NO_SETTINGS) && <> <Link to={route.engines.index} className="underline">Open GInfer Hosts</Link></>}{offline ? ' · Saved inventory may be out of date.' : ''}</p>}
       {local && !localLoadReady && (resources.error
         ? <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">Local model runtime is unavailable: {resources.error}</p>
         : <p role="status" className="rounded border p-3 text-sm">Preparing local model runtime…</p>)}
