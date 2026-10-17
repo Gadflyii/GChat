@@ -17,8 +17,12 @@ tests were skipped and 27 Rust tests ignored; lint has no errors and four
 warnings. Types, quality checks and all six coverage floors passed. Saved-mode
 recovery, hidden preferences, quick navigation and numeric bounds are covered.
 The candidate includes current main and the accepted attachment-durability fix.
-Returned 16:13Z; booking2650 canceled. Next: final integrated private native
-replay, retaining screenshots alongside the original finding.
+Returned 16:13Z; booking2650 canceled. The final private OLD native replay at
+16:24Z passed on source `5a46f3fb5`: the named document-text select offers only
+`auto`, `inline` and `prompt`; the unavailable-search explanation is visible,
+and inactive retrieval, chunk and search controls are absent. Evidence:
+`/ai/gchat/out/c4-settings-sweep-20261017/final-attachment-controls.json` and
+`/ai/gchat/out/c4-settings-sweep-20261017/final-attachments-sidebar.png`.
 
 Owned source: `/ai/gchat-worktrees/c4-settings-attachment-availability-20261017`,
 branch `fix/c4-settings-attachment-availability-20261017`. The original evidence is retained in
