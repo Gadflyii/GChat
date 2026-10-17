@@ -81,8 +81,12 @@ also remain open. Known Folder settings, window state, MCP locks and vector DB,
 plus current-user credentials, are not isolated by APPDATA/LOCALAPPDATA overrides.
 The packaged desktop has no general private-root override. No GChat desktop or
 Manager was launched, and Ron's install and shared application data were not used.
-Next action: establish a fully private desktop route or separately authorized user
-profile, then complete the remaining runtime and ordinary desktop acceptance.
+GUI limitation, confirmed by Bubbs at 23:42Z: acceptance needs an isolated Windows
+user profile. Creating or changing a Windows account is Ron's decision; C7 must
+not do it. The passing runtime scopes above are merge-ready documentation
+(`59d9fa845`). The next runtime action is normal idle-stop/reopen and copied-state
+rejection in the next free booked local5090 window; it does not require a desktop
+or account change. Ordinary GUI acceptance remains limited pending Ron's decision.
 
 Current inventory: owned worktree
 `/ai/gchat-worktrees/c7-host-port-collision-20261017`, branch
