@@ -9,15 +9,18 @@ const mocks = vi.hoisted(() => ({
   command: vi.fn<(action: string, args?: Record<string, unknown>) => Promise<unknown>>(async () => []), refresh: vi.fn(async () => {}),
   switchModel: vi.fn<(params: { options?: { loadOperationId?: string }; signal?: AbortSignal }) => Promise<void>>(async () => {}),
   selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
-  providers: [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally' }] }],
+  providers: [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally', path: '/models/local.ginfer' }] }],
   catalog: [] as unknown[], errors: {} as Record<string, string>,
   resources: { ready: true as boolean | null, error: '' },
+  localSnapshot: null as null | Record<string, unknown>,
+  controlHost: vi.fn(async () => {}),
 }))
+vi.mock('@/utils/localHostModel', () => ({ controlLocalHostModel: mocks.controlHost }))
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: React.ReactNode }) => <header>{children}</header> }))
 vi.mock('@/containers/EngineHostModels', () => ({ HostCard: ({ host }: { host: { name: string } }) => <section>Installed on {host.name}</section> }))
 vi.mock('@/containers/hub/DeleteModelAction', () => ({ DeleteModelAction: () => null }))
 vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
-vi.mock('@/services/engines', () => ({ engineCommand: mocks.command }))
+vi.mock('@/services/engines', () => ({ engineCommand: mocks.command, engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}` }))
 vi.mock('@/hooks/useServiceHub', () => ({ useServiceHub: () => ({ models: () => ({ getActiveModels: async () => ['another-model'] }) }) }))
 vi.mock('@/hooks/useBundledResources', () => ({ useBundledResources: (enabled = true) => enabled ? mocks.resources : { ready: true, error: '' } }))
 vi.mock('@/hooks/useModelProvider', () => {
@@ -32,8 +35,8 @@ vi.mock('@/hooks/useHardware', () => ({ useHardware: (selector: (s: unknown) => 
 }) }))
 vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog }) }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (s: unknown) => unknown) => selector({
-  hosts: [{ host_id: 'remote', name: 'Lab server' }], errors: mocks.errors, refresh: mocks.refresh,
-  snapshots: { remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: [] } } },
+  hosts: [{ host_id: 'remote', name: 'Lab server' }, ...(mocks.localSnapshot ? [{ host_id: 'local-host', name: 'This computer', local: true }] : [])], errors: mocks.errors, refresh: mocks.refresh,
+  snapshots: { ...(mocks.localSnapshot ? { 'local-host': mocks.localSnapshot } : {}), remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: [] } } },
 }) }))
 const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: 'muse', weights_id: 'nvfp4' },
   url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64), bytes: 4096,
@@ -140,6 +143,17 @@ describe('host-scoped Models', () => {
     expect(alert).not.toHaveTextContent(/^Error:/)
     expect(alert).not.toHaveTextContent('Saved inventory may be out of date')
     mocks.switchModel.mockResolvedValue(undefined)
+  })
+  it('shows a model started from GInfer Hosts as running and stops that Host instance', async () => {
+    mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [{ id: 'host-model', path: '/models/local.ginfer' }],
+      instances: [{ instance_id: 'inst', status: 'ready', profile: { model_id: 'host-model' } }], model_management: { version: 1, downloads: [] } }
+    try {
+      render(<ModelManagement />)
+      expect(screen.getByText(/^Running · /)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
+      fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+      await waitFor(() => expect(mocks.controlHost).toHaveBeenCalledWith('ginfer/local-host/inst', 'stop'))
+    } finally { mocks.localSnapshot = null }
   })
   it('disables mutations against an offline host even with saved inventory', async () => {
     const user = userEvent.setup()
