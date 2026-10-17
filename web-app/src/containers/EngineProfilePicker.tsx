@@ -130,8 +130,8 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
     {!choices.length && <p className="text-sm text-muted-foreground">{
       !snapshot.models.length ? 'No installed models were found. Add a .ginfer model to this host’s model folder, then rescan.'
         : currentSettings ? 'No alternate profiles match this model and GPU group. You can benchmark the current running settings, or select another installed model with a compatible profile.'
-        : matching.length ? 'No profiles match this model on the selected GPU group. Select a compatible GPU group or install matching profiles. Existing instances keep their assigned GPUs; create a new instance to use another group.'
-          : 'No installed profile matches this host and its exact model artifacts. Check the model identity, quantization, draft format and TP degree—not just the filename. Install the matching model and profile catalog, then refresh. Custom launch settings remain available below.'
+        : matching.length ? 'No saved profile fits this model on the selected graphics cards. Choose a different group of cards or install a matching profile. A running instance keeps its cards; start a new instance to use another group.'
+          : 'No saved hardware profile fits this exact model on this computer yet. Build one in Advanced hardware profile options, or install the matching model and profile, then refresh. You can also start it now with the custom settings below.'
     }</p>}
     {(!currentSettings || pending) && <Button disabled={controlsDisabled || !selected || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={() => {
       if (!selected || controlsDisabled) return
