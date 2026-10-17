@@ -30,7 +30,8 @@ export default function M365Setup({
 }) {
   const [id] = useState(() => initial?.id ?? crypto.randomUUID())
   const [view, setView] = useState<ConnectorAccountsView>()
-  const [remote, setRemote] = useState(false)
+  const [remote, setRemote] = useState<boolean>()
+  const [loadingAccounts, setLoadingAccounts] = useState(true)
   const [accountId, setAccountId] = useState(initial?.account_id ?? '')
   const [pcs, setPcs] = useState<CloudPc[]>()
   const [pcId, setPcId] = useState(initial?.cloud_pc.id ?? '')
@@ -48,6 +49,7 @@ export default function M365Setup({
     active.current = true
     getGbotServiceTarget()
       .then(async (target) => {
+        if (!active.current) return
         const remote = target.kind === 'paired_host'
         const next = remote
           ? await gbot<ConnectorAccountsView>('setup/m365/accounts')
@@ -63,6 +65,9 @@ export default function M365Setup({
       })
       .catch((cause) => {
         if (active.current) setError(String(cause))
+      })
+      .finally(() => {
+        if (active.current) setLoadingAccounts(false)
       })
     return () => {
       active.current = false
@@ -88,17 +93,20 @@ export default function M365Setup({
             .toLowerCase() === 'cloudpc.read.all'
       )
   )
-  const checkPrerequisite = !account
-    ? remote
-      ? 'Connect Microsoft to GChat on the service computer, then choose an account above.'
-      : 'First sign in to GChat, then choose a connected work or school account above.'
-    : account.needs_reconnect
-      ? 'Reconnect this account and allow read-only Cloud PC access before checking assigned PCs.'
-      : !permission
-        ? 'Allow read-only Cloud PC access for this account before checking assigned PCs.'
-        : undefined
+  const checkPrerequisite =
+    remote === undefined
+      ? 'Resolve the Gbot service computer before checking assigned PCs.'
+      : !account
+        ? remote
+          ? 'Connect Microsoft to GChat on the service computer, then choose an account above.'
+          : 'First sign in to GChat, then choose a connected work or school account above.'
+        : account.needs_reconnect
+          ? 'Reconnect this account and allow read-only Cloud PC access before checking assigned PCs.'
+          : !permission
+            ? 'Allow read-only Cloud PC access for this account before checking assigned PCs.'
+            : undefined
   const waiting = flow?.status === 'waiting'
-  const disabled = working || waiting
+  const disabled = loadingAccounts || working || waiting
   const pc = pcs?.find((item) => item.id === pcId)
   const removed = Boolean(
     initial &&
@@ -133,10 +141,14 @@ export default function M365Setup({
     }
   }
   const refreshAccounts = async (announce = false) => {
+    const target = await getGbotServiceTarget()
+    if (!active.current) return
+    const remote = target.kind === 'paired_host'
     const next = remote
       ? await gbot<ConnectorAccountsView>('setup/m365/accounts')
       : await connectorAccounts()
     if (!active.current) return
+    setRemote(remote)
     setView(next)
     if (announce) {
       const count = next.accounts.filter(
@@ -167,6 +179,18 @@ export default function M365Setup({
         Settings → Workspace connections. No Cloud PC is purchased or
         provisioned here.
       </p>
+      <ol className="list-decimal space-y-1 pl-5">
+        <li>
+          Sign in with Microsoft using the work or school account that has the
+          Cloud PC.
+        </li>
+        <li>
+          Choose that account below, then choose Check assigned Cloud PCs.
+        </li>
+        <li>
+          Select your Cloud PC and review the connection options before saving.
+        </li>
+      </ol>
       <p className="text-muted-foreground">
         Desktop control is not connected yet. Save your setup and open
         Microsoft’s client to prepare the connection. Gbot desktop viewing and
