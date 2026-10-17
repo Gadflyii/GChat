@@ -85,6 +85,15 @@ describe('host-scoped Models', () => {
     expect(screen.getByText(/only recommended once it has been tested on your graphics card/)).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent(/CUDA_VISIBLE_DEVICES|\bTP\b|VRAM|Smol/)
   })
+  it('explains a failed download and offers a retry that matches it', async () => {
+    mocks.command.mockImplementation(async action => action === 'local_model_downloads'
+      ? [{ id: 'job', release, status: 'failed', received: 4096, bytes_per_second: 0, error: 'SHA256 mismatch', path: null }] : [])
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('This download did not finish: SHA256 mismatch. Try again, or delete the partial download')
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Resume download' })).not.toBeInTheDocument()
+  })
   it('disables mutations against an offline host even with saved inventory', async () => {
     const user = userEvent.setup()
     mocks.errors = { remote: 'Connection lost' }
