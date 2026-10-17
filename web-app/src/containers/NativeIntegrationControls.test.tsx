@@ -241,6 +241,24 @@ describe.each([false, true])('NativeIntegrationControls compact=%s', compact => 
 })
 
 describe('Settings sidebar tool help', () => {
+  it('keeps the Hermes settings link on its own line and keyboard reachable with help hidden', async () => {
+    const user = userEvent.setup()
+    render(<NativeIntegrationControls compact />)
+    const settings = screen.getByRole('link', { name: 'Hermes settings' })
+    const hermes = screen.getByRole('switch', { name: 'Hermes integration' })
+
+    expect(screen.getByText(/An assistant in GChat/i)).not.toBeVisible()
+    expect(settings).toBeVisible()
+    expect(settings).toHaveClass('block')
+    expect(settings).toHaveAttribute('href', route.settings.hermes_agent)
+
+    hermes.focus()
+    await user.tab({ shift: true })
+    expect(settings).toHaveFocus()
+    await user.tab()
+    expect(hermes).toHaveFocus()
+  })
+
   it('keeps switches and the settings link available while descriptions open and close', async () => {
     const user = userEvent.setup()
     render(<NativeIntegrationControls compact />)
