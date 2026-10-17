@@ -237,7 +237,7 @@ export function ServerQuickActions() {
             ) : (
               <IconServer className="size-4 text-foreground/70" />
             )}
-            <span>{running ? 'Local API server running' : modelLoaded ? 'Model loaded' : 'Local API server stopped'}</span>
+            <span className="truncate" title="Local API server">{running ? 'Local server running' : modelLoaded ? 'Model loaded' : 'Local server stopped'}</span>
             <span
               className={`ml-auto size-1.5 rounded-full ${
                 running ? 'bg-emerald-500' : 'bg-muted-foreground/40'
