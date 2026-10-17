@@ -5,6 +5,7 @@ import HeaderPage from '@/containers/HeaderPage'
 import { CredentialSetup } from '@/containers/CredentialSetup'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import { route } from '@/constants/routes'
 import { engineCommand } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
@@ -48,12 +49,12 @@ function EnginesPage() {
     catch (e) { toast.error(String(e)) } finally { setBusy(null) }
   }
   return <div className="flex h-svh min-h-0 flex-col overflow-hidden">
-    <HeaderPage><div className="flex w-full items-center justify-between"><h1>GInfer Hosts</h1><Button variant="outline" disabled={refreshing} onClick={() => void refresh().catch((e) => toast.error(String(e)))}>Refresh</Button></div></HeaderPage>
+    <HeaderPage><div className="flex w-full items-center justify-between pr-4"><h1>GInfer Hosts</h1><Button variant="outline" disabled={refreshing} onClick={() => void refresh().catch((e) => toast.error(String(e)))}>Refresh</Button></div></HeaderPage>
     <main className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
       <p className="text-muted-foreground">Manage local serving and GInfer hosts on your network. Your computer does not need a local GPU to use remote hosts.</p>
       <div className="flex flex-wrap items-center gap-6">
-      <label className="flex items-center gap-2"><input type="checkbox" role="switch" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />Discover nearby GInfer hosts</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={sharing?.enabled ?? false} disabled={!sharing?.managed || sharingBusy || !!(local && errors[local.host_id])} onChange={event => void share(event.target.checked)} />Share this host</label>
+      <div className="flex items-center gap-2"><Switch id="discover-hosts" checked={enabled} onCheckedChange={setEnabled} /><label htmlFor="discover-hosts">Discover nearby GInfer hosts</label></div>
+        <div className="flex items-center gap-2"><Switch id="share-host" checked={sharing?.enabled ?? false} disabled={!sharing?.managed || sharingBusy || !!(local && errors[local.host_id])} onCheckedChange={(checked) => void share(checked)} /><label htmlFor="share-host">Share this host</label></div>
       </div>
       <p className="text-sm text-muted-foreground">Discovery finds other hosts. Sharing lets other computers on your network pair with this host. Turning sharing off disconnects remote clients and keeps local models running.</p>
       {discoveryError && <p role="alert" className="text-sm text-destructive">Discovery unavailable: {discoveryError}. You can still enter a host address manually.</p>}
