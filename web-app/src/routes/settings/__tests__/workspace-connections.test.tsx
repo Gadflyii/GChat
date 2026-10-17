@@ -188,6 +188,7 @@ describe('Workspace connections', () => {
 
   it('imports a Desktop JSON file directly to the native vault without credential fields', async () => {
     await ready()
+    expect(googleCard().getByText(/The app secret goes directly to GChat’s protected credential store/)).toBeInTheDocument()
     api.nativeInvoke.mockResolvedValue(initialView())
     const file = new File(
       [JSON.stringify({ installed: {

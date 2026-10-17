@@ -33,7 +33,7 @@ and [account audience decision](../decisions/2026-10-16-allow-personal-microsoft
 Google uses each user's own Desktop OAuth client, with no built-in Google release
 identity. Settings guides project creation, API enablement, External consent and
 production publishing, then imports the downloaded client JSON with a file picker.
-The existing native vault stores any registration secret; imported endpoint URLs
+GChat's protected credential store saves any registration secret; imported endpoint URLs
 never change provider routing. Expired or revoked sign-in prompts account
 reconnection in plain language. These source changes use mocks; live consent
 remains Ron's release gate. See [the Google setup guide](operations.md#google-register-your-own-desktop-app)
@@ -62,7 +62,9 @@ The single master backlog is [GInfer open work](/ai/ginfer-worktrees/open-work/d
 
 One native account owner manages browser-based OAuth PKCE, public app registration
 configuration, per-service grants, selected accounts and refresh. Refresh tokens
-and any Google desktop registration secret are stored in the OS credential vault;
+and any Google desktop registration secret are stored in GChat's protected
+credential store (the native Windows store, or Secret Service or a selected
+passphrase vault on Linux);
 access tokens are cached only in native memory. Frontend and model receive public
 metadata only. Use existing dependencies. Provider adapters
 own exact API hosts, endpoints, methods, schemas, paging and response conversion.

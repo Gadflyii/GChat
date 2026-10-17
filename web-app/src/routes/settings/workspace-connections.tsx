@@ -236,8 +236,8 @@ function GoogleRegistration({
         </label>
         <p>Choose one downloaded JSON file, up to 64 KB.</p>
         <p>
-          The app secret goes directly to your operating system’s credential
-          vault. GChat does not display or keep it in this form.
+          The app secret goes directly to GChat’s protected credential store.
+          GChat does not display or keep it in this form.
         </p>
         {configured ? (
           <p>
@@ -731,8 +731,8 @@ export function WorkspaceConnections() {
           </div>
           <p className="text-sm text-muted-foreground">
             Use the same accounts in Chat, Agent and Code. Sign-in uses your
-            system browser; refresh tokens stay in your operating system’s
-            credential vault.
+            system browser; refresh tokens stay in GChat’s protected credential
+            store.
           </p>
           {error && !disconnecting && (
             <p role="alert" className="text-sm text-destructive">

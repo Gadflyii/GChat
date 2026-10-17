@@ -42,7 +42,7 @@ JSON, so users do not need to copy a client ID or secret:
    client with application type **Desktop app**, and download its client JSON.
 5. In **Settings → Workspace connections → Google**, choose the JSON file.
    GChat accepts Desktop-client JSON, saves the public ID
-   and stores any registration secret in the existing OS credential vault.
+   and stores any registration secret in GChat's protected credential store.
    Importing another client replaces the registration and requires reconnecting
    existing Google accounts. Keep the downloaded file private; do not paste it
    into chat.
@@ -156,8 +156,8 @@ status; a status alone does not establish an account-type or consent problem.
 
 The provider consent screen controls actual grants. Settings displays the granted
 scopes and reconnect status. Changing registration or expired consent requires
-reconnection. Windows uses the existing native credential store; Linux requires
-the existing Secret Service credential backend. Tokens are not exposed to models
+reconnection. Windows uses the native credential store; Linux uses Secret Service
+or a user-selected passphrase vault. Tokens are not exposed to models
 or saved in the public connection metadata.
 
 Read-only access restricts GChat operations. Provider permissions can be broader:
