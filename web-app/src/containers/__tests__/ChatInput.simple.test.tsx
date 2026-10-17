@@ -432,6 +432,23 @@ describe('ChatInput', () => {
     unmount()
   })
 
+  it('announces the choose-a-model hint and dismisses it with a keyboard-reachable button', () => {
+    useModelProvider.setState({ selectedModel: undefined })
+    const { unmount } = render(<ChatInput />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: 'Hello' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('chat:selectModelToChat')
+    const dismiss = screen.getByRole('button', { name: 'common:close' })
+    expect(dismiss.tagName).toBe('BUTTON')
+    fireEvent.click(dismiss)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(input).toHaveFocus()
+    unmount()
+  })
+
   it('toggles native web tools through the shared defaults without a hosted web-search capability', () => {
     useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel!, capabilities: ['tools'] } }))
     useAppState.setState({ tools: [...webTools, fileTool] })
