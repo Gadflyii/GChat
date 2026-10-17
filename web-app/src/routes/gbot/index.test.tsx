@@ -538,7 +538,7 @@ it('resumes a saved cloud price review without creating a workspace or offering 
   expect(
     await screen.findByRole('region', { name: 'Cloud cost review' })
   ).toBeInTheDocument()
-  expect(screen.getByLabelText('Provider API token')).toHaveValue('')
+  expect(screen.getByLabelText('Provider API token (access key)')).toHaveValue('')
   expect(
     mocks.call.mock.calls.some(
       ([path]) => path === 'workspaces/ssh' || path === 'workspaces'
@@ -711,7 +711,7 @@ it('imports an SSH workspace and preserves setup identity on retry', async () =>
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(await screen.findByLabelText(/Another computer on the LAN/))
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  fireEvent.click(screen.getByLabelText('Use an existing SSH key'))
+  fireEvent.click(screen.getByLabelText('Use an existing SSH key (advanced)'))
   for (const [label, value] of [
     ['SSH host', 'bot.local'],
     ['SSH user', 'bot'],

@@ -59,6 +59,7 @@ function HTTPSProxyContent() {
                     {t('settings:httpsProxy.proxy')}
                   </h1>
                   <Switch
+                    aria-label={t('settings:httpsProxy.proxy')}
                     checked={proxyEnabled}
                     onCheckedChange={toggleProxy}
                   />
@@ -72,6 +73,7 @@ function HTTPSProxyContent() {
                   <div className="space-y-2">
                     <p>{t('settings:httpsProxy.proxyUrlDesc')}</p>
                     <Input
+                      aria-label={t('settings:httpsProxy.proxyUrl')}
                       className="w-full"
                       placeholder={t('settings:httpsProxy.proxyUrlPlaceholder')}
                       value={proxyUrl}
@@ -88,12 +90,14 @@ function HTTPSProxyContent() {
                     <p>{t('settings:httpsProxy.authenticationDesc')}</p>
                     <div className="flex gap-2">
                       <Input
+                        aria-label={t('settings:httpsProxy.username')}
                         placeholder={t('settings:httpsProxy.username')}
                         value={proxyUsername}
                         onChange={(e) => setProxyUsername(e.target.value)}
                       />
                       <div className="relative shrink-0 w-1/2">
                         <Input
+                          aria-label={t('settings:httpsProxy.password')}
                           type={showPassword ? 'text' : 'password'}
                           placeholder={t('settings:httpsProxy.password')}
                           className="pr-16"
@@ -102,6 +106,8 @@ function HTTPSProxyContent() {
                         />
                         <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
                           <button
+                            type="button"
+                            aria-label={showPassword ? 'Hide proxy password' : 'Show proxy password'}
                             onClick={() => setShowPassword(!showPassword)}
                             className="p-1 rounded hover:bg-foreground/5 text-foreground/70"
                           >
@@ -124,6 +130,7 @@ function HTTPSProxyContent() {
                   <div className="space-y-2">
                     <p>{t('settings:httpsProxy.noProxyDesc')}</p>
                     <Input
+                      aria-label={t('settings:httpsProxy.noProxy')}
                       placeholder={t('settings:httpsProxy.noProxyPlaceholder')}
                       value={noProxy}
                       onChange={(e) => setNoProxy(e.target.value)}
@@ -136,6 +143,7 @@ function HTTPSProxyContent() {
                 description={t('settings:httpsProxy.ignoreSslDesc')}
                 actions={
                   <Switch
+                    aria-label={t('settings:httpsProxy.ignoreSsl')}
                     checked={proxyIgnoreSSL}
                     onCheckedChange={(checked) => setProxyIgnoreSSL(checked)}
                   />

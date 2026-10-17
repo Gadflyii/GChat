@@ -51,6 +51,12 @@ export default function CloudSetup({
   const locked = Boolean(initial || connection.workspaceId)
   return (
     <section aria-label="Cloud computer setup" className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Choose a provider where you have an account. Automated setup can create
+        a separate bot computer after you approve the cost. Guided setup means
+        you create the computer in the provider’s website, then connect it here.
+        Your cloud provider bills you separately.
+      </p>
       <fieldset className="grid gap-2 sm:grid-cols-2">
         <legend className="mb-2 text-sm font-medium">Cloud provider</legend>
         {providers.map(([id, label]) => (
@@ -102,9 +108,10 @@ export default function CloudSetup({
               Do not expose VNC or RDP ports.
             </li>
             <li>
-              Copy the VM’s resource ID below, then verify its SSH fingerprint.
-              GChat saves its own key in your vault and prepares the pinned
-              desktop tools with your explicit consent.
+              Find the VM’s resource ID in its details page and copy it below.
+              Then follow the secure-connection checks here. GChat saves its own
+              connection key in secure storage and asks before installing the
+              required desktop tools.
             </li>
           </ol>
           <label className="block space-y-1 text-sm">
