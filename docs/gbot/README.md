@@ -474,6 +474,12 @@ per-user Windows service/agent or Linux user service is the proposed mechanism;
 privileged installation helpers are separate from ordinary task execution.
 No machine-level service is assumed able to capture a signed-in user's desktop.
 
+Local **Quit Gbot service** reports stopped only after service ownership is
+released. Account or service request failures may clear cached clients; Quit can
+reconnect to the existing local service to shut it down, without starting a new
+process. A discovery or shutdown failure remains an error rather than claiming
+that background tasks and schedules have stopped.
+
 The [existing agent runtime](../agent-runtime/README.md) and
 [architecture](../../src-tauri/src/core/agent/ARCHITECTURE.md) share capabilities
 across Chat, Studio and Code, but app exit currently cancels their execution.
