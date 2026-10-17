@@ -115,6 +115,21 @@ describe('host-scoped Models', () => {
     }
     expect(await screen.findByText('No downloads on this host.')).toBeInTheDocument()
   })
+  it('moves between the model tabs with the arrow keys and keeps one tab stop', async () => {
+    const user = userEvent.setup()
+    render(<ModelManagement />)
+    const installed = screen.getByRole('tab', { name: 'Installed' })
+    expect(installed).toHaveAttribute('tabindex', '0')
+    expect(screen.getByRole('tab', { name: 'Recommended' })).toHaveAttribute('tabindex', '-1')
+    installed.focus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('tab', { name: 'Recommended' })).toHaveFocus()
+    expect(screen.getByRole('tab', { name: 'Recommended' })).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{End}')
+    expect(screen.getByRole('tab', { name: 'Downloads' })).toHaveFocus()
+    await user.keyboard('{ArrowRight}')
+    expect(screen.getByRole('tab', { name: 'Installed' })).toHaveFocus()
+  })
   it('disables mutations against an offline host even with saved inventory', async () => {
     const user = userEvent.setup()
     mocks.errors = { remote: 'Connection lost' }

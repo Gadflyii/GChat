@@ -42,6 +42,8 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
   starting: 'Starting installed model',
 }
 
+const managementTabs = ['Installed', 'Recommended', 'Downloads'] as const
+
 function cancelLocalLoad(load: PendingLocalLoad): Promise<unknown> {
   if (load.ready || load.settled || load.cancelRequested) return Promise.resolve()
   load.cancelRequested = true
@@ -238,7 +240,15 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
       <div className="flex flex-wrap gap-2">{gpus.map(g => <span key={g.uuid} className="rounded border px-3 py-1 text-sm">{g.name} · {(g.memory_mib / 1024).toFixed(0)} GiB · {g.compute_capability ? `SM ${g.compute_capability}` : 'SM unknown'}</span>)}</div>
       <p className="text-sm text-muted-foreground">{local ? 'Manage models on this computer.' : `Downloads and model operations run on ${host?.name ?? 'the selected host'}, not this computer.`} GPU memory is evaluated per device, never added together.</p>
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex gap-1" role="tablist" aria-label="Model management">
-        {(['Installed', 'Recommended', 'Downloads'] as const).map(t => <Button key={t} role="tab" aria-selected={tab === t} variant={tab === t ? 'default' : 'ghost'} onClick={() => setTab(t)}>{t}</Button>)}
+        {managementTabs.map((t, index) => <Button key={t} role="tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1} variant={tab === t ? 'default' : 'ghost'} onClick={() => setTab(t)}
+          onKeyDown={event => {
+            const next = event.key === 'ArrowRight' ? (index + 1) % managementTabs.length : event.key === 'ArrowLeft' ? (index + managementTabs.length - 1) % managementTabs.length
+              : event.key === 'Home' ? 0 : event.key === 'End' ? managementTabs.length - 1 : -1
+            if (next < 0) return
+            event.preventDefault()
+            setTab(managementTabs[next])
+            ;(event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
+          }}>{t}</Button>)}
       </div><Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : 'Refresh installed models'}</Button></div>
       {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]} · Saved inventory may be out of date.</p>}
       {local && !localLoadReady && (resources.error
