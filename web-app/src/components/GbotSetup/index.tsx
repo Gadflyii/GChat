@@ -252,7 +252,11 @@ export default function GbotSetup({
       )}
       {step === 1 && (
         <fieldset disabled={saving} aria-label="Gbot service selection">
-          <ServiceSetup target={service} change={changeService} />
+          <ServiceSetup
+            target={service}
+            change={changeService}
+            inWizard
+          />
         </fieldset>
       )}
       {step === 2 && (
