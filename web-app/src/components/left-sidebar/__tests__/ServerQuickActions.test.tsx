@@ -162,7 +162,7 @@ describe('sidebar server shortcut', () => {
     expect(models.stopModel).not.toHaveBeenCalled()
     expect(useAppState.getState().activeModels).toEqual([])
     expect(shouldAttemptAutoStart('ginfer-lan', localAlias)).toBe(false)
-    expect(screen.getByText('Local server stopped')).toBeInTheDocument()
+    expect(screen.getByText('No local model running')).toBeInTheDocument()
   })
 
   it('recognizes a Ready imported local alias even without ModelsService active models', async () => {
@@ -172,7 +172,7 @@ describe('sidebar server shortcut', () => {
       ...ready, instances: [{ ...ready.instances[0], status: 'stopped' }],
     })
     render(<ServerQuickActions />)
-    expect(screen.getByText('Model loaded')).toBeInTheDocument()
+    expect(screen.getByText('Local model: loaded')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Stop model/ }))
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Model stopped'))
     expect(stopServer).not.toHaveBeenCalled()
@@ -214,7 +214,7 @@ describe('sidebar server shortcut', () => {
     expect(shouldAttemptAutoStart('ginfer-lan', localAlias)).toBe(true)
     expect(useModelProvider.getState().selectedModel?.id).toBe(localAlias)
     expect(useModelProvider.getState().selectedProvider).toBe('ginfer-lan')
-    expect(screen.getByText('Local server running')).toBeInTheDocument()
+    expect(screen.getByText('Local model: running')).toBeInTheDocument()
   })
 
   it('keeps the restored local selection after the real picker finishes an older empty active-model read', async () => {
@@ -232,7 +232,7 @@ describe('sidebar server shortcut', () => {
     render(<><DropdownModelProvider showSampler={false} /><ServerQuickActions /></>)
     await waitFor(() => expect(models.getActiveModels).toHaveBeenCalledOnce())
     fireEvent.click(screen.getByRole('button', { name: /Start server/ }))
-    await waitFor(() => expect(screen.getByText('Local server running')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Local model: running')).toBeInTheDocument())
     await act(async () => { releaseOldRead([]) })
     expect(screen.getByTitle(localAlias)).toHaveTextContent('Muse Glimmer 30B — Local Host')
     expect(useModelProvider.getState().selectedProvider).toBe('ginfer-lan')
@@ -328,7 +328,7 @@ describe('sidebar server shortcut', () => {
   it('offers Stop model when the API is already stopped', async () => {
     useAppState.setState({ serverStatus: 'stopped' })
     render(<ServerQuickActions />)
-    expect(screen.getByText('Model loaded')).toBeInTheDocument()
+    expect(screen.getByText('Local model: loaded')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Start server/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Reload model/ })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /Stop model/ }))

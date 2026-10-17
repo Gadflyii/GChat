@@ -23,7 +23,7 @@ describe('secure storage intake', () => {
     })
     const ready = vi.fn()
     render(<CredentialSetup onReady={ready} />)
-    await screen.findByText(/Choose Check secure storage to confirm/)
+    await screen.findByText(/Select the Check secure storage button below to confirm/)
     const setupPanel = screen.getByRole('region', {
       name: 'Secure storage setup',
     })
@@ -62,7 +62,7 @@ describe('secure storage intake', () => {
       state: 'unchecked',
     })
     render(<CredentialSetup onReady={vi.fn()} />)
-    await screen.findByText(/Choose Check secure storage to confirm/)
+    await screen.findByText(/Select the Check secure storage button below to confirm/)
     expect(
       screen.getByRole('button', { name: 'Check secure storage' })
     ).toBeEnabled()

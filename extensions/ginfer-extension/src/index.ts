@@ -28,7 +28,7 @@ import {
   isProcessRunning,
   type GinferConfig,
 } from '../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index'
-import { resolveBinaryPath } from './util'
+import { loadFailure, resolveBinaryPath } from './util'
 import { checkGinferHardware } from './hardware'
 import { ginferModelProfile } from './model-profile'
 import { countTokens, loadedContext } from './session-metadata'
@@ -360,8 +360,7 @@ export default class ginfer_extension extends AIEngine {
           timeout: this.timeout,
         })
       } catch (e: any) {
-        const msg = e && typeof e.message === 'string' ? e.message : String(e)
-        throw new Error(`Failed to load ${modelLabel}: ${msg}`)
+        throw loadFailure(modelLabel, e)
       }
 
       return session

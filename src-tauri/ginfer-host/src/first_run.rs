@@ -74,6 +74,28 @@ fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str
     "startup"
 }
 
+/// A selected download that no longer exists (deleted on Models) releases the
+/// whole selection so Welcome returns to model choice instead of re-admitting it.
+fn reconcile(progress: &mut Progress, jobs: &[Download]) -> bool {
+    if progress.complete
+        || !progress
+            .download_ids
+            .iter()
+            .any(|id| !jobs.iter().any(|j| j.id == *id))
+    {
+        return false;
+    }
+    release_selection(progress);
+    true
+}
+
+fn release_selection(progress: &mut Progress) {
+    progress.selected_release_ids.clear();
+    progress.download_ids.clear();
+    progress.download_error = None;
+    progress.startup_profiles.clear();
+}
+
 fn needs_maintenance(progress: &Progress, jobs: &[Download]) -> bool {
     if progress.complete || progress.gpu_uuids.is_empty() {
         return false;
@@ -296,9 +318,10 @@ impl Host {
     }
 
     pub async fn first_run_status(&self) -> Result<Value, String> {
-        let progress = self.data.lock().await.first_run.clone();
-        let profile = self.first_run_profile(&progress).await;
+        let mut progress = self.data.lock().await.first_run.clone();
         let jobs = self.downloads.list().await;
+        reconcile(&mut progress, &jobs);
+        let profile = self.first_run_profile(&progress).await;
         let selected: Vec<_> = jobs
             .iter()
             .filter(|j| progress.download_ids.contains(&j.id))
@@ -408,9 +431,23 @@ impl Host {
         let _operation = self.first_run_operation.lock().await;
         let mut progress = self.data.lock().await.first_run.clone();
         let jobs = self.downloads.list().await;
+        if reconcile(&mut progress, &jobs) {
+            self.store_first_run(progress.clone()).await?;
+        }
         let profiled = self.first_run_selected_ready(&progress).await;
         let step = stage(&progress, profiled, &jobs);
         match body["action"].as_str().ok_or("first-run action required")? {
+            "reselect" => {
+                if step != "downloads" {
+                    return Err("There is no download to replace at this step".into());
+                }
+                for job in &jobs {
+                    if progress.download_ids.contains(&job.id) && job.status == "failed" {
+                        self.downloads.action(job.id, "discard").await?;
+                    }
+                }
+                release_selection(&mut progress);
+            }
             "profile" => {
                 if progress.complete {
                     return Err(
@@ -755,8 +792,9 @@ impl Host {
     }
 
     pub async fn first_run_pending(&self) -> bool {
-        let progress = self.data.lock().await.first_run.clone();
+        let mut progress = self.data.lock().await.first_run.clone();
         let jobs = self.downloads.list().await;
+        reconcile(&mut progress, &jobs);
         if progress.complete
             || !progress.catalog_loaded
             || stage(&progress, true, &jobs) != "startup"
@@ -916,6 +954,10 @@ impl Host {
         }
         let _operation = self.first_run_operation.lock().await;
         let mut progress = self.data.lock().await.first_run.clone();
+        let jobs = self.downloads.list().await;
+        if reconcile(&mut progress, &jobs) {
+            self.store_first_run(progress.clone()).await?;
+        }
         // The published catalog is metadata; it can load while calibration
         // runs without starting package downloads or validating storage.
         if !progress.catalog_loaded {
@@ -2387,6 +2429,23 @@ mod tests {
         assert!(validate_group(&gpus, &["a".into()]).is_ok());
         assert!(validate_group(&gpus, &["a".into(), "a".into()]).is_err());
         assert!(validate_group(&gpus, &["a".into(), "b".into()]).is_err());
+    }
+    #[test]
+    fn deleted_selected_download_returns_to_model_choice() {
+        let p0 = Progress {
+            gpu_uuids: vec!["a".into()],
+            storage_accepted: true,
+            selected_release_ids: vec!["sha".into()],
+            download_ids: vec![Uuid::new_v4()],
+            download_error: Some("Not found".into()),
+            ..Default::default()
+        };
+        assert_eq!(stage(&p0, true, &[]), "downloads");
+        let mut p = p0.clone();
+        assert!(reconcile(&mut p, &[]));
+        assert_eq!(stage(&p, true, &[]), "models");
+        assert!(p.selected_release_ids.is_empty() && p.download_error.is_none());
+        assert!(!reconcile(&mut p, &[]));
     }
     #[test]
     fn shared_progress_resumes_in_order() {

@@ -1564,7 +1564,7 @@ time.sleep(60)
             &std::fs::read(&host.downloads.state_path).unwrap()).unwrap();
         assert!(saved.is_empty(), "The removal must be durable before the wake");
         assert!(host.downloads.list().await.is_empty());
-        assert!(host.first_run_pending().await, "Missing selected work must restore maintenance");
+        assert!(!host.first_run_pending().await, "A deleted selection returns to model choice, not re-admission");
         assert!(!host.processes.lock().await.has_children());
     }
 

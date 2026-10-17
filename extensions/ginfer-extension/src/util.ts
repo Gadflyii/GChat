@@ -27,3 +27,12 @@ export async function resolveBinaryPath(
     `ginfer-serve binary not found at ${fallback}. Set Settings → GInfer → ginfer-serve Binary, or download the binary into ${fallback}.`
   )
 }
+
+/** The Host command leads a typed failure with `[code] `; keep the message plain and expose the code as `error.code`. */
+export function loadFailure(modelLabel: string, error: unknown): Error {
+  const raw = error && typeof (error as Error).message === 'string' ? (error as Error).message : String(error)
+  const typed = /^\[([a-z_]+)\] ([\s\S]*)$/.exec(raw)
+  const failure = new Error(`Failed to load ${modelLabel}: ${typed ? typed[2] : raw}`)
+  if (typed) (failure as Error & { code?: string }).code = typed[1]
+  return failure
+}

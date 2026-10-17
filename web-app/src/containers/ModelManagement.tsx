@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { confirmAction } from '@/lib/confirm'
 import { IconChevronDown } from '@tabler/icons-react'
 import { toast } from 'sonner'
+import { Link } from '@tanstack/react-router'
+import { route } from '@/constants/routes'
 import HeaderPage from '@/containers/HeaderPage'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,7 +25,7 @@ import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
 import { engineAlias, engineCommand, type LocalModelLoadProgress } from '@/services/engines'
 import { controlLocalHostModel } from '@/utils/localHostModel'
 import { HostCard } from '@/containers/EngineHostModels'
-import { hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
+import { gpuCardName, hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
 import { downloadStatusLabel, formatModelBytes, releaseReadiness, type ModelDownload, type ModelGpu, type ModelRelease } from '@/lib/model-release'
 import { switchToModel } from '@/utils/switchModel'
 import { useAppState } from '@/hooks/useAppState'
@@ -47,6 +49,7 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
 
 const managementTabs = ['Installed', 'Recommended', 'Downloads'] as const
 
+const NO_SETTINGS = ' has no saved startup settings yet. Open GInfer Hosts and choose settings for it, then load it again.'
 const errorMessage = (e: unknown) => e instanceof Error ? e.message : String(e).replace(/^Error: /, '')
 
 function cancelLocalLoad(load: PendingLocalLoad): Promise<unknown> {
@@ -207,6 +210,12 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
         signal: load.controller.signal,
         ...(selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
       load.ready = true
+    } catch (e) {
+      if ((e as { code?: string } | null)?.code === 'no_qualified_profile') {
+        const m = localModels.find(x => x.id === modelId)
+        throw new Error(plainModelName(m?.displayName ?? modelId) + NO_SETTINGS)
+      }
+      throw e
     } finally {
       load.settled = true
       if (loadRef.current === load) loadRef.current = null
@@ -256,7 +265,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
       </div></div></HeaderPage>
     <main className="space-y-5 overflow-y-auto p-5">
       <div className="flex flex-wrap gap-2">{gpus.map(g => <span key={g.uuid} className="rounded border px-3 py-1 text-sm">{g.name} · {(g.memory_mib / 1024).toFixed(0)} GiB · {g.compute_capability ? `SM ${g.compute_capability}` : 'SM unknown'}</span>)}</div>
-      <p className="text-sm text-muted-foreground">{local ? 'Manage models on this computer.' : `Downloads and model operations run on ${host?.name ?? 'the selected host'}, not this computer.`} GPU memory is evaluated per device, never added together.</p>
+      <p className="text-sm text-muted-foreground">{local ? 'Manage models on this computer.' : `Downloads and model operations run on ${host?.name ?? 'the selected host'}, not this computer.`} Each graphics card's memory is counted on its own, not added together.</p>
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex gap-1" role="tablist" aria-label="Model management">
         {managementTabs.map((t, index) => <Button key={t} role="tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1} variant={tab === t ? 'default' : 'ghost'} onClick={() => setTab(t)}
           onKeyDown={event => {
@@ -268,7 +277,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
             ;(event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
           }}>{t}</Button>)}
       </div><Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : 'Refresh installed models'}</Button></div>
-      {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]}{offline ? ' · Saved inventory may be out of date.' : ''}</p>}
+      {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]}{error?.endsWith(NO_SETTINGS) && <> <Link to={route.engines.index} className="underline">Open GInfer Hosts</Link></>}{offline ? ' · Saved inventory may be out of date.' : ''}</p>}
       {local && !localLoadReady && (resources.error
         ? <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">Local model runtime is unavailable: {resources.error}</p>
         : <p role="status" className="rounded border p-3 text-sm">Preparing local model runtime…</p>)}
@@ -287,9 +296,9 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
       {local && localDownloadError && <p role="alert" className="text-sm text-destructive">{localDownloadError}</p>}
       {(tab === 'Recommended' || (tab === 'Installed' && local)) && <Input aria-label="Search models" placeholder="Find a model…" value={query} onChange={e => setQuery(e.target.value)} />}
       {tab === 'Installed' && <>
-        {local && <fieldset disabled={busy} className="space-y-2 rounded border p-3"><legend>GPUs for Load model</legend>
+        {local && <fieldset disabled={busy} className="space-y-2 rounded border p-3"><legend>Graphics cards to use when loading a model</legend>
           <label className="flex items-center gap-2"><input type="checkbox" checked={selectedGpuUuids === null} onChange={e => setSelectedGpuUuids(e.target.checked ? null : [])} />Automatic (visible GPUs only)</label>
-          {gpus.map(g => <label key={g.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedGpuUuids?.includes(g.uuid) ?? false} onChange={e => setSelectedGpuUuids(e.target.checked ? [...(selectedGpuUuids ?? []), g.uuid] : (selectedGpuUuids ?? []).filter(id => id !== g.uuid))} />{g.name} · {g.uuid}</label>)}
+          {gpus.map(g => <label key={g.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedGpuUuids?.includes(g.uuid) ?? false} onChange={e => setSelectedGpuUuids(e.target.checked ? [...(selectedGpuUuids ?? []), g.uuid] : (selectedGpuUuids ?? []).filter(id => id !== g.uuid))} />{gpuCardName(gpus, gpus.indexOf(g))}</label>)}
           <p className="text-sm text-muted-foreground">Choose the graphics cards to load the model onto. Leave Automatic checked to use every available card; a model that needs several cards needs that many selected.</p>
           {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Choose available GPUs. A saved GPU may no longer be connected.' : 'Waiting for fresh GPU information.'}</p>}
         </fieldset>}
