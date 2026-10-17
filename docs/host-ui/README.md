@@ -25,6 +25,12 @@ If the image or audio file window fails, GChat shows an error and keeps your
 draft and existing attachments. Use the attachment button again to retry.
 Canceling the file window without choosing a file shows no error.
 
+## Choosing a skill with the keyboard
+
+Type `/` in the composer to see available skills. Use the up and down arrow
+keys to choose a skill, then press Enter or Tab to select it. The selected
+skill stays visible as you move through a long list.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing
