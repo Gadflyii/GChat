@@ -550,7 +550,7 @@ describe('ChatInput', () => {
     const sent = { ...createDocumentAttachment({ name: 'sent.txt', path: '/docs/sent.txt' }), id: 'sent-file', processed: true }
     const newer = { ...createDocumentAttachment({ name: 'new.txt', path: '/docs/new.txt' }), id: 'new-file', processed: true }
     useChatAttachments.getState().setAttachments(threadId, [sent])
-    const getActiveModels = vi.fn().mockResolvedValue([])
+    const getActiveModels = vi.fn(async () => useAppState.getState().activeModels)
     seedServiceHub({ models: { getActiveModels } as unknown as ModelsService })
     const starting = deferred<void>()
     const start = vi.spyOn(switchModel, 'switchToModel').mockImplementation(async (params) => {
