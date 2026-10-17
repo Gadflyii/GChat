@@ -31,9 +31,9 @@ function ExtensionsContent() {
             <Card
               header={
                 <div className="flex items-center justify-between mb-4">
-                  <h1 className="text-foreground font-studio font-medium text-base">
+                  <h2 className="text-foreground font-studio font-medium text-base">
                     {t('settings:extensions.title')}
-                  </h1>
+                  </h2>
                   {/* <div className="flex items-center gap-2">
                     <Button size="sm">Install Extension</Button>
                   </div> */}
@@ -50,9 +50,9 @@ function ExtensionsContent() {
                     key={i}
                     title={
                       <div className="flex items-center gap-x-2">
-                        <h1 className="text-foreground font-studio font-medium text-base">
+                        <h2 className="text-foreground font-studio font-medium text-base">
                           {item.productName ?? item.name}
-                        </h1>
+                        </h2>
                         <div className="bg-foreground/10 px-1 py-0.5 rounded text-foreground/70 text-xs">
                           v{item.version}
                         </div>
