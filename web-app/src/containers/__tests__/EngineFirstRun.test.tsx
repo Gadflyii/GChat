@@ -286,8 +286,17 @@ it('surfaces unsupported and unavailable hosts with an actionable state', async 
   expect(screen.getByRole('button', { name: 'Use selected graphics cards' })).toBeDisabled()
   view.unmount()
   mocks.state = { ...mocks.state, hosts: [] }
-  render(<EngineFirstRun />)
-  expect(await screen.findByText(/GInfer could not connect on this computer/)).toBeInTheDocument()
+  vi.useFakeTimers()
+  try {
+    render(<EngineFirstRun />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+    // The Host is still starting; this is not yet a failure to report.
+    expect(screen.getByText(/Starting GInfer on this computer/)).toBeInTheDocument()
+    expect(screen.queryByText(/could not connect on this computer/)).not.toBeInTheDocument()
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+    expect(screen.getByText(/GInfer could not connect on this computer/)).toBeInTheDocument()
+    expect(screen.queryByText(/Starting GInfer on this computer/)).not.toBeInTheDocument()
+  } finally { vi.useRealTimers() }
 })
 
 it('honors setup already completed in Manager without starting new work', async () => {

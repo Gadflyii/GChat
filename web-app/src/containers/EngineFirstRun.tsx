@@ -20,6 +20,9 @@ type FirstRun = {
 }
 
 /** All progress and long-running work belongs to the shared local Host. */
+/** First launch installs the engine before the local Host answers; measured at about 12 s. */
+const LOCAL_HOST_START_GRACE_MS = 30_000
+
 export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: {
   hostId?: string; onComplete?: () => void; hardwareProfileControls?: ReactNode
 }) {
@@ -47,7 +50,16 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     if (step === 'complete' && !completed.current) { completed.current = true; onComplete?.() }
   }, [step, onComplete])
   useEffect(() => {
-    void refresh().catch(e => setError(String(e))).finally(() => setChecked(true))
+    // The desktop starts this computer's GInfer Host in the background and, on
+    // first launch, installs the engine first. Saying it "could not connect"
+    // before that has had time to finish tells a new person their setup is
+    // broken, so keep reporting progress for a short grace period.
+    let stopped = false
+    let grace: ReturnType<typeof setTimeout> | undefined
+    void refresh().catch(e => setError(String(e))).finally(() => {
+      if (!stopped) grace = setTimeout(() => setChecked(true), LOCAL_HOST_START_GRACE_MS)
+    })
+    return () => { stopped = true; clearTimeout(grace) }
   }, [refresh])
   useEffect(() => {
     if (!localId) return
@@ -120,7 +132,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     <h2 className="font-medium">Set up models on this computer</h2>
     <p className="text-sm text-muted-foreground">Choose the graphics cards and model folder to use, then choose a model. GInfer, the engine that runs your models, measures this hardware and checks that each model can start. Saving this hardware profile helps future model loads and switches finish faster.</p>
     {unavailable && <p role="alert" className="text-sm text-destructive">{unavailable}</p>}
-    {!localId && <p role="status" className="text-sm">{checked ? 'GInfer could not connect on this computer. Check that a supported NVIDIA graphics card and the GInfer engine are installed. You can also connect to another computer running GInfer.' : 'Connecting to GInfer on this computer…'}</p>}
+    {!localId && <p role="status" className="text-sm">{checked ? 'GInfer could not connect on this computer. Check that a supported NVIDIA graphics card and the GInfer engine are installed. You can also connect to another computer running GInfer.' : 'Starting GInfer on this computer. The first start can take about half a minute.'}</p>}
     {localId && !flow && !unavailable && <p role="status">Reading saved setup…</p>}
     {flow?.error && <p role="alert" className="text-sm text-destructive">{flow.error}</p>}
     {step === 'gpu' && !manualOpen && <fieldset disabled={busy} className="space-y-3"><legend className="font-medium">Select graphics cards</legend>
