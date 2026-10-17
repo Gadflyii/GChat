@@ -87,7 +87,8 @@ vi.mock('@/hooks/useAppUpdater', () => ({
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { defaultValue?: string }) =>
+      options?.defaultValue ?? key,
   }),
 }))
 
@@ -484,7 +485,7 @@ describe('General Settings Route', () => {
       )
     })
     return screen.getByRole('button', {
-      name: 'settings:dialogs.changeDataFolder.changeLocation',
+      name: 'Copy data and restart',
     })
   }
 
@@ -498,6 +499,34 @@ describe('General Settings Route', () => {
     )
     const confirm = await openDataFolderConfirmation()
 
+    expect(
+      screen.getByText(
+        'GChat copies the chats, settings, and model files inside your current data folder. Model files stored elsewhere stay where they are.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText('Before you move')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Choose an empty folder outside your current data folder, on a drive that will stay connected.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Allow enough free space for a second copy. The original folder is kept.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Finish any model loads or chats in progress and quit the Gbot service before continuing.'
+      )
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'When the copy finishes, GChat restarts and uses the new folder.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+
     await act(async () => {
       fireEvent.click(confirm)
       fireEvent.click(confirm)
@@ -510,7 +539,13 @@ describe('General Settings Route', () => {
     expect(mockEmitEvent).not.toHaveBeenCalled()
     expect(window.core?.api?.relaunch).not.toHaveBeenCalled()
     expect(screen.getByTitle('/test/data/folder')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'common:loading' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Copying data…' })
+    ).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveAttribute('aria-live', 'polite')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Copying your data. Keep GChat open until it restarts. Large folders can take a while.'
+    )
     expect(
       screen.getByRole('button', {
         name: 'settings:dialogs.changeDataFolder.cancel',
@@ -559,8 +594,14 @@ describe('General Settings Route', () => {
       expect(mockStopAllModels).not.toHaveBeenCalled()
       expect(mockEmitEvent).not.toHaveBeenCalled()
       expect(
+        screen.getByText(
+          /If an error appears, follow its instructions before retrying\./
+        )
+      ).toBeInTheDocument()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(
         screen.getByRole('button', {
-          name: 'settings:dialogs.changeDataFolder.changeLocation',
+          name: 'Copy data and restart',
         })
       ).toBeEnabled()
 
@@ -593,8 +634,13 @@ describe('General Settings Route', () => {
     expect(mockStopAllModels).not.toHaveBeenCalled()
     expect(mockEmitEvent).not.toHaveBeenCalled()
     expect(
+      screen.getByText(
+        'If an error appears, follow its instructions before retrying. If the files moved but the Host could not restart, open Manager and start the Host there.'
+      )
+    ).toBeInTheDocument()
+    expect(
       screen.getByRole('button', {
-        name: 'settings:dialogs.changeDataFolder.changeLocation',
+        name: 'Copy data and restart',
       })
     ).toBeEnabled()
   })

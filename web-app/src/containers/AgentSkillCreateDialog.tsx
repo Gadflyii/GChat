@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +39,7 @@ export function AgentSkillCreateDialog({
   const [description, setDescription] = useState('')
   const [instructions, setInstructions] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const pending = useRef(false)
 
   useEffect(() => {
     if (!open) {
@@ -50,6 +51,8 @@ export function AgentSkillCreateDialog({
   }, [open])
 
   const submit = async () => {
+    if (pending.current) return
+    pending.current = true
     const normalizedName = normalizeSkillName(name).replace(/-+$/, '')
     setSubmitting(true)
     try {
@@ -61,12 +64,19 @@ export function AgentSkillCreateDialog({
       onOpenChange(false)
     } catch (reason) {
       toast.error(String(reason))
+    } finally {
+      pending.current = false
       setSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!pending.current) onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t('common:writeSkillInstructions')}</DialogTitle>
