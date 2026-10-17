@@ -36,9 +36,9 @@ own Host on port 46543, displayed the collision notice and retained loopback-onl
 sharing. After normal desktop close, normal idle-Host stop and ordinary reopen,
 the GUI connected to the same own Host identity and persisted port. Both TLS
 identities remained unchanged and the independent Host stayed reachable.
-No model, Ensure, Engine test or GPU workload ran. Native Windows and actual
-cross-OS coexistence remain open; this result closes only the current-package
-Linux collision/reopen leaf.
+No model, Ensure, Engine test or GPU workload ran. This result closes only the
+current-package Linux collision/reopen leaf; partial native Windows and actual
+cross-OS runtime evidence follows.
 
 The initial locator-only fixture selected default port 7443 and is invalid
 collision evidence. Normal shutdown followed by setting the private Host state's
@@ -49,6 +49,56 @@ at 09:51Z; package and source donors were read-only and untouched. Retained
 result and short summary: `/ai/gchat/out/c7-host-port-collision-20261017/`.
 Package receipt:
 `/ai/gchat/out/linux-rc-final-20261017/current-0b3aa523c-4f451dded/package-result.json`.
+
+### Native Windows/cross-OS runtime leaf — October 17
+
+Bubbs lifted the Windows hold at 23:31Z on October 17 after Ron closed his
+hidden desktop. The current instruction requires a private test location, no NSIS
+installation, no shared application data and cleanup by exact PID. The retained
+Windows RC is GChat `ed68c7443` / Engine `e2282c336`; source tests and the accepted
+Linux collision/reopen evidence above will be reused.
+
+The retained packaged Host binaries ran with explicit private absolute data roots.
+A native Windows foreign Host occupied port 59566; another native root selected
+and saved 59567 with the expected collision notice. Reconnecting to that live root
+preserved its Host UUID, boot UUID and endpoint. Windows also reached the pinned
+Linux Host on 46673 and could not exclusively bind that port. A third native root
+collided there, selected and saved 53463, and reported its own Windows identity.
+All four roots had distinct Host UUIDs and TLS pins. Sharing stayed disabled and
+instances stayed empty. No desktop, NSIS installer, model, Engine process or GPU
+workload ran; deliberately absent Engine paths allowed passive inventory only.
+
+The installed service-owner launcher accepted the real native root and rejected a
+private copy of its authority with the production root/platform identity error.
+PS5.1's ErrorActionPreference=Stop intercepted that expected stderr before the
+exit code was collected; follow-up commands must collect expected native failures
+explicitly. The immediate compute handoff then stopped this leaf before normal
+idle-stop/reopen persistence and copied-Linux/independent wrong-platform rejection.
+Those runtime checks remain open; prior source tests were reused, not rerun.
+
+Ordinary Windows desktop configured-root connection and visible collision notice
+also remain open. Known Folder settings, window state, MCP locks and vector DB,
+plus current-user credentials, are not isolated by APPDATA/LOCALAPPDATA overrides.
+The packaged desktop has no general private-root override. No GChat desktop or
+Manager was launched, and Ron's install and shared application data were not used.
+GUI limitation, confirmed by Bubbs at 23:42Z: acceptance needs an isolated Windows
+user profile. Creating or changing a Windows account is Ron's decision; C7 must
+not do it. The passing runtime scopes above are merge-ready documentation
+(`59d9fa845`). The next runtime action is normal idle-stop/reopen and copied-state
+rejection in the next free booked local5090 window; it does not require a desktop
+or account change. Ordinary GUI acceptance remains limited pending Ron's decision.
+
+Current inventory: owned worktree
+`/ai/gchat-worktrees/c7-host-port-collision-20261017`, branch
+`test/c7-host-port-collision-20261017`; accepted Linux result is retained above.
+Disposed Windows root: `C:\Users\Ron\gchat-c7-port-collision-20261017-2334`.
+Sanitized result JSON and short summary only:
+`/ai/gchat/out/c7-host-port-collision-windows-20261017/`.
+Linux Host PID1624354 and Windows PIDs36520/36192/66388 stopped by verified exact
+PID; wrapper1624347 exited. No private Host processes or test-port listeners
+remained at 23:40:48Z. Booking1392 was cancelled and resources returned23:40Z.
+Private runtime roots, binary copies, tokens and keys were removed; retained RC
+donors remain untouched. No live job, retained build or disposable runtime remains.
 
 ## Installed model GPU selection
 
