@@ -176,7 +176,7 @@ describe('AgentStudioPage', () => {
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
+    vi.mocked(toast.error).mockRestore()
   })
 
   async function renderSavedAgents() {
@@ -189,7 +189,8 @@ describe('AgentStudioPage', () => {
     listAgentRuns.mockResolvedValue([firstHistoricalRun, secondHistoricalRun])
     const view = render(<AgentStudioPage />)
     fireEvent.click(await screen.findByRole('button', { name: 'Runs', exact: true }))
-    await screen.findByText(firstHistoricalRun.finalReply)
+    fireEvent.click(await screen.findByRole('button', { name: /Review assistant incomplete/ }))
+    expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
     return view
   }
 
