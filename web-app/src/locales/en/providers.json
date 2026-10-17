@@ -6,6 +6,7 @@
   "refreshModelsLiveFailed": "Could not reach {{provider}} live models endpoint: {{error}}. Showing registry models only.",
   "models": "Models",
   "refreshing": "Refreshing...",
+  "refreshModels": "Refresh model list",
   "refresh": "Refresh",
   "import": "Import",
   "findModel": "Find model",

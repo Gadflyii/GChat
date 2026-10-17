@@ -575,6 +575,8 @@ export function DownloadManagement() {
             variant="ghost"
             size="icon"
             className="text-muted-foreground z-50 rounded-full hover:bg-sidebar-foreground/8! -mt-0.5 size-7 relative"
+            aria-label={t('common:downloads')}
+            title={t('common:downloads')}
           >
             <DownloadIcon className="text-muted-foreground size-4" />
             {downloadCount > 0 && (
