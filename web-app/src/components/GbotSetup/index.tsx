@@ -163,6 +163,10 @@ export default function GbotSetup({
           : step === 3
             ? (computer === 'lan' || guidedCloud) && lanReady
             : true
+  const continueHint =
+    step === 3 && computer === 'lan' && connection.workspaceId && !lanReady && !saving && !connecting
+      ? 'Continue turns on once Check SSH access succeeds. Add the public key to the bot computer first.'
+      : ''
   const submit = async () => {
     if (submissionPending.current || saving || connecting || !canContinue)
       return
@@ -392,13 +396,23 @@ export default function GbotSetup({
           {error}
         </p>
       )}
+      {continueHint && (
+        <p id="gbot-setup-continue-hint" className="text-sm text-muted-foreground">
+          {continueHint}
+        </p>
+      )}
       <div className="flex gap-2">
         {!(
           step === 3 &&
           ['local', 'cloud', 'm365'].includes(computer) &&
           !guidedCloud
         ) && (
-          <Button disabled={saving || connecting || !canContinue}>
+          <Button
+            disabled={saving || connecting || !canContinue}
+            aria-describedby={
+              continueHint ? 'gbot-setup-continue-hint' : undefined
+            }
+          >
             {saving
               ? step === 1
                 ? preparingService
