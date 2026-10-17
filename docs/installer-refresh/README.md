@@ -22,6 +22,48 @@ For the October 17 release candidate:
   The initial [Windows gate](windows-gate-20261016.md) covers a narrower set of
   checks on an RTX 5090; its results do not qualify every Windows feature.
 
+## October 17 current Linux RC — packages and OLD lifecycle verified
+
+The unsigned, unpublished app-only refresh uses GChat
+`c5f125d2544f22adb7f7c3952d0fa4e9582f5b43` and unchanged Engine
+`4f451dded472516ac561b67efdacf9673f776967` (SM80/86/89/120a). The source tree
+matches the verified Gbot Quit cache correction candidate: full `make verify`
+passed with 2,545 frontend tests (6 skipped), 119 extension tests and 1,055 Rust
+tests (27 ignored). Production frontend/native builds, complete DEB/AppImage
+archive checks, all 684 Engine runtime files and direct NTFS transfer checks pass.
+Both streamed and destination SHA256 values match.
+
+| Package | SHA256 |
+| --- | --- |
+| `GChat_2.0.42+rc20261017.gchatc5f125d25.engine4f451dded_amd64.deb` | `44bcae73732c5220eb532ccbc2de7b039bce93de246543b20c3e53c769cde42b` |
+| `GChat_2.0.42_rc20261017.gchatc5f125d25.engine4f451dded_amd64.AppImage` | `bae6a98a6df674fb2e785075dfdd4ae2c7232a72229f7a799695287e29712f38` |
+
+The packages are retained in
+`C:\Users\Ron\gchat-windows-gate-20261016\linux-rc-current-c5f125d25-4f451dded`.
+Exact package, archive and transfer receipts are in
+`/ai/gchat/out/linux-rc-final-20261017/current-c5f125d25-4f451dded/`.
+Gchat 2's one current-c5f **OLD fixture rerun passes**:
+`old-acceptance-result.json` records the fixed uncached native Quit followed by
+one ordinary service start. Both saved setups became Ready automatically, with
+no manual Resume and all 445 baseline operations preserved. Normal Quit removed
+the service, the ordinary GUI exited with code 0, the outer domain was OFF and
+its original XML was restored exactly; resources returned at 10:02Z. This covers
+the retained saved-setup/service lifecycle, without View, Send, model start,
+task execution or control transfer.
+
+The packaged Flash pure 2-bit package (SHA256
+`8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`)
+**High-reasoning consumer check remains OPEN**.
+
+Historical acceptance on GChat `0b3aa523c` with the same Engine reached Ready
+through one ordinary Installed Load on the local RTX 5090, then answered one
+High-reasoning Qwen GUI request with exactly `RC_OK`. That retained-state/profile
+scope, recorded in `local5090-0b3aa523c-4f451dded/` beside the current packet,
+does not qualify installation of c5f, a fresh install/import, full Ensure, all
+formats or a full model rehash. The prior FRESH fixture result remains separately
+bound to 0b3/4f. `VITE_MODEL_CATALOG_URL` remains unset; no public release catalog
+is approved. Signing, publication and the known issues above remain separate.
+
 ## October 17 local-model startup quote — Linux preview passes
 
 The retained Linux AppImage (`d31a4cbd0`, Engine `db265e6b2`) verified a locally
@@ -44,7 +86,7 @@ Evidence: `/ai/gchat/out/manager-quote-local-models-20261016/packaged-d31-202610
 
 The [Windows gate packet](windows-gate-20261016.md) binds the current-user NSIS installer to GChat `dcb11c14` and Engine `c440179a` (SM120a), records the upgrade and fresh application-state checks, and lists each PASS, failure and unqualified check. One model started and answered one request. Custom-root Host migration remains open for Windows. The [October 17 native follow-up](https://github.com/Gadflyii/GChat/blob/5671542f5/docs/installer-refresh/windows-native-followup-20261017.md) qualifies ordinary **Stop Host and Quit** for an idle desktop-owned Host; busy refusal is covered by source tests, and SCM shutdown was not run. The packet also records the 85m7.168s natural profile, 2365ms native reuse, functional long-chat render and actual idle measurement.
 
-## October 15 current Linux Engine package — accepted
+## October 15 historical Linux Engine package — accepted
 
 Bubbs's one unsigned package refresh passes. Desktop/CLI/Host/Gbot source is
 merged GChat main `44e80b7c11ba07ed43a58d69e9a97408625452ef`, including
