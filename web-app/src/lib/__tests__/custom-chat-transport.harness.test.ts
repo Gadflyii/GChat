@@ -1056,6 +1056,10 @@ describe('CustomChatTransport production harness', () => {
         rag: { getTools: vi.fn().mockResolvedValue([]) } as never,
         app: { getServerStatus: vi.fn().mockResolvedValue(true) } as never,
       })
+      const invoke = vi
+        .fn<(command: string, args?: InvokeArgs) => unknown>()
+        .mockReturnValue(undefined)
+      mockIPC(invoke)
       const instances = vi
         .spyOn(agentDefinitions, 'listAgentModelInstances')
         .mockResolvedValue([
@@ -1107,6 +1111,7 @@ describe('CustomChatTransport production harness', () => {
         }
         expect(createModel).toHaveBeenCalledTimes(7)
       } finally {
+        clearMocks()
         instances.mockRestore()
         createModel.mockRestore()
       }
