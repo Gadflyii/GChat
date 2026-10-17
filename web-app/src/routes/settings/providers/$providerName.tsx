@@ -589,6 +589,8 @@ function ProviderDetail() {
                               size="icon-xs"
                               onClick={handleRefreshModels}
                               disabled={refreshingModels}
+                              aria-label={t('providers:refreshModels')}
+                              title={t('providers:refreshModels')}
                             >
                               {refreshingModels ? (
                                 <IconLoader
