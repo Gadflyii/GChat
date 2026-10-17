@@ -442,6 +442,9 @@ function MCPServersDesktop() {
                         </Button>
                       </div>
                     </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {t('mcp-servers:description')}
+                    </p>
                     <p className="text-sm mt-1">
                       {t('mcp-servers:findMore')}{' '}
                       <a
@@ -463,6 +466,7 @@ function MCPServersDesktop() {
                   )}
                   actions={
                     <Input
+                      aria-label={t('mcp-servers:runtimeSettings.toolCallTimeout')}
                       type="number"
                       min={1}
                       step={1}

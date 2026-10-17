@@ -218,14 +218,14 @@
   top: 4%;
   font-family: ui-monospace, monospace;
   font-weight: 500;
-  font-size: 0.16em;
+  font-size: 0.28em;
   line-height: 1;
   opacity: 0;
   pointer-events: none;
   animation: gbot-zz 3.2s ease-out infinite;
 }
 .gbot--sleeping .gbot__body::after {
-  font-size: 0.12em;
+  font-size: 0.21em;
   animation-delay: 1.6s;
 }
 .gbot--dark.gbot--sleeping .gbot__body::before,

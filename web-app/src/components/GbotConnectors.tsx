@@ -95,9 +95,10 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     <details className="rounded-lg border p-3">
       <summary className="cursor-pointer text-sm">Linked accounts</summary>
       <p className="my-3 text-xs text-muted-foreground">
-        Link existing Google or Microsoft accounts to this bot. New bots start
-        without accounts. Tools are available to new or resumed tasks, and write
-        actions require approval.
+        Choose which of your connected Google or Microsoft accounts this bot may
+        use, then choose Save linked accounts. New bots start without accounts.
+        The selection applies to new or resumed tasks; actions that change your
+        account data still require approval.
       </p>
       <p id={setupHelpId} className="mb-3 text-xs text-muted-foreground">
         To add or reconnect an account, open Settings → Workspace connections,

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import AddEditMCPServer from '../dialogs/AddEditMCPServer'
 import EditJsonMCPserver from '../dialogs/EditJsonMCPserver'
@@ -17,6 +18,36 @@ vi.mock('@/components/JSONCodeEditor', () => ({
 const config = { command: 'node', args: ['server.js'], env: {}, type: 'stdio' as const }
 
 describe('MCP server configuration dialogs', () => {
+  it('guides a web connection from provider details to a saved connection', async () => {
+    const saved = new Map<string, unknown>()
+    function Setup() {
+      const [open, setOpen] = useState(true)
+      return <AddEditMCPServer open={open} editingKey={null}
+        onOpenChange={setOpen} onSave={async (connections) => {
+          for (const [name, connection] of Object.entries(connections)) {
+            saved.set(name, connection)
+          }
+        }} />
+    }
+    render(<Setup />)
+
+    expect(screen.getByText(/Use the connection details supplied by the tool provider/)).toBeVisible()
+    fireEvent.change(screen.getByLabelText('mcp-servers:serverName'), {
+      target: { value: 'My calendar' },
+    })
+    fireEvent.click(screen.getByRole('radio', { name: 'Web address (HTTP)' }))
+    fireEvent.change(screen.getByLabelText('Tool server address'), {
+      target: { value: 'https://calendar.example/mcp' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'mcp-servers:save' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(saved.get('My calendar')).toMatchObject({
+      type: 'http',
+      url: 'https://calendar.example/mcp',
+    })
+  })
+
   it('keeps the form open with the native validation error when saving fails', async () => {
     const close = vi.fn()
     const save = vi.fn().mockRejectedValue(new Error('MCP header name is invalid'))
@@ -34,7 +65,7 @@ describe('MCP server configuration dialogs', () => {
     const close = vi.fn()
     const save = vi.fn().mockRejectedValue(new Error('MCP args must be an array of strings'))
     render(<AddEditMCPServer open editingKey={null} onOpenChange={close} onSave={save} />)
-    fireEvent.click(screen.getByTitle('Add server by JSON'))
+    fireEvent.click(screen.getByTitle('Paste advanced settings (JSON)'))
     const batch = { first: config, invalid: { ...config, args: 1 } }
     fireEvent.change(screen.getByLabelText('MCP JSON'), {
       target: { value: JSON.stringify(batch) },
@@ -49,7 +80,7 @@ describe('MCP server configuration dialogs', () => {
   it('preserves a JSON server whose name is also an object prototype key', async () => {
     const save = vi.fn().mockResolvedValue(undefined)
     render(<AddEditMCPServer open editingKey={null} onOpenChange={vi.fn()} onSave={save} />)
-    fireEvent.click(screen.getByTitle('Add server by JSON'))
+    fireEvent.click(screen.getByTitle('Paste advanced settings (JSON)'))
     const batch = JSON.parse(`{"__proto__":${JSON.stringify(config)}}`)
     fireEvent.change(screen.getByLabelText('MCP JSON'), {
       target: { value: JSON.stringify(batch) },

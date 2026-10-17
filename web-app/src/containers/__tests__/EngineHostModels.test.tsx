@@ -97,7 +97,7 @@ it.each(['running', 'cancelling'] as const)('allows an imported model quote and 
   const view = render(<HostCard host={localHost} snapshot={data} />)
   selectImportedModel()
   expect(screen.getByRole('progressbar', { name: 'Hardware profiling in progress' })).toBeInTheDocument()
-  expect(screen.getByText(/The selected model is ready/)).toBeInTheDocument()
+  expect(screen.getByText(/Your selected model is ready to load/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
   expect(await screen.findByText(/Verified artifact: qwen3.8-27b \/ int8/)).toBeInTheDocument()

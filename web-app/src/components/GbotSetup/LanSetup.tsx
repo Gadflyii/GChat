@@ -116,8 +116,11 @@ export default function LanSetup({
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Use a dedicated bot computer or VM with SSH enabled. GChat creates its
-        own key and keeps the private key in your vault.
+        Use a separate bot computer or virtual machine with SSH enabled. SSH is
+        the secure connection GChat uses to reach it. Enter its network address,
+        SSH port (usually 22) and user name below; ask the computer’s owner if
+        you do not know them. GChat creates a connection key and protects its
+        private part in secure storage.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         {(['hostname', 'port', 'user'] as const).map((field) => (
@@ -154,8 +157,14 @@ export default function LanSetup({
               setVerified(false)
             }}
           />
-          Use an existing SSH key
+          Use an existing SSH key (advanced)
         </label>
+      )}
+      {!locked && (
+        <p className="text-xs text-muted-foreground">
+          Leave the existing-key option off to let GChat create a new key for
+          this bot. Only select it if you already have a private SSH key.
+        </p>
       )}
       {importing ? (
         <>
