@@ -50,7 +50,11 @@ function GbotPage() {
   const [selected, setSelected] = useState('')
   const [owner] = useState(gbotControlOwner)
   const desktop = useRef<DesktopViewHandle>(null)
-  const [busy, setBusy] = useState(false)
+  const [operationBusy, setBusy] = useState(false)
+  const [serviceAction, setServiceAction] = useState<
+    'starting' | 'connecting' | 'stopping' | 'disconnecting'
+  >()
+  const busy = operationBusy || Boolean(serviceAction)
   const [recoveryConfirmation, setRecoveryConfirmation] = useState('')
   const [serviceStopped, setServiceStopped] = useState(false)
   const [serviceTarget, setServiceTarget] = useState<ServiceTarget>({
@@ -174,7 +178,16 @@ function GbotPage() {
   }, [refresh, gbotEnabled, serviceStopped])
   const changeService = async (start: boolean) => {
     if (busy) return
-    setBusy(true)
+    const paired = serviceTarget.kind === 'paired_host'
+    setServiceAction(
+      start
+        ? paired
+          ? 'connecting'
+          : 'starting'
+        : paired
+          ? 'disconnecting'
+          : 'stopping'
+    )
     try {
       if (start) {
         await startGbotService()
@@ -190,7 +203,7 @@ function GbotPage() {
       if (!start) stopped.current = false
       toast.error(String(cause))
     } finally {
-      setBusy(false)
+      setServiceAction(undefined)
       void useGbotCompanion.getState().refresh()
     }
   }
@@ -445,17 +458,40 @@ function GbotPage() {
                 void changeService(serviceStopped || Boolean(error))
               }
             >
-              {serviceTarget.kind === 'paired_host'
-                ? serviceStopped || error
-                  ? 'Connect Gbot service'
-                  : 'Disconnect Gbot service'
-                : serviceStopped || error
-                  ? 'Start Gbot service'
-                  : 'Quit Gbot service'}
+              {serviceAction
+                ? {
+                    starting: 'Starting Gbot service…',
+                    connecting: 'Connecting Gbot service…',
+                    stopping: 'Stopping Gbot service…',
+                    disconnecting: 'Disconnecting Gbot service…',
+                  }[serviceAction]
+                : serviceTarget.kind === 'paired_host'
+                  ? serviceStopped || error
+                    ? 'Connect Gbot service'
+                    : 'Disconnect Gbot service'
+                  : serviceStopped || error
+                    ? 'Start Gbot service'
+                    : 'Quit Gbot service'}
             </Button>
           </div>
         </div>
       </HeaderPage>
+      {serviceAction && (
+        <p role="status" className="border-b px-5 py-3 text-sm">
+          {
+            {
+              starting:
+                'Starting Gbot on this computer. First-time setup or an update may need several minutes to prepare files. The service will start automatically when preparation finishes. You can keep using GChat.',
+              connecting:
+                'Connecting to the Gbot service on your selected LAN computer. Please wait.',
+              stopping:
+                'Stopping the Gbot service. Tasks and schedules will resume when you start it again.',
+              disconnecting:
+                'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.',
+            }[serviceAction]
+          }
+        </p>
+      )}
       {choosingService && (
         <section
           aria-label="Choose service computer"
