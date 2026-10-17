@@ -40,6 +40,7 @@ pub enum ExecutorError {
     State(ServiceError),
     Io(std::io::Error),
     InvalidMessage,
+    EmptyReply,
     AwaitingHuman,
     NeedsReview,
     Denied,
@@ -52,6 +53,7 @@ impl std::fmt::Display for ExecutorError {
             Self::State(e) => e.fmt(f),
             Self::Io(e) => e.fmt(f),
             Self::InvalidMessage => f.write_str("invalid Cua task message"),
+            Self::EmptyReply => f.write_str("model returned no answer; resume the task to try again"),
             Self::AwaitingHuman => f.write_str("waiting for your reply"),
             Self::NeedsReview => {
                 f.write_str("task has an unresolved effect; review before resuming")
@@ -619,7 +621,14 @@ impl CuaTask {
                             self.save().await?;Ok(Value::Null)
                         },
                         "tool"=>self.tool(runtime,approval,payload).await,
-                        "done"=> Ok(Value::Null),
+                        "done"=> {
+                            let content=&self.record.messages.last().ok_or(ExecutorError::EmptyReply)?["content"];
+                            let has_answer=content.as_str().is_some_and(|text|!text.trim().is_empty())
+                                || content.as_array().is_some_and(|parts|parts.iter().any(|part|
+                                    part["type"]=="text" && part["text"].as_str().is_some_and(|text|!text.trim().is_empty())));
+                            if !has_answer { return Err(ExecutorError::EmptyReply); }
+                            Ok(Value::Null)
+                        },
                         "failed"=>Err(ExecutorError::ChildFailed),
                         _=>Err(ExecutorError::InvalidMessage),
                     }
@@ -1574,6 +1583,39 @@ mod tests {
             .unwrap()
             .contains("Never use\nAT-SPI DoAction"));
     }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn empty_terminal_model_reply_is_interrupted_and_preserved() {
+        for content in [json!(""), json!(" \n"), Value::Null, json!("Finished"),
+            json!([{"type":"text","text":"Finished"}])] {
+            let dir = tempfile::tempdir().unwrap();
+            let (mut task, runtime) = fixture(dir.path()).await;
+            task.record.messages = vec![json!({"role":"user","content":"Report the result"})];
+            task.record.tools.clear();
+            let raw = json!({"choices":[{"message":{"role":"assistant","content":content,
+                "reasoning_content":"Private reasoning alone is not an answer"}}]});
+            let script = format!("read start; printf '%s\\n' '{}'; read reply; printf '%s\\n' '{}'; read reply",
+                json!({"method":"model","payload":raw}), json!({"method":"done","payload":{}}));
+            let processes = ExecutorProcesses {
+                python: ProcessSpec { program: "sh".into(), args: vec!["-c".into(), script] },
+                context: ProcessSpec { program: "cat".into(), args: vec![] },
+            };
+            let assignment = Assignment { api_base: "http://unused/v1".into(), api_key: None,
+                model: "fixture".into(), context_tokens: 131072 };
+            let (_sender, receiver) = watch::channel(false);
+            let result = task.run(&runtime, &Deny, &assignment, &processes, receiver).await;
+            let empty = content.is_null() || content.as_str().is_some_and(|text| text.trim().is_empty());
+            if empty { assert!(matches!(result, Err(ExecutorError::EmptyReply))); }
+            else { result.unwrap(); }
+            let saved = CuaTask::open(dir.path().join("task.json")).await.unwrap().snapshot();
+            assert_eq!(saved.state, if empty { TaskState::Interrupted } else { TaskState::Completed });
+            assert_eq!(saved.model_replies, vec![raw]);
+            assert!(saved.calls.is_empty());
+            if empty { assert_eq!(saved.history.last().unwrap().reason,
+                "model returned no answer; resume the task to try again"); }
+        }
+    }
+
     #[tokio::test]
     async fn cancellation_during_approval_leaves_no_effect_and_can_resume() {
         let dir = tempfile::tempdir().unwrap();
