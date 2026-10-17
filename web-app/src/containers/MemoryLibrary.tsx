@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { IconPlus, IconRefresh } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -53,34 +55,43 @@ export function MemoryLibrary() {
         .toLowerCase()
         .includes(query.toLowerCase())
   )
+  // Page actions belong in the page header, like Add Assistant in Settings.
+  // The route provides the slot; without one they render in place.
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    setHeaderSlot(document.getElementById('page-header-actions'))
+  }, [])
+  const actions = (
+    <div className="flex gap-2">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy}
+        onClick={() => void act(refresh)}
+      >
+        <IconRefresh size={16} />
+        Refresh
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={busy}
+        onClick={() => {
+          setDraft(blank())
+          setError('')
+        }}
+      >
+        <IconPlus size={16} />
+        New memory
+      </Button>
+    </div>
+  )
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-medium">Memory</h1>
-          <p className="text-sm text-muted-foreground">
-            Facts and decisions you choose to keep across conversations.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => void act(refresh)}
-          >
-            Refresh
-          </Button>
-          <Button
-            disabled={busy}
-            onClick={() => {
-              setDraft(blank())
-              setError('')
-            }}
-          >
-            New memory
-          </Button>
-        </div>
-      </div>
+      {headerSlot ? createPortal(actions, headerSlot) : actions}
+      <p className="text-sm text-muted-foreground">
+        Facts and decisions you choose to keep across conversations.
+      </p>
       <p className="text-sm text-muted-foreground">
         Personal memories can be recalled in GChat chat and agents. Workspace
         memories are limited to agents in that exact workspace. Relevant enabled
@@ -198,7 +209,7 @@ export function MemoryLibrary() {
         <p className="rounded-lg border border-dashed p-8 text-center text-muted-foreground">
           {entries.length
             ? 'No matching memories.'
-            : 'No saved memories yet. Create one above, or ask an agent to remember a fact and review its approval request.'}
+            : 'No saved memories yet. Choose New memory to create one, or ask an agent to remember a fact and review its approval request.'}
         </p>
       )}
       <div className="space-y-3">
