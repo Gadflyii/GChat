@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { Route as GeneralRoute } from '../general'
 import type { ServiceHub } from '@/services'
@@ -36,12 +36,16 @@ vi.mock('@/containers/Card', () => ({
     actions,
     className,
   }: {
-    title?: string
+    title?: React.ReactNode
     description?: string
     actions?: React.ReactNode
     className?: string
   }) => (
-    <div data-testid="card-item" data-title={title} className={className}>
+    <div
+      data-testid="card-item"
+      data-title={typeof title === 'string' ? title : undefined}
+      className={className}
+    >
       {title && <div data-testid="card-item-title">{title}</div>}
       {description && (
         <div data-testid="card-item-description">{description}</div>
@@ -56,6 +60,7 @@ vi.mock('@/containers/LanguageSwitcher', () => ({
 }))
 
 const mockSetPreloadModelOnStartup = vi.hoisted(() => vi.fn())
+const mockSetHuggingfaceToken = vi.hoisted(() => vi.fn())
 const mockNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
@@ -63,7 +68,7 @@ vi.mock('@/hooks/useGeneralSetting', () => ({
     spellCheckChatInput: true,
     setSpellCheckChatInput: vi.fn(),
     huggingfaceToken: 'test-token',
-    setHuggingfaceToken: vi.fn(),
+    setHuggingfaceToken: mockSetHuggingfaceToken,
     preloadModelOnStartup: false,
     setPreloadModelOnStartup: mockSetPreloadModelOnStartup,
   }),
@@ -136,21 +141,8 @@ vi.mock('@/components/ui/button', () => ({
 }))
 
 vi.mock('@/components/ui/input', () => ({
-  Input: ({
-    value,
-    onChange,
-    placeholder,
-  }: {
-    value: string
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-    placeholder?: string
-  }) => (
-    <input
-      data-testid="input"
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-    />
+  Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => (
+    <input data-testid="input" {...props} />
   ),
 }))
 
@@ -283,6 +275,10 @@ Object.assign(navigator, {
 })
 
 describe('General Settings Route', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     useConversationPolicy.getState().setDefaultApprovalMode('manual')
@@ -346,16 +342,78 @@ describe('General Settings Route', () => {
   //   expect(screen.getByTestId('language-switcher')).toBeInTheDocument()
   // })
 
-  it('should render huggingface token input', async () => {
+  it('labels the Hugging Face token input and masks it by default', async () => {
     const Component = GeneralRoute.component as React.ComponentType
     await act(async () => {
       render(<Component />)
     })
 
-    const input = screen.getByTestId('input')
-    expect(input).toBeInTheDocument()
+    const input = screen.getByLabelText('settings:general.huggingfaceToken')
+    expect(input).toHaveAttribute('type', 'password')
     expect(input).toHaveValue('test-token')
+    expect(screen.getByRole('button', { name: 'Show token' })).toHaveAttribute(
+      'aria-controls',
+      input.id
+    )
   })
+
+  it('reveals and hides the same token without changing its stored value', async () => {
+    const Component = GeneralRoute.component as React.ComponentType
+    await act(async () => {
+      render(<Component />)
+    })
+    const input = screen.getByLabelText('settings:general.huggingfaceToken')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show token' }))
+
+    expect(input).toHaveAttribute('type', 'text')
+    expect(input).toHaveValue('test-token')
+    expect(
+      screen.queryByRole('button', { name: 'Show token' })
+    ).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide token' }))
+
+    expect(input).toHaveAttribute('type', 'password')
+    expect(input).toHaveValue('test-token')
+    expect(screen.getByRole('button', { name: 'Show token' })).toBeInTheDocument()
+    expect(mockSetHuggingfaceToken).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])(
+    'verifies the unchanged token when revealed is %s',
+    async (revealed) => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ name: 'Test User' }),
+      })
+      vi.stubGlobal('fetch', mockFetch)
+      const Component = GeneralRoute.component as React.ComponentType
+      await act(async () => {
+        render(<Component />)
+      })
+      if (revealed) {
+        fireEvent.click(screen.getByRole('button', { name: 'Show token' }))
+      }
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Verify' }))
+      })
+
+      expect(mockFetch).toHaveBeenCalledExactlyOnceWith(
+        'https://huggingface.co/api/whoami-v2',
+        {
+          headers: { Authorization: 'Bearer test-token' },
+          signal: expect.any(AbortSignal),
+        }
+      )
+      expect(toast.success).toHaveBeenCalledWith('Token is valid', {
+        description: 'Signed in as Test User',
+      })
+      expect(mockSetHuggingfaceToken).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Verify' })).toBeEnabled()
+    }
+  )
 
   it('should handle spell check toggle', async () => {
     const Component = GeneralRoute.component as React.ComponentType
@@ -432,14 +490,11 @@ describe('General Settings Route', () => {
       render(<Component />)
     })
 
-    const input = screen.getByTestId('input')
-    expect(input).toBeInTheDocument()
-
-    // Test that input is interactive
+    const input = screen.getByLabelText('settings:general.huggingfaceToken')
     await act(async () => {
       fireEvent.change(input, { target: { value: 'new-token' } })
     })
-    expect(input).toBeInTheDocument()
+    expect(mockSetHuggingfaceToken).toHaveBeenCalledExactlyOnceWith('new-token')
   })
 
   it('should handle check for updates', async () => {
