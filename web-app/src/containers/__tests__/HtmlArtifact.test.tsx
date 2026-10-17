@@ -74,8 +74,10 @@ async function rejectRegistration(
 
 describe('HtmlArtifact', () => {
   let scrollTops: number[]
+  let clipboardDescriptor: PropertyDescriptor | undefined
 
   beforeEach(() => {
+    clipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard')
     native.tauri = false
     native.invoke.mockReset().mockResolvedValue(undefined)
     native.save.mockReset().mockResolvedValue(null)
@@ -95,6 +97,11 @@ describe('HtmlArtifact', () => {
   })
 
   afterEach(() => {
+    if (clipboardDescriptor) {
+      Object.defineProperty(navigator, 'clipboard', clipboardDescriptor)
+    } else {
+      delete (navigator as unknown as Record<string, unknown>).clipboard
+    }
     delete (HTMLElement.prototype as unknown as Record<string, unknown>)
       .scrollTop
     delete (HTMLElement.prototype as unknown as Record<string, unknown>)
@@ -371,5 +378,107 @@ describe('HtmlArtifact', () => {
     expect(native.save).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(native.writeFile).not.toHaveBeenCalled()
+  })
+
+  it('keeps the source available after Copy fails and reports success only when retry finishes', async () => {
+    native.tauri = true
+    const copying = deferred<void>()
+    const retry = deferred<void>()
+    const writeText = vi
+      .fn()
+      .mockReturnValueOnce(copying.promise)
+      .mockReturnValueOnce(retry.promise)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const code = '<main>Copy this exact HTML</main>'
+    const { unmount } = render(<HtmlArtifact code={code} />)
+    const copy = screen.getByRole('button', { name: 'Copy HTML' })
+
+    fireEvent.click(copy)
+    expect(screen.getByRole('status')).not.toHaveTextContent('HTML copied.')
+    await rejectRegistration(copying, 'Clipboard permission denied')
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not copy the HTML. Try Copy again, or select the text in Code.'
+    )
+    expect(copy).toBeEnabled()
+    expect(screen.getByRole('status')).not.toHaveTextContent('HTML copied.')
+    fireEvent.click(screen.getByRole('button', { name: 'Code', exact: true }))
+    expect(codePane()).toBeVisible()
+    expect(codePane()).toHaveTextContent(code)
+
+    fireEvent.click(copy)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(copy).toBeDisabled()
+    expect(screen.getByRole('status')).not.toHaveTextContent('HTML copied.')
+    expect(writeText).toHaveBeenNthCalledWith(1, code)
+    expect(writeText).toHaveBeenNthCalledWith(2, code)
+    await act(async () => {
+      retry.resolve(undefined)
+      await retry.promise
+    })
+
+    expect(copy).toBeEnabled()
+    expect(screen.getByRole('status')).toHaveTextContent('HTML copied.')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    unmount()
+  })
+
+  it('offers the Code source when the clipboard is unavailable', async () => {
+    native.tauri = true
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    })
+    const code = '<section>Select this source manually</section>'
+    const { unmount } = render(<HtmlArtifact code={code} />)
+    const copy = screen.getByRole('button', { name: 'Copy HTML' })
+
+    fireEvent.click(copy)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not copy the HTML. Try Copy again, or select the text in Code.'
+    )
+    expect(copy).toBeEnabled()
+    expect(screen.getByRole('status')).not.toHaveTextContent('HTML copied.')
+    fireEvent.click(screen.getByRole('button', { name: 'Code', exact: true }))
+    expect(codePane()).toBeVisible()
+    expect(codePane()).toHaveTextContent(code)
+    unmount()
+  })
+
+  it('copies once for rapid Copy clicks and stays busy until the clipboard accepts the HTML', async () => {
+    native.tauri = true
+    const copying = deferred<void>()
+    const writeText = vi.fn().mockReturnValueOnce(copying.promise)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
+    const code = '<p>Copy once while pending</p>'
+    const { unmount } = render(<HtmlArtifact code={code} />)
+    const copy = screen.getByRole('button', { name: 'Copy HTML' })
+
+    act(() => {
+      fireEvent.click(copy)
+      fireEvent.click(copy)
+    })
+
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(code)
+    expect(copy).toBeDisabled()
+    expect(copy).toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('status')).not.toHaveTextContent('HTML copied.')
+    await act(async () => {
+      copying.resolve(undefined)
+      await copying.promise
+    })
+
+    expect(copy).toBeEnabled()
+    expect(copy).toHaveAttribute('aria-busy', 'false')
+    expect(screen.getByRole('status')).toHaveTextContent('HTML copied.')
+    expect(writeText).toHaveBeenCalledOnce()
+    unmount()
   })
 })
