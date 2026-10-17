@@ -1,5 +1,36 @@
 # GChat remediation and code hygiene
 
+## Thread deletion single submission (C4, October 17)
+
+Repository `/ai/gchat`, branch `fix/c4-thread-delete-single-submit-20261017`,
+worktree `/ai/gchat-worktrees/c4-thread-delete-single-submit-20261017`,
+baseline `691fdcc10`. The dialog handled Enter itself while the native button
+also activated its click handler, allowing duplicate deletion requests. It now
+uses native activation and a synchronous in-flight guard. Cancel receives
+initial focus; pending deletion disables controls and dismissal, shows loading,
+and reports failures inline so the user can retry. Existing deletion callbacks
+and default/project navigation behavior are preserved.
+
+Acceptance passed: one deletion while pending, including input repeated before
+a render; opening Enter safely cancels; failures remain visible and retryable;
+success closes the dialog, with home navigation only for default deletion.
+Source and interaction tests were implemented in parallel with distinct file
+ownership. Eight focused tests passed using the real dialog/button components
+and a mocked `onDelete`; no actual user data was deleted.
+
+Linux `make verify` passed: lint, typecheck, quality/contract/asset checks,
+coverage floors, 2,710 frontend tests (six skipped), 119 extension tests, and
+1,073 Rust tests (27 ignored). Lint retains two unrelated warnings in
+`ServiceSetup.tsx` and `AgentWorkspaceFiles.tsx`. Windows runtime behavior was
+not separately exercised.
+
+The private S1 build copy and container were removed after verification;
+booking 2544 was cancelled and resources returned at 13:44Z. Gchat 3's inactive
+dependency donor remains read-only and retained. The source worktree is retained
+for review; concise results are kept at
+`/ai/gchat/out/c4-thread-delete-single-submit-20261017/result.json`.
+The next step is the authorized merge; no further run is required.
+
 ## Project deletion single submission (C4, October 17)
 
 Repository `/ai/gchat`, branch `fix/c4-project-delete-single-submit-20261017`,
