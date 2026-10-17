@@ -21,3 +21,13 @@ describe('plain model names', () => {
     expect(plainWeightsName('x', 'weird-format')).toBe('WEIRD FORMAT')
   })
 })
+
+describe('plain profile names', () => {
+  it('maps SMOL in Host profile names to the plain names', async () => {
+    const { plainProfileName } = await import('../engine-host-labels')
+    expect(plainProfileName('GBench Max Perf · Flash SMOL')).toBe('GBench Max Perf · Flash pure 2-bit')
+    expect(plainProfileName('GBench Max Perf · Qwen 3.8 Flash SMOL')).toBe('GBench Max Perf · Qwen 3.8 Flash pure 2-bit')
+    expect(plainProfileName('Qwen 27B SMOL')).toBe('Qwen 27B 2-bit mix')
+    expect(plainProfileName('GBench Max Perf · Qwen 3.8 27B INT')).toBe('GBench Max Perf · Qwen 3.8 27B INT')
+  })
+})

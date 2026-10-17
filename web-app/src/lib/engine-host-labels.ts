@@ -3,6 +3,10 @@ import type { EngineInstance, EngineModel, EngineSnapshot } from '@/services/eng
 /** Trailing package hashes in catalog names, e.g. "Qwen 27B 2-bit mix (483343c2...)". */
 export const plainModelName = (name: string) => name.replace(/\s*\([a-f0-9]{64}\)\s*$/i, '')
 
+/** Profile names come from the Host; older Hosts still say SMOL for the 2-bit packages. */
+export const plainProfileName = (name: string) =>
+  name.replace(/\bFlash SMOL\b/g, 'Flash pure 2-bit').replace(/\bSMOL\b/g, '2-bit mix')
+
 const familyName = (modelId: string) => {
   if (/^qwen3\.8-27b$/i.test(modelId)) return 'Qwen 3.8 27B'
   if (/^muse-glimmer-30b$/i.test(modelId)) return 'Muse 30B'

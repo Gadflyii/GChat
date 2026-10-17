@@ -5,7 +5,7 @@ import { EngineProfilePicker } from './EngineProfilePicker'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { engineAlias, engineCommand, hardwareProfileBlocksLaunch } from '@/services/engines'
 import type { BenchmarkSessionInfo } from '@/services/benchmark/tauri'
-import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
+import { hostInstanceLabel, hostModelLabel, plainProfileName } from '@/lib/engine-host-labels'
 import { Button } from '@/components/ui/button'
 
 export function BenchmarkServerSettings({ sessions, selected, select, disabled, refresh, onPendingChange }: {
@@ -91,7 +91,7 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
           }}>
           <option value="">Choose a Max Perf profile</option>
           {maxPerfChoices.map(({ entry, key }) => <option key={key} value={key}>
-            {entry.profile.name} · {hostModelLabel(snapshot.models.find(model => model.id === entry.model_id)!)}
+            {plainProfileName(entry.profile.name)} · {hostModelLabel(snapshot.models.find(model => model.id === entry.model_id)!)}
           </option>)}
         </select>
       </label>
