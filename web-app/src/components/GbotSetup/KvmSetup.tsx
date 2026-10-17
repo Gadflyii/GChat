@@ -42,10 +42,20 @@ export default function KvmSetup({
   const [error, setError] = useState('')
   const checkPending = useRef(false)
   const actionPending = useRef(false)
+  const refreshVersion = useRef(0)
   const newId = useRef(crypto.randomUUID())
+  const invalidateRefresh = useCallback(() => {
+    ++refreshVersion.current
+  }, [])
   const refresh = useCallback(async () => {
-    const saved = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
-    setRecords(saved.filter((record) => record.stage !== 'removed'))
+    const version = ++refreshVersion.current
+    try {
+      const saved = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
+      if (version !== refreshVersion.current) return
+      setRecords(saved.filter((record) => record.stage !== 'removed'))
+    } catch (cause) {
+      if (version === refreshVersion.current) throw cause
+    }
   }, [])
   const check = useCallback(async () => {
     if (checkPending.current || actionPending.current) return
@@ -70,9 +80,10 @@ export default function KvmSetup({
       void refresh().catch((cause) => setError(String(cause)))
     })
     return () => {
+      invalidateRefresh()
       void subscription.then((unlisten) => unlisten())
     }
-  }, [check, refresh])
+  }, [check, refresh, invalidateRefresh])
   const visibleRecords = initialId
     ? records.filter((saved) => saved.id === initialId)
     : records
@@ -92,11 +103,13 @@ export default function KvmSetup({
         await connected(id)
         return
       }
+      invalidateRefresh()
       setCurrent(id)
       const result = await gbot<KvmSetupRecord>(
         `setup/kvm/${path}`,
         path === 'start' ? { id, name: botName } : { id }
       )
+      invalidateRefresh()
       setRecords((previous) => [
         ...previous.filter((item) => item.id !== id),
         ...(result.stage === 'removed' ? [] : [result]),
