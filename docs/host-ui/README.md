@@ -1,5 +1,28 @@
 # GInfer host UI
 
+## Global conversation deletion — C7
+
+`GUI-GLOBAL-THREADS-DELETE-SINGLE-SUBMIT-20261017` applies the existing project
+confirmation behavior to global Delete all: Cancel initially focused, synchronous
+single submission, blocked dismissal while pending, and a visible retryable
+error. Preserve global deletion scope, notification and success-only deferred
+home navigation. No actual conversation deletion is authorized.
+
+Acceptance: focused rendered keyboard/repeated activation/pending/success/retry
+cases and one full `make verify`, then isolated commit/push merge-ready by
+15:15 UTC October17. Installed confirmation remains with Gchat3. Windows
+host-port collision still waits for Gchat2 installed-Windows handoff.
+
+Owned tree `/ai/gchat-worktrees/c7-global-threads-delete-single-submit-20261017`,
+branch `fix/c7-global-threads-delete-single-submit-20261017`, base main
+`65248d3cc`. Implementation and dedicated test are separate agent-owned files.
+Implementation and six rendered regression cases are ready. S1 CPU32–39 are
+booked as2595 from14:33–15:08 UTC for private offline staging, focused cases and
+one full CPU-only gate in pinned image `ad7f9bf020d7`. The read-only
+`tmp-gchat3-linux-rc-20261016` dependency/native cache donor is preserved;
+owned disposable gate root is `tmp-c7-global-threads-delete-single-submit-20261017`
+on S1. No model/GUI or GPU operation. Next: run focused tests, then full verify.
+
 ## Project conversation deletion — C7
 
 `GUI-PROJECT-THREADS-DELETE-SINGLE-SUBMIT-20261017` makes the project's
