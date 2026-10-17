@@ -338,6 +338,38 @@ function GbotPage() {
       savedAssignment.model.trim() &&
       savedAssignment.context_tokens > 0
   )
+  const taskGuidance = (() => {
+    if (busy)
+      return 'Wait for the current operation to finish before running a task.'
+    if (setupBlocked) {
+      if (canHandBackDuringSetup)
+        return 'Choose Hand back, then Resume setup before running a task.'
+      if (!botHasControl)
+        return 'Setup is incomplete and this bot is paused. Its control owner must hand back control before setup can continue.'
+      return setups === undefined
+        ? 'Wait for setup status before running a task.'
+        : 'Finish this bot’s setup with Resume setup before running a task.'
+    }
+    if (executorError)
+      return 'The task runner is unavailable. Resolve the task runner issue above before running a task.'
+    if (!identity) return 'Connect this bot’s computer before running a task.'
+    if (!botHasControl) {
+      const ownsCurrentControl =
+        control?.owner === owner &&
+        control.identity.session_id === identity.session_id
+      return ownsCurrentControl
+        ? 'This bot is paused while you have control. Choose Hand back before running a task.'
+        : 'This bot is paused under another session’s control. Its owner must hand back control before a task can run.'
+    }
+    if (draft) return 'Save the brain settings above before running a task.'
+    if (!ready)
+      return savedAssignment
+        ? 'The saved brain settings are incomplete or invalid. Edit the brain settings above and save a valid connection, model and context limit.'
+        : 'Configure and save a brain above before running a task.'
+    return prompt.trim()
+      ? 'Ready to run this task.'
+      : 'Enter a task, then choose Run.'
+  })()
   const add = async (connection: BotConnection) => {
     if (connection.workspaceId) {
       setSelected(connection.workspaceId)
@@ -1028,6 +1060,12 @@ function GbotPage() {
                       ))}
                     </article>
                   ))}
+                  <p
+                    id="gbot-task-guidance"
+                    className="text-sm text-muted-foreground"
+                  >
+                    {taskGuidance}
+                  </p>
                   <form
                     className="flex gap-2"
                     onSubmit={(event) => {
@@ -1054,6 +1092,7 @@ function GbotPage() {
                   >
                     <Input
                       aria-label="Bot task"
+                      aria-describedby="gbot-task-guidance"
                       placeholder="Give this bot a task"
                       value={prompt}
                       onChange={(event) => {
@@ -1066,6 +1105,7 @@ function GbotPage() {
                       }}
                     />
                     <Button
+                      aria-describedby="gbot-task-guidance"
                       disabled={
                         busy || !ready || !prompt.trim() || !botHasControl
                       }
