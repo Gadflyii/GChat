@@ -44,6 +44,8 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
 
 const managementTabs = ['Installed', 'Recommended', 'Downloads'] as const
 
+const errorMessage = (e: unknown) => e instanceof Error ? e.message : String(e).replace(/^Error: /, '')
+
 function cancelLocalLoad(load: PendingLocalLoad): Promise<unknown> {
   if (load.ready || load.settled || load.cancelRequested) return Promise.resolve()
   load.cancelRequested = true
@@ -145,16 +147,16 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   }, [pendingLoad])
 
   useEffect(() => {
-    if (local) void refreshLocal().catch(e => setError(String(e)))
+    if (local) void refreshLocal().catch(e => setError(errorMessage(e)))
   }, [local, refreshLocal])
-  useEffect(() => { void refreshHosts().catch(e => setError(String(e))) }, [refreshHosts])
+  useEffect(() => { void refreshHosts().catch(e => setError(errorMessage(e))) }, [refreshHosts])
 
   const act = async (operation: () => Promise<unknown>) => {
     setBusy(true)
     try { await operation(); if (mounted.current) { await (local ? refreshLocal() : refreshHosts()); setError(null) } }
     catch (e) {
       const cancelled = typeof e === 'object' && e !== null && 'name' in e && e.name === 'AbortError'
-      if (mounted.current && !cancelled) setError(String(e))
+      if (mounted.current && !cancelled) setError(errorMessage(e))
     }
     finally { if (mounted.current) setBusy(false) }
   }
@@ -250,7 +252,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
             ;(event.currentTarget.parentElement?.children[next] as HTMLElement | undefined)?.focus()
           }}>{t}</Button>)}
       </div><Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : 'Refresh installed models'}</Button></div>
-      {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]} · Saved inventory may be out of date.</p>}
+      {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]}{offline ? ' · Saved inventory may be out of date.' : ''}</p>}
       {local && !localLoadReady && (resources.error
         ? <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">Local model runtime is unavailable: {resources.error}</p>
         : <p role="status" className="rounded border p-3 text-sm">Preparing local model runtime…</p>)}
