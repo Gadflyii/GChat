@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
 import HumanHelp from '@/components/GbotHumanHelp'
+import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import GbotConnectors from '@/components/GbotConnectors'
 import GbotSchedules from '@/components/GbotSchedules'
@@ -983,42 +984,16 @@ function GbotPage() {
                       history.some((task) => task.id === approval.task_id)
                     )
                     .map((approval) => (
-                      <div
+                      <GbotTaskApproval
                         key={approval.id}
-                        className="space-y-2 rounded-lg border p-3"
-                      >
-                        <p className="text-sm">Bot requests permission</p>
-                        <pre className="overflow-x-auto text-xs">
-                          {JSON.stringify(approval.request.operation, null, 2)}
-                        </pre>
-                        <Button
-                          disabled={busy}
-                          onClick={() =>
-                            void perform(() =>
-                              gbot('tasks/approval', {
-                                id: approval.id,
-                                allow: true,
-                              })
-                            )
-                          }
-                        >
-                          Allow
-                        </Button>{' '}
-                        <Button
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() =>
-                            void perform(() =>
-                              gbot('tasks/approval', {
-                                id: approval.id,
-                                allow: false,
-                              })
-                            )
-                          }
-                        >
-                          Deny
-                        </Button>
-                      </div>
+                        approval={approval}
+                        busy={busy}
+                        reply={(allow) =>
+                          perform(() =>
+                            gbot('tasks/approval', { id: approval.id, allow })
+                          )
+                        }
+                      />
                     ))}
                   {history.map((task) => (
                     <article
