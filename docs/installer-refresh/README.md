@@ -64,6 +64,24 @@ formats or a full model rehash. The prior FRESH fixture result remains separatel
 bound to 0b3/4f. `VITE_MODEL_CATALOG_URL` remains unset; no public release catalog
 is approved. Signing, publication and the known issues above remain separate.
 
+## October 17 local-model startup quote — Linux preview passes
+
+The retained Linux AppImage (`d31a4cbd0`, Engine `db265e6b2`) verified a locally
+registered Qwen 27B NVFP4 artifact with an empty catalog and no fabricated download
+job. **Check startup settings** passed with C1, context 65,536, structured outputs
+on and an explicit 5 GiB KV arena. One ordinary **Load model** then failed during
+artifact-scoped hardware profiling: the startup CPU roster split a physical
+sibling group across roles. This historical `db265e6b2` validation failure was
+already corrected in later packages; it is not a new current-main regression.
+No instance was created or reached Ready, and the three existing configurations
+stayed unchanged. The GUI closed normally and the idle private Host stopped;
+resources returned at 10:26Z. Current-package custom quote-to-Ready, fresh-install
+and Windows acceptance remain pending; this explicit-budget check does not
+qualify AUTO KV admission.
+
+Evidence: `/ai/gchat/out/manager-quote-local-models-20261016/packaged-d31-20261017/quote-to-ready/result.json`
+(SHA256 `65f5c0a68d0e13784952f598d290759a300ff558e4d3077e156d3d559f5925e4`).
+
 ## October 16 Windows gate — functional checks complete, findings retained
 
 The [Windows gate packet](windows-gate-20261016.md) binds the current-user NSIS installer to GChat `dcb11c14` and Engine `c440179a` (SM120a), records the upgrade and fresh application-state checks, and lists each PASS, failure and unqualified check. One model started and answered one request. Custom-root Host migration remains open for Windows. The [October 17 native follow-up](https://github.com/Gadflyii/GChat/blob/5671542f5/docs/installer-refresh/windows-native-followup-20261017.md) qualifies ordinary **Stop Host and Quit** for an idle desktop-owned Host; busy refusal is covered by source tests, and SCM shutdown was not run. The packet also records the 85m7.168s natural profile, 2365ms native reuse, functional long-chat render and actual idle measurement.
