@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { CardItem } from '@/containers/Card'
+import { Card, CardItem } from '@/containers/Card'
 import { Switch } from '@/components/ui/switch'
 import { DropdownControl } from '@/containers/dynamicControllerSetting/DropdownControl'
 
@@ -48,5 +48,16 @@ describe('CardItem', () => {
       name: 'Speculative Decoding Auto (recommended)',
     })
     expect(trigger).toHaveAccessibleDescription('Choose how to draft tokens.')
+  })
+
+  it('uses heading levels that nest: card title h2, row title h3', () => {
+    render(
+      <Card title="General">
+        <CardItem title="Language" actions={<Switch />} />
+      </Card>
+    )
+
+    expect(screen.getByRole('heading', { level: 2, name: 'General' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Language' })).toBeInTheDocument()
   })
 })

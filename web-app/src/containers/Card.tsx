@@ -47,9 +47,9 @@ export function CardItem({
         )}
       >
         <div className="space-y-1.5">
-          <h1 id={labelId} className="font-medium text-foreground">
+          <h3 id={labelId} className="font-medium text-foreground">
             {title}
-          </h1>
+          </h3>
           {description && (
             <span
               id={descriptionId}
@@ -92,9 +92,9 @@ export function Card({ title, children, header, className }: CardProps) {
       )}
     >
       {title && (
-        <h1 className="text-foreground font-studio font-medium text-base mb-4">
+        <h2 className="text-foreground font-studio font-medium text-base mb-4">
           {title}
-        </h1>
+        </h2>
       )}
       {header && header}
       {children}

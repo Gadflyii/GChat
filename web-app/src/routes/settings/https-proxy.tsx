@@ -56,11 +56,11 @@ function HTTPSProxyContent() {
             <Card
               header={
                 <div className="flex items-center justify-between">
-                  <h1 className="text-foreground font-studio font-medium text-base mb-2">
+                  <h2 className="text-foreground font-studio font-medium text-base mb-2">
                     <label htmlFor={`${proxyId}-enabled`}>
                       {t('settings:httpsProxy.proxy')}
                     </label>
-                  </h1>
+                  </h2>
                   <Switch
                     id={`${proxyId}-enabled`}
                     aria-describedby={`${proxyId}-url-description`}

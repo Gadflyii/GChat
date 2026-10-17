@@ -302,9 +302,9 @@ function HermesAgentIntegration() {
                       className="text-emerald-500"
                     />
                   </svg>
-                  <h1 className="text-foreground font-studio font-medium text-base">
+                  <h2 className="text-foreground font-studio font-medium text-base">
                     Hermes Agent integration
-                  </h1>
+                  </h2>
                 </div>
               }
             >

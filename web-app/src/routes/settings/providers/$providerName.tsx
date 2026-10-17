@@ -577,9 +577,9 @@ function ProviderDetail() {
               <Card
                 header={
                   <div className="flex items-center justify-between mb-4">
-                    <h1 className="text-foreground font-medium text-base">
+                    <h2 className="text-foreground font-medium text-base">
                       {t('providers:models')}
-                    </h1>
+                    </h2>
                     <div className="flex items-center gap-2">
                       {provider &&
                         !isLocalProvider(provider.provider) && (
@@ -640,12 +640,12 @@ function ProviderDetail() {
                           key={modelIndex}
                           title={
                             <div className="flex items-center gap-2">
-                              <h1
+                              <h3
                                 className="font-medium line-clamp-1 max-w-[16rem] lg:max-w-[24rem] xl:max-w-none"
                                 title={model.id}
                               >
                                 {getModelDisplayName(model)}
-                              </h1>
+                              </h3>
                               {model.source && (
                                 <ModelSourceBadge source={model.source} />
                               )}
