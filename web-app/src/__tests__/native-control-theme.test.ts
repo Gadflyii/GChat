@@ -21,4 +21,9 @@ describe('native checkbox and radio theme', () => {
   it('draws native selects like inputs, with their own chevron', () => {
     expect(css).toMatch(/\n  select \{[^}]*appearance: none[^}]*background-image: url\("data:image\/svg\+xml/)
   })
+
+  it('keeps room for the chevron even when a utility class sets select padding', () => {
+    // p-2 or px-2 sit in a later layer than this base rule and would win otherwise.
+    expect(css).toMatch(/\n  select \{[^}]*padding-inline-end: 2rem !important/)
+  })
 })
