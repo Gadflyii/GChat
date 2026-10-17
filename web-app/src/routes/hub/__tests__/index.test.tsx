@@ -130,6 +130,17 @@ describe('host-scoped Models', () => {
     await user.keyboard('{ArrowRight}')
     expect(screen.getByRole('tab', { name: 'Installed' })).toHaveFocus()
   })
+  it('shows a failed load as a plain message, without the stale-inventory note', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    mocks.switchModel.mockRejectedValue(new Error('Failed to load Qwen: No qualified automatic profile is available.'))
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Failed to load Qwen: No qualified automatic profile is available.')
+    expect(alert).not.toHaveTextContent(/^Error:/)
+    expect(alert).not.toHaveTextContent('Saved inventory may be out of date')
+    mocks.switchModel.mockResolvedValue(undefined)
+  })
   it('disables mutations against an offline host even with saved inventory', async () => {
     const user = userEvent.setup()
     mocks.errors = { remote: 'Connection lost' }
