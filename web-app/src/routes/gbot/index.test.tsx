@@ -1313,9 +1313,7 @@ it.each(['success', 'failure'] as const)(
       else finish()
     })
     if (outcome === 'failure') {
-      expect(screen.getByRole('alert')).toHaveTextContent(
-        'Service selection failed'
-      )
+      expect(screen.getByText('Error: Service selection failed')).toBeVisible()
       expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
       expect(otherComputer).toBeEnabled()
       expect(choose).toBeEnabled()
