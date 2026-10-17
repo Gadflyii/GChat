@@ -99,6 +99,9 @@ pub struct Persistent {
     /// Successful Flash startup graph allowances, bound to producer and recipe.
     #[serde(default)]
     pub graph_receipts: BTreeMap<String, u64>,
+    /// Exact payload receipts, including imported artifacts, survive Host restart.
+    #[serde(default)]
+    pub payload_verifications: BTreeMap<PathBuf, crate::payload_verification::PayloadVerification>,
     #[serde(default)]
     pub local_artifacts: Vec<PathBuf>,
     #[serde(default)]
@@ -345,6 +348,7 @@ impl Host {
                 models: BTreeMap::new(),
                 profiles: BTreeMap::new(),
                 graph_receipts: BTreeMap::new(),
+                payload_verifications: BTreeMap::new(),
                 local_artifacts: vec![],
                 managed_model_root: None,
                 first_run: Default::default(),
@@ -650,6 +654,35 @@ impl Host {
         }
         self.downloads.set_root(root.clone());
         Ok(root)
+    }
+    async fn verify_qualified_payload(
+        &self, payload: PathBuf, sha256: String, bytes: u64,
+    ) -> Result<(), String> {
+        let previous = self.data.lock().await.payload_verifications.get(&payload).cloned();
+        let previous = match previous {
+            Some(record) => Some(record),
+            None => self.downloads.installed_verification(&payload, &sha256, bytes).await,
+        };
+        let path = payload.clone();
+        let verification = tokio::task::spawn_blocking(move || {
+            crate::payload_verification::verify(&path, &sha256, bytes, previous.as_ref())
+        }).await.map_err(|e| e.to_string())?
+            .map_err(crate::launch_profiles::profile_verification_error)?;
+        let mut data = self.data.lock().await;
+        if data.payload_verifications.get(&payload) == Some(&verification) {
+            return Ok(());
+        }
+        let previous = data.payload_verifications.insert(payload.clone(), verification);
+        let persisted = serde_json::to_vec(&*data).map_err(|e| e.to_string())
+            .and_then(|bytes| write_private(&self.directory.join("host.json"), &bytes));
+        if let Err(error) = persisted {
+            match previous {
+                Some(record) => { data.payload_verifications.insert(payload, record); }
+                None => { data.payload_verifications.remove(&payload); }
+            }
+            return Err(error);
+        }
+        Ok(())
     }
     pub async fn save(&self) -> Result<(), String> {
         let data = self.data.lock().await;
@@ -1254,9 +1287,8 @@ impl Host {
             {
                 return Err("GPU group is not qualified for this profile".into());
             }
-            tokio::task::spawn_blocking(move || profile.verify_payload(&payload))
-                .await
-                .map_err(|e| e.to_string())??;
+            self.verify_qualified_payload(payload, profile.artifact_sha256, profile.artifact_bytes)
+                .await?;
         }
         let limit = request.options.validate_target(
             &metadata.identity,
@@ -2687,6 +2719,33 @@ mod normal_stop_tests {
 mod target_launch_tests {
     use super::*;
 
+    #[tokio::test]
+    async fn qualified_payload_receipt_survives_restart_and_rejects_modified_payload() {
+        use sha2::Digest;
+        let directory = tempfile::tempdir().unwrap();
+        let state = directory.path().join("state");
+        let payload = directory.path().join("imported.ginfer");
+        std::fs::write(&payload, b"verified").unwrap();
+        let sha256 = hex::encode(Sha256::digest(b"verified"));
+        let open = || Host::open(state.clone(), "Verification test".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]);
+        let host = open().await.unwrap();
+        host.verify_qualified_payload(payload.clone(), sha256.clone(), 8).await.unwrap();
+        let journal = std::fs::read(state.join("host.json")).unwrap();
+        let recorded = host.data.lock().await.payload_verifications[&payload].clone();
+        drop(host);
+        let reopened = open().await.unwrap();
+        assert_eq!(reopened.data.lock().await.payload_verifications[&payload], recorded);
+        reopened.verify_qualified_payload(payload.clone(), sha256.clone(), 8).await.unwrap();
+        assert_eq!(std::fs::read(state.join("host.json")).unwrap(), journal,
+            "An unchanged receipt does not rewrite the journal");
+        std::fs::write(&payload, b"modified").unwrap();
+        assert_eq!(reopened.verify_qualified_payload(payload.clone(), sha256, 8).await.unwrap_err(),
+            "profile does not qualify this artifact payload");
+        assert_eq!(reopened.data.lock().await.payload_verifications[&payload], recorded,
+            "A failed hash must not replace the durable receipt");
+    }
+
     async fn installed_flash(
         weights: &str,
         calibrated: bool,
@@ -2790,6 +2849,7 @@ mod target_launch_tests {
             error: None,
             path: None,
             storage_root: root,
+            verification: None,
         };
         std::fs::write(
             host.directory.join("model-downloads.json"),
@@ -3952,6 +4012,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             host.downloads.seed_concurrent_resource_jobs(job_ids.iter().enumerate().map(|(index, id)| crate::model_downloads::Download {
                 id:*id,release:release.clone(),status:if index == 0 { "queued" } else { "paused" }.into(),received:0,bytes_per_second:0,error:None,path:None,
                 storage_root:host.downloads.root(),
+                verification: None,
             }).collect()).await;
             let mut expected_jobs = host.downloads.list().await;
             expected_jobs.iter_mut().find(|job| job.id == job_ids[0]).unwrap().status = "paused".into();
@@ -4379,6 +4440,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
                 capabilities: vec![], launch_profiles: vec![],
             }, status: "installed".into(), received: 4096, bytes_per_second: 0,
             error: None, path: Some(payload.clone()), storage_root: host.downloads.root(),
+            verification: None,
         };
         std::fs::write(
             dir.path().join("state/model-downloads.json"),

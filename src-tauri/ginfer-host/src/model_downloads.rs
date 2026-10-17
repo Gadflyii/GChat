@@ -1,10 +1,12 @@
 //! Destination-owned, bounded transfers of immutable producer-final packages.
 use crate::{
     engine_inventory::{inspect_artifact, ArtifactIdentity},
+    payload_verification::PayloadVerification,
     service::write_private,
 };
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -148,6 +150,8 @@ pub struct Download {
     pub path: Option<PathBuf>,
     #[serde(default)]
     pub storage_root: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<PayloadVerification>,
 }
 pub struct RemovedPackage {
     pub journal_error: Option<String>,
@@ -173,6 +177,14 @@ impl ModelDownloads {
             profiles.extend(job.release.launch_profiles.iter().cloned());
         }
         Ok(profiles)
+    }
+    pub(crate) async fn installed_verification(
+        &self, path: &std::path::Path, sha256: &str, bytes: u64,
+    ) -> Option<PayloadVerification> {
+        self.jobs.lock().await.values().find(|job| {
+            job.status == "installed" && job.path.as_deref() == Some(path)
+                && job.release.sha256 == sha256 && job.release.bytes == bytes
+        }).and_then(|job| job.verification.clone())
     }
     pub fn open(root: PathBuf, state_path: PathBuf) -> Result<Arc<Self>, String> {
         Self::open_layout(root, state_path, false)
@@ -364,6 +376,7 @@ impl ModelDownloads {
             error: None,
             path: None,
             storage_root,
+            verification: None,
         };
         jobs.insert(job.id, job.clone());
         self.persist(jobs, Some((self.clone(), job.id)), true, false).await?;
@@ -577,8 +590,8 @@ impl ModelDownloads {
         let staging = root.join(format!(".model-install-{id}"));
         if destination.is_file() {
             self.update(id, release.bytes, 0, "verifying").await?;
-            verify_package(destination.clone(), &release).await?;
-            return self.installed(id, destination).await;
+            let verification = verify_package(destination.clone(), &release).await?;
+            return self.installed(id, destination, verification).await;
         }
         if self.local_layout && !partial.exists() && staging.join("model.ginfer").exists() {
             tokio::fs::rename(staging.join("model.ginfer"), &partial)
@@ -662,7 +675,7 @@ impl ModelDownloads {
             return Err("download ended before the declared size; resume to retry".into());
         }
         self.update(id, received, 0, "verifying").await?;
-        verify_package(partial.clone(), &release).await?;
+        let verification = verify_package(partial.clone(), &release).await?;
         if self.local_layout {
             tokio::fs::create_dir_all(&staging)
                 .await
@@ -688,13 +701,17 @@ impl ModelDownloads {
                 .await
                 .map_err(|e| e.to_string())?;
         }
-        self.installed(id, destination).await
+        let published = destination.clone();
+        let verification = tokio::task::spawn_blocking(move || verification.after_rename(&published))
+            .await.map_err(|e| e.to_string())??;
+        self.installed(id, destination, verification).await
     }
-    async fn installed(&self, id: Uuid, destination: PathBuf) -> Result<(), String> {
+    async fn installed(&self, id: Uuid, destination: PathBuf, verification: PayloadVerification) -> Result<(), String> {
         let mut jobs = self.jobs.clone().lock_owned().await;
         let job = jobs.get_mut(&id).ok_or("unknown download")?;
         job.status = "installed".into();
         job.path = Some(destination);
+        job.verification = Some(verification);
         job.error = None;
         self.save(jobs).await
     }
@@ -800,7 +817,7 @@ fn finish_move(
     copied.sync_all().map_err(|e| e.to_string())?;
     drop(copied);
     drop(source);
-    verify_package_sync(&copied_path, &original.release)
+    let verification = verify_package_sync(&copied_path, &original.release)
         .map_err(|error| format!("Copied model failed verification; original retained: {error}"))?;
     if local_layout {
         let release = &original.release;
@@ -818,6 +835,7 @@ fn finish_move(
     }
     let mut moved = original.clone();
     moved.storage_root = prepared.target_root;
+    moved.verification = Some(verification.after_rename(&prepared.destination)?);
     moved.path = Some(prepared.destination);
     moved.bytes_per_second = 0;
     moved.error = None;
@@ -939,31 +957,20 @@ fn move_file_windows(
     Ok(())
 }
 
-async fn verify_package(path: PathBuf, release: &Release) -> Result<(), String> {
+async fn verify_package(path: PathBuf, release: &Release) -> Result<PayloadVerification, String> {
     let release = release.clone();
     tokio::task::spawn_blocking(move || verify_package_sync(&path, &release))
         .await.map_err(|e| e.to_string())?
 }
 
-fn verify_package_sync(path: &std::path::Path, release: &Release) -> Result<(), String> {
-    use std::io::Read;
-    let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    if file.metadata().map_err(|e| e.to_string())?.len() != release.bytes {
-        return Err("package size differs from release".into());
-    }
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0; 1024 * 1024];
-    loop {
-        let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buffer[..n]);
-    }
-    drop(file);
-    if hex::encode(hasher.finalize()) != release.sha256 {
-        return Err("SHA256 mismatch; remove incomplete files and download again. Package was not installed.".into());
-    }
+fn verify_package_sync(path: &std::path::Path, release: &Release) -> Result<PayloadVerification, String> {
+    // Downloads and moves always verify the complete payload before publication.
+    let verification = crate::payload_verification::verify(path, &release.sha256, release.bytes, None)
+        .map_err(|error| match error.as_str() {
+            "payload size mismatch" => "package size differs from release".into(),
+            "SHA256 mismatch" => "SHA256 mismatch; remove incomplete files and download again. Package was not installed.".into(),
+            _ => error,
+        })?;
     let metadata = inspect_artifact(path)?;
     if metadata.identity != release.identity || metadata.tp_size != release.tp {
         return Err("package identity or TP differs from its release declaration".into());
@@ -971,7 +978,7 @@ fn verify_package_sync(path: &std::path::Path, release: &Release) -> Result<(), 
     if release.launch_profiles.iter().any(|profile| profile.draft_tp != metadata.draft_tp) {
         return Err("package draft TP differs from its qualified launch profiles".into());
     }
-    Ok(())
+    Ok(verification)
 }
 
 pub async fn available_bytes(path: PathBuf) -> Result<u64, String> {
@@ -1138,6 +1145,7 @@ time.sleep(60)
             error: None,
             path: Some(path),
             storage_root: manager.root(),
+            verification: None,
         };
         let mut jobs = manager.jobs.clone().lock_owned().await;
         jobs.insert(job.id, job.clone());
@@ -1190,6 +1198,12 @@ time.sleep(60)
             let reopened_job = reopened.list().await.pop().unwrap();
             assert_eq!(reopened_job.path, moved.path);
             assert_eq!(reopened_job.storage_root, moved.storage_root);
+            let recorded = reopened.installed_verification(
+                moved.path.as_ref().unwrap(), &moved.release.sha256, moved.release.bytes,
+            ).await.unwrap();
+            assert_eq!(Some(&recorded), moved.verification.as_ref());
+            assert_eq!(crate::payload_verification::verify(moved.path.as_ref().unwrap(),
+                &moved.release.sha256, moved.release.bytes, Some(&recorded)).unwrap(), recorded);
             assert!(std::fs::read_dir(&moved.storage_root)
                 .unwrap()
                 .all(|entry| {
@@ -1342,6 +1356,7 @@ time.sleep(60)
                 error: None,
                 path: None,
                 storage_root: manager.root(),
+                verification: None,
             },
         );
         manager.save(jobs).await.unwrap();
@@ -1415,6 +1430,7 @@ time.sleep(60)
             id: old_id, release: release.clone(), status: "paused".into(),
             received: 16, bytes_per_second: 0, error: None, path: None,
             storage_root: original.clone(),
+            verification: None,
         };
         let expected_old = serde_json::to_value(&old_job).unwrap();
         let saved = serde_json::to_vec(&BTreeMap::from([(old_id, old_job)])).unwrap();
@@ -1475,6 +1491,12 @@ time.sleep(60)
         let job = manager.list().await.pop().unwrap();
         assert_eq!(job.status, "installed");
         assert_eq!(std::fs::read(job.path.as_ref().unwrap()).unwrap(), bytes);
+        let reopened = ModelDownloads::open(manager.root(), manager.state_path.clone()).unwrap();
+        let recorded = reopened.installed_verification(job.path.as_ref().unwrap(),
+            &release.sha256, release.bytes).await.unwrap();
+        assert_eq!(Some(&recorded), job.verification.as_ref());
+        assert_eq!(crate::payload_verification::verify(job.path.as_ref().unwrap(),
+            &release.sha256, release.bytes, Some(&recorded)).unwrap(), recorded);
         let outside = dir.path().join("external.ginfer");
         std::fs::write(&outside, &bytes).unwrap();
         assert!(manager.remove_installed(&outside).await.is_err());

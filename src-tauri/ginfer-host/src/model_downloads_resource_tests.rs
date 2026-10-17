@@ -114,7 +114,7 @@ async fn failed_install_journal_retries_the_complete_state_without_reinstalling(
     // A failed final journal must also remain retryable after publication.
     std::fs::remove_file(&journal).unwrap();
     std::fs::create_dir(&journal).unwrap();
-    assert!(manager.installed(id, installed.path.clone().unwrap()).await.is_err());
+    assert!(manager.installed(id, installed.path.clone().unwrap(), installed.verification.clone().unwrap()).await.is_err());
     assert!(manager.pending_journal.load(Ordering::SeqCst));
     std::fs::remove_dir(&journal).unwrap();
     manager.flush_pending().await.unwrap();

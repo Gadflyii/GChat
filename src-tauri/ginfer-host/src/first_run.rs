@@ -1170,6 +1170,7 @@ mod tests {
                     error: None,
                     path: Some(path),
                     storage_root: root.clone(),
+                    verification: None,
                 },
             );
         }
