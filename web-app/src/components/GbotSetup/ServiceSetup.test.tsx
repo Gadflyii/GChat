@@ -314,3 +314,15 @@ it('asks the owner to confirm each device approval and revocation', async () => 
   )
   expect(change).toHaveBeenLastCalledWith('approved', 'revoke')
 })
+
+it('mentions the next wizard step only while setting up a bot', () => {
+  const next = /In the next step, you will choose the separate desktop/
+  const view = render(
+    <ServiceSetup target={{ kind: 'local' }} change={vi.fn()} />
+  )
+  expect(screen.queryByText(next)).not.toBeInTheDocument()
+  view.rerender(
+    <ServiceSetup target={{ kind: 'local' }} change={vi.fn()} inWizard />
+  )
+  expect(screen.getByText(next)).toBeVisible()
+})
