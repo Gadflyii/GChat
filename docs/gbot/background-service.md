@@ -57,6 +57,15 @@ of a LAN service removes that entry. This does not run before user sign-in or
 change inference process ownership. A passphrase-protected vault still requires
 unlocking after sign-in; no key or passphrase is placed in the startup entry.
 
+On Linux, an App Data move transfers an existing Gbot sign-in entry to the new
+folder with the configuration and Host handoff. A failed handoff restores the
+previous entry. Disabled or LAN-service startup stays disabled, and another
+folder's registration is never overwritten.
+
+Before moving App Data, use **Quit Gbot service**. The move refuses a running
+service and reserves its source ownership lock through the handoff, so Gbot
+cannot write the state being copied. It does not stop bot work automatically.
+
 Windows Gbot enablement registers the same background service for the current
 user in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`. Each App Data
 folder has its own entry, containing the exact installed executable, data folder

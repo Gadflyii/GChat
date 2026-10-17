@@ -28,12 +28,12 @@ pub(crate) fn with_relocated_startup<T>(
     resources: &Path,
     commit: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     {
         let updated = ginfer_host::gbot_bootstrap::Bootstrap::capture(destination, resources)?;
-        login_windows::relocate(current, &updated, commit)
+        login::relocate(current, &updated, commit)
     }
-    #[cfg(not(windows))]
+    #[cfg(not(any(windows, target_os = "linux")))]
     {
         let _ = (current, destination, resources);
         commit()
