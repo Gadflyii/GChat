@@ -62,6 +62,9 @@ function HtmlArtifactComponent({
   const [previewUrl, setPreviewUrl] = useState<string>('')
   const [previewFailed, setPreviewFailed] = useState(false)
   const [previewRetry, setPreviewRetry] = useState(0)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadFailed, setDownloadFailed] = useState(false)
+  const downloadPendingRef = useRef(false)
   const [frameLoaded, setFrameLoaded] = useState(false)
   const [progress, setProgress] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -228,8 +231,12 @@ function HtmlArtifactComponent({
   }, [code])
 
   const handleDownload = useCallback(async () => {
-    if (isPlatformTauri()) {
-      try {
+    if (downloadPendingRef.current) return
+    downloadPendingRef.current = true
+    setDownloading(true)
+    setDownloadFailed(false)
+    try {
+      if (isPlatformTauri()) {
         const path = await getServiceHub()
           .dialog()
           .save({
@@ -240,14 +247,9 @@ function HtmlArtifactComponent({
           await fs.writeFileSync(path, code)
         }
         return
-      } catch (error) {
-        console.error('Failed to save artifact:', error)
-        return
       }
-    }
 
-    // Web/mobile: trigger a browser download.
-    try {
+      // Web/mobile: trigger a browser download.
       const url = URL.createObjectURL(new Blob([code], { type: 'text/html' }))
       const anchor = document.createElement('a')
       anchor.href = url
@@ -257,7 +259,11 @@ function HtmlArtifactComponent({
       anchor.remove()
       URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('Failed to download artifact:', error)
+      console.error('Failed to save artifact:', error)
+      setDownloadFailed(true)
+    } finally {
+      downloadPendingRef.current = false
+      setDownloading(false)
     }
   }, [code])
 
@@ -354,6 +360,9 @@ function HtmlArtifactComponent({
                 className="h-7 gap-1 px-2 text-xs"
                 onClick={handleDownload}
                 title="Download as .html"
+                aria-label="Download HTML"
+                aria-busy={downloading}
+                disabled={downloading}
               >
                 <Download size={14} className="shrink-0" />
                 <span className="hidden @[26rem]:inline">Download</span>
@@ -383,6 +392,12 @@ function HtmlArtifactComponent({
           )}
         </div>
       </div>
+
+      {downloadFailed && (
+        <p role="alert" className="px-3 py-2 text-sm text-destructive">
+          Could not save the HTML file. Choose Download to try again.
+        </p>
+      )}
 
       <div
         ref={previewWrapRef}
