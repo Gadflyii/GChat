@@ -52,7 +52,9 @@ vi.mock('@/hooks/useAgentSkills', () => ({
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({
     t: (key: string, options?: { name?: string; defaultValue?: string }) =>
-      key === 'common:enablingSkill' || key === 'common:disablingSkill'
+      key === 'common:enablingSkill' ||
+      key === 'common:disablingSkill' ||
+      key === 'common:savingSkill'
         ? (options?.defaultValue ?? key).replace('{{name}}', options?.name ?? '')
         : key,
   }),
@@ -136,6 +138,13 @@ function openDeleteConfirmation(skill: AgentSkillDetail) {
     within(row).getByRole('button', { name: 'common:uninstallSkill' })
   )
   return screen.getByRole('dialog', { name: 'common:deleteSkill' })
+}
+
+function getDownloadAction(skill: AgentSkillDetail) {
+  const row = screen.getByRole('button', {
+    name: `${skill.name} ${skill.description}`,
+  }).parentElement as HTMLElement
+  return within(row).getByRole('button', { name: 'common:downloadSkill' })
 }
 
 describe('SkillsPage', () => {
@@ -475,6 +484,125 @@ describe('SkillsPage', () => {
       expect(toggle).toBeEnabled()
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
     } finally {
+      errorToast.mockRestore()
+    }
+  })
+
+  it('saves one skill at a time and blocks rapid repeated or competing Download actions', async () => {
+    const saving = deferred<boolean>()
+    hookState.value.skills = [customSkill, otherSkill]
+    hookState.value.exportSkill.mockReturnValue(saving.promise)
+    const successToast = vi.spyOn(toast, 'success').mockReturnValue('skill-save-success')
+
+    try {
+      render(<SkillsPage />)
+      const download = getDownloadAction(customSkill)
+      const otherDownload = getDownloadAction(otherSkill)
+
+      act(() => {
+        download.click()
+        download.click()
+        otherDownload.click()
+      })
+
+      expect(hookState.value.exportSkill).toHaveBeenCalledExactlyOnceWith(customSkill.name)
+      for (const action of screen.getAllByRole('button', { name: 'common:downloadSkill' })) {
+        expect(action).toBeDisabled()
+      }
+      expect(screen.getByRole('status')).toHaveTextContent('Saving custom-skill…')
+      expect(successToast).not.toHaveBeenCalled()
+
+      await act(async () => saving.resolve(true))
+
+      expect(download).toBeEnabled()
+      expect(otherDownload).toBeEnabled()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(successToast).toHaveBeenCalledExactlyOnceWith('common:skillExported')
+      expect(hookState.value.exportSkill).toHaveBeenCalledOnce()
+    } finally {
+      successToast.mockRestore()
+    }
+  })
+
+  it('clears a cancelled native Save without a toast and permits another skill download', async () => {
+    const cancelled = deferred<boolean>()
+    const next = deferred<boolean>()
+    hookState.value.skills = [customSkill, otherSkill]
+    hookState.value.exportSkill
+      .mockReturnValueOnce(cancelled.promise)
+      .mockReturnValueOnce(next.promise)
+    const successToast = vi.spyOn(toast, 'success').mockReturnValue('skill-save-success')
+    const errorToast = vi.spyOn(toast, 'error').mockReturnValue('skill-save-error')
+
+    try {
+      render(<SkillsPage />)
+      const download = getDownloadAction(customSkill)
+      const otherDownload = getDownloadAction(otherSkill)
+      fireEvent.click(download)
+      expect(download).toBeDisabled()
+
+      await act(async () => cancelled.resolve(false))
+
+      expect(download).toBeEnabled()
+      expect(otherDownload).toBeEnabled()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(successToast).not.toHaveBeenCalled()
+      expect(errorToast).not.toHaveBeenCalled()
+      fireEvent.click(otherDownload)
+      expect(hookState.value.exportSkill.mock.calls).toEqual([
+        [customSkill.name],
+        [otherSkill.name],
+      ])
+      expect(screen.getByRole('status')).toHaveTextContent('Saving other-skill…')
+
+      await act(async () => next.resolve(false))
+
+      expect(download).toBeEnabled()
+      expect(otherDownload).toBeEnabled()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(successToast).not.toHaveBeenCalled()
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      successToast.mockRestore()
+      errorToast.mockRestore()
+    }
+  })
+
+  it('reports a failed skill download and unlocks Download for a successful retry', async () => {
+    const failed = deferred<boolean>()
+    const retry = deferred<boolean>()
+    hookState.value.exportSkill
+      .mockReturnValueOnce(failed.promise)
+      .mockReturnValueOnce(retry.promise)
+    const successToast = vi.spyOn(toast, 'success').mockReturnValue('skill-save-success')
+    const errorToast = vi.spyOn(toast, 'error').mockReturnValue('skill-save-error')
+
+    try {
+      render(<SkillsPage />)
+      const download = getDownloadAction(customSkill)
+      fireEvent.click(download)
+
+      await act(async () => failed.reject(new Error('Could not save custom-skill')))
+
+      expect(download).toBeEnabled()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(errorToast).toHaveBeenCalledExactlyOnceWith('Error: Could not save custom-skill')
+      expect(successToast).not.toHaveBeenCalled()
+      fireEvent.click(download)
+      expect(hookState.value.exportSkill.mock.calls).toEqual([
+        [customSkill.name],
+        [customSkill.name],
+      ])
+      expect(download).toBeDisabled()
+
+      await act(async () => retry.resolve(true))
+
+      expect(download).toBeEnabled()
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(successToast).toHaveBeenCalledExactlyOnceWith('common:skillExported')
+      expect(errorToast).toHaveBeenCalledOnce()
+    } finally {
+      successToast.mockRestore()
       errorToast.mockRestore()
     }
   })
