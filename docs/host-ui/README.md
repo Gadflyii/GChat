@@ -1,5 +1,16 @@
 # GInfer host UI
 
+## Sending in an existing conversation
+
+**Send** waits for GChat to finish preparing the conversation before starting
+the response. Repeated Send actions are blocked while preparation is pending.
+If preparation fails, GChat shows an error and keeps your draft and attachments
+so you can retry.
+
+Text or attachments you add while an earlier Send is pending stay in the
+composer when that preparation finishes; its completion does not clear your
+newer changes.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing

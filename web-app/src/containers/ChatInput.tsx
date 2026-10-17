@@ -141,8 +141,9 @@ type ChatInputProps = {
     text: string,
     files?: InitialMessageFile[],
     agentSkillName?: string,
-    agentDefinitionId?: string
-  ) => void
+    agentDefinitionId?: string,
+    documents?: Attachment[]
+  ) => void | Promise<void>
   onStop?: () => void
   chatStatus?: ChatStatus
   submissionReady?: boolean
@@ -164,6 +165,9 @@ const ChatInput = memo(function ChatInput({
   const [agentSkillTokenWidth, setAgentSkillTokenWidth] = useState(0)
   const [isFocused, setIsFocused] = useState(false)
   const [rows, setRows] = useState(1)
+  const [isSubmittingMessage, setIsSubmittingMessage] = useState(false)
+  const submittingMessageRef = useRef(false)
+  const composerLifetimeRef = useRef({})
   const serviceHub = useServiceHub()
   const abortControllers = useAppState((state) => state.abortControllers)
   const loadingModel = useAppState((state) => state.loadingModel)
@@ -239,6 +243,12 @@ const ChatInput = memo(function ChatInput({
   }
 
   const conversationKey = initialMessage ? TEMPORARY_CHAT_ID : (currentThreadId ?? TEMPORARY_CHAT_ID)
+  useLayoutEffect(() => {
+    composerLifetimeRef.current = {}
+    return () => {
+      composerLifetimeRef.current = {}
+    }
+  }, [conversationKey])
   const activeSkill = useConversationPolicy((state) => state.activeSkills[conversationKey])
   const activeDefinition = useConversationPolicy((state) => state.activeDefinitions[conversationKey])
   const { skills: agentSkills, loading: agentSkillsLoading } =
@@ -634,8 +644,9 @@ const ChatInput = memo(function ChatInput({
     })
   }
 
-  const handleSendMessage = async (prompt: string) => {
-    if (!submissionReady) return
+  const submitMessage = async (prompt: string) => {
+    const submittedDraft = prompt
+    const submittedLifetime = composerLifetimeRef.current
     if (isCompactCommand(prompt)) {
       if (attachments.length) {
         toast.error('Remove attachments before running /compact.')
@@ -643,7 +654,12 @@ const ChatInput = memo(function ChatInput({
       }
       if (onSubmit) await onSubmit(prompt)
       else toast.info('Nothing to compact yet.')
-      setPrompt('')
+      if (
+        composerLifetimeRef.current === submittedLifetime &&
+        usePrompt.getState().prompt === submittedDraft
+      ) {
+        setPrompt('')
+      }
       return
     }
     useConversationPolicy.getState().setActiveDefinition(conversationKey, selectedAgentDefinitionId)
@@ -719,11 +735,23 @@ const ChatInput = memo(function ChatInput({
         }))
 
       const submissionFiles = files.length > 0 ? files : undefined
-      onSubmit(prompt, submissionFiles, skillName,
-        skillName === 'agent-builder' || selectedAgentDefinitionId === 'general' ? undefined : selectedAgentDefinitionId)
-      setPrompt('')
-      setSelectedAgentSkill(null)
-      clearAttachmentsForThread(attachmentsKey)
+      await onSubmit(
+        prompt,
+        submissionFiles,
+        skillName,
+        skillName === 'agent-builder' || selectedAgentDefinitionId === 'general'
+          ? undefined
+          : selectedAgentDefinitionId,
+        attachments.filter((attachment) => attachment.type === 'document')
+      )
+      if (composerLifetimeRef.current === submittedLifetime) {
+        if (usePrompt.getState().prompt === submittedDraft) setPrompt('')
+        setSelectedAgentSkill((current) => current === selectedAgentSkill ? null : current)
+      }
+      const submittedIds = new Set(attachments.map((attachment) => attachment.id))
+      setAttachmentsForThread(attachmentsKey, (current) =>
+        current.filter((attachment) => !submittedIds.has(attachment.id))
+      )
     } else {
       // No onSubmit provided - create a new thread and navigate to it
       // Store the initial message in sessionStorage for the thread page to read
@@ -937,6 +965,25 @@ const ChatInput = memo(function ChatInput({
           params: { threadId: newThread.id },
         })
       }
+    }
+  }
+
+  const handleSendMessage = async (draft: string) => {
+    if (!submissionReady || submittingMessageRef.current) return
+    if (!onSubmit) return submitMessage(draft)
+
+    // A ref also blocks repeated Enter/click events before React renders.
+    submittingMessageRef.current = true
+    setIsSubmittingMessage(true)
+    try {
+      await submitMessage(draft)
+    } catch (error) {
+      toast.error('Could not send message. Your draft is still here.', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      submittingMessageRef.current = false
+      setIsSubmittingMessage(false)
     }
   }
 
@@ -2519,6 +2566,7 @@ const ChatInput = memo(function ChatInput({
                       // - Prompt is not empty
                       if (
                         submissionReady &&
+                        !isSubmittingMessage &&
                         (isCompactCommand(prompt) || !isStreaming) &&
                         prompt.trim() &&
                         (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady))
@@ -2875,15 +2923,24 @@ const ChatInput = memo(function ChatInput({
                     size="icon-sm"
                     disabled={
                       !submissionReady ||
+                      isSubmittingMessage ||
                       !prompt.trim() ||
                       (!isCompactCommand(prompt) &&
                         (isAttachmentPipelineBusy || blockSendUntilModelReady))
                     }
                     data-test-id="send-message-button"
+                    aria-label={
+                      isSubmittingMessage ? 'Preparing message' : 'Send message'
+                    }
+                    aria-busy={isSubmittingMessage}
                     onClick={() => handleSendMessage(prompt)}
                     className="rounded-full mr-1 mb-1"
                   >
-                    <ArrowRight className="text-primary-fg" />
+                    {isSubmittingMessage ? (
+                      <IconLoader2 className="animate-spin" />
+                    ) : (
+                      <ArrowRight className="text-primary-fg" />
+                    )}
                   </Button>
                 )}
               </div>

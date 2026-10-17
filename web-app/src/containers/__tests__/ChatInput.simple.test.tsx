@@ -148,6 +148,16 @@ vi.mock('@/components/TokenCounter', () => ({
   TokenCounter: () => null,
 }))
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
 describe('ChatInput', () => {
   it.each(['submitted', 'streaming'] as const)('keeps Stop usable during %s without requiring a route thread ID', (chatStatus) => {
     const onStop = vi.fn()
@@ -422,10 +432,188 @@ describe('ChatInput', () => {
       'Invoke the machine spirit',
       undefined,
       undefined,
-      undefined
+      undefined,
+      []
     )
     await waitFor(() => expect(input).toHaveValue(''))
     unmount()
+  })
+
+  it('retains the submitted draft, attachment and selected skill after failure so the user can retry', async () => {
+    const threadId = 'submission-retry'
+    useThreads.setState({ currentThreadId: threadId })
+    agentSkills.value = [{ name: 'agent-builder', description: 'Build agents', version: '1.2.0', requiresTools: [], requiresScripts: [], dangerous: false, platforms: null, enabled: true, compatible: true, reserved: false, unavailableReasons: [], error: null }]
+    const attachment = { ...createDocumentAttachment({ name: 'notes.txt', path: '/docs/notes.txt' }), id: 'review-notes', processed: true }
+    useChatAttachments.getState().setAttachments(threadId, [attachment])
+    const first = deferred<void>()
+    const retry = deferred<void>()
+    const onSubmit = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise)
+    const failure = vi.spyOn(toast, 'error')
+    try {
+      render(<ChatInput onSubmit={onSubmit} chatStatus="ready" preselectedAgentSkillName="agent-builder" />)
+      const input = screen.getByTestId('chat-input')
+      fireEvent.change(input, { target: { value: 'Review the attached notes' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+      expect(input).toHaveValue('Review the attached notes')
+      expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/agent-builder')
+
+      await act(async () => {
+        first.reject(new Error('Document preparation failed'))
+        await first.promise.catch(() => undefined)
+      })
+
+      expect(failure).toHaveBeenCalledWith('Could not send message. Your draft is still here.', {
+        description: 'Document preparation failed',
+      })
+      expect(input).toHaveValue('Review the attached notes')
+      expect(useChatAttachments.getState().getAttachments(threadId)).toEqual([attachment])
+      expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/agent-builder')
+      expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review the attached notes', undefined, 'agent-builder', undefined, [attachment])
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+      expect(onSubmit).toHaveBeenCalledTimes(2)
+      expect(onSubmit).toHaveBeenLastCalledWith('Review the attached notes', undefined, 'agent-builder', undefined, [attachment])
+      await act(async () => {
+        retry.resolve(undefined)
+        await retry.promise
+      })
+      expect(input).toHaveValue('')
+      expect(useChatAttachments.getState().getAttachments(threadId)).toEqual([])
+      expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    } finally {
+      failure.mockRestore()
+    }
+  })
+
+  it('sends only once for repeated Send and Enter while submission is pending', async () => {
+    useThreads.setState({ currentThreadId: 'single-submission' })
+    const pending = deferred<void>()
+    const onSubmit = vi.fn().mockReturnValue(pending.promise)
+    render(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: 'Send this once' } })
+    const send = screen.getByRole('button', { name: 'Send message' })
+    act(() => {
+      fireEvent.click(send)
+      fireEvent.click(send)
+      fireEvent.keyDown(input, { key: 'Enter' })
+    })
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Send this once', undefined, undefined, undefined, [])
+    expect(screen.getByRole('button', { name: 'Preparing message' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Preparing message' })).toHaveAttribute('aria-busy', 'true')
+    expect(input).toHaveValue('Send this once')
+
+    await act(async () => {
+      pending.resolve(undefined)
+      await pending.promise
+    })
+    expect(input).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Send message' })).toHaveAttribute('aria-busy', 'false')
+  })
+
+  it('removes only submitted attachments and preserves text and files added while sending', async () => {
+    const threadId = 'newer-submission-draft'
+    useThreads.setState({ currentThreadId: threadId })
+    const sent = { ...createDocumentAttachment({ name: 'notes.txt', path: '/docs/sent/notes.txt' }), id: 'sent-notes', processed: true }
+    const newer = { ...createDocumentAttachment({ name: 'notes.txt', path: '/docs/new/notes.txt' }), id: 'new-notes', processed: true }
+    useChatAttachments.getState().setAttachments(threadId, [sent])
+    const pending = deferred<void>()
+    const onSubmit = vi.fn().mockReturnValue(pending.promise)
+    render(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: 'Review the first attachment' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(input).toBeEnabled()
+    fireEvent.change(input, { target: { value: 'My next message' } })
+    act(() => useChatAttachments.getState().setAttachments(threadId, (attachments) => [...attachments, newer]))
+
+    await act(async () => {
+      pending.resolve(undefined)
+      await pending.promise
+    })
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review the first attachment', undefined, undefined, undefined, [sent])
+    expect(input).toHaveValue('My next message')
+    expect(useChatAttachments.getState().getAttachments(threadId)).toEqual([newer])
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+  })
+
+  it('captures the sent text and documents before waiting for model startup', async () => {
+    const threadId = 'model-start-submission'
+    const model = { id: 'test-model', capabilities: [], settings: {} } as Model
+    useModelProvider.setState({
+      providers: [{ provider: 'ginfer', active: true, models: [model], settings: [] } as ModelProvider],
+      selectedProvider: 'ginfer', selectedModel: model,
+    })
+    useAppState.setState({ activeModels: [], intentionallyStoppedModels: new Set(['ginfer::test-model']) })
+    useThreads.setState({ currentThreadId: threadId })
+    const sent = { ...createDocumentAttachment({ name: 'sent.txt', path: '/docs/sent.txt' }), id: 'sent-file', processed: true }
+    const newer = { ...createDocumentAttachment({ name: 'new.txt', path: '/docs/new.txt' }), id: 'new-file', processed: true }
+    useChatAttachments.getState().setAttachments(threadId, [sent])
+    const getActiveModels = vi.fn().mockResolvedValue([])
+    seedServiceHub({ models: { getActiveModels } as unknown as ModelsService })
+    const starting = deferred<void>()
+    const start = vi.spyOn(switchModel, 'switchToModel').mockImplementation(async (params) => {
+      await starting.promise
+      useAppState.getState().setIntentionalModelStop(params.providerName, params.modelId, false)
+      useAppState.setState({ activeModels: [params.modelId] })
+    })
+    try {
+      const onSubmit = vi.fn()
+      render(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+      await waitFor(() => expect(getActiveModels).toHaveBeenCalledTimes(2))
+      const input = screen.getByTestId('chat-input')
+      fireEvent.change(input, { target: { value: 'Review the original file' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+      await waitFor(() => expect(start).toHaveBeenCalledOnce())
+      expect(onSubmit).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: 'Preparing message' })).toBeDisabled()
+      fireEvent.change(input, { target: { value: 'My next question' } })
+      act(() => useChatAttachments.getState().setAttachments(threadId, (attachments) => [...attachments, newer]))
+      fireEvent.keyDown(input, { key: 'Enter' })
+
+      await act(async () => {
+        starting.resolve(undefined)
+        await starting.promise
+      })
+
+      expect(start).toHaveBeenCalledOnce()
+      expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review the original file', undefined, undefined, undefined, [sent])
+      expect(input).toHaveValue('My next question')
+      expect(useChatAttachments.getState().getAttachments(threadId)).toEqual([newer])
+      expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+    } finally {
+      start.mockRestore()
+    }
+  })
+
+  it('does not clear the next conversation draft when an earlier submission finishes', async () => {
+    const originalThread = 'original-conversation'
+    const nextThread = 'next-conversation'
+    const originalAttachment = { ...createDocumentAttachment({ name: 'original.txt', path: '/docs/original.txt' }), id: 'original-file', processed: true }
+    const nextAttachment = { ...createDocumentAttachment({ name: 'next.txt', path: '/docs/next.txt' }), id: 'next-file', processed: true }
+    useThreads.setState({ currentThreadId: originalThread })
+    useChatAttachments.getState().setAttachments(originalThread, [originalAttachment])
+    useChatAttachments.getState().setAttachments(nextThread, [nextAttachment])
+    const pending = deferred<void>()
+    const onSubmit = vi.fn().mockReturnValue(pending.promise)
+    render(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: 'Review these notes' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+
+    act(() => useThreads.setState({ currentThreadId: nextThread }))
+    fireEvent.change(input, { target: { value: 'Review these notes' } })
+    await act(async () => {
+      pending.resolve(undefined)
+      await pending.promise
+    })
+
+    expect(useThreads.getState().currentThreadId).toBe(nextThread)
+    expect(input).toHaveValue('Review these notes')
+    expect(useChatAttachments.getState().getAttachments(nextThread)).toEqual([nextAttachment])
+    expect(useChatAttachments.getState().getAttachments(originalThread)).toEqual([])
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
   })
 
   it('consumes /compact on the home input before model selection or thread creation', async () => {
@@ -507,7 +695,7 @@ describe('ChatInput', () => {
     view.rerender(<ChatInput onSubmit={onSubmit} chatStatus="ready" submissionReady preselectedAgentSkillName="agent-builder" />)
     expect(send).toBeEnabled()
     fireEvent.keyDown(input, { key: 'Enter' })
-    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review the attached spreadsheet', undefined, 'agent-builder', undefined))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review the attached spreadsheet', undefined, 'agent-builder', undefined, [attachment]))
     expect(input).toHaveValue('')
     expect(useChatAttachments.getState().getAttachments(threadId)).toEqual([])
   })
@@ -555,7 +743,7 @@ describe('ChatInput', () => {
       expect(sendButton).toBeEnabled()
       fireEvent.click(sendButton)
 
-      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('Continue', undefined, undefined, undefined))
+      await waitFor(() => expect(onSubmit).toHaveBeenCalledWith('Continue', undefined, undefined, undefined, []))
       expect(switchSpy.mock.calls.some(([params]) =>
         params.modelId === 'test-model' &&
         params.providerName === 'ginfer' &&
@@ -567,7 +755,7 @@ describe('ChatInput', () => {
     }
   })
 
-  it('keeps skill invocation on the default agent unless a saved workflow is explicitly selected', () => {
+  it('keeps skill invocation on the default agent unless a saved workflow is explicitly selected', async () => {
     const model = {
       id: 'agent-model',
       capabilities: [],
@@ -616,12 +804,14 @@ describe('ChatInput', () => {
     expect(screen.queryByRole('option', { name: 'General Agent' })).not.toBeInTheDocument()
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Build a model inventory agent' } })
     fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
-    expect(onSubmit).toHaveBeenLastCalledWith('Build a model inventory agent', undefined, 'agent-builder', undefined)
+    expect(onSubmit).toHaveBeenLastCalledWith('Build a model inventory agent', undefined, 'agent-builder', undefined, [])
+    await waitFor(() => expect(screen.getByTestId('chat-input')).toHaveValue(''))
 
     fireEvent.change(screen.getByLabelText('Invoke saved agent'), { target: { value: 'researcher' } })
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Run my saved workflow' } })
     fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
-    expect(onSubmit).toHaveBeenLastCalledWith('Run my saved workflow', undefined, undefined, 'researcher')
+    expect(onSubmit).toHaveBeenLastCalledWith('Run my saved workflow', undefined, undefined, 'researcher', [])
+    await waitFor(() => expect(screen.getByTestId('chat-input')).toHaveValue(''))
 
     agentDefinitions.loading = true
     agentDefinitions.value = []
@@ -630,10 +820,11 @@ describe('ChatInput', () => {
     view.rerender(<ChatInput initialMessage onSubmit={onSubmit} />)
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Continue without deleted workflow' } })
     fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
-    expect(onSubmit).toHaveBeenLastCalledWith('Continue without deleted workflow', undefined, undefined, undefined)
+    expect(onSubmit).toHaveBeenLastCalledWith('Continue without deleted workflow', undefined, undefined, undefined, [])
+    await waitFor(() => expect(screen.getByTestId('chat-input')).toHaveValue(''))
   })
 
-  it('invokes a skill from ordinary chat without selecting an agent workflow', () => {
+  it('invokes a skill from ordinary chat without selecting an agent workflow', async () => {
     agentSkills.value = [{ name: 'agent-builder', description: 'Build agents', version: '1.2.0',
       requiresTools: [], requiresScripts: [], dangerous: false, platforms: null, enabled: true,
       compatible: true, reserved: false, unavailableReasons: [], error: null }]
@@ -641,9 +832,9 @@ describe('ChatInput', () => {
     render(<ChatInput initialMessage onSubmit={onSubmit} />)
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: '/agent-builder Make an inventory agent' } })
     fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
-    expect(onSubmit).toHaveBeenCalledWith('Make an inventory agent', undefined, 'agent-builder', undefined)
+    expect(onSubmit).toHaveBeenCalledWith('Make an inventory agent', undefined, 'agent-builder', undefined, [])
     expect(conversationPolicyState.setActiveSkill).toHaveBeenCalledWith(expect.any(String), 'agent-builder')
-    expect(screen.getByTestId('chat-input')).toHaveValue('')
+    await waitFor(() => expect(screen.getByTestId('chat-input')).toHaveValue(''))
   })
 
   it('asks for a model instead of sending when none is selected', async () => {
