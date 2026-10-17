@@ -59,6 +59,7 @@
   },
   "agentWorkspace": {
     "choose": "Choose workspace",
+    "chooseFailed": "Could not choose the workspace folder. Try again or choose another folder.",
     "change": "Change agent workspace",
     "default": "Default",
     "defaultDescription": "Uses the agent-workspace folder inside the GChat data folder.",
@@ -67,6 +68,7 @@
     "canEdit": "CAN EDIT",
     "viewOnly": "VIEW ONLY",
     "addFolder": "Add external folder",
+    "addFolderFailed": "Could not add the folder. Try again or choose another folder.",
     "folderOptions": "Folder options",
     "allowEditing": "Can edit",
     "makeViewOnly": "View only",

@@ -78,7 +78,7 @@ function GbotPage() {
   const [cloudReviews, setCloudReviews] = useState<CloudReview[]>([])
   const [m365Setups, setM365Setups] = useState<M365SetupRecord[]>([])
   const [setupError, setSetupError] = useState('')
-  const [prompt, setPrompt] = useState('')
+  const [prompts, setPrompts] = useState<Record<string, string>>({})
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const setGbotEnabled = useGeneralSetting((state) => state.setGbotEnabled)
@@ -207,6 +207,7 @@ function GbotPage() {
       setTasks([])
       setApprovals([])
       setSelected('')
+      setPrompts({})
       setAssignments({})
       setCloudReviews([])
       setM365Setups([])
@@ -236,6 +237,7 @@ function GbotPage() {
     }
   }
   const workspaceId = selected || state?.workspaces[0]?.id
+  const prompt = prompts[workspaceId || ''] || ''
   const bot = state?.workspaces.find(
     (workspace) => workspace.id === workspaceId
   )
@@ -1031,12 +1033,22 @@ function GbotPage() {
                     onSubmit={(event) => {
                       event.preventDefault()
                       if (!identity || !ready || !botHasControl) return
+                      const submittedIdentity: Identity = identity
+                      const submittedPrompt = prompt
                       void perform(async () => {
                         await gbot('tasks/start', {
-                          identity: identity as Identity,
-                          prompt,
+                          identity: submittedIdentity,
+                          prompt: submittedPrompt,
                         })
-                        setPrompt('')
+                        setPrompts((previous) =>
+                          previous[submittedIdentity.workspace_id] ===
+                          submittedPrompt
+                            ? {
+                                ...previous,
+                                [submittedIdentity.workspace_id]: '',
+                              }
+                            : previous
+                        )
                       })
                     }}
                   >
@@ -1044,7 +1056,14 @@ function GbotPage() {
                       aria-label="Bot task"
                       placeholder="Give this bot a task"
                       value={prompt}
-                      onChange={(event) => setPrompt(event.target.value)}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        if (workspaceId)
+                          setPrompts((previous) => ({
+                            ...previous,
+                            [workspaceId]: value,
+                          }))
+                      }}
                     />
                     <Button
                       disabled={

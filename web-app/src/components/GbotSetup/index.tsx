@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useBundledResources } from '@/hooks/useBundledResources'
+import { useEngineHosts } from '@/stores/engine-hosts-store'
 import KvmSetup from './KvmSetup'
 import LanSetup from './LanSetup'
 import CloudSetup from './CloudSetup'
@@ -97,6 +98,12 @@ export default function GbotSetup({
   const [connecting, setConnecting] = useState(false)
   const [service, setService] = useState<ServiceTarget>({ kind: 'local' })
   const [serviceReady, setServiceReady] = useState(false)
+  const hosts = useEngineHosts((state) => state.hosts)
+  const serviceName =
+    service.kind === 'local'
+      ? 'This PC'
+      : hosts.find((host) => host.host_id === service.host_id)?.name ||
+        'Paired service computer (unavailable)'
   const resources = useBundledResources()
   const preparingService = step === 1 && saving && resources.ready !== true
   useEffect(() => {
@@ -305,7 +312,7 @@ export default function GbotSetup({
             <dt>Bot</dt>
             <dd>{connection.name.trim()}</dd>
             <dt>Service</dt>
-            <dd>This PC</dd>
+            <dd>{serviceName}</dd>
             <dt>Computer</dt>
             <dd>
               {connection.user.trim()}@{connection.hostname.trim()}:
