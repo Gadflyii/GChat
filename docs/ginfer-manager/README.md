@@ -82,6 +82,11 @@ settings change is accounted for on the next start. Catalog KV bytes are
 historical evidence, not a current allocation: profile selection uses Automatic
 unless the user explicitly supplies a byte budget.
 
+Installed Load applies the same rule when selecting a catalog recipe, attaching
+to the new instance or reusing a resident instance. Historical catalog KV bytes
+do not become a desktop override. An explicit custom budget is sent to Host and
+remains part of the settings checked before attachment.
+
 For a solo Automatic start on idle selected GPUs, the fresh quote is an estimate:
 Host leaves the Engine arena automatic so it uses actual free memory after
 weights, workspace and graph startup allocations. Shared placement or multiple
