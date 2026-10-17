@@ -199,7 +199,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
     searchInputRef.current?.focus()
   }, [])
 
-  // Jump to the Hub to download a local model. Carry over whatever the user
+  // Jump to Models to download or load a local model. Carry over whatever the user
   // already typed so the Hub search is prefilled instead of starting blank.
   const onDownloadModel = useCallback(() => {
     setOpen(false)
@@ -251,6 +251,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
 
     return items
   }, [providers])
+  const hasNoChatModels = searchableItems.length === 0
 
   // Create Fzf instance for fuzzy search
   const fzfInstance = useMemo(() => {
@@ -470,7 +471,16 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
 
           {/* Model list */}
           <div className="max-h-80 overflow-y-auto">
-            {Object.keys(groupedItems).length === 0 && searchValue ? (
+            {hasNoChatModels ? (
+              <div className="py-6 px-4 text-center text-sm">
+                <p className="font-medium">
+                  {t('common:noChatModelsAvailable')}
+                </p>
+                <p className="mt-2 text-muted-foreground">
+                  {t('common:noChatModelsAvailableDescription')}
+                </p>
+              </div>
+            ) : filteredItems.length === 0 && searchValue ? (
               <div className="py-3 px-4 text-sm ">
                 {t('common:noModelsFoundFor', { searchValue })}
               </div>
@@ -649,8 +659,7 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
             )}
           </div>
 
-          {/* Download CTA — shortcut into the Hub so users can grab a local
-              model without leaving the selector first. */}
+          {/* Models CTA — shortcut to download or load a local model. */}
           <div className="border-t p-1.5 mt-auto">
             <button
               type="button"
@@ -658,7 +667,9 @@ const DropdownModelProvider = memo(function DropdownModelProvider({
               className="w-full flex items-center gap-2 px-2 py-1.5 rounded-sm cursor-pointer text-sm text-muted-foreground transition-colors duration-200 hover:bg-secondary/40 hover:text-foreground"
             >
               <IconDownload size={16} className="shrink-0" />
-              <span>{t('common:downloadModel')}</span>
+              <span>
+                {t(hasNoChatModels ? 'common:openModels' : 'common:downloadModel')}
+              </span>
             </button>
           </div>
         </div>
