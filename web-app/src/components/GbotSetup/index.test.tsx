@@ -8,7 +8,12 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import GbotSetup from './index'
-import { gbot, getGbotServiceTarget, selectGbotService } from '@/services/gbot'
+import {
+  gbot,
+  gbotControlGrant,
+  getGbotServiceTarget,
+  selectGbotService,
+} from '@/services/gbot'
 
 const resources = vi.hoisted(() => ({
   ready: true as boolean | null,
@@ -18,9 +23,13 @@ vi.mock('@/hooks/useBundledResources', () => ({
   useBundledResources: () => resources,
 }))
 
+const hostStore = vi.hoisted(() => ({
+  hosts: [] as import('@/services/engines').EngineHost[],
+  errors: {},
+  refresh: async () => {},
+}))
 vi.mock('@/stores/engine-hosts-store', () => ({
-  useEngineHosts: (select: (state: unknown) => unknown) =>
-    select({ hosts: [], errors: {}, refresh: async () => {} }),
+  useEngineHosts: (select: (state: unknown) => unknown) => select(hostStore),
 }))
 
 vi.mock('@/services/gbot', () => ({
@@ -32,8 +41,13 @@ vi.mock('@/services/gbot', () => ({
 beforeEach(() => {
   resources.ready = true
   resources.error = ''
+  hostStore.hosts = []
   vi.mocked(getGbotServiceTarget).mockResolvedValue({ kind: 'local' })
   vi.mocked(selectGbotService).mockResolvedValue(undefined)
+  vi.mocked(gbotControlGrant).mockResolvedValue({
+    status: 'approved',
+    service_configured: true,
+  })
 })
 
 afterEach(() => {
@@ -62,7 +76,7 @@ async function checkTools() {
   await screen.findByRole('status')
 }
 
-async function chooseLan() {
+async function chooseLan(serviceHostId?: string) {
   fireEvent.change(screen.getByLabelText('Bot name'), {
     target: { value: ' Writer ' },
   })
@@ -70,6 +84,15 @@ async function chooseLan() {
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   )
+  if (serviceHostId) {
+    fireEvent.click(screen.getByLabelText('Another PC on the LAN'))
+    fireEvent.change(screen.getByLabelText('Paired service computer'), {
+      target: { value: serviceHostId },
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+    )
+  }
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   await screen.findByLabelText(/A separate local VM/)
   fireEvent.click(screen.getByLabelText(/Another computer on the LAN/))
@@ -313,6 +336,9 @@ it('reviews a valid LAN connection without showing secrets and saves only on con
   fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
   await checkTools()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  expect(
+    screen.getByText('Service', { selector: 'dt' }).nextElementSibling
+  ).toHaveTextContent(/^This PC$/)
   expect(screen.getByText('bot@bot.local:2222')).toBeInTheDocument()
   expect(screen.queryByDisplayValue('private-key')).not.toBeInTheDocument()
   expect(
@@ -331,6 +357,71 @@ it('reviews a valid LAN connection without showing secrets and saves only on con
     passphrase: '',
     workspaceId: 'saved-bot',
   })
+})
+
+it('reviews the selected paired service computer instead of this PC or another paired host', async () => {
+  preparedApi()
+  hostStore.hosts = [
+    {
+      host_id: 'other-host',
+      name: 'Other paired computer',
+      base_url: 'https://other.test',
+      certificate_sha256: 'other-certificate',
+      client_id: 'other-client',
+    },
+    {
+      host_id: 'service-host',
+      name: 'Office bot server',
+      base_url: 'https://office.test',
+      certificate_sha256: 'office-certificate',
+      client_id: 'office-client',
+    },
+  ]
+  render(<GbotSetup save={vi.fn()} localReady={vi.fn()} cancel={vi.fn()} />)
+  await chooseLan('service-host')
+  expect(selectGbotService).toHaveBeenCalledWith({
+    kind: 'paired_host',
+    host_id: 'service-host',
+  })
+  fillConnection()
+  fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
+  await checkTools()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  expect(
+    screen.getByText('Service', { selector: 'dt' }).nextElementSibling
+  ).toHaveTextContent(/^Office bot server$/)
+  expect(screen.queryByText('This PC')).not.toBeInTheDocument()
+})
+
+it('keeps the review honest when the selected paired service disappears', async () => {
+  preparedApi()
+  hostStore.hosts = [
+    {
+      host_id: 'service-host',
+      name: 'Office bot server',
+      base_url: 'https://office.test',
+      certificate_sha256: 'office-certificate',
+      client_id: 'office-client',
+    },
+  ]
+  const props = { save: vi.fn(), localReady: vi.fn(), cancel: vi.fn() }
+  const view = render(<GbotSetup {...props} />)
+  await chooseLan('service-host')
+  fillConnection()
+  fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
+  await checkTools()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  expect(
+    screen.getByText('Service', { selector: 'dt' }).nextElementSibling
+  ).toHaveTextContent(/^Office bot server$/)
+
+  hostStore.hosts = []
+  view.rerender(<GbotSetup {...props} />)
+  expect(
+    screen.getByText('Service', { selector: 'dt' }).nextElementSibling
+  ).toHaveTextContent(/^Paired service computer \(unavailable\)$/)
+  expect(screen.queryByText('This PC')).not.toBeInTheDocument()
+  expect(selectGbotService).toHaveBeenCalledTimes(1)
 })
 
 it('keeps a failed save reviewable and allows retry', async () => {
