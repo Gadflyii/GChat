@@ -34,6 +34,10 @@ pub enum ApiError {
 impl std::fmt::Display for ApiError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Vault(error @ (VaultError::Unavailable | VaultError::AccessDenied)) => write!(
+                formatter,
+                "Gbot secure storage: {error}. Choose Check secure storage in GChat (the welcome screen or GInfer Hosts), unlock it if asked, then start Gbot again."
+            ),
             Self::Vault(error) => write!(formatter, "Gbot secure storage: {error}"),
             Self::Listener(_) => formatter.write_str("Gbot loopback listener is unavailable"),
             Self::Http(_) => formatter.write_str("Gbot HTTP service could not complete"),
@@ -2901,5 +2905,16 @@ mod tests {
             Api::bind(reopened, vault, 0).await,
             Err(ApiError::Vault(VaultError::InvalidData))
         ));
+    }
+
+    #[test]
+    fn unavailable_or_locked_secure_storage_says_how_to_recover() {
+        for error in [VaultError::Unavailable, VaultError::AccessDenied] {
+            let text = ApiError::Vault(error).to_string();
+            assert!(text.contains("Check secure storage"), "{text}");
+            assert!(text.contains("start Gbot again"), "{text}");
+        }
+        let other = ApiError::Vault(VaultError::InvalidData).to_string();
+        assert!(!other.contains("Check secure storage"), "{other}");
     }
 }
