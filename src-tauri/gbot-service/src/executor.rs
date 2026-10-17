@@ -1586,33 +1586,71 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn empty_terminal_model_reply_is_interrupted_and_preserved() {
-        for content in [json!(""), json!(" \n"), Value::Null, json!("Finished"),
-            json!([{"type":"text","text":"Finished"}])] {
+        for content in [
+            json!(""),
+            json!(" \n"),
+            Value::Null,
+            json!("Finished"),
+            json!([{"type":"text","text":"Finished"}]),
+        ] {
             let dir = tempfile::tempdir().unwrap();
             let (mut task, runtime) = fixture(dir.path()).await;
-            task.record.messages = vec![json!({"role":"user","content":"Report the result"})];
+            task.record.messages =
+                vec![json!({"role":"user","content":"Report the result"})];
             task.record.tools.clear();
             let raw = json!({"choices":[{"message":{"role":"assistant","content":content,
                 "reasoning_content":"Private reasoning alone is not an answer"}}]});
             let script = format!("read start; printf '%s\\n' '{}'; read reply; printf '%s\\n' '{}'; read reply",
                 json!({"method":"model","payload":raw}), json!({"method":"done","payload":{}}));
             let processes = ExecutorProcesses {
-                python: ProcessSpec { program: "sh".into(), args: vec!["-c".into(), script] },
-                context: ProcessSpec { program: "cat".into(), args: vec![] },
+                python: ProcessSpec {
+                    program: "sh".into(),
+                    args: vec!["-c".into(), script],
+                },
+                context: ProcessSpec {
+                    program: "cat".into(),
+                    args: vec![],
+                },
             };
-            let assignment = Assignment { api_base: "http://unused/v1".into(), api_key: None,
-                model: "fixture".into(), context_tokens: 131072 };
+            let assignment = Assignment {
+                api_base: "http://unused/v1".into(),
+                api_key: None,
+                model: "fixture".into(),
+                context_tokens: 131072,
+            };
             let (_sender, receiver) = watch::channel(false);
-            let result = task.run(&runtime, &Deny, &assignment, &processes, receiver).await;
-            let empty = content.is_null() || content.as_str().is_some_and(|text| text.trim().is_empty());
-            if empty { assert!(matches!(result, Err(ExecutorError::EmptyReply))); }
-            else { result.unwrap(); }
-            let saved = CuaTask::open(dir.path().join("task.json")).await.unwrap().snapshot();
-            assert_eq!(saved.state, if empty { TaskState::Interrupted } else { TaskState::Completed });
+            let result = task
+                .run(&runtime, &Deny, &assignment, &processes, receiver)
+                .await;
+            let empty = content.is_null()
+                || content
+                    .as_str()
+                    .is_some_and(|text| text.trim().is_empty());
+            if empty {
+                assert!(matches!(result, Err(ExecutorError::EmptyReply)));
+            } else {
+                result.unwrap();
+            }
+            let saved = CuaTask::open(dir.path().join("task.json"))
+                .await
+                .unwrap()
+                .snapshot();
+            assert_eq!(
+                saved.state,
+                if empty {
+                    TaskState::Interrupted
+                } else {
+                    TaskState::Completed
+                }
+            );
             assert_eq!(saved.model_replies, vec![raw]);
             assert!(saved.calls.is_empty());
-            if empty { assert_eq!(saved.history.last().unwrap().reason,
-                "model returned no answer; resume the task to try again"); }
+            if empty {
+                assert_eq!(
+                    saved.history.last().unwrap().reason,
+                    "model returned no answer; resume the task to try again"
+                );
+            }
         }
     }
 
