@@ -30,6 +30,7 @@ export class DefaultProjectsService implements ProjectsService {
       localStorage.setItem(this.storageKey, JSON.stringify(data))
     } catch (error) {
       console.error('Error saving projects to localStorage:', error)
+      throw error
     }
   }
 

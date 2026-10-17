@@ -38,6 +38,44 @@ tree `/ai/gchat-worktrees/c3-hardware-profile-guidance-evidence-20261017`,
 branch `docs/c3-hardware-profile-guidance-evidence-20261017`, retained for merge.
 The cited evidence remains with its existing owners; there is no new live job
 or disposable output. Next action: coordinator merge of this closure record.
+## Project storage failures reach the save dialog — C3
+
+The installed acceptance for `GUI-PROJECT-SAVE-ASYNC-RESULT-20261017`
+found a remaining failure beneath the merged dialog fix (`68cc55bba`). In the
+selected Linux release RC (`ed68c7443` / Engine `e2282c336`), creating a project
+under a real WebKit localStorage quota failure still reported success, cleared
+the draft and navigated to **Project Not Found**. The saved project list was
+unchanged. This used a disposable private profile, no model, and the ordinary
+New Project/Create controls. Removing only the disposable quota-filling key
+allowed a manually re-entered project to save normally.
+
+`DefaultProjectsService` caught storage-write errors and resolved its mutation
+promises successfully. It now propagates the original error to callers, allowing
+the existing dialog failure handling to retain the draft and offer retry.
+Five service regressions cover ordinary creation and quota rejection, preserved
+stored projects and successful retry for create/update/delete/list replacement.
+The existing rendered dialog tests cover pending, retained draft and retry.
+
+Owned source: `/ai/gchat-worktrees/c3-project-storage-rejection-20261017`, branch
+`fix/c3-project-storage-rejection-20261017`, from main `9e75fc31e`.
+Focused lint and all five focused cases pass. The required single `make verify`
+completed the frontend, extension and most native suites, then exited 2 in the
+unrelated Gbot test
+`ssh_loopback::cua_idle_revival_and_refused_start_never_dispatches_actions`.
+Its fixture shutdown at `src-tauri/gbot-service/tests/ssh_loopback.rs:1279`
+expected the released loopback port to refuse a connection. A narrow gate
+continuation passed that failed case in isolation, then completed the remaining
+Gbot doc tests, hardware and utility suites. The initial failure remains recorded;
+its exact nondeterministic cause is unestablished. Completed coverage is
+3,182 frontend cases (six skipped), 120 extension cases and 1,200 native cases
+(27 ignored), plus all six critical coverage floors. All compilation ran on
+S1 CPUs104–111 in a private SSD copy with pinned image `ad7f9bf020d7`, offline
+caches and read-only launch profiles; the booking was returned at 23:51Z.
+No local root-disk build or Engine/model run is involved. Evidence and final
+verification results:
+`/ai/gchat/out/c3-project-storage-rejection-20261017/`. Installed acceptance of
+the corrected source remains for the next RC; the frozen RC above reproduced
+the failure and was not modified.
 
 ## Hardware live statistics wording — C7
 
