@@ -31,7 +31,10 @@ export function useAgentSkills(enabled = true) {
     setError(null)
     try {
       const detail = await getAgentSkill(name)
-      if (request === selectionRequest.current) setSelected(detail)
+      if (request === selectionRequest.current) {
+        setSelected(detail)
+        return detail
+      }
     } catch (reason) {
       if (request === selectionRequest.current) setError(String(reason))
     }

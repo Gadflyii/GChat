@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import {
   IconAlertTriangle,
@@ -42,7 +42,7 @@ import { route } from '@/constants/routes'
 import { useAgentSkills } from '@/hooks/useAgentSkills'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { cn } from '@/lib/utils'
-import type { AgentSkill } from '@/services/agent/skills'
+import type { AgentSkill, AgentSkillDetail } from '@/services/agent/skills'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.skills.index as any)({
@@ -67,9 +67,24 @@ export function SkillsPage() {
     exportSkill,
   } = useAgentSkills()
   const [deleteName, setDeleteName] = useState<string | null>(null)
-  const [editOpen, setEditOpen] = useState(false)
+  const [editingSkill, setEditingSkill] = useState<AgentSkillDetail | null>(null)
+  const editRequest = useRef(0)
   const [createOpen, setCreateOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
+
+  useEffect(() => {
+    return () => {
+      editRequest.current += 1
+    }
+  }, [])
+
+  const edit = async (name: string) => {
+    const request = ++editRequest.current
+    const detail = await select(name)
+    if (request === editRequest.current && detail?.name === name) {
+      setEditingSkill(detail)
+    }
+  }
 
   const mutate = async (operation: () => Promise<void>) => {
     try {
@@ -117,7 +132,10 @@ export function SkillsPage() {
                 variant="ghost"
                 title={t('common:refresh')}
                 disabled={loading}
-                onClick={() => void load(true)}
+                onClick={() => {
+                  editRequest.current += 1
+                  void load(true)
+                }}
               >
                 <IconRefresh className={cn(loading && 'animate-spin')} />
               </Button>
@@ -129,11 +147,21 @@ export function SkillsPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-max">
-                  <DropdownMenuItem onSelect={() => setCreateOpen(true)}>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      editRequest.current += 1
+                      setCreateOpen(true)
+                    }}
+                  >
                     <IconClipboardText />
                     {t('common:writeSkillInstructions')}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onSelect={() => setUploadOpen(true)}>
+                  <DropdownMenuItem
+                    onSelect={() => {
+                      editRequest.current += 1
+                      setUploadOpen(true)
+                    }}
+                  >
                     <IconUpload />
                     {t('common:uploadASkill')}
                   </DropdownMenuItem>
@@ -169,7 +197,10 @@ export function SkillsPage() {
                 <button
                   type="button"
                   className="min-w-0 flex-1 p-1 text-left"
-                  onClick={() => void select(skill.name)}
+                  onClick={() => {
+                    editRequest.current += 1
+                    void select(skill.name)
+                  }}
                 >
                   <div className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate font-medium">
@@ -196,11 +227,11 @@ export function SkillsPage() {
                   canTry={canTry}
                   onDownload={() => void download(skill.name)}
                   onTry={() => tryInChat(skill.name)}
-                  onEdit={() => {
-                    void select(skill.name)
-                    setEditOpen(true)
+                  onEdit={() => void edit(skill.name)}
+                  onUninstall={() => {
+                    editRequest.current += 1
+                    setDeleteName(skill.name)
                   }}
-                  onUninstall={() => setDeleteName(skill.name)}
                 />
               </div>
             )
@@ -237,7 +268,10 @@ export function SkillsPage() {
                     size="icon-sm"
                     variant="ghost"
                     aria-label={t('common:editSkill')}
-                    onClick={() => setEditOpen(true)}
+                    onClick={() => {
+                      editRequest.current += 1
+                      setEditingSkill(selected)
+                    }}
                   >
                     <IconEdit />
                   </Button>
@@ -293,9 +327,9 @@ export function SkillsPage() {
         onUpload={addImported}
       />
       <AgentSkillEditDialog
-        skill={selected}
-        open={editOpen}
-        onOpenChange={setEditOpen}
+        skill={editingSkill}
+        open={editingSkill !== null}
+        onOpenChange={(open) => !open && setEditingSkill(null)}
         onUpdate={update}
       />
     </div>
