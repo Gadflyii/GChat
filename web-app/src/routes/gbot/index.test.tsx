@@ -2362,7 +2362,7 @@ it.each([
 
 it('shows one plain not-connected message and hides it while the service starts', async () => {
   const notConnected =
-    'Gbot service is not running or connected. Use the service button at the top of the Gbot page to start or connect it.'
+    'Gbot service is not running or is disconnected. Use the service button at the top of the Gbot page to start or connect it.'
   mocks.listen.mockResolvedValue(() => {})
   mocks.call.mockRejectedValue(notConnected)
   let finish!: () => void

@@ -120,7 +120,7 @@ async fn close_views(views: BTreeMap<uuid::Uuid, ViewLease>) {
 impl Connection {
     fn require_service(&self) -> Result<(), String> {
         if self.stopped || !self.authorized {
-            return Err("Gbot service is not running or connected. Use the service button at the top of the Gbot page to start or connect it.".into());
+            return Err("Gbot service is not running or is disconnected. Use the service button at the top of the Gbot page to start or connect it.".into());
         }
         Ok(())
     }
