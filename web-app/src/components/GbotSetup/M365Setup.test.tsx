@@ -233,8 +233,14 @@ it('does not load accounts when setup closes during service resolution', async (
     })
   )
   mount()
+  expect(
+    screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+  ).toBeDisabled()
   cleanup()
   await act(async () => resolveTarget({ kind: 'local' }))
+  expect(
+    screen.queryByRole('button', { name: 'Refresh Microsoft accounts' })
+  ).not.toBeInTheDocument()
   expect(connectorAccounts).not.toHaveBeenCalled()
   expect(gbot).not.toHaveBeenCalled()
   expect(beginConnectorAuth).not.toHaveBeenCalled()
