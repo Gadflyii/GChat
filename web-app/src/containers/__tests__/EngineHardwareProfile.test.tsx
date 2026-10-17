@@ -131,3 +131,11 @@ it('explains building a profile before choices and keeps technical paths out of 
   expect(screen.getByRole('checkbox', { name: 'GPU 1: RTX 5090' })).not.toBeChecked()
   expect(screen.getByRole('button', { name: 'Build profile' })).toBeDisabled()
 })
+
+it('drops the how-long-it-takes note once the profile is ready and keeps it while profiling', () => {
+  const view = render(<EngineHardwareProfile gpus={gpus} profile={profile('running')} offline={false} disabled={false} action={vi.fn()} />)
+  expect(screen.getByText(/Allow 10 minutes to an hour/)).toBeInTheDocument()
+  view.rerender(<EngineHardwareProfile gpus={gpus} profile={profile('completed')} offline={false} disabled={false} action={vi.fn()} />)
+  expect(screen.queryByText(/Allow 10 minutes to an hour/)).not.toBeInTheDocument()
+  expect(screen.getByText(/Your hardware profile is ready/)).toBeInTheDocument()
+})
