@@ -1,5 +1,29 @@
 # GInfer host UI
 
+## Proxy control labels — GUI-PROXY-SETTINGS-ACCESSIBILITY
+
+Current main already supplies novice proxy instructions and accessible control
+names. This follow-up keeps credential labels visible after typing, associates
+each field and switch with its existing instructions, and connects the named
+Show/Hide password button to the password field. Existing configuration values
+and setters remain unchanged; locales and network behavior are outside this fix.
+
+Acceptance is met on candidate `409322292`: four focused rendered cases,
+lint, frontend types and coverage checks, 2,658 frontend tests (six skipped),
+119 extension tests and 1,073 Rust tests (27 ignored). All required `make verify`
+components completed on S1 CPUs 72–79 in the pinned `ad7f9bf020d7` container.
+The first attempt stopped at a fake-GPU fixture because the runner set
+`CUDA_VISIBLE_DEVICES` empty. Leaving CUDA mask/order unset made that case pass;
+the remaining Rust suites then passed without source changes or repeating
+successful checks. CPU-only verification must preserve the fake GPU inventory.
+Next: coordinator review and merge; installed workflow qualification is separate.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| Codex 6 / local | `/ai/gchat-worktrees/c6-proxy-settings-accessibility-20261017`, branch `fix/c6-proxy-settings-accessibility-20261017` | Candidate from `eaf131aed`; route and dedicated tests only |
+| Codex 6 / evidence | `/ai/gchat/out/c6-proxy-settings-accessibility-20261017/` | Passing result JSON, initial runner failure and concise summary retained |
+| Codex 6 / S1 | `/media/ron/SSD_RAID/ai/tmp-c6-proxy-settings-accessibility-20261017/` | Private gate source/dependencies/build retired after passing results; 19,857,235,968 allocated bytes reclaimed, no GPU |
+
 ## Data-folder move guidance — GUI-DATA-LOCATION-GUIDANCE
 
 The confirmation dialog explains which files are copied, that external model
