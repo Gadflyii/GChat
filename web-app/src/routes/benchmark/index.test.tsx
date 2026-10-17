@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
 import type { EngineSnapshot } from '@/services/engines'
+import type { BenchmarkResult, BenchmarkV2Wave } from '@/services/benchmark/tauri'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), run: vi.fn(), command: vi.fn(), refresh: vi.fn(), snapshots: {} as Record<string, EngineSnapshot> }))
 vi.mock('@tanstack/react-router', () => ({ createFileRoute: () => (options: unknown) => ({ options }), useNavigate: () => vi.fn() }))
@@ -97,19 +98,71 @@ it('keeps saved results visible without an online server', async () => {
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks(); localStorage.removeItem(localStorageKey.gbenchReceipts) })
 
-it('renders saved native v2 scope and explains the public contract boundary offline', async () => {
+it('previews saved native v2 as public v1 offline while keeping publication disabled', async () => {
   mocks.list.mockResolvedValue([])
-  useBenchmarkStore.setState({ runs: [{ benchmark_id: 'standard', hardware: null, methodology: 'ginfer-resident-max-perf-v2', run_id: 'saved-v2', started_at_ms: 1, completed_at_ms: 1001, points: [],
+  const run: BenchmarkResult = { benchmark_id: 'standard', methodology: 'ginfer-resident-max-perf-v2', run_id: 'saved-v2', started_at_ms: 1, completed_at_ms: 1001,
+    hardware: { cpu_model: 'Example CPU', physical_cores: 16, logical_threads: 32, ram_bytes: 2 ** 36,
+      ram_speed_mt_s: 6000, os: 'Linux', os_version: '6.8', resource_scope: 'physical',
+      gpus: [{ model: 'RTX 5090', vram_mib: 32768, sm: '120' }] },
     session: { display_name: 'Saved v2 run', pid: null, target_id: 'ginfer/local/instance', session_id: 'session',
-      model_id: 'model', model_path: '/model.ginfer', max_context: 8181, max_concurrency: 8, vision: true,
+      model_id: 'qwen3.8-27b/groupwise-int-dflash2-q4', model_path: '/model.ginfer', max_context: 8181, max_concurrency: 8, vision: true,
+      benchmark_profile: { id: 'gbench-max-perf', version: 1, model_class: 'qwen27-int-dflash-q4' }, tp: 1, draft_policy: 'fixed',
       spec: 'dflash', draft_tokens: 7, draft_tp: 1, kv_dtype: 'int8', prefill_chunk: 0, cuda_graph: true },
-  }], selectedRunId: 'saved-v2' })
+    points: [1, 4, 8].map(concurrency => {
+      const logical = 2048 * concurrency
+      const wave = (prefix: boolean, seconds: number): BenchmarkV2Wave => ({
+        full_cold_prompt: !prefix, computed_tokens: prefix ? 0 : logical, cached_tokens: prefix ? logical : 0,
+        compute_seconds: prefix ? 0 : seconds, output_tokens: 500 * concurrency, mean_ttft_seconds: seconds,
+        decode_tokens: 480 * concurrency, decode_rounds: 120 * concurrency, decode_seconds: 2, wall_seconds: seconds + 4,
+        logical_prompt_tokens: logical, observed_compute_tokens: prefix ? 0 : logical, prefix_reuse: prefix,
+        warm_cached_prompt: prefix, prefill_seconds_sum: seconds * concurrency, decode_seconds_sum: 2 * concurrency,
+        request_seconds_sum: (seconds + 4) * concurrency, warm_prefill_status: prefix ? 'cached' : 'prefix_reuse_disabled',
+        warm_prefill_seconds_mean: prefix ? seconds : null, warm_pp_effective_per_request: prefix ? 2048 / seconds : null,
+        warm_cached_ttft_seconds: prefix ? seconds : null,
+      })
+      return { concurrency, requested_prompt_tokens: 2048, requested_output_tokens: 500, completed_requests: concurrency,
+        average_prompt_tokens: 2048, average_completion_tokens: 500, cached_prompt_tokens: logical,
+        cold_prompt_tokens_per_second: logical / 2, prompt_tokens_per_second: null,
+        warm_prefill_tokens_per_second_per_request: 512, warm_cached_ttft_seconds: 4,
+        generation_tokens_per_second: 240 * concurrency, per_request_generation_tokens_per_second: 240,
+        wave_output_tokens_per_second: 500 * concurrency / 8, average_prefill_seconds: 4, average_decode_seconds: 2,
+        average_request_seconds: 8, wave_seconds: 8, finish_reasons: ['output_limit'],
+        evidence: { schema: 'ginfer-resident-benchmark-v2', corpus: 'fixture-standard-v2',
+          configuration: { engine_build: 'native-build', model: 'qwen3.8-27b', weights: 'groupwise-int-dflash2-q4',
+            tp: 1, draft_tp: 1, max_context: 8181, max_concurrency: 8, kv_dtype: 'int8', spec: 'dflash',
+            draft_tokens: 7, draft_policy: 'fixed', cuda_graph: true, vision: true, prefix_reuse: true },
+          workload: { prompt_tokens: 2048, output_tokens: 500, concurrency, warmup_rounds: 1, measured_rounds: 1 },
+          cold_prefill: { prefix_reuse: false, warmup: [wave(false, 1)], measured: [wave(false, 2)] },
+          warm_generation: { prefix_reuse: true, warmup: [wave(true, 3)], measured: [wave(true, 4)] } },
+      }
+    }),
+  }
+  useBenchmarkStore.setState({ runs: [run], selectedRunId: run.run_id })
   render(<Page />)
   expect(await screen.findByText('Native v2 · measured cold prefill and warm generation')).toBeInTheDocument()
   expect(screen.getByRole('columnheader', { name: 'Warm PP / request t/s' })).toBeInTheDocument()
   expect(screen.getByRole('columnheader', { name: 'Cached TTFT' })).toBeInTheDocument()
-  expect(screen.getByText(/Native v2 results are saved locally/)).toBeInTheDocument()
-  expect(screen.queryByLabelText('Public nickname')).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Enter public nickname'), { target: { value: 'Player' } })
+  fireEvent.click(screen.getByText('What will be published'))
+  const preview = screen.getByText('Full submission preview')
+  fireEvent.click(preview)
+  const payload = JSON.parse(preview.closest('details')!.querySelector('pre')!.textContent!)
+  expect(payload.schema).toBe('gbench-submission-v1')
+  expect(payload.methodology).toBe('ginfer-resident-max-perf-v1')
+  expect(payload.configuration.engine_build).toBe('native-build')
+  expect(payload.points).toEqual([1, 4, 8].map(concurrency => ({ concurrency, corpus: 'fixture-standard-v2',
+    warmup: { full_cold_prompt: true, computed_tokens: 2048 * concurrency, cached_tokens: 0, compute_seconds: 1,
+      output_tokens: 500 * concurrency, mean_ttft_seconds: 1, decode_tokens: 480 * concurrency,
+      decode_rounds: 120 * concurrency, decode_seconds: 2, wall_seconds: 5 },
+    measured: { full_cold_prompt: false, computed_tokens: 0, cached_tokens: 2048 * concurrency, compute_seconds: 0,
+      output_tokens: 500 * concurrency, mean_ttft_seconds: 4, decode_tokens: 480 * concurrency,
+      decode_rounds: 120 * concurrency, decode_seconds: 2, wall_seconds: 8 },
+  })))
+  fireEvent.click(screen.getByRole('checkbox', { name: /I want to publish/ }))
+  expect(screen.getByRole('button', { name: 'Submit to leaderboard' })).toBeDisabled()
+  expect(screen.getByText('Leaderboard coming soon. Publishing is not enabled yet.')).toBeInTheDocument()
+  expect(localStorage.getItem(localStorageKey.gbenchReceipts)).toBeNull()
+  expect(useBenchmarkStore.getState().runs[0]).toEqual(run)
 })
 
 it('keeps receipt-owned public removal available after deleting the last local result', async () => {

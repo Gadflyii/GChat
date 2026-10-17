@@ -72,8 +72,7 @@ export function BenchmarkLeaderboard({ run }: { run?: BenchmarkResult }) {
   }
   return <div className="space-y-4">
     {receiptError && <p role="alert" className="text-sm text-destructive">{receiptError}</p>}
-    {run?.methodology === 'ginfer-resident-max-perf-v2' && <p className="text-sm text-muted-foreground">Native v2 results are saved locally. Leaderboard submission requires an approved public report and scoring contract.</p>}
-    {run?.benchmark_id === 'standard' && run.methodology === 'ginfer-resident-max-perf-v1' && !receiptError && !receipts.some(receipt => receipt.run_id === run.run_id) &&
+    {run?.benchmark_id === 'standard' && ['ginfer-resident-max-perf-v1', 'ginfer-resident-max-perf-v2'].includes(run.methodology) && !receiptError && !receipts.some(receipt => receipt.run_id === run.run_id) &&
       <BenchmarkSubmission key={run.run_id} run={run} onSubmitted={refreshReceipts} />}
     {receipts.length > 0 && <section aria-label="Published benchmark results" className="rounded-lg border border-border p-4">
       <h3 className="font-medium">Your published results</h3>

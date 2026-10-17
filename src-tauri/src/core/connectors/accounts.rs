@@ -965,10 +965,12 @@ impl AccountsState {
             } else {
                 tokio::select! { _ = cancellation.cancelled() => return Err("Workspace request cancelled".into()), response = response.json() => response.map_err(|_| "Invalid provider token response")? }
             };
-            if matches!(
-                response.get("error").and_then(Value::as_str),
-                Some("invalid_grant" | "invalid_client" | "unauthorized_client")
-            ) {
+            if matches!(status.as_u16(), 400 | 401 | 403)
+                && matches!(
+                    response.get("error").and_then(Value::as_str),
+                    Some("invalid_grant" | "invalid_client" | "unauthorized_client")
+                )
+            {
                 if config.provider == Provider::Google
                     && response.get("error").and_then(Value::as_str) == Some("invalid_grant")
                 {
@@ -2748,7 +2750,8 @@ mod tests {
             Some(format!("http://{}", listener.local_addr().unwrap()));
         let server = tokio::spawn(async move {
             for (status, body) in [
-                (429, json!({"error":"temporarily_unavailable"})),
+                (429, json!({"error":"invalid_grant"})),
+                (503, json!({"error":"invalid_client"})),
                 (
                     200,
                     json!({"access_token":"rotated-access","refresh_token":"rotated-refresh","expires_in":3600,"token_type":"Bearer","scope":"https://www.googleapis.com/auth/calendar.readonly"}),
@@ -2802,16 +2805,18 @@ mod tests {
             .unwrap()
             .expires = Instant::now();
         let cancellation = CancellationToken::new();
-        assert!(state
-            .token("first", &cancellation)
-            .await
-            .unwrap_err()
-            .contains("429"));
-        assert!(!state.view().unwrap().accounts[0].needs_reconnect);
-        assert_eq!(
-            vault.get("account:first").unwrap().as_deref(),
-            Some("original-refresh")
-        );
+        for status in [429, 503] {
+            assert_eq!(
+                state.token("first", &cancellation).await.unwrap_err(),
+                format!("Provider token authorization failed (HTTP {status})")
+            );
+            assert!(!state.view().unwrap().accounts[0].needs_reconnect);
+            assert!(!original_lease.is_cancelled());
+            assert_eq!(
+                vault.get("account:first").unwrap().as_deref(),
+                Some("original-refresh")
+            );
+        }
         let (access, lease) = state.token("first", &cancellation).await.unwrap();
         assert_eq!(access, "rotated-access");
         assert!(original_lease.is_cancelled());
@@ -3018,6 +3023,8 @@ mod tests {
                 (400, "consent_required"),
                 (429, "consent_required"),
                 (503, "consent_required"),
+                (429, "invalid_grant"),
+                (503, "invalid_client"),
                 (400, "invalid_grant"),
             ] {
                 let (mut stream, _) = listener.accept().await.unwrap();
@@ -3058,7 +3065,7 @@ mod tests {
             .unwrap();
         assert!(approval.contains("permission approval"));
         assert!(!approval.contains("private-provider-detail"));
-        for status in [429, 503] {
+        for status in [429, 503, 429, 503] {
             assert_eq!(
                 state.exchange(&config, vec![], &cancellation).await.err().unwrap(),
                 format!("Provider token authorization failed (HTTP {status})")
