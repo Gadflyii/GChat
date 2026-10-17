@@ -511,8 +511,10 @@ saved-Host Connect prompting, with a clear locked-storage error after Cancel.
 A fresh isolated-keyring follow-up also passes ordinary unlock, stored-credential
 retrieval and reconnection after restart. The installed Linux Gbot local service
 token also passes creation and retrieval after GUI and normal service-process
-restart, with silent locked launch and Gbot navigation. SSH/provider credential
-use, crash recovery and Windows remain unqualified.
+restart, with silent locked launch and Gbot navigation. Synthetic SSH-key import
+and stored-key retrieval after GUI restart also pass, displaying the same public key.
+SSH authentication/provider credential use, crash recovery and Windows remain
+unqualified.
 [Evidence and limits](remaining-acceptance.md#installed-linux-locked-keyring-launch-and-explicit-connect--october-17).
 OI-069's two-Host worker gate and October 15 independent-workstation gate pass.
 Two native Linux clients with distinct grants share one instance-wide worker

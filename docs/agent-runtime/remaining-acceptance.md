@@ -605,10 +605,30 @@ reconnected by 09:01:55Z. Normal service Quit and desktop close completed at
 
 This qualifies local service-token creation, persistence and retrieval across
 GUI and normal service-process restart, alongside silent locked launch and
-navigation. Crash recovery, SSH/provider credentials, bot control/tasks, fresh
-installation and native Windows remain unqualified. No model, GPU workload, bot
-or task ran. Prior GUI-restart evidence:
+navigation. Crash recovery, SSH authentication/provider credential use, bot
+control/tasks, fresh installation and native Windows remain unqualified. No model,
+GPU workload, bot or task ran. Prior GUI-restart evidence:
 `/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-gbot-credential-20261017/result.json`.
+
+### Gbot synthetic SSH-key follow-up
+
+The installed d31 GUI imported a synthetic SSH key at 09:13:11Z, with CreateItem
+and GetSecret observed, and displayed the matching public key at 09:13:29Z.
+After normal desktop close, keyring lock and desktop restart as PID1871, plain
+launch and Gbot navigation made no Secret Service method calls before explicit
+Start at 09:15:05Z. After bundled-resource validation, the service-token prompt
+at 09:16:58Z mapped sender `:1.33` to the restarted desktop. Ordinary unlock and
+GetSecret reconnected the service by 09:17:52Z.
+
+The keyring was locked again at 09:17:59Z before ordinary Set up SSH access.
+That action requested Unlock and Prompt from sender `:1.37`, mapped live to
+surviving Gbot service PID1602. Ordinary unlock at 09:18:08Z reopened setup;
+its displayed public key at 09:18:14Z exactly matched the original. This passes
+key import, persistence and stored-key retrieval for public-key derivation across
+GUI restart. It does not qualify SSH network connection, authentication, provider
+credentials, bot control or tasks. No model ran. Normal service Quit and desktop
+close completed at 09:18:57Z; the guest shut down normally and returned at 09:20Z.
+Evidence: `/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-ssh-roundtrip-20261017/{result.json,summary.md}`.
 
 Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
 Two concurrent workers finished; a third queued at full capacity and was cancelled.
