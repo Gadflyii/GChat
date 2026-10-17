@@ -25,12 +25,15 @@ vi.mock('@/hooks/useThreadManagement', () => ({
   useThreadManagement: () => ({ folders: mocks.folders }),
 }))
 vi.mock('@/hooks/useAssistant', () => ({
+  defaultAssistant: { parameters: { temperature: 0.7 } },
   useAssistant: () => ({
     assistants: mocks.assistants,
     addAssistant: mocks.addAssistant,
   }),
 }))
-vi.mock('../AddEditAssistant', () => ({ default: () => null }))
+vi.mock('@/hooks/useTheme', () => ({
+  useTheme: () => ({ isDark: false }),
+}))
 vi.mock('sonner', () => ({
   toast: {
     success: mocks.success,
@@ -299,5 +302,50 @@ describe('AddProjectDialog async saving', () => {
     expect(screen.getByRole('button', { name: 'Research helper' })).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(mocks.save).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('AddProjectDialog nested assistant saving', () => {
+  it('waits for assistant storage and retains a rejected draft before selecting the retry', async () => {
+    const first = deferred()
+    const retry = deferred()
+    mocks.addAssistant.mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise)
+    const user = userEvent.setup()
+    render(<ProjectDialog />)
+    fireEvent.change(screen.getByRole('textbox', { name: nameLabel }), {
+      target: { value: 'New project' },
+    })
+    await user.click(screen.getByRole('button', { name: selectAssistantLabel }))
+    await user.click(screen.getByRole('menuitem', { name: 'projects.addProjectDialog.addAssistant' }))
+    const name = screen.getByRole('textbox', { name: 'common:name' })
+    fireEvent.change(name, { target: { value: 'New assistant' } })
+    await user.click(screen.getByRole('button', { name: 'assistants:save' }))
+
+    expect(mocks.addAssistant).toHaveBeenCalledOnce()
+    expect(name).toBeDisabled()
+    expect(name).toHaveValue('New assistant')
+    expect(mocks.save).not.toHaveBeenCalled()
+    const assistant = mocks.addAssistant.mock.calls[0][0]
+
+    await act(async () => {
+      first.reject(new Error('Assistant disk unavailable'))
+      await first.promise.catch(() => undefined)
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent('Assistant disk unavailable')
+    expect(name).toHaveValue('New assistant')
+    expect(name).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'assistants:save' }))
+    expect(mocks.addAssistant).toHaveBeenNthCalledWith(2, assistant)
+    expect(mocks.save).not.toHaveBeenCalled()
+
+    await act(async () => {
+      retry.resolve()
+      await retry.promise
+    })
+    expect(screen.queryByRole('textbox', { name: 'common:name' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: nameLabel })).toHaveValue('New project')
+    await user.click(screen.getByRole('button', { name: createLabel }))
+    expect(mocks.save).toHaveBeenCalledExactlyOnceWith('New project', assistant.id)
   })
 })
