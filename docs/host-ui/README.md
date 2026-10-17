@@ -23,6 +23,25 @@ Next: coordinator review and merge; installed workflow qualification is separate
 | Codex 6 / local | `/ai/gchat-worktrees/c6-proxy-settings-accessibility-20261017`, branch `fix/c6-proxy-settings-accessibility-20261017` | Candidate from `eaf131aed`; route and dedicated tests only |
 | Codex 6 / evidence | `/ai/gchat/out/c6-proxy-settings-accessibility-20261017/` | Passing result JSON, initial runner failure and concise summary retained |
 | Codex 6 / S1 | `/media/ron/SSD_RAID/ai/tmp-c6-proxy-settings-accessibility-20261017/` | Private gate source/dependencies/build retired after passing results; 19,857,235,968 allocated bytes reclaimed, no GPU |
+## Factory-reset keyboard confirmation — GUI-RESET-CONFIRMATION-KEYBOARD
+
+The factory-reset confirmation opens with **Cancel** focused. Reset requires an
+explicit mouse or keyboard activation and invokes the existing reset callback
+once, without changing the reset operation. Cancel, Close and Escape dismiss
+the dialog without resetting; closing returns focus to the trigger.
+
+Owned source: `/ai/gchat-worktrees/c3-reset-confirmation-keyboard-20261017`,
+branch `fix/c3-reset-confirmation-keyboard-20261017`, base `eb6831fb0`.
+Focused mouse/keyboard tests: 8 passed. Full `make verify` passed on S1 CPUs
+88–95 at 2026-10-17 13:37:54Z: frontend 2,688 passed / 6 skipped, extensions
+119 passed, Rust 1,073 passed / 27 ignored; critical coverage floors passed.
+The offline gate used private writable caches, Rust 1.98 and 22 retained
+profile catalogs. Only the disposable fixture's local-core archive references
+were adjusted; no dependency install, GPU/model operation or live reset ran.
+Logs and command: `/ai/gchat/out/c3-reset-confirmation-keyboard-20261017/`.
+The private S1 source/build/cache copies are retired, result/log receipts and
+the read-only donor remain; booking 2542 is canceled. Coordinator integration
+is next.
 
 ## Data-folder move guidance — GUI-DATA-LOCATION-GUIDANCE
 
