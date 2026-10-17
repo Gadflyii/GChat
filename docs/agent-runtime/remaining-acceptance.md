@@ -201,9 +201,53 @@ local CPU bookings were returned early. Shared GPU0, model/profile donors and
 the user's desktop were untouched. UI, durable artifacts and cleanup receipts
 are consolidated in the result JSON above.
 
-Automatic continuation and crash recovery are unqualified. The original
-review-quality failure, full 262144-token capacity, Hermes and Windows remain
-open; OI-068 remains PARTIAL.
+The separate October 17 desktop-death check below passes its bounded scope;
+automatic continuation and broader crash recovery remain unqualified. The original
+review-quality failure is now a known limitation; full 262144-token capacity,
+Hermes and Windows remain open. OI-068 remains PARTIAL.
+
+## OI-068 native desktop process-death and continuation — October 17
+
+The retained Linux desktop from source `0c3b8f265` ran a real Standard Agent
+with Qwen 27B INT on the local RTX 5090. The packet below records the artifact
+SHA and full settings. After a completed `observation.txt` read and while
+`touch approved-shell-marker.txt` awaited approval, only the desktop received
+SIGKILL at 05:05:31.976Z. Ordinary Runs reopening after relaunch showed the
+original record as INCOMPLETE, with completion and steps not recorded. Its
+working state, transcript and completed tool artifact remained hash-identical;
+the marker was absent and the pending approval did not replay.
+
+The Host survived, but the Engine later disappeared; an ordinary new INT Start
+was required. Continue as new run then created a distinct record with fresh
+folder and shell approvals. The approved step-4 `touch` succeeded. The model
+requested another `touch` at step 6, which the human denied. The new run finished
+with a Reply after eight steps and reopened as FINISHED; the original remained
+INCOMPLETE.
+
+This passes bounded native desktop-death history discovery and explicit new-run
+continuation. It does not qualify automatic resume, exactly-once execution,
+Host/Engine loss, power loss or Windows. OI-068 remains PARTIAL. Normal UI Stop
+at 05:22:44.255Z and normal desktop/Host exit completed; owned resources were
+returned at 05:23Z. Evidence:
+`/ai/gchat/out/oi068-process-death-20261017/{result.json,summary.md}`.
+
+## Native attachment chooser current tools — October 17
+
+In an existing private conversation on the same desktop, the document reader
+was disabled before the native chooser opened. Ordinary Tools controls enabled
+it while the same chooser, XID `0x800e2d`, remained open. Native accessibility
+input confirmed `short.pdf` (585 bytes); the result retained an Auto raw-path
+attachment with no inline content, processing, error or ingestion prompt. This
+exercises current tool availability after the asynchronous chooser returns and passes
+`GCHAT-ATTACHMENT-PICKER-STALE-TOOL-SNAPSHOT-20261015`'s causal native check.
+
+The preliminary New Chat attempt bypassed the existing-conversation processing
+branch and is retained as unqualified. App controls and state capture were
+Inspector-assisted; native chooser input used AT-SPI. No PDF Send, document
+content extraction, Windows or fresh-install acceptance is claimed. Evidence:
+`/ai/gchat/out/attachment-picker-current-tools-20261016/result.json` and the
+`05-picker-thread-*` receipts in
+`/ai/gchat/out/oi068-process-death-20261017/`.
 
 ## Worker review guidance — October 15
 
@@ -248,7 +292,8 @@ Normal Host Stop reached `stopped` with zero active requests. The native
 inventory no longer showed the private remote pairing; owned processes were
 retired, and S1 GPU/CPU plus local CPU bookings were released.
 
-The original harder review's factual-accuracy row remains open. Active-worker
+The original harder review is a known accuracy limitation, recorded in the
+[release notes](../installer-refresh/README.md#known-issues). Broader active-worker
 app-exit/restart recovery, full 262144-token capacity, Hermes and Windows remain
 unqualified; OI-068 remains PARTIAL. Evidence:
 `/ai/gchat/out/worker-post-compact-20261015/{result.json,summary.md}`.
@@ -771,7 +816,7 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. One native task passed at 241364 measured input tokens with configured context 262144, reserve 20480, correct three-code Reply and zero compactions; saved Result reopening and normal Stop passed. | Automatic continuation and crash recovery; Windows/Hermes at release. The original harder review's factual accuracy remains open separately. The measured input gate does not qualify literal 262144 input tokens or fresh-install packaging. Read-range defect tracked separately. Do not replay passing gates. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. October 17 desktop-only process death retained the original incomplete record and unchanged artifacts without replay; explicitly approved Continue finished as a distinct record. One native task passed at 241364 measured input tokens with configured context 262144, reserve 20480, correct three-code Reply and zero compactions; saved Result reopening and normal Stop passed. | Automatic continuation, exactly-once execution and broader Host/Engine or power-loss recovery; Windows/Hermes at release. The original harder review is a known accuracy limitation in the release notes. The measured input gate does not qualify literal 262144 input tokens or fresh-install packaging. Read-range defect tracked separately. Do not replay passing gates. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
 | GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |

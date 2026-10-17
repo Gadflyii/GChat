@@ -10,7 +10,10 @@ a correct eight-file task after compaction. The finished record also survives a
 normal app exit/restart. Active-worker cancellation, durable state and ordinary
 Studio reopening also pass after normal exit. Interrupted-run history now has a
 [passing bounded invocation-loss regression](#interrupted-studio-run-history--october-16);
-native unexpected-process exit and power-loss recovery remain unqualified.
+the [October 17 native desktop-death check](#native-desktop-process-death-and-new-run-continuation--october-17)
+also passes incomplete-history discovery and explicitly approved new-run
+continuation. Automatic resume, Host/Engine loss, power-loss recovery and Windows
+remain unqualified; OI-068 remains PARTIAL.
 
 ## Client tools and native request capability errors — release scope
 
@@ -95,7 +98,7 @@ with speculation disabled and structured outputs enabled. Normal UI Stop leaves
 the engine absent; the owned Host and guard then exit, with compute empty and the
 GPU lock released. The private desktop closes normally and its resources are
 released. This qualifies measured near-full input; literal 262144-token input,
-full reserved output, fresh-install, Hermes, Windows and crash recovery remain
+full reserved output, fresh-install, Hermes, Windows and broader crash recovery remain
 unqualified, so OI-068 remains PARTIAL.
 [Exact recipe and evidence](remaining-acceptance.md#oi-068-native-near-full-input-task--october-15).
 
@@ -157,7 +160,9 @@ closure, cancelled persistence and fresh-app reopening without replay. One nativ
 Standard Agent also read a file and reached shell approval before normal window
 Close. The cancelled record, original task and completed read survived same-data
 relaunch and ordinary Studio Runs reopening; the unapproved command never ran.
-Native unexpected-process exit and power-loss recovery remain unqualified.
+The separate [October 17 desktop-death check](#native-desktop-process-death-and-new-run-continuation--october-17)
+passes its bounded scope; Host/Engine loss and power-loss recovery remain
+unqualified.
 [Evidence and remaining scope](remaining-acceptance.md#oi-068-studio-worker-exit-persistence--october-15).
 
 ## Interrupted Studio run history — October 16
@@ -199,11 +204,47 @@ and full `make verify` on Linux with Docker `--init`. The first gate without an
 init process failed two descendant-liveness tests; the approved unchanged-source
 rerun passed. That environment failure and both logs are retained under
 `out/studio-pending-drop-cleanup-20261016/`.
-Native unexpected-process exit and power-loss recovery remain unqualified; the
-normal-close acceptance above remains valid.
+The separate native desktop-death check below passes incomplete-history
+discovery and explicit new-run continuation. Automatic resume, Host/Engine loss
+and power-loss recovery remain unqualified; the normal-close acceptance above
+remains valid.
 See the [decision](../decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 
-## Current worker review follow-up
+## Native desktop process-death and new-run continuation — October 17
+
+One real Linux Standard Agent completed a file read and waited for shell
+approval before the desktop alone was killed. Ordinary Runs reopening after
+relaunch showed the same original record as INCOMPLETE, with completion and
+steps not recorded. Its saved artifacts were unchanged, and the unapproved
+command did not run or replay. The Host survived the desktop death, but the
+Engine later disappeared; a normal new INT Start was required before continuing.
+
+Ordinary Continue as new run created a distinct run with fresh folder and shell
+approvals. The approved `touch` succeeded once. The model requested another
+`touch`, which the human denied; the new run finished in eight steps and reopened
+as FINISHED while the original remained INCOMPLETE. This qualifies that explicit
+continuation path, not automatic resume or exactly-once execution. Host/Engine
+loss, power loss and Windows are not qualified; OI-068 remains PARTIAL.
+[Settings, evidence and limits](remaining-acceptance.md#oi-068-native-desktop-process-death-and-continuation--october-17).
+
+## Native attachment chooser uses current tools — October 17
+
+In an existing Linux conversation, the document reader was disabled before the
+native chooser opened and enabled while that same chooser remained open.
+Confirming `short.pdf` then retained an Auto raw-path attachment without inline
+processing or an ingestion prompt. This passes the causal current-tools check
+for `GCHAT-ATTACHMENT-PICKER-STALE-TOOL-SNAPSHOT-20261015`; it does not qualify
+sending the PDF or reading its contents. The preliminary New Chat attempt did
+not exercise the relevant processing branch and is not a causal pass.
+[Native procedure and evidence](remaining-acceptance.md#native-attachment-chooser-current-tools--october-17).
+
+## Worker review follow-up
+
+The October 17 disposition closes the factual-accuracy row as a known model
+limitation. In one matched run per package, INT did better than NVFP4; neither
+result establishes reliability on complex code reviews. See the
+[release known issues](../installer-refresh/README.md#known-issues). The earlier
+guidance acceptance below retains its recorded scope.
 
 `GCHAT-WORKER-REVIEW-INSTRUCTION-FOLLOWING` owns the remaining task-quality
 failures from the retained fresh-read review. The candidate clarifies that the
@@ -222,8 +263,8 @@ navigation and saved-run reopening.
 The task still fails factual accuracy: the answer again says manual Compact does
 nothing whenever input fits, overlooking the earlier checkpoint attempt. It also
 misstates the cut indices. This guidance therefore qualifies sequential inspection
-in this run, not resolution of the review-quality defect. The row remains open;
-model capability remains a possible cause. No new checkpoint, restart or
+in this run, not resolution of the review-quality defect. At that point the row remained open; the October 17 known-limitation
+disposition above supersedes that status. No new checkpoint, restart or
 post-compaction task acceptance is claimed by that review.
 
 Evidence: `/ai/gchat/out/worker-review-guidance-20261015/{result.json,summary.md}`.
@@ -253,8 +294,9 @@ and owned fixture processes and resource bookings were released.
 [Acceptance details](remaining-acceptance.md#oi-068-factual-multi-file-task-after-checkpoint--october-15)
 and evidence: `/ai/gchat/out/worker-post-compact-20261015/{result.json,summary.md}`.
 This qualifies successful post-compaction task execution and terminal-record
-persistence. The original harder review's factual accuracy, active-worker restart
-recovery, full 262144-token capacity, Hermes and Windows remain unqualified;
+persistence. The original harder review is a known accuracy limitation; broader
+active-worker restart recovery, full 262144-token capacity, Hermes and Windows
+remain unqualified;
 OI-068 remains PARTIAL.
 
 ## Worker file-read ranges — October 15
