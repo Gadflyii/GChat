@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import CloudComputer from './CloudComputer'
@@ -14,6 +14,12 @@ import {
   type CloudProvider,
   type CloudReview,
 } from '@/services/gbot'
+
+const actionLabels = {
+  prices: 'Loading prices…',
+  quote: 'Calculating cost…',
+  save: 'Saving cost review…',
+}
 
 function Choice({
   label,
@@ -85,6 +91,8 @@ export default function CloudCosts({
   )
   const [acknowledged, setAcknowledged] = useState(false)
   const [pending, setPending] = useState(false)
+  const [action, setAction] = useState<keyof typeof actionLabels>()
+  const pendingRef = useRef(false)
   const [error, setError] = useState('')
   const [expired, setExpired] = useState(false)
   const [refreshFailed, setRefreshFailed] = useState(false)
@@ -95,22 +103,29 @@ export default function CloudCosts({
     const timer = setTimeout(() => setExpired(true), Math.max(0, remaining))
     return () => clearTimeout(timer)
   }, [review])
-  const perform = async (action: () => Promise<void>) => {
-    if (pending) return
+  const perform = async (
+    kind: keyof typeof actionLabels,
+    operation: () => Promise<void>
+  ) => {
+    if (pendingRef.current) return
+    pendingRef.current = true
     setPending(true)
+    setAction(kind)
     busy(true)
     setError('')
     try {
-      await action()
+      await operation()
     } catch (cause) {
       setError(String(cause))
     } finally {
+      pendingRef.current = false
       setPending(false)
+      setAction(undefined)
       busy(false)
     }
   }
   const read = () =>
-    perform(async () => {
+    perform('prices', async () => {
       setAcknowledged(false)
       setRefreshFailed(true)
       try {
@@ -184,7 +199,11 @@ export default function CloudCosts({
         disabled={pending || (!token.trim() && !review)}
         onClick={() => void read()}
       >
-        {pending ? 'Working…' : review ? 'Refresh prices' : 'Load live prices'}
+        {action === 'prices'
+          ? actionLabels.prices
+          : review
+            ? 'Refresh prices'
+            : 'Load live prices'}
       </Button>
       {review && (
         <>
@@ -221,7 +240,7 @@ export default function CloudCosts({
             variant="outline"
             disabled={pending || !valid || !region || !plan}
             onClick={() =>
-              void perform(async () => {
+              void perform('quote', async () => {
                 setAcknowledged(false)
                 setReview(
                   await gbot<CloudReview>('setup/cloud/select', {
@@ -233,7 +252,7 @@ export default function CloudCosts({
               })
             }
           >
-            Review cost
+            {action === 'quote' ? actionLabels.quote : 'Review cost'}
           </Button>
           {expired && (
             <p role="status" className="text-sm">
@@ -298,7 +317,7 @@ export default function CloudCosts({
                 type="button"
                 disabled={pending || !acknowledged}
                 onClick={() =>
-                  void perform(async () => {
+                  void perform('save', async () => {
                     setReview(
                       await gbot<CloudReview>('setup/cloud/confirm', {
                         id,
@@ -309,7 +328,7 @@ export default function CloudCosts({
                   })
                 }
               >
-                Save cost review
+                {action === 'save' ? actionLabels.save : 'Save cost review'}
               </Button>
             </>
           )}
@@ -322,12 +341,18 @@ export default function CloudCosts({
             updated={setReview}
             canCreate={valid && Boolean(review.confirmed && quote && matches)}
             busy={(value) => {
+              pendingRef.current = value
               setPending(value)
               busy(value)
             }}
             connected={connected}
           />
         )}
+      {action && (
+        <p role="status" className="text-sm">
+          {actionLabels[action]}
+        </p>
+      )}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
