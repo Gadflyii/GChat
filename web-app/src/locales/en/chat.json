@@ -67,6 +67,7 @@
     "canEdit": "CAN EDIT",
     "viewOnly": "VIEW ONLY",
     "addFolder": "Add external folder",
+    "addFolderFailed": "Could not add the folder. Try again or choose another folder.",
     "folderOptions": "Folder options",
     "allowEditing": "Can edit",
     "makeViewOnly": "View only",
