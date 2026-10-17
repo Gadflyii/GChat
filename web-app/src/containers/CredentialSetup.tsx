@@ -182,7 +182,7 @@ export function CredentialSetup({
       {!busy && status && !status.ready && (
         <p role={status.state === 'unchecked' ? 'status' : 'alert'}>
           {status.state === 'unchecked'
-            ? 'Choose Check secure storage to confirm it is ready. Your computer may ask you to unlock its password storage. GChat only opens this storage when you ask to check it or connect an account or computer.'
+            ? 'Select the Check secure storage button below to confirm it is ready. Your computer may ask you to unlock its password storage. GChat only opens this storage when you ask to check it or connect an account or computer.'
             : 'Secure storage is unavailable. Set it up or unlock it before connecting accounts or computers.'}
         </p>
       )}

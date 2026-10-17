@@ -31,3 +31,16 @@ describe('plain profile names', () => {
     expect(plainProfileName('GBench Max Perf · Qwen 3.8 27B INT')).toBe('GBench Max Perf · Qwen 3.8 27B INT')
   })
 })
+
+describe('plain GPU and startup names', () => {
+  it('names a startup profile without the raw package id', async () => {
+    const { plainStartupModelName } = await import('../engine-host-labels')
+    expect(plainStartupModelName('qwen3.8-27b/smol-q2g64-mix-dflash2-q4')).toBe('Qwen 3.8 27B — 2-bit mix')
+    expect(plainStartupModelName('muse')).toBe('muse')
+  })
+  it('numbers cards only when names repeat', async () => {
+    const { gpuCardName } = await import('../engine-host-labels')
+    expect(gpuCardName([{ name: 'RTX 5090' }, { name: 'RTX 4090' }], 0)).toBe('RTX 5090')
+    expect(gpuCardName([{ name: 'RTX 5090' }, { name: 'RTX 5090' }], 1)).toBe('RTX 5090 (card 2 of 2)')
+  })
+})
