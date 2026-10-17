@@ -75,10 +75,13 @@ async fn native<R: Runtime>(
     ) {
         state.authorize_local().await;
     }
+    let client = state.local_client(app).await?;
     state
-        .local_client(app)
-        .await?
-        .call(&format!("/v1/native/connectors/{operation}"), arguments)
+        .call_local(
+            &client,
+            &format!("/v1/native/connectors/{operation}"),
+            arguments,
+        )
         .await
 }
 
@@ -573,8 +576,9 @@ pub async fn execute<R: Runtime>(
     state.authorize_local().await;
     let client = state.local_client(app).await?;
     let id = uuid::Uuid::new_v4().to_string();
-    client
-        .call(
+    state
+        .call_local(
+            &client,
             "/v1/native/connectors/register",
             serde_json::json!({"request_id":id,"client_id": app.state::<crate::core::gbot::GbotState>().connector_client_id()}),
         )
@@ -588,10 +592,10 @@ pub async fn execute<R: Runtime>(
     tokio::select! {
         biased;
         _ = cancellation.cancelled() => {
-            let _ = client.call("/v1/native/connectors/cancel", serde_json::json!({"request_id":id})).await;
+            let _ = state.call_local(&client, "/v1/native/connectors/cancel", serde_json::json!({"request_id":id})).await;
             Err("Connector operation cancelled".into())
         },
-        result = client.call("/v1/native/connectors/execute", serde_json::json!({"request_id":id,"name":name,"arguments":args})) => result,
+        result = state.call_local(&client, "/v1/native/connectors/execute", serde_json::json!({"request_id":id,"name":name,"arguments":args})) => result,
     }
 }
 
