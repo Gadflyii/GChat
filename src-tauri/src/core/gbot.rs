@@ -16,7 +16,7 @@ mod login_windows;
 #[cfg(target_os = "linux")]
 pub(crate) use background::credential_control;
 pub use background::run_service_mode;
-pub(crate) use background::Client;
+pub(crate) type Client = Arc<background::Client>;
 #[cfg(target_os = "linux")]
 use ginfer_host::gbot_login as login;
 #[cfg(windows)]
@@ -66,7 +66,7 @@ fn save_service_target(root: &Path, target: &ServiceTarget) -> Result<(), String
 }
 #[derive(Clone)]
 enum ServiceClient {
-    Local(background::Client),
+    Local(Client),
     Remote {
         hosts: Arc<ginfer_host::client::Client>,
         host_id: uuid::Uuid,
@@ -89,7 +89,7 @@ impl ServiceClient {
 struct Connection {
     root: Option<PathBuf>,
     client: Option<ServiceClient>,
-    local_client: Option<background::Client>,
+    local_client: Option<Client>,
     updates: Option<tauri::async_runtime::JoinHandle<()>>,
     views: BTreeMap<uuid::Uuid, ViewLease>,
     generation: u64,
@@ -195,7 +195,7 @@ impl GbotState {
     pub(crate) async fn local_client<R: Runtime>(
         &self,
         app: &AppHandle<R>,
-    ) -> Result<background::Client, String> {
+    ) -> Result<Client, String> {
         self.connection.lock().await.require_local()?;
         let root = self.root(app).await?;
         let mut connection = self.connection.lock().await;
@@ -204,9 +204,30 @@ impl GbotState {
             return Ok(client.clone());
         }
         let resources = app.path().resource_dir().map_err(|e| e.to_string())?;
-        let client = background::ensure_running(&root, &resources).await?;
+        let client = Arc::new(background::ensure_running(&root, &resources).await?);
         connection.local_client = Some(client.clone());
         Ok(client)
+    }
+    pub(crate) async fn call_local(
+        &self,
+        client: &Client,
+        path: &str,
+        body: Value,
+    ) -> Result<Value, String> {
+        let result = client.call(path, body).await;
+        if result.is_err() {
+            let mut connection = self.connection.lock().await;
+            // A late failure must not discard a replacement connection. Never
+            // replay a request: a mutation may already have reached the service.
+            if connection
+                .local_client
+                .as_ref()
+                .is_some_and(|cached| Arc::ptr_eq(cached, client))
+            {
+                connection.local_client = None;
+            }
+        }
+        result
     }
     async fn client<R: Runtime>(&self, app: &AppHandle<R>) -> Result<ServiceClient, String> {
         self.connection.lock().await.require_service()?;
@@ -221,7 +242,7 @@ impl GbotState {
             ServiceTarget::Local => {
                 connection.require_local()?;
                 let resources = app.path().resource_dir().map_err(|e| e.to_string())?;
-                let client = background::ensure_running(&root, &resources).await?;
+                let client = Arc::new(background::ensure_running(&root, &resources).await?);
                 connection.local_client = Some(client.clone());
                 ServiceClient::Local(client)
             }
@@ -628,6 +649,160 @@ mod tests {
             },
             bridge: None,
             close: json!({"identity":identity,"owner":owner,"lease_id":lease}),
+        }
+    }
+
+    #[tokio::test]
+    async fn connector_restart_reconnects_without_replaying_or_evicting_a_newer_client() {
+        const FIXTURE: &str = "GCHAT_CONNECTOR_RESTART_FIXTURE";
+        let root = match std::env::var_os(FIXTURE) {
+            Some(root) => std::path::PathBuf::from(root),
+            None => {
+                let root = tempfile::tempdir().unwrap();
+                let result = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "core::gbot::tests::connector_restart_reconnects_without_replaying_or_evicting_a_newer_client",
+                        "--nocapture",
+                    ])
+                    .env(FIXTURE, root.path())
+                    .env("XDG_CONFIG_HOME", root.path().join("config"))
+                    .output()
+                    .unwrap();
+                assert!(
+                    result.status.success(),
+                    "{}{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr)
+                );
+                return;
+            }
+        };
+        let service_id = Uuid::new_v4();
+        let vault = ginfer_host::gbot_bootstrap::credential_store().unwrap();
+        vault.create_or_migrate(b"fixture-passphrase", &[]).unwrap();
+        vault
+            .put("app.gchat.gbot", &service_id.to_string(), b"fixture-token")
+            .unwrap();
+        let mutations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let app = tauri::test::mock_app();
+        app.manage(GbotState::default());
+        app.manage(crate::test_support::TestDataRoot(root.clone()));
+        let (resources, completion) = crate::core::setup::BundledResources::pending();
+        completion.send(Some(Ok(()))).unwrap();
+        app.manage(resources);
+        let state = app.state::<GbotState>();
+        let mut prior = None;
+        for instance in [1, 2] {
+            let service_mutations = mutations.clone();
+            let server = hyper::Server::bind(&"127.0.0.1:0".parse().unwrap()).serve(
+                hyper::service::make_service_fn(move |_| {
+                    let mutations = service_mutations.clone();
+                    async move {
+                        Ok::<_, std::convert::Infallible>(hyper::service::service_fn(
+                            move |request: hyper::Request<hyper::Body>| {
+                                let configure = request.uri().path().ends_with("/configure");
+                                assert_eq!(
+                                    request.headers()["authorization"],
+                                    "Bearer fixture-token"
+                                );
+                                if configure {
+                                    mutations.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                                }
+                                async move {
+                                    let body = if configure {
+                                        json!({"error":{"message":"fixture configuration refused"}})
+                                    } else {
+                                        json!({"service_id":service_id,"instance":instance})
+                                    };
+                                    Ok::<_, std::convert::Infallible>(
+                                        hyper::Response::builder()
+                                            .status(if configure { 503 } else { 200 })
+                                            .body(hyper::Body::from(body.to_string()))
+                                            .unwrap(),
+                                    )
+                                }
+                            },
+                        ))
+                    }
+                }),
+            );
+            let discovery = ginfer_host::gbot_bootstrap::Discovery {
+                service_id,
+                endpoint: server.local_addr(),
+                data_folder: root.clone(),
+            };
+            ginfer_host::service::write_private(
+                &root.join("gbot/service.json"),
+                &serde_json::to_vec(&discovery).unwrap(),
+            )
+            .unwrap();
+            let (shutdown, stopped) = tokio::sync::oneshot::channel();
+            let serving = tokio::spawn(server.with_graceful_shutdown(async {
+                let _ = stopped.await;
+            }));
+            if let Some(prior) = &prior {
+                assert!(
+                    crate::core::connectors::connector_accounts(app.handle().clone(), None)
+                        .await
+                        .unwrap_err()
+                        .contains("connection lost")
+                );
+                assert!(state.connection.lock().await.local_client.is_none());
+                assert!(state.local_authorized().await);
+                assert!(!state.connection.lock().await.authorized);
+                // The next user request uses the new discovery endpoint.
+                assert_eq!(
+                    crate::core::connectors::connector_accounts(app.handle().clone(), None)
+                        .await
+                        .unwrap()["instance"],
+                    instance
+                );
+                let replacement = state.local_client(app.handle()).await.unwrap();
+                assert!(state
+                    .call_local(prior, "/v1/native/connectors/accounts", Value::Null)
+                    .await
+                    .is_err());
+                assert!(
+                    Arc::ptr_eq(
+                        &state.local_client(app.handle()).await.unwrap(),
+                        &replacement,
+                    ),
+                    "an old client's failure must preserve its replacement"
+                );
+            } else {
+                assert_eq!(
+                    crate::core::connectors::connector_accounts(app.handle().clone(), Some(true))
+                        .await
+                        .unwrap()["instance"],
+                    instance
+                );
+                let original = state.local_client(app.handle()).await.unwrap();
+                assert!(crate::core::connectors::connector_configure(
+                    app.handle().clone(),
+                    json!({})
+                )
+                .await
+                .unwrap_err()
+                .contains("configuration refused"));
+                assert_eq!(
+                    mutations.load(std::sync::atomic::Ordering::SeqCst),
+                    1,
+                    "failed mutations must never be replayed"
+                );
+                assert!(state.connection.lock().await.local_client.is_none());
+                assert_eq!(
+                    crate::core::connectors::connector_accounts(app.handle().clone(), None)
+                        .await
+                        .unwrap()["instance"],
+                    instance
+                );
+                let reconnected = state.local_client(app.handle()).await.unwrap();
+                assert!(!Arc::ptr_eq(&original, &reconnected));
+            }
+            prior = Some(state.local_client(app.handle()).await.unwrap());
+            shutdown.send(()).unwrap();
+            serving.await.unwrap().unwrap();
         }
     }
 
