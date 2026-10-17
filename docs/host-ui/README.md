@@ -84,6 +84,39 @@ Owned source: `/ai/gchat-worktrees/c4-settings-attachment-availability-20261017`
 branch `fix/c4-settings-attachment-availability-20261017`. The original evidence is retained in
 `/ai/gchat/out/c4-settings-sweep-20261017/{attachment-parse-options.json,settings-attachment-unsupported-mode.png}`.
 No new build, runtime, model or fixture resource is allocated.
+## Compact Settings sidebar — C4
+
+`GUI-SETTINGS-SIDEBAR-DENSITY` was reproduced in the native Linux Settings
+walkthrough: the built-in tool descriptions push provider navigation below the
+initial window. Settings now shows compact switch rows and a keyboard-accessible
+Help button to expand their descriptions. Stop status/errors and the Hermes
+settings link remain visible. The Launch page retains the full descriptions.
+C7's provider keyboard links from `da2fe1f1e` are preserved.
+
+Acceptance: rendered help keyboard and switch persistence/stop/retry cases in
+both layouts, one full `make verify`, and a native screenshot at the original
+window size showing the provider section. Source is
+`/ai/gchat-worktrees/c4-settings-sidebar-density-20261017`, branch
+`fix/c4-settings-sidebar-density-20261017`. Evidence belongs to
+`/ai/gchat/out/c4-settings-sweep-20261017/sidebar-density/`. The candidate includes
+the tested attachment-durability fix and current main. All 35 focused cases
+and one full `make verify` pass: 2,981 frontend tests, 119 extension tests,
+1,079 Rust tests and 59 Node contracts. Six frontend tests were skipped and
+27 Rust tests ignored; lint, types, quality checks and all six critical
+coverage floors passed. Lint retains four warnings. Returned 16:07Z;
+booking2647 canceled, with the private cache retained for the remaining gates.
+The final Hermes link correction is included in sidebar source `7eba3f873`.
+Its controls, controls test and SettingsMenu files are identical to combined
+source `0c598c378`, which passed 16 focused cases and one full `make verify`
+(2,996 frontend tests, 119 extension tests, 1,079 Rust tests and 59 Node
+contracts), plus production frontend/native builds. The native replay confirms
+providers visible and the Hermes link on its own line at the original window
+size. Keyboard Help expands the three descriptions and Enter opens OpenAI.
+See `/ai/gchat/out/c4-settings-sweep-20261017/final-attachments-sidebar-corrected.png`,
+`final-hermes-corrected-layout.json` and `final-combined/spacing-followup/result.json`.
+Returned 16:39Z: OLD OFF/original XML restored. The owned generated S1 cache
+is being retired; concise results and screenshots are retained. Next: coordinator merge.
+No Engine, model, provider request or real user-data action is in scope.
 
 ## Attachment edits survive navigation — C4
 

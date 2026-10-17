@@ -34,7 +34,7 @@ vi.mock('@/services/terminal/tauri', () => ({
   stopCodeTerminals: mocks.stopCodeTerminals,
 }))
 
-describe('NativeIntegrationControls', () => {
+describe.each([false, true])('NativeIntegrationControls compact=%s', compact => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.stopCodeTerminals.mockReset().mockResolvedValue(undefined)
@@ -45,7 +45,11 @@ describe('NativeIntegrationControls', () => {
   })
 
   it('labels each switch with a visible action and explains its purpose and off behavior', () => {
-    render(<NativeIntegrationControls />)
+    render(<NativeIntegrationControls compact={compact} />)
+
+    if (compact) {
+      act(() => screen.getByRole('button', { name: 'Show help' }).click())
+    }
 
     for (const name of ['Gbot', 'OpenCode', 'Hermes']) {
       const control = screen.getByRole('switch', { name: `${name} integration` })
@@ -82,7 +86,7 @@ describe('NativeIntegrationControls', () => {
   it('shows saved integration choices without changing them or stopping terminals', () => {
     useCodeTerminalStore.setState({ enabled: true })
     useHermesAgentStore.setState({ enabled: true })
-    render(<NativeIntegrationControls />)
+    render(<NativeIntegrationControls compact={compact} />)
 
     expect(screen.getByRole('switch', { name: 'Gbot integration' })).not.toBeChecked()
     expect(screen.getByRole('switch', { name: 'OpenCode integration' })).toBeChecked()
@@ -97,7 +101,7 @@ describe('NativeIntegrationControls', () => {
 
   it('persists Gbot choices and opens its setup only when enabling it', async () => {
     const user = userEvent.setup()
-    render(<NativeIntegrationControls />)
+    render(<NativeIntegrationControls compact={compact} />)
     const control = screen.getByRole('switch', { name: 'Gbot integration' })
 
     await user.click(control)
@@ -120,7 +124,7 @@ describe('NativeIntegrationControls', () => {
 
   it('enables OpenCode without stopping work or changing navigation', async () => {
     const user = userEvent.setup()
-    render(<NativeIntegrationControls />)
+    render(<NativeIntegrationControls compact={compact} />)
     const control = screen.getByRole('switch', { name: 'OpenCode integration' })
 
     await user.click(control)
@@ -145,7 +149,7 @@ describe('NativeIntegrationControls', () => {
     useCodeTerminalStore.setState({ enabled: true, workspace: '/saved/workspace', selectedThreadId: 'saved-thread' })
     useHermesAgentStore.setState({ enabled: true })
     const user = userEvent.setup()
-    render(<NativeIntegrationControls />)
+    render(<NativeIntegrationControls compact={compact} />)
     const control = screen.getByRole('switch', { name: 'OpenCode integration' })
 
     await user.click(control)
@@ -187,7 +191,7 @@ describe('NativeIntegrationControls', () => {
     mocks.stopCodeTerminals.mockRejectedValueOnce(new Error('workspace shutdown failed'))
     useCodeTerminalStore.setState({ enabled: true })
     const user = userEvent.setup()
-    render(<NativeIntegrationControls />)
+    render(<NativeIntegrationControls compact={compact} />)
     const control = screen.getByRole('switch', { name: 'OpenCode integration' })
 
     await user.click(control)
@@ -213,7 +217,7 @@ describe('NativeIntegrationControls', () => {
 
   it('persists Hermes choices and stops only its terminal when disabling it', async () => {
     const user = userEvent.setup()
-    render(<NativeIntegrationControls />)
+    render(<NativeIntegrationControls compact={compact} />)
     const control = screen.getByRole('switch', { name: 'Hermes integration' })
 
     await user.click(control)
@@ -233,5 +237,48 @@ describe('NativeIntegrationControls', () => {
     expect(mocks.stopTerminal).toHaveBeenCalledExactlyOnceWith('hermes')
     expect(mocks.stopCodeTerminals).not.toHaveBeenCalled()
     expect(mocks.navigate).not.toHaveBeenCalled()
+  })
+})
+
+describe('Settings sidebar tool help', () => {
+  it('keeps the Hermes settings link on its own line and keyboard reachable with help hidden', async () => {
+    const user = userEvent.setup()
+    render(<NativeIntegrationControls compact />)
+    const settings = screen.getByRole('link', { name: 'Hermes settings' })
+    const hermes = screen.getByRole('switch', { name: 'Hermes integration' })
+
+    expect(screen.getByText(/An assistant in GChat/i)).not.toBeVisible()
+    expect(settings).toBeVisible()
+    expect(settings).toHaveAttribute('href', route.settings.hermes_agent)
+
+    hermes.focus()
+    await user.tab({ shift: true })
+    expect(settings).toHaveFocus()
+    await user.tab()
+    expect(hermes).toHaveFocus()
+  })
+
+  it('keeps switches and the settings link available while descriptions open and close', async () => {
+    const user = userEvent.setup()
+    render(<NativeIntegrationControls compact />)
+    const help = screen.getByRole('button', { name: 'Show help' })
+    const description = screen.getByText(/A persistent assistant/i)
+
+    expect(help).toHaveAttribute('aria-expanded', 'false')
+    expect(description).not.toBeVisible()
+    expect(screen.getByRole('link', { name: 'Hermes settings' })).toBeVisible()
+    expect(screen.getAllByRole('switch')).toHaveLength(3)
+    expect(screen.getByRole('switch', { name: 'Gbot integration' }))
+      .toHaveAccessibleDescription(/running work continues/)
+
+    help.focus()
+    await user.keyboard('{Enter}')
+    expect(help).toHaveAccessibleName('Hide help')
+    expect(help).toHaveAttribute('aria-expanded', 'true')
+    expect(description).toBeVisible()
+
+    await user.keyboard(' ')
+    expect(help).toHaveAccessibleName('Show help')
+    expect(description).not.toBeVisible()
   })
 })

@@ -7,9 +7,14 @@ import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useHermesAgentStore } from '@/stores/hermes-agent-store'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 
-export function NativeIntegrationControls() {
+export function NativeIntegrationControls({ compact = false }: { compact?: boolean }) {
   const id = useId()
   const navigate = useNavigate()
+  const [showDescriptions, setShowDescriptions] = useState(false)
+  const descriptionsHidden = compact && !showDescriptions
+  const rowClass = compact
+    ? 'flex items-start justify-between gap-2 py-1.5'
+    : 'flex items-start justify-between gap-4 rounded-md border p-3'
   const gbotEnabled = useGeneralSetting(state => state.gbotEnabled)
   const setGbotEnabled = useGeneralSetting(state => state.setGbotEnabled)
   const codeEnabled = useCodeTerminalStore(state => state.enabled)
@@ -39,16 +44,29 @@ export function NativeIntegrationControls() {
   }
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Built-in tools
-      </h2>
-      <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+    <section className={compact ? 'space-y-1' : 'space-y-3'}>
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Built-in tools
+        </h2>
+        {compact && (
+          <button
+            type="button"
+            className="rounded-sm text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-expanded={showDescriptions}
+            aria-controls={`${id}-gbot-description ${id}-code-description ${id}-hermes-description`}
+            onClick={() => setShowDescriptions(value => !value)}
+          >
+            {showDescriptions ? 'Hide help' : 'Show help'}
+          </button>
+        )}
+      </div>
+      <div className={rowClass}>
         <div className="min-w-0 space-y-1">
           <label htmlFor={`${id}-gbot`} className="text-sm font-medium">
             Enable Gbot
           </label>
-          <p id={`${id}-gbot-description`} className="text-sm leading-relaxed text-muted-foreground">
+          <p hidden={descriptionsHidden} id={`${id}-gbot-description`} className="text-sm leading-relaxed text-muted-foreground">
             A persistent assistant with its own computer workspace. Turning on opens
             Gbot. Turning off hides Gbot and disables sign-in startup; running work
             continues.
@@ -66,12 +84,12 @@ export function NativeIntegrationControls() {
           }}
         />
       </div>
-      <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+      <div className={rowClass}>
         <div className="min-w-0 space-y-1">
           <label htmlFor={`${id}-code`} className="text-sm font-medium">
             Enable OpenCode
           </label>
-          <p id={`${id}-code-description`} className="text-sm leading-relaxed text-muted-foreground">
+          <p hidden={descriptionsHidden} id={`${id}-code-description`} className="text-sm leading-relaxed text-muted-foreground">
             A coding assistant in the Code tab. Turning on prepares OpenCode,
             installing it if needed. Turning off stops all running Code workspaces
             and hides Code; saved settings remain.
@@ -95,17 +113,17 @@ export function NativeIntegrationControls() {
           onCheckedChange={enabled => void changeCodeEnabled(enabled)}
         />
       </div>
-      <div className="flex items-start justify-between gap-4 rounded-md border p-3">
+      <div className={rowClass}>
         <div className="min-w-0 space-y-1">
           <label htmlFor={`${id}-hermes`} className="text-sm font-medium">
             Enable Hermes
           </label>
-          <p id={`${id}-hermes-description`} className="text-sm leading-relaxed text-muted-foreground">
+          <p hidden={descriptionsHidden} id={`${id}-hermes-description`} className="text-sm leading-relaxed text-muted-foreground">
             An assistant in GChat’s built-in terminal. Turning on prepares Hermes,
             installing it if needed. Turning off stops its terminal and hides
             Hermes; saved settings remain.
           </p>
-          <Link to={route.settings.hermes_agent} className="text-sm text-primary hover:underline">
+          <Link to={route.settings.hermes_agent} className="block text-sm text-primary hover:underline">
             Hermes settings
           </Link>
         </div>
