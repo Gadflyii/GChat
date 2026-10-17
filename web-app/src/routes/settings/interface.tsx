@@ -57,7 +57,7 @@ function InterfaceSettings() {
                 description={t('settings:interface.resetToDefaultDesc')}
                 actions={
                   <Button
-                    variant="destructive"
+                    variant="outline"
                     size="sm"
                     onClick={() => {
                       resetInterface()

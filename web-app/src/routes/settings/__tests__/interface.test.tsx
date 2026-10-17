@@ -143,6 +143,16 @@ describe('Interface Settings Route', () => {
     expect(resetButtons.length).toBeGreaterThan(0)
   })
 
+  it('shows Reset as an ordinary button, not a destructive one', () => {
+    const Component = InterfaceRoute.component as React.ComponentType
+    render(<Component />)
+
+    expect(screen.getByText('common:reset')).toHaveAttribute(
+      'variant',
+      'outline'
+    )
+  })
+
   it('should render reset buttons', () => {
     const Component = InterfaceRoute.component as React.ComponentType
     render(<Component />)
