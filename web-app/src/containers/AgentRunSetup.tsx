@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStudioCatalog } from '@/hooks/useStudioCatalog'
 import { roleReadiness } from '@/lib/agent-preflight'
 import { StatusLabel } from './StatusLabel'
@@ -43,6 +43,17 @@ export function AgentRunSetup({
   const [assignments, setAssignments] = useState(defaultAssignments(definition))
   const [saveDefaults, setSaveDefaults] = useState(false)
   const [busy, setBusy] = useState(false)
+  const active = useRef(true)
+  useEffect(() => {
+    active.current = true
+    return () => {
+      active.current = false
+    }
+  }, [])
+  const close = () => {
+    active.current = false
+    onClose()
+  }
   const current = useModelProvider((s) => s.selectedModel?.id ?? '')
   const roles = placementRoles(definition)
   const change = (id: string, patch: Partial<AgentRoleAssignment>) =>
@@ -63,7 +74,7 @@ export function AgentRunSetup({
       )) ||
     roles.some(({ id }) => !readiness[id].canStart)
   const start = async () => {
-    if (missing || !task.trim()) return
+    if (!active.current || busy || missing || !task.trim()) return
     setBusy(true)
     try {
       if (saveDefaults)
@@ -71,6 +82,8 @@ export function AgentRunSetup({
           ...definition,
           roleAssignments: assignments,
         })
+      // Saving defaults may finish after the user has dismissed this setup.
+      if (!active.current) return
       const id = crypto.randomUUID()
       useStudioRuns.getState().start(definition.name, {
         run_id: id,
@@ -84,16 +97,16 @@ export function AgentRunSetup({
       })
       onRun()
     } catch (e) {
-      toast.error(String(e))
+      if (active.current) toast.error(String(e))
     } finally {
-      setBusy(false)
+      if (active.current) setBusy(false)
     }
   }
   return (
     <Dialog
       open
       onOpenChange={(open) => {
-        if (!open) onClose()
+        if (!open) close()
       }}
     >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
@@ -304,7 +317,7 @@ export function AgentRunSetup({
             {showPools ? 'Hide pool editor' : 'Create or edit pools'}
           </Button>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="ghost" onClick={close}>
               Cancel
             </Button>
             <Button
