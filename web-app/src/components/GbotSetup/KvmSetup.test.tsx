@@ -334,3 +334,126 @@ it('creates one owned setup when Create is repeated before the first render', as
     response.resolve({ ...starts[0][1], stage: 'connecting', issue: null })
   )
 })
+
+it.each(['reply', 'error'] as const)(
+  'does not resurrect a removed computer when an earlier event status returns a late %s',
+  async (outcome) => {
+    const saved = {
+      id: 'writer-id',
+      name: 'Writer',
+      stage: 'connecting',
+      issue: null,
+    }
+    const oldStatus = deferred<object[]>()
+    const removal = deferred<object>()
+    const freshStatus = deferred<object[]>()
+    let statusReads = 0
+    call.mockImplementation((path) => {
+      if (path.endsWith('preflight'))
+        return Promise.resolve({ ready: true, issues: [] })
+      if (path.endsWith('status')) {
+        statusReads += 1
+        if (statusReads === 1) return Promise.resolve([saved])
+        return statusReads === 2 ? oldStatus.promise : freshStatus.promise
+      }
+      return removal.promise
+    })
+    render(
+      <KvmSetup name="Different bot" initialId={saved.id} connected={vi.fn()} />
+    )
+    const remove = await screen.findByRole('button', {
+      name: 'Remove owned computer',
+    })
+    await waitFor(() => expect(remove).toBeEnabled())
+    act(() => events.update?.())
+    expect(statusReads).toBe(2)
+    fireEvent.click(remove)
+    expect(call).toHaveBeenCalledWith('setup/kvm/remove', { id: saved.id })
+    await act(async () => removal.resolve({ ...saved, stage: 'removed' }))
+    await waitFor(() => expect(statusReads).toBe(3))
+    await act(async () => freshStatus.resolve([]))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Check prerequisites again' })
+      ).toBeEnabled()
+    )
+    expect(
+      screen.queryByText('Saved local computer setups')
+    ).not.toBeInTheDocument()
+    await act(async () => {
+      if (outcome === 'reply') oldStatus.resolve([saved])
+      else oldStatus.reject(new Error('The old status request failed.'))
+    })
+    expect(
+      screen.queryByText('Saved local computer setups')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Remove owned computer' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
+it.each(['reply', 'error'] as const)(
+  'keeps the post-Resume setup state when an earlier event status returns a late %s',
+  async (outcome) => {
+    const saved = {
+      id: 'writer-id',
+      name: 'Writer',
+      stage: 'connecting',
+      issue: {
+        code: 'guest_not_ready',
+        message: 'The earlier guest connection was unavailable.',
+        next_action: 'Resume setup for this computer.',
+      },
+    }
+    const oldStatus = deferred<object[]>()
+    const resume = deferred<object>()
+    const freshStatus = deferred<object[]>()
+    let statusReads = 0
+    call.mockImplementation((path) => {
+      if (path.endsWith('preflight'))
+        return Promise.resolve({ ready: true, issues: [] })
+      if (path.endsWith('status')) {
+        statusReads += 1
+        if (statusReads === 1) return Promise.resolve([saved])
+        return statusReads === 2 ? oldStatus.promise : freshStatus.promise
+      }
+      return resume.promise
+    })
+    render(
+      <KvmSetup name="Different bot" initialId={saved.id} connected={vi.fn()} />
+    )
+    const restart = await screen.findByRole('button', { name: 'Resume setup' })
+    await waitFor(() => expect(restart).toBeEnabled())
+    act(() => events.update?.())
+    expect(statusReads).toBe(2)
+    fireEvent.click(restart)
+    expect(call).toHaveBeenCalledWith('setup/kvm/start', {
+      id: saved.id,
+      name: saved.name,
+    })
+    await act(async () =>
+      resume.resolve({ ...saved, stage: 'testing_desktop', issue: null })
+    )
+    await waitFor(() => expect(statusReads).toBe(3))
+    await act(async () =>
+      freshStatus.resolve([{ ...saved, stage: 'ready', issue: null }])
+    )
+    const use = await screen.findByRole('button', { name: 'Use this computer' })
+    await waitFor(() => expect(use).toBeEnabled())
+    expect(screen.getByText('Writer · Computer ready')).toBeInTheDocument()
+    await act(async () => {
+      if (outcome === 'reply') oldStatus.resolve([saved])
+      else oldStatus.reject(new Error('The old status request failed.'))
+    })
+    expect(screen.getByText('Writer · Computer ready')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Use this computer' })
+    ).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Resume setup' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
