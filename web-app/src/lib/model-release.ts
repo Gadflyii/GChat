@@ -53,3 +53,10 @@ export function releaseReadiness(release: unknown, gpus: ModelGpu[]) {
 }
 
 export const formatModelBytes = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GiB`
+
+const downloadStatusLabels: Record<string, string> = {
+  queued: 'Waiting to start', downloading: 'Downloading', pausing: 'Pausing', paused: 'Paused',
+  verifying: 'Checking the download', installed: 'Installed', failed: 'Failed',
+}
+export const downloadStatusLabel = (status: string) => downloadStatusLabels[status] ?? status
+
