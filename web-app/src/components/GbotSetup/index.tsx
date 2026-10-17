@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useBundledResources } from '@/hooks/useBundledResources'
@@ -93,6 +93,7 @@ export default function GbotSetup({
             : ''
   )
   const [saving, setSaving] = useState(false)
+  const submissionPending = useRef(false)
   const [error, setError] = useState('')
   const [lanReady, setLanReady] = useState(false)
   const [connecting, setConnecting] = useState(false)
@@ -158,8 +159,10 @@ export default function GbotSetup({
             ? (computer === 'lan' || guidedCloud) && lanReady
             : true
   const submit = async () => {
-    if (saving || connecting || !canContinue) return
+    if (submissionPending.current || saving || connecting || !canContinue)
+      return
     if (step === 1) {
+      submissionPending.current = true
       setSaving(true)
       setError('')
       try {
@@ -168,6 +171,7 @@ export default function GbotSetup({
       } catch (cause) {
         setError(String(cause))
       } finally {
+        submissionPending.current = false
         setSaving(false)
       }
       return
@@ -176,6 +180,7 @@ export default function GbotSetup({
       setStep(step + 1)
       return
     }
+    submissionPending.current = true
     setSaving(true)
     setError('')
     try {
@@ -189,6 +194,7 @@ export default function GbotSetup({
     } catch (cause) {
       setError(String(cause))
     } finally {
+      submissionPending.current = false
       setSaving(false)
     }
   }
@@ -366,6 +372,11 @@ export default function GbotSetup({
           <p>{resources.error}</p>
           <p>Restart GChat to try resource preparation again.</p>
         </div>
+      )}
+      {step === 4 && saving && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Saving {connection.name.trim()} and its computer connection…
+        </p>
       )}
       {error && !(step === 1 && error === resources.error) && (
         <p role="alert" className="text-sm text-destructive">
