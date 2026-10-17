@@ -63,18 +63,22 @@ function WorkspaceSchedules({
   const busy = !!pending
   const [error, setError] = useState('')
   const [stopped, setStopped] = useState<string | null>(null)
+  const refreshVersion = useRef(0)
   const refresh = useCallback(async () => {
+    const version = ++refreshVersion.current
     try {
       const values = await gbot<{
         schedules: Schedule[]
         stopped: string | null
       }>('schedules')
+      if (version !== refreshVersion.current) return
       setSchedules(
         values.schedules.filter((value) => value.workspace_id === workspaceId)
       )
       setStopped(values.stopped)
       setError('')
     } catch (cause) {
+      if (version !== refreshVersion.current) return
       setError(String(cause))
     }
   }, [workspaceId])
@@ -82,6 +86,7 @@ function WorkspaceSchedules({
     void refresh()
     const subscription = listen('gbot-task-update', () => void refresh())
     return () => {
+      ++refreshVersion.current
       void subscription.then((stop) => stop())
     }
   }, [refresh])
