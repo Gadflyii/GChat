@@ -13,6 +13,8 @@ use tokio::sync::Mutex;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct GinferConfig {
+    /// Installed Load requests the complete catalog profile, without custom overrides.
+    pub use_profile_defaults: bool,
     pub vision: bool,
     pub spec: String,
     pub draft_tokens: u32,
@@ -28,6 +30,7 @@ pub struct GinferConfig {
 impl Default for GinferConfig {
     fn default() -> Self {
         Self {
+            use_profile_defaults: false,
             vision: true,
             spec: "auto".into(),
             draft_tokens: 0,

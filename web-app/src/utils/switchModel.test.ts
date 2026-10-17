@@ -142,6 +142,39 @@ describe('switchToModel', () => {
     )
   })
 
+  it.each([{ gpuUuids: undefined }, { gpuUuids: ['GPU-one'] }])(
+    'forwards Installed Load profile defaults for an already serving model with GPU selection $gpuUuids',
+    async ({ gpuUuids }) => {
+      const failure = new Error('profile admission rejected')
+      const models = {
+        getActiveModels: vi.fn().mockResolvedValue(['broken-model']),
+        stopAllModels: vi.fn().mockResolvedValue(undefined),
+        startModel: vi.fn().mockRejectedValue(failure),
+      }
+      const serviceHub = {
+        app: () => ({ getServerStatus: vi.fn().mockResolvedValue(true) }),
+        models: () => models,
+      } as unknown as ServiceHub
+
+      await expect(switchToModel({
+        modelId: 'broken-model',
+        providerName: 'ginfer',
+        serviceHub,
+        gpuUuids,
+        options: { useProfileDefaults: true },
+      })).rejects.toBe(failure)
+
+      expect(models.startModel).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'ginfer' }),
+        'broken-model',
+        true,
+        gpuUuids,
+        { useProfileDefaults: true }
+      )
+      expect(appState.setServerStatus).toHaveBeenLastCalledWith('running')
+    }
+  )
+
   it('restores a previously running API server after model load failure', async () => {
     const models = {
       getActiveModels: vi.fn().mockResolvedValue([]),

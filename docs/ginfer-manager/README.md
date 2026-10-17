@@ -937,9 +937,17 @@ styling. The reviewed correction uses neutral status text for readiness, a red
 alert only after failure, and clears the previous failure on retry. A focused
 DOM fixture covers success, failure and recovery and passed once on composed
 `6b199362d` (519 ms), recorded in `out/s2-acceptance-20261011/source-gates.json`.
-Native successful-vault presentation remains owed to the release walkthrough.
-No secure-storage or pairing contract changes. This source correction does not
-qualify the physical tray or saved-grant lifecycle.
+Native Linux success, failure and retry presentation passed on retained Manager
+`0705f31a6` containing `6b199362d` on October 17. **Check secure storage** showed
+neutral `muted`/`status` success, a red `section-error`/`alert` for an actual private
+Secret Service `CreateItem` rejection, and neutral success with no remaining alert
+after the policy was restored and the check retried. Exact embedded UI bytes were
+verified; evidence is `out/manager-vault-status-native-20261017/{result.json,summary.md}`.
+This closes the original presentation ticket without changing secure-storage or
+pairing contracts. Pairing was not submitted. Retained window-close IPC was denied,
+so exact owned processes were stopped with SIGTERM; normal exit, the physical tray,
+saved-grant lifecycle, later credential tiers, a fresh release package and Windows
+are not qualified by this check.
 
 Ron explicitly approved the reviewed `tray-icon` source override under GChat
 `AGENTS.md` §6.6. `src-tauri/vendor/tray-icon` now contains the locked 0.21.3

@@ -89,6 +89,8 @@ export interface UnloadResult {
 
 // ginfer-serve startup capability configuration
 export type GinferConfig = {
+  /** Use the Host catalog profile's complete settings; GPU selection still applies. */
+  use_profile_defaults?: boolean
   vision: boolean
   /** Speculative backend: `auto`, `none`, or `dflash`. */
   spec: string

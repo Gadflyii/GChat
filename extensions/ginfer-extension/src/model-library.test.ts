@@ -53,6 +53,7 @@ vi.mock('../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index', () => (
 }))
 
 import GinferExtension from './index'
+import { findSessionByModel } from '../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index'
 
 describe('GInfer library model context and names', () => {
   beforeEach(() => {
@@ -62,6 +63,7 @@ describe('GInfer library model context and names', () => {
     hardware.mockResolvedValue({ ok: true })
     downloadFiles.mockResolvedValue(undefined)
     loadModel.mockResolvedValue({ pid: 1, port: 8080 })
+    vi.mocked(findSessionByModel).mockResolvedValue(null)
     window.core.extensionManager.getByName = vi.fn().mockReturnValue({ downloadFiles })
     config.value = {}
     config.manifests = {}
@@ -184,6 +186,37 @@ describe('GInfer library model context and names', () => {
     expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
       modelId: 'custom', modelPath: '/linux/models/custom/package.ginfer',
     }))
+  })
+
+  it('forwards Installed profile intent and GPU choice without changing custom defaults', async () => {
+    config.value = { model_path: '/linux/models/custom/package.ginfer' }
+    const extension = new GinferExtension()
+    Object.assign(extension, { config: {
+      vision: true, max_context: 262144, max_concurrency: 0, kv_arena_bytes: 'custom-arena',
+    } })
+    await extension.load('custom', { use_profile_defaults: true, gpu_uuids: ['selected'] })
+    expect(loadModel).toHaveBeenLastCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ use_profile_defaults: true, gpu_uuids: ['selected'] }),
+    }))
+    await extension.load('custom')
+    const custom = loadModel.mock.calls.at(-1)![0].config
+    expect(custom).toMatchObject({
+      vision: true, max_context: 262144, max_concurrency: 0, kv_arena_bytes: 'custom-arena',
+    })
+    expect(custom).not.toHaveProperty('use_profile_defaults')
+  })
+
+  it('checks automatic profile settings natively even when a model is already loaded', async () => {
+    config.value = { model_path: '/linux/models/custom/package.ginfer' }
+    const resident = { pid: 2, port: 8081 } as any
+    vi.mocked(findSessionByModel).mockResolvedValue(resident)
+    const extension = new GinferExtension()
+    await extension.load('custom', { use_profile_defaults: true })
+    expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ use_profile_defaults: true }),
+    }))
+    expect(await extension.load('custom')).toBe(resident)
+    expect(loadModel).toHaveBeenCalledTimes(1)
   })
 
   it('imports local bytes into the native location and preserves a legacy rename', async () => {

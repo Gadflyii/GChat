@@ -47,7 +47,7 @@ $members = @{}
 foreach ($entry in $manifest.files) {
     $name = [string]$entry.path
     # Vendor licenses include nested, extensionless files; keep every component relative.
-    if ($name -notmatch '\A(bin/[A-Za-z0-9_.-]+\.(exe|dll)|licenses/[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?(?:/[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)*|README\.md|LICENSE)\z' -or $members.ContainsKey($name)) {
+    if ($name -notmatch '\A(bin/[A-Za-z0-9_.-]+\.(exe|dll)|licenses/[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?(?:/[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)*|README\.md|LICENSE|VERSION|docs/(?:cli\.md|serving\.md|release-names/README\.md))\z' -or $members.ContainsKey($name)) {
         throw "Unexpected or duplicate runtime member: $name"
     }
     $source = Join-Path $runtime $name

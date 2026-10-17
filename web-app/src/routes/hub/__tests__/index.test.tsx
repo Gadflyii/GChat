@@ -70,6 +70,18 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('Connection lost')
   })
+  it('loads an installed model with profile defaults and automatic GPU selection', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+    await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith({
+      modelId: 'local-model', providerName: 'ginfer', serviceHub: expect.anything(),
+      options: { useProfileDefaults: true },
+    }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    vi.restoreAllMocks()
+  })
   it('shows an unavailable selected GPU error and restores Load after forwarding the choice', async () => {
     mocks.selectedGpuUuids = ['local-gpu']
     mocks.switchModel.mockRejectedValueOnce(new Error('Selected GPU is unavailable'))
@@ -82,6 +94,7 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(loadButton).toBeEnabled())
     expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({
       modelId: 'local-model', providerName: 'ginfer', gpuUuids: ['local-gpu'],
+      options: { useProfileDefaults: true },
     }))
     vi.restoreAllMocks()
   })

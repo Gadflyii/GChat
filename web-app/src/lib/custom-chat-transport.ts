@@ -424,6 +424,7 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
         if (disableReasoning || reasoningBudget === 'off') {
           switch (effectiveProviderName) {
             case 'ginfer':
+            case 'ginfer-lan':
               // Direct responses use `none`; enable_thinking would contradict it.
               reasoningOverride.reasoning_effort = 'none'
               break
@@ -453,8 +454,8 @@ export class CustomChatTransport implements ChatTransport<UIMessage> {
                 enable_thinking: false,
               }
           }
-        } else if (effectiveProviderName === 'ginfer') {
-          // ginfer maps OpenAI-compatible `reasoning_effort` onto its
+        } else if (effectiveProviderName === 'ginfer' || effectiveProviderName === 'ginfer-lan') {
+          // Local and paired GInfer map OpenAI-compatible `reasoning_effort` onto the
           // artifact's effort template, not a fixed token budget.
           const effortByBudget: Partial<Record<typeof reasoningBudget, string>> =
             {
