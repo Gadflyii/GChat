@@ -234,6 +234,12 @@
     @apply outline-2 outline-offset-2 outline-ring;
   }
 
+  /* A collapsed <details> keeps the gap that space-y-* puts under its summary,
+     leaving an empty band inside the box. */
+  details:not([open]) > summary {
+    margin-block-end: 0;
+  }
+
   select:focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
   }
