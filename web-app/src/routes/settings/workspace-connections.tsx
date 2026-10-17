@@ -236,8 +236,8 @@ function GoogleRegistration({
         </label>
         <p>Choose one downloaded JSON file, up to 64 KB.</p>
         <p>
-          The app secret goes directly to your operating system’s credential
-          vault. GChat does not display or keep it in this form.
+          The app secret goes directly to GChat’s protected credential store.
+          GChat does not display or keep it in this form.
         </p>
         {configured ? (
           <p>
@@ -344,8 +344,9 @@ function ProviderCard({
               </li>
               <li>
                 Enter the directory (tenant) ID if your administrator requires
-                one. Otherwise leave Tenant blank to use the app’s supported
-                account audience.
+                one. Otherwise leave Tenant blank to use common for work,
+                school and personal accounts. The app registration must support
+                your account type.
               </li>
               <li>
                 Save the registration, choose the services you need, then
@@ -400,8 +401,8 @@ function ProviderCard({
         <>
           <p className="mb-3 text-sm">
             {config?.client_id
-              ? 'Choose the services you need, then sign in with Microsoft in your browser. You do not need to enter an app ID.'
-              : 'Microsoft sign-in is not configured in this GChat release yet. You do not need to find or create an app ID. Use an updated release when sign-in is available, or use the advanced option if your organization already has an approved app.'}
+              ? 'Choose the services you need, then sign in with Microsoft in your browser. The app registration is already set up; you do not need to enter an app ID.'
+              : 'Microsoft sign-in is unavailable in this GChat build. You do not need to find or create an app ID. Install a release that includes Microsoft sign-in, or use the advanced option if your organization already has an approved app.'}
           </p>
           <p className="mb-3 text-sm">
             Connect a work, school or personal Microsoft account, including
@@ -730,8 +731,8 @@ export function WorkspaceConnections() {
           </div>
           <p className="text-sm text-muted-foreground">
             Use the same accounts in Chat, Agent and Code. Sign-in uses your
-            system browser; refresh tokens stay in your operating system’s
-            credential vault.
+            system browser; refresh tokens stay in GChat’s protected credential
+            store.
           </p>
           {error && !disconnecting && (
             <p role="alert" className="text-sm text-destructive">

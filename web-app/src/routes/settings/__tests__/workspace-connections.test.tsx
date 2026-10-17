@@ -188,6 +188,7 @@ describe('Workspace connections', () => {
 
   it('imports a Desktop JSON file directly to the native vault without credential fields', async () => {
     await ready()
+    expect(googleCard().getByText(/The app secret goes directly to GChat’s protected credential store/)).toBeInTheDocument()
     api.nativeInvoke.mockResolvedValue(initialView())
     const file = new File(
       [JSON.stringify({ installed: {
@@ -291,6 +292,9 @@ describe('Workspace connections', () => {
     await user.click(
       microsoft.getByText('Advanced: use your organization’s Microsoft app')
     )
+    expect(
+      microsoft.getByText(/leave Tenant blank to use common/)
+    ).toHaveTextContent('work, school and personal accounts')
     await user.click(
       microsoft.getByRole('button', { name: 'Save Microsoft 365 registration' })
     )
@@ -318,9 +322,9 @@ describe('Workspace connections', () => {
     )
     expect(
       microsoft.getByText(
-        /Microsoft sign-in is not configured in this GChat release yet/
+        /Microsoft sign-in is unavailable in this GChat build/
       )
-    ).toBeInTheDocument()
+    ).toHaveTextContent('Install a release that includes Microsoft sign-in')
     expect(
       microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
     ).toBeDisabled()
@@ -349,6 +353,9 @@ describe('Workspace connections', () => {
     )
     const signIn = microsoft.getByRole('button', { name: 'Sign in with Microsoft' })
     expect(signIn).toBeDisabled()
+    expect(
+      microsoft.getByText(/The app registration is already set up/)
+    ).toHaveTextContent('you do not need to enter an app ID')
     expect(
       microsoft.getByLabelText('Client ID').closest('details')
     ).not.toHaveAttribute('open')
@@ -457,7 +464,7 @@ describe('Workspace connections', () => {
     ]
     api.connectorAccounts.mockResolvedValue(view)
     const approvalMessage =
-      'Your organization needs to approve this connection. Ask its administrator to approve the requested permissions, then try again.'
+      'Microsoft needs permission approval. Sign in again and review the requested permissions. If your organization requires administrator approval, ask its administrator to approve GChat.'
     api.beginConnectorAuth.mockResolvedValue({
       flow_id: 'approval-needed',
       provider: 'microsoft',

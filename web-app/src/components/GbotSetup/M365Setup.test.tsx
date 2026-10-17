@@ -176,10 +176,10 @@ it('explains a release without Microsoft sign-in and offers Advanced without an 
     })
   ).toHaveAttribute('href', '/settings/workspace-connections')
   expect(
-    screen.getByText(/Microsoft sign-in is not configured in this GChat release/)
+    screen.getByText(/Microsoft sign-in is unavailable in this GChat build/)
   ).toHaveTextContent('You do not need to find or enter a client ID.')
   expect(screen.getByRole('alert')).toHaveTextContent(
-    'Use an updated release when sign-in is available.'
+    'Install a release that includes Microsoft sign-in.'
   )
   expect(screen.getByRole('alert')).toHaveTextContent(
     'If your organization already has an approved Microsoft app, use Advanced'

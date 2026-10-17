@@ -175,9 +175,9 @@ export default function M365Setup({
       </Button>
       {view && !configured && (
         <p role="alert">
-          Microsoft sign-in is not configured in this GChat release yet. You do
-          not need to find or enter a client ID. Use an updated release when
-          sign-in is available. If your organization already has an approved
+          Microsoft sign-in is unavailable in this GChat build. You do not need
+          to find or enter a client ID. Install a release that includes
+          Microsoft sign-in. If your organization already has an approved
           Microsoft app, use Advanced in{' '}
           {remote ? (
             'Settings → Workspace connections on the service computer'
@@ -239,8 +239,8 @@ export default function M365Setup({
             Sign in with your Microsoft work or school account in your browser.
             GChat requests read-only access to find your assigned Cloud PCs.
             Microsoft may ask for multifactor authentication (MFA) or your
-            organization’s administrator approval. Account tokens stay in
-            GChat’s existing account vault.
+            organization’s administrator approval. Your saved sign-in stays in
+            GChat’s protected credential store.
           </p>
           <Button
             type="button"
