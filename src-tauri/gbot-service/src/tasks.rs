@@ -651,6 +651,29 @@ impl TaskRunner {
         }).await.map_err(|error| crate::kvm_setup::SetupIssue::new("removal_failed", error.to_string(), "Retry removal of this same computer."))?
     }
 
+    /// Unfinished tasks and active schedules keep a LAN bot; removal holds both guards.
+    pub(crate) async fn remove_lan_workspace(
+        self: &Arc<Self>,
+        runtime: Arc<crate::workspace::WorkspaceRuntime>,
+        id: crate::contract::WorkspaceId,
+    ) -> std::result::Result<(), crate::workspace::WorkspaceError> {
+        use crate::{service::ServiceError, workspace::WorkspaceError};
+        let owner = self.clone();
+        tokio::spawn(async move {
+            let state = owner.state.lock("remove_lan_workspace", Some(id), None).await;
+            if state.records.iter().any(|(task_id, saved)| {
+                let record = state.actors.get(task_id)
+                    .map_or_else(|| saved.clone(), |actor| actor.record.borrow().clone());
+                record.identity.workspace_id == id
+                    && !matches!(record.state, crate::executor::TaskState::Completed | crate::executor::TaskState::Cancelled)
+            }) {
+                return Err(WorkspaceError::State(ServiceError::WorkspaceInUse));
+            }
+            let _schedules = owner.schedules.guard_workspace_removal(id).await?;
+            runtime.remove_lan_workspace(id).await
+        }).await.map_err(|_| WorkspaceError::Vault(crate::vault::VaultError::WorkerFailure))?
+    }
+
     pub async fn snapshot(&self, id: Uuid) -> Result<TaskRecord> {
         let state = self.state.lock("snapshot", None, Some(id)).await;
         if let Some(actor) = state.actors.get(&id) {
