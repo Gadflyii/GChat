@@ -41,8 +41,14 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false })
   const selected = snapshot?.models.find((m) => m.id === modelId)
   const configuration = { ...options, model_id: modelId, gpu_uuids: gpus, max_context: context, concurrency }
-  const quoteKey = JSON.stringify([host.host_id, host.base_url, host.certificate_sha256, error, snapshot?.boot_id, snapshot?.revision,
-    selected, snapshot?.gpus, snapshot?.hardware_profile, snapshot?.instances.map(instance => [instance.instance_id, instance.status, instance.configuration]),
+  const profile = snapshot?.hardware_profile
+  // Snapshot revisions and profiling progress can change while the same quote is
+  // running. Only launch inputs and the Host's placement/profile state invalidate it.
+  const quoteKey = JSON.stringify([host.host_id, host.base_url, host.certificate_sha256, error, snapshot?.boot_id,
+    selected, snapshot?.gpus.map(gpu => [gpu.uuid, gpu.memory_mib, gpu.compute_capability]),
+    [profiling, profile?.profile_path, profile?.engine_path, profile?.gpu_uuids, profile?.available,
+      profile?.base_complete, profile?.scope_complete, profile?.all_formats_complete],
+    snapshot?.instances.map(instance => [instance.instance_id, instance.status, instance.configuration]),
     configuration, instanceCount, editing])
   const quoteRevision = useRef(0)
   useEffect(() => {
