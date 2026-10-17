@@ -1,5 +1,31 @@
 # GInfer host UI
 
+## Attachment edits survive navigation — C4
+
+`GUI-SETTINGS-ATTACHMENT-EDIT-LOSS` was reproduced in the current native Linux
+Settings walkthrough: changing the file limit from 20 to 21, leaving within
+100 ms and reopening after 600 ms restores 20. The page discarded its pending
+500 ms write on unmount. Independent extension updates also read and replace
+the same settings document, allowing concurrent writes to lose another edit.
+
+The candidate flushes pending numeric edits together when leaving, retains the
+typing debounce and existing validation, and serializes extension reads/writes
+so reopening waits for persistence. Acceptance: rendered regressions using real
+extension persistence for debounce, quick navigation, delayed reads, concurrent
+controls, validation and retry after a failed write; one full `make verify`.
+No model, Engine, provider request or real user-data operation is in scope.
+
+Source: `/ai/gchat-worktrees/c4-attachment-edit-durability-20261017`, branch
+`fix/c4-attachment-edit-durability-20261017`, base `0099e0a1d`. The route, hook and
+dedicated tests are ready for verification. Results and the original native
+screenshots belong to `/ai/gchat/out/c4-settings-sweep-20261017/`; the reproduced
+loss is in `attachments-quick-navigation.json`. The private S1 cache at
+`/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/` is retained for this gate;
+no build is running. Next: focused tests and full verification after C3's GMUL
+timing return, then merge-ready. Provider labels are owned separately by C6,
+provider keyboard navigation by C7; unsupported attachment choices and sidebar
+density remain separate findings in Gchat3's shared GUI list.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing
