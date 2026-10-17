@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { gbot, type LanPreparation } from '@/services/gbot'
 
@@ -14,12 +14,16 @@ export default function LanTools({
   cloud?: boolean
 }) {
   const [consent, setConsent] = useState(false)
-  const [working, setWorking] = useState(false)
+  const [action, setAction] = useState<'prepare' | 'check' | null>(null)
+  const pending = useRef(false)
+  const working = action !== null
   const [command, setCommand] = useState('')
   const [installed, setInstalled] = useState(false)
   const [issue, setIssue] = useState('')
   const run = async (prepare: boolean) => {
-    setWorking(true)
+    if (pending.current) return
+    pending.current = true
+    setAction(prepare ? 'prepare' : 'check')
     busy(true)
     ready(false)
     setInstalled(false)
@@ -37,7 +41,8 @@ export default function LanTools({
     } catch (cause) {
       setIssue(String(cause instanceof Error ? cause.message : cause))
     } finally {
-      setWorking(false)
+      pending.current = false
+      setAction(null)
       busy(false)
     }
   }
@@ -72,7 +77,7 @@ export default function LanTools({
           disabled={working || !consent}
           onClick={() => void run(true)}
         >
-          {working ? 'Working…' : 'Prepare tools'}
+          {action === 'prepare' ? 'Preparing tools…' : 'Prepare tools'}
         </Button>
         <Button
           type="button"
@@ -80,9 +85,16 @@ export default function LanTools({
           disabled={working}
           onClick={() => void run(false)}
         >
-          Check tools
+          {action === 'check' ? 'Checking tools…' : 'Check tools'}
         </Button>
       </div>
+      {working && (
+        <p role="status" aria-live="polite">
+          {action === 'prepare'
+            ? 'Preparing tools on the bot computer…'
+            : 'Checking tools on the bot computer…'}
+        </p>
+      )}
       {command && (
         <div className="space-y-2">
           <p>
