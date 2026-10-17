@@ -184,6 +184,9 @@ mod native_store {
         pub fn new(root: &Path) -> Self {
             Self {
                 root: root.join("credentials"),
+                #[cfg(target_os = "windows")]
+                native: Arc::new(windows::WindowsNative::new()),
+                #[cfg(not(target_os = "windows"))]
                 native: Arc::new(NativeProvider),
             }
         }
@@ -230,6 +233,9 @@ mod native_store {
 }
 #[cfg(not(target_os = "linux"))]
 pub use native_store::Store;
+
+#[cfg(any(target_os = "windows", test))]
+mod windows;
 
 #[cfg(target_os = "linux")]
 mod linux;
