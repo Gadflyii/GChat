@@ -100,6 +100,87 @@ impl ProfileScope {
         }
     }
 }
+
+/// Admit only the hardware-profile command shapes prepared by this module.
+/// Kept outside the Windows process owner so its admission rule is testable on Linux.
+#[cfg(any(windows, test))]
+pub(crate) fn prepared_hardware_profile_args(args: &[&std::ffi::OsStr]) -> bool {
+    use std::ffi::OsStr;
+
+    let [operation, profile_flag, output, tail @ ..] = args else {
+        return false;
+    };
+    if *operation != "profile-hardware"
+        || *profile_flag != "--hardware-profile"
+        || !Path::new(output).is_absolute()
+    {
+        return false;
+    }
+    let tail = tail
+        .strip_prefix(&[OsStr::new("--reprofile")])
+        .unwrap_or(tail);
+    if tail.is_empty()
+        || tail
+            == [
+                OsStr::new("--complete-remaining-formats"),
+                OsStr::new("--json"),
+            ]
+    {
+        return true;
+    }
+    let [model_flag, model, tp_flag, tp, spec_flag, spec, json, rest @ ..] = tail else {
+        return false;
+    };
+    let tp = match tp.to_str() {
+        Some("1") => 1,
+        Some("2") => 2,
+        Some("4") => 4,
+        _ => return false,
+    };
+    if *model_flag != "--model"
+        || !Path::new(model).is_absolute()
+        || *tp_flag != "--tp"
+        || *spec_flag != "--spec"
+        || *json != "--json"
+    {
+        return false;
+    }
+    let rest = if let [flag, value, remaining @ ..] = rest {
+        if *flag == "--draft-tp" {
+            let draft_tp = match value.to_str() {
+                Some("1") => 1,
+                Some("2") => 2,
+                Some("4") => 4,
+                _ => return false,
+            };
+            if draft_tp > tp {
+                return false;
+            }
+            remaining
+        } else {
+            rest
+        }
+    } else {
+        rest
+    };
+    let tokens = match rest {
+        [] => None,
+        [flag, value] if *flag == "--draft-tokens" => {
+            match value.to_str().and_then(|value| value.parse::<u32>().ok()) {
+                Some(tokens) => Some(tokens),
+                None => return false,
+            }
+        }
+        _ => return false,
+    };
+    match spec.to_str() {
+        Some("auto" | "none") => tokens.unwrap_or(0) == 0,
+        Some("dflash") => tokens.is_none_or(|tokens| (1..=15).contains(&tokens)),
+        Some("mtp") => tokens != Some(0),
+        _ => false,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HardwareProfileStatus {
     pub status: String,
@@ -1499,6 +1580,111 @@ mod tests {
     use hyper::{Body, Request};
     use std::os::unix::fs::PermissionsExt;
     use std::time::Duration;
+
+    #[test]
+    fn windows_hardware_profile_args_accepts_prepared_scopes() {
+        use std::ffi::OsStr;
+
+        for reprofile in [false, true] {
+            let mut base = vec![
+                OsStr::new("profile-hardware"),
+                OsStr::new("--hardware-profile"),
+                OsStr::new("/private data/hardware.json"),
+            ];
+            if reprofile {
+                base.push(OsStr::new("--reprofile"));
+            }
+            assert!(prepared_hardware_profile_args(&base));
+            let mut completion = base.clone();
+            completion.extend([
+                OsStr::new("--complete-remaining-formats"),
+                OsStr::new("--json"),
+            ]);
+            assert!(prepared_hardware_profile_args(&completion));
+            for (spec, optional) in [
+                ("auto", vec![]),
+                ("none", vec!["--draft-tokens", "0"]),
+                ("dflash", vec!["--draft-tp", "2", "--draft-tokens", "15"]),
+                ("mtp", vec!["--draft-tokens", "3"]),
+                ("mtp", vec!["--draft-tp", "4"]),
+            ] {
+                let mut artifact = base.clone();
+                artifact.extend(
+                    [
+                        "--model",
+                        "/model data/model.ginfer",
+                        "--tp",
+                        "4",
+                        "--spec",
+                        spec,
+                        "--json",
+                    ]
+                    .into_iter()
+                    .chain(optional)
+                    .map(OsStr::new),
+                );
+                assert!(prepared_hardware_profile_args(&artifact), "{artifact:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn windows_hardware_profile_args_rejects_malformed_scopes() {
+        use std::ffi::OsStr;
+
+        let base = [
+            "profile-hardware",
+            "--hardware-profile",
+            "/private/hardware.json",
+        ];
+        let artifact = [
+            "--model",
+            "/models/model.ginfer",
+            "--tp",
+            "1",
+            "--spec",
+            "mtp",
+            "--json",
+        ];
+        for tail in [
+            vec!["--reprofile", "--reprofile"],
+            vec!["--complete-remaining-formats"],
+            vec!["--complete-remaining-formats", "--json", "--unknown"],
+            vec!["--json"],
+            artifact[..6].to_vec(),
+            [artifact.as_slice(), &["--unknown"]].concat(),
+            [
+                artifact.as_slice(),
+                &["--complete-remaining-formats", "--json"],
+            ]
+            .concat(),
+            [artifact.as_slice(), &["--draft-tp"]].concat(),
+            [artifact.as_slice(), &["--draft-tp", "2"]].concat(),
+            [artifact.as_slice(), &["--draft-tokens", "0"]].concat(),
+            [artifact.as_slice(), &["--draft-tokens", "not-a-number"]].concat(),
+            [
+                artifact.as_slice(),
+                &["--draft-tokens", "3", "--draft-tokens", "3"],
+            ]
+            .concat(),
+        ] {
+            let args: Vec<_> = base.iter().copied().chain(tail).map(OsStr::new).collect();
+            assert!(!prepared_hardware_profile_args(&args), "{args:?}");
+        }
+        let valid: Vec<_> = base.into_iter().chain(artifact).map(OsStr::new).collect();
+        for (index, value) in [
+            (0, "not-profile-hardware"),
+            (1, "--not-hardware-profile"),
+            (2, "relative/hardware.json"),
+            (4, "relative/model.ginfer"),
+            (6, "3"),
+            (8, "unknown"),
+        ] {
+            let mut invalid = valid.clone();
+            invalid[index] = OsStr::new(value);
+            assert!(!prepared_hardware_profile_args(&invalid), "{invalid:?}");
+        }
+    }
 
     async fn fixture() -> (tempfile::TempDir, Arc<Host>, PathBuf) {
         let directory = tempfile::tempdir().unwrap();
