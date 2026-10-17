@@ -33,6 +33,23 @@ launch/restart lifecycle, persists its identity and retains ordinary automatic
 arena, prefill and host-memory admission. It supplies no new fixed memory cap or
 qualification claim. The UI makes a restart explicit.
 
+The benchmark settings panel starts with the running server selector. Its empty
+state points to Models and Refresh server. Max Perf guidance explains the common
+settings, the explicit apply/restart step, and the effect on chats using that
+server; selecting a server alone never restarts it. Confirmation and session
+guards remain required.
+
+The October 17 guidance change is on
+`fix/c4-benchmark-settings-guidance-20261017` in
+`/ai/gchat-worktrees/c4-benchmark-settings-guidance-20261017`. Acceptance is the
+focused settings/benchmark route tests and `make verify`; launch settings,
+benchmark controls and submission behavior are outside this change. Verification
+is pending in the owned S1 checkout
+`/media/ron/SSD_RAID/ai/tmp-c4-benchmark-settings-guidance-20261017/gchat`;
+the inactive Gchat 3 donor is read-only and disposable copied caches will be
+removed after the gate. The next action is to complete verification and submit
+this branch for merge.
+
 Standard records the selected Host session and profile version. Every native
 report must match those facts and the same configuration across all three points.
 A missing, changed or mismatched profile/session cannot produce a submit-ready

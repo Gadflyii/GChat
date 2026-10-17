@@ -53,7 +53,7 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
   const selector = <label className="min-w-0 text-sm">Host / Instance
     <select className="mt-1 block w-full min-w-0 rounded border bg-background p-2" value={selected?.target_id ?? ''}
       disabled={disabled || busy} onChange={event => { setMaxPerfChoice(null); setCapacityPending(false); onPendingChange(false); select(event.target.value) }}>
-      {!selected && <option value="">Choose an online instance</option>}
+      {!selected && <option value="">Choose a running server</option>}
       {sessions.map(session => {
         for (const host of hosts) {
           const snapshot = snapshots[host.host_id]
@@ -64,13 +64,24 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
       })}
     </select>
   </label>
-  if (!host || !snapshot || !instance) return <div className="rounded-lg border p-4">{selector}<p className="mt-2 text-sm text-muted-foreground">Select a managed online instance to change its model or profile.</p></div>
+  const serverSelection = <div className="space-y-3 rounded-lg border p-4">
+    <h3 className="font-medium">Choose a running server</h3>
+    <p className="text-sm text-muted-foreground">Choose the computer and running model you want to benchmark. Selecting a server does not restart it.</p>
+    {selector}
+    {!sessions.length && <p className="text-sm text-muted-foreground">Open Models, load a model, then select Refresh server to update this list.</p>}
+  </div>
+  if (!host || !snapshot || !instance) return <div className="space-y-3">
+    {serverSelection}
+    {!!sessions.length && <p className="text-sm text-muted-foreground">Choose a server managed by GChat to change its model or profile.</p>}
+  </div>
   const maxPerfDisabled = disabled || busy || !!errors[host.host_id] || instance.status !== 'ready'
     || hardwareProfileBlocksLaunch(snapshot.hardware_profile) || !selected?.session_id || selected.session_id !== instance.session_id
   return <div className="space-y-3">
+    {serverSelection}
     <div className="space-y-3 rounded-lg border p-4">
       <h3 className="font-medium">GBench Max Perf</h3>
-      <p className="text-sm text-muted-foreground">The Standard Benchmark profile uses 8,181 context tokens, capacity for eight requests, TP1, and the release KV and draft settings. It is separate from capacity profiles and does not claim hardware qualification.</p>
+      <p className="text-sm text-muted-foreground">Use Max Perf for the Standard Benchmark so results use the same settings: an 8,181-token context, up to eight requests at once, and one GPU. It is separate from capacity profiles and does not claim hardware qualification.</p>
+      <p className="text-sm text-muted-foreground">Choose a Max Perf profile, then select Apply Max Perf &amp; Restart Server. Wait for the server to be ready before selecting Run benchmark.</p>
       {selected?.benchmark_profile && <p className="text-sm">Running profile: GBench Max Perf v{selected.benchmark_profile.version}</p>}
       <label className="block text-sm">Max Perf profile
         <select className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={maxPerfDisabled || capacityPending || !maxPerfChoices.length}
@@ -83,8 +94,8 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
           </option>)}
         </select>
       </label>
-      {!maxPerfChoices.length && <p className="text-sm text-muted-foreground">No Max Perf profile matches an installed release model on this instance’s available single GPU. Existing GPU groups are preserved.</p>}
-      {maxPerf && <p role="alert" className="text-sm">Applying this profile drains current requests and restarts this server. Other clients are affected. Benchmarking remains paused until the new session is ready.</p>}
+      {!maxPerfChoices.length && <p className="text-sm text-muted-foreground">No Max Perf profile is available for this server’s installed models and GPU. Choose a running server with a supported release model on one GPU. Existing GPU groups are preserved.</p>}
+      {maxPerf && <p role="alert" className="text-sm">Applying this profile waits for current requests to finish, then restarts this server. Chats and other clients using it are affected. Wait for the server to be ready before selecting Run benchmark.</p>}
       <Button disabled={maxPerfDisabled || !maxPerf || capacityPending} onClick={() => {
         if (!maxPerf || maxPerfDisabled || capacityPending) return
         if (!window.confirm('Apply the GBench Max Perf profile and restart this server? Other clients using it will be affected.')) return
@@ -94,7 +105,7 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
       {maxPerf && <Button variant="outline" disabled={busy} onClick={() => setMaxPerfChoice(null)}>Keep running settings</Button>}
     </div>
     <EngineProfilePicker key={`${selected?.target_id}:${selected?.session_id}:${generation}`} snapshot={snapshot}
-    instanceId={instance.instance_id} hostSelector={selector} currentSettings onPendingChange={setCapacityPending}
+    instanceId={instance.instance_id} currentSettings onPendingChange={setCapacityPending}
     disabled={disabled || busy || maxPerfPending || !!errors[host.host_id] || instance.status !== 'ready'}
     launch={apply} />
   </div>
