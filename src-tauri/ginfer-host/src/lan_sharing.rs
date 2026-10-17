@@ -226,6 +226,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let host = Host::open(dir.path().to_owned(), "Independent sharing".into(),
             std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        host.data.lock().await.share_lan = true;
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let standalone_port = listener.local_addr().unwrap().port();
         let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
@@ -271,7 +272,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn sharing_defaults_on_requires_admin_and_persists_opt_out() {
+    async fn sharing_defaults_off_requires_admin_opt_in_and_persists_choices() {
         let dir = tempfile::tempdir().unwrap();
         let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let port = probe.local_addr().unwrap().port();
@@ -283,8 +284,20 @@ mod tests {
             Ok::<_, String>(host)
         };
         let host = open().await.unwrap();
-        assert!(host.data.lock().await.share_lan);
+        assert!(!host.data.lock().await.share_lan);
         host.initialize_lan_sharing().await;
+        assert_eq!(host.snapshot().await["lan_sharing"]["enabled"], false);
+        assert!(!host.lan_sharing.lock().await.active());
+        assert!(tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port)).await.is_err());
+        let request = Request::post("/host/v1/lan-sharing")
+            .body(Body::from(r#"{"enabled":true}"#)).unwrap();
+        assert_eq!(host.clone().route(request).await.unwrap().status(), StatusCode::UNAUTHORIZED);
+        assert!(!host.lan_sharing.lock().await.active());
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let request = Request::post("/host/v1/lan-sharing")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(r#"{"enabled":true}"#)).unwrap();
+        assert_eq!(host.clone().route(request).await.unwrap().status(), StatusCode::OK);
         assert_eq!(host.snapshot().await["lan_sharing"]["active"], true, "{}", host.snapshot().await["lan_sharing"]);
         let (token, fingerprint) = {
             let data = host.data.lock().await;
@@ -338,6 +351,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn saved_state_without_sharing_choice_stays_local() {
+        let dir = tempfile::tempdir().unwrap();
+        let host = Host::open(dir.path().to_owned(), "Local Host".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        let path = dir.path().join("host.json");
+        let mut saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        saved.as_object_mut().unwrap().remove("share_lan");
+        std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
+        drop(host);
+
+        let host = Host::open(dir.path().to_owned(), "Reopened Host".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+        host.initialize_lan_sharing().await;
+        let sharing = host.snapshot().await["lan_sharing"].clone();
+        assert_eq!(sharing["managed"], true);
+        assert_eq!(sharing["enabled"], false);
+        assert_eq!(sharing["active"], false);
+        assert!(sharing["error"].is_null());
+        assert!(host.lan_sharing.lock().await.running.is_none());
+    }
+
+    #[tokio::test]
     async fn occupied_managed_lan_port_selects_and_persists_an_independent_listener() {
         let dir = tempfile::tempdir().unwrap();
         let occupied = TcpListener::bind((std::net::Ipv4Addr::UNSPECIFIED, 0)).await.unwrap();
@@ -346,6 +381,7 @@ mod tests {
             std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
         {
             let mut data = host.data.lock().await;
+            data.share_lan = true;
             data.lan_port = Some(preferred_port);
             data.management_origin = Some("https://127.0.0.1:12345".into());
             data.management_notice = Some("Management selected a separate port.".into());
