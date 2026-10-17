@@ -17,7 +17,7 @@
   "stop": "중지",
   "activeGpus": "활성 GPU",
   "noGpus": "감지된 GPU가 없습니다",
-  "liveStatsUnavailable": "시스템 열거를 통해 GPU가 감지되었습니다. 이 카드에 대한 실시간 VRAM 통계는 사용할 수 없습니다 — 선택한 llama.cpp 백엔드가 장치 목록을 반환하지 않았지만, GPU는 여전히 추론에 사용할 수 있습니다.",
+  "liveStatsUnavailable": "실시간 GPU 메모리 통계를 사용할 수 없습니다. 여기에 표시된 GPU 정보는 하드웨어 감지 결과입니다.",
   "noActiveGpus": "활성 GPU가 없습니다. 모든 GPU가 현재 비활성화되어 있습니다.",
   "vramUsage": "VRAM 사용량",
   "driverVersion": "드라이버 버전:",
