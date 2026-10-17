@@ -177,6 +177,12 @@ Canceling the file window without choosing a file shows no error.
 If an image cannot be read, GChat names the file and asks you to choose it
 again. Your draft and other attachments stay in place.
 
+## Generated HTML previews
+
+If a generated HTML preview cannot load, GChat shows an error. Choose
+**Retry preview** to try again. **Code** remains available so you can read
+the HTML while the preview is unavailable.
+
 ## Choosing a skill with the keyboard
 
 Type `/` in the composer to see available skills. Use the up and down arrow
