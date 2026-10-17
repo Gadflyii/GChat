@@ -17,6 +17,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
   const setupHelpId = useId()
+  const noAccountsId = useId()
   const generation = useRef(0)
   const pending = useRef(false)
   const dirty = useRef(false)
@@ -91,6 +92,8 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     }
   }
 
+  const nothingToSave =
+    settings !== undefined && !settings.accounts.length && !linked.length
   return (
     <details className="rounded-lg border p-3">
       <summary className="cursor-pointer text-sm">Linked accounts</summary>
@@ -123,8 +126,9 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
       {settings ? (
         <>
           {!settings.accounts.length && (
-            <p className="text-sm text-muted-foreground">
-              No accounts are connected to GChat yet.
+            <p id={noAccountsId} className="text-sm text-muted-foreground">
+              No accounts are connected to GChat yet. Connect one in Settings →
+              Workspace connections, then refresh this list.
             </p>
           )}
           <div className="space-y-3">
@@ -198,8 +202,10 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
         {settings && (
           <Button
             variant="outline"
-            disabled={busy !== null}
-            aria-describedby={setupHelpId}
+            disabled={busy !== null || nothingToSave}
+            aria-describedby={
+              nothingToSave ? `${setupHelpId} ${noAccountsId}` : setupHelpId
+            }
             onClick={() => void save()}
           >
             {busy === 'save' ? 'Saving…' : 'Save linked accounts'}

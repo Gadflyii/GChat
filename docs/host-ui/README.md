@@ -931,6 +931,7 @@ Fixed, one branch each (all merged or merge-ready with `make verify` PASS):
 - `GUI-AGENT-EDITOR-FIELD-LABELS`: Identifier, Description, Instructions, Output contract and the
   step and token limits are programmatically tied to their labels.
 - `GBOT-VAULT-WORDING`: Gbot setup text says secure storage, matching the rest of GChat.
+- `GBOT-LINKED-ACCOUNTS-EMPTY-SAVE`: Save linked accounts is disabled, with the visible reason "No accounts are connected to GChat yet", when no accounts exist and none are linked; it stays enabled to unlink a disconnected account.
 
 Open, not fixed (product or design decisions):
 
@@ -938,8 +939,6 @@ Open, not fixed (product or design decisions):
   workspace delete or rename route (local VM and cloud setups have removal).
 - `GBOT-SETUP-STEP-COUNT-CHANGES`: the wizard says "Step 2 of 5" and then "Step 4 of 4" once a VM,
   cloud or Microsoft 365 computer is chosen, because the total depends on that choice.
-- `GBOT-LINKED-ACCOUNTS-EMPTY-SAVE`: with no connected accounts, Linked accounts still offers Save
-  linked accounts. Low severity; saving an empty selection may be intended to unlink everything.
 
 Test-isolation notes: a launch must set a private `XDG_RUNTIME_DIR` and unset `WAYLAND_DISPLAY`;
 Browse on a bare private session opens a file chooser on the real display through the portal.
