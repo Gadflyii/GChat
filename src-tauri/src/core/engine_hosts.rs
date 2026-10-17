@@ -138,22 +138,25 @@ where
     S: Fn(ginfer_host::local_host::LocalHost) -> F,
     F: std::future::Future<Output = Result<(), String>>,
 {
-    // Windows startup registration hashes the exact saved path, not its
+    // Startup registration hashes the exact saved path, not its
     // canonical spelling. Keep it until the reversible cutover is complete.
     let configured_current = current.to_path_buf();
     let (current, destination) = validate_data_folder_move(current, destination)?;
-    #[cfg(windows)]
     let rollback_current = &configured_current;
-    #[cfg(not(windows))]
-    let rollback_current = &current;
+    // The independent Gbot service also writes this tree. Do not copy its live
+    // state or allow another starter to acquire the old root during the move.
+    let gbot_directory = current.join("gbot");
+    let _gbot_owner = ginfer_host::service_owner::ServiceOwner::acquire(&gbot_directory)
+        .map_err(|error| format!("Quit the Gbot service before changing App Data, then try again. {error}"))?;
     let old_local = relocation_desktop_host(&current, resources)?;
     let guard = client.prepare_local_relocation(&old_local.directory, &destination.join("ginfer/host")).await?;
     let was_running = guard.had_running_host();
-    // Both ownership locks remain held. Copying host.lock would replace or write
-    // through a reserved lock file, defeating the cross-process handoff fence.
+    // Host and Gbot ownership stay reserved. Copying host.lock would replace or
+    // write through a reserved lock file, defeating the handoff fence.
     let prepared = (|| {
         crate::core::app::helpers::copy_dir_recursive(&current, &destination,
-            &[".uvx", ".npx", "openclaw"], &[old_local.directory.join("host.lock")])
+            &[".uvx", ".npx", "openclaw"],
+            &[old_local.directory.join("host.lock"), gbot_directory.join("host.lock")])
             .map_err(|e| format!("Failed to copy App Data: {e}"))?;
         let updated = relocation_desktop_host(&destination, resources)?;
         Ok::<_, String>(updated)
@@ -1027,6 +1030,25 @@ mod registration_tests {
     }
 
     #[tokio::test]
+    async fn data_folder_move_refuses_a_running_gbot_before_copy_or_host_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let current = root.path().join("old");
+        let destination = root.path().join("new");
+        let owner = ginfer_host::service_owner::ServiceOwner::acquire(&current.join("gbot")).unwrap();
+        std::fs::write(current.join("gbot/state.json"), b"live bot state").unwrap();
+        let client = Client::new(Some(root.path().join("shared-hosts.json")), Arc::new(NativeVault));
+        let error = relocate_data_folder_with(&client, &current, &destination, &root.path().join("resources"),
+            |_| panic!("a running Gbot must refuse configuration changes"),
+            |_| async { panic!("a running Gbot must refuse Host changes") }).await.unwrap_err();
+        assert!(error.contains("Quit the Gbot service"), "{error}");
+        assert_eq!(std::fs::read(current.join("gbot/state.json")).unwrap(), b"live bot state");
+        assert!(!destination.join("gbot").exists(), "live state must not be copied");
+        assert!(!current.join("ginfer").exists(), "Host handoff must not begin");
+        drop(owner);
+        let _available = ginfer_host::service_owner::ServiceOwner::acquire(&current.join("gbot")).unwrap();
+    }
+
+    #[tokio::test]
     async fn data_folder_move_copies_owned_state_and_rolls_back_configuration_failure() {
         const FIXTURE: &str = "GCHAT_DATA_FOLDER_MOVE_FIXTURE";
         let root = match std::env::var_os(FIXTURE) {
@@ -1060,6 +1082,8 @@ mod registration_tests {
             let original_state = std::fs::read(directory.join("host.json")).unwrap();
             std::fs::write(directory.join("host.lock"), b"source lock must not be copied").unwrap();
             std::fs::write(current.join("chat-history.json"), b"retained conversation").unwrap();
+            std::fs::create_dir_all(current.join("gbot")).unwrap();
+            std::fs::write(current.join("gbot/state.json"), b"retained bot state").unwrap();
             let mut local = relocation_desktop_host(&current, &resources).unwrap();
             local.listen = "127.0.0.1:17121".parse().unwrap();
             let locator = ginfer_host::local_host_registry::locator_path().unwrap();
@@ -1075,7 +1099,11 @@ mod registration_tests {
             let client = Client::new(Some(selected.join("shared-hosts.json")), Arc::new(NativeVault));
             client.set_local_directory(directory.clone()).await.unwrap();
             let result = relocate_data_folder_with(&client, &current, &destination, &resources,
-                |path| if refuse_configuration && path == destination.as_path() { Err("fixture configuration denied".into()) } else { persist(path) },
+                |path| {
+                    assert!(ginfer_host::service_owner::ServiceOwner::acquire(&current.join("gbot")).is_err(),
+                        "Gbot ownership must remain reserved until the handoff commits");
+                    if refuse_configuration && path == destination.as_path() { Err("fixture configuration denied".into()) } else { persist(path) }
+                },
                 |_| async { panic!("an unused Host must not be started by a data move") }).await;
             let expected = if refuse_configuration { &current } else { &destination };
             if refuse_configuration { assert!(result.unwrap_err().contains("configuration denied")); } else { result.unwrap(); }
@@ -1091,6 +1119,9 @@ mod registration_tests {
             let _old_owner = ginfer_host::service_owner::ServiceOwner::acquire(&directory).unwrap();
             let _new_owner = ginfer_host::service_owner::ServiceOwner::acquire(&destination.join("ginfer/host")).unwrap();
             assert_eq!(std::fs::read(current.join("chat-history.json")).unwrap(), b"retained conversation");
+            assert!(!destination.join("gbot/host.lock").exists(), "never copy a Gbot ownership lock");
+            assert_eq!(std::fs::read(destination.join("gbot/state.json")).unwrap(), b"retained bot state");
+            let _gbot_owner = ginfer_host::service_owner::ServiceOwner::acquire(&current.join("gbot")).unwrap();
         }
     }
 

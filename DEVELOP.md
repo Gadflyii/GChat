@@ -119,9 +119,12 @@ If the configured old root owns a running Host, the move requests authenticated
 idle Stop and waits for actual ownership release. A model load, active model,
 download, profiling, calibration or setup transaction causes a refusal; the move
 does not unload models or force-stop work. An unused Host remains unstarted.
+The independent Gbot service must also be stopped with **Quit Gbot service**.
+The move refuses a running Gbot and reserves its source ownership lock until the
+handoff finishes; it never stops bot work automatically.
 Both old and destination Host ownership locks stay held during the copy and
 configuration/locator handoff. The copy keeps the existing generated-cache
-exclusions and skips the exact Host lock file so it cannot replace a held lock.
+exclusions and skips the exact Host and Gbot lock files so it cannot replace a held lock.
 The copied Host UUID and certificate must match the source. Discovery changes
 only if it still selects the old desktop owner; another installation's locator
 is preserved.
