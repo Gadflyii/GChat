@@ -422,6 +422,7 @@ async fn load_on_host_inner(
     .await
 }
 
+#[allow(clippy::too_many_arguments)] // Keep the load owner beside the existing attachment inputs.
 async fn attach(
     sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     control: Arc<ginfer_host::launcher::LocalControl>,
