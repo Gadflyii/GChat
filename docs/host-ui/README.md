@@ -12,17 +12,35 @@ and provider behavior remain C6-owned.
 Acceptance: rendered checks find fields by their visible translated names,
 edit the named file limit and verify persistence after navigation; attachment
 availability and durability checks plus one full `make verify` must pass.
-This candidate includes current main, accepted attachment durability, the
-separate availability and sidebar fixes, and C6's tested label change. Source
-is frozen for the combined focused/full verification after the availability
-gate. Next: build the verified native app and replay the changes in the
-private fixture, retaining screenshots.
+The combined candidate `5a46f3fb5` includes accepted attachment durability,
+the separate availability and sidebar fixes, and C6's tested label change.
+All 51 focused cases across five files and one full `make verify` passed:
+2,995 frontend tests, 119 extension tests, 1,079 Rust tests and 59 Node
+contracts. Six frontend tests were skipped and 27 Rust tests ignored; lint
+has four warnings and no errors. Types, quality and coverage checks passed.
+The production frontend and native desktop builds also passed; the receipt is
+`/ai/gchat/out/c4-settings-sweep-20261017/final-combined/result.json`.
+
+The private OLD replay at 16:24Z on `5a46f3fb5` found all attachment fields by
+their translated accessible names and confirmed that a named numeric edit
+survives quick navigation. Evidence is in `final-attachment-controls.json`
+and `final-attachment-quick-navigation.json` beneath the evidence directory.
+The follow-up source `0c598c378` separates the Hermes settings link from its
+compact enable label. Its 16 focused cases and one full `make verify` passed
+(2,996 frontend tests; the extension, Rust and Node counts above are unchanged).
+Production frontend/native builds passed, and the native screenshot confirms
+the link occupies a separate line with providers visible. Evidence:
+`final-attachments-sidebar-corrected.png`, `final-hermes-corrected-layout.json`
+and `final-combined/spacing-followup/result.json` beneath the evidence root.
+Returned 16:39Z: OLD is OFF and its original XML restored; custody is back
+with Gchat2. Next: coordinator merge.
 
 Owned source: `/ai/gchat-worktrees/c4-settings-attachment-labels-20261017`,
 branch `fix/c4-settings-attachment-labels-20261017`. Evidence belongs to
 `/ai/gchat/out/c4-settings-sweep-20261017/`. No model, Engine, provider request
-or retained user profile operation is required. The existing private S1 cache
-is retained for these gates and the final native app build.
+or retained user profile operation is required. The owned generated S1 cache
+is being retired after the final native replay;
+concise results and screenshots remain in the evidence directory.
 
 ## Available attachment settings — C4
 
@@ -38,20 +56,18 @@ shared control-label change belongs to this branch.
 Acceptance: rendered checks for available choices/help, saved-mode recovery,
 preserved hidden preferences, navigation durability and visible numeric bounds,
 then full `make verify`. The candidate includes current main and the accepted
-attachment-durability fix. Next: focused and full verification after the
-sidebar gate, then the final private native replay.
+attachment-durability fix.
 All 11 focused rendered cases and one full `make verify` pass: 2,982 frontend
 tests, 119 extension tests, 1,079 Rust tests and 59 Node contracts. Six frontend
 tests were skipped and 27 Rust tests ignored; lint has no errors and four
 warnings. Types, quality checks and all six coverage floors passed. Saved-mode
 recovery, hidden preferences, quick navigation and numeric bounds are covered.
-The candidate includes current main and the accepted attachment-durability fix.
 Returned 16:13Z; booking2650 canceled. The final private OLD native replay at
 16:24Z passed on source `5a46f3fb5`: the named document-text select offers only
 `auto`, `inline` and `prompt`; the unavailable-search explanation is visible,
 and inactive retrieval, chunk and search controls are absent. Evidence:
 `/ai/gchat/out/c4-settings-sweep-20261017/final-attachment-controls.json` and
-`/ai/gchat/out/c4-settings-sweep-20261017/final-attachments-sidebar.png`.
+`/ai/gchat/out/c4-settings-sweep-20261017/final-attachments-sidebar-corrected.png`.
 
 Owned source: `/ai/gchat-worktrees/c4-settings-attachment-availability-20261017`,
 branch `fix/c4-settings-attachment-availability-20261017`. The original evidence is retained in
@@ -79,9 +95,20 @@ and one full `make verify` pass: 2,981 frontend tests, 119 extension tests,
 27 Rust tests ignored; lint, types, quality checks and all six critical
 coverage floors passed. Lint retains four warnings. Returned 16:07Z;
 booking2647 canceled, with the private cache retained for the remaining gates.
-Next: integrate the separately gated attachment availability and labels,
-build the final native app, then capture the compact sidebar in the private
-fixture at the original window size.
+The combined `5a46f3fb5` gate and native replay also passed. At the original
+window size, provider entries were visible, the keyboard Help button expanded
+all three descriptions, and Enter on the OpenAI link opened its Settings page.
+Evidence is in `final-attachments-sidebar.png`,
+`final-sidebar-keyboard-help.json` and `final-provider-keyboard-result.json`
+beneath the evidence root. The replay exposed adjacent Hermes enable/link
+wording; `1f00011aa` places the link on a separate line. The final
+`0c598c378` gate passed all 16 focused cases and one full
+`make verify` (2,996 frontend tests, 119 extension tests, 1,079 Rust tests and
+59 Node contracts). Its production native replay confirms the Hermes link
+on its own line and provider entries visible at the original window size;
+see `final-attachments-sidebar-corrected.png` and
+`final-hermes-corrected-layout.json`. Returned 16:39Z: OLD OFF/original XML
+restored. Next: coordinator merge.
 No Engine, model, provider request or real user-data action is in scope.
 
 ## Attachment edits survive navigation — C4
@@ -115,12 +142,14 @@ tests began. A stale post-run phase reader failed after both requested commands
 and the container exited 0; its separate error does not replace their results.
 No passing test was repeated. Returned 15:55Z; booking2638 canceled.
 
+The fix merged as `7ac349d05`. The private OLD native replay at 16:24Z on
+combined source `5a46f3fb5` confirmed 20→21, navigation after 50 ms and 21 on
+return; the value was restored to 20. The result is retained in
+`final-attachment-quick-navigation.json` beneath the evidence directory.
 The private S1 cache at `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/`
-is retained for the remaining isolated Settings fixes. Next: coordinator merge,
-then replay the accepted Settings changes in the private native app. Provider
-labels are owned separately by C6, provider keyboard navigation by C7;
-unsupported attachment choices and sidebar density remain separate findings in
-Gchat3's shared GUI list.
+is being retired after the final native replay; concise evidence is retained.
+Provider labels remain C6-owned and provider keyboard navigation C7-owned; availability,
+sidebar and attachment labels retain their separate findings in Gchat3's list.
 
 ## Provider field labels — C6
 
@@ -162,28 +191,6 @@ is retired after retaining the result; the read-only donor remains untouched.
 Next: coordinator merge and ordinary installed associated-label/navigation
 confirmation. W3 local-path validation still uses Gchat3's sole Installed Load
 packet, without a separate Load.
-
-`fix/c4-attachment-edit-durability-20261017`, integrated source `1788ee4336`.
-All six focused persistence regressions and one full `make verify` pass:
-2,971 frontend tests, 119 extension tests, 1,079 Rust tests and 59 Node
-contracts. Six frontend tests were skipped and 27 Rust tests ignored; lint,
-types, quality checks and all six critical coverage floors passed. Lint retains
-four warnings, including the existing attachment `sel` dependency warning.
-
-Results and the original native screenshots belong to
-`/ai/gchat/out/c4-settings-sweep-20261017/`; the reproduced loss is in
-`attachments-quick-navigation.json`, and passing commands are linked from
-`attachment-fix/result.json`. Retained source permissions were repaired before
-tests began. A stale post-run phase reader failed after both requested commands
-and the container exited 0; its separate error does not replace their results.
-No passing test was repeated. Returned 15:55Z; booking2638 canceled.
-
-The private S1 cache at `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/`
-is retained for the remaining isolated Settings fixes. Next: coordinator merge,
-then replay the accepted Settings changes in the private native app. Provider
-labels are owned separately by C6, provider keyboard navigation by C7;
-unsupported attachment choices and sidebar density remain separate findings in
-Gchat3's shared GUI list.
 
 ## Provider settings keyboard navigation — C7
 
@@ -332,13 +339,22 @@ receipt are in `token-fix/result.json` beneath the retained evidence directory.
 
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
-| C4 / local | `/ai/gchat-worktrees/c4-settings-sweep-20261017`, branch `fix/c4-settings-sweep-20261017` | Token fix and subject record; remaining findings have separate ownership |
-| C4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017` | Private dependency/build cache retained through the Settings fixes; donor read-only |
-| C4 / OLD | `/home/gchat/c4-settings-sweep-20261017` | Private native app/home only; returned 15:30Z, normal OFF and unchanged XML |
-| C4 / evidence | `/ai/gchat/out/c4-settings-sweep-20261017/` | Before screenshots, control outcomes, findings and validation; no real token used |
+| C4 / local | `/ai/gchat-worktrees/c4-settings-attachment-labels-20261017`, branch `fix/c4-settings-attachment-labels-20261017` | Combined source `0c598c378`: focused/full gates and native replay PASS |
+| C4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017` | Owned generated dependency/build cache being retired; donor untouched |
+| C4 / OLD | `/home/gchat/c4-settings-sweep-20261017` | Private native app/home; returned16:39Z OFF/original XML restored, custody back with Gchat2 |
+| C4 / evidence | `/ai/gchat/out/c4-settings-sweep-20261017/` | Before/after screenshots, native control results and source validation; no real token used |
 
-Token privacy merged as `513f2ab30`; attachment edit durability now passes its focused and full gates. Next: merge attachment durability, then sidebar density and the unavailable document-search controls. Assistant create/update remains C7-owned; existing Engine and
-Hardware work remains with its owners. No model or shared FRESH fixture is in scope.
+Token privacy merged as `513f2ab30` and attachment edit durability as
+`7ac349d05`. Durability, availability, sidebar and labels each passed their
+focused/full gates; combined source `5a46f3fb5` passed 51 focused cases, one
+full `make verify` and production frontend/native builds. The 16:24Z private
+OLD replay confirmed durable quick-navigation edits, supported attachment
+choices and explanation, named fields, reachable provider entries and keyboard
+Help/provider links. Native `final-*.json` and screenshots retain those results.
+The final `0c598c378` follow-up also passed focused/full gates and native
+replay, including the separate-line Hermes screenshot. Returned16:39Z, OLD
+OFF/original XML restored. Next: coordinator merge of the remaining fixes. Assistant create/update remains C7-owned; existing Engine and Hardware
+work remains with its owners. No model or shared FRESH fixture is in scope.
 ## Models, Hub, Engine and Hardware walkthrough — C7
 
 `GUI-MODELS-HUB-ENGINE-HARDWARE-20261017` is an ordinary first-user walkthrough
