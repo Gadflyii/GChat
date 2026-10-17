@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { DeleteModelAction } from '@/containers/hub/DeleteModelAction'
 import { useHardware } from '@/hooks/useHardware'
+import { useBundledResources } from '@/hooks/useBundledResources'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
@@ -81,6 +82,8 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const [cancellingLoad, setCancellingLoad] = useState(false)
   const [cancelError, setCancelError] = useState(false)
   const local = destination === 'local'
+  const resources = useBundledResources(local)
+  const localLoadReady = resources.ready === true && !resources.error
   const host = hosts.find(h => h.host_id === destination)
   const snapshot = snapshots[destination]
   const offline = !local && (!snapshot || !!hostErrors[destination])
@@ -237,6 +240,9 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
         {(['Installed', 'Recommended', 'Downloads'] as const).map(t => <Button key={t} role="tab" aria-selected={tab === t} variant={tab === t ? 'default' : 'ghost'} onClick={() => setTab(t)}>{t}</Button>)}
       </div><Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : 'Refresh installed models'}</Button></div>
       {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]} · Saved inventory may be out of date.</p>}
+      {local && !localLoadReady && (resources.error
+        ? <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">Local model runtime is unavailable: {resources.error}</p>
+        : <p role="status" className="rounded border p-3 text-sm">Preparing local model runtime…</p>)}
       {pendingLoad && <div role="status" className="space-y-2 rounded border p-3 text-sm">
         <p className="font-medium">{cancellingLoad ? 'Cancelling installed model load' : loadProgress?.status === 'ready' ? 'Model ready; finishing startup' : loadPhaseLabels[loadProgress?.phase ?? 'preparing']}</p>
         {loadProgress?.detail && <p>{loadProgress.detail}</p>}
@@ -259,7 +265,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
           {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Choose available GPUs. A saved GPU may no longer be connected.' : 'Waiting for fresh GPU information.'}</p>}
         </fieldset>}
         {local ? <>{!filteredModels.length && <div className="rounded-xl border p-8 text-center"><p>No installed models found.</p><Button className="mt-3" onClick={() => setTab('Recommended')}>Find a recommended model</Button></div>}
-          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{m.displayName ?? m.id}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) ? 'Running' : 'Installed'} · {m.capabilities?.join(' · ') || 'GInfer model'}. Load uses the Host launch profile for the selected GPUs. Use Engines for custom settings.</p></div><div className="flex gap-2"><Button disabled={busy || invalidGpuSelection || activeModels.includes(m.id)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !activeModels.includes(m.id)} onClick={() => void stopLocal(m.id)}>Stop</Button><DeleteModelAction modelId={m.id} provider="ginfer" /></div></section>)}</>
+          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{m.displayName ?? m.id}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) ? 'Running' : 'Installed'} · {m.capabilities?.join(' · ') || 'GInfer model'}. Load uses the Host launch profile for the selected GPUs. Use Engines for custom settings.</p></div><div className="flex gap-2"><Button disabled={busy || !localLoadReady || invalidGpuSelection || activeModels.includes(m.id)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !activeModels.includes(m.id)} onClick={() => void stopLocal(m.id)}>Stop</Button><DeleteModelAction modelId={m.id} provider="ginfer" /></div></section>)}</>
           : host ? <HostCard key={host.host_id} host={host} snapshot={snapshot} error={hostErrors[destination]} /> : <p>Select a paired host in GInfer Hosts.</p>}
         {!local && snapshot?.model_management && <details><summary className="cursor-pointer text-sm">Managed storage and removal</summary><p className="my-2 text-sm text-muted-foreground">External model roots are read-only. Stop instances before removing a managed package.</p>{snapshot.models.filter(m => downloads.some(j => j.status === 'installed' && j.path === m.path)).map(m => <div key={m.id} className="flex items-center justify-between gap-3 border-b py-2"><span>{m.metadata.identity.model_id} · {formatModelBytes(m.metadata.size_bytes)}</span><Button variant="outline" disabled={busy || offline} onClick={() => { if (window.confirm(`Remove ${m.metadata.identity.model_id} from ${host?.name}? The package will need downloading again.`)) void act(() => engineCommand('remove_model', { host_id: destination, body: { model_id: m.id } })) }}>Remove package</Button></div>)}</details>}
       </>}

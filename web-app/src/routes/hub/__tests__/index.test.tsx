@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
   providers: [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally' }] }],
   catalog: [] as unknown[], errors: {} as Record<string, string>,
+  resources: { ready: true as boolean | null, error: '' },
 }))
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: React.ReactNode }) => <header>{children}</header> }))
 vi.mock('@/containers/EngineHostModels', () => ({ HostCard: ({ host }: { host: { name: string } }) => <section>Installed on {host.name}</section> }))
@@ -17,6 +18,7 @@ vi.mock('@/containers/hub/DeleteModelAction', () => ({ DeleteModelAction: () => 
 vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
 vi.mock('@/services/engines', () => ({ engineCommand: mocks.command }))
 vi.mock('@/hooks/useServiceHub', () => ({ useServiceHub: () => ({ models: () => ({ getActiveModels: async () => ['another-model'] }) }) }))
+vi.mock('@/hooks/useBundledResources', () => ({ useBundledResources: (enabled = true) => enabled ? mocks.resources : { ready: true, error: '' } }))
 vi.mock('@/hooks/useModelProvider', () => {
   const state = { providers: mocks.providers, selectModelProvider: vi.fn() }
   const hook = (selector: (s: typeof state) => unknown) => selector(state)
@@ -38,6 +40,7 @@ const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: '
 describe('host-scoped Models', () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null
+    mocks.resources = { ready: true, error: '' }
     mocks.command.mockResolvedValue([])
     mocks.switchModel.mockResolvedValue(undefined)
     mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [release] }]
@@ -51,16 +54,20 @@ describe('host-scoped Models', () => {
     expect(screen.queryByRole('button', { name: /Download to/ })).not.toBeInTheDocument()
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
   })
-  it('downloads to the selected host without invoking a local transfer', async () => {
+  it.each([true, null, false])('downloads to the selected host without invoking a local transfer (local runtime ready: %s)', async ready => {
+    mocks.resources = { ready, error: '' }
     const user = userEvent.setup()
     render(<ModelManagement />)
     await user.click(screen.getByRole('button', { name: 'Model destination' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Lab server' }))
     expect(screen.getByText('Installed on Lab server')).toBeInTheDocument()
+    expect(screen.queryByText('Preparing local model runtime…')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Download to Lab server' }))
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('download', { host_id: 'remote', body: release }))
     expect(mocks.command.mock.calls.some(call => call[0] === 'local_model_download')).toBe(false)
+    expect(mocks.switchModel).not.toHaveBeenCalled()
     expect(screen.getByRole('tab', { name: 'Downloads' })).toHaveAttribute('aria-selected', 'true')
   })
   it('disables mutations against an offline host even with saved inventory', async () => {
@@ -85,6 +92,54 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     vi.restoreAllMocks()
+  })
+  it.each([null, false])('waits for local runtime preparation before loading an installed model (ready: %s)', async ready => {
+    mocks.resources = { ready, error: '' }
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    const view = render(<ModelManagement />)
+    const loadButton = screen.getByRole('button', { name: 'Load model' })
+    expect(loadButton).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing local model runtime…')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    fireEvent.click(loadButton)
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+
+    mocks.resources = { ready: true, error: '' }
+    view.rerender(<ModelManagement />)
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(loadButton).toBeEnabled()
+    fireEvent.click(loadButton)
+    await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith({
+      modelId: 'local-model', providerName: 'ginfer', serviceHub: expect.anything(),
+      options: { useProfileDefaults: true, loadOperationId: expect.any(String) },
+      signal: expect.any(AbortSignal),
+    }))
+    expect(mocks.switchModel).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(loadButton).toBeEnabled())
+  })
+  it.each([null, true])('keeps Load disabled after a local runtime error until readiness recovers (ready: %s)', async ready => {
+    mocks.resources = { ready, error: 'Runtime extraction failed' }
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    const view = render(<ModelManagement />)
+    const loadButton = screen.getByRole('button', { name: 'Load model' })
+    expect(loadButton).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Local model runtime is unavailable: Runtime extraction failed')
+    expect(screen.queryByText('Preparing local model runtime…')).not.toBeInTheDocument()
+    fireEvent.click(loadButton)
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+
+    mocks.resources = { ready: true, error: '' }
+    view.rerender(<ModelManagement />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(loadButton).toBeEnabled()
+    fireEvent.click(loadButton)
+    await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledTimes(1))
+    expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({
+      modelId: 'local-model', providerName: 'ginfer',
+      options: { useProfileDefaults: true, loadOperationId: expect.any(String) },
+      signal: expect.any(AbortSignal),
+    }))
+    await waitFor(() => expect(loadButton).toBeEnabled())
   })
   it('shows an unavailable selected GPU error and restores Load after forwarding the choice', async () => {
     mocks.selectedGpuUuids = ['local-gpu']
