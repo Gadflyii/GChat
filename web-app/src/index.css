@@ -253,6 +253,57 @@
     margin-block-end: 0;
   }
 
+  /* Native <progress> bars: a themed track and fill, and a moving fill when the
+     length is unknown (an indeterminate bar is otherwise a static grey block). */
+  progress {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 0.5rem;
+    border: 0;
+    border-radius: 9999px;
+    overflow: hidden;
+    background-color: color-mix(in srgb, var(--foreground) 14%, transparent);
+  }
+
+  progress::-webkit-progress-bar {
+    background-color: transparent;
+    border-radius: 9999px;
+  }
+
+  progress::-webkit-progress-value {
+    background-color: var(--primary);
+    border-radius: 9999px;
+  }
+
+  progress::-moz-progress-bar {
+    background-color: var(--primary);
+    border-radius: 9999px;
+  }
+
+  progress:not([value]) {
+    background-image: linear-gradient(90deg, var(--primary), var(--primary));
+    background-size: 35% 100%;
+    background-repeat: no-repeat;
+    animation: native-progress-indeterminate 1.4s ease-in-out infinite alternate;
+  }
+
+  @keyframes native-progress-indeterminate {
+    from {
+      background-position: 0% 0;
+    }
+    to {
+      background-position: 100% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    progress:not([value]) {
+      animation: none;
+      background-size: 100% 100%;
+      opacity: 0.6;
+    }
+  }
+
   select:focus-visible {
     @apply outline-2 outline-offset-2 outline-ring;
   }
