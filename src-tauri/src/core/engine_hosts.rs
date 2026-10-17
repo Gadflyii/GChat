@@ -440,6 +440,28 @@ pub async fn engine_hosts_command<R: tauri::Runtime>(
         }
         let control = ensure_desktop_host(&app).await?;
         return match action.as_str() {
+            "local_model_load_status" => {
+                control
+                    .request(
+                        &format!(
+                            "/host/v1/load-operations/{}",
+                            argument_id(&args, "operation_id")?
+                        ),
+                        None,
+                    )
+                    .await
+            }
+            "local_model_load_cancel" => {
+                control
+                    .request(
+                        &format!(
+                            "/host/v1/load-operations/{}",
+                            argument_id(&args, "operation_id")?
+                        ),
+                        Some(json!({"action":"cancel"})),
+                    )
+                    .await
+            }
             "local_model_downloads" => control.request("/host/v1/downloads", None).await,
             "local_model_download" => {
                 control

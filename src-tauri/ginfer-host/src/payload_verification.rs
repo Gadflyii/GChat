@@ -79,9 +79,31 @@ pub(crate) fn verify<'a>(
     bytes: u64,
     previous: impl IntoIterator<Item = &'a PayloadVerification>,
 ) -> Result<PayloadVerification, String> {
-    verify_with_hasher(path, sha256, bytes, previous, hash_payload)
+    verify_controlled(path, sha256, bytes, previous, || false, |_, _| {})
 }
 
+/// Verify while allowing the owning operation to stop payload reads. Progress
+/// counts bytes actually read, or the complete size for a reusable receipt.
+pub(crate) fn verify_controlled<'a>(
+    path: &Path,
+    sha256: &str,
+    bytes: u64,
+    previous: impl IntoIterator<Item = &'a PayloadVerification>,
+    cancelled: impl Fn() -> bool,
+    progress: impl Fn(u64, u64),
+) -> Result<PayloadVerification, String> {
+    verify_with_hasher_controlled(
+        path,
+        sha256,
+        bytes,
+        previous,
+        |file| hash_payload_controlled(file, bytes, &cancelled, &progress),
+        &cancelled,
+        &progress,
+    )
+}
+
+#[cfg(test)]
 fn verify_with_hasher<'a>(
     path: &Path,
     sha256: &str,
@@ -89,7 +111,21 @@ fn verify_with_hasher<'a>(
     previous: impl IntoIterator<Item = &'a PayloadVerification>,
     hash: impl FnOnce(&mut File) -> Result<String, String>,
 ) -> Result<PayloadVerification, String> {
+    verify_with_hasher_controlled(path, sha256, bytes, previous, hash, &|| false, &|_, _| {})
+}
+
+fn verify_with_hasher_controlled<'a>(
+    path: &Path,
+    sha256: &str,
+    bytes: u64,
+    previous: impl IntoIterator<Item = &'a PayloadVerification>,
+    hash: impl FnOnce(&mut File) -> Result<String, String>,
+    cancelled: &impl Fn() -> bool,
+    progress: &impl Fn(u64, u64),
+) -> Result<PayloadVerification, String> {
+    check_cancelled(cancelled)?;
     let mut file = File::open(path).map_err(|e| e.to_string())?;
+    check_cancelled(cancelled)?;
     let before = fingerprint(&file)?;
     if before.bytes != bytes {
         return Err("payload size mismatch".into());
@@ -97,29 +133,64 @@ fn verify_with_hasher<'a>(
     let cached = before.reusable() && previous.into_iter().any(|record| {
         record.sha256 == sha256 && record.fingerprint == before
     });
-    let actual_sha256 = if cached { None } else { Some(hash(&mut file)?) };
+    let actual_sha256 = if cached {
+        check_cancelled(cancelled)?;
+        progress(bytes, bytes);
+        None } else {
+        check_cancelled(cancelled)?;
+        progress(0, bytes);
+        check_cancelled(cancelled)?;
+        Some(hash(&mut file)?) };
+    check_cancelled(cancelled)?;
     if fingerprint(&file)? != before {
         return Err("payload changed during verification".into());
     }
+    check_cancelled(cancelled)?;
     check_current_path(path, &before)?;
     if actual_sha256.is_some_and(|actual| actual != sha256) {
         return Err("SHA256 mismatch".into());
     }
+    check_cancelled(cancelled)?;
     Ok(PayloadVerification {
         sha256: sha256.to_owned(),
         fingerprint: before,
     })
 }
 
+#[cfg(test)]
 fn hash_payload(file: &mut File) -> Result<String, String> {
+    let bytes = file.metadata().map_err(|e| e.to_string())?.len();
+    hash_payload_controlled(file, bytes, &|| false, &|_, _| {})
+}
+
+fn hash_payload_controlled(
+    file: &mut File,
+    bytes: u64,
+    cancelled: &impl Fn() -> bool,
+    progress: &impl Fn(u64, u64),
+) -> Result<String, String> {
     let mut digest = Sha256::new();
     let mut buffer = vec![0; 1024 * 1024];
+    let mut completed = 0;
     loop {
+        check_cancelled(cancelled)?;
         let read = file.read(&mut buffer).map_err(|e| e.to_string())?;
+        check_cancelled(cancelled)?;
         if read == 0 {
             return Ok(hex::encode(digest.finalize()));
         }
         digest.update(&buffer[..read]);
+        completed += read as u64;
+        progress(completed, bytes);
+        check_cancelled(cancelled)?;
+    }
+}
+
+fn check_cancelled(cancelled: &impl Fn() -> bool) -> Result<(), String> {
+    if cancelled() {
+        Err("payload verification cancelled".into())
+    } else {
+        Ok(())
     }
 }
 
@@ -285,6 +356,7 @@ fn fingerprint(file: &File) -> Result<FileFingerprint, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::{Cell, RefCell};
     use std::fs::{FileTimes, OpenOptions};
     use std::time::{Duration, UNIX_EPOCH};
 
@@ -294,6 +366,127 @@ mod tests {
         std::fs::write(&path, b"verified").unwrap();
         let sha256 = hex::encode(Sha256::digest(b"verified"));
         (directory, path, sha256)
+    }
+
+    #[test]
+    fn cancelled_verification_does_not_open_the_payload() {
+        let directory = tempfile::tempdir().unwrap();
+        let error = verify_controlled(
+            &directory.path().join("absent.ginfer"),
+            &"0".repeat(64),
+            8,
+            None,
+            || true,
+            |_, _| panic!("cancelled verification must not report progress"),
+        )
+        .unwrap_err();
+        assert_eq!(error, "payload verification cancelled");
+    }
+
+    #[test]
+    fn cancellation_after_a_chunk_stops_reads_without_a_receipt() {
+        let (_directory, path, _) = fixture();
+        let payload = vec![42_u8; 3 * 1024 * 1024];
+        std::fs::write(&path, &payload).unwrap();
+        let cancelled = Cell::new(false);
+        let progress = RefCell::new(Vec::new());
+        let error = verify_controlled(
+            &path,
+            &hex::encode(Sha256::digest(&payload)),
+            payload.len() as u64,
+            None,
+            || cancelled.get(),
+            |completed, total| {
+                progress.borrow_mut().push((completed, total));
+                if completed > 0 {
+                    cancelled.set(true);
+                }
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error, "payload verification cancelled");
+        assert_eq!(
+            *progress.borrow(),
+            vec![
+                (0, payload.len() as u64),
+                (1024 * 1024, payload.len() as u64)
+            ]
+        );
+    }
+
+    #[test]
+    fn controlled_progress_reports_real_read_bytes() {
+        let (_directory, path, _) = fixture();
+        let payload = vec![42_u8; 2 * 1024 * 1024 + 8];
+        std::fs::write(&path, &payload).unwrap();
+        let sha256 = hex::encode(Sha256::digest(&payload));
+        let total = payload.len() as u64;
+        let progress = RefCell::new(Vec::new());
+        let record = verify_controlled(
+            &path,
+            &sha256,
+            total,
+            None,
+            || false,
+            |completed, bytes| {
+                progress.borrow_mut().push((completed, bytes));
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            *progress.borrow(),
+            vec![
+                (0, total),
+                (1024 * 1024, total),
+                (2 * 1024 * 1024, total),
+                (total, total),
+            ]
+        );
+        assert_eq!(record.sha256, sha256);
+    }
+
+    #[test]
+    fn cached_receipt_cancellation_does_not_return_success() {
+        let (_directory, path, sha256) = fixture();
+        let record = verify(&path, &sha256, 8, None).unwrap();
+        let cancelled = Cell::new(false);
+        let progress = RefCell::new(Vec::new());
+        let error = verify_with_hasher_controlled(
+            &path,
+            &sha256,
+            8,
+            Some(&record),
+            |_| panic!("cached receipt must not reread the payload"),
+            &|| cancelled.get(),
+            &|completed, total| {
+                progress.borrow_mut().push((completed, total));
+                cancelled.set(true);
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error, "payload verification cancelled");
+        assert_eq!(*progress.borrow(), vec![(8, 8)]);
+    }
+
+    #[test]
+    fn cancellation_after_hash_does_not_publish_a_receipt() {
+        let (_directory, path, sha256) = fixture();
+        let cancelled = Cell::new(false);
+        let error = verify_with_hasher_controlled(
+            &path,
+            &sha256,
+            8,
+            None,
+            |file| {
+                let digest = hash_payload(file)?;
+                cancelled.set(true);
+                Ok(digest)
+            },
+            &|| cancelled.get(),
+            &|_, _| {},
+        )
+        .unwrap_err();
+        assert_eq!(error, "payload verification cancelled");
     }
 
     #[test]

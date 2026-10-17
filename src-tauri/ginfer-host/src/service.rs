@@ -133,6 +133,7 @@ pub struct Host {
     pub artifact_sets: Vec<PathBuf>,
     pub(crate) lifecycle: Mutex<()>,
     pub(crate) first_run_operation: Mutex<()>,
+    load_operations: std::sync::Mutex<BTreeMap<Uuid, Arc<LoadOperation>>>,
     normal_stop_enabled: AtomicBool,
     normal_stop_quit_enabled: AtomicBool,
     normal_stopping: AtomicBool,
@@ -141,6 +142,77 @@ pub struct Host {
     traffic: Arc<std::sync::Mutex<BTreeMap<Uuid, InstanceTraffic>>>,
     activity: Arc<std::sync::Mutex<BTreeMap<Principal, ClientActivity>>>,
     worker_slots: Arc<std::sync::Mutex<BTreeMap<crate::engine_registry::InstanceRef, u32>>>,
+}
+// A desktop Installed Load owns preparation work independently of the HTTP timeout.
+// Cancellation is cooperative for file reads and targets only the profile job it started.
+tokio::task_local! { static LOAD_OPERATION: Arc<LoadOperation>; }
+struct LoadOperation {
+    cancelled: AtomicBool,
+    view: std::sync::Mutex<serde_json::Value>,
+    profile: std::sync::Mutex<Option<(Arc<crate::hardware_profile::HardwareProfiles>, Uuid)>>,
+}
+impl LoadOperation {
+    fn new(id: Uuid) -> Self {
+        Self {
+            cancelled: AtomicBool::new(false),
+            view: std::sync::Mutex::new(
+                serde_json::json!({"operation_id":id,"status":"queued","phase":"preparing"}),
+            ),
+            profile: std::sync::Mutex::new(None),
+        }
+    }
+    fn check(&self) -> Result<(), String> {
+        if self.cancelled.load(Ordering::SeqCst) {
+            Err("Model load cancelled".into())
+        } else {
+            Ok(())
+        }
+    }
+    fn update(&self, phase: &str, detail: &str, bytes: Option<(u64, u64)>) {
+        let mut view = self.view.lock().unwrap();
+        if self.cancelled.load(Ordering::SeqCst) {
+            return;
+        }
+        view["status"] = "running".into();
+        view["phase"] = phase.into();
+        view["detail"] = detail.into();
+        if let Some((completed, total)) = bytes {
+            view["completed_bytes"] = completed.into();
+            view["total_bytes"] = total.into();
+        } else {
+            view.as_object_mut().unwrap().remove("completed_bytes");
+            view.as_object_mut().unwrap().remove("total_bytes");
+        }
+    }
+    fn cancel(&self) {
+        let mut view = self.view.lock().unwrap();
+        if matches!(view["status"].as_str(), Some("ready" | "failed")) {
+            return;
+        }
+        self.cancelled.store(true, Ordering::SeqCst);
+        view["status"] = "cancelled".into();
+        drop(view);
+        if let Some((job, id)) = self.profile.lock().unwrap().as_ref() {
+            job.cancel_job(*id);
+        }
+    }
+}
+struct LoadRequestGuard {
+    operation: Arc<LoadOperation>,
+    finished: bool,
+}
+impl Drop for LoadRequestGuard {
+    fn drop(&mut self) {
+        if !self.finished {
+            self.operation.cancel();
+        }
+    }
+}
+fn current_load() -> Option<Arc<LoadOperation>> {
+    LOAD_OPERATION.try_with(Arc::clone).ok()
+}
+fn check_load() -> Result<(), String> {
+    current_load().map_or(Ok(()), |operation| operation.check())
 }
 /// An authenticated HTTP caller, not a persistent desktop connection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -458,6 +530,7 @@ impl Host {
             artifact_sets,
             lifecycle: Mutex::new(()),
             first_run_operation: Mutex::new(()),
+            load_operations: std::sync::Mutex::new(BTreeMap::new()),
             normal_stop_enabled: AtomicBool::new(false),
             normal_stop_quit_enabled: AtomicBool::new(false),
             normal_stopping: AtomicBool::new(false),
@@ -664,11 +737,30 @@ impl Host {
             previous.push(installed);
         }
         let path = payload.clone();
+        let operation = current_load();
+        check_load()?;
         let verification = tokio::task::spawn_blocking(move || {
-            crate::payload_verification::verify(&path, &sha256, bytes, previous.iter())
+            crate::payload_verification::verify_controlled(&path, &sha256, bytes, previous.iter(),
+                || {
+                    operation
+                        .as_ref()
+                        .is_some_and(|operation| operation.cancelled.load(Ordering::SeqCst))
+                },
+                |completed, total| {
+                    if let Some(operation) = &operation {
+                        operation.update(
+                            "verification",
+                            "Verifying model package",
+                            Some((completed, total)),
+                        );
+                    }
+                },
+            )
         }).await.map_err(|e| e.to_string())?
             .map_err(crate::launch_profiles::profile_verification_error)?;
+        check_load()?;
         let mut data = self.data.lock().await;
+        check_load()?;
         if data.payload_verifications.get(&payload) == Some(&verification) {
             return Ok(());
         }
@@ -1392,11 +1484,31 @@ impl Host {
         if has_children {
             return Err("Stop running models before profiling this selected artifact, then retry Load".into());
         }
+        check_load()?;
+        if let Some(operation) = current_load() {
+            operation.update("profiling", "Measuring hardware for this model", None);
+        }
         if !busy {
             job.start_scoped(crate::hardware_profile::HardwareProfileAction::Ensure, cli.clone(), launch.gpu_uuids.clone(), intent.clone())?;
+            if let (Some(operation), Some(id)) = (current_load(), job.status(cli.clone()).job_id) {
+                *operation.profile.lock().unwrap() = Some((job.clone(), id));
+                if operation.check().is_err() {
+                    job.cancel_job_and_wait(id).await?;
+                    return operation.check();
+                }
+            }
         }
         let job_id = job.status(cli.clone()).job_id;
         loop {
+            if let Some(operation) = current_load() {
+                if operation.check().is_err() {
+                    let owned = operation.profile.lock().unwrap().clone();
+                    if let Some((owned_job, id)) = owned {
+                        owned_job.cancel_job_and_wait(id).await?;
+                    }
+                    return operation.check();
+                }
+            }
             let status = job.status(cli.clone());
             if status.job_id != job_id || status.scope != "artifact" || status.selected_artifact.as_ref() != Some(&intent) {
                 return Err("Selected hardware profiling job changed before model loading".into());
@@ -1415,6 +1527,7 @@ impl Host {
     }
     async fn place(&self, request: LaunchRequest, remaining: u32) -> Result<Uuid, String> {
         let _lifecycle = self.lifecycle.lock().await;
+        check_load()?;
         self.stop_background_profile().await?;
         let launch = self.prepare_launch(&request).await?;
         self.start_placement(request, launch, remaining).await
@@ -1521,7 +1634,16 @@ impl Host {
         mut launch: EngineLaunch,
         remaining: u32,
     ) -> Result<Uuid, String> {
+        check_load()?;
+        if let Some(operation) = current_load() {
+            operation.update(
+                "starting",
+                "Checking startup settings and starting the model",
+                None,
+            );
+        }
         let (_, kv_arena_bytes) = self.quote_prepared(&launch, remaining).await?;
+        check_load()?;
         // A pre-load quote estimates capacity; it does not reserve VRAM or
         // include every allocation made during startup. A solo AUTO launch
         // must let the Engine size its arena after those allocations. Shared
@@ -1536,6 +1658,7 @@ impl Host {
             // Resolving AUTO changes capacity, not the selected Max Perf recipe.
         }
         let id = launch.instance_id;
+        check_load()?;
         self.processes.lock().await.launch(launch)?;
         request.instance_id = Some(id);
         let previous = self.data.lock().await.profiles.insert(id, request);
@@ -1714,12 +1837,78 @@ impl Host {
             self.normal_stop(&mut req).await
         } else {
             match self.running_admission().await {
-                Ok(_admission) => self.handle(&mut req).await,
+                Ok(_admission) => self.handle_load(&mut req).await,
                 Err(error) => Ok(json(StatusCode::SERVICE_UNAVAILABLE, serde_json::json!({"error":error}))),
             }
         };
         Ok(result
             .unwrap_or_else(|e| json(StatusCode::BAD_REQUEST, serde_json::json!({"error": e}))))
+    }
+    fn load_operation(&self, id: Uuid) -> Arc<LoadOperation> {
+        self.load_operations
+            .lock()
+            .unwrap()
+            .entry(id)
+            .or_insert_with(|| Arc::new(LoadOperation::new(id)))
+            .clone()
+    }
+    async fn handle_load(
+        self: &Arc<Self>,
+        req: &mut Request<Body>,
+    ) -> Result<Response<Body>, String> {
+        if req.method() != hyper::Method::POST
+            || !matches!(
+                req.uri().path(),
+                "/host/v1/profile-launch" | "/host/v1/instances"
+            )
+        {
+            return self.handle(req).await;
+        }
+        // Paired remote clients retain their existing protocol and cannot control desktop loads.
+        if !self.local_administrator(req).await {
+            return self.handle(req).await;
+        }
+        let mut body = body_json(req).await?;
+        let id = body
+            .as_object_mut()
+            .and_then(|body| body.remove("load_operation_id"));
+        *req.body_mut() = Body::from(body.to_string());
+        let Some(id) = id.filter(|id| !id.is_null()) else {
+            return self.handle(req).await;
+        };
+        let id: Uuid = serde_json::from_value(id).map_err(|_| "Invalid model load operation id")?;
+        let operation = self.load_operation(id);
+        operation.check()?;
+        operation.update("preparing", "Preparing model load", None);
+        let mut guard = LoadRequestGuard {
+            operation: operation.clone(),
+            finished: false,
+        };
+        let result = LOAD_OPERATION
+            .scope(operation.clone(), self.handle(req))
+            .await;
+        if result
+            .as_ref()
+            .is_ok_and(|response| response.status().is_success())
+        {
+            guard.finished = true;
+        } else {
+            let was_cancelled = operation.cancelled.load(Ordering::SeqCst);
+            operation.cancel();
+            let owned = operation.profile.lock().unwrap().clone();
+            if let Some((job, id)) = owned {
+                job.cancel_job_and_wait(id).await?;
+            }
+            if let Err(error) = &result {
+                let mut view = operation.view.lock().unwrap();
+                if !was_cancelled {
+                    view["status"] = "failed".into();
+                }
+                view["detail"] = error.clone().into();
+            }
+            guard.finished = true;
+        }
+        result
     }
     async fn handle(self: &Arc<Self>, req: &mut Request<Body>) -> Result<Response<Body>, String> {
         let path = req.uri().path().to_string();
@@ -1804,6 +1993,51 @@ impl Host {
             ));
         };
         req.extensions_mut().insert(principal);
+        if let Some(id) = path.strip_prefix("/host/v1/load-operations/") {
+            if principal != Principal::LocalAdministrator {
+                return Ok(json(
+                    StatusCode::FORBIDDEN,
+                    serde_json::json!({"error":"local administrator credential required"}),
+                ));
+            }
+            let id: Uuid = id.parse().map_err(|_| "Invalid model load operation id")?;
+            let operation = self.load_operation(id);
+            if req.method() == hyper::Method::POST {
+                let body = body_json(req).await?;
+                match body["action"].as_str() {
+                    Some("begin") => {
+                        operation.check()?;
+                    }
+                    Some("cancel") => {
+                        operation.cancel();
+                        let owned = operation.profile.lock().unwrap().clone();
+                        if let Some((job, id)) = owned {
+                            job.cancel_job_and_wait(id).await?;
+                        }
+                    }
+                    Some("complete") => {
+                        let mut view = operation.view.lock().unwrap();
+                        // A Ready result wins the final Cancel race; it is already a resident model.
+                        view["status"] = "ready".into();
+                        view["phase"] = "starting".into();
+                    }
+                    Some("fail") => {
+                        let cancelled = operation.cancelled.load(Ordering::SeqCst);
+                        operation.cancel();
+                        let mut view = operation.view.lock().unwrap();
+                        if !cancelled {
+                            view["status"] = "failed".into();
+                        }
+                    }
+                    _ => return Err("Unknown model load operation action".into()),
+                }
+            } else if req.method() != hyper::Method::GET {
+                return Err("Unsupported model load operation method".into());
+            }
+            let view = operation.view.lock().unwrap().clone();
+            return Ok(json(StatusCode::OK, view));
+        }
+
         if req.method() == hyper::Method::GET && path == "/host/v1/clients" {
             return Ok(json(
                 StatusCode::OK,
@@ -2339,6 +2573,7 @@ impl Host {
                 let selection: Selection =
                     serde_json::from_value(body.clone()).map_err(|e| e.to_string())?;
                 let _lifecycle = self.lifecycle.lock().await;
+                check_load()?;
                 if let Some(id) = selection.instance_id {
                     if body.get("expected_session_id").is_some() {
                         let current = self
@@ -2619,6 +2854,238 @@ pub fn json(status: StatusCode, body: serde_json::Value) -> Response<Body> {
 }
 pub(crate) async fn body_json(req: &mut Request<Body>) -> Result<serde_json::Value, String> {
     serde_json::from_slice(&bounded_body(req, 1024 * 1024).await?).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod load_operation_tests {
+    use super::*;
+
+    async fn fixture() -> (tempfile::TempDir, Arc<Host>, String) {
+        let directory = tempfile::tempdir().unwrap();
+        let host = Host::open(
+            directory.path().into(),
+            "Load cancellation fixture".into(),
+            std::env::current_exe().unwrap(),
+            vec![],
+            vec![],
+            vec![],
+        )
+        .await
+        .unwrap();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        (directory, host, token)
+    }
+
+    async fn request(
+        host: &Arc<Host>,
+        token: &str,
+        path: &str,
+        body: Option<serde_json::Value>,
+    ) -> (StatusCode, serde_json::Value) {
+        let request = match body {
+            Some(body) => Request::post(path).body(Body::from(body.to_string())),
+            None => Request::get(path).body(Body::empty()),
+        }
+        .unwrap();
+        let (mut parts, body) = request.into_parts();
+        parts
+            .headers
+            .insert("authorization", format!("Bearer {token}").parse().unwrap());
+        let response = host
+            .clone()
+            .route(Request::from_parts(parts, body))
+            .await
+            .unwrap();
+        let status = response.status();
+        let body = hyper::body::to_bytes(response.into_body()).await.unwrap();
+        (status, serde_json::from_slice(&body).unwrap())
+    }
+
+    #[tokio::test]
+    async fn cancellation_before_begin_fences_late_placement_and_other_loads_survive() {
+        let (_directory, host, token) = fixture().await;
+        let id = Uuid::new_v4();
+        let path = format!("/host/v1/load-operations/{id}");
+        assert_eq!(
+            request(&host, &token, &path, None).await.1["status"],
+            "queued"
+        );
+        assert_eq!(
+            request(
+                &host,
+                &token,
+                &path,
+                Some(serde_json::json!({"action":"cancel"}))
+            )
+            .await
+            .1["status"],
+            "cancelled"
+        );
+        let (status, body) = request(
+            &host,
+            &token,
+            &path,
+            Some(serde_json::json!({"action":"begin"})),
+        )
+        .await;
+        assert!(!status.is_success(), "{body}");
+        for placement in ["/host/v1/profile-launch", "/host/v1/instances"] {
+            let (status, body) = request(
+                &host,
+                &token,
+                placement,
+                Some(serde_json::json!({"load_operation_id":id})),
+            )
+            .await;
+            assert!(!status.is_success(), "{body}");
+            assert!(
+                body["error"].as_str().unwrap().contains("cancelled"),
+                "{body}"
+            );
+        }
+        let other = Uuid::new_v4();
+        let other_path = format!("/host/v1/load-operations/{other}");
+        assert!(request(
+            &host,
+            &token,
+            &other_path,
+            Some(serde_json::json!({"action":"begin"}))
+        )
+        .await
+        .0
+        .is_success());
+        assert!(!host.load_operation(other).cancelled.load(Ordering::SeqCst));
+        assert!(!host.processes.lock().await.has_children());
+    }
+
+    #[tokio::test]
+    async fn progress_is_scoped_and_paired_clients_cannot_cancel_desktop_loads() {
+        let (_directory, host, token) = fixture().await;
+        let id = Uuid::new_v4();
+        let operation = host.load_operation(id);
+        operation.update(
+            "verification",
+            "Verifying model package",
+            Some((1024, 4096)),
+        );
+        let path = format!("/host/v1/load-operations/{id}");
+        let (status, progress) = request(&host, &token, &path, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(progress["operation_id"], serde_json::json!(id));
+        assert_eq!(progress["completed_bytes"], 1024);
+        assert_eq!(progress["total_bytes"], 4096);
+        let client_id = Uuid::new_v4();
+        let client_token = format!("{client_id}.load-client");
+        host.data.lock().await.clients.insert(
+            client_id,
+            ClientGrant {
+                name: "Paired client".into(),
+                token_verifier: hex::encode(verifier(&client_token).finalize().into_bytes()),
+            },
+        );
+        assert_eq!(
+            request(&host, &client_token, &path, None).await.0,
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            request(
+                &host,
+                &client_token,
+                &path,
+                Some(serde_json::json!({"action":"cancel"}))
+            )
+            .await
+            .0,
+            StatusCode::FORBIDDEN
+        );
+        assert!(operation.check().is_ok());
+        operation.update("profiling", "Measuring hardware for this model", None);
+        assert!(request(&host, &token, &path, None)
+            .await
+            .1
+            .get("completed_bytes")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn dropped_load_request_cancels_work_and_ready_wins_late_cancel() {
+        let (_directory, host, token) = fixture().await;
+        let id = Uuid::new_v4();
+        let operation = host.load_operation(id);
+        let lifecycle = host.lifecycle.lock().await;
+        let mut request = Box::pin(
+            host.clone().route(
+                Request::post("/host/v1/instances")
+                    .header("authorization", format!("Bearer {token}"))
+                    .body(Body::from(
+                        serde_json::json!({"load_operation_id":id,
+                "model_id":Uuid::new_v4(),"gpu_uuids":[],"max_context":4096,"concurrency":1})
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            ),
+        );
+        assert!(matches!(
+            futures_util::poll!(request.as_mut()),
+            std::task::Poll::Pending
+        ));
+        drop(request);
+        assert!(operation.check().is_err());
+        drop(lifecycle);
+        let ready_id = Uuid::new_v4();
+        let path = format!("/host/v1/load-operations/{ready_id}");
+        assert_eq!(
+            self::request(
+                &host,
+                &token,
+                &path,
+                Some(serde_json::json!({"action":"complete"}))
+            )
+            .await
+            .1["status"],
+            "ready"
+        );
+        assert_eq!(
+            self::request(
+                &host,
+                &token,
+                &path,
+                Some(serde_json::json!({"action":"cancel"}))
+            )
+            .await
+            .1["status"],
+            "ready"
+        );
+        assert!(host.load_operation(ready_id).check().is_ok());
+    }
+
+    #[tokio::test]
+    async fn cancelled_load_never_persists_a_payload_receipt() {
+        use sha2::Digest;
+        let (directory, host, _token) = fixture().await;
+        let payload = directory.path().join("cancelled.ginfer");
+        std::fs::write(&payload, b"cancelled").unwrap();
+        let operation = host.load_operation(Uuid::new_v4());
+        operation.cancel();
+        let error = LOAD_OPERATION
+            .scope(
+                operation,
+                host.verify_qualified_payload(
+                    payload.clone(),
+                    hex::encode(Sha256::digest(b"cancelled")),
+                    9,
+                ),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.contains("cancelled"), "{error}");
+        assert!(!host
+            .data
+            .lock()
+            .await
+            .payload_verifications
+            .contains_key(&payload));
+    }
 }
 
 #[cfg(test)]
@@ -3248,7 +3715,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
 }
 
 #[cfg(all(test, unix))]
-fn write_selected_profile_fixture(path: &Path) {
+pub(crate) fn write_selected_profile_fixture(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
     std::fs::write(path, r#"#!/usr/bin/env python3
 import hashlib, json, pathlib, sys, time
@@ -3392,7 +3859,7 @@ time.sleep(60)
         let (dir, host, request) = fixture().await;
         std::fs::write(dir.path().join("fail-profile"), b"").unwrap();
         let error = host.launch(request).await.unwrap_err();
-        assert!(error.contains("fixture selected calibration failed"), "{error}");
+        assert!(error.contains("Selected hardware profiling failed") && error.contains("23"), "{error}");
         let job = host.processes.lock().await.hardware_profile.clone().unwrap();
         assert!(!job.busy());
         assert_eq!(job.status(None).status, "failed");
@@ -5252,6 +5719,14 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             concurrency: 1,
             options: LaunchOptions::default(),
         };
+        // Calibrate both synthetic GPU groups while idle, before either owns a child.
+        {
+            let mut second = profile.clone();
+            second.gpu_uuids = vec!["GPU-second".into()];
+            let _lifecycle = host.lifecycle.lock().await;
+            let launch = host.prepare_launch(&second).await.unwrap();
+            host.ensure_selected_profile(&launch).await.unwrap();
+        }
         let id = host.launch(profile.clone()).await.unwrap();
         let before = host.snapshot().await;
         let token = format!("{}.test", Uuid::new_v4());

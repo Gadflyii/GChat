@@ -1,11 +1,12 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelManagement } from '@/containers/ModelManagement'
 import type { ModelRelease } from '@/lib/model-release'
+import type { LocalModelLoadProgress } from '@/services/engines'
 const mocks = vi.hoisted(() => ({
-  command: vi.fn(async () => []), refresh: vi.fn(async () => {}),
-  switchModel: vi.fn(async () => {}),
+  command: vi.fn<(action: string, args?: Record<string, unknown>) => Promise<unknown>>(async () => []), refresh: vi.fn(async () => {}),
+  switchModel: vi.fn<(params: { options?: { loadOperationId?: string }; signal?: AbortSignal }) => Promise<void>>(async () => {}),
   selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
   providers: [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally' }] }],
   catalog: [] as unknown[], errors: {} as Record<string, string>,
@@ -38,8 +39,10 @@ describe('host-scoped Models', () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null
     mocks.command.mockResolvedValue([])
+    mocks.switchModel.mockResolvedValue(undefined)
     mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [release] }]
   })
+  afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
   it('uses local inventory and never offers the remote GPU package locally', async () => {
     render(<ModelManagement />)
     expect(screen.getByText('Installed locally')).toBeInTheDocument()
@@ -76,7 +79,8 @@ describe('host-scoped Models', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith({
       modelId: 'local-model', providerName: 'ginfer', serviceHub: expect.anything(),
-      options: { useProfileDefaults: true },
+      options: { useProfileDefaults: true, loadOperationId: expect.any(String) },
+      signal: expect.any(AbortSignal),
     }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -94,7 +98,8 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(loadButton).toBeEnabled())
     expect(mocks.switchModel).toHaveBeenCalledWith(expect.objectContaining({
       modelId: 'local-model', providerName: 'ginfer', gpuUuids: ['local-gpu'],
-      options: { useProfileDefaults: true },
+      options: { useProfileDefaults: true, loadOperationId: expect.any(String) },
+      signal: expect.any(AbortSignal),
     }))
     vi.restoreAllMocks()
   })
@@ -113,4 +118,109 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
     vi.restoreAllMocks()
   })
+
+  it('shows scoped verification, profiling and elapsed progress while a long Load stays pending', async () => {
+    vi.useFakeTimers()
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(1000)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let finish!: () => void
+    mocks.switchModel.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
+    let phase: LocalModelLoadProgress['phase'] = 'verification'
+    mocks.command.mockImplementation(async (action, args) => action === 'local_model_load_status'
+      ? { operation_id: args!.operation_id, status: 'running', phase,
+        detail: phase === 'verification' ? 'Reading verified package bytes' : 'Selected-model CPU experts',
+        ...(phase === 'verification' ? { completed_bytes: 1024, total_bytes: 4096 } : {}) } : [])
+    render(<ModelManagement />)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load model' })) })
+    expect(screen.getByRole('status')).toHaveTextContent('Verifying installed model')
+    expect(screen.getByRole('progressbar', { name: 'Installed model verification' })).toHaveAttribute('value', '1024')
+    expect(screen.getByRole('checkbox', { name: 'Automatic (visible GPUs only)' })).toBeDisabled()
+    phase = 'profiling'
+    clock.mockReturnValue(602000)
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(screen.getByRole('status')).toHaveTextContent('Profiling installed model')
+    expect(screen.getByRole('status')).toHaveTextContent('Selected-model CPU experts')
+    expect(screen.getByRole('status')).toHaveTextContent('Load request elapsed: 601s')
+    expect(screen.getByRole('status')).not.toHaveTextContent(/remaining|expected/i)
+    expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
+    await act(async () => { finish() })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(mocks.switchModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('ignores another operation status and keeps the load alive through a polling error', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let finish!: () => void
+    let polls = 0
+    mocks.switchModel.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
+    mocks.command.mockImplementation(async (action, args) => {
+      if (action !== 'local_model_load_status') return []
+      if (++polls === 1) throw new Error('Private server response')
+      return { operation_id: polls === 2 ? 'another-operation' : args!.operation_id,
+        status: 'running', phase: 'starting', detail: 'Waiting for model readiness' }
+    })
+    render(<ModelManagement />)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load model' })) })
+    expect(screen.getByRole('status')).toHaveTextContent('Startup status is temporarily unavailable')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).not.toHaveTextContent('Private server response')
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(screen.getByRole('status')).not.toHaveTextContent('Waiting for model readiness')
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+    expect(screen.getByRole('status')).toHaveTextContent('Starting installed model')
+    expect(screen.getByRole('status')).not.toHaveTextContent('temporarily unavailable')
+    await act(async () => { finish() })
+    const finishedPolls = polls
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000) })
+    expect(polls).toBe(finishedPolls)
+    expect(mocks.switchModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('cancels only its own load and waits for native cleanup before restoring Load', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let reject!: (reason: unknown) => void
+    mocks.switchModel.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail }))
+    render(<ModelManagement />)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load model' })) })
+    const request = mocks.switchModel.mock.calls[0][0]
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel load' }))
+    expect(request.signal!.aborted).toBe(true)
+    expect(mocks.command).toHaveBeenCalledWith('local_model_load_cancel', { operation_id: request.options!.loadOperationId })
+    expect(screen.getByRole('status')).toHaveTextContent('Cancelling installed model load')
+    expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
+    await act(async () => { reject(new DOMException('Cancelled', 'AbortError')) })
+    expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_load_cancel')).toHaveLength(1)
+  })
+
+  it('cancels a pending operation when the Models route unmounts', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let reject!: (reason: unknown) => void
+    mocks.switchModel.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail }))
+    const view = render(<ModelManagement />)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load model' })) })
+    const request = mocks.switchModel.mock.calls[0][0]
+    view.unmount()
+    expect(request.signal!.aborted).toBe(true)
+    expect(mocks.command).toHaveBeenCalledWith('local_model_load_cancel', { operation_id: request.options!.loadOperationId })
+    await act(async () => { reject(new DOMException('Cancelled', 'AbortError')) })
+  })
+
+  it('does not cancel a Ready operation when the route unmounts', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    let finish!: () => void
+    mocks.switchModel.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
+    mocks.command.mockImplementation(async (action, args) => action === 'local_model_load_status'
+      ? { operation_id: args!.operation_id, status: 'ready', phase: 'starting' } : [])
+    const view = render(<ModelManagement />)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load model' })) })
+    expect(screen.getByRole('button', { name: 'Cancel load' })).toBeDisabled()
+    view.unmount()
+    expect(mocks.command.mock.calls.some(([action]) => action === 'local_model_load_cancel')).toBe(false)
+    expect(mocks.switchModel.mock.calls[0][0].signal!.aborted).toBe(false)
+    await act(async () => { finish() })
+  })
+
 })

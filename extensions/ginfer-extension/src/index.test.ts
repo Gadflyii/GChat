@@ -13,11 +13,16 @@ const values = (key: string) =>
 
 describe('bundled GInfer profile', () => {
   it('preserves explicit profile intent and GPU choice across the native boundary', () => {
-    expect(normalizeGinferConfig({ use_profile_defaults: true, gpu_uuids: ['GPU-selected'] }))
-      .toMatchObject({ use_profile_defaults: true, gpu_uuids: ['GPU-selected'] })
+    const operationId = 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c'
+    expect(normalizeGinferConfig({ use_profile_defaults: true, gpu_uuids: ['GPU-selected'], load_operation_id: operationId }))
+      .toMatchObject({ use_profile_defaults: true, gpu_uuids: ['GPU-selected'], load_operation_id: operationId })
     for (const value of [undefined, false, 'true']) {
       expect(normalizeGinferConfig({ use_profile_defaults: value }))
         .not.toHaveProperty('use_profile_defaults')
+    }
+    expect(normalizeGinferConfig({})).not.toHaveProperty('load_operation_id')
+    for (const value of ['', ' ', true, 123]) {
+      expect(() => normalizeGinferConfig({ load_operation_id: value })).toThrow('nonempty identifier')
     }
   })
 

@@ -460,13 +460,13 @@ describe('DefaultModelsService', () => {
         'model1',
         true,
         ['GPU-selected'],
-        { useProfileDefaults: true }
+        { useProfileDefaults: true, loadOperationId: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c' }
       )
 
       expect(result).toEqual({ id: 'session1' })
       expect(mockEngine.load).toHaveBeenCalledWith(
         'model1',
-        { use_profile_defaults: true, gpu_uuids: ['GPU-selected'] },
+        { use_profile_defaults: true, gpu_uuids: ['GPU-selected'], load_operation_id: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c' },
         false,
         true
       )

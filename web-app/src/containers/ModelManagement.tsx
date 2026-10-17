@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconChevronDown } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
@@ -18,12 +18,35 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useModelCatalogStore } from '@/stores/model-catalog-store'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
-import { engineCommand } from '@/services/engines'
+import { engineCommand, type LocalModelLoadProgress } from '@/services/engines'
 import { HostCard } from '@/containers/EngineHostModels'
 import { formatModelBytes, releaseReadiness, type ModelDownload, type ModelGpu, type ModelRelease } from '@/lib/model-release'
 import { switchToModel } from '@/utils/switchModel'
 import { useAppState } from '@/hooks/useAppState'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
+
+type PendingLocalLoad = {
+  operationId: string
+  controller: AbortController
+  startedAt: number
+  ready: boolean
+  settled: boolean
+  cancelRequested: boolean
+}
+
+const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
+  preparing: 'Preparing installed model',
+  verification: 'Verifying installed model',
+  profiling: 'Profiling installed model',
+  starting: 'Starting installed model',
+}
+
+function cancelLocalLoad(load: PendingLocalLoad): Promise<unknown> {
+  if (load.ready || load.settled || load.cancelRequested) return Promise.resolve()
+  load.cancelRequested = true
+  load.controller.abort()
+  return engineCommand('local_model_load_cancel', { operation_id: load.operationId })
+}
 
 export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }) {
   const service = useServiceHub()
@@ -49,6 +72,14 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const refreshLocal = useLocalModelDownloads(s => s.refresh)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const mounted = useRef(true)
+  const loadRef = useRef<PendingLocalLoad | null>(null)
+  const [pendingLoad, setPendingLoad] = useState<PendingLocalLoad | null>(null)
+  const [loadProgress, setLoadProgress] = useState<LocalModelLoadProgress | null>(null)
+  const [loadStatusUnavailable, setLoadStatusUnavailable] = useState(false)
+  const [loadElapsedSeconds, setLoadElapsedSeconds] = useState(0)
+  const [cancellingLoad, setCancellingLoad] = useState(false)
+  const [cancelError, setCancelError] = useState(false)
   const local = destination === 'local'
   const host = hosts.find(h => h.host_id === destination)
   const snapshot = snapshots[destination]
@@ -69,15 +100,57 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
     }))), [catalog, gpus])
 
   useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      if (loadRef.current) void cancelLocalLoad(loadRef.current).catch(() => {})
+    }
+  }, [])
+  useEffect(() => {
+    if (!pendingLoad) return
+    let stopped = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      try {
+        const progress = await engineCommand<LocalModelLoadProgress | null>('local_model_load_status', {
+          operation_id: pendingLoad.operationId,
+        })
+        if (stopped) return
+        // A status from another load must never change this route's ownership.
+        if (progress?.operation_id === pendingLoad.operationId) {
+          pendingLoad.ready ||= progress.status === 'ready'
+          setLoadProgress(progress)
+          setLoadStatusUnavailable(false)
+        }
+      } catch {
+        if (!stopped) setLoadStatusUnavailable(true)
+      }
+      if (!stopped) timer = setTimeout(() => { void poll() }, 1000)
+    }
+    void poll()
+    const elapsedTimer = setInterval(() => {
+      setLoadElapsedSeconds(Math.floor((performance.now() - pendingLoad.startedAt) / 1000))
+    }, 1000)
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+      clearInterval(elapsedTimer)
+    }
+  }, [pendingLoad])
+
+  useEffect(() => {
     if (local) void refreshLocal().catch(e => setError(String(e)))
   }, [local, refreshLocal])
   useEffect(() => { void refreshHosts().catch(e => setError(String(e))) }, [refreshHosts])
 
   const act = async (operation: () => Promise<unknown>) => {
     setBusy(true)
-    try { await operation(); await (local ? refreshLocal() : refreshHosts()); setError(null) }
-    catch (e) { setError(String(e)) }
-    finally { setBusy(false) }
+    try { await operation(); if (mounted.current) { await (local ? refreshLocal() : refreshHosts()); setError(null) } }
+    catch (e) {
+      const cancelled = typeof e === 'object' && e !== null && 'name' in e && e.name === 'AbortError'
+      if (mounted.current && !cancelled) setError(String(e))
+    }
+    finally { if (mounted.current) setBusy(false) }
   }
   const rescan = async () => {
     if (!local) return engineCommand('scan', { host_id: destination })
@@ -96,12 +169,40 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const loadLocal = (modelId: string) => act(async () => {
     if (invalidGpuSelection) throw new Error('Choose available GPUs before loading this model.')
     const active = await service.models().getActiveModels('ginfer')
+    if (!mounted.current) return
     if (active.some(id => id !== modelId) && !window.confirm('Switch the local model? This may interrupt chats and agent runs using the current model.')) return
+    const load: PendingLocalLoad = { operationId: crypto.randomUUID(), controller: new AbortController(),
+      startedAt: performance.now(), ready: false, settled: false, cancelRequested: false }
+    loadRef.current = load
+    setPendingLoad(load)
+    setLoadProgress(null)
+    setLoadElapsedSeconds(0)
+    setLoadStatusUnavailable(false)
+    setCancellingLoad(false)
+    setCancelError(false)
     useModelProvider.getState().selectModelProvider('ginfer', modelId)
-    await switchToModel({ modelId, providerName: 'ginfer', serviceHub: service,
-      options: { useProfileDefaults: true },
-      ...(selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
+    try {
+      await switchToModel({ modelId, providerName: 'ginfer', serviceHub: service,
+        options: { useProfileDefaults: true, loadOperationId: load.operationId },
+        signal: load.controller.signal,
+        ...(selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
+      load.ready = true
+    } finally {
+      load.settled = true
+      if (loadRef.current === load) loadRef.current = null
+      if (mounted.current) setPendingLoad(null)
+    }
   })
+  const cancelPendingLoad = async () => {
+    if (!pendingLoad || pendingLoad.ready || pendingLoad.settled) return
+    setCancellingLoad(true)
+    setCancelError(false)
+    try { await cancelLocalLoad(pendingLoad) }
+    catch {
+      pendingLoad.cancelRequested = false
+      if (mounted.current) { setCancellingLoad(false); setCancelError(true) }
+    }
+  }
   const stopLocal = (modelId: string) => act(async () => {
     const result = await service.models().stopModel(modelId, 'ginfer')
     if (!result?.success) throw new Error(result?.error ?? 'The engine did not confirm that this model stopped.')
@@ -136,10 +237,22 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
         {(['Installed', 'Recommended', 'Downloads'] as const).map(t => <Button key={t} role="tab" aria-selected={tab === t} variant={tab === t ? 'default' : 'ghost'} onClick={() => setTab(t)}>{t}</Button>)}
       </div><Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : 'Refresh installed models'}</Button></div>
       {(error || (offline && hostErrors[destination])) && <p role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error ?? hostErrors[destination]} · Saved inventory may be out of date.</p>}
+      {pendingLoad && <div role="status" className="space-y-2 rounded border p-3 text-sm">
+        <p className="font-medium">{cancellingLoad ? 'Cancelling installed model load' : loadProgress?.status === 'ready' ? 'Model ready; finishing startup' : loadPhaseLabels[loadProgress?.phase ?? 'preparing']}</p>
+        {loadProgress?.detail && <p>{loadProgress.detail}</p>}
+        <p>Load request elapsed: {loadElapsedSeconds}s</p>
+        {typeof loadProgress?.completed_bytes === 'number' && typeof loadProgress.total_bytes === 'number' && loadProgress.total_bytes > 0 && <>
+          <progress aria-label="Installed model verification" className="h-2 w-full accent-primary" max={loadProgress.total_bytes} value={loadProgress.completed_bytes} />
+          <p>{formatModelBytes(loadProgress.completed_bytes)} / {formatModelBytes(loadProgress.total_bytes)}</p>
+        </>}
+        {loadStatusUnavailable && <p>Startup status is temporarily unavailable. The load request is still running.</p>}
+        {cancelError && <p>Cancellation could not be confirmed. Try Cancel load again.</p>}
+        <Button variant="outline" disabled={cancellingLoad || pendingLoad.ready} onClick={() => void cancelPendingLoad()}>Cancel load</Button>
+      </div>}
       {local && localDownloadError && <p role="alert" className="text-sm text-destructive">{localDownloadError}</p>}
       {(tab === 'Recommended' || (tab === 'Installed' && local)) && <Input aria-label="Search models" placeholder="Find a model…" value={query} onChange={e => setQuery(e.target.value)} />}
       {tab === 'Installed' && <>
-        {local && <fieldset className="space-y-2 rounded border p-3"><legend>GPUs for Load model</legend>
+        {local && <fieldset disabled={busy} className="space-y-2 rounded border p-3"><legend>GPUs for Load model</legend>
           <label className="flex items-center gap-2"><input type="checkbox" checked={selectedGpuUuids === null} onChange={e => setSelectedGpuUuids(e.target.checked ? null : [])} />Automatic (visible GPUs only)</label>
           {gpus.map(g => <label key={g.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedGpuUuids?.includes(g.uuid) ?? false} onChange={e => setSelectedGpuUuids(e.target.checked ? [...(selectedGpuUuids ?? []), g.uuid] : (selectedGpuUuids ?? []).filter(id => id !== g.uuid))} />{g.name} · {g.uuid}</label>)}
           <p className="text-sm text-muted-foreground">Select the GPUs required by the model's TP size. CUDA_VISIBLE_DEVICES is also enforced when loading.</p>

@@ -91,6 +91,8 @@ export interface UnloadResult {
 export type GinferConfig = {
   /** Use the Host catalog profile's complete settings; GPU selection still applies. */
   use_profile_defaults?: boolean
+  /** Caller-owned Installed Load progress/cancellation scope. */
+  load_operation_id?: string
   vision: boolean
   /** Speculative backend: `auto`, `none`, or `dflash`. */
   spec: string

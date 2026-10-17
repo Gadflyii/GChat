@@ -245,6 +245,44 @@ async fn load_on_host(
     config: GinferConfig,
     timeout: u64,
 ) -> Result<SessionInfo, String> {
+    let operation_id = config.load_operation_id;
+    if let Some(id) = operation_id {
+        control
+            .request(
+                &format!("/host/v1/load-operations/{id}"),
+                Some(serde_json::json!({"action":"begin"})),
+            )
+            .await?;
+    }
+    let result = load_on_host_inner(
+        sessions,
+        control.clone(),
+        model_id,
+        model_path,
+        config,
+        timeout,
+    )
+    .await;
+    if let Some(id) = operation_id {
+        let action = if result.is_ok() { "complete" } else { "fail" };
+        let _ = control
+            .request(
+                &format!("/host/v1/load-operations/{id}"),
+                Some(serde_json::json!({"action":action})),
+            )
+            .await;
+    }
+    result
+}
+
+async fn load_on_host_inner(
+    sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
+    control: Arc<ginfer_host::launcher::LocalControl>,
+    model_id: String,
+    model_path: String,
+    config: GinferConfig,
+    timeout: u64,
+) -> Result<SessionInfo, String> {
     let model = control
         .register_model(std::path::Path::new(&model_path))
         .await?;
@@ -294,18 +332,23 @@ async fn load_on_host(
         return Err("Multiple matching resident instances exist; choose the intended host instance explicitly".into());
     }
     if let Some((id, launch)) = residents.into_iter().next() {
-        return attach(sessions, control, launch, id, model_id, model_path, timeout).await;
+        return attach(sessions, control, launch, id, model_id, model_path, timeout,
+            config.load_operation_id,
+        ).await;
     }
     if let Some((profile, gpu_uuids)) = selected {
         let mut launch = profile_request(model.id, &profile, gpu_uuids, &config, &requested);
         let result = control.request("/host/v1/profile-launch", Some(serde_json::json!({
             "profile_id": profile.id, "model_id": model.id, "gpu_uuids": launch.gpu_uuids,
             "structured_outputs": launch.options.structured_outputs,
-        }))).await?;
+                    "load_operation_id":config.load_operation_id,
+                }))).await?;
         let instance_id: Uuid = serde_json::from_value(result["instance_id"].clone())
             .map_err(|e| e.to_string())?;
         launch.instance_id = Some(instance_id);
-        return attach(sessions, control, launch, instance_id, model_id, model_path, timeout).await;
+        return attach(sessions, control, launch, instance_id, model_id, model_path, timeout,
+            config.load_operation_id,
+        ).await;
     }
     if config.use_profile_defaults || config.max_context == 0 || config.max_concurrency == 0 {
         return Err("No qualified automatic profile is available. Select a qualified profile in Engines, or specify both context and concurrency as custom settings.".into());
@@ -358,11 +401,11 @@ async fn load_on_host(
         concurrency: config.max_concurrency,
         options: requested,
     };
+    let mut placement = serde_json::to_value(&launch).map_err(|e| e.to_string())?;
+    placement["load_operation_id"] =
+        serde_json::to_value(config.load_operation_id).map_err(|e| e.to_string())?;
     let result = control
-        .request(
-            "/host/v1/instances",
-            Some(serde_json::to_value(&launch).map_err(|e| e.to_string())?),
-        )
+        .request("/host/v1/instances", Some(placement))
         .await?;
     let instance_id: Uuid =
         serde_json::from_value(result["instance_id"].clone()).map_err(|e| e.to_string())?;
@@ -374,6 +417,7 @@ async fn load_on_host(
         model_id,
         model_path,
         timeout,
+        config.load_operation_id,
     )
     .await
 }
@@ -386,10 +430,19 @@ async fn attach(
     model_id: String,
     model_path: String,
     timeout: u64,
+    operation_id: Option<Uuid>,
 ) -> Result<SessionInfo, String> {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(timeout);
     let mut expected_session = None;
     let connection = loop {
+        if let Some(id) = operation_id {
+            let status = control
+                .request(&format!("/host/v1/load-operations/{id}"), None)
+                .await?;
+            if status["status"] == "cancelled" {
+                return Err("Model load cancelled".into());
+            }
+        }
         let snapshot = control.snapshot().await?;
         let instance = snapshot["instances"]
             .as_array()
@@ -686,8 +739,10 @@ mod tests {
     #[test]
     fn installed_load_never_reuses_a_resident_on_the_wrong_or_hidden_gpu() {
         let requested = LaunchOptions::default();
-        let mut config = GinferConfig::default();
-        config.gpu_uuids = Some(vec!["GPU-one".into()]);
+        let mut config = GinferConfig {
+            gpu_uuids: Some(vec!["GPU-one".into()]),
+            ..Default::default()
+        };
         let mut launch = LaunchRequest {
             instance_id: None, qualified_profile_id: None, benchmark_profile: None,
             model_id: Uuid::nil(), gpu_uuids: vec!["GPU-zero".into()],

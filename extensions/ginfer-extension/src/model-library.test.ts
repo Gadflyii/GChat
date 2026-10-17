@@ -194,9 +194,10 @@ describe('GInfer library model context and names', () => {
     Object.assign(extension, { config: {
       vision: true, max_context: 262144, max_concurrency: 0, kv_arena_bytes: 'custom-arena',
     } })
-    await extension.load('custom', { use_profile_defaults: true, gpu_uuids: ['selected'] })
+    const operationId = 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c'
+    await extension.load('custom', { use_profile_defaults: true, gpu_uuids: ['selected'], load_operation_id: operationId })
     expect(loadModel).toHaveBeenLastCalledWith(expect.objectContaining({
-      config: expect.objectContaining({ use_profile_defaults: true, gpu_uuids: ['selected'] }),
+      config: expect.objectContaining({ use_profile_defaults: true, gpu_uuids: ['selected'], load_operation_id: operationId }),
     }))
     await extension.load('custom')
     const custom = loadModel.mock.calls.at(-1)![0].config
@@ -204,6 +205,17 @@ describe('GInfer library model context and names', () => {
       vision: true, max_context: 262144, max_concurrency: 0, kv_arena_bytes: 'custom-arena',
     })
     expect(custom).not.toHaveProperty('use_profile_defaults')
+    expect(custom).not.toHaveProperty('load_operation_id')
+  })
+
+  it('does not join another resident session for a scoped load operation', async () => {
+    config.value = { model_path: '/linux/models/custom/package.ginfer' }
+    vi.mocked(findSessionByModel).mockResolvedValue({ pid: 2, port: 8081 } as any)
+    const operationId = 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c'
+    await new GinferExtension().load('custom', { load_operation_id: operationId })
+    expect(loadModel).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ load_operation_id: operationId }),
+    }))
   })
 
   it('checks automatic profile settings natively even when a model is already loaded', async () => {
