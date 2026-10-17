@@ -58,7 +58,12 @@ local-resource handoff select the installed producer and execution window.
 C7 has no running fixture, Host, GUI, model or resource booking.
 
 Use one genuine Linux/WSL Host on an owned root and nondefault loopback port,
-first confirming that Windows can actually reach that listener. The installed
+first confirming that Windows can actually reach that listener and cannot bind
+the same Windows loopback port. WSL forwarding can provide reachability without
+occupying a Windows listener; that alone is not collision evidence. If it does
+not block the bind, use a separate genuine Windows Host for the native collision
+and retain the Linux Host for the actual cross-OS identity/coexistence check.
+The installed
 Windows desktop must keep its own Windows root, UUID and certificate, select
 and persist a free management port, show the collision notice, and reconnect
 with those same values after normal close/idle-Host stop/reopen. The Linux Host
