@@ -226,7 +226,7 @@ export function SkillsPage() {
             {error}
           </div>
         )}
-        {!loading && skills.length === 0 && (
+        {!loading && !error && skills.length === 0 && (
           <p className="p-3 text-sm text-muted-foreground">
             {t('common:skillsEmpty')}
           </p>
