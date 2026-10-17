@@ -175,6 +175,13 @@ pub struct GetAssignment {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct RenameLanBot {
+    pub workspace_id: WorkspaceId,
+    pub name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct PrepareLanTools {
     workspace_id: WorkspaceId,
     consent: bool,
@@ -1121,6 +1128,37 @@ async fn route(
                 None => invalid_request(),
             }
         }
+        (&Method::POST, "/v1/workspaces/ssh/rename") => {
+            match parse_body::<RenameLanBot>(request).await {
+                Some(input) => match runtime
+                    .rename_lan_workspace(input.workspace_id, input.name)
+                    .await
+                {
+                    Ok(config) => json_response(StatusCode::OK, &config),
+                    Err(error) => lan_bot_error(error),
+                },
+                None => invalid_request(),
+            }
+        }
+        (&Method::POST, "/v1/workspaces/ssh/remove") => {
+            match parse_body::<GetAssignment>(request).await {
+                Some(input) => {
+                    let result = match tasks {
+                        Some(tasks) => {
+                            tasks
+                                .remove_lan_workspace(runtime.clone(), input.workspace_id)
+                                .await
+                        }
+                        None => runtime.remove_lan_workspace(input.workspace_id).await,
+                    };
+                    match result {
+                        Ok(()) => json_response(StatusCode::OK, &serde_json::json!({"removed":true})),
+                        Err(error) => lan_bot_error(error),
+                    }
+                }
+                None => invalid_request(),
+            }
+        }
         (&Method::POST, "/v1/workspaces/ssh") => {
             match parse_body::<CreateSshWorkspace>(request).await {
                 Some(input) => match runtime.create_ssh_workspace(input).await {
@@ -1379,6 +1417,22 @@ fn workspace_error(error: WorkspaceError) -> Response<Body> {
         _ => (StatusCode::CONFLICT, "guest_state_conflict"),
     };
     error_response(status, code, &error.to_string())
+}
+
+fn lan_bot_error(error: WorkspaceError) -> Response<Body> {
+    match error {
+        WorkspaceError::State(ServiceError::WorkspaceInUse) => error_response(
+            StatusCode::CONFLICT,
+            "workspace_in_use",
+            "This bot is in use or is not a LAN bot. Finish its tasks, disable its schedules, unlink its accounts and disconnect it, then try again.",
+        ),
+        WorkspaceError::State(ServiceError::Contract(_)) => error_response(
+            StatusCode::BAD_REQUEST,
+            "invalid_workspace",
+            "That bot name is not valid.",
+        ),
+        other => workspace_error(other),
+    }
 }
 
 fn ssh_workspace_error(error: WorkspaceError) -> Response<Body> {
@@ -2099,6 +2153,78 @@ mod tests {
             .contains("different workspace or SSH key"));
         assert_eq!(*vault.0.lock().unwrap(), entries);
         assert_eq!(service.snapshot().await.workspaces.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn lan_bot_can_be_renamed_and_removed_only_when_unused() {
+        let directory = tempfile::tempdir().unwrap();
+        let service = Arc::new(
+            Service::open(directory.path().join("state.json"))
+                .await
+                .unwrap(),
+        );
+        let vault = Arc::new(MemoryVault::default());
+        let api = Api::bind(service.clone(), vault.clone(), 0).await.unwrap();
+        let client = api.client();
+        let input = ssh_workspace_request();
+        let id = input["id"].clone();
+        let before = vault.0.lock().unwrap().len();
+        client.call("/v1/workspaces/ssh", input).await.unwrap();
+        let saved = service.snapshot().await.workspaces[0].clone();
+        assert_eq!(vault.0.lock().unwrap().len(), before + 1);
+
+        assert!(client
+            .call("/v1/workspaces/ssh/rename", serde_json::json!({"workspace_id": id, "name": ""}))
+            .await
+            .is_err());
+        let renamed = client
+            .call(
+                "/v1/workspaces/ssh/rename",
+                serde_json::json!({"workspace_id": id, "name": "Office bot"}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(renamed["name"], "Office bot");
+        let after = service.snapshot().await.workspaces[0].clone();
+        assert_eq!(after.name, "Office bot");
+        assert_eq!(
+            WorkspaceConfig { name: saved.name.clone(), ..after },
+            saved
+        );
+
+        service
+            .save_connector_accounts(crate::connectors::BotConnectorAccounts {
+                workspace_id: saved.id,
+                account_ids: vec!["account".into()],
+            })
+            .await
+            .unwrap();
+        assert!(client
+            .call("/v1/workspaces/ssh/remove", serde_json::json!({"workspace_id": id}))
+            .await
+            .unwrap_err()
+            .contains("in use"));
+        assert_eq!(service.snapshot().await.workspaces.len(), 1);
+        assert_eq!(vault.0.lock().unwrap().len(), before + 1);
+
+        service
+            .save_connector_accounts(crate::connectors::BotConnectorAccounts {
+                workspace_id: saved.id,
+                account_ids: vec![],
+            })
+            .await
+            .unwrap();
+        client
+            .call("/v1/workspaces/ssh/remove", serde_json::json!({"workspace_id": id}))
+            .await
+            .unwrap();
+        let state = service.snapshot().await;
+        assert!(state.workspaces.is_empty() && state.connector_accounts.is_empty());
+        assert_eq!(vault.0.lock().unwrap().len(), before);
+        assert!(client
+            .call("/v1/workspaces/ssh/remove", serde_json::json!({"workspace_id": id}))
+            .await
+            .is_err());
     }
 
     #[tokio::test]

@@ -75,7 +75,7 @@ impl std::fmt::Display for WorkspaceError {
             Self::Vault(error) => error.fmt(f),
             Self::CredentialCleanup(error) => write!(
                 f,
-                "Model assignment was saved, but the old credential could not be removed: {error}"
+                "The change was saved, but the old credential could not be removed from secure storage: {error}"
             ),
             Self::Connector(error) | Self::Inference(error) | Self::GuestSetup(error) => {
                 f.write_str(error)
@@ -666,6 +666,80 @@ impl WorkspaceRuntime {
         })
         .await
         .map_err(|_| "Cloud removal interrupted. Check progress before continuing.".to_string())?
+    }
+
+    /// Renames a saved LAN bot. Local VM, cloud and Cloud PC bots keep their setup-owned names.
+    pub async fn rename_lan_workspace(
+        &self,
+        id: WorkspaceId,
+        name: String,
+    ) -> Result<WorkspaceConfig, WorkspaceError> {
+        self.accepting()?;
+        let lock = self.lifecycle_lock(id).await;
+        let _guard = lock.lock().await;
+        let owner = self.lan_owner(id).await?;
+        self.service
+            .rename_workspace(id, &owner, name)
+            .await
+            .map_err(WorkspaceError::State)
+    }
+
+    /// Removes a saved LAN bot and its saved connection key. The computer itself is untouched.
+    pub async fn remove_lan_workspace(self: &Arc<Self>, id: WorkspaceId) -> Result<(), WorkspaceError> {
+        self.accepting()?;
+        let owner = self.clone();
+        tokio::spawn(async move {
+            let lock = owner.lifecycle_lock(id).await;
+            let _guard = lock.lock().await;
+            let bot_pc = owner.lan_owner(id).await?;
+            let state = owner.service.snapshot().await;
+            let ssh_key = state
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.id == id)
+                .and_then(|workspace| match &workspace.connection {
+                    WorkspaceConnection::Ssh(connection) => Some(connection.credential_ref),
+                    _ => None,
+                });
+            let removal = owner
+                .service
+                .begin_owned_workspace_removal(id, &bot_pc, None)
+                .await
+                .map_err(WorkspaceError::State)?;
+            let mut credentials: Vec<_> = ssh_key.map(|key| key.as_uuid()).into_iter().collect();
+            if let Some(key) = removal.model_credential() {
+                credentials.push(key.as_uuid());
+            }
+            removal.commit().await.map_err(WorkspaceError::State)?;
+            for credential in credentials {
+                owner
+                    .vault
+                    .delete(credential)
+                    .await
+                    .map_err(WorkspaceError::CredentialCleanup)?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|_| WorkspaceError::Vault(VaultError::WorkerFailure))?
+    }
+
+    async fn lan_owner(&self, id: WorkspaceId) -> Result<BotPc, WorkspaceError> {
+        match self
+            .service
+            .snapshot()
+            .await
+            .workspaces
+            .into_iter()
+            .find(|workspace| workspace.id == id)
+        {
+            Some(WorkspaceConfig {
+                bot_pc: bot_pc @ BotPc::Lan { .. },
+                ..
+            }) => Ok(bot_pc),
+            Some(_) => Err(WorkspaceError::State(ServiceError::WorkspaceInUse)),
+            None => Err(WorkspaceError::NotFound),
+        }
     }
 
     pub async fn inspect_ssh_identity(

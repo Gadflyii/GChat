@@ -407,6 +407,8 @@ impl OwnedWorkspaceRemoval<'_> {
         let mut next = self.state.durable.clone();
         next.workspaces.retain(|item| item.id != self.id);
         next.assignments.retain(|item| item.workspace_id != self.id);
+        next.connector_accounts
+            .retain(|item| item.workspace_id != self.id);
         next.controls
             .retain(|item| item.identity.workspace_id != self.id);
         next.operations
@@ -625,6 +627,31 @@ impl Service {
         next.validate()?;
         drop(self.commit(state, next).await?);
         Ok(())
+    }
+
+    /// Renames one workspace of the stated kind; every other field is kept.
+    pub(crate) async fn rename_workspace(
+        &self,
+        id: WorkspaceId,
+        owner: &crate::contract::BotPc,
+        name: String,
+    ) -> Result<WorkspaceConfig, ServiceError> {
+        let state = self.state.clone().lock_owned().await;
+        let mut next = state.durable.clone();
+        let workspace = next
+            .workspaces
+            .iter_mut()
+            .find(|workspace| workspace.id == id)
+            .ok_or(ServiceError::WorkspaceNotFound)?;
+        if &workspace.bot_pc != owner {
+            return Err(ServiceError::WorkspaceInUse);
+        }
+        workspace.name = name;
+        workspace.validate().map_err(ServiceError::Contract)?;
+        let renamed = workspace.clone();
+        next.validate()?;
+        drop(self.commit(state, next).await?);
+        Ok(renamed)
     }
 
     /// Admission rechecks links and control after a possibly long human approval.
@@ -850,7 +877,7 @@ impl Service {
                 .durable
                 .connector_accounts
                 .iter()
-                .any(|item| item.workspace_id == id)
+                .any(|item| item.workspace_id == id && !item.account_ids.is_empty())
             || state.durable.controls.iter().any(|item| {
                 item.identity.workspace_id == id && item.state != SessionControlState::Bot
             })

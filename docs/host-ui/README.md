@@ -931,11 +931,10 @@ Fixed, one branch each (all merged or merge-ready with `make verify` PASS):
 - `GUI-AGENT-EDITOR-FIELD-LABELS`: Identifier, Description, Instructions, Output contract and the
   step and token limits are programmatically tied to their labels.
 - `GBOT-VAULT-WORDING`: Gbot setup text says secure storage, matching the rest of GChat.
+- `GBOT-LAN-BOT-NO-REMOVE`: a saved LAN bot can now be renamed and removed (Rename bot, Remove bot with the shared confirm dialog). The service routes `workspaces/ssh/rename` and `workspaces/ssh/remove` refuse while the bot is connected, has unfinished tasks or active schedules, or has linked accounts; removal deletes the bot record, its model assignment and its saved connection key, never the computer.
 
 Open, not fixed (product or design decisions):
 
-- `GBOT-LAN-BOT-NO-REMOVE`: a saved LAN bot cannot be renamed or removed; the service has no
-  workspace delete or rename route (local VM and cloud setups have removal).
 - `GBOT-SETUP-STEP-COUNT-CHANGES`: the wizard says "Step 2 of 5" and then "Step 4 of 4" once a VM,
   cloud or Microsoft 365 computer is chosen, because the total depends on that choice.
 - `GBOT-LINKED-ACCOUNTS-EMPTY-SAVE`: with no connected accounts, Linked accounts still offers Save

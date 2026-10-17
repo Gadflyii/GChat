@@ -8,6 +8,7 @@ import GbotTaskActions from '@/components/GbotTaskActions'
 import HumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
+import GbotLanBot from '@/components/GbotLanBot'
 import GbotConnectors from '@/components/GbotConnectors'
 import GbotSchedules from '@/components/GbotSchedules'
 import GbotSetup, {
@@ -937,6 +938,17 @@ function GbotPage() {
                       </Button>
                     )}
                   </div>
+                  {bot.bot_pc?.kind === 'lan' && (
+                    <GbotLanBot
+                      key={bot.id}
+                      id={bot.id}
+                      name={bot.name}
+                      busy={busy}
+                      connected={Boolean(identity)}
+                      perform={perform}
+                      removed={() => setSelected('')}
+                    />
+                  )}
                   {identity && !setupBlocked && (
                     <GbotDesktopView
                       key={`${identity.workspace_id}:${identity.session_id}`}
