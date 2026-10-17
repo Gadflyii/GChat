@@ -53,6 +53,36 @@ describe('secure storage intake', () => {
     })
     expect(ready).toHaveBeenLastCalledWith(true)
   })
+  it('offers only the check before it has been run, so setup or installation is never the first step', async () => {
+    command.mockResolvedValue({
+      ready: false,
+      platform: 'linux',
+      can_install: true,
+      tier: 'native',
+      state: 'unchecked',
+    })
+    render(<CredentialSetup onReady={vi.fn()} />)
+    await screen.findByText(/Choose Check secure storage to confirm/)
+    expect(
+      screen.getByRole('button', { name: 'Check secure storage' })
+    ).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Set up secure storage' })
+    ).not.toBeInTheDocument()
+    command.mockResolvedValue({
+      ready: false,
+      platform: 'linux',
+      can_install: true,
+      tier: 'native',
+      state: 'unavailable',
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Check secure storage' })
+    )
+    expect(
+      await screen.findByRole('button', { name: 'Set up secure storage' })
+    ).toBeInTheDocument()
+  })
   it('uses an existing provider without offering installation', async () => {
     command.mockResolvedValue({
       ready: true,

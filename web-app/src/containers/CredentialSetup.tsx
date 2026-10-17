@@ -285,7 +285,7 @@ export function CredentialSetup({
             Use a passphrase vault
           </Button>
         )}
-        {status?.tier !== 'passphrase' && (
+        {status?.tier !== 'passphrase' && status?.state !== 'unchecked' && (
           <Button
             disabled={busy}
             onClick={() =>
@@ -296,7 +296,7 @@ export function CredentialSetup({
           </Button>
         )}
         <Button
-          variant="outline"
+          variant={status?.state === 'unchecked' ? 'default' : 'outline'}
           disabled={busy}
           onClick={() => void check(true)}
         >
