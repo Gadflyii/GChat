@@ -115,5 +115,50 @@ pub(crate) fn preflight() -> &'static str {
 }
 
 pub(crate) fn check_command() -> &'static str {
-    "set -eu; for p in /usr/local/bin/gbot-operation /usr/local/bin/gbot-cua /opt/gbot/bin/cua-driver /opt/gbot/bin/cua-spacesd; do [ -x \"$p\" ] || { echo 'Gbot tools are not installed. Run the displayed administrator command on the bot computer, then check again.'; exit 1; }; done; [ -e /var/lib/gbot/installed ]; export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"; export DBUS_SESSION_BUS_ADDRESS=\"unix:path=$XDG_RUNTIME_DIR/bus\"; systemctl --user is-active --quiet gbot-desktop.service gbot-media.service || { echo 'The bot desktop or media service is stopped. Re-run the installer and check again.'; exit 1; }; echo 'Gbot tools installed; connect to check the desktop.'"
+    "set -eu; for p in /usr/local/bin/gbot-operation /usr/local/bin/gbot-cua /opt/gbot/bin/cua-driver /opt/gbot/bin/cua-spacesd; do [ -x \"$p\" ] || { echo 'Gbot tools are not fully installed. For a dedicated Debian 13 computer, authorize installation and choose Prepare tools in GChat. Follow its installation instructions, including running the administrator command if shown, then choose Check tools.'; exit 1; }; done; [ -e /var/lib/gbot/installed ] || { echo 'Gbot tools are not fully installed. For a dedicated Debian 13 computer, authorize installation and choose Prepare tools in GChat. Follow its installation instructions, including running the administrator command if shown, then choose Check tools.'; exit 1; }; export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"; export DBUS_SESSION_BUS_ADDRESS=\"unix:path=$XDG_RUNTIME_DIR/bus\"; systemctl --user is-active --quiet gbot-desktop.service gbot-media.service || { echo 'The bot desktop or media service is stopped. Re-run the installer and check again.'; exit 1; }; echo 'Gbot tools installed; connect to check the desktop.'"
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::{fs, os::unix::fs::PermissionsExt, process::Command};
+
+    #[test]
+    fn missing_tools_and_install_marker_explain_how_to_prepare() {
+        let paths = [
+            "/usr/local/bin/gbot-operation",
+            "/usr/local/bin/gbot-cua",
+            "/opt/gbot/bin/cua-driver",
+            "/opt/gbot/bin/cua-spacesd",
+            "/var/lib/gbot/installed",
+        ];
+        for missing in [paths[0], paths[4]] {
+            let directory = tempfile::tempdir().unwrap();
+            let mut command = check_command().to_string();
+            for path in paths {
+                let target = directory.path().join(Path::new(path).file_name().unwrap());
+                if path != missing {
+                    fs::write(&target, "").unwrap();
+                    fs::set_permissions(&target, fs::Permissions::from_mode(0o700)).unwrap();
+                }
+                command = command.replace(path, &quote(target.to_str().unwrap()));
+            }
+            let output = Command::new("sh")
+                .arg("-c")
+                .arg(format!("systemctl() {{ exit 99; }}; {command}"))
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(1), "missing {missing}");
+            let issue = String::from_utf8(output.stdout).unwrap();
+            for guidance in [
+                "dedicated Debian 13 computer",
+                "authorize installation",
+                "Prepare tools",
+                "administrator command if shown",
+                "Check tools",
+            ] {
+                assert!(issue.contains(guidance), "missing {missing}: {issue}");
+            }
+        }
+    }
 }
