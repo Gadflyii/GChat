@@ -19,6 +19,7 @@ import {
 import { BaseExtension } from '../../../../../core/src/browser/extension'
 import attachmentSchema from '../../../../../extensions/rag-extension/settings.json'
 import type { SettingComponentProps } from '@gchat/core'
+import settingsTranslations from '@/locales/en/settings.json'
 import { useAttachments } from '@/hooks/useAttachments'
 import { Route } from '../attachments'
 
@@ -47,15 +48,33 @@ vi.mock('@/containers/HeaderPage', () => ({
 
 vi.mock('@/containers/Card', () => ({
   Card: ({ children }: { children: ReactNode }) => <section>{children}</section>,
-  CardItem: ({ title, actions }: { title: string; actions: ReactNode }) => (
+  CardItem: ({
+    title,
+    description,
+    actions,
+  }: {
+    title: string
+    description?: ReactNode
+    actions?: ReactNode
+  }) => (
     <div role="group" aria-label={title}>
+      {description}
       {actions}
     </div>
   ),
 }))
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string) => {
+      const attachmentKey = key.replace('settings:attachments.', '')
+      return (
+        settingsTranslations.attachments[
+          attachmentKey as keyof typeof settingsTranslations.attachments
+        ] ?? key
+      )
+    },
+  }),
 }))
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
@@ -74,6 +93,7 @@ class AttachmentExtension extends BaseExtension {
 }
 
 const STORAGE_KEY = 'attachment-settings-durability-test'
+const text = settingsTranslations.attachments
 const Page = Route.component as ComponentType
 let extension: AttachmentExtension
 let updateSettings: MockInstance<AttachmentExtension['updateSettings']>
@@ -113,8 +133,8 @@ function storedValues() {
   )
 }
 
-function input(title: string) {
-  return within(screen.getByRole('group', { name: title })).getByRole('textbox')
+function input(key: keyof typeof text) {
+  return within(screen.getByRole('group', { name: text[key] })).getByRole('textbox')
 }
 
 async function drainSettingsQueue() {
@@ -151,10 +171,98 @@ afterEach(async () => {
   vi.useRealTimers()
 })
 
+describe('Attachment settings availability', () => {
+  it('offers supported document choices and explains the unavailable search fallback', async () => {
+    await openSettings()
+
+    const parseMode = screen.getByRole('combobox', { name: text.parseMode })
+    expect(
+      within(parseMode)
+        .getAllByRole('option')
+        .map((option) => (option as HTMLOptionElement).value)
+    ).toEqual(['auto', 'inline', 'prompt'])
+    expect(
+      screen.queryByRole('option', { name: text.parseModeEmbeddings })
+    ).toBeNull()
+    expect(
+      screen.getByText(text.documentSearchUnavailableDesc)
+    ).toBeInTheDocument()
+    expect(screen.getByText(text.availableParseModeDesc)).toBeInTheDocument()
+    expect(
+      screen.getByText(text.availableAutoInlineThresholdDesc)
+    ).toBeInTheDocument()
+
+    for (const name of [
+      text.topK,
+      text.threshold,
+      text.chunkSize,
+      text.chunkOverlap,
+      text.searchMode,
+    ]) {
+      expect(screen.queryByRole('group', { name })).toBeNull()
+    }
+
+    expect(input('maxFile')).toHaveValue('20')
+    expect(input('autoInlineThreshold')).toHaveValue('0.75')
+    expect(screen.getByRole('combobox', { name: text.maxImageSize })).toHaveValue(
+      '0'
+    )
+    expect(updateSettings).not.toHaveBeenCalled()
+  })
+
+  it('marks a saved search mode unavailable without replacing it or its hidden settings', async () => {
+    const saved = {
+      parseMode: 'embeddings' as const,
+      retrievalLimit: 7,
+      retrievalThreshold: 0.6,
+      chunkSizeChars: 2048,
+      overlapChars: 128,
+      searchMode: 'linear' as const,
+    }
+    await useAttachments.getState().saveSettings(saved)
+    updateSettings.mockClear()
+
+    const page = await openSettings()
+    const parseMode = screen.getByRole('combobox', { name: text.parseMode })
+    expect(parseMode).toHaveValue('embeddings')
+    expect(
+      screen.getByRole('option', { name: text.savedDocumentSearchUnavailable })
+    ).toBeDisabled()
+    expect(
+      screen.getByText(text.savedDocumentSearchUnavailableDesc)
+    ).toBeInTheDocument()
+    expect(updateSettings).not.toHaveBeenCalled()
+    expect(useAttachments.getState()).toMatchObject(saved)
+
+    fireEvent.change(parseMode, { target: { value: 'inline' } })
+    fireEvent.change(input('maxFile'), { target: { value: '21' } })
+    page.unmount()
+    await drainSettingsQueue()
+    await openSettings()
+
+    expect(screen.getByRole('combobox', { name: text.parseMode })).toHaveValue(
+      'inline'
+    )
+    expect(
+      screen.queryByRole('option', { name: text.savedDocumentSearchUnavailable })
+    ).toBeNull()
+    expect(screen.queryByText(text.savedDocumentSearchUnavailableDesc)).toBeNull()
+    expect(storedValues()).toMatchObject({
+      parse_mode: 'inline',
+      max_file_size_mb: 21,
+      retrieval_limit: 7,
+      retrieval_threshold: 0.6,
+      chunk_size_chars: 2048,
+      overlap_chars: 128,
+      search_mode: 'linear',
+    })
+  })
+})
+
 describe('Attachment settings persistence', () => {
   it('keeps the 500 ms typing debounce and saves the latest value once', async () => {
     const page = await openSettings()
-    const maxFileSize = input('settings:attachments.maxFile')
+    const maxFileSize = input('maxFile')
 
     fireEvent.change(maxFileSize, { target: { value: '21' } })
     act(() => {
@@ -183,11 +291,11 @@ describe('Attachment settings persistence', () => {
     const page = await openSettings()
     const held = blockNextSettingsRead()
 
-    fireEvent.change(input('settings:attachments.maxFile'), {
+    fireEvent.change(input('maxFile'), {
       target: { value: '21' },
     })
-    fireEvent.change(input('settings:attachments.topK'), {
-      target: { value: '5' },
+    fireEvent.change(input('autoInlineThreshold'), {
+      target: { value: '0.8' },
     })
     act(() => {
       vi.advanceTimersByTime(100)
@@ -200,7 +308,7 @@ describe('Attachment settings persistence', () => {
     expect(updateSettings.mock.calls[0][0]).toEqual(
       expect.arrayContaining([
         { key: 'max_file_size_mb', controllerProps: { value: 21 } },
-        { key: 'retrieval_limit', controllerProps: { value: 5 } },
+        { key: 'auto_inline_context_ratio', controllerProps: { value: 0.8 } },
       ])
     )
     expect(updateSettings.mock.calls[0][0]).toHaveLength(2)
@@ -212,10 +320,10 @@ describe('Attachment settings persistence', () => {
     await drainSettingsQueue()
     expect(storedValues()).toMatchObject({
       max_file_size_mb: 21,
-      retrieval_limit: 5,
+      auto_inline_context_ratio: 0.8,
     })
-    expect(input('settings:attachments.maxFile')).toHaveValue('21')
-    expect(input('settings:attachments.topK')).toHaveValue('5')
+    expect(input('maxFile')).toHaveValue('21')
+    expect(input('autoInlineThreshold')).toHaveValue('0.8')
 
     await act(async () => {
       vi.advanceTimersByTime(1000)
@@ -227,7 +335,7 @@ describe('Attachment settings persistence', () => {
   it('serializes an in-flight debounce, an immediate switch and a later navigation flush', async () => {
     const page = await openSettings()
     const held = blockNextSettingsRead()
-    fireEvent.change(input('settings:attachments.maxFile'), {
+    fireEvent.change(input('maxFile'), {
       target: { value: '21' },
     })
     await act(async () => {
@@ -235,13 +343,11 @@ describe('Attachment settings persistence', () => {
     })
     await act(async () => held.started)
 
-    fireEvent.change(input('settings:attachments.maxFile'), {
+    fireEvent.change(input('maxFile'), {
       target: { value: '22' },
     })
     fireEvent.click(
-      within(
-        screen.getByRole('group', { name: 'settings:attachments.enable' })
-      ).getByRole('switch')
+      within(screen.getByRole('group', { name: text.enable })).getByRole('switch')
     )
     page.unmount()
     render(<Page />)
@@ -258,24 +364,18 @@ describe('Attachment settings persistence', () => {
       enabled: false,
       maxFileSizeMB: 22,
     })
-    expect(input('settings:attachments.maxFile')).toHaveValue('22')
+    expect(input('maxFile')).toHaveValue('22')
     expect(
-      within(
-        screen.getByRole('group', { name: 'settings:attachments.enable' })
-      ).getByRole('switch')
+      within(screen.getByRole('group', { name: text.enable })).getByRole('switch')
     ).not.toBeChecked()
   })
 
-  it('applies the existing bounds and integer rules when navigation flushes a batch', async () => {
+  it('preserves integer and decimal rules when navigation flushes a batch', async () => {
     const page = await openSettings()
     const changes = [
-      ['settings:attachments.maxFile', '500'],
-      ['settings:attachments.topK', '6.9'],
-      ['settings:attachments.threshold', '-0.2'],
-      ['settings:attachments.autoInlineThreshold', '0.83'],
-      ['settings:attachments.chunkSize', '-4'],
-      ['settings:attachments.chunkOverlap', '9000'],
-    ]
+      ['maxFile', '21.9'],
+      ['autoInlineThreshold', '0.83'],
+    ] as const
     changes.forEach(([title, value]) => {
       fireEvent.change(input(title), { target: { value } })
     })
@@ -284,18 +384,29 @@ describe('Attachment settings persistence', () => {
     await drainSettingsQueue()
     expect(updateSettings).toHaveBeenCalledTimes(1)
     expect(storedValues()).toMatchObject({
-      max_file_size_mb: 200,
-      retrieval_limit: 6,
-      retrieval_threshold: 0,
+      max_file_size_mb: 21,
       auto_inline_context_ratio: 0.83,
-      chunk_size_chars: 64,
-      overlap_chars: 1024,
     })
   })
 
+  it.each([
+    ['maxFile', '500', 'max_file_size_mb', 200],
+    ['autoInlineThreshold', '-1', 'auto_inline_context_ratio', 0.05],
+    ['autoInlineThreshold', '2', 'auto_inline_context_ratio', 1],
+  ] as const)(
+    'clamps %s to its supported bounds for %s',
+    async (key, value, field, expected) => {
+      const page = await openSettings()
+      fireEvent.change(input(key), { target: { value } })
+      page.unmount()
+      await drainSettingsQueue()
+      expect(storedValues()[field]).toBe(expected)
+    }
+  )
+
   it('keeps the saved value when a numeric edit is not finite', async () => {
     const page = await openSettings()
-    fireEvent.change(input('settings:attachments.maxFile'), {
+    fireEvent.change(input('maxFile'), {
       target: { value: 'not-a-number' },
     })
     page.unmount()

@@ -56,6 +56,34 @@ Types, quality guards and all six coverage floors passed; lint retains four
 existing warnings. S1 CPUs64–71 returned16:22Z, booking2652 canceled. The private
 verification copy is retired after collection; the read-only donor and C7's
 shared runnable remain retained.
+## Available attachment settings — C4
+
+`GUI-SETTINGS-UNAVAILABLE-EMBEDDINGS` was observed in the native Linux
+walkthrough: Settings offered document-search ingestion and retrieval controls
+although GInfer embeddings are feature-disabled. The page now offers Automatic,
+Include document text and Ask me each time, explains their unavailable search
+fallback, and hides the inactive retrieval, chunk and search controls. A saved
+embeddings choice is displayed as unavailable and kept until explicitly changed;
+hidden settings and supported attachment behavior remain intact. No backend or
+shared control-label change belongs to this branch.
+
+All 11 focused rendered cases and one full `make verify` pass: 2,982 frontend
+tests, 119 extension tests, 1,079 Rust tests and 59 Node contracts. Six frontend
+tests were skipped and 27 Rust tests ignored; lint has no errors and four
+warnings. Types, quality checks and all six coverage floors passed. Saved-mode
+recovery, hidden preferences, quick navigation and numeric bounds are covered.
+The candidate includes current main and the accepted attachment-durability fix.
+Returned 16:13Z; booking2650 canceled. The final private OLD native replay at
+16:24Z passed on source `5a46f3fb5`: the named document-text select offers only
+`auto`, `inline` and `prompt`; the unavailable-search explanation is visible,
+and inactive retrieval, chunk and search controls are absent. Evidence:
+`/ai/gchat/out/c4-settings-sweep-20261017/final-attachment-controls.json` and
+`/ai/gchat/out/c4-settings-sweep-20261017/final-attachments-sidebar.png`.
+
+Owned source: `/ai/gchat-worktrees/c4-settings-attachment-availability-20261017`,
+branch `fix/c4-settings-attachment-availability-20261017`. The original evidence is retained in
+`/ai/gchat/out/c4-settings-sweep-20261017/{attachment-parse-options.json,settings-attachment-unsupported-mode.png}`.
+No new build, runtime, model or fixture resource is allocated.
 
 ## Attachment edits survive navigation — C4
 
