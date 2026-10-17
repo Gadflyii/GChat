@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import '@testing-library/jest-dom'
 import DropdownModelProvider from '../DropdownModelProvider'
 import { useModelProvider } from '@/hooks/useModelProvider'
@@ -7,6 +7,11 @@ import { useFavoriteModel } from '@/hooks/useFavoriteModel'
 import type { ModelsService } from '@/services/models/types'
 import { seedServiceHub } from '@/test/service-hub'
 import { useAppState } from '@/hooks/useAppState'
+import { useGeneralSetting } from '@/hooks/useGeneralSetting'
+import { route } from '@/constants/routes'
+import { switchToModel } from '@/utils/switchModel'
+
+const { mockNavigate } = vi.hoisted(() => ({ mockNavigate: vi.fn() }))
 
 vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: vi.fn(),
@@ -35,7 +40,11 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 }))
 
 vi.mock('@tanstack/react-router', () => ({
-  useNavigate: vi.fn(() => vi.fn()),
+  useNavigate: vi.fn(() => mockNavigate),
+}))
+
+vi.mock('@/utils/switchModel', () => ({
+  switchToModel: vi.fn().mockResolvedValue(undefined),
 }))
 
 vi.mock('@/hooks/useFavoriteModel', () => ({
@@ -119,6 +128,7 @@ describe('DropdownModelProvider - provider ordering', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useAppState.setState({ activeModels: ['local.gguf'] })
+    useGeneralSetting.setState({ preloadModelOnStartup: false })
     vi.mocked(useFavoriteModel).mockReturnValue({
       favoriteModels: [],
       addFavorite: vi.fn(),
@@ -128,6 +138,7 @@ describe('DropdownModelProvider - provider ordering', () => {
     })
     seedServiceHub({
       models: {
+        getActiveModels: vi.fn().mockResolvedValue([]),
         checkMmprojExists: vi.fn().mockResolvedValue(false),
         checkMmprojExistsAndUpdateOffloadMMprojSetting: vi
           .fn()
@@ -188,5 +199,88 @@ describe('DropdownModelProvider - provider ordering', () => {
     view.rerender(<DropdownModelProvider />)
     expect(screen.queryByTitle('local.gguf')).not.toBeInTheDocument()
     mockProviders[0].models.pop()
+  })
+
+  it('explains an empty chat picker and opens Models without loading anything', async () => {
+    useAppState.setState({ activeModels: [] })
+    const providers = [
+      mockProviders[0],
+      {
+        provider: 'openai',
+        active: true,
+        api_key: 'sk-test',
+        settings: [],
+        models: [{ id: 'embedding-only', embedding: true, capabilities: [] }],
+      },
+      {
+        provider: 'openrouter',
+        active: true,
+        api_key: '',
+        settings: [],
+        models: [{ id: 'unconfigured-model', capabilities: ['completion'] }],
+      },
+    ]
+    const selectModelProvider = vi.fn()
+    mockModelProvider({
+      providers,
+      selectedProvider: '',
+      selectedModel: undefined,
+      getProviderByName: (name: string) => providers.find(p => p.provider === name),
+      selectModelProvider,
+    })
+
+    render(<DropdownModelProvider />)
+
+    expect(screen.getByText('common:noChatModelsAvailable')).toBeInTheDocument()
+    expect(screen.getByText('common:noChatModelsAvailableDescription')).toBeInTheDocument()
+    expect(providerHeaderOrder()).toEqual([])
+    expect(screen.queryByTitle('local.gguf')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('embedding-only')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('unconfigured-model')).not.toBeInTheDocument()
+    await waitFor(() => expect(selectModelProvider).toHaveBeenCalledWith('', ''))
+
+    fireEvent.click(screen.getByRole('button', { name: 'common:openModels' }))
+
+    expect(mockNavigate).toHaveBeenCalledWith({ to: route.hub.index, search: {} })
+    expect(switchToModel).not.toHaveBeenCalled()
+  })
+
+  it('keeps available favorites visible without showing empty-picker guidance', () => {
+    vi.mocked(useFavoriteModel).mockReturnValue({
+      favoriteModels: mockProviders.flatMap(provider => provider.models) as Model[],
+      addFavorite: vi.fn(),
+      removeFavorite: vi.fn(),
+      isFavorite: vi.fn(),
+      toggleFavorite: vi.fn(),
+    })
+
+    render(<DropdownModelProvider />)
+
+    const menu = within(screen.getByTestId('popover-content'))
+    expect(screen.getByText('common:favorites')).toBeInTheDocument()
+    expect(menu.getByText('local.gguf')).toBeInTheDocument()
+    expect(menu.getByText('gpt-4o')).toBeInTheDocument()
+    expect(menu.getByText('claude')).toBeInTheDocument()
+    expect(screen.queryByText('common:noChatModelsAvailable')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'common:openModels' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'common:downloadModel' })).toBeInTheDocument()
+  })
+
+  it('retains search no-results feedback and carries the search to Downloads', () => {
+    render(<DropdownModelProvider />)
+
+    fireEvent.change(screen.getByPlaceholderText('common:searchModels'), {
+      target: { value: '  nonexistent-model-query  ' },
+    })
+
+    expect(screen.getByText('common:noModelsFoundFor')).toBeInTheDocument()
+    expect(screen.queryByText('common:noChatModelsAvailable')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'common:downloadModel' }))
+
+    expect(mockNavigate).toHaveBeenCalledWith({
+      to: route.hub.index,
+      search: { q: 'nonexistent-model-query' },
+    })
+    expect(switchToModel).not.toHaveBeenCalled()
   })
 })

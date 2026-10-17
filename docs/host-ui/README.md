@@ -25,6 +25,37 @@ booking2646 canceled. The private S1 copy and container are retired; the donor
 is unchanged. Results are retained in
 `/ai/gchat/out/hardware-live-stats-wording-20261017/{result.json,summary.md}`.
 Next: coordinator merge. The private-catalog walkthrough continues separately.
+## Empty chat model picker — C3
+
+`GUI-CHAT-MODEL-PICKER-EMPTY-20261017` was observed in a private first-run
+native desktop at source `77ccd3624`: opening **Select a model** shows an empty
+panel and only **Download a model**. The component is unchanged on the candidate
+base `0d1b43307`. Explain that no chat model is available and direct the user to
+**Open Models** to download or load a local model. Keep model availability,
+selection and search behavior unchanged.
+
+Acceptance: rendered empty-state/action regressions, preserved favorites and
+search results, focused lint/tests and one `make verify`. No model, Engine,
+Host, provider request or existing user data is involved. Next: coordinator merge
+and continued chat walkthrough; post-fix installed and Windows acceptance remain open.
+
+Owned source: `/ai/gchat-worktrees/c3-chat-model-picker-empty-20261017`, branch
+`fix/c3-chat-model-picker-empty-20261017`; component and English strings are
+owned by one implementation agent, the existing provider-order test by another,
+and integration/docs/verification by C3. Native evidence and the retained
+read-only runnable belong to `/ai/gchat/out/c3-chat-area-hands-on-20261017/`;
+`native-model-picker.png` records the observed state. Source verification and
+temporary build inventory will be retained in
+`/ai/gchat/out/c3-chat-model-picker-empty-20261017/{result.json,summary.md}`.
+The private desktop closed normally at16:17Z. Focused lint and all seven focused
+cases passed; the favorites assertion needed menu scoping because the selected
+model also appears in the trigger, and only that failed case was resumed.
+One `make verify` passed at16:21:52Z: 3,003 frontend, 119 extension, 1,079 Rust
+and 59 Node tests; six frontend tests were skipped and 27 Rust tests ignored.
+Types, quality guards and all six coverage floors passed; lint retains four
+existing warnings. S1 CPUs64–71 returned16:22Z, booking2652 canceled. The private
+verification copy is retired after collection; the read-only donor and C7's
+shared runnable remain retained.
 
 ## Attachment edits survive navigation — C4
 
