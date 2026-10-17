@@ -2736,10 +2736,18 @@ mod tests {
             let view = state.view().unwrap();
             assert!(view.accounts.is_empty());
             assert!(view.selected_accounts.is_empty());
-            let restored = view.active_flows.iter().find(|saved| saved.flow_id == flow.flow_id).unwrap();
+            let restored = view
+                .active_flows
+                .iter()
+                .find(|saved| saved.flow_id == flow.flow_id)
+                .unwrap();
             assert_eq!(restored.status, "failed");
             assert!(restored.account_id.is_none());
-            assert!(restored.error.as_deref().unwrap().contains("but saving the account in GChat failed"));
+            assert!(restored
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("but saving the account in GChat failed"));
             assert!(vault.values.lock().unwrap().is_empty());
             assert!(state.tokens.lock().unwrap().is_empty());
             server.await.unwrap();

@@ -31,9 +31,13 @@ Ron owns confirmation of the Entra redirect configuration and live-consent gate.
 and [account audience decision](../decisions/2026-10-16-allow-personal-microsoft-accounts.md).
 
 Google uses each user's own Desktop OAuth client, with no built-in Google release
-identity or Sectile Google account. Settings guides project creation, API enablement,
-External consent and production publishing, then accepts the client ID and secret
-or imports the downloaded client JSON with a file picker. Personal use follows
+identity or Sectile Google account. **Set up Google** opens a six-step guide in a
+separate dialog, with Back and Next controls for project creation, API enablement,
+the permission screen and Desktop app registration. Importing the downloaded
+client JSON is the recommended save step; a manual client ID and password-masked
+secret remain available as an alternative. The final step confirms that setup is
+saved, then returns to **Choose services** and browser sign-in; saving a registration
+does not claim that an account is connected. Personal use follows
 Google's verification exception, without a paid review. Consent uses the system
 browser and a temporary loopback callback. GChat's protected credential vault
 saves the registration secret and refresh token; access refresh continues after
@@ -119,6 +123,15 @@ consented scopes. Cancellation and disconnect serialize with durable credential
 updates. Cancel can report Connected if the durable sign-in commit has already
 begun. Each provider owns typed request construction and binary content;
 Microsoft responses remove preauthenticated storage URLs before publication.
+
+Workspace Connections keeps sign-in progress visible while waiting for the
+browser and refreshing the saved account list. Connection is confirmed only when
+the durable account appears in **Connected accounts**. The latest outcome for
+each provider survives navigation: failures and cancellation stay visible with a
+clear retry, and an unfinished account refresh offers recovery instead of silently
+returning to an apparently ready Sign in button. Focused UI and native fixtures
+cover these transitions; they do not establish live Google or Microsoft consent,
+provider API access or installed OAuth acceptance.
 
 All three modes resolve the same account before approval and use the same dispatch:
 
