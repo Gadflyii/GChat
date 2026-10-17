@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { confirmAction } from '@/lib/confirm'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,7 +11,7 @@ import { EngineInstanceSettings } from '@/containers/EngineInstanceSettings'
 import { EngineProfilePicker } from '@/containers/EngineProfilePicker'
 import { EngineHardwareProfile } from '@/containers/EngineHardwareProfile'
 import { EngineFirstRun } from '@/containers/EngineFirstRun'
-import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
+import { hostInstanceLabel, hostModelLabel, identityLabel, weightsDrafterDetail } from '@/lib/engine-host-labels'
 import { formatModelBytes } from '@/lib/model-release'
 
 const advancedFieldLabels = { draft_tokens: 'Draft tokens', draft_tp: 'Draft TP', prefill_chunk: 'Prefill chunk' } as const
@@ -95,13 +96,13 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         <div className="flex items-center gap-2">
         <Button variant="outline" disabled={busy || profiling || !!error || !active.profile || !['stopped', 'failed'].includes(active.status)} onClick={() => void act('start', { instance_id: active.instance_id, body: {} })}>Start</Button>
         <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(active.status)} onClick={() => void act('stop', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })}>Stop</Button>
-        <Button variant="outline" disabled={busy || profiling || !!error || active.status !== 'ready'} onClick={() => {
-          if (window.confirm('Reload this instance with its saved settings after current requests drain?')) void act('restart', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })
+        <Button variant="outline" disabled={busy || profiling || !!error || active.status !== 'ready'} onClick={async () => {
+          if (await confirmAction({ title: 'Reload this instance?', message: 'Reload this instance with its saved settings after current requests drain?', confirmLabel: 'Reload' })) void act('restart', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })
         }}>Reload</Button>
         </div>
       </div>}
-      {host.local ? <span className="text-sm text-muted-foreground">Local host</span> : <Button variant="outline" disabled={busy} onClick={() => {
-        if (window.confirm(`Forget ${host.name}? This removes its saved connection from GChat. Running jobs stay on the host.`)) void act('forget')
+      {host.local ? <span className="text-sm text-muted-foreground">Local host</span> : <Button variant="outline" disabled={busy} onClick={async () => {
+        if (await confirmAction({ title: `Forget ${host.name}?`, message: 'This removes its saved connection from GChat. Running jobs stay on the host.', confirmLabel: 'Forget', destructive: true })) void act('forget')
       }}>Forget</Button>}
       {host.local && snapshot?.can_stop_host && <Button variant="outline" disabled={busy || hostStopping || !!error} onClick={async () => {
         setBusy(true)
@@ -147,8 +148,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
               kv_arena_headroom_bytes: profile.kv_arena_headroom_bytes,
               prefill_chunk: profile.prefill_chunk, no_cuda_graph: profile.no_cuda_graph })
           }}>Edit settings</Button>}
-          <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={() => {
-            if (window.confirm('Force-stop this instance and cancel its active requests?')) void act('stop', { instance_id: instance.instance_id, body: { force: true, expected_session_id: instance.session_id } })
+          <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={async () => {
+            if (await confirmAction({ title: 'Force stop this instance?', message: 'Force-stop this instance and cancel its active requests?', confirmLabel: 'Force stop', destructive: true })) void act('stop', { instance_id: instance.instance_id, body: { force: true, expected_session_id: instance.session_id } })
           }}>Force stop</Button>
         </div>
       </div>)}
@@ -169,7 +170,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         setGpus(model?.metadata.tp_size === 1 && available.length === 1 ? [available[0].uuid] : [])
       }}>
         <option value="">Choose an installed model</option>
-        {snapshot.models.map((m) => <option key={m.id} value={m.id}>{hostModelLabel(m)} · TP{m.metadata.tp_size} · {(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GB{m.artifact_set ? ' · deployment set' : ''}</option>)}
+        {snapshot.models.map((m) => <option key={m.id} value={m.id} title={weightsDrafterDetail(m.metadata.identity.weights_id)}>{hostModelLabel(m)} · TP{m.metadata.tp_size} · {(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GB{m.artifact_set ? ' · deployment set' : ''}</option>)}
       </select></label>
       <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />GPU {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
       <div className="flex flex-wrap gap-4">
@@ -204,11 +205,11 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             .catch(error => { if (quoteRevision.current === revision) setStartupQuote({ key, error: String(error) }) })
             .finally(() => setBusy(false))
         }}>Check startup settings</Button>
-        {currentQuote?.result && <p role="status" className="text-sm">Verified artifact: {currentQuote.result.model_identity.model_id} / {currentQuote.result.model_identity.weights_id}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'instance' : 'instances'}. {currentQuote.result.kv_arena_bytes === null ? 'Automatic KV; a solo startup must measure graph memory before sharing.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU memory for the conversation cache (KV) per instance.`} This check did not start a model.</p>}
+        {currentQuote?.result && <p role="status" className="text-sm">Verified artifact: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'instance' : 'instances'}. {currentQuote.result.kv_arena_bytes === null ? 'Automatic KV; a solo startup must measure graph memory before sharing.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU memory for the conversation cache (KV) per instance.`} This check did not start a model.</p>}
         {currentQuote?.error && <p role="alert" className="text-sm text-destructive">{currentQuote.error}</p>}
       </>}
-      <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
-        if (editing && !window.confirm('Apply these model and launch settings? This restarts the selected instance after its current requests drain.')) return
+      <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {
+        if (editing && !await confirmAction({ title: 'Apply these settings?', message: 'Apply these model and launch settings? This restarts the selected instance after its current requests drain.', confirmLabel: 'Apply and restart' })) return
         if (editing) void act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })
         else void (async () => {
           for (let remaining = instanceCount; remaining > 0; remaining--) {

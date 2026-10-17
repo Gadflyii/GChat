@@ -10,9 +10,11 @@ import {
 export default function ServiceSetup({
   target,
   change,
+  inWizard = false,
 }: {
   target: ServiceTarget
   change: (target: ServiceTarget, ready: boolean) => void
+  inWizard?: boolean
 }) {
   const hosts = useEngineHosts((state) => state.hosts)
   const errors = useEngineHosts((state) => state.errors)
@@ -89,8 +91,9 @@ export default function ServiceSetup({
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         The Gbot service coordinates your bots, tasks and schedules. Choose
-        where it runs below; This PC is the easiest choice. In the next step,
-        you will choose the separate desktop where the bot does its work.
+        where it runs below; This PC is the easiest choice.
+        {inWizard &&
+          ' In the next step, you will choose the separate desktop where the bot does its work.'}
       </p>
       <fieldset className="space-y-2" disabled={busy}>
         <legend className="mb-2 text-sm font-medium">

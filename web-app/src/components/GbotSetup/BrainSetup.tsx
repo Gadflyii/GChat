@@ -103,6 +103,17 @@ export function BrainSetup({
     }
   }
 
+  function cancelEdits() {
+    if (!saved || disabled || savingRef.current) return
+    onChange({
+      connection: saved.connection,
+      model: saved.model,
+      context_tokens: saved.context_tokens,
+    })
+    setError(undefined)
+    setEditing(false)
+  }
+
   if (saved && !editing) {
     return (
       <section aria-label="Bot brain" className="rounded-lg border p-3">
@@ -284,7 +295,7 @@ export function BrainSetup({
                     type="password"
                     autoComplete="off"
                     placeholder={
-                      saved?.credential_ref ? 'Saved in vault' : 'If required'
+                      saved?.credential_ref ? 'Saved in secure storage' : 'If required'
                     }
                     value={value.api_key || ''}
                     disabled={Boolean(
@@ -302,7 +313,7 @@ export function BrainSetup({
               <p className="text-xs text-muted-foreground">
                 {saved?.credential_ref
                   ? 'Leave the key blank to keep this bot’s saved key.'
-                  : 'This bot’s key is stored in the vault.'}
+                  : 'This bot’s key is stored in secure storage.'}
               </p>
               {saved?.credential_ref && (
                 <label className="flex items-center gap-2 text-sm">
@@ -378,9 +389,21 @@ export function BrainSetup({
             Saving brain settings…
           </p>
         )}
-        <Button type="submit" disabled={disabled || !valid}>
-          {saving ? 'Saving brain settings…' : 'Save brain settings'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={disabled || !valid}>
+            {saving ? 'Saving brain settings…' : 'Save brain settings'}
+          </Button>
+          {saved && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={disabled}
+              onClick={cancelEdits}
+            >
+              Cancel edits
+            </Button>
+          )}
+        </div>
       </div>
     </form>
   )

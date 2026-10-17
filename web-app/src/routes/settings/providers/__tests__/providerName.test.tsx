@@ -5,6 +5,7 @@ import { seedServiceHub } from '@/test/service-hub'
 
 const state = vi.hoisted(() => ({
   provider: undefined as unknown,
+  name: 'openai',
 }))
 
 vi.mock('@/containers/SettingsMenu', () => ({ default: () => null }))
@@ -57,7 +58,7 @@ vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (config: Record<string, unknown>) => ({ ...config }),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
   useNavigate: () => vi.fn(),
-  useParams: () => ({ providerName: 'openai' }),
+  useParams: () => ({ providerName: state.name }),
 }))
 
 describe('Provider detail route', () => {
@@ -92,5 +93,29 @@ describe('Provider detail route', () => {
 
     expect(screen.queryByText('providers:addApiKeyFirstHint')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'providers:start' })).toBeEnabled()
+  })
+
+  it('keeps engine options behind Advanced with plain labels and has no second Start for GInfer', () => {
+    state.name = 'ginfer'
+    try {
+      const setting = (key: string, title: string) => ({ key, title, description: '', controller_type: 'input', controller_props: { value: '' } })
+      state.provider = {
+        provider: 'ginfer', active: true, api_key: '', base_url: '',
+        settings: [setting('vision', 'Vision'), setting('spec', 'Speculative Decoding'), setting('kv_arena_bytes', 'KV Arena Size'), setting('auto_unload', 'Auto Unload')],
+        models: [{ id: 'model', capabilities: [] }],
+      }
+      const Component = (ProviderRoute as unknown as { component: React.ComponentType }).component
+      render(<Component />)
+      const advanced = screen.getByText('providers:ginferAdvanced').closest('details')!
+      expect(advanced).not.toHaveAttribute('open')
+      expect(advanced).toHaveTextContent('Speculative decoding')
+      expect(advanced).toHaveTextContent('Conversation memory size')
+      expect(advanced).not.toHaveTextContent('KV Arena Size')
+      expect(advanced).not.toHaveTextContent('Vision')
+      expect(screen.getByText('Vision').closest('details')).toBeNull()
+      expect(screen.getByText('Auto Unload').closest('details')).toBeNull()
+      expect(screen.queryByRole('button', { name: 'providers:start' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'providers:manageInModels' })).toBeInTheDocument()
+    } finally { state.name = 'openai' }
   })
 })

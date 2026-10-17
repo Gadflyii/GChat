@@ -381,6 +381,12 @@ Text or attachments you add while an earlier Send is pending stay in the
 composer when that preparation finishes; its completion does not clear your
 newer changes.
 
+## Reading workspace folders
+
+If GChat cannot read your workspace folder, the **Files** panel opens so you
+can see the problem. Choose **Retry folder** to try again. You can close the
+panel while you work; another failed check will not keep reopening it.
+
 ## Choosing image or audio attachments
 
 If the image or audio file window fails, GChat shows an error and keeps your
@@ -395,6 +401,10 @@ again. Your draft and other attachments stay in place.
 If a generated HTML preview cannot load, GChat shows an error. Choose
 **Retry preview** to try again. **Code** remains available so you can read
 the HTML while the preview is unavailable.
+
+When you make the window narrower, the preview panel shrinks so the chat
+keeps room to work in. A panel you already made narrower is never widened
+automatically.
 
 ## Copying generated HTML
 
@@ -891,3 +901,45 @@ Owned tree: `/ai/gchat-worktrees/stale-load-error-clear-20261017`, branch
 `fix/gchat-stale-load-error-clear-20261017`, from main `dbec106e4`.
 Acceptance: focused app-state, provider-page and switch-model tests, then one
 `make verify`; packaged retest in the next Linux RC.
+
+## Gbot and Agent Studio first-time-user pass — claude-gui-gbot-agents
+
+Walked on GChat `87628b891` and `8b9f177e9` (Linux desktop build, private `HOME`,
+`XDG_RUNTIME_DIR`, dbus session and unlocked keyring; no provider sign-in, no model).
+Agent Studio: Agents & flows editor and run setup, Templates, Skills, Worker Pools,
+Runs. Gbot: enable, start service, Add bot wizard (name, service, computer, LAN
+connection, local VM review, cloud and Microsoft 365 pages), saved LAN bot page,
+Linked accounts, Scheduled tasks, brain, companion pane. A saved LAN bot was created
+against a real SSH host key (identity check only; no login). The desktop viewer, tool
+check, approvals and task history need a connected bot computer and were not reached.
+
+Fixed, one branch each (all merged or merge-ready with `make verify` PASS):
+
+- `GBOT-SERVICE-NOT-RUNNING-MESSAGE`: "Gbot service is not running or is disconnected. Use the
+  service button at the top of the Gbot page to start or connect it."; hidden while the service starts.
+- `GBOT-SERVICE-EXIT-REASON`: a service that exits before it is ready shows its own last log line.
+- `GBOT-SECURE-STORAGE-START-GUIDANCE`: locked or unavailable secure storage says to choose Check
+  secure storage in GChat and start Gbot again.
+- `GUI-SKILLS-ERROR-NOT-EMPTY`: a load error no longer shows beside "No skills are installed."
+- `GUI-WORKER-POOLS-FIRST-USE`: plain explanation instead of a red alert and a pointless Retry.
+- `GUI-AGENT-RUNS-PANE-HEIGHT`: the Runs and Agents panes fill the page height.
+- `GBOT-SSH-PLAIN-ERRORS`: SSH connection failures name the bot's computer and what to check
+  (previously "Guest SSH connection or liveness check timed out").
+- `GBOT-LAN-DISABLED-BUTTON-HINTS`: Create bot key and Continue say why they are off.
+- `GBOT-SCHEDULES-INTRO-INSIDE`: the schedule explanation sits inside its collapsed section, as Linked accounts does.
+- `GBOT-SERVICE-CHOOSER-COPY`: the Service computer panel no longer promises "the next step".
+- `GUI-AGENT-EDITOR-FIELD-LABELS`: Identifier, Description, Instructions, Output contract and the
+  step and token limits are programmatically tied to their labels.
+- `GBOT-VAULT-WORDING`: Gbot setup text says secure storage, matching the rest of GChat.
+
+Open, not fixed (product or design decisions):
+
+- `GBOT-LAN-BOT-NO-REMOVE`: a saved LAN bot cannot be renamed or removed; the service has no
+  workspace delete or rename route (local VM and cloud setups have removal).
+- `GBOT-SETUP-STEP-COUNT-CHANGES`: the wizard says "Step 2 of 5" and then "Step 4 of 4" once a VM,
+  cloud or Microsoft 365 computer is chosen, because the total depends on that choice.
+- `GBOT-LINKED-ACCOUNTS-EMPTY-SAVE`: with no connected accounts, Linked accounts still offers Save
+  linked accounts. Low severity; saving an empty selection may be intended to unlink everything.
+
+Test-isolation notes: a launch must set a private `XDG_RUNTIME_DIR` and unset `WAYLAND_DISPLAY`;
+Browse on a bare private session opens a file chooser on the real display through the portal.

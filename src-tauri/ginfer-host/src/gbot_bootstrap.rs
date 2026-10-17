@@ -314,7 +314,7 @@ async fn wait_for_service(
             // A concurrent starter may own the service after our child loses the lock.
             if let Ok(_owner) = ServiceOwner::acquire(&directory) {
                 return Err(format!(
-                    "Gbot service exited before becoming ready ({status}){}; see {}",
+                    "Account connections could not start{}.\n\nDetails: the Gbot service exited before becoming ready ({status}); log: {}",
                     last_log_reason(&directory.join("service.log")),
                     directory.join("service.log").display()
                 ));
@@ -327,7 +327,7 @@ async fn wait_for_service(
                 });
             }
             return Err(format!(
-                "Gbot service did not become ready; see {}",
+                "Account connections did not start in time.\n\nDetails: the Gbot service did not become ready; log: {}",
                 directory.join("service.log").display()
             ));
         }
@@ -366,7 +366,7 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(
             directory.join("service.log"),
-            "old line\nGbot service failed: Gbot secure storage: Secure storage is unavailable\n\n",
+            "old line\nGbot service failed: Secure storage is unavailable\n\n",
         )
         .unwrap();
         let child = tokio::process::Command::new("/bin/sh")
@@ -383,7 +383,7 @@ mod tests {
         .unwrap();
         assert!(
             error.contains(
-                "(exit status: 1): Gbot secure storage: Secure storage is unavailable; see "
+                "Account connections could not start: Secure storage is unavailable.\n\nDetails: the Gbot service exited before becoming ready (exit status: 1); log: "
             ),
             "{error}"
         );

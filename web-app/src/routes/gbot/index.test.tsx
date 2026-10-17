@@ -1015,7 +1015,7 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   expect(screen.getByLabelText('API key')).toHaveValue('')
   expect(screen.getByLabelText('API key')).toHaveAttribute(
     'placeholder',
-    'Saved in vault'
+    'Saved in secure storage'
   )
   expect(screen.getByLabelText('Model ID')).toHaveValue('qwen')
   cleanup()

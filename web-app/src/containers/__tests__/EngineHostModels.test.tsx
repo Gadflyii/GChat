@@ -95,7 +95,7 @@ it('checks imported artifact settings without a catalog or download and uses the
   const body = expect.objectContaining({ model_id: 'imported-model', gpu_uuids: ['GPU-one'], remaining_instances: 2,
     max_context: 65536, concurrency: 4, structured_outputs: false, kv_arena_bytes: null, host_kv_cache_bytes: 0 })
   await waitFor(() => expect(engineCommand).toHaveBeenCalledWith('quote', { host_id: 'host', body }))
-  expect(await screen.findByRole('status')).toHaveTextContent('Verified artifact: qwen3.8-27b / int8')
+  expect(await screen.findByRole('status')).toHaveTextContent('Verified artifact: Qwen 3.8 27B — INT')
   expect(screen.getByRole('status')).toHaveTextContent('2 instances')
   expect(screen.getByRole('status')).toHaveTextContent('1 MiB of GPU memory for the conversation cache (KV) per instance')
   expect(engineCommand).toHaveBeenCalledTimes(1)
@@ -142,7 +142,7 @@ it.each(['running', 'cancelling'] as const)('allows an imported model quote and 
   expect(screen.getByText(/Your selected model is ready to load/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
-  expect(await screen.findByText(/Verified artifact: qwen3.8-27b \/ int8/)).toBeInTheDocument()
+  expect(await screen.findByText(/Verified artifact: Qwen 3.8 27B — INT/)).toBeInTheDocument()
   await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
   refreshHosts.mockImplementationOnce(async () => {
     view.rerender(<HostCard host={localHost} snapshot={{ ...data, instances: [{
@@ -201,7 +201,7 @@ it('keeps a pending startup check through polling and displays its result', asyn
     ...snapshot.hardware_profile!, status: 'cancelled', finished_unix_ms: 300, diagnostic_tail: 'Yielded to startup check',
   } }} />)
   finishQuote(importedQuote)
-  expect(await screen.findByText(/Verified artifact: qwen3.8-27b \/ int8/)).toBeInTheDocument()
+  expect(await screen.findByText(/Verified artifact: Qwen 3.8 27B — INT/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Check startup settings' })).toBeEnabled()
   expect(engineCommand).toHaveBeenCalledExactlyOnceWith('quote', expect.objectContaining({ host_id: 'host' }))
 })
@@ -212,7 +212,7 @@ it.each(['success', 'rejection'] as const)('keeps a completed startup-check %s t
   const { rerender } = render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
-  const message = outcome === 'success' ? /Verified artifact: qwen3.8-27b \/ int8/ : /Not enough memory for these settings/
+  const message = outcome === 'success' ? /Verified artifact: Qwen 3.8 27B — INT/ : /Not enough memory for these settings/
   expect(await screen.findByText(message)).toBeInTheDocument()
   rerender(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, revision: 2,
     display_name: 'Renamed Host', management_notice: 'Management address updated',

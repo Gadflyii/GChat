@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { spyConfirm } from '@/test/confirm'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelManagement } from '@/containers/ModelManagement'
@@ -134,7 +135,7 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('tab', { name: 'Installed' })).toHaveFocus()
   })
   it('shows a failed load as a plain message, without the stale-inventory note', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    spyConfirm().mockReturnValueOnce(true)
     mocks.switchModel.mockRejectedValue(new Error('Failed to load Qwen: No qualified automatic profile is available.'))
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
@@ -166,7 +167,7 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Connection lost')
   })
   it('loads an installed model with profile defaults and automatic GPU selection', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    spyConfirm().mockReturnValueOnce(true)
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     await waitFor(() => expect(mocks.switchModel).toHaveBeenCalledWith({
@@ -180,7 +181,7 @@ describe('host-scoped Models', () => {
   })
   it.each([null, false])('waits for local runtime preparation before loading an installed model (ready: %s)', async ready => {
     mocks.resources = { ready, error: '' }
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    spyConfirm().mockReturnValueOnce(true)
     const view = render(<ModelManagement />)
     const loadButton = screen.getByRole('button', { name: 'Load model' })
     expect(loadButton).toBeDisabled()
@@ -204,7 +205,7 @@ describe('host-scoped Models', () => {
   })
   it.each([null, true])('keeps Load disabled after a local runtime error until readiness recovers (ready: %s)', async ready => {
     mocks.resources = { ready, error: 'Runtime extraction failed' }
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    spyConfirm().mockReturnValueOnce(true)
     const view = render(<ModelManagement />)
     const loadButton = screen.getByRole('button', { name: 'Load model' })
     expect(loadButton).toBeDisabled()
@@ -229,7 +230,7 @@ describe('host-scoped Models', () => {
   it('shows an unavailable selected GPU error and restores Load after forwarding the choice', async () => {
     mocks.selectedGpuUuids = ['local-gpu']
     mocks.switchModel.mockRejectedValueOnce(new Error('Selected GPU is unavailable'))
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
+    spyConfirm().mockReturnValueOnce(true)
     render(<ModelManagement />)
     const loadButton = screen.getByRole('button', { name: 'Load model' })
     fireEvent.click(loadButton)
@@ -250,10 +251,11 @@ describe('host-scoped Models', () => {
     expect(mocks.switchModel).not.toHaveBeenCalled()
   })
   it('does not switch away from another local model without confirmation', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
+    const confirmSpy = spyConfirm()
+    confirmSpy.mockReturnValueOnce(false)
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
-    await waitFor(() => expect(window.confirm).toHaveBeenCalled())
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled())
     expect(mocks.switchModel).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
     vi.restoreAllMocks()
@@ -262,7 +264,7 @@ describe('host-scoped Models', () => {
   it('shows scoped verification, profiling and elapsed progress while a long Load stays pending', async () => {
     vi.useFakeTimers()
     const clock = vi.spyOn(performance, 'now').mockReturnValue(1000)
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    spyConfirm().mockReturnValue(true)
     let finish!: () => void
     mocks.switchModel.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
     let phase: LocalModelLoadProgress['phase'] = 'verification'
@@ -290,7 +292,7 @@ describe('host-scoped Models', () => {
 
   it('ignores another operation status and keeps the load alive through a polling error', async () => {
     vi.useFakeTimers()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    spyConfirm().mockReturnValue(true)
     let finish!: () => void
     let polls = 0
     mocks.switchModel.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
@@ -318,7 +320,7 @@ describe('host-scoped Models', () => {
   })
 
   it('cancels only its own load and waits for native cleanup before restoring Load', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    spyConfirm().mockReturnValue(true)
     let reject!: (reason: unknown) => void
     mocks.switchModel.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail }))
     render(<ModelManagement />)
@@ -336,7 +338,7 @@ describe('host-scoped Models', () => {
   })
 
   it('cancels a pending operation when the Models route unmounts', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    spyConfirm().mockReturnValue(true)
     let reject!: (reason: unknown) => void
     mocks.switchModel.mockImplementationOnce(() => new Promise<void>((_, fail) => { reject = fail }))
     const view = render(<ModelManagement />)
@@ -349,7 +351,7 @@ describe('host-scoped Models', () => {
   })
 
   it('does not cancel a Ready operation when the route unmounts', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    spyConfirm().mockReturnValue(true)
     let finish!: () => void
     mocks.switchModel.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
     mocks.command.mockImplementation(async (action, args) => action === 'local_model_load_status'

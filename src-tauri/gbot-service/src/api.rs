@@ -36,9 +36,9 @@ impl std::fmt::Display for ApiError {
         match self {
             Self::Vault(error @ (VaultError::Unavailable | VaultError::AccessDenied)) => write!(
                 formatter,
-                "Gbot secure storage: {error}. Choose Check secure storage in GChat (the welcome screen or GInfer Hosts), unlock it if asked, then start Gbot again."
+                "{error}. Choose Check secure storage in GChat (the welcome screen or GInfer Hosts), unlock it if asked, then start Gbot again."
             ),
-            Self::Vault(error) => write!(formatter, "Gbot secure storage: {error}"),
+            Self::Vault(error) => error.fmt(formatter),
             Self::Listener(_) => formatter.write_str("Gbot loopback listener is unavailable"),
             Self::Http(_) => formatter.write_str("Gbot HTTP service could not complete"),
             Self::Workspace(error) => error.fmt(formatter),

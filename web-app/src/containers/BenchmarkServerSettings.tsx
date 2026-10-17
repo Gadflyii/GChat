@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
+import { confirmAction } from '@/lib/confirm'
 import { toast } from 'sonner'
 import { EngineProfilePicker } from './EngineProfilePicker'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { engineAlias, engineCommand, hardwareProfileBlocksLaunch } from '@/services/engines'
 import type { BenchmarkSessionInfo } from '@/services/benchmark/tauri'
-import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
+import { hostInstanceLabel, hostModelLabel, plainProfileName } from '@/lib/engine-host-labels'
 import { Button } from '@/components/ui/button'
 
 export function BenchmarkServerSettings({ sessions, selected, select, disabled, refresh, onPendingChange }: {
@@ -90,15 +91,15 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
           }}>
           <option value="">Choose a Max Perf profile</option>
           {maxPerfChoices.map(({ entry, key }) => <option key={key} value={key}>
-            {entry.profile.name} · {hostModelLabel(snapshot.models.find(model => model.id === entry.model_id)!)}
+            {plainProfileName(entry.profile.name)} · {hostModelLabel(snapshot.models.find(model => model.id === entry.model_id)!)}
           </option>)}
         </select>
       </label>
       {!maxPerfChoices.length && <p className="text-sm text-muted-foreground">No Max Perf profile is available for this server’s installed models and GPU. Choose a running server with a supported release model on one GPU. Existing GPU groups are preserved.</p>}
       {maxPerf && <p role="alert" className="text-sm">Applying this profile waits for current requests to finish, then restarts this server. Chats and other clients using it are affected. Wait for the server to be ready before selecting Run benchmark.</p>}
-      <Button disabled={maxPerfDisabled || !maxPerf || capacityPending} onClick={() => {
+      <Button disabled={maxPerfDisabled || !maxPerf || capacityPending} onClick={async () => {
         if (!maxPerf || maxPerfDisabled || capacityPending) return
-        if (!window.confirm('Apply the GBench Max Perf profile and restart this server? Other clients using it will be affected.')) return
+        if (!await confirmAction({ title: 'Restart this server?', message: 'Apply the GBench Max Perf profile and restart this server? Other clients using it will be affected.', confirmLabel: 'Apply and restart' })) return
         void apply({ profile_id: maxPerf.entry.profile.id, model_id: maxPerf.entry.model_id,
           gpu_uuids: maxPerf.group, instance_id: instance.instance_id, expected_session_id: instance.session_id, force: false })
       }}>Apply Max Perf & Restart Server</Button>

@@ -4,6 +4,7 @@ import { cleanup } from '@testing-library/react'
 import * as matchers from '@testing-library/jest-dom/matchers'
 import { clearMocks } from '@tauri-apps/api/mocks'
 import { useServiceStore } from '@/hooks/useServiceHub'
+import { stopConfirmSpies } from './confirm'
 
 // extends Vitest's expect method with methods from react-testing-library
 expect.extend(matchers)
@@ -50,6 +51,7 @@ Object.defineProperty(window, 'matchMedia', {
 
 // runs a cleanup after each test case (e.g. clearing jsdom)
 afterEach(() => {
+  stopConfirmSpies()
   // Unmount subscribers and native previews before resetting their dependencies.
   cleanup()
   clearMocks()

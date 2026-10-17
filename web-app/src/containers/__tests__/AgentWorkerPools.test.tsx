@@ -1,3 +1,4 @@
+import { spyConfirm } from '@/test/confirm'
 import {
   act,
   cleanup,
@@ -276,7 +277,7 @@ it('retains the reviewed draft after a failed save and allows retry', async () =
 it('sends one delete and blocks changing pools or editing while deleting', async () => {
   const deleting = deferred<unknown>()
   mocks.command.mockReturnValueOnce(deleting.promise)
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  const confirm = spyConfirm().mockReturnValue(true)
   mocks.catalog.pools.push({ id: 'reviewer', name: 'reviewer', members: [] })
   render(<AgentWorkerPools />)
   fireEvent.click(screen.getByRole('button', { name: /coder · not assigned/ }))
@@ -287,8 +288,8 @@ it('sends one delete and blocks changing pools or editing while deleting', async
     fireEvent.click(remove)
   })
 
-  expect(confirm).toHaveBeenCalledOnce()
-  expect(mocks.command).toHaveBeenCalledOnce()
+  await waitFor(() => expect(mocks.command).toHaveBeenCalledOnce())
+  expect(confirm).toHaveBeenCalled()
   expect(mocks.command).toHaveBeenCalledWith('delete_pool', {
     id: 'coder',
     expectedRevision: 10,
@@ -319,7 +320,7 @@ it('sends one delete and blocks changing pools or editing while deleting', async
 it('restores the draft and controls after delete fails and allows retry', async () => {
   const deleting = deferred<unknown>()
   mocks.command.mockReturnValueOnce(deleting.promise)
-  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  spyConfirm().mockReturnValue(true)
   render(<AgentWorkerPools />)
   fireEvent.click(screen.getByRole('button', { name: /coder · not assigned/ }))
   fireEvent.change(screen.getByLabelText('Pool name'), {

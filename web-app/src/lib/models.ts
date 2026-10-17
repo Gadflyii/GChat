@@ -1,3 +1,4 @@
+import { plainModelName } from '@/lib/engine-host-labels'
 import { providerModels as models } from '@/constants/models'
 import type {
   CatalogModel,
@@ -60,7 +61,7 @@ export const runtimeModelDisplayName = (
   model: { id: string; name?: string }
 ): string | undefined =>
   provider === 'ginfer' && model.name && model.name !== model.id
-    ? model.name
+    ? plainModelName(model.name)
     : undefined
 
 export const extractDescription = (text?: string) => {

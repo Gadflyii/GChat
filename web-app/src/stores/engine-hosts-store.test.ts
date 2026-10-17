@@ -157,4 +157,19 @@ describe('Host facade address projection', () => {
       api_key: 'local-test-key',
     })
   })
+
+  it('names a ready instance in the picker by its model, not the raw package identity', async () => {
+    const host = { host_id: 'local', local: true, name: 'This computer' }
+    vi.mocked(engineCommand).mockImplementation(async action => action === 'list'
+      ? { registered: [host], discovered: [] } as never
+      : { host_id: 'local', display_name: 'Ron-PC', gpus: [],
+        models: [{ id: 'host-model', path: '/m.ginfer', artifact_set: false,
+          metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'smol-q2g64-mix-dflash2-q4' }, tp_size: 1, draft_tp: 0, size_bytes: 1 } }],
+        instances: [{ instance_id: 'one', display_name: 'qwen3.8-27b/smol-q2g64-mix-dflash2-q4', status: 'ready',
+          configuration: {}, profile: { model_id: 'host-model' } }] } as never)
+    providers.updateProvider.mockClear()
+    await useEngineHosts.getState().refresh()
+    const projection = providers.updateProvider.mock.calls.at(-1)?.[1]
+    expect(projection.models[0].displayName).toBe('Qwen 3.8 27B — 2-bit mix — Ron-PC')
+  })
 })

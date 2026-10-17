@@ -190,7 +190,7 @@ export default function CloudCosts({
         {provider === 'hetzner'
           ? 'Use a Hetzner read-write project token.'
           : 'Allow catalog reads and Droplet, firewall and tag creation, reads and deletion on your DigitalOcean token.'}{' '}
-        Saved only in GChat’s vault.
+        Saved only in GChat’s secure storage.
         {review && ' Leave blank to reuse your saved token.'}
       </p>
       <Button

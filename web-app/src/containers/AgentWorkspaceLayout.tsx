@@ -114,14 +114,18 @@ export function AgentWorkspaceLayout({
         listAgentWorkspace({
           rootId: root.rootId,
           rootPath: root.path,
-        }).catch(() => [])
+        }).then(
+          (entries) => entries.length > 0,
+          // Keep the Files panel visible so it can show the read error and Retry.
+          () => true
+        )
       )
     ).then(
-      (rootEntries) => {
+      (rootsNeedFilesPanel) => {
         if (cancelled) return
         const hasEntries =
           workspace.externalRoots.length > 0 ||
-          rootEntries.some((entries) => entries.length > 0)
+          rootsNeedFilesPanel.some(Boolean)
         const previouslyHadEntries = previousWorkspaceHasEntriesRef.current
 
         if (!hasEntries) {

@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { spyConfirm } from '@/test/confirm'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { BenchmarkServerSettings } from '../BenchmarkServerSettings'
 import type { EngineSnapshot } from '@/services/engines'
@@ -60,12 +61,12 @@ it('offers Max Perf separately and applies only after selection and confirmation
   })).toBeInTheDocument()
   expect(screen.getByText(/does not claim hardware qualification/)).toBeInTheDocument()
   expect(mocks.command).not.toHaveBeenCalled()
-  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash SMOL/ }) as HTMLOptionElement
+  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash pure 2-bit/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Max Perf profile'), { target: { value: choice.value } })
   expect(pending).toHaveBeenLastCalledWith(true)
   expect(mocks.command).not.toHaveBeenCalled()
   expect(screen.getByRole('alert')).toHaveTextContent('Applying this profile waits for current requests to finish, then restarts this server. Chats and other clients using it are affected. Wait for the server to be ready before selecting Run benchmark.')
-  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+  const confirm = spyConfirm().mockReturnValue(false)
   fireEvent.click(screen.getByRole('button', { name: 'Apply Max Perf & Restart Server' }))
   expect(mocks.command).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)
@@ -94,7 +95,7 @@ it('clears the pending profile when selecting another server without restarting 
   const pending = vi.fn()
   const props = { sessions: [current, other], selected: current, select, disabled: false, refresh: vi.fn(), onPendingChange: pending }
   const view = render(<BenchmarkServerSettings {...props} />)
-  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash SMOL/ }) as HTMLOptionElement
+  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash pure 2-bit/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Max Perf profile'), { target: { value: choice.value } })
   expect(pending).toHaveBeenLastCalledWith(true)
   fireEvent.change(screen.getByLabelText('Host / Instance'), { target: { value: other.target_id } })
@@ -128,7 +129,7 @@ it('refuses to apply from a stale session selection and clears a choice when its
   const current = session()
   const props = { sessions: [current], selected: current, select: vi.fn(), disabled: false, refresh: vi.fn(), onPendingChange: vi.fn() }
   const view = render(<BenchmarkServerSettings {...props} />)
-  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash SMOL/ }) as HTMLOptionElement
+  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash pure 2-bit/ }) as HTMLOptionElement
   fireEvent.change(screen.getByLabelText('Max Perf profile'), { target: { value: choice.value } })
   view.rerender(<BenchmarkServerSettings {...props} selected={{ ...current, session_id: 'old-session' }} />)
   expect(screen.getByLabelText('Max Perf profile')).toHaveValue('')
