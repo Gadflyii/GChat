@@ -66,8 +66,10 @@ function review(): CloudReview {
 
 it('requires explicit cost consent and confirms the exact saved quote without creating a VM', async () => {
   const initial = review()
-  const reviewed = vi.fn().mockResolvedValue(undefined)
-  vi.mocked(gbot).mockResolvedValueOnce({ ...initial, confirmed: true })
+  const saving = deferred<CloudReview>()
+  const refresh = deferred<void>()
+  const reviewed = vi.fn().mockReturnValue(refresh.promise)
+  vi.mocked(gbot).mockReturnValueOnce(saving.promise)
   render(
     <CloudCosts
       name="Research bot"
@@ -84,35 +86,70 @@ it('requires explicit cost consent and confirms the exact saved quote without cr
     screen.getByRole('button', { name: 'Save cost review' })
   ).toBeDisabled()
   fireEvent.click(screen.getByRole('checkbox'))
-  fireEvent.click(screen.getByRole('button', { name: 'Save cost review' }))
-  await screen.findByText('Cost review saved. No VM has been created.')
+  const save = screen.getByRole('button', { name: 'Save cost review' })
+  fireEvent.click(save)
+  expect(
+    screen.getByRole('button', { name: 'Saving cost review…' })
+  ).toBeDisabled()
+  expect(
+    screen.getByText('Saving cost review…', { selector: '[role="status"]' })
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeDisabled()
+  fireEvent.click(save)
   expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/cloud/confirm', {
     id: 'review',
     quote_id: 'quote',
   })
+  await act(async () => saving.resolve({ ...initial, confirmed: true }))
+  expect(
+    screen.getByText('Cost review saved. No VM has been created.')
+  ).toBeInTheDocument()
+  expect(
+    screen.getByText('Saving cost review…', { selector: '[role="status"]' })
+  ).toBeInTheDocument()
   expect(reviewed).toHaveBeenCalledOnce()
+  await act(async () => refresh.resolve())
+  expect(
+    screen.queryByText('Saving cost review…', { selector: '[role="status"]' })
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeEnabled()
   expect(screen.getByLabelText('Provider API token (access key)')).toHaveValue(
     ''
   )
 })
 
 it('clears entered tokens and withholds an old quote after a failed price refresh', async () => {
-  vi.mocked(gbot).mockRejectedValueOnce(
-    new Error('Provider rate limit reached')
-  )
+  const prices = deferred<CloudReview>()
+  vi.mocked(gbot).mockReturnValueOnce(prices.promise)
+  const busy = vi.fn()
   render(
     <CloudCosts
       name="Research bot"
       initial={review()}
-      busy={vi.fn()}
+      busy={busy}
       reviewed={vi.fn()}
     />
   )
   fireEvent.change(screen.getByLabelText('Provider API token (access key)'), {
     target: { value: 'fixture-secret' },
   })
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh prices' }))
-  await screen.findByRole('alert')
+  const refresh = screen.getByRole('button', { name: 'Refresh prices' })
+  fireEvent.click(refresh)
+  expect(screen.getByRole('button', { name: 'Loading prices…' })).toBeDisabled()
+  expect(
+    screen.getByText('Loading prices…', { selector: '[role="status"]' })
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Review cost' })).toBeDisabled()
+  fireEvent.click(refresh)
+  await act(async () => prices.reject(new Error('Provider rate limit reached')))
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Provider rate limit reached'
+  )
+  expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeEnabled()
+  expect(
+    screen.queryByText('Loading prices…', { selector: '[role="status"]' })
+  ).not.toBeInTheDocument()
+  expect(busy.mock.calls).toEqual([[true], [false]])
   expect(screen.getByLabelText('Provider API token (access key)')).toHaveValue(
     ''
   )
@@ -126,6 +163,79 @@ it('clears entered tokens and withholds an old quote after a failed price refres
     provider: 'hetzner',
     api_token: 'fixture-secret',
   })
+})
+
+it('explains cost calculation and allows a failed calculation to be retried', async () => {
+  const initial = review()
+  const quote = deferred<CloudReview>()
+  vi.mocked(gbot).mockReturnValueOnce(quote.promise)
+  render(
+    <CloudCosts
+      name="Research bot"
+      initial={initial}
+      busy={vi.fn()}
+      reviewed={vi.fn()}
+    />
+  )
+  const calculate = screen.getByRole('button', { name: 'Review cost' })
+  fireEvent.click(calculate)
+  expect(
+    screen.getByRole('button', { name: 'Calculating cost…' })
+  ).toBeDisabled()
+  expect(
+    screen.getByText('Calculating cost…', { selector: '[role="status"]' })
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeDisabled()
+  fireEvent.click(calculate)
+  expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/cloud/select', {
+    id: 'review',
+    region: 'fsn1',
+    plan: '22',
+  })
+  await act(async () =>
+    quote.reject(new Error('Prices are temporarily unavailable'))
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Prices are temporarily unavailable'
+  )
+  expect(calculate).toBeEnabled()
+  expect(
+    screen.queryByText('Calculating cost…', { selector: '[role="status"]' })
+  ).not.toBeInTheDocument()
+  vi.mocked(gbot).mockResolvedValueOnce(initial)
+  fireEvent.click(calculate)
+  await screen.findByRole('button', { name: 'Review cost' })
+  expect(gbot).toHaveBeenCalledTimes(2)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('allows cost confirmation to be retried after saving fails', async () => {
+  const initial = review()
+  const reviewed = vi.fn().mockResolvedValue(undefined)
+  vi.mocked(gbot).mockRejectedValueOnce(
+    new Error('Cost review could not be saved')
+  )
+  render(
+    <CloudCosts
+      name="Research bot"
+      initial={initial}
+      busy={vi.fn()}
+      reviewed={reviewed}
+    />
+  )
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Save cost review' }))
+  await screen.findByRole('alert')
+  expect(reviewed).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Save cost review' })).toBeEnabled()
+  expect(
+    screen.queryByText('Saving cost review…', { selector: '[role="status"]' })
+  ).not.toBeInTheDocument()
+  vi.mocked(gbot).mockResolvedValueOnce({ ...initial, confirmed: true })
+  fireEvent.click(screen.getByRole('button', { name: 'Save cost review' }))
+  await screen.findByText('Cost review saved. No VM has been created.')
+  expect(gbot).toHaveBeenCalledTimes(2)
+  expect(reviewed).toHaveBeenCalledOnce()
 })
 
 it('requires a new plan selection after refreshing saved credentials', async () => {
@@ -229,6 +339,7 @@ it('creates only after separate billing consent with the reviewed quote and expl
       selector: '[role="status"]',
     })
   ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeDisabled()
   fireEvent.click(create)
   expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/cloud/create', {
     id: 'review',
