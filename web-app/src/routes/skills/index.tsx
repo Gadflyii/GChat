@@ -67,6 +67,10 @@ export function SkillsPage() {
     exportSkill,
   } = useAgentSkills()
   const [deleteName, setDeleteName] = useState<string | null>(null)
+  const deletePending = useRef(false)
+  const [deletingSkill, setDeletingSkill] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const deleteCancelRef = useRef<HTMLButtonElement>(null)
   const [editingSkill, setEditingSkill] = useState<AgentSkillDetail | null>(null)
   const editRequest = useRef(0)
   const [createOpen, setCreateOpen] = useState(false)
@@ -91,6 +95,28 @@ export function SkillsPage() {
       await operation()
     } catch (reason) {
       toast.error(String(reason))
+    }
+  }
+
+  const closeDelete = () => {
+    if (deletePending.current) return
+    setDeleteName(null)
+    setDeleteError(null)
+  }
+
+  const deleteSkill = async () => {
+    if (!deleteName || deletePending.current) return
+    deletePending.current = true
+    setDeletingSkill(true)
+    setDeleteError(null)
+    try {
+      await remove(deleteName)
+      setDeleteName(null)
+    } catch (reason) {
+      setDeleteError(String(reason))
+    } finally {
+      deletePending.current = false
+      setDeletingSkill(false)
     }
   }
 
@@ -229,7 +255,9 @@ export function SkillsPage() {
                   onTry={() => tryInChat(skill.name)}
                   onEdit={() => void edit(skill.name)}
                   onUninstall={() => {
+                    if (deletePending.current) return
                     editRequest.current += 1
+                    setDeleteError(null)
                     setDeleteName(skill.name)
                   }}
                 />
@@ -289,29 +317,54 @@ export function SkillsPage() {
 
       <Dialog
         open={deleteName !== null}
-        onOpenChange={(open) => !open && setDeleteName(null)}
+        onOpenChange={(open) => !open && closeDelete()}
       >
-        <DialogContent>
+        <DialogContent
+          aria-busy={deletingSkill}
+          showCloseButton={!deletingSkill}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            deleteCancelRef.current?.focus()
+          }}
+          onEscapeKeyDown={(event) => {
+            if (deletePending.current) event.preventDefault()
+          }}
+          onInteractOutside={(event) => {
+            if (deletePending.current) event.preventDefault()
+          }}
+        >
           <DialogHeader>
             <DialogTitle>{t('common:deleteSkill')}</DialogTitle>
             <DialogDescription>
               {t('common:deleteSkillDescription', { name: deleteName })}
             </DialogDescription>
           </DialogHeader>
+          {deleteError && (
+            <p role="alert" className="text-sm text-destructive">
+              {t('common:deleteSkillFailed', {
+                defaultValue: 'Could not delete this skill. Please try again.',
+              })}{' '}
+              {deleteError}
+            </p>
+          )}
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setDeleteName(null)}>
+            <Button
+              ref={deleteCancelRef}
+              type="button"
+              variant="ghost"
+              disabled={deletingSkill}
+              onClick={closeDelete}
+            >
               {t('common:cancel')}
             </Button>
             <Button
+              type="button"
               variant="destructive"
-              onClick={() => {
-                if (deleteName) {
-                  void mutate(() => remove(deleteName))
-                  setDeleteName(null)
-                }
-              }}
+              disabled={deletingSkill}
+              aria-busy={deletingSkill}
+              onClick={() => void deleteSkill()}
             >
-              {t('common:delete')}
+              {t(deletingSkill ? 'common:loading' : 'common:delete')}
             </Button>
           </DialogFooter>
         </DialogContent>
