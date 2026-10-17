@@ -208,13 +208,15 @@ function MCPServersDesktop() {
         setServerStatuses(await serviceHub.mcp().getMCPServerStatuses())
       } catch (error) {
         setErrorMessage({ message: String(error), subtitle: t('mcp-servers:checkParams') })
-        return
+        return false
       }
       toast.success(
         t('mcp-servers:deleteServer.success', { serverName: serverToDelete })
       )
       setServerToDelete(null)
+      return true
     }
+    return false
   }
 
   const handleOpenJsonEditor = async (serverKey?: string) => {

@@ -6,7 +6,7 @@ import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
 import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
-import type { TerminalSpawnRequest, TerminalStatus } from '@/types/terminal'
+import type { OpenCodeReadiness, TerminalSpawnRequest, TerminalStatus } from '@/types/terminal'
 
 const mocks = vi.hoisted(() => ({
   terminalConstructed: vi.fn(),
@@ -249,7 +249,7 @@ function sendRuntimeOutput(terminalId: string, text: string) {
 describe('CodeTerminalHost', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    useCodeTerminalStore.setState({ enabled: true, workspace: undefined, selectedThreadId: undefined })
+    useCodeTerminalStore.setState({ enabled: true, disabling: false, workspace: undefined, selectedThreadId: undefined })
     useThreads.setState({ threads: {} })
     useConversationPolicy.getState().clearAll()
     useToolAvailable.setState({ disabledTools: {}, defaultDisabledTools: [] })
@@ -368,6 +368,67 @@ describe('CodeTerminalHost', () => {
     expect(screen.getByTestId('code-terminal')).toBe(pane)
     expect(within(pane).getByRole('log')).toHaveTextContent('The running task is waiting for input.')
     expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
+  })
+
+  it('does not launch from delayed readiness while disabling and starts normally after re-enabling', async () => {
+    let finishReadiness!: (readiness: OpenCodeReadiness) => void
+    mocks.provisionOpenCode.mockImplementationOnce(() => new Promise<OpenCodeReadiness>(resolve => {
+      finishReadiness = resolve
+    }))
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(1))
+
+    act(() => useCodeTerminalStore.getState().setDisabling(true))
+    await act(async () => finishReadiness({
+      ready: true,
+      installed: true,
+      configured: true,
+      viaWsl: false,
+      configPath: '/home/user/.config/opencode/opencode.json',
+    }))
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Update Code' })).toBeDisabled()
+
+    act(() => useCodeTerminalStore.setState({ enabled: false, disabling: false }))
+    expect(mocks.spawnTerminal).not.toHaveBeenCalled()
+    expect(screen.getByText('Enable OpenCode integration in Settings.')).toBeInTheDocument()
+
+    act(() => useCodeTerminalStore.getState().setEnabled(true))
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    expect(mocks.provisionOpenCode).toHaveBeenCalledTimes(2)
+    expect(screen.getByLabelText('code:status.running')).toBeInTheDocument()
+  })
+
+  it.each(['restart', 'update'] as const)('does not continue an awaiting %s after integration disabling begins', async (operation) => {
+    let finishStatus!: (status: TerminalStatus) => void
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.getTerminalStatus.mockImplementationOnce(() => new Promise<TerminalStatus>(resolve => {
+      finishStatus = resolve
+    }))
+    mocks.updateCode.mockReset().mockResolvedValue({ logPath: '/code/gchat-update.log' })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(screen.getByLabelText('code:status.running')).toBeInTheDocument())
+    if (operation === 'update') {
+      fireEvent.click(screen.getByRole('button', { name: 'Update Code' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Stop and update' }))
+    } else {
+      act(() => mocks.attachTerminal.mock.calls[0][1]({
+        type: 'exited', generation: 1, sequence: 3,
+        status: { phase: 'exited', generation: 1, sequence: 3, replayComplete: true },
+      }))
+      fireEvent.click(screen.getByRole('button', { name: 'code:restart' }))
+    }
+    await waitFor(() => expect(mocks.getTerminalStatus).toHaveBeenCalled())
+
+    act(() => useCodeTerminalStore.getState().setDisabling(true))
+    await act(async () => finishStatus({ phase: 'exited', generation: 1, sequence: 4, replayComplete: true }))
+
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+    expect(mocks.updateCode).not.toHaveBeenCalled()
+    expect(useCodeTerminalStore.getState().enabled).toBe(true)
+    act(() => useCodeTerminalStore.setState({ enabled: false, disabling: false }))
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+    expect(mocks.updateCode).not.toHaveBeenCalled()
   })
 
   it('updates Code in the background with confirmation and returns to the TUI', async () => {

@@ -53,6 +53,7 @@ const EXPECTED_DESKTOP_ONLY = new Set([
   'terminal_spawn',
   'terminal_status',
   'terminal_stop',
+  'terminal_stop_code',
   'terminal_update_bridge_policy',
   'terminal_write',
 ])

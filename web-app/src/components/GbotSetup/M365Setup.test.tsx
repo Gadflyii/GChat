@@ -20,6 +20,7 @@ import {
   connectorAccounts,
   connectorAuthStatus,
   type ConnectorAccountsView,
+  type ConnectorAuthFlow,
 } from '@/services/workspace-connectors'
 
 const opener = vi.hoisted(() => vi.fn())
@@ -266,9 +267,11 @@ it('explains the connected account list and reports an empty refresh without sta
   fireEvent.click(
     screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
   )
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'Microsoft accounts refreshed. No accounts are connected to GChat yet.'
-  )
+  expect(
+    await screen.findByText(
+      'Microsoft accounts refreshed. No accounts are connected to GChat yet.'
+    )
+  ).toHaveAttribute('role', 'status')
   expect(connectorAccounts).toHaveBeenCalledTimes(2)
   expect(beginConnectorAuth).not.toHaveBeenCalled()
   expect(gbot).not.toHaveBeenCalled()
@@ -289,9 +292,11 @@ it('reports only connected Microsoft accounts on refresh without choosing one', 
   fireEvent.click(
     screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
   )
-  expect(await screen.findByRole('status')).toHaveTextContent(
-    'Microsoft accounts refreshed. 2 connected accounts are available. Choose an account above.'
-  )
+  expect(
+    await screen.findByText(
+      'Microsoft accounts refreshed. 2 connected accounts are available. Choose an account above.'
+    )
+  ).toHaveAttribute('role', 'status')
   expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
   expect(
     screen.getByRole('option', { name: 'second@example.test' })
@@ -767,4 +772,264 @@ it('uses Microsoft accounts on the selected LAN service and keeps sign-in there'
   expect(connectorAccounts).not.toHaveBeenCalled()
   expect(beginConnectorAuth).not.toHaveBeenCalled()
   expect(opener).not.toHaveBeenCalled()
+})
+
+it('shows account refresh progress, prevents duplicates, and clears a rejected refresh for retry', async () => {
+  let rejectRefresh!: (cause: Error) => void
+  vi.mocked(connectorAccounts)
+    .mockResolvedValueOnce(accounts())
+    .mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectRefresh = reject
+      })
+    )
+    .mockResolvedValue(accounts())
+  mount()
+  await screen.findByLabelText('Microsoft account')
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+  )
+  const refreshing = screen.getByRole('button', {
+    name: 'Refreshing Microsoft accounts…',
+  })
+  expect(refreshing).toBeDisabled()
+  expect(
+    screen.getByText(
+      'Refreshing the Microsoft accounts connected to GChat. Please wait.'
+    )
+  ).toHaveAttribute('role', 'status')
+  fireEvent.click(refreshing)
+  await waitFor(() => expect(connectorAccounts).toHaveBeenCalledTimes(2))
+  await act(async () => rejectRefresh(new Error('Account list unavailable')))
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Account list unavailable'
+  )
+  expect(
+    screen.queryByText(
+      'Refreshing the Microsoft accounts connected to GChat. Please wait.'
+    )
+  ).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+  ).toBeEnabled()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+  )
+  await screen.findByText(
+    'Microsoft accounts refreshed. 1 connected account is available. Choose an account above.'
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(beginConnectorAuth).not.toHaveBeenCalled()
+})
+
+it('shows browser sign-in launch progress without choosing an account or allowing duplicate launch', async () => {
+  let resolveSignIn!: (flow: ConnectorAuthFlow) => void
+  vi.mocked(beginConnectorAuth).mockReturnValue(
+    new Promise((resolve) => {
+      resolveSignIn = resolve
+    })
+  )
+  mount()
+  await screen.findByLabelText('Microsoft account')
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Sign in with Microsoft' })
+  )
+  const opening = screen.getByRole('button', {
+    name: 'Opening Microsoft sign-in…',
+  })
+  expect(opening).toBeDisabled()
+  expect(
+    screen.getByText('Opening Microsoft sign-in in your browser. Please wait.')
+  ).toHaveAttribute('role', 'status')
+  fireEvent.click(opening)
+  expect(beginConnectorAuth).toHaveBeenCalledOnce()
+  await act(async () =>
+    resolveSignIn({
+      flow_id: 'waiting-flow',
+      provider: 'microsoft',
+      status: 'waiting',
+    })
+  )
+  expect(
+    screen.getByRole('button', { name: 'Check sign-in status' })
+  ).toBeEnabled()
+  expect(
+    screen.queryByText(
+      'Opening Microsoft sign-in in your browser. Please wait.'
+    )
+  ).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(connectorAuthStatus).not.toHaveBeenCalled()
+})
+
+it.each([
+  {
+    action: 'check',
+    label: 'Check sign-in status',
+    pending: 'Checking sign-in status…',
+    message: 'Checking whether Microsoft sign-in has completed. Please wait.',
+    status: 'connected',
+    terminal:
+      'Microsoft account connected. Choose the account and check its assigned PCs.',
+  },
+  {
+    action: 'cancel',
+    label: 'Cancel sign-in',
+    pending: 'Cancelling sign-in…',
+    message: 'Cancelling Microsoft sign-in. Please wait.',
+    status: 'cancelled',
+    terminal: 'Microsoft sign-in cancelled.',
+  },
+] as const)(
+  'shows $action progress until Microsoft sign-in responds',
+  async ({ action, label, pending, message, status, terminal }) => {
+    const view = accounts()
+    view.active_flows = [
+      { flow_id: 'waiting-flow', provider: 'microsoft', status: 'waiting' },
+    ]
+    vi.mocked(connectorAccounts).mockResolvedValue(view)
+    let resolveFlow!: (flow: ConnectorAuthFlow) => void
+    const operation =
+      action === 'check'
+        ? vi.mocked(connectorAuthStatus)
+        : vi.mocked(cancelConnectorAuth)
+    operation.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFlow = resolve
+      })
+    )
+    mount()
+    fireEvent.click(await screen.findByRole('button', { name: label }))
+    const checking = screen.getByRole('button', { name: pending })
+    expect(checking).toBeDisabled()
+    expect(screen.getByText(message)).toHaveAttribute('role', 'status')
+    fireEvent.click(checking)
+    expect(operation).toHaveBeenCalledOnce()
+    expect(
+      screen.getByRole('button', {
+        name: action === 'check' ? 'Cancel sign-in' : 'Check sign-in status',
+      })
+    ).toBeDisabled()
+    await act(async () =>
+      resolveFlow({ flow_id: 'waiting-flow', provider: 'microsoft', status })
+    )
+    expect(screen.getByText(terminal)).toBeInTheDocument()
+    expect(screen.queryByText(message)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+    expect(
+      screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+    ).toBeDisabled()
+  }
+)
+
+it('shows assigned-PC progress until the selected account lookup finishes', async () => {
+  let resolvePcs!: (pcs: (typeof cloudPc)[]) => void
+  vi.mocked(gbot).mockReturnValue(
+    new Promise((resolve) => {
+      resolvePcs = resolve
+    })
+  )
+  mount()
+  await chooseAccount()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+  )
+  const checking = screen.getByRole('button', {
+    name: 'Checking assigned Cloud PCs…',
+  })
+  expect(checking).toBeDisabled()
+  expect(
+    screen.getByText(
+      'Checking the Cloud PCs assigned to your selected Microsoft account. Please wait.'
+    )
+  ).toHaveAttribute('role', 'status')
+  fireEvent.click(checking)
+  expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/m365/assigned', {
+    account_id: 'work-account',
+  })
+  await act(async () => resolvePcs([cloudPc]))
+  expect(screen.getByLabelText('Assigned Cloud PC')).toHaveValue('')
+  expect(
+    screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+  ).toBeEnabled()
+  expect(
+    screen.queryByText(
+      'Checking the Cloud PCs assigned to your selected Microsoft account. Please wait.'
+    )
+  ).not.toBeInTheDocument()
+})
+
+it('keeps save progress visible until the saved setup callback completes', async () => {
+  vi.mocked(gbot).mockImplementation(async (path) =>
+    path === 'setup/m365/assigned' ? [cloudPc] : initial
+  )
+  const saved = mount(initial)
+  let finishSaved!: () => void
+  saved.mockReturnValue(
+    new Promise<void>((resolve) => {
+      finishSaved = resolve
+    })
+  )
+  await screen.findByLabelText('Microsoft account')
+  await checkAssignments()
+  fireEvent.click(screen.getByLabelText(/dedicated to the bot/))
+  fireEvent.click(screen.getByRole('button', { name: 'Save Cloud PC setup' }))
+  await screen.findByText(
+    'Cloud PC setup saved. Desktop control is not connected yet.'
+  )
+  const saving = screen.getByRole('button', { name: 'Saving Cloud PC setup…' })
+  expect(saving).toBeDisabled()
+  expect(
+    screen.getByText('Saving your Cloud PC setup. Please wait.')
+  ).toHaveAttribute('role', 'status')
+  fireEvent.click(saving)
+  expect(saved).toHaveBeenCalledOnce()
+  await act(async () => finishSaved())
+  expect(
+    screen.getByRole('button', { name: 'Save Cloud PC setup' })
+  ).toBeEnabled()
+  expect(
+    screen.queryByText('Saving your Cloud PC setup. Please wait.')
+  ).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Microsoft account')).toHaveValue(
+    initial.account_id
+  )
+})
+
+it('keeps client-opening progress visible through the native opener response', async () => {
+  vi.mocked(gbot).mockResolvedValue({
+    url: 'https://windows365.microsoft.com/temporary',
+  })
+  let finishOpen!: () => void
+  opener.mockReturnValue(
+    new Promise<void>((resolve) => {
+      finishOpen = resolve
+    })
+  )
+  mount(initial)
+  await screen.findByLabelText('Microsoft account')
+  fireEvent.click(screen.getByRole('button', { name: 'Open Microsoft client' }))
+  await waitFor(() => expect(opener).toHaveBeenCalledOnce())
+  const opening = screen.getByRole('button', {
+    name: 'Opening Microsoft client…',
+  })
+  expect(opening).toBeDisabled()
+  expect(
+    screen.getByText('Opening Microsoft’s client. Please wait.')
+  ).toHaveAttribute('role', 'status')
+  fireEvent.click(opening)
+  expect(gbot).toHaveBeenCalledOnce()
+  await act(async () => finishOpen())
+  expect(
+    screen.getByRole('button', { name: 'Open Microsoft client' })
+  ).toBeEnabled()
+  expect(
+    screen.getByText(
+      'Microsoft client opened. Desktop control is not connected yet.'
+    )
+  ).toHaveAttribute('role', 'status')
+  expect(
+    screen.queryByText('Opening Microsoft’s client. Please wait.')
+  ).not.toBeInTheDocument()
 })

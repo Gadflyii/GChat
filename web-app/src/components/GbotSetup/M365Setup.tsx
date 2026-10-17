@@ -17,6 +17,41 @@ import {
   type ConnectorAuthFlow,
 } from '@/services/workspace-connectors'
 
+const pendingActions = {
+  refresh: {
+    label: 'Refreshing Microsoft accounts…',
+    message:
+      'Refreshing the Microsoft accounts connected to GChat. Please wait.',
+  },
+  signIn: {
+    label: 'Opening Microsoft sign-in…',
+    message: 'Opening Microsoft sign-in in your browser. Please wait.',
+  },
+  checkSignIn: {
+    label: 'Checking sign-in status…',
+    message: 'Checking whether Microsoft sign-in has completed. Please wait.',
+  },
+  cancelSignIn: {
+    label: 'Cancelling sign-in…',
+    message: 'Cancelling Microsoft sign-in. Please wait.',
+  },
+  checkPcs: {
+    label: 'Checking assigned Cloud PCs…',
+    message:
+      'Checking the Cloud PCs assigned to your selected Microsoft account. Please wait.',
+  },
+  save: {
+    label: 'Saving Cloud PC setup…',
+    message: 'Saving your Cloud PC setup. Please wait.',
+  },
+  openClient: {
+    label: 'Opening Microsoft client…',
+    message: 'Opening Microsoft’s client. Please wait.',
+  },
+}
+
+type PendingAction = keyof typeof pendingActions
+
 export default function M365Setup({
   name,
   initial,
@@ -39,7 +74,7 @@ export default function M365Setup({
   const [dedicated, setDedicated] = useState(false)
   const [record, setRecord] = useState(initial)
   const [flow, setFlow] = useState<ConnectorAuthFlow>()
-  const [working, setWorking] = useState(false)
+  const [pendingAction, setPendingAction] = useState<PendingAction>()
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const active = useRef(true)
@@ -105,6 +140,7 @@ export default function M365Setup({
           : !permission
             ? 'Allow read-only Cloud PC access for this account before checking assigned PCs.'
             : undefined
+  const working = pendingAction !== undefined
   const waiting = flow?.status === 'waiting'
   const disabled = loadingAccounts || working || waiting
   const pc = pcs?.find((item) => item.id === pcId)
@@ -121,10 +157,13 @@ export default function M365Setup({
       record.route === route
   )
 
-  const perform = async (operation: () => Promise<void>) => {
+  const perform = async (
+    action: PendingAction,
+    operation: () => Promise<void>
+  ) => {
     if (locked.current) return
     locked.current = true
-    setWorking(true)
+    setPendingAction(action)
     busy(true)
     setError('')
     setNotice('')
@@ -135,7 +174,7 @@ export default function M365Setup({
     } finally {
       locked.current = false
       if (active.current) {
-        setWorking(false)
+        setPendingAction(undefined)
         busy(false)
       }
     }
@@ -201,7 +240,12 @@ export default function M365Setup({
         in to Windows or other Microsoft apps are not added automatically.
         Connect an account with Microsoft sign-in to add it to this list.
       </p>
-      {!view && !error && <p role="status">Loading Microsoft accounts…</p>}
+      {!view && !error && !working && (
+        <p role="status">Loading Microsoft accounts…</p>
+      )}
+      {pendingAction && (
+        <p role="status">{pendingActions[pendingAction].message}</p>
+      )}
       {remote && (
         <p role="status" className="text-muted-foreground">
           These accounts belong to the service computer. Connect Microsoft there
@@ -214,13 +258,15 @@ export default function M365Setup({
         variant="outline"
         disabled={disabled}
         onClick={() =>
-          void perform(async () => {
+          void perform('refresh', async () => {
             setPcs(undefined)
             await refreshAccounts(true)
           })
         }
       >
-        Refresh Microsoft accounts
+        {pendingAction === 'refresh'
+          ? pendingActions.refresh.label
+          : 'Refresh Microsoft accounts'}
       </Button>
       {view && !configured && (
         <p role="alert">
@@ -304,7 +350,7 @@ export default function M365Setup({
             variant="outline"
             disabled={disabled || !configured || remote}
             onClick={() =>
-              void perform(async () => {
+              void perform('signIn', async () => {
                 setPcs(undefined)
                 await acceptFlow(
                   await beginConnectorAuth({
@@ -317,9 +363,11 @@ export default function M365Setup({
               })
             }
           >
-            {account
-              ? 'Allow read-only Cloud PC access'
-              : 'Sign in with Microsoft'}
+            {pendingAction === 'signIn'
+              ? pendingActions.signIn.label
+              : account
+                ? 'Allow read-only Cloud PC access'
+                : 'Sign in with Microsoft'}
           </Button>
         </>
       )}
@@ -337,24 +385,28 @@ export default function M365Setup({
                   variant="outline"
                   disabled={working}
                   onClick={() =>
-                    void perform(async () =>
+                    void perform('checkSignIn', async () =>
                       acceptFlow(await connectorAuthStatus(flow.flow_id))
                     )
                   }
                 >
-                  Check sign-in status
+                  {pendingAction === 'checkSignIn'
+                    ? pendingActions.checkSignIn.label
+                    : 'Check sign-in status'}
                 </Button>
                 <Button
                   type="button"
                   variant="ghost"
                   disabled={working}
                   onClick={() =>
-                    void perform(async () =>
+                    void perform('cancelSignIn', async () =>
                       acceptFlow(await cancelConnectorAuth(flow.flow_id))
                     )
                   }
                 >
-                  Cancel sign-in
+                  {pendingAction === 'cancelSignIn'
+                    ? pendingActions.cancelSignIn.label
+                    : 'Cancel sign-in'}
                 </Button>
               </div>
             </>
@@ -382,7 +434,7 @@ export default function M365Setup({
           checkPrerequisite ? `${id}-cloud-pc-prerequisite` : undefined
         }
         onClick={() =>
-          void perform(async () => {
+          void perform('checkPcs', async () => {
             setPcs(undefined)
             const next = await gbot<CloudPc[]>('setup/m365/assigned', {
               account_id: accountId,
@@ -393,7 +445,9 @@ export default function M365Setup({
           })
         }
       >
-        Check assigned Cloud PCs
+        {pendingAction === 'checkPcs'
+          ? pendingActions.checkPcs.label
+          : 'Check assigned Cloud PCs'}
       </Button>
       {checkPrerequisite && (
         <p id={`${id}-cloud-pc-prerequisite`} className="text-muted-foreground">
@@ -500,7 +554,7 @@ export default function M365Setup({
           type="button"
           disabled={disabled || !permission || !pc || !route || !dedicated}
           onClick={() =>
-            void perform(async () => {
+            void perform('save', async () => {
               const next = await gbot<M365SetupRecord>('setup/m365/save', {
                 id,
                 name: name.trim(),
@@ -518,7 +572,9 @@ export default function M365Setup({
             })
           }
         >
-          Save Cloud PC setup
+          {pendingAction === 'save'
+            ? pendingActions.save.label
+            : 'Save Cloud PC setup'}
         </Button>
         <Button
           type="button"
@@ -532,7 +588,7 @@ export default function M365Setup({
             (pcs !== undefined && !pc)
           }
           onClick={() =>
-            void perform(async () => {
+            void perform('openClient', async () => {
               const launch = await gbot<{ url: string }>('setup/m365/launch', {
                 id,
               })
@@ -544,7 +600,9 @@ export default function M365Setup({
             })
           }
         >
-          Open Microsoft client
+          {pendingAction === 'openClient'
+            ? pendingActions.openClient.label
+            : 'Open Microsoft client'}
         </Button>
       </div>
       {notice && <p role="status">{notice}</p>}
