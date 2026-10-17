@@ -842,9 +842,8 @@ impl KvmSetup {
                 action,
             ));
         }
-        let unit = format!("gbot-setup-{}", record.id.as_uuid());
         let launch_time = SystemTime::now().duration_since(UNIX_EPOCH).ok();
-        let command = format!("systemctl --user stop {unit}.service 2>/dev/null; systemctl --user reset-failed {unit}.service 2>/dev/null; systemd-run --user --collect --unit={unit} /usr/local/bin/gbot-in-session mousepad --disable-server {}", path.0);
+        let command = readiness_editor_command(record.id, &path);
         let launched = self
             .guest(
                 runtime,
@@ -1222,6 +1221,17 @@ impl KvmSetup {
             Ok(record)
         }).await.map_err(persistence)?
     }
+}
+fn readiness_editor_command(id: WorkspaceId, path: &GuestPath) -> String {
+    let unit = format!("gbot-setup-{}", id.as_uuid());
+    // --disable-server gives this unit its own editor process, but Mousepad still
+    // restores the user's previous session. Keep this disposable readiness editor
+    // away from both the user's settings and their unsaved recovery documents.
+    // systemd removes the private runtime directory when this exact unit stops.
+    format!(
+        r#"systemctl --user stop {unit}.service 2>/dev/null; systemctl --user reset-failed {unit}.service 2>/dev/null; systemd-run --user --collect --unit={unit} --property=RuntimeDirectory={unit} --property=RuntimeDirectoryMode=0700 --property=RuntimeDirectoryPreserve=no /usr/local/bin/gbot-in-session /bin/sh -c 'set -eu; : "${{RUNTIME_DIRECTORY:?}}"; export GSETTINGS_BACKEND=memory XDG_CONFIG_HOME="$RUNTIME_DIRECTORY/config" XDG_DATA_HOME="$RUNTIME_DIRECTORY/data" XDG_CACHE_HOME="$RUNTIME_DIRECTORY/cache" XDG_STATE_HOME="$RUNTIME_DIRECTORY/state"; exec mousepad --disable-server "$1"' sh {}"#,
+        path.0
+    )
 }
 pub(crate) fn readiness_input(
     window: &serde_json::Value,
@@ -2112,6 +2122,38 @@ mod tests {
         assert!(matches!(readiness_result("read", GuestOutcome::Success {
             result: GuestResult::Read { data: b"ready".to_vec() },
         }).unwrap(), GuestResult::Read { data } if data == b"ready"));
+    }
+    #[test]
+    fn readiness_editor_isolates_crash_recovery_per_setup() {
+        let first = WorkspaceId::new();
+        let second = WorkspaceId::new();
+        for id in [first, second] {
+            let path = GuestPath(format!("/home/gbot/Gbot-setup-{}.txt", id.as_uuid()));
+            let command = readiness_editor_command(id, &path);
+            let unit = format!("gbot-setup-{}", id.as_uuid());
+            assert!(command.contains(&format!(
+                "--unit={unit} --property=RuntimeDirectory={unit} "
+            )));
+            assert!(command.contains("--property=RuntimeDirectoryMode=0700"));
+            assert!(command.contains("--property=RuntimeDirectoryPreserve=no"));
+            assert!(command.contains(": \"${RUNTIME_DIRECTORY:?}\""));
+            assert!(command.contains("export GSETTINGS_BACKEND=memory "));
+            for (variable, directory) in [
+                ("XDG_CONFIG_HOME", "config"),
+                ("XDG_DATA_HOME", "data"),
+                ("XDG_CACHE_HOME", "cache"),
+                ("XDG_STATE_HOME", "state"),
+            ] {
+                assert!(command.contains(&format!("{variable}=\"$RUNTIME_DIRECTORY/{directory}\"")));
+            }
+            assert!(command.contains("/usr/local/bin/gbot-in-session /bin/sh -c 'set -eu;"));
+            assert!(command.ends_with(&format!(
+                "exec mousepad --disable-server \"$1\"' sh {}",
+                path.0
+            )));
+            let other = if id == first { second } else { first };
+            assert!(!command.contains(&other.as_uuid().to_string()));
+        }
     }
     #[test]
     fn window_diagnostics_retains_actual_values_and_full_title_matches() {
