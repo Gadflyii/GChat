@@ -583,6 +583,25 @@ describe('Workspace connections', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('says why sign-in is disabled until a service is selected', async () => {
+    await ready()
+    const microsoft = within(
+      screen.getByRole('heading', { name: 'Microsoft 365' }).parentElement!
+    )
+    const signIn = microsoft.getByRole('button', {
+      name: 'Sign in with Microsoft',
+    })
+    expect(signIn).toBeDisabled()
+    expect(signIn).toHaveAccessibleDescription(
+      'Select at least one service above to continue.'
+    )
+    await userEvent.setup().click(microsoft.getAllByRole('checkbox')[0])
+    expect(signIn).toBeEnabled()
+    expect(
+      microsoft.queryByText('Select at least one service above to continue.')
+    ).not.toBeInTheDocument()
+  })
+
   it('uses the configured release identity for Microsoft browser sign-in without editing an ID', async () => {
     await ready()
     const microsoft = within(
