@@ -1228,8 +1228,14 @@ mod plain_error_tests {
             SshError::CleanupUnproven,
         ] {
             let text = error.to_string();
-            assert!(!text.contains("Guest") && !text.contains("liveness"), "{text}");
-            assert!(text.contains("bot’s computer") || text.contains("computer’s"), "{text}");
+            assert!(
+                !text.contains("Guest") && !text.contains("liveness"),
+                "{text}"
+            );
+            assert!(
+                text.contains("bot’s computer") || text.contains("computer’s"),
+                "{text}"
+            );
         }
         assert!(SshError::TimedOut.to_string().contains("turned on"));
     }
