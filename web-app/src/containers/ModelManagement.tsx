@@ -25,7 +25,7 @@ import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
 import { engineAlias, engineCommand, type LocalModelLoadProgress } from '@/services/engines'
 import { controlLocalHostModel } from '@/utils/localHostModel'
 import { HostCard } from '@/containers/EngineHostModels'
-import { hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
+import { gpuCardName, hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
 import { downloadStatusLabel, formatModelBytes, releaseReadiness, type ModelDownload, type ModelGpu, type ModelRelease } from '@/lib/model-release'
 import { switchToModel } from '@/utils/switchModel'
 import { useAppState } from '@/hooks/useAppState'
@@ -265,7 +265,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
       </div></div></HeaderPage>
     <main className="space-y-5 overflow-y-auto p-5">
       <div className="flex flex-wrap gap-2">{gpus.map(g => <span key={g.uuid} className="rounded border px-3 py-1 text-sm">{g.name} · {(g.memory_mib / 1024).toFixed(0)} GiB · {g.compute_capability ? `SM ${g.compute_capability}` : 'SM unknown'}</span>)}</div>
-      <p className="text-sm text-muted-foreground">{local ? 'Manage models on this computer.' : `Downloads and model operations run on ${host?.name ?? 'the selected host'}, not this computer.`} GPU memory is evaluated per device, never added together.</p>
+      <p className="text-sm text-muted-foreground">{local ? 'Manage models on this computer.' : `Downloads and model operations run on ${host?.name ?? 'the selected host'}, not this computer.`} Each graphics card's memory is counted on its own, not added together.</p>
       <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex gap-1" role="tablist" aria-label="Model management">
         {managementTabs.map((t, index) => <Button key={t} role="tab" aria-selected={tab === t} tabIndex={tab === t ? 0 : -1} variant={tab === t ? 'default' : 'ghost'} onClick={() => setTab(t)}
           onKeyDown={event => {
@@ -296,9 +296,9 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
       {local && localDownloadError && <p role="alert" className="text-sm text-destructive">{localDownloadError}</p>}
       {(tab === 'Recommended' || (tab === 'Installed' && local)) && <Input aria-label="Search models" placeholder="Find a model…" value={query} onChange={e => setQuery(e.target.value)} />}
       {tab === 'Installed' && <>
-        {local && <fieldset disabled={busy} className="space-y-2 rounded border p-3"><legend>GPUs for Load model</legend>
+        {local && <fieldset disabled={busy} className="space-y-2 rounded border p-3"><legend>Graphics cards to use when loading a model</legend>
           <label className="flex items-center gap-2"><input type="checkbox" checked={selectedGpuUuids === null} onChange={e => setSelectedGpuUuids(e.target.checked ? null : [])} />Automatic (visible GPUs only)</label>
-          {gpus.map(g => <label key={g.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedGpuUuids?.includes(g.uuid) ?? false} onChange={e => setSelectedGpuUuids(e.target.checked ? [...(selectedGpuUuids ?? []), g.uuid] : (selectedGpuUuids ?? []).filter(id => id !== g.uuid))} />{g.name} · {g.uuid}</label>)}
+          {gpus.map(g => <label key={g.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedGpuUuids?.includes(g.uuid) ?? false} onChange={e => setSelectedGpuUuids(e.target.checked ? [...(selectedGpuUuids ?? []), g.uuid] : (selectedGpuUuids ?? []).filter(id => id !== g.uuid))} />{gpuCardName(gpus, gpus.indexOf(g))}</label>)}
           <p className="text-sm text-muted-foreground">Choose the graphics cards to load the model onto. Leave Automatic checked to use every available card; a model that needs several cards needs that many selected.</p>
           {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Choose available GPUs. A saved GPU may no longer be connected.' : 'Waiting for fresh GPU information.'}</p>}
         </fieldset>}

@@ -33,7 +33,7 @@ it('saves explicit GPU selection before choosing storage without starting profil
   const start = await screen.findByRole('button', { name: 'Use selected graphics cards' })
   expect(start).toBeDisabled()
   expect(screen.getByText(/each combination needs its own hardware profile/)).toBeVisible()
-  const technicalIdentity = screen.getByText(/RTX 5090: GPU-one/ )
+  const technicalIdentity = screen.getByText(/RTX 5090 · NVIDIA compatibility 12.0/)
   expect(technicalIdentity).not.toBeVisible()
   fireEvent.click(screen.getByText('Graphics card details'))
   expect(technicalIdentity).toBeVisible()
