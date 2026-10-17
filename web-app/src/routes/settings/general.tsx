@@ -437,7 +437,7 @@ function General() {
                       &nbsp;
                     </span>
                     <div className="flex items-center gap-2 mt-1 ">
-                      <div className="truncate">
+                      <div className="min-w-0 truncate">
                         <span
                           title={janDataFolder}
                           className="bg-secondary text-xs p-1 rounded-sm"
@@ -632,10 +632,12 @@ function General() {
                 description={t('settings:general.huggingfaceTokenDesc', {
                   ns: 'settings',
                 })}
+                classNameWrapperAction="max-w-full"
                 actions={
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Input
                       id="hf-token"
+                      className="min-w-40 flex-1"
                       type={showHuggingfaceToken ? 'text' : 'password'}
                       value={huggingfaceToken || ''}
                       onChange={(e) => setHuggingfaceToken(e.target.value)}
