@@ -18,7 +18,7 @@ Acceptance: focused rendered move/pending/refusal/completion cases and full
 | --- | --- | --- |
 | Codex 6 / local | `/ai/gchat-worktrees/c6-gui-data-location-guidance-20261017`, branch `fix/c6-gui-data-location-guidance-20261017` | Candidate from `fb15341b1`; focused and full verification pass |
 | Codex 6 / evidence | `/ai/gchat/out/c6-gui-data-location-guidance-20261017/` | Result JSON and concise verification summary retained |
-| Codex 6 / S1 | `/media/ron/SSD_RAID/ai/tmp-c6-gui-data-location-guidance-20261017/` | Private source/dependency/build copies retired after verification; CPU 72–79 returned 12:50Z |
+| Codex 6 / S1 | `/media/ron/SSD_RAID/ai/tmp-c6-gui-data-location-guidance-20261017/` | Merged-source gate passed on CPU 72–79; private source/dependency/build copies retired, no GPU |
 
 Verification passed on S1 in the pinned `gchat-s1-verify` container: all 21
 focused settings cases and full `make verify` (2,579 frontend tests, 119 extension
@@ -27,8 +27,13 @@ local-core archive references only in the disposable test copy; candidate
 dependency files are unchanged. No live data move was performed.
 
 Current: `origin/main` (`51842219e`, including the settings guidance) is merged
-without rebasing. Both guidance sections are retained; combined-source
-`make verify` is pending on S1 CPUs 72–79 before the refreshed merge-ready.
+without rebasing, retaining both guidance sections. Gchat 2 released the stale
+Gbot LAN-label test expectation for correction in `ba19013a5`. Combined-source
+`make verify` passed on that commit: 2,619 frontend tests, 119 extension tests
+and 1,073 Rust tests, with six frontend and 27 Rust skips/ignored cases. The
+21 General settings cases pass. The initial fixture failure and corrected result
+are retained beside the original evidence. Next: coordinator merge of the
+isolated branch; installed workflow qualification remains separate.
 
 ## Integration switch guidance — C7
 
