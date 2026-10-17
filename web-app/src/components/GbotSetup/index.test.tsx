@@ -85,7 +85,9 @@ async function chooseLan(serviceHostId?: string) {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   )
   if (serviceHostId) {
-    fireEvent.click(screen.getByLabelText('Another PC on the LAN'))
+    fireEvent.click(
+      screen.getByLabelText('Another PC on the home or office network (LAN)')
+    )
     fireEvent.change(screen.getByLabelText('Paired service computer'), {
       target: { value: serviceHostId },
     })
