@@ -26,6 +26,30 @@ Windows runtime acceptance remains a separate platform gate. See the
 [ownership decision](../decisions/2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
 and [data-folder behavior](../../DEVELOP.md#custom-data-folder).
 
+## Current-package Linux collision/reopen acceptance — October 17
+
+C7 completed the CPU-only Linux leaf of
+`GCHAT-CROSS-OS-HOST-PORT-COLLISION-20261016` using the retained GChat
+`0b3aa523c` / Engine `4f451dded` AppImage. An independent genuine Host occupied
+private port 19873. Ordinary GInfer Hosts navigation connected to the desktop's
+own Host on port 46543, displayed the collision notice and retained loopback-only
+sharing. After normal desktop close, normal idle-Host stop and ordinary reopen,
+the GUI connected to the same own Host identity and persisted port. Both TLS
+identities remained unchanged and the independent Host stayed reachable.
+No model, Ensure, Engine test or GPU workload ran. Native Windows and actual
+cross-OS coexistence remain open; this result closes only the current-package
+Linux collision/reopen leaf.
+
+The initial locator-only fixture selected default port 7443 and is invalid
+collision evidence. Normal shutdown followed by setting the private Host state's
+management origin to the occupied private port corrected the fixture. No
+Ron-owned data root was used. Source tests were reused without rerunning them.
+Private processes, package mount, CPU booking and disposable roots were released
+at 09:51Z; package and source donors were read-only and untouched. Retained
+result and short summary: `/ai/gchat/out/c7-host-port-collision-20261017/`.
+Package receipt:
+`/ai/gchat/out/linux-rc-final-20261017/current-0b3aa523c-4f451dded/package-result.json`.
+
 ## Installed model GPU selection
 
 The Installed page keeps the selected GPU UUIDs through Load and verifies them

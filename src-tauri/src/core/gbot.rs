@@ -497,7 +497,19 @@ impl GbotState {
         let mut connection = self.connection.lock().await;
         let mut local_shutdown = false;
         if target == ServiceTarget::Local {
-            if let Some(client) = &connection.local_client {
+            // Request errors invalidate caches without stopping the service. Only
+            // an available ownership lock proves there is no service left to quit.
+            if let Ok(owner) = ginfer_host::service_owner::ServiceOwner::acquire(&root.join("gbot"))
+            {
+                drop(owner);
+            } else {
+                let client = match &connection.local_client {
+                    Some(client) => client.clone(),
+                    None => match &connection.client {
+                        Some(ServiceClient::Local(client)) => client.clone(),
+                        _ => Arc::new(background::connect(&root).await?),
+                    },
+                };
                 client.call("/v1/service/shutdown", Value::Null).await?;
                 local_shutdown = true;
             }
@@ -685,6 +697,8 @@ mod tests {
             .put("app.gchat.gbot", &service_id.to_string(), b"fixture-token")
             .unwrap();
         let mutations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let shutdowns = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let service_owner = Arc::new(std::sync::Mutex::new(None));
         let app = tauri::test::mock_app();
         app.manage(GbotState::default());
         app.manage(crate::test_support::TestDataRoot(root.clone()));
@@ -695,9 +709,14 @@ mod tests {
         let mut prior = None;
         for instance in [1, 2] {
             let service_mutations = mutations.clone();
+            let service_shutdowns = shutdowns.clone();
+            let service_owner = service_owner.clone();
+            let request_owner = service_owner.clone();
             let server = hyper::Server::bind(&"127.0.0.1:0".parse().unwrap()).serve(
                 hyper::service::make_service_fn(move |_| {
                     let mutations = service_mutations.clone();
+                    let shutdowns = service_shutdowns.clone();
+                    let owner = request_owner.clone();
                     async move {
                         Ok::<_, std::convert::Infallible>(hyper::service::service_fn(
                             move |request: hyper::Request<hyper::Body>| {
@@ -708,6 +727,10 @@ mod tests {
                                 );
                                 if configure {
                                     mutations.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                                }
+                                if request.uri().path() == "/v1/service/shutdown" {
+                                    shutdowns.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                                    owner.lock().unwrap().take();
                                 }
                                 async move {
                                     let body = if configure {
@@ -801,6 +824,60 @@ mod tests {
                 assert!(!Arc::ptr_eq(&original, &reconnected));
             }
             prior = Some(state.local_client(app.handle()).await.unwrap());
+            if instance == 2 {
+                *service_owner.lock().unwrap() = Some(
+                    ginfer_host::service_owner::ServiceOwner::acquire(&root.join("gbot")).unwrap(),
+                );
+                state.connection.lock().await.client =
+                    Some(ServiceClient::Local(prior.as_ref().unwrap().clone()));
+                assert!(crate::core::connectors::connector_configure(
+                    app.handle().clone(),
+                    json!({})
+                )
+                .await
+                .is_err());
+                assert!(state.connection.lock().await.local_client.is_none());
+                state.quit(app.handle()).await.unwrap();
+                assert_eq!(
+                    shutdowns.load(std::sync::atomic::Ordering::SeqCst),
+                    1,
+                    "Quit must stop the service after an account error clears its cache"
+                );
+
+                // Even if both caches were cleared, Quit must discover the running
+                // service without starting a replacement or claiming false success.
+                *service_owner.lock().unwrap() = Some(
+                    ginfer_host::service_owner::ServiceOwner::acquire(&root.join("gbot")).unwrap(),
+                );
+                {
+                    let mut connection = state.connection.lock().await;
+                    assert!(connection.client.is_none());
+                    assert!(connection.local_client.is_none());
+                    connection.stopped = false;
+                    connection.local_stopped = false;
+                    connection.authorized = true;
+                    connection.local_authorized = true;
+                }
+                let discovery_path = root.join("gbot/service.json");
+                let discovery_bytes = std::fs::read(&discovery_path).unwrap();
+                std::fs::write(&discovery_path, b"invalid discovery").unwrap();
+                assert!(state.quit(app.handle()).await.is_err());
+                {
+                    let connection = state.connection.lock().await;
+                    assert!(!connection.stopped);
+                    assert!(!connection.local_stopped);
+                    assert!(connection.authorized);
+                    assert!(connection.local_authorized);
+                }
+                std::fs::write(&discovery_path, discovery_bytes).unwrap();
+                state.quit(app.handle()).await.unwrap();
+                assert_eq!(shutdowns.load(std::sync::atomic::Ordering::SeqCst), 2);
+                assert!(state.connection.lock().await.stopped);
+                // An already-stopped service needs neither credentials nor a start.
+                std::fs::write(&discovery_path, b"invalid discovery").unwrap();
+                state.quit(app.handle()).await.unwrap();
+                assert_eq!(shutdowns.load(std::sync::atomic::Ordering::SeqCst), 2);
+            }
             shutdown.send(()).unwrap();
             serving.await.unwrap().unwrap();
         }
