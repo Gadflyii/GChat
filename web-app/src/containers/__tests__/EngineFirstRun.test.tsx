@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { EngineFirstRun } from '../EngineFirstRun'
 
@@ -17,7 +17,8 @@ afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 it('saves explicit GPU selection before choosing storage without starting profiling', async () => {
   mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('storage', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } }) : flow('gpu')))
-  render(<EngineFirstRun />)
+  // Finish restoring the saved GPU group before simulating the user's edit.
+  await act(async () => { render(<EngineFirstRun />) })
   const start = await screen.findByRole('button', { name: 'Use selected GPUs' })
   expect(start).toBeDisabled()
   expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })

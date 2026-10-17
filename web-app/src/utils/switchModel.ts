@@ -8,6 +8,7 @@ import { localStorageKey } from '@/constants/localStorage'
 import { showModelLoadErrorToast } from '@/containers/ModelLoadErrorToast'
 import i18n from '@/i18n/setup'
 import type { ServiceHub } from '@/services'
+import type { StartModelOptions } from '@/services/models/types'
 import {
   isKeylessRemoteProvider,
   registerRemoteProvider,
@@ -296,6 +297,7 @@ export async function switchToModel(params: {
   serviceHub: ServiceHub
   isAutoStart?: boolean
   gpuUuids?: string[]
+  options?: StartModelOptions
 }): Promise<void> {
   if (params.isAutoStart && isIntentionallyStopped(params.providerName, params.modelId)) return
   // Claim a slot in the queue. `mySeq` lets us detect if a newer switch was
@@ -328,7 +330,11 @@ export async function switchToModel(params: {
       useAppState.getState().setIntentionalModelStop(params.providerName, params.modelId, false)
     }
 
-    if (params.gpuUuids === undefined && await isTargetModelAlreadyServing(params)) {
+    if (
+      !params.options?.useProfileDefaults &&
+      params.gpuUuids === undefined &&
+      await isTargetModelAlreadyServing(params)
+    ) {
       const activeModels = await params.serviceHub
         .models()
         .getActiveModels()
@@ -403,8 +409,9 @@ async function doSwitchToModel(params: {
   serviceHub: ServiceHub
   isAutoStart?: boolean
   gpuUuids?: string[]
+  options?: StartModelOptions
 }): Promise<void> {
-  const { modelId, providerName, serviceHub, isAutoStart, gpuUuids } = params
+  const { modelId, providerName, serviceHub, isAutoStart, gpuUuids, options } = params
 
   const { setServerStatus, setActiveModels, updateLoadingModel } =
     useAppState.getState()
@@ -493,9 +500,11 @@ async function doSwitchToModel(params: {
 
     if (isLocal) {
       await taggedWithTimeout(
-        gpuUuids === undefined
-          ? serviceHub.models().startModel(provider, modelId, true)
-          : serviceHub.models().startModel(provider, modelId, true, gpuUuids),
+        options !== undefined
+          ? serviceHub.models().startModel(provider, modelId, true, gpuUuids, options)
+          : gpuUuids === undefined
+            ? serviceHub.models().startModel(provider, modelId, true)
+            : serviceHub.models().startModel(provider, modelId, true, gpuUuids),
         MODEL_LOAD_WATCHDOG_MS,
         `Timed out waiting for model "${modelId}" to finish loading.`
       )

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
+import { normalizeGinferConfig } from '../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index'
 
 const settings = JSON.parse(
   readFileSync(resolve(process.cwd(), 'settings.json'), 'utf8')
@@ -11,6 +12,15 @@ const values = (key: string) =>
   setting(key).controllerProps.options.map((option: any) => option.value)
 
 describe('bundled GInfer profile', () => {
+  it('preserves explicit profile intent and GPU choice across the native boundary', () => {
+    expect(normalizeGinferConfig({ use_profile_defaults: true, gpu_uuids: ['GPU-selected'] }))
+      .toMatchObject({ use_profile_defaults: true, gpu_uuids: ['GPU-selected'] })
+    for (const value of [undefined, false, 'true']) {
+      expect(normalizeGinferConfig({ use_profile_defaults: value }))
+        .not.toHaveProperty('use_profile_defaults')
+    }
+  })
+
   it('starts registered multimodal packages with engine-owned automatic defaults', () => {
     expect(setting('vision').controllerProps.value).toBe(true)
     expect(setting('spec').controllerProps.value).toBe('auto')

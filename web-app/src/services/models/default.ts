@@ -22,6 +22,7 @@ import type {
   HuggingFaceRepo,
   CatalogModel,
   ModelValidationResult,
+  StartModelOptions,
 } from './types'
 import { getCatalogOrFallback } from '@/services/model-catalog-registry'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
@@ -375,13 +376,18 @@ export class DefaultModelsService implements ModelsService {
     provider: ProviderObject,
     model: string,
     bypassAutoUnload: boolean = false,
-    gpuUuids?: string[]
+    gpuUuids?: string[],
+    options?: StartModelOptions
   ): Promise<SessionInfo | undefined> {
     const engine = this.getEngine(provider.provider)
     if (!engine) return undefined
 
     const loadedModels = await engine.getLoadedModels()
-    if (gpuUuids === undefined && loadedModels.includes(model)) return undefined
+    if (
+      !options?.useProfileDefaults &&
+      gpuUuids === undefined &&
+      loadedModels.includes(model)
+    ) return undefined
 
     const modelConfig = provider.models.find((m) => m.id === model)
 
@@ -403,8 +409,12 @@ export class DefaultModelsService implements ModelsService {
         Number.isFinite(configuredContext) && configuredContext > 0
           ? configuredContext
           : declaredMaximum
-      const settings =
-        (Number.isFinite(maxContext) && maxContext > 0) || gpuUuids !== undefined
+      const settings = options?.useProfileDefaults
+        ? {
+            use_profile_defaults: true,
+            ...(gpuUuids === undefined ? {} : { gpu_uuids: [...gpuUuids] }),
+          }
+        : (Number.isFinite(maxContext) && maxContext > 0) || gpuUuids !== undefined
           ? {
               ...(Number.isFinite(maxContext) && maxContext > 0
                 ? { max_context: maxContext }

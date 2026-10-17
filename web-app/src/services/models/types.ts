@@ -115,6 +115,10 @@ export type PreflightReason =
   | 'NETWORK'
   | 'UNKNOWN'
 
+export interface StartModelOptions {
+  useProfileDefaults?: boolean
+}
+
 export interface ModelsService {
   getModel(modelId: string): Promise<modelInfo | undefined>
   fetchModels(): Promise<modelInfo[]>
@@ -150,7 +154,8 @@ export interface ModelsService {
     provider: ProviderObject,
     model: string,
     bypassAutoUnload?: boolean,
-    gpuUuids?: string[]
+    gpuUuids?: string[],
+    options?: StartModelOptions
   ): Promise<SessionInfo | undefined>
   isToolSupported(modelId: string): Promise<boolean>
   checkMmprojExistsAndUpdateOffloadMMprojSetting(
