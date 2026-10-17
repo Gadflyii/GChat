@@ -352,7 +352,7 @@ describe('DefaultModelsService', () => {
           {
             id: 'model1',
             settings: {
-              ctx_len: { controller_props: { value: 131072 } },
+              ctx_len: { controller_props: { value: 131072, max: 262144 } },
               ngl: { controller_props: { value: 100 } },
             },
           },
@@ -371,19 +371,43 @@ describe('DefaultModelsService', () => {
       )
     })
 
-    it('uses the declared GInfer context when its stored value is unset', async () => {
+    it.each([undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+      'leaves GInfer context automatic for an unset or invalid value (%s)',
+      async (value) => {
+        const provider = {
+          provider: 'ginfer',
+          models: [
+            {
+              id: 'model1',
+              settings: {
+                ctx_len: { controller_props: { value, max: 262144 } },
+              },
+            },
+          ],
+        } as any
+        mockEngine.getLoadedModels.mockResolvedValue({ includes: () => false })
+        mockEngine.load.mockResolvedValue({ id: 'session1' })
+
+        const result = await modelsService.startModel(provider, 'model1')
+
+        expect(result).toEqual({ id: 'session1' })
+        expect(mockEngine.load).toHaveBeenCalledWith(
+          'model1',
+          undefined,
+          false,
+          false
+        )
+      }
+    )
+
+    it('forwards selected GPUs without promoting the GInfer context ceiling', async () => {
       const provider = {
         provider: 'ginfer',
         models: [
           {
-            id: 'muse_glimmer_30b_nvfp4_df2q4',
+            id: 'model1',
             settings: {
-              ctx_len: {
-                controller_props: {
-                  value: 0,
-                  max: 131072,
-                },
-              },
+              ctx_len: { controller_props: { value: 0, max: 262144 } },
             },
           },
         ],
@@ -391,16 +415,19 @@ describe('DefaultModelsService', () => {
       mockEngine.getLoadedModels.mockResolvedValue({ includes: () => false })
       mockEngine.load.mockResolvedValue({ id: 'session1' })
 
-      await modelsService.startModel(
+      const result = await modelsService.startModel(
         provider,
-        'muse_glimmer_30b_nvfp4_df2q4'
+        'model1',
+        true,
+        ['GPU-selected']
       )
 
+      expect(result).toEqual({ id: 'session1' })
       expect(mockEngine.load).toHaveBeenCalledWith(
-        'muse_glimmer_30b_nvfp4_df2q4',
-        { max_context: 131072 },
+        'model1',
+        { gpu_uuids: ['GPU-selected'] },
         false,
-        false
+        true
       )
     })
 

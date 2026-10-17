@@ -391,18 +391,8 @@ export class DefaultModelsService implements ModelsService {
     if (provider.provider === 'ginfer') {
       const contextProps =
         modelConfig?.settings?.ctx_len?.controller_props?.value
-      const configuredContext = Number(contextProps)
-      const declaredMaximum = Number(
-        (
-          modelConfig?.settings?.ctx_len?.controller_props as
-            | (ControllerProps & { max?: number })
-            | undefined
-        )?.max
-      )
-      const maxContext =
-        Number.isFinite(configuredContext) && configuredContext > 0
-          ? configuredContext
-          : declaredMaximum
+      // A capability ceiling is not an explicit startup-context choice.
+      const maxContext = Number(contextProps)
       const settings =
         (Number.isFinite(maxContext) && maxContext > 0) || gpuUuids !== undefined
           ? {
