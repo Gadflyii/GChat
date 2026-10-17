@@ -349,6 +349,12 @@ function slug(value: string): string {
 
 function AgentStudioPage() {
   const [runSetup, setRunSetup] = useState<AgentDefinition | null>(null)
+  const runSetupRequest = useRef(0)
+  const [preparingRun, setPreparingRun] = useState(false)
+  const invalidateRunSetup = () => {
+    ++runSetupRequest.current
+    setPreparingRun(false)
+  }
   const [runTask, setRunTask] = useState('')
   const [runWorkspace, setRunWorkspace] = useState('')
   const navigate = useNavigate()
@@ -385,6 +391,7 @@ function AgentStudioPage() {
 
   useEffect(() => () => {
     ++draftRevision.current
+    ++runSetupRequest.current
     useGbotPage.getState().clear(pageId)
   }, [pageId])
 
@@ -420,6 +427,7 @@ function AgentStudioPage() {
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
 
   const selectView = (next: StudioView) => {
+    invalidateRunSetup()
     ++draftRevision.current
     setView(next)
     void navigate({
@@ -526,8 +534,11 @@ function AgentStudioPage() {
       toast.error('This older run does not contain a reusable task prompt.')
       return
     }
+    const request = ++runSetupRequest.current
+    setPreparingRun(true)
     try {
       const definition = await getAgentDefinition(run.definitionId)
+      if (request !== runSetupRequest.current) return
       setRunTask(continueWork ? continuationTask(run) : run.userMessage)
       setRunWorkspace(run.workspace ?? '')
       setRunSetup({
@@ -535,7 +546,11 @@ function AgentStudioPage() {
         roleAssignments: run.roleAssignments ?? definition.roleAssignments,
       })
     } catch (reason) {
-      toast.error(`Could not re-run task: ${String(reason)}`)
+      if (request === runSetupRequest.current) {
+        toast.error(`Could not re-run task: ${String(reason)}`)
+      }
+    } finally {
+      if (request === runSetupRequest.current) setPreparingRun(false)
     }
   }
 
@@ -559,6 +574,7 @@ function AgentStudioPage() {
         active={view}
         onSelect={(section) => {
           if (section === 'skills') {
+            invalidateRunSetup()
             void navigate({ to: route.skills.index })
             return
           }
@@ -725,7 +741,10 @@ function AgentStudioPage() {
           definition={runSetup}
           initialTask={runTask}
           initialWorkspace={runWorkspace}
-          onClose={() => setRunSetup(null)}
+          onClose={() => {
+            invalidateRunSetup()
+            setRunSetup(null)
+          }}
           onRun={() => {
             setRunSetup(null)
             selectView('runs')
@@ -736,10 +755,18 @@ function AgentStudioPage() {
       {view === 'runs' && (
         <div className="overflow-auto">
           <AgentLiveRuns />
+          {preparingRun && (
+            <p role="status" className="px-6 py-2 text-sm text-muted-foreground">
+              Preparing run…
+            </p>
+          )}
           <RunInspector
             runs={runs}
             selected={selectedRun}
-            onSelect={setSelectedRunId}
+            onSelect={(id) => {
+              invalidateRunSetup()
+              setSelectedRunId(id)
+            }}
             onRerun={(run) => void rerun(run)}
             onContinue={(run) => void rerun(run, true)}
             onDelete={(run) => void deleteRun(run)}
