@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  configureGoogleDesktopRegistration,
   importGoogleDesktopRegistration,
   type ConnectorAccountsView,
 } from '../workspace-connectors'
@@ -26,6 +27,47 @@ beforeEach(() => {
   invoke.mockResolvedValue(view)
 })
 afterEach(() => vi.restoreAllMocks())
+
+describe('Google Desktop registration paste', () => {
+  it('sends only the pasted Google registration through the native vault command', async () => {
+    const result = await configureGoogleDesktopRegistration(
+      ' pasted.apps.googleusercontent.com ',
+      ' synthetic-desktop-secret '
+    )
+    expect(invoke).toHaveBeenCalledExactlyOnceWith('connector_configure', {
+      request: {
+        provider: 'google',
+        client_id: 'pasted.apps.googleusercontent.com',
+        client_secret: 'synthetic-desktop-secret',
+      },
+    })
+    expect(result).toBe(view)
+  })
+
+  it.each([
+    ['', 'synthetic-secret'],
+    ['client', ' '],
+    ['x'.repeat(4097), 'synthetic-secret'],
+    ['client', 'x'.repeat(4097)],
+  ])('rejects incomplete or oversized pasted details %#', async (clientId, secret) => {
+    await expect(
+      configureGoogleDesktopRegistration(clientId, secret)
+    ).rejects.toThrow(
+      'Paste the client ID and client secret from your Google Desktop app. Each must be no longer than 4096 characters.'
+    )
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('keeps credential material and native error details out of save errors', async () => {
+    invoke.mockRejectedValue(new Error('synthetic-native-secret'))
+    await expect(
+      configureGoogleDesktopRegistration('client', 'synthetic-desktop-secret')
+    ).rejects.toThrow(
+      'Could not save the Google registration. Unlock secure storage if asked, then paste the Desktop client details and try again.'
+    )
+    expect(invoke).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe('Google Desktop registration import', () => {
   it('forwards only the Desktop client credentials to native configuration', async () => {

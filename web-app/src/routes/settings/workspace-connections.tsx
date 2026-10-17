@@ -19,6 +19,7 @@ import {
   beginConnectorAuth,
   cancelConnectorAuth,
   configureConnector,
+  configureGoogleDesktopRegistration,
   connectorAccounts,
   connectorAuthStatus,
   disconnectConnectorAccount,
@@ -76,17 +77,24 @@ function GoogleRegistration({
   configured,
   disabled,
   onImport,
+  onSave,
 }: {
   configured: boolean
   disabled: boolean
-  onImport: (file: File) => Promise<void>
+  onImport: (file: File) => Promise<boolean>
+  onSave: (clientId: string, clientSecret: string) => Promise<boolean>
 }) {
   const importing = useRef(false)
   const [reading, setReading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
+  const [saved, setSaved] = useState(false)
   const importFiles = async (files: readonly File[]) => {
     if (disabled || importing.current) return
     setError(null)
+    setSaved(false)
+    setClientSecret('')
     if (files.length !== 1) {
       setError('Choose one downloaded Google Desktop app JSON file.')
       return
@@ -94,7 +102,22 @@ function GoogleRegistration({
     importing.current = true
     setReading(true)
     try {
-      await onImport(files[0])
+      setSaved(await onImport(files[0]))
+    } finally {
+      importing.current = false
+      setReading(false)
+    }
+  }
+  const saveManualRegistration = async () => {
+    if (disabled || importing.current) return
+    importing.current = true
+    setReading(true)
+    setError(null)
+    setSaved(false)
+    const secret = clientSecret
+    setClientSecret('')
+    try {
+      setSaved(await onSave(clientId, secret))
     } finally {
       importing.current = false
       setReading(false)
@@ -104,8 +127,9 @@ function GoogleRegistration({
     <div className="mb-4 space-y-3 text-sm">
       <p>
         Google sign-in needs a Desktop app registration in your own Google Cloud
-        project. GChat does not include a shared Google app. You do not need to
-        copy a client ID or secret into GChat.
+        project. GChat does not include a shared Google app. Import its downloaded
+        JSON or paste its client ID and client secret below. Do not put either
+        credential in chat.
       </p>
       <details open={!configured}>
         <summary className="cursor-pointer text-foreground">
@@ -150,7 +174,9 @@ function GoogleRegistration({
             >
               Branding
             </a>{' '}
-            in Google Auth Platform, then choose External in{' '}
+            in Google Auth Platform. Choose Get started, enter an app name such
+            as My GChat, and add your support and contact email. Then choose
+            External in{' '}
             <a
               href="https://console.cloud.google.com/auth/audience"
               target="_blank"
@@ -169,6 +195,18 @@ function GoogleRegistration({
               consent setup guide
             </a>{' '}
             explains these settings.
+          </li>
+          <li>
+            In{' '}
+            <a
+              href="https://console.cloud.google.com/auth/scopes"
+              target="_blank"
+              rel="noreferrer"
+              className="underline"
+            >
+              Data Access
+            </a>, review the permissions for the services you enabled before
+            creating the client. Choose only the access you intend to grant.
           </li>
           <li>
             Open{' '}
@@ -190,7 +228,9 @@ function GoogleRegistration({
             >
               Desktop app instructions
             </a>.
-            Import that file below; do not share it.
+            Import that file below, or copy its client ID and client secret into
+            the fields below. Save the registration before connecting; do not
+            share the file or secret.
           </li>
           <li>
             Set the app’s publishing status to In production. With these service
@@ -206,8 +246,11 @@ function GoogleRegistration({
             Publishing does not itself verify your app.
           </li>
           <li>
-            Choose your services below and connect. For your own unverified app,
-            Google may offer Advanced → Go to your app (unsafe). Use that option
+            Choose your services below and connect. GChat opens your system
+            browser for Google sign-in and consent, then a temporary loopback
+            callback returns the result to GChat. Keep GChat open; do not paste a
+            callback URL or authorization code anywhere. For your own unverified
+            app, Google may offer Advanced → Go to your app (unsafe). Use that option
             only for your own project when the displayed app, account and
             permissions are the ones you expect, then review permissions and
             select Continue. This does not bypass an organization block; your
@@ -215,6 +258,11 @@ function GoogleRegistration({
           </li>
         </ol>
       </details>
+      <p>
+        Google Desktop apps use a temporary local callback at{' '}
+        <code>http://127.0.0.1:&lt;port&gt;/oauth/callback</code>. Choose Desktop app
+        when creating the client; you do not need to register a website redirect.
+      </p>
       <div
         role="group"
         aria-label="Google Desktop app JSON import"
@@ -241,11 +289,13 @@ function GoogleRegistration({
         </p>
         {configured ? (
           <p>
-            Google registration saved. Importing a different registration requires
+            Google registration saved. Saving a different registration requires
             reconnecting existing accounts.
           </p>
         ) : (
-          <p>Import your Desktop app JSON before connecting.</p>
+          <p>
+            Import the JSON or save your Desktop client details before connecting.
+          </p>
         )}
         {error && (
           <p role="alert" className="text-destructive">
@@ -253,6 +303,73 @@ function GoogleRegistration({
           </p>
         )}
       </div>
+      <details>
+        <summary className="cursor-pointer text-foreground">
+          Paste a Desktop client ID and secret instead
+        </summary>
+        <form
+          className="mt-3 space-y-3"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void saveManualRegistration()
+          }}
+        >
+          <p>
+            In Google Auth Platform → Clients, open the Desktop app you created
+            and copy its Client ID and Client secret. These are app credentials,
+            not your Google password.
+          </p>
+          <label className="block">
+            Google Desktop client ID
+            <Input
+              value={clientId}
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={4096}
+              disabled={disabled || reading}
+              onChange={(event) => {
+                setClientId(event.target.value)
+                setSaved(false)
+              }}
+            />
+          </label>
+          <label className="block">
+            Google Desktop client secret
+            <Input
+              type="password"
+              value={clientSecret}
+              autoComplete="new-password"
+              spellCheck={false}
+              maxLength={4096}
+              disabled={disabled || reading}
+              onChange={(event) => {
+                setClientSecret(event.target.value)
+                setSaved(false)
+              }}
+            />
+          </label>
+          <p>
+            Save sends the secret to the same protected credential store used
+            for sign-in tokens, then clears this field, including if saving fails.
+          </p>
+          <Button
+            type="submit"
+            variant="outline"
+            size="sm"
+            disabled={
+              disabled || reading || !clientId.trim() || !clientSecret.trim()
+            }
+          >
+            Save Google registration
+          </Button>
+        </form>
+      </details>
+      {saved && (
+        <p role="status">
+          Google registration saved. Choose services and connect in your browser.
+          Existing accounts need reconnecting if the registration changed.
+        </p>
+      )}
     </div>
   )
 }
@@ -265,7 +382,8 @@ type ProviderCardProps = {
   selectedAccount?: string
   disabled: boolean
   onConfigure: (request: ConfigureConnectorRequest) => Promise<void>
-  onImportGoogle: (file: File) => Promise<void>
+  onImportGoogle: (file: File) => Promise<boolean>
+  onSaveGoogle: (clientId: string, clientSecret: string) => Promise<boolean>
   onConnect: (request: BeginConnectorAuthRequest) => Promise<void>
   onSelect: (account: ConnectorAccount) => Promise<void>
   onDisconnect: (account: ConnectorAccount) => void
@@ -280,6 +398,7 @@ function ProviderCard({
   disabled,
   onConfigure,
   onImportGoogle,
+  onSaveGoogle,
   onConnect,
   onSelect,
   onDisconnect,
@@ -320,6 +439,7 @@ function ProviderCard({
           configured={Boolean(config?.client_id)}
           disabled={disabled}
           onImport={onImportGoogle}
+          onSave={onSaveGoogle}
         />
       ) : (
         <details className="mb-4">
@@ -829,11 +949,27 @@ export function WorkspaceConnections() {
                     acceptSnapshot(await configureConnector(request))
                   )
                 }
-                onImportGoogle={(file) =>
-                  perform('Importing Google registration', async () =>
+                onImportGoogle={async (file) => {
+                  let saved = false
+                  await perform('Importing Google registration', async () => {
                     acceptSnapshot(await importGoogleDesktopRegistration(file))
-                  )
-                }
+                    saved = true
+                  })
+                  return saved
+                }}
+                onSaveGoogle={async (clientId, clientSecret) => {
+                  let saved = false
+                  await perform('Saving Google registration', async () => {
+                    acceptSnapshot(
+                      await configureGoogleDesktopRegistration(
+                        clientId,
+                        clientSecret
+                      )
+                    )
+                    saved = true
+                  })
+                  return saved
+                }}
                 onConnect={connect}
                 onSelect={(account) =>
                   perform('Selecting default account', async () =>
