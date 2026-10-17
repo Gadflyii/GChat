@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { engineCommand, type EngineHardwareProfile } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { plainModelName } from '@/lib/engine-host-labels'
-import { downloadStatusLabel, formatModelBytes, type ModelDownload, type ModelRelease } from '@/lib/model-release'
+import { diskSpaceWarning, downloadStatusLabel, formatModelBytes, type ModelDownload, type ModelRelease } from '@/lib/model-release'
 
 type FirstRun = {
   step: 'gpu' | 'profiling' | 'storage' | 'models' | 'downloads' | 'startup' | 'complete'
@@ -46,6 +46,8 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const pathEdited = useRef(false)
   const releasesEdited = useRef(false)
   const step = flow?.step
+  const neededBytes = (flow?.models ?? []).filter(m => releases.includes(m.release_id ?? m.release.sha256)).reduce((sum, m) => sum + m.release.bytes, 0)
+  const spaceWarning = diskSpaceWarning(neededBytes, flow?.storage.available_bytes)
   useEffect(() => {
     if (step === 'complete' && !completed.current) { completed.current = true; onComplete?.() }
   }, [step, onComplete])
@@ -168,8 +170,9 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       {!flow?.models.length && <p role="status">{flow?.catalog_loaded === false && !flow.error ? 'Loading published model catalog…' : 'No model downloads are available for these graphics cards. Downloads are optional: use an existing .ginfer model from Installed models, or add its folder there. If you expect a download catalog, select Refresh model catalog.'}</p>}
       {!profiling && (snapshot?.model_management?.downloads ?? []).filter(job => job.status === 'installed' && job.path && !job.path.startsWith(`${flow?.storage.path}/`) && !job.path.startsWith(`${flow?.storage.path}\\`)).map(job => <div key={job.id} className="space-y-2 rounded border p-3 text-sm"><p>{plainModelName(job.release.name)} is already on this computer. Keep it where it is, or move it to your selected model folder.</p><details><summary className="cursor-pointer">Folder details</summary><p>Current folder: {job.path}</p><p>Selected folder: {flow?.storage.path}</p></details><Button variant="outline" onClick={() => void act({ action: 'move', download_id: job.id })}>Move {plainModelName(job.release.name)} to selected storage</Button></div>)}
       {profiling && !!flow?.selected_release_ids?.length && <p role="status">Model choices saved. Downloads will begin after the hardware measurement and folder check finish.</p>}
+      {spaceWarning && <p role="alert" className="text-sm text-destructive">{spaceWarning.text}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button disabled={!releases.length} onClick={() => void act({ action: 'models', release_ids: releases })}>{step === 'models' ? 'Download selected models' : 'Save model choices'}</Button>
+        <Button disabled={!releases.length || spaceWarning?.block} onClick={() => void act({ action: 'models', release_ids: releases })}>{step === 'models' ? 'Download selected models' : 'Save model choices'}</Button>
         <Button variant="outline" onClick={() => void act({ action: 'refresh_catalog' })}>Refresh model catalog</Button>
       </div>
     </fieldset>}

@@ -672,10 +672,10 @@ async fn monitor_processes(host: &Host) {
                 return;
             };
             if let Err(error) = host.first_run_maintenance().await {
-                eprintln!("First-run setup: {error}");
+                eprintln!("First-run setup: {}", ginfer_host::service::plain_disk_error(error));
             }
             if let Err(error) = host.idle_maintenance().await {
-                eprintln!("Draft calibration: {error}");
+                eprintln!("Draft calibration: {}", ginfer_host::service::plain_disk_error(error));
             }
         }
         if !host.processes.lock().await.needs_monitoring() && !host.first_run_pending().await {
