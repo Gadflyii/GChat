@@ -76,7 +76,9 @@ it('uses chosen storage, retries the shared catalog and resumes saved downloads'
   fireEvent.click(download)
   expect(await screen.findByText('Connection interrupted')).toBeInTheDocument()
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'models', release_ids: [release.sha256] })
-  fireEvent.click(screen.getByRole('button', { name: 'Resume downloads' }))
+  expect(screen.getByRole('button', { name: 'Choose a different model' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Resume downloads' })).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
   await screen.findByText(/Muse · Downloading/)
   expect(screen.getByText(/GInfer checks the downloaded files, then measures the hardware/)).toBeInTheDocument()
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'resume' })
@@ -445,4 +447,16 @@ it('shows only the manual progress controls while advanced options are open', as
   expect(screen.getByRole('progressbar')).toHaveAccessibleName('Hardware profiling in progress')
   expect(screen.getAllByRole('button', { name: 'Cancel profiling' })).toHaveLength(1)
   expect(screen.getByLabelText('Model download folder')).toBeVisible()
+})
+
+it('returns to model choice when the person picks a different model after a failed download', async () => {
+  let saved = flow('downloads', { selected_downloads: [{ id: 'download', release, status: 'failed', received: 0, bytes_per_second: 0, error: 'Download not found' }] })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'reselect') saved = flow('models', { catalog_loaded: true, models: [{ release, recommended: true, reason: 'Published for this GPU group' }] })
+    return Promise.resolve(saved)
+  })
+  render(<EngineFirstRun />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Choose a different model' }))
+  expect(await screen.findByRole('button', { name: 'Download selected models' })).toBeInTheDocument()
+  expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'reselect' })
 })
