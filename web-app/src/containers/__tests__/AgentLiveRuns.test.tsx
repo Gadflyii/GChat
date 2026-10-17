@@ -1,10 +1,11 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { AgentLiveRuns } from '../AgentLiveRuns'
 import { useStudioRuns, type StudioRun } from '@/stores/studio-run-store'
 import { createAgentRunState, reduceAgentRunState } from '@/hooks/useAgentRun'
 import { studioCommand } from '@/services/agent/studio'
-import { resolveAgentApproval, resolveAgentFolderAccess } from '@/services/agent/tauri'
+import { cancelAgentTurn, resolveAgentApproval, resolveAgentFolderAccess } from '@/services/agent/tauri'
 
 vi.mock('@/services/agent/studio', () => ({ studioCommand: vi.fn().mockResolvedValue({ queued: true }) }))
 import { deleteAgentRun, listAgentRuns } from '@/services/agent/definitions'
@@ -17,6 +18,7 @@ vi.mock('@/services/agent/definitions', () => ({
 }))
 vi.mock('@/services/agent/tauri', async (original) => ({
   ...(await original<object>()),
+  cancelAgentTurn: vi.fn(),
   resolveAgentApproval: vi.fn(),
   resolveAgentFolderAccess: vi.fn(),
 }))
@@ -83,6 +85,7 @@ function renderApprovals(approvals: StudioRun['approvals']) {
 beforeEach(() => {
   vi.mocked(listAgentRuns).mockReset().mockResolvedValue([])
   vi.mocked(deleteAgentRun).mockReset().mockResolvedValue(undefined)
+  vi.mocked(cancelAgentTurn).mockReset().mockResolvedValue(undefined)
   vi.mocked(resolveAgentApproval).mockReset().mockResolvedValue(undefined)
   vi.mocked(resolveAgentFolderAccess).mockReset().mockResolvedValue(undefined)
   useStudioRuns.setState({
@@ -103,6 +106,140 @@ it('allows deleting finished cards but protects active runs', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Delete run Finished' }))
   await waitFor(() => expect(screen.queryByRole('heading', { name: 'Finished' })).not.toBeInTheDocument())
   expect(screen.getByRole('heading', { name: 'Active' })).toBeInTheDocument()
+})
+
+it('requests Stop once while pending and waits for the run lifecycle before allowing deletion', async () => {
+  const stopping = deferred()
+  vi.mocked(cancelAgentTurn).mockReturnValue(stopping.promise)
+  render(<AgentLiveRuns />)
+  const stop = screen.getByRole('button', { name: 'Stop run' })
+  const deleteRun = screen.getByRole('button', { name: 'Delete run Active' })
+  const card = screen.getByRole('heading', { name: 'Active' }).closest('article') as HTMLElement
+
+  act(() => {
+    stop.click()
+    stop.click()
+  })
+
+  expect(cancelAgentTurn).toHaveBeenCalledExactlyOnceWith('Active')
+  expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled()
+  expect(stop).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('status')).toHaveTextContent('Requesting stop for Active…')
+  expect(within(card).getByText(/^running ·/)).toBeInTheDocument()
+  expect(deleteRun).toBeDisabled()
+  fireEvent.click(deleteRun)
+  expect(listAgentRuns).not.toHaveBeenCalled()
+  expect(useStudioRuns.getState().runs.Active).toMatchObject({
+    state: { status: 'running' }, settled: false,
+  })
+
+  await act(async () => stopping.resolve())
+
+  expect(screen.getByRole('button', { name: 'Stop run' })).toBeEnabled()
+  expect(stop).not.toHaveAttribute('aria-busy', 'true')
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(deleteRun).toBeDisabled()
+  expect(useStudioRuns.getState().runs.Active).toMatchObject({
+    state: { status: 'running' }, settled: false,
+  })
+  expect(cancelAgentTurn).toHaveBeenCalledOnce()
+
+  act(() => {
+    const run = useStudioRuns.getState().runs.Active
+    useStudioRuns.setState((state) => ({
+      runs: {
+        ...state.runs,
+        Active: {
+          ...run,
+          state: reduceAgentRunState(run.state, {
+            type: 'turn_finished', reason: 'cancelled', step_count: 0,
+          }),
+          settled: true,
+        },
+      },
+    }))
+  })
+
+  expect(screen.queryByRole('button', { name: 'Stop run' })).not.toBeInTheDocument()
+  expect(deleteRun).toBeEnabled()
+})
+
+it('reports a failed Stop request without settling the run and permits retry', async () => {
+  const failed = deferred()
+  const retry = deferred()
+  vi.mocked(cancelAgentTurn)
+    .mockReturnValueOnce(failed.promise)
+    .mockReturnValueOnce(retry.promise)
+  const errorToast = vi.spyOn(toast, 'error').mockReturnValue('stop-request-error')
+
+  try {
+    render(<AgentLiveRuns />)
+    fireEvent.click(screen.getByRole('button', { name: 'Stop run' }))
+
+    await act(async () => failed.reject(new Error('Could not contact the agent')))
+
+    expect(errorToast).toHaveBeenCalledExactlyOnceWith('Error: Could not contact the agent')
+    expect(screen.getByRole('button', { name: 'Stop run' })).toBeEnabled()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete run Active' })).toBeDisabled()
+    expect(useStudioRuns.getState().runs.Active).toMatchObject({
+      state: { status: 'running' }, settled: false,
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Stop run' }))
+    expect(vi.mocked(cancelAgentTurn).mock.calls).toEqual([['Active'], ['Active']])
+    expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled()
+
+    await act(async () => retry.resolve())
+
+    expect(screen.getByRole('button', { name: 'Stop run' })).toBeEnabled()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(errorToast).toHaveBeenCalledOnce()
+  } finally {
+    errorToast.mockRestore()
+  }
+})
+
+it('lets another active run complete its Stop request while the first request is pending', async () => {
+  const first = deferred()
+  const second = deferred()
+  vi.mocked(cancelAgentTurn)
+    .mockReturnValueOnce(first.promise)
+    .mockReturnValueOnce(second.promise)
+  const active = useStudioRuns.getState().runs.Active
+  useStudioRuns.setState((state) => ({
+    runs: {
+      ...state.runs,
+      Second: {
+        ...active,
+        name: 'Second',
+        request: { ...active.request, run_id: 'Second', session_id: 'Second' },
+      },
+    },
+  }))
+  render(<AgentLiveRuns />)
+  const firstCard = screen.getByRole('heading', { name: 'Active' }).closest('article') as HTMLElement
+  const secondCard = screen.getByRole('heading', { name: 'Second' }).closest('article') as HTMLElement
+  fireEvent.click(within(firstCard).getByRole('button', { name: 'Stop run' }))
+
+  expect(within(firstCard).getByRole('button', { name: 'Stopping…' })).toBeDisabled()
+  expect(within(secondCard).getByRole('button', { name: 'Stop run' })).toBeEnabled()
+  fireEvent.click(within(secondCard).getByRole('button', { name: 'Stop run' }))
+  expect(vi.mocked(cancelAgentTurn).mock.calls).toEqual([['Active'], ['Second']])
+  expect(within(secondCard).getByRole('status')).toHaveTextContent('Requesting stop for Second…')
+
+  await act(async () => second.resolve())
+
+  expect(within(secondCard).getByRole('button', { name: 'Stop run' })).toBeEnabled()
+  expect(within(secondCard).queryByRole('status')).not.toBeInTheDocument()
+  expect(within(firstCard).getByRole('button', { name: 'Stopping…' })).toBeDisabled()
+  expect(within(firstCard).getByRole('status')).toHaveTextContent('Requesting stop for Active…')
+
+  await act(async () => first.resolve())
+
+  expect(within(firstCard).getByRole('button', { name: 'Stop run' })).toBeEnabled()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Delete run Active' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Delete run Second' })).toBeDisabled()
 })
 
 it('requires confirmation before clearing saved history', async () => {
