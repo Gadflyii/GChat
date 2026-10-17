@@ -52,6 +52,9 @@ function HTTPSProxyContent() {
         <SettingsMenu />
         <div className="p-4 pt-0 w-full overflow-y-auto">
           <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
+<p className="text-sm text-muted-foreground">
+              Send GChat's internet traffic through a proxy if your network requires one.
+            </p>
             {/* Proxy Configuration */}
             <Card
               header={

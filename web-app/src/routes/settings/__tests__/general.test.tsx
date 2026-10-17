@@ -323,6 +323,9 @@ describe('General Settings Route', () => {
     expect(screen.getByTestId('header-page')).toBeInTheDocument()
     expect(screen.getByTestId('settings-menu')).toBeInTheDocument()
     expect(screen.getByText('common:settings')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Choose how GChat starts, updates and behaves/)
+    ).toBeInTheDocument()
   })
 
   it('should render app version', async () => {

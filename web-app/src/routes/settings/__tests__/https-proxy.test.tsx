@@ -49,6 +49,9 @@ beforeEach(async () => {
 describe('Proxy settings', () => {
   it('associates visible field labels and novice guidance with the named controls', () => {
     renderSettings()
+    expect(
+      screen.getByText(/Send GChat's internet traffic through a proxy/)
+    ).toBeInTheDocument()
 
     const address = screen.getByRole('textbox', {
       name: 'Proxy server address',
