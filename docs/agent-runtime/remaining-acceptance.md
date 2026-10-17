@@ -593,11 +593,21 @@ reconnected, with the same service UUID and endpoint and the original service
 process still alive. Ordinary Quit Gbot service and normal desktop close left
 both processes absent at 08:41:54.564547Z.
 
+The separate service-process restart check also passes. After normal Quit of
+service PID1645 and guest/private-keyring-daemon restart, new desktop PID1453's
+locked launch and Gbot navigation stayed silent. One ordinary Start at 08:57:53Z
+waited for bundled-resource validation, then prompted at 09:01:37Z. Sender
+`:1.16` mapped live to new service PID1770. Ordinary unlock at 09:01:48Z was
+followed by two GetSecret calls and no CreateItem; the same service UUID
+reconnected by 09:01:55Z. Normal service Quit and desktop close completed at
+09:02:16Z, and the guest was normally shut down and returned at 09:02Z. Evidence:
+`/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-gbot-service-restart-20261017/result.json`.
+
 This qualifies local service-token creation, persistence and retrieval across
-GUI restart, alongside silent locked launch and navigation. Service-process
-restart, SSH/provider credentials, bot control/tasks, fresh installation and
-native Windows remain unqualified. No model, GPU workload, bot or task ran.
-Evidence:
+GUI and normal service-process restart, alongside silent locked launch and
+navigation. Crash recovery, SSH/provider credentials, bot control/tasks, fresh
+installation and native Windows remain unqualified. No model, GPU workload, bot
+or task ran. Prior GUI-restart evidence:
 `/ai/gchat/out/keyring-prompt-at-launch-20261016/final-d31-gbot-credential-20261017/result.json`.
 
 Completed item at the recorded scope: OI-069 two-Host shared-pool gate PASS.
