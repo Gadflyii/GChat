@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -80,6 +80,7 @@ function SortableArgItem({
       <div
         {...attributes}
         {...listeners}
+        aria-label="Reorder command option"
         className="size-6 cursor-move flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
       >
         <IconGripVertical size={16} className="text-muted-foreground" />
@@ -91,14 +92,31 @@ function SortableArgItem({
         className="flex-1"
       />
       {canRemove && (
-        <div
-          className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
-          onClick={onRemove}
-        >
-          <IconTrash size={16} className="text-destructive" />
-        </div>
+        <RowButton label="Remove command option" onClick={onRemove}><IconTrash size={16} className="text-destructive" /></RowButton>
       )}
     </div>
+  )
+}
+
+function RowButton({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
+    >
+      {children}
+    </button>
   )
 }
 
@@ -554,12 +572,7 @@ export default function AddEditMCPServer({
                   <label className="text-sm">
                     {t('mcp-servers:arguments')}
                   </label>
-                  <div
-                    className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
-                    onClick={handleAddArg}
-                  >
-                    <IconPlus size={16} className="text-muted-foreground" />
-                  </div>
+                  <RowButton label="Add command option" onClick={handleAddArg}><IconPlus size={16} className="text-muted-foreground" /></RowButton>
                 </div>
 
                 <DndContext
@@ -603,12 +616,7 @@ export default function AddEditMCPServer({
                 </p>
                 <div className="flex items-center justify-between">
                   <label className="text-sm">{t('mcp-servers:envVars')}</label>
-                  <div
-                    className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
-                    onClick={handleAddEnv}
-                  >
-                    <IconPlus size={16} className="text-muted-foreground" />
-                  </div>
+                  <RowButton label="Add extra setting" onClick={handleAddEnv}><IconPlus size={16} className="text-muted-foreground" /></RowButton>
                 </div>
 
                 {envKeys.map((key, index) => (
@@ -630,12 +638,7 @@ export default function AddEditMCPServer({
                       className="flex-1"
                     />
                     {envKeys.length > 1 && (
-                      <div
-                        className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
-                        onClick={() => handleRemoveEnv(index)}
-                      >
-                        <IconTrash size={16} className="text-destructive" />
-                      </div>
+                      <RowButton label="Remove extra setting" onClick={() => handleRemoveEnv(index)}><IconTrash size={16} className="text-destructive" /></RowButton>
                     )}
                   </div>
                 ))}
@@ -647,12 +650,7 @@ export default function AddEditMCPServer({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="text-sm">Extra connection details (headers)</label>
-                    <div
-                      className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
-                      onClick={handleAddHeader}
-                    >
-                      <IconPlus size={16} className="text-muted-foreground" />
-                    </div>
+                    <RowButton label="Add header" onClick={handleAddHeader}><IconPlus size={16} className="text-muted-foreground" /></RowButton>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Leave these empty unless the tool provider supplies them, for example to sign in with an access key.
@@ -680,12 +678,7 @@ export default function AddEditMCPServer({
                         className="flex-1"
                       />
                       {headerKeys.length > 1 && (
-                        <div
-                          className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
-                          onClick={() => handleRemoveHeader(index)}
-                        >
-                          <IconTrash size={16} className="text-destructive" />
-                        </div>
+                        <RowButton label="Remove header" onClick={() => handleRemoveHeader(index)}><IconTrash size={16} className="text-destructive" /></RowButton>
                       )}
                     </div>
                   ))}

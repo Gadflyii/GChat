@@ -48,6 +48,23 @@ describe('MCP server configuration dialogs', () => {
     })
   })
 
+  it('adds and removes rows with real, named buttons reachable from the keyboard', () => {
+    render(<AddEditMCPServer open editingKey="trusted" initialData={config}
+      onOpenChange={vi.fn()} onSave={vi.fn()} />)
+
+    const rows = () => screen.getAllByLabelText('Reorder command option').length
+    const before = rows()
+    const add = screen.getByRole('button', { name: 'Add command option' })
+    expect(add.tagName).toBe('BUTTON')
+    fireEvent.click(add)
+    expect(rows()).toBe(before + 1)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove command option' })[0])
+    expect(rows()).toBe(before)
+    expect(screen.getByRole('button', { name: 'Add extra setting' })).toBeVisible()
+    fireEvent.click(screen.getByRole('radio', { name: 'Web address (HTTP)' }))
+    expect(screen.getByRole('button', { name: 'Add header' })).toBeVisible()
+  })
+
   it('keeps the form open with the native validation error when saving fails', async () => {
     const close = vi.fn()
     const save = vi.fn().mockRejectedValue(new Error('MCP header name is invalid'))
