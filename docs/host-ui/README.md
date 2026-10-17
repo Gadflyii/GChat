@@ -1,5 +1,86 @@
 # GInfer host UI
 
+## Disable OpenCode workspaces — C7
+
+`GUI-CODE-DISABLE-WORKSPACE-STOP-20261017` fixes the integration switch's
+use of the legacy `code` terminal ID while workspace sessions use `code:<path>`.
+Turning OpenCode off must request stop for every app-owned Code session, including
+legacy and workspace slots, while leaving Hermes unchanged. The switch stays on
+until the native stop succeeds, disables repeated clicks during the request, and
+shows a retryable error if stopping fails. No live user terminals are test inputs.
+
+Acceptance: focused native lifecycle and rendered pending/success/failure tests,
+then one full `make verify`; push the isolated branch for coordinator merge.
+Installed GUI workflow belongs to Gchat 3's parent acceptance. Windows collision
+qualification remains pending Gchat 2's separate installed-app handoff.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| C7 / local | `/ai/gchat-worktrees/c7-code-disable-workspace-stop-20261017`, branch `fix/c7-code-disable-workspace-stop-20261017` | Tested implementation `6b99bcf84` from `691fdcc10`; ready for coordinator merge |
+| C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-code-disable-workspace-stop-20261017/` | Private source/dependency/native cache retired; 19,816,259,584 allocated bytes reclaimed, donor unchanged |
+| C7 / evidence | `/ai/gchat/out/code-disable-workspace-stop-20261017/{result.json,summary.md}` | Passing focused and composed full verification results retained |
+
+The implementation serializes native Code launch/stop, reaps successful stops,
+and retains failed stop handles for retry. A shared transient disabling state
+blocks delayed UI readiness and restart work. Verification passes on S1 CPUs
+80–87 in pinned image `ad7f9bf020d7`: 55 focused frontend cases, three native
+lifecycle cases, Cargo check and strict Clippy. All `make verify` components pass:
+2,709 frontend tests (six skipped), 119 extension tests and 1,076 Rust tests
+(27 ignored), plus lint, types, quality and coverage checks.
+
+The one `make verify` invocation exited 2 at an unrelated coordinator fixture:
+Docker `--network none` provided no route for its UDP address selection. Retrying
+only that failed case with bridge networking passed, then the five unrun Rust
+suite commands passed. Successful checks were not repeated. Offline setup uses
+the retained per-project Yarn cache with global caching disabled and refills
+extension-only entries after root installation; generated core archive references
+remain confined to the disposable copy. Candidate dependency files are unchanged.
+No Engine or GPU/model run. Next: coordinator merge and Gchat 3's installed
+workflow acceptance; Windows collision still waits for Gchat 2's handoff.
+
+## Proxy control labels — GUI-PROXY-SETTINGS-ACCESSIBILITY
+
+Current main already supplies novice proxy instructions and accessible control
+names. This follow-up keeps credential labels visible after typing, associates
+each field and switch with its existing instructions, and connects the named
+Show/Hide password button to the password field. Existing configuration values
+and setters remain unchanged; locales and network behavior are outside this fix.
+
+Acceptance is met on candidate `409322292`: four focused rendered cases,
+lint, frontend types and coverage checks, 2,658 frontend tests (six skipped),
+119 extension tests and 1,073 Rust tests (27 ignored). All required `make verify`
+components completed on S1 CPUs 72–79 in the pinned `ad7f9bf020d7` container.
+The first attempt stopped at a fake-GPU fixture because the runner set
+`CUDA_VISIBLE_DEVICES` empty. Leaving CUDA mask/order unset made that case pass;
+the remaining Rust suites then passed without source changes or repeating
+successful checks. CPU-only verification must preserve the fake GPU inventory.
+Next: coordinator review and merge; installed workflow qualification is separate.
+
+| Owner / host | Path | Status / retention |
+| --- | --- | --- |
+| Codex 6 / local | `/ai/gchat-worktrees/c6-proxy-settings-accessibility-20261017`, branch `fix/c6-proxy-settings-accessibility-20261017` | Candidate from `eaf131aed`; route and dedicated tests only |
+| Codex 6 / evidence | `/ai/gchat/out/c6-proxy-settings-accessibility-20261017/` | Passing result JSON, initial runner failure and concise summary retained |
+| Codex 6 / S1 | `/media/ron/SSD_RAID/ai/tmp-c6-proxy-settings-accessibility-20261017/` | Private gate source/dependencies/build retired after passing results; 19,857,235,968 allocated bytes reclaimed, no GPU |
+## Factory-reset keyboard confirmation — GUI-RESET-CONFIRMATION-KEYBOARD
+
+The factory-reset confirmation opens with **Cancel** focused. Reset requires an
+explicit mouse or keyboard activation and invokes the existing reset callback
+once, without changing the reset operation. Cancel, Close and Escape dismiss
+the dialog without resetting; closing returns focus to the trigger.
+
+Owned source: `/ai/gchat-worktrees/c3-reset-confirmation-keyboard-20261017`,
+branch `fix/c3-reset-confirmation-keyboard-20261017`, base `eb6831fb0`.
+Focused mouse/keyboard tests: 8 passed. Full `make verify` passed on S1 CPUs
+88–95 at 2026-10-17 13:37:54Z: frontend 2,688 passed / 6 skipped, extensions
+119 passed, Rust 1,073 passed / 27 ignored; critical coverage floors passed.
+The offline gate used private writable caches, Rust 1.98 and 22 retained
+profile catalogs. Only the disposable fixture's local-core archive references
+were adjusted; no dependency install, GPU/model operation or live reset ran.
+Logs and command: `/ai/gchat/out/c3-reset-confirmation-keyboard-20261017/`.
+The private S1 source/build/cache copies are retired, result/log receipts and
+the read-only donor remain; booking 2542 is canceled. Coordinator integration
+is next.
+
 ## Data-folder move guidance — GUI-DATA-LOCATION-GUIDANCE
 
 The confirmation dialog explains which files are copied, that external model
@@ -40,8 +121,8 @@ isolated branch; installed workflow qualification remains separate.
 `GUI-INTEGRATION-TOGGLE-GUIDANCE` explains Gbot, OpenCode and Hermes beside
 their persisted switches in Settings and Integrations. Each has a visible
 **Enable** label and an accessible description. Gbot off hides the interface and
-disables sign-in startup while work continues. OpenCode off hides Code; the
-description tells users to use **Stop** first to end running work. Hermes off
+disables sign-in startup while work continues. OpenCode off now stops all Code workspaces before hiding Code, as specified
+in the current disable-workspaces section above. Hermes off
 stops its terminal while retaining saved settings. Enabling the terminal tools
 can install them; enabling Gbot still opens its setup. **Hermes settings** remains
 available. Existing actions, defaults and saved choices are unchanged.
@@ -49,8 +130,8 @@ available. Existing actions, defaults and saved choices are unchanged.
 Acceptance is met: five focused rendered tests and full `make verify` pass.
 The full gate includes lint, frontend types, 2,584 frontend + 119 extension tests,
 coverage checks and all supported Rust suites. Existing saved choices, enabling
-navigation and terminal actions are protected. The separate OpenCode workspace
-Stop defect is unchanged; the copy tells users to stop work before hiding Code.
+navigation and terminal actions are protected. The original guidance shipped separately; the current disable-workspaces
+fix above replaces its temporary Stop-first guidance.
 No Engine, installer, model or Windows acceptance run belongs to this GUI change.
 The Windows host-port collision leaf waits for Gchat 2's installed-app handoff.
 
@@ -60,7 +141,8 @@ implementation `eafaedd7c`. Results and concise suite outcomes:
 `/ai/gchat/out/integration-toggle-guidance-20261017/{result.json,summary.md}`.
 Verification ran on S1 CPUs 80–87 with the pinned Rust 1.98 image `ad7f9bf020d7`.
 Private compiler/dependency copies are retired; the authorized donor is unchanged.
-No live job or retained remote build. Next action: coordinator review and merge.
+No live job or retained remote build. The original guidance was merged at
+12:48Z as `2f2c4f028`; its workspace-stop follow-up is recorded above.
 
 ## Profile presentation — OI-077
 

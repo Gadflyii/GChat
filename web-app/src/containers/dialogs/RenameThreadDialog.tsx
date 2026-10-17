@@ -18,7 +18,7 @@ import { toast } from 'sonner'
 interface RenameThreadDialogProps {
   thread: Thread
   plainTitleForRename: string
-  onRename: (threadId: string, title: string) => void
+  onRename: (threadId: string, title: string) => void | Promise<void>
   onDropdownClose?: () => void
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -37,7 +37,10 @@ export function RenameThreadDialog({
   const { t } = useTranslation()
   const [title, setTitle] = useState('')
   const [internalOpen, setInternalOpen] = useState(false)
+  const [isRenaming, setIsRenaming] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const renamePending = useRef(false)
 
   const isControlled = open !== undefined
   const isOpen = isControlled ? !!open : internalOpen
@@ -52,6 +55,7 @@ export function RenameThreadDialog({
   useEffect(() => {
     if (isOpen) {
       setTitle(plainTitleForRename || t('common:newThread'))
+      setError(null)
       setTimeout(() => {
         inputRef.current?.focus()
         inputRef.current?.select()
@@ -60,28 +64,44 @@ export function RenameThreadDialog({
   }, [isOpen, plainTitleForRename, t])
 
   const handleOpenChange = (open: boolean) => {
+    if (renamePending.current) return
     setOpenSafe(open)
     if (!open) {
       onDropdownClose?.()
     }
   }
 
-  const handleRename = () => {
-    if (title.trim()) {
-      onRename(thread.id, title.trim())
+  const handleRename = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const nextTitle = title.trim()
+    if (
+      renamePending.current ||
+      !nextTitle ||
+      nextTitle === plainTitleForRename
+    ) {
+      return
+    }
+
+    renamePending.current = true
+    setIsRenaming(true)
+    setError(null)
+    try {
+      await onRename(thread.id, nextTitle)
       setOpenSafe(false)
       onDropdownClose?.()
       toast.success(t('common:toast.renameThread.title'), {
         id: 'rename-thread',
-        description: t('common:toast.renameThread.description', { title }),
+        description: t('common:toast.renameThread.description', {
+          title: nextTitle,
+        }),
       })
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    e.stopPropagation()
-    if (e.key === 'Enter' && title.trim()) {
-      handleRename()
+    } catch (error) {
+      const message = String(error)
+      setError(message)
+      toast.error(message)
+    } finally {
+      renamePending.current = false
+      setIsRenaming(false)
     }
   }
 
@@ -95,34 +115,53 @@ export function RenameThreadDialog({
           </DropdownMenuItem>
         </DialogTrigger>
       )}
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t('common:threadTitle')}</DialogTitle>
-          <Input
-            ref={inputRef}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="mt-2"
-            onKeyDown={handleKeyDown}
-            placeholder={t('common:threadTitle')}
-            aria-label={t('common:threadTitle')}
-          />
-          <DialogFooter className="mt-2 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
-            <DialogClose asChild>
-              <Button variant="ghost" size="sm" className="w-full sm:w-auto">
-                {t('common:cancel')}
+      <DialogContent showCloseButton={!isRenaming}>
+        <form onSubmit={handleRename}>
+          <DialogHeader>
+            <DialogTitle>{t('common:threadTitle')}</DialogTitle>
+            <Input
+              ref={inputRef}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={isRenaming}
+              className="mt-2"
+              onKeyDown={(e) => e.stopPropagation()}
+              placeholder={t('common:threadTitle')}
+              aria-label={t('common:threadTitle')}
+            />
+            {error && (
+              <p role="alert" className="text-destructive text-sm">
+                {error}
+              </p>
+            )}
+            <DialogFooter className="mt-2 flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
+              <DialogClose asChild>
+                <Button
+                  type="button"
+                  disabled={isRenaming}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full sm:w-auto"
+                >
+                  {t('common:cancel')}
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                disabled={
+                  isRenaming ||
+                  !title.trim() ||
+                  title.trim() === plainTitleForRename
+                }
+                aria-busy={isRenaming}
+                size="sm"
+                className="w-full sm:w-auto"
+              >
+                {t('common:rename')}
               </Button>
-            </DialogClose>
-            <Button
-              disabled={!title.trim() || title.trim() === plainTitleForRename}
-              onClick={handleRename}
-              size="sm"
-              className="w-full sm:w-auto"
-            >
-              {t('common:rename')}
-            </Button>
-          </DialogFooter>
-        </DialogHeader>
+            </DialogFooter>
+          </DialogHeader>
+        </form>
       </DialogContent>
     </Dialog>
   )

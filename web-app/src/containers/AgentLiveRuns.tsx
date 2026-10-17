@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { AgentModelInstance } from '@/types/agent'
 import { useStudioCatalog } from '@/hooks/useStudioCatalog'
 import { StatusLabel } from './StatusLabel'
@@ -82,6 +82,7 @@ function LiveRun({
   const deleting = useStudioRuns((s) => s.deleting)
   const [selected, setSelected] = useState<string>()
   const [pending, setPending] = useState<string[]>([])
+  const resolvingApprovals = useRef(new Set<string>())
   if (!run) return null
 
   const running = !['finished', 'cancelled', 'failed', 'incomplete'].includes(
@@ -133,6 +134,8 @@ function LiveRun({
             ? approval.approval_id
             : approval.access_id
         const answer = async (allow: boolean) => {
+          if (resolvingApprovals.current.has(approvalId)) return
+          resolvingApprovals.current.add(approvalId)
           setPending((s) => [...s, approvalId])
           try {
             if (approval.type === 'approval_requested')
@@ -150,6 +153,7 @@ function LiveRun({
           } catch (e) {
             toast.error(String(e))
           } finally {
+            resolvingApprovals.current.delete(approvalId)
             setPending((s) => s.filter((v) => v !== approvalId))
           }
         }
@@ -184,6 +188,11 @@ function LiveRun({
                 Deny
               </Button>
             </div>
+            {pending.includes(approvalId) && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Sending your decision…
+              </p>
+            )}
           </div>
         )
       })}

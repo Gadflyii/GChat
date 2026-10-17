@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -20,9 +21,24 @@ vi.mock('@/hooks/useStudioCatalog', () => ({
 }))
 vi.mock('@/services/agent/studio', () => ({ studioCommand: mocks.command }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: mocks.toast } }))
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.command.mockReset()
   mocks.catalog = {
     pools: [
       {
@@ -132,4 +148,181 @@ it('requires a reachable address when this computer has no advertised shared ori
       origin: 'https://192.168.1.10:7443',
     })
   )
+})
+
+it('keeps the reviewed pool frozen and sends one save while saving', async () => {
+  const saving = deferred<unknown>()
+  mocks.command.mockReturnValueOnce(saving.promise)
+  mocks.catalog.pools.push({ id: 'reviewer', name: 'reviewer', members: [] })
+  render(<AgentWorkerPools />)
+  fireEvent.click(screen.getByRole('button', { name: /coder · not assigned/ }))
+  fireEvent.change(screen.getByLabelText('Pool name'), {
+    target: { value: 'Reviewed pool' },
+  })
+  fireEvent.change(screen.getByLabelText('Worker limit'), {
+    target: { value: '2' },
+  })
+  const save = screen.getByRole('button', { name: 'Save pool' })
+
+  act(() => {
+    fireEvent.click(save)
+    fireEvent.click(save)
+  })
+
+  expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+  expect(screen.getByLabelText('Pool name')).toBeDisabled()
+  expect(screen.getByLabelText('Worker limit')).toBeDisabled()
+  expect(screen.getByRole('checkbox')).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Create pool' })).toBeDisabled()
+  const otherPool = screen.getByRole('button', {
+    name: /reviewer · not assigned/,
+  })
+  expect(otherPool).toBeDisabled()
+  fireEvent.click(otherPool)
+  fireEvent.click(screen.getByRole('button', { name: 'Create pool' }))
+  expect(screen.getByLabelText('Pool name')).toHaveValue('Reviewed pool')
+  expect(screen.getByLabelText('Worker limit')).toHaveValue(2)
+  expect(mocks.command).toHaveBeenCalledOnce()
+  expect(mocks.command).toHaveBeenCalledWith('save_pool', {
+    expectedRevision: 10,
+    pool: {
+      id: 'coder',
+      name: 'Reviewed pool',
+      members: [{ instanceId: 'instance', workerLimit: 2 }],
+    },
+  })
+
+  await act(async () => {
+    saving.resolve(mocks.catalog.pools[0])
+    await saving.promise
+  })
+
+  expect(screen.queryByLabelText('Pool name')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Create pool' })).toBeEnabled()
+})
+
+it('retains the reviewed draft after a failed save and allows retry', async () => {
+  const saving = deferred<unknown>()
+  mocks.command.mockReturnValueOnce(saving.promise)
+  render(<AgentWorkerPools />)
+  fireEvent.click(screen.getByRole('button', { name: /coder · not assigned/ }))
+  fireEvent.change(screen.getByLabelText('Pool name'), {
+    target: { value: 'Keep this reviewed draft' },
+  })
+  fireEvent.change(screen.getByLabelText('Worker limit'), {
+    target: { value: '2' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Save pool' }))
+
+  await act(async () => {
+    saving.reject(new Error('Coordinator unavailable'))
+    await saving.promise.catch(() => undefined)
+  })
+
+  expect(mocks.toast).toHaveBeenCalledWith('Error: Coordinator unavailable')
+  expect(screen.getByLabelText('Pool name')).toHaveValue(
+    'Keep this reviewed draft'
+  )
+  expect(screen.getByLabelText('Worker limit')).toHaveValue(2)
+  expect(screen.getByLabelText('Pool name')).toBeEnabled()
+  expect(screen.getByRole('checkbox')).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Save pool' })).toBeEnabled()
+  mocks.command.mockResolvedValueOnce(mocks.catalog.pools[0])
+  fireEvent.click(screen.getByRole('button', { name: 'Save pool' }))
+
+  await waitFor(() =>
+    expect(screen.queryByLabelText('Pool name')).not.toBeInTheDocument()
+  )
+  expect(mocks.refresh).toHaveBeenCalledOnce()
+  expect(mocks.command).toHaveBeenCalledTimes(2)
+  expect(mocks.command).toHaveBeenLastCalledWith('save_pool', {
+    expectedRevision: 10,
+    pool: {
+      id: 'coder',
+      name: 'Keep this reviewed draft',
+      members: [{ instanceId: 'instance', workerLimit: 2 }],
+    },
+  })
+})
+
+it('sends one delete and blocks changing pools or editing while deleting', async () => {
+  const deleting = deferred<unknown>()
+  mocks.command.mockReturnValueOnce(deleting.promise)
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+  mocks.catalog.pools.push({ id: 'reviewer', name: 'reviewer', members: [] })
+  render(<AgentWorkerPools />)
+  fireEvent.click(screen.getByRole('button', { name: /coder · not assigned/ }))
+  const remove = screen.getByRole('button', { name: 'Delete pool' })
+
+  act(() => {
+    fireEvent.click(remove)
+    fireEvent.click(remove)
+  })
+
+  expect(confirm).toHaveBeenCalledOnce()
+  expect(mocks.command).toHaveBeenCalledOnce()
+  expect(mocks.command).toHaveBeenCalledWith('delete_pool', {
+    id: 'coder',
+    expectedRevision: 10,
+  })
+  expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Save pool' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Create pool' })).toBeDisabled()
+  expect(screen.getByLabelText('Pool name')).toBeDisabled()
+  expect(screen.getByLabelText('Worker limit')).toBeDisabled()
+  expect(screen.getByRole('checkbox')).toBeDisabled()
+  const otherPool = screen.getByRole('button', {
+    name: /reviewer · not assigned/,
+  })
+  expect(otherPool).toBeDisabled()
+  fireEvent.click(otherPool)
+  fireEvent.click(screen.getByRole('button', { name: 'Create pool' }))
+  expect(screen.getByLabelText('Pool name')).toHaveValue('coder')
+
+  await act(async () => {
+    deleting.resolve(undefined)
+    await deleting.promise
+  })
+
+  expect(screen.queryByLabelText('Pool name')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Create pool' })).toBeEnabled()
+})
+
+it('restores the draft and controls after delete fails and allows retry', async () => {
+  const deleting = deferred<unknown>()
+  mocks.command.mockReturnValueOnce(deleting.promise)
+  vi.spyOn(window, 'confirm').mockReturnValue(true)
+  render(<AgentWorkerPools />)
+  fireEvent.click(screen.getByRole('button', { name: /coder · not assigned/ }))
+  fireEvent.change(screen.getByLabelText('Pool name'), {
+    target: { value: 'Keep this deletion draft' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Delete pool' }))
+
+  await act(async () => {
+    deleting.reject(new Error('Delete was refused'))
+    await deleting.promise.catch(() => undefined)
+  })
+
+  expect(mocks.toast).toHaveBeenCalledWith('Error: Delete was refused')
+  expect(screen.getByLabelText('Pool name')).toHaveValue(
+    'Keep this deletion draft'
+  )
+  expect(screen.getByLabelText('Pool name')).toBeEnabled()
+  expect(screen.getByLabelText('Worker limit')).toBeEnabled()
+  expect(screen.getByRole('checkbox')).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Create pool' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Delete pool' })).toBeEnabled()
+  mocks.command.mockResolvedValueOnce(undefined)
+  fireEvent.click(screen.getByRole('button', { name: 'Delete pool' }))
+
+  await waitFor(() =>
+    expect(screen.queryByLabelText('Pool name')).not.toBeInTheDocument()
+  )
+  expect(mocks.refresh).toHaveBeenCalledOnce()
+  expect(mocks.command).toHaveBeenCalledTimes(2)
+  expect(mocks.command).toHaveBeenLastCalledWith('delete_pool', {
+    id: 'coder',
+    expectedRevision: 10,
+  })
 })

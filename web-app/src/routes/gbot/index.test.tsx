@@ -1614,6 +1614,174 @@ it('links existing accounts per bot without inherited selection', async () => {
   })
 })
 
+it.each(['local', 'paired_host'] as const)(
+  'keeps %s service startup progress visible until connection completes',
+  async (kind) => {
+    readyTaskBots()
+    mocks.getTarget.mockResolvedValue(
+      kind === 'local' ? { kind } : { kind, host_id: 'paired-host' }
+    )
+    mocks.quitService.mockResolvedValue(undefined)
+    let finish!: () => void
+    mocks.startService.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    fireEvent.click(
+      screen.getByRole('button', {
+        name:
+          kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service',
+      })
+    )
+    const startLabel =
+      kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service'
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: startLabel })).toBeEnabled()
+    )
+    fireEvent.click(screen.getByRole('button', { name: startLabel }))
+    const button = screen.getByRole('button', {
+      name:
+        kind === 'local'
+          ? 'Starting Gbot service…'
+          : 'Connecting Gbot service…',
+    })
+    expect(button).toBeDisabled()
+    const progress = screen.getByText(
+      kind === 'local'
+        ? 'Starting Gbot on this computer. First-time setup or an update may need several minutes to prepare files. The service will start automatically when preparation finishes. You can keep using GChat.'
+        : 'Connecting to the Gbot service on your selected LAN computer. Please wait.'
+    )
+    expect(progress).toHaveAttribute('role', 'status')
+    expect(progress).toBeVisible()
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(progress).toBeVisible()
+    fireEvent.click(button)
+    expect(mocks.startService).toHaveBeenCalledTimes(1)
+    await act(async () => finish())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name:
+            kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service',
+        })
+      ).toBeEnabled()
+    )
+    expect(progress).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+  }
+)
+
+it('clears failed startup progress and allows an explicit retry', async () => {
+  readyTaskBots()
+  mocks.quitService.mockResolvedValue(undefined)
+  let fail!: (cause: Error) => void
+  mocks.startService
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject
+        })
+    )
+    .mockResolvedValue(undefined)
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  fireEvent.click(screen.getByRole('button', { name: 'Quit Gbot service' }))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Start Gbot service' })
+    ).toBeEnabled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Start Gbot service' }))
+  expect(
+    screen.getByRole('button', { name: 'Starting Gbot service…' })
+  ).toBeDisabled()
+  await act(async () => fail(new Error('Service start failed')))
+  expect(
+    screen.queryByText(/Starting Gbot on this computer/)
+  ).not.toBeInTheDocument()
+  expect(
+    screen.getByText(
+      'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+    )
+  ).toBeVisible()
+  const retry = screen.getByRole('button', { name: 'Start Gbot service' })
+  expect(retry).toBeEnabled()
+  fireEvent.click(retry)
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Quit Gbot service' })
+    ).toBeEnabled()
+  )
+  expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+  expect(mocks.startService).toHaveBeenCalledTimes(2)
+})
+
+it.each(['local', 'paired_host'] as const)(
+  'shows %s shutdown progress without claiming the service has already stopped',
+  async (kind) => {
+    readyTaskBots()
+    mocks.getTarget.mockResolvedValue(
+      kind === 'local' ? { kind } : { kind, host_id: 'paired-host' }
+    )
+    let finish!: () => void
+    mocks.quitService.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    fireEvent.click(
+      screen.getByRole('button', {
+        name:
+          kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service',
+      })
+    )
+    const progress = screen.getByText(
+      kind === 'local'
+        ? 'Stopping the Gbot service. Tasks and schedules will resume when you start it again.'
+        : 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.'
+    )
+    expect(progress).toHaveAttribute('role', 'status')
+    expect(
+      screen.getByRole('button', {
+        name:
+          kind === 'local'
+            ? 'Stopping Gbot service…'
+            : 'Disconnecting Gbot service…',
+      })
+    ).toBeDisabled()
+    expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+    await act(async () => finish())
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name:
+            kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service',
+        })
+      ).toBeEnabled()
+    )
+    expect(progress).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Writer' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        kind === 'local'
+          ? 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+          : 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
+      )
+    ).toBeVisible()
+  }
+)
+
 it('explicitly stops the service without refreshing and starts it before reconnecting', async () => {
   mocks.listen.mockResolvedValue(() => {})
   mocks.quitService.mockResolvedValue(undefined)

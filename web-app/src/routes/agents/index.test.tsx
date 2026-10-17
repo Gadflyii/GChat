@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import type { AgentDefinition, AgentRunRecord } from '@/types/agent'
 import { Route } from './index'
 import GbotCompanion from '@/containers/GbotCompanion'
@@ -14,6 +15,8 @@ const navigate = vi.hoisted(() => vi.fn())
 const listAgentTemplates = vi.hoisted(() => vi.fn())
 const listAgentRuns = vi.hoisted(() => vi.fn())
 const listAgentModelInstances = vi.hoisted(() => vi.fn())
+const getAgentDefinition = vi.hoisted(() => vi.fn())
+const studioCommand = vi.hoisted(() => vi.fn())
 const botCall = vi.hoisted(() => vi.fn())
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
 vi.mock('@/services/gbot', async (original) => ({
@@ -60,6 +63,12 @@ vi.mock('@/services/agent/definitions', () => ({
   listAgentTemplates,
   listAgentRuns,
   listAgentModelInstances,
+  getAgentDefinition,
+}))
+
+vi.mock('@/services/agent/studio', async (original) => ({
+  ...(await original<object>()),
+  studioCommand,
 }))
 
 const editableDraft: AgentDefinition = {
@@ -77,8 +86,68 @@ const editableDraft: AgentDefinition = {
   builtIn: false,
 }
 
+const firstAgent: AgentDefinition = {
+  ...editableDraft,
+  id: 'review-assistant',
+  name: 'Review assistant',
+  instructions: 'Review the selected sources.',
+}
+
+const secondAgent: AgentDefinition = {
+  ...editableDraft,
+  id: 'research-assistant',
+  name: 'Research assistant',
+  instructions: 'Research the selected topic.',
+}
+
+const firstHistoricalRun: AgentRunRecord = {
+  schemaVersion: 3,
+  id: 'review-history',
+  runId: 'review-run',
+  sessionId: 'review-session',
+  definitionId: firstAgent.id,
+  definitionName: firstAgent.name,
+  userMessage: 'Review the authentication files.',
+  kind: 'standard',
+  status: 'incomplete',
+  finishReason: 'max_steps',
+  startedAtMs: 1000,
+  finishedAtMs: 2000,
+  totalSteps: 25,
+  maxSteps: 25,
+  workspace: '/work/review',
+  outputWorkspace: '/outputs/review',
+  finalReply: 'Authentication review is unfinished.',
+  defaultModelInstanceId: 'qwen',
+  stages: [],
+}
+
+const secondHistoricalRun: AgentRunRecord = {
+  ...firstHistoricalRun,
+  id: 'research-history',
+  runId: 'research-run',
+  sessionId: 'research-session',
+  definitionId: secondAgent.id,
+  definitionName: secondAgent.name,
+  userMessage: 'Research the deployment options.',
+  workspace: '/work/research',
+  outputWorkspace: '/outputs/research',
+  finalReply: 'Deployment research needs another source.',
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise
+    reject = rejectPromise
+  })
+  return { promise, resolve, reject }
+}
+
 describe('AgentStudioPage', () => {
   beforeEach(() => {
+    vi.spyOn(toast, 'error').mockReturnValue('test-error')
     useGbotPage.setState({ page: null, sharing: null, requests: {} })
     useGbotCompanion.getState().reset()
     useGeneralSetting.setState({ gbotEnabled: true })
@@ -86,6 +155,11 @@ describe('AgentStudioPage', () => {
     navigate.mockReset()
     listAgentTemplates.mockReset().mockResolvedValue([])
     listAgentRuns.mockReset().mockResolvedValue([])
+    getAgentDefinition.mockReset().mockResolvedValue(firstAgent)
+    studioCommand.mockReset().mockResolvedValue({
+      pools: [], instances: [], usage: {}, aliases: {}, fleetTargets: [],
+      fleetHosts: [], fleet: { connected: false, migrationIssues: [] },
+    })
     listAgentModelInstances.mockReset().mockResolvedValue([
       { id: 'qwen', modelId: 'qwen', port: 8123 },
       { id: 'muse', modelId: 'muse', port: 8124 },
@@ -99,6 +173,138 @@ describe('AgentStudioPage', () => {
       remove: vi.fn(),
       createDraft: vi.fn().mockResolvedValue(editableDraft),
     }
+  })
+
+  afterEach(() => {
+    vi.mocked(toast.error).mockRestore()
+  })
+
+  async function renderSavedAgents() {
+    definitionState.value.definitions = [firstAgent, secondAgent]
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue(firstAgent.name)
+  }
+
+  async function renderRunHistory() {
+    listAgentRuns.mockResolvedValue([firstHistoricalRun, secondHistoricalRun])
+    const view = render(<AgentStudioPage />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Runs', exact: true }))
+    fireEvent.click(await screen.findByRole('button', { name: /Review assistant incomplete/ }))
+    expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
+    return view
+  }
+
+  async function prepareHistoricalRun(action: 'Re-run' | 'Continue as new run…') {
+    if (action === 'Re-run') {
+      fireEvent.keyDown(screen.getByRole('button', {
+        name: `Actions for ${firstAgent.name}`,
+      }), { key: 'ArrowDown' })
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Re-run' }))
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: action }))
+    }
+  }
+
+  it.each(['Re-run', 'Continue as new run…'] as const)(
+    'does not open delayed %s setup after leaving run history', async (action) => {
+      const pending = deferred<AgentDefinition>()
+      getAgentDefinition.mockReturnValue(pending.promise)
+      await renderRunHistory()
+
+      await prepareHistoricalRun(action)
+      expect(screen.getByRole('status')).toHaveTextContent('Preparing run…')
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+      expect(screen.queryByText('Preparing run…')).not.toBeInTheDocument()
+
+      await act(async () => pending.resolve(firstAgent))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Runs', exact: true }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    }
+  )
+
+  it('keeps the latest selected run task and workspace when an older preparation finishes later', async () => {
+    const first = deferred<AgentDefinition>()
+    const second = deferred<AgentDefinition>()
+    getAgentDefinition.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
+    await renderRunHistory()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant incomplete/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+    expect(getAgentDefinition.mock.calls).toEqual([[firstAgent.id], [secondAgent.id]])
+
+    await act(async () => second.resolve(secondAgent))
+
+    expect(screen.getByRole('dialog', { name: `Run ${secondAgent.name}` })).toBeInTheDocument()
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).toContain(secondHistoricalRun.userMessage)
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).toContain(secondHistoricalRun.finalReply)
+    expect(screen.getByLabelText('Workspace')).toHaveValue(secondHistoricalRun.workspace)
+
+    await act(async () => first.resolve(firstAgent))
+
+    expect(screen.getByRole('dialog', { name: `Run ${secondAgent.name}` })).toBeInTheDocument()
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).toContain(secondHistoricalRun.userMessage)
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).not.toContain(firstHistoricalRun.userMessage)
+    expect(screen.getByLabelText('Workspace')).toHaveValue(secondHistoricalRun.workspace)
+  })
+
+  it.each(['section', 'run selection'] as const)(
+    'suppresses a stale preparation error after changing %s', async (change) => {
+      const pending = deferred<AgentDefinition>()
+      getAgentDefinition.mockReturnValue(pending.promise)
+      await renderRunHistory()
+      fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+
+      if (change === 'section') {
+        fireEvent.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+      } else {
+        fireEvent.click(screen.getByRole('button', { name: /Research assistant incomplete/ }))
+      }
+      await act(async () => pending.reject(new Error('Old definition is unavailable')))
+
+      expect(toast.error).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.queryByText('Preparing run…')).not.toBeInTheDocument()
+    }
+  )
+
+  it('reports the current preparation error and lets the user retry the same run', async () => {
+    const failed = deferred<AgentDefinition>()
+    const retry = deferred<AgentDefinition>()
+    getAgentDefinition.mockReturnValueOnce(failed.promise).mockReturnValueOnce(retry.promise)
+    await renderRunHistory()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+
+    await act(async () => failed.reject(new Error('Definition storage is unavailable')))
+
+    expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('Definition storage is unavailable'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByText('Preparing run…')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing run…')
+
+    await act(async () => retry.resolve(firstAgent))
+
+    expect(screen.getByRole('dialog', { name: `Run ${firstAgent.name}` })).toBeInTheDocument()
+    expect((screen.getByLabelText('Task or goal') as HTMLTextAreaElement).value).toContain(firstHistoricalRun.userMessage)
+    expect(screen.getByLabelText('Workspace')).toHaveValue(firstHistoricalRun.workspace)
+    expect(getAgentDefinition).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not report a pending preparation failure after Studio unmounts', async () => {
+    const pending = deferred<AgentDefinition>()
+    getAgentDefinition.mockReturnValue(pending.promise)
+    const view = await renderRunHistory()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue as new run…' }))
+
+    view.unmount()
+    await act(async () => pending.reject(new Error('Definition lookup finished after leaving Studio')))
+
+    expect(toast.error).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   async function askAboutDraft() {
@@ -260,6 +466,171 @@ describe('AgentStudioPage', () => {
     expect(screen.getByDisplayValue('Untitled Agent')).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument()
     expect(screen.queryByText('Duplicate to edit')).not.toBeInTheDocument()
+  })
+
+  it('saves once while keeping newer edits when the reviewed save completes', async () => {
+    const pending = deferred<AgentDefinition>()
+    definitionState.value.save.mockReturnValue(pending.promise)
+    await renderSavedAgents()
+
+    const saveButton = screen.getByRole('button', { name: 'Save definition' })
+    act(() => {
+      fireEvent.click(saveButton)
+      fireEvent.click(saveButton)
+    })
+
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(firstAgent)
+    expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save & run' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled()
+    expect(screen.getByTitle('New agent')).toBeDisabled()
+    expect(screen.getByLabelText('Name')).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Research assistant/ })).toBeEnabled()
+
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'My newer agent name' },
+    })
+    fireEvent.change(screen.getByLabelText('Agent role and operating instructions'), {
+      target: { value: 'My newer unsaved instructions.' },
+    })
+    await act(async () => pending.resolve(firstAgent))
+
+    expect(screen.getByLabelText('Name')).toHaveValue('My newer agent name')
+    expect(screen.getByLabelText('Agent role and operating instructions')).toHaveValue('My newer unsaved instructions.')
+    expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled()
+    expect(definitionState.value.save).toHaveBeenCalledOnce()
+  })
+
+  it('keeps the newly selected agent when an earlier save completes', async () => {
+    const pending = deferred<AgentDefinition>()
+    definitionState.value.save.mockReturnValue(pending.promise)
+    await renderSavedAgents()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+    expect(screen.getByLabelText('Name')).toHaveValue(secondAgent.name)
+
+    await act(async () => pending.resolve(firstAgent))
+
+    expect(screen.getByLabelText('Name')).toHaveValue(secondAgent.name)
+    expect(screen.getByLabelText('Agent role and operating instructions')).toHaveValue(secondAgent.instructions)
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(firstAgent)
+  })
+
+  it.each(['edit', 'select'] as const)(
+    'keeps the newer draft after %s while deletion is pending', async (change) => {
+      const pending = deferred<void>()
+      definitionState.value.remove.mockReturnValue(pending.promise)
+      await renderSavedAgents()
+
+      const deleteButton = screen.getByRole('button', { name: 'Delete', exact: true })
+      act(() => {
+        fireEvent.click(deleteButton)
+        fireEvent.click(deleteButton)
+      })
+      expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id)
+      expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Save definition' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Save & run' })).toBeDisabled()
+      expect(screen.getByTitle('New agent')).toBeDisabled()
+
+      if (change === 'edit') {
+        fireEvent.change(screen.getByLabelText('Name'), {
+          target: { value: 'Keep my edited draft' },
+        })
+      } else {
+        fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+      }
+      await act(async () => pending.resolve())
+
+      expect(screen.getByLabelText('Name')).toHaveValue(
+        change === 'edit' ? 'Keep my edited draft' : secondAgent.name
+      )
+      expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled()
+      expect(definitionState.value.remove).toHaveBeenCalledOnce()
+    }
+  )
+
+  it('does not open run setup for an older draft after Save & run is double clicked', async () => {
+    const pending = deferred<AgentDefinition>()
+    definitionState.value.save.mockReturnValue(pending.promise)
+    await renderSavedAgents()
+
+    const runButton = screen.getByRole('button', { name: 'Save & run' })
+    act(() => {
+      fireEvent.click(runButton)
+      fireEvent.click(runButton)
+    })
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(firstAgent)
+    expect(runButton).toBeDisabled()
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'A different run draft' },
+    })
+
+    await act(async () => pending.resolve(firstAgent))
+
+    expect(screen.getByLabelText('Name')).toHaveValue('A different run draft')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Task or goal')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save & run' })).toBeEnabled()
+    expect(definitionState.value.save).toHaveBeenCalledOnce()
+  })
+
+  it('retains the edited draft after a failed save and retries the latest values', async () => {
+    const pending = deferred<AgentDefinition>()
+    definitionState.value.save
+      .mockReturnValueOnce(pending.promise)
+      .mockImplementationOnce(async (definition) => definition)
+    await renderSavedAgents()
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Reviewed name to retry' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await act(async () => pending.reject(new Error('Saving is unavailable')))
+
+    expect(screen.getByLabelText('Name')).toHaveValue('Reviewed name to retry')
+    expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save & run' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled()
+    expect(screen.getByTitle('New agent')).toBeEnabled()
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'Latest retry name' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    expect(definitionState.value.save).toHaveBeenCalledTimes(2)
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      id: firstAgent.id,
+      name: 'Latest retry name',
+    }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Latest retry name')
+  })
+
+  it('creates once without replacing an agent selected while creation is pending', async () => {
+    const pending = deferred<AgentDefinition>()
+    definitionState.value.createDraft.mockReturnValue(pending.promise)
+    await renderSavedAgents()
+
+    const createButton = screen.getByTitle('New agent')
+    act(() => {
+      fireEvent.click(createButton)
+      fireEvent.click(createButton)
+    })
+    expect(definitionState.value.createDraft).toHaveBeenCalledOnce()
+    expect(createButton).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save definition' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save & run' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+
+    await act(async () => pending.resolve(editableDraft))
+
+    expect(screen.getByLabelText('Name')).toHaveValue(secondAgent.name)
+    expect(screen.getByLabelText('Agent role and operating instructions')).toHaveValue(secondAgent.instructions)
+    expect(screen.getByTitle('New agent')).toBeEnabled()
+    expect(definitionState.value.createDraft).toHaveBeenCalledOnce()
   })
 
   it('assigns the default agent to a loaded model instance', async () => {

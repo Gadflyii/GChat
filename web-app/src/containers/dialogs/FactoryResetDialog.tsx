@@ -22,16 +22,10 @@ export function FactoryResetDialog({
   children,
 }: FactoryResetDialogProps) {
   const { t } = useTranslation()
-  const resetButtonRef = useRef<HTMLButtonElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
 
   const handleReset = () => {
     onReset()
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      handleReset()
-    }
   }
 
   return (
@@ -41,7 +35,7 @@ export function FactoryResetDialog({
         className="sm:max-w-[425px] max-w-[90vw]"
         onOpenAutoFocus={(e) => {
           e.preventDefault()
-          resetButtonRef.current?.focus()
+          cancelButtonRef.current?.focus()
         }}
       >
         <DialogHeader>
@@ -51,9 +45,10 @@ export function FactoryResetDialog({
           </DialogDescription>
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <DialogClose asChild>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                ref={cancelButtonRef}
+                variant="ghost"
+                size="sm"
                 className="hover:no-underline w-full sm:w-auto"
               >
                 {t('settings:general.cancel')}
@@ -61,10 +56,8 @@ export function FactoryResetDialog({
             </DialogClose>
             <DialogClose asChild>
               <Button
-                ref={resetButtonRef}
                 variant="destructive"
                 onClick={handleReset}
-                onKeyDown={handleKeyDown}
                 size="sm"
                 className="w-full sm:w-auto"
                 aria-label={t('settings:general.reset')}

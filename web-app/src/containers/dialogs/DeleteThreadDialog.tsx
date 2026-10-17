@@ -40,7 +40,9 @@ export function DeleteThreadDialog({
   const navigate = useNavigate()
   const [internalOpen, setInternalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const deleteButtonRef = useRef<HTMLButtonElement>(null)
+  const [error, setError] = useState<string | null>(null)
+  const deletionPending = useRef(false)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
 
   const isControlled = open !== undefined
   const isOpen = isControlled ? !!open : internalOpen
@@ -53,6 +55,8 @@ export function DeleteThreadDialog({
   }
 
   const handleOpenChange = (open: boolean) => {
+    if (deletionPending.current) return
+    setError(null)
     setOpenSafe(open)
     if (!open) {
       onDropdownClose?.()
@@ -60,8 +64,12 @@ export function DeleteThreadDialog({
   }
 
   const handleDelete = async () => {
-    if (deleting) return
+    if (deletionPending.current) return
+    // Lock synchronously so input repeated before the pending render cannot
+    // start another deletion of the same thread.
+    deletionPending.current = true
     setDeleting(true)
+    setError(null)
     try {
       await onDelete(thread.id)
       setOpenSafe(false)
@@ -76,15 +84,12 @@ export function DeleteThreadDialog({
         }, 0)
       }
     } catch (error) {
-      toast.error(String(error))
+      const message = String(error)
+      setError(message)
+      toast.error(message)
     } finally {
+      deletionPending.current = false
       setDeleting(false)
-    }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      void handleDelete()
     }
   }
 
@@ -99,9 +104,17 @@ export function DeleteThreadDialog({
         </DialogTrigger>
       )}
       <DialogContent
+        aria-busy={deleting}
+        showCloseButton={!deleting}
         onOpenAutoFocus={(e) => {
           e.preventDefault()
-          deleteButtonRef.current?.focus()
+          cancelButtonRef.current?.focus()
+        }}
+        onEscapeKeyDown={(e) => {
+          if (deletionPending.current) e.preventDefault()
+        }}
+        onInteractOutside={(e) => {
+          if (deletionPending.current) e.preventDefault()
         }}
       >
         <DialogHeader>
@@ -109,23 +122,35 @@ export function DeleteThreadDialog({
           <DialogDescription>
             {t('common:dialogs.deleteThread.description')}
           </DialogDescription>
+          {error !== null && (
+            <p role="alert" className="text-destructive text-sm">
+              {error}
+            </p>
+          )}
           <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2">
             <DialogClose asChild>
-              <Button variant="ghost" size="sm" className="w-full sm:w-auto">
+              <Button
+                ref={cancelButtonRef}
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full sm:w-auto"
+                disabled={deleting}
+              >
                 {t('common:cancel')}
               </Button>
             </DialogClose>
             <Button
-              ref={deleteButtonRef}
+              type="button"
               variant="destructive"
               onClick={() => void handleDelete()}
               disabled={deleting}
-              onKeyDown={handleKeyDown}
+              aria-busy={deleting}
               size="sm"
               className="w-full sm:w-auto"
               aria-label={`${t('common:delete')} ${thread.title || t('common:newThread')}`}
             >
-              {t('common:delete')}
+              {deleting ? t('common:loading') : t('common:delete')}
             </Button>
           </DialogFooter>
         </DialogHeader>

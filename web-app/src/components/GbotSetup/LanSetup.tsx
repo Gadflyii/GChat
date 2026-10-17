@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { gbot } from '@/services/gbot'
@@ -7,6 +7,14 @@ import LanTools from './LanTools'
 
 type PublicKey = { algorithm: string; public_key: string }
 type Identity = { public_key: PublicKey; fingerprint: string }
+
+const actionLabels = {
+  identity: 'Checking computer identity…',
+  import: 'Importing bot key…',
+  create: 'Creating bot key…',
+  key: 'Loading bot public key…',
+  access: 'Checking SSH access…',
+} as const
 
 export default function LanSetup({
   connection,
@@ -26,7 +34,9 @@ export default function LanSetup({
   const [importing, setImporting] = useState(false)
   const [identity, setIdentity] = useState<Identity>()
   const [verified, setVerified] = useState(false)
-  const [working, setWorking] = useState(false)
+  const [action, setAction] = useState<keyof typeof actionLabels>()
+  const pending = useRef(false)
+  const working = action !== undefined
   const [locked, setLocked] = useState(Boolean(connection.workspaceId))
   const [publicKey, setPublicKey] = useState('')
   const [error, setError] = useState('')
@@ -62,16 +72,22 @@ export default function LanSetup({
     setImporting(false)
     change({ ...connection, workspaceId: created.id, key: '', passphrase: '' })
   }
-  const run = async (action: () => Promise<void>) => {
-    setWorking(true)
+  const run = async (
+    nextAction: keyof typeof actionLabels,
+    perform: () => Promise<void>
+  ) => {
+    if (pending.current) return
+    pending.current = true
+    setAction(nextAction)
     busy(true)
     setError('')
     try {
-      await action()
+      await perform()
     } catch (cause) {
       setError(String(cause instanceof Error ? cause.message : cause))
     } finally {
-      setWorking(false)
+      pending.current = false
+      setAction(undefined)
       busy(false)
     }
   }
@@ -206,9 +222,9 @@ export default function LanSetup({
               !connection.key.trim() ||
               connection.hostKey.trim().split(/\s+/).length < 2
             }
-            onClick={() => void run(() => create(true))}
+            onClick={() => void run('import', () => create(true))}
           >
-            Import bot key
+            {action === 'import' ? actionLabels.import : 'Import bot key'}
           </Button>
         </>
       ) : (
@@ -219,7 +235,7 @@ export default function LanSetup({
               variant="outline"
               disabled={working || !validEndpoint}
               onClick={() =>
-                void run(async () => {
+                void run('identity', async () => {
                   ready(false)
                   setVerified(false)
                   setIdentity(undefined)
@@ -232,7 +248,9 @@ export default function LanSetup({
                 })
               }
             >
-              Check computer identity
+              {action === 'identity'
+                ? actionLabels.identity
+                : 'Check computer identity'}
             </Button>
           )}
           {identity && (
@@ -259,9 +277,9 @@ export default function LanSetup({
             <Button
               type="button"
               disabled={working || !verified || !identity}
-              onClick={() => void run(() => create(false))}
+              onClick={() => void run('create', () => create(false))}
             >
-              {working ? 'Working…' : 'Create bot key'}
+              {action === 'create' ? actionLabels.create : 'Create bot key'}
             </Button>
           )}
           {connection.workspaceId && (
@@ -285,10 +303,10 @@ export default function LanSetup({
                   variant="outline"
                   disabled={working}
                   onClick={() =>
-                    void run(() => loadKey(connection.workspaceId!))
+                    void run('key', () => loadKey(connection.workspaceId!))
                   }
                 >
-                  Show bot public key
+                  {action === 'key' ? actionLabels.key : 'Show bot public key'}
                 </Button>
               )}
               <Button
@@ -296,7 +314,7 @@ export default function LanSetup({
                 variant="outline"
                 disabled={working || !publicKey}
                 onClick={() =>
-                  void run(async () => {
+                  void run('access', async () => {
                     ready(false)
                     setChecked(false)
                     await gbot('workspaces/ssh/check', {
@@ -307,7 +325,7 @@ export default function LanSetup({
                   })
                 }
               >
-                Check SSH access
+                {action === 'access' ? actionLabels.access : 'Check SSH access'}
               </Button>
               {checked && (
                 <LanTools
@@ -319,6 +337,15 @@ export default function LanSetup({
             </div>
           )}
         </>
+      )}
+      {action && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="text-sm text-muted-foreground"
+        >
+          {actionLabels[action]}
+        </p>
       )}
       {error && (
         <p role="alert" className="text-sm text-destructive">

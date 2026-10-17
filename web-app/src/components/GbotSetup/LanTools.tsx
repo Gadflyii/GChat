@@ -23,13 +23,14 @@ export default function LanTools({
     busy(true)
     ready(false)
     setInstalled(false)
+    setCommand('')
     setIssue('')
     try {
       const result = await gbot<LanPreparation>(
         prepare ? 'workspaces/ssh/prepare' : 'workspaces/ssh/tools',
         { workspace_id: workspaceId, ...(prepare ? { consent } : {}) }
       )
-      if (result.command) setCommand(result.command)
+      setCommand(result.command ?? '')
       setIssue(result.issue ?? '')
       setInstalled(result.installed)
       ready(result.installed)

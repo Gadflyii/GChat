@@ -1,5 +1,5 @@
 import { incompleteOutcomeMessage } from '@/lib/agent-outcome'
-import { useEffect, useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { continuationTask } from '@/lib/agent-continuation'
 import { AgentRunSetup } from '@/containers/AgentRunSetup'
@@ -349,6 +349,12 @@ function slug(value: string): string {
 
 function AgentStudioPage() {
   const [runSetup, setRunSetup] = useState<AgentDefinition | null>(null)
+  const runSetupRequest = useRef(0)
+  const [preparingRun, setPreparingRun] = useState(false)
+  const invalidateRunSetup = () => {
+    ++runSetupRequest.current
+    setPreparingRun(false)
+  }
   const [runTask, setRunTask] = useState('')
   const [runWorkspace, setRunWorkspace] = useState('')
   const navigate = useNavigate()
@@ -357,31 +363,43 @@ function AgentStudioPage() {
     useAgentDefinitions()
   const { skills } = useAgentSkills()
   const [view, setView] = useState<StudioView>(search.view ?? 'definitions')
-  const [draft, setDraft] = useState<AgentDefinition | null>(null)
+  const [draft, setDraftState] = useState<AgentDefinition | null>(null)
+  const draftRevision = useRef(0)
+  const mutatingDraft = useRef(false)
+  const setDraft = useCallback((next: AgentDefinition | null) => {
+    ++draftRevision.current
+    setDraftState(next)
+  }, [])
   const [templates, setTemplates] = useState<AgentTemplate[]>([])
   const [runs, setRuns] = useState<AgentRunRecord[]>([])
   const [modelInstances, setModelInstances] = useState<AgentModelInstance[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const draftBusy = saving || creating || deleting
   const historyRevision = useStudioRuns((s) => s.historyRevision)
   const pageId = useId()
 
   useEffect(() => {
-    if (view === 'definitions' && draft && !saving && !creating && !runSetup) {
+    if (view === 'definitions' && draft && !draftBusy && !runSetup) {
       useGbotPage.getState().publish({ id: pageId, draft, update: setDraft })
     } else {
       useGbotPage.getState().clear(pageId)
     }
-  }, [pageId, draft, view, saving, creating, runSetup])
+  }, [pageId, draft, view, draftBusy, runSetup, setDraft])
 
-  useEffect(() => () => useGbotPage.getState().clear(pageId), [pageId])
+  useEffect(() => () => {
+    ++draftRevision.current
+    ++runSetupRequest.current
+    useGbotPage.getState().clear(pageId)
+  }, [pageId])
 
   useEffect(() => {
     if (!draft && definitions.length > 0) {
       setDraft(cloneDefinition(definitions[0]))
     }
-  }, [definitions, draft])
+  }, [definitions, draft, setDraft])
 
   useEffect(() => {
     void Promise.all([listAgentTemplates(), listAgentRuns()])
@@ -409,6 +427,8 @@ function AgentStudioPage() {
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
 
   const selectView = (next: StudioView) => {
+    invalidateRunSetup()
+    ++draftRevision.current
     setView(next)
     void navigate({
       to: route.agents.index,
@@ -418,13 +438,19 @@ function AgentStudioPage() {
   }
 
   const createAgent = async () => {
+    if (mutatingDraft.current) return
+    mutatingDraft.current = true
+    const revision = draftRevision.current
     setCreating(true)
     try {
-      setDraft(await createDraft())
+      const created = await createDraft()
+      if (revision !== draftRevision.current) return
+      setDraft(created)
       selectView('definitions')
     } catch (reason) {
       toast.error(String(reason))
     } finally {
+      mutatingDraft.current = false
       setCreating(false)
     }
   }
@@ -446,7 +472,8 @@ function AgentStudioPage() {
   const saveDraft = async (
     showToast = true
   ): Promise<AgentDefinition | null> => {
-    if (!draft) return null
+    if (!draft || mutatingDraft.current) return null
+    const revision = draftRevision.current
     const candidate = {
       ...draft,
       id: draft.id || slug(draft.name),
@@ -456,9 +483,11 @@ function AgentStudioPage() {
       toast.error('Give the agent a name before saving.')
       return null
     }
+    mutatingDraft.current = true
     setSaving(true)
     try {
       const saved = await save(candidate)
+      if (revision !== draftRevision.current) return null
       setDraft(cloneDefinition(saved))
       if (showToast) toast.success('Agent definition saved')
       return saved
@@ -466,22 +495,29 @@ function AgentStudioPage() {
       toast.error(String(reason))
       return null
     } finally {
+      mutatingDraft.current = false
       setSaving(false)
     }
   }
 
   const deleteDraft = async () => {
-    if (!draft) return
+    if (!draft || mutatingDraft.current) return
     if (!draft.id) {
       setDraft(null)
       return
     }
+    mutatingDraft.current = true
+    const revision = draftRevision.current
+    setDeleting(true)
     try {
       await remove(draft.id)
-      setDraft(null)
+      if (revision === draftRevision.current) setDraft(null)
       toast.success('Agent definition deleted')
     } catch (reason) {
       toast.error(String(reason))
+    } finally {
+      mutatingDraft.current = false
+      setDeleting(false)
     }
   }
 
@@ -498,8 +534,11 @@ function AgentStudioPage() {
       toast.error('This older run does not contain a reusable task prompt.')
       return
     }
+    const request = ++runSetupRequest.current
+    setPreparingRun(true)
     try {
       const definition = await getAgentDefinition(run.definitionId)
+      if (request !== runSetupRequest.current) return
       setRunTask(continueWork ? continuationTask(run) : run.userMessage)
       setRunWorkspace(run.workspace ?? '')
       setRunSetup({
@@ -507,7 +546,11 @@ function AgentStudioPage() {
         roleAssignments: run.roleAssignments ?? definition.roleAssignments,
       })
     } catch (reason) {
-      toast.error(`Could not re-run task: ${String(reason)}`)
+      if (request === runSetupRequest.current) {
+        toast.error(`Could not re-run task: ${String(reason)}`)
+      }
+    } finally {
+      if (request === runSetupRequest.current) setPreparingRun(false)
     }
   }
 
@@ -531,6 +574,7 @@ function AgentStudioPage() {
         active={view}
         onSelect={(section) => {
           if (section === 'skills') {
+            invalidateRunSetup()
             void navigate({ to: route.skills.index })
             return
           }
@@ -555,7 +599,7 @@ function AgentStudioPage() {
           {!loading && !error && (
             <Button
               size="lg"
-              disabled={creating}
+              disabled={draftBusy}
               onClick={() => void createAgent()}
             >
               <IconPlus /> {creating ? 'Creating…' : 'Create agent'}
@@ -585,7 +629,7 @@ function AgentStudioPage() {
                 size="icon-sm"
                 variant="ghost"
                 title="New agent"
-                disabled={creating}
+                disabled={draftBusy}
                 onClick={() => void createAgent()}
               >
                 <IconPlus />
@@ -645,6 +689,8 @@ function AgentStudioPage() {
               <DefinitionInspector
                 draft={draft}
                 saving={saving}
+                deleting={deleting}
+                busy={draftBusy}
                 onSave={() => void saveDraft()}
                 onDelete={() => void deleteDraft()}
                 onTry={() => void tryInChat(draft)}
@@ -695,7 +741,10 @@ function AgentStudioPage() {
           definition={runSetup}
           initialTask={runTask}
           initialWorkspace={runWorkspace}
-          onClose={() => setRunSetup(null)}
+          onClose={() => {
+            invalidateRunSetup()
+            setRunSetup(null)
+          }}
           onRun={() => {
             setRunSetup(null)
             selectView('runs')
@@ -706,10 +755,18 @@ function AgentStudioPage() {
       {view === 'runs' && (
         <div className="overflow-auto">
           <AgentLiveRuns />
+          {preparingRun && (
+            <p role="status" className="px-6 py-2 text-sm text-muted-foreground">
+              Preparing run…
+            </p>
+          )}
           <RunInspector
             runs={runs}
             selected={selectedRun}
-            onSelect={setSelectedRunId}
+            onSelect={(id) => {
+              invalidateRunSetup()
+              setSelectedRunId(id)
+            }}
             onRerun={(run) => void rerun(run)}
             onContinue={(run) => void rerun(run, true)}
             onDelete={(run) => void deleteRun(run)}
@@ -1839,6 +1896,8 @@ function SkillPicker({
 function DefinitionInspector({
   draft,
   saving,
+  deleting,
+  busy,
   onSave,
   onDelete,
   onTry,
@@ -1846,6 +1905,8 @@ function DefinitionInspector({
 }: {
   draft: AgentDefinition
   saving: boolean
+  deleting: boolean
+  busy: boolean
   onSave: () => void
   onDelete: () => void
   onTry: () => void
@@ -1911,14 +1972,14 @@ function DefinitionInspector({
         approval policy still cascade from the parent run.
       </div>
       <div className="grid gap-2">
-        <Button disabled={!draft.name.trim()} onClick={onTry}>
+        <Button disabled={busy || !draft.name.trim()} onClick={onTry}>
           <IconPlayerPlay /> Save &amp; run
         </Button>
-        <Button variant="outline" disabled={saving} onClick={onSave}>
+        <Button variant="outline" disabled={busy} onClick={onSave}>
           {saving ? 'Saving…' : 'Save definition'}
         </Button>
-        <Button variant="ghost" className="text-destructive" onClick={onDelete}>
-          <IconTrash /> {saved ? 'Delete' : 'Discard'}
+        <Button variant="ghost" className="text-destructive" disabled={busy} onClick={onDelete}>
+          <IconTrash /> {deleting ? 'Deleting…' : saved ? 'Delete' : 'Discard'}
         </Button>
       </div>
     </div>

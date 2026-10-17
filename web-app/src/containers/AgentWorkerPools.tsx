@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useStudioCatalog } from '@/hooks/useStudioCatalog'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -11,6 +11,8 @@ export function AgentWorkerPools() {
   const [draft, setDraft] = useState<AgentWorkerPool | null>(null)
   const [draftRevision, setDraftRevision] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
+  const busyRef = useRef(false)
+  const [deleting, setDeleting] = useState(false)
   const [coordinator, setCoordinator] = useState('')
   const [coordinatorAddress, setCoordinatorAddress] = useState('')
   const needsCoordinatorAddress =
@@ -18,7 +20,14 @@ export function AgentWorkerPools() {
     !catalog.fleetHosts?.find((host) => host.id === coordinator)?.origins
       ?.length
   const save = async () => {
-    if (!draft || draftRevision === null || !catalog.fleet?.connected) return
+    if (
+      busyRef.current ||
+      !draft ||
+      draftRevision === null ||
+      !catalog.fleet?.connected
+    )
+      return
+    busyRef.current = true
     setBusy(true)
     try {
       setDraft(
@@ -34,7 +43,41 @@ export function AgentWorkerPools() {
     } catch (error) {
       toast.error(String(error))
     } finally {
+      busyRef.current = false
       setBusy(false)
+    }
+  }
+  const remove = async () => {
+    if (
+      busyRef.current ||
+      !draft?.id ||
+      draftRevision === null ||
+      !catalog.fleet?.connected
+    )
+      return
+    if (
+      !window.confirm(
+        'Delete this pool? Existing runs keep their assignment snapshot; new runs must choose another pool.'
+      )
+    )
+      return
+    busyRef.current = true
+    setBusy(true)
+    setDeleting(true)
+    try {
+      await studioCommand('delete_pool', {
+        id: draft.id,
+        expectedRevision: draftRevision,
+      })
+      setDraft(null)
+      setDraftRevision(null)
+      await refresh()
+    } catch (error) {
+      toast.error(String(error))
+    } finally {
+      busyRef.current = false
+      setBusy(false)
+      setDeleting(false)
     }
   }
   const ids = [
@@ -70,6 +113,7 @@ export function AgentWorkerPools() {
             Fleet coordinator{' '}
             <select
               aria-label="Fleet coordinator"
+              disabled={busy}
               value={coordinator}
               onChange={(event) => {
                 setCoordinator(event.target.value)
@@ -89,6 +133,7 @@ export function AgentWorkerPools() {
             <label className="text-sm">
               Coordinator address
               <Input
+                disabled={busy}
                 value={coordinatorAddress}
                 onChange={(event) => setCoordinatorAddress(event.target.value)}
                 placeholder="https://192.168.1.10:7443"
@@ -106,6 +151,8 @@ export function AgentWorkerPools() {
               (needsCoordinatorAddress && !coordinatorAddress.trim())
             }
             onClick={async () => {
+              if (busyRef.current) return
+              busyRef.current = true
               setBusy(true)
               try {
                 await studioCommand('fleet_authority', {
@@ -118,6 +165,7 @@ export function AgentWorkerPools() {
               } catch (error) {
                 toast.error(String(error))
               } finally {
+                busyRef.current = false
                 setBusy(false)
               }
             }}
@@ -144,7 +192,7 @@ export function AgentWorkerPools() {
           </p>
         </div>
         <Button
-          disabled={!catalog.fleet?.connected}
+          disabled={busy || !catalog.fleet?.connected}
           onClick={() => {
             setDraft({ id: '', name: '', members: [] })
             setDraftRevision(catalog.fleet.revision ?? null)
@@ -164,6 +212,7 @@ export function AgentWorkerPools() {
           {catalog.pools.map((pool) => (
             <Button
               key={pool.id}
+              disabled={busy}
               variant={draft?.id === pool.id ? 'secondary' : 'outline'}
               className="w-full justify-between"
               onClick={() => {
@@ -187,6 +236,7 @@ export function AgentWorkerPools() {
             <label className="block text-sm">
               Pool name
               <Input
+                disabled={busy}
                 value={draft.name}
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 placeholder="Coding workers"
@@ -215,6 +265,7 @@ export function AgentWorkerPools() {
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
+                      disabled={busy}
                       checked={!!member}
                       onChange={(e) =>
                         setDraft({
@@ -243,6 +294,7 @@ export function AgentWorkerPools() {
                     <label className="text-xs">
                       Worker limit
                       <Input
+                        disabled={busy}
                         className="w-20"
                         type="number"
                         min={1}
@@ -285,7 +337,7 @@ export function AgentWorkerPools() {
                 }
                 onClick={() => void save()}
               >
-                Save pool
+                {busy && !deleting ? 'Saving…' : 'Save pool'}
               </Button>
               {draft.id && (
                 <Button
@@ -293,26 +345,9 @@ export function AgentWorkerPools() {
                   disabled={
                     busy || !catalog.fleet?.connected || draftRevision === null
                   }
-                  onClick={async () => {
-                    if (
-                      !window.confirm(
-                        'Delete this pool? Existing runs keep their assignment snapshot; new runs must choose another pool.'
-                      )
-                    )
-                      return
-                    try {
-                      await studioCommand('delete_pool', {
-                        id: draft.id,
-                        expectedRevision: draftRevision,
-                      })
-                      setDraft(null)
-                      await refresh()
-                    } catch (e) {
-                      toast.error(String(e))
-                    }
-                  }}
+                  onClick={() => void remove()}
                 >
-                  Delete pool
+                  {deleting ? 'Deleting…' : 'Delete pool'}
                 </Button>
               )}
             </div>

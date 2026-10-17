@@ -139,6 +139,93 @@ it('invalidates an imported-model quote when the Host restarts at the same revis
   expect(engineCommand).toHaveBeenCalledTimes(1)
 })
 
+it('keeps a pending startup check through polling and displays its result', async () => {
+  let finishQuote!: (quote: EngineStartupQuote) => void
+  vi.mocked(engineCommand).mockReturnValueOnce(new Promise<EngineStartupQuote>(resolve => { finishQuote = resolve }))
+  const snapshot: EngineSnapshot = { ...importedModelSnapshot, hardware_profile: {
+    status: 'running', scope: 'complete_remaining_formats', base_complete: true, scope_complete: false, all_formats_complete: false,
+    pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', job_id: 'job', pid: 42,
+    reprofile: false, started_unix_ms: 100, finished_unix_ms: null, profile_path: '/hardware.json',
+    checkpoint_available: true, diagnostic_tail: '', error: null, available: true, elapsed_ms: 100,
+  } }
+  const { rerender } = render(<HostCard host={localHost} snapshot={snapshot} />)
+  selectImportedModel()
+  fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
+  expect(screen.getByRole('button', { name: 'Check startup settings' })).toBeDisabled()
+  rerender(<HostCard host={localHost} snapshot={{ ...snapshot, revision: 2, hardware_profile: {
+    ...snapshot.hardware_profile!, elapsed_ms: 200, diagnostic_tail: 'Profiling another format',
+  } }} />)
+  rerender(<HostCard host={localHost} snapshot={{ ...snapshot, revision: 3, hardware_profile: {
+    ...snapshot.hardware_profile!, status: 'cancelled', finished_unix_ms: 300, diagnostic_tail: 'Yielded to startup check',
+  } }} />)
+  finishQuote(importedQuote)
+  expect(await screen.findByText(/Verified artifact: qwen3.8-27b \/ int8/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Check startup settings' })).toBeEnabled()
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('quote', expect.objectContaining({ host_id: 'host' }))
+})
+
+it.each(['success', 'rejection'] as const)('keeps a completed startup-check %s through unrelated snapshot updates', async (outcome) => {
+  if (outcome === 'success') vi.mocked(engineCommand).mockResolvedValueOnce(importedQuote)
+  else vi.mocked(engineCommand).mockRejectedValueOnce('Not enough memory for these settings')
+  const { rerender } = render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  selectImportedModel()
+  fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
+  const message = outcome === 'success' ? /Verified artifact: qwen3.8-27b \/ int8/ : /Not enough memory for these settings/
+  expect(await screen.findByText(message)).toBeInTheDocument()
+  rerender(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, revision: 2,
+    display_name: 'Renamed Host', management_notice: 'Management address updated',
+    gpus: [{ ...importedModelSnapshot.gpus[0], display_name: 'Renamed GPU' }],
+  }} />)
+  rerender(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, revision: 3 }} />)
+  expect(screen.getByText(message)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Check startup settings' })).toBeEnabled()
+  expect(engineCommand).toHaveBeenCalledTimes(1)
+})
+
+it.each([
+  ['Context tokens', '32768'], ['Concurrent requests', '4'], ['Instances', '2'],
+  ['Speculative decoding', 'auto'], ['KV format', 'int8'],
+])('discards a pending startup check when %s changes', async (label, value) => {
+  let finishQuote!: (quote: EngineStartupQuote) => void
+  vi.mocked(engineCommand).mockReturnValueOnce(new Promise<EngineStartupQuote>(resolve => { finishQuote = resolve }))
+  render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  selectImportedModel()
+  fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
+  fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  finishQuote(importedQuote)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Check startup settings' })).toBeEnabled())
+  expect(screen.queryByText(/Verified artifact:/)).not.toBeInTheDocument()
+  expect(engineCommand).toHaveBeenCalledTimes(1)
+})
+
+it.each([
+  ['artifact identity', { ...importedModelSnapshot, models: [{ ...importedModelSnapshot.models[0], metadata: {
+    ...importedModelSnapshot.models[0].metadata, identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' },
+  } }] }],
+  ['GPU capacity', { ...importedModelSnapshot, gpus: [{ ...importedModelSnapshot.gpus[0], memory_mib: 24576 }] }],
+  ['instance placement', { ...importedModelSnapshot, instances: [{
+    instance_id: 'other', session_id: 'session', display_name: 'Other instance', upstream_model_id: 'other', status: 'starting',
+    configuration: { gpu_uuids: ['GPU-one'], max_context: 32768, concurrency: 1 },
+  }] }],
+] satisfies [string, EngineSnapshot][])('invalidates a completed and pending startup check when %s changes', async (_label, changed) => {
+  vi.mocked(engineCommand).mockResolvedValueOnce(importedQuote)
+  const { rerender } = render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  selectImportedModel()
+  fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
+  expect(await screen.findByText(/Verified artifact:/)).toBeInTheDocument()
+  // These changes matter even if a Host reuses its snapshot revision.
+  rerender(<HostCard host={localHost} snapshot={changed} />)
+  expect(screen.queryByText(/Verified artifact:/)).not.toBeInTheDocument()
+  let finishQuote!: (quote: EngineStartupQuote) => void
+  vi.mocked(engineCommand).mockReturnValueOnce(new Promise<EngineStartupQuote>(resolve => { finishQuote = resolve }))
+  fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
+  rerender(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  finishQuote(importedQuote)
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Check startup settings' })).toBeEnabled())
+  expect(screen.queryByText(/Verified artifact:/)).not.toBeInTheDocument()
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+})
+
 it('does not restore a completed or pending quote after changing settings and changing them back', async () => {
   vi.mocked(engineCommand).mockResolvedValue(importedQuote)
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
