@@ -1,5 +1,41 @@
 # GChat remediation and code hygiene
 
+## Model deletion result and retry (C4, October 17)
+
+Repository `/ai/gchat`, branch `fix/c4-model-delete-result-20261017`,
+worktree `/ai/gchat-worktrees/c4-model-delete-result-20261017`, baseline
+`65248d3cc`. The provider-settings model dialog closed immediately after
+Delete, hiding an unresolved or failed deletion. It also focused Delete on
+opening and had no guard against repeated activation.
+
+The dialog now waits for the existing deletion operation before closing,
+keeps failures visible and retryable, focuses Cancel initially, and blocks
+repeated submission and dismissal while pending. Its trigger uses a native
+button. Acceptance: safe initial keyboard activation, one request while
+pending, visible failure with retry, and close only on success. Source and interaction tests were implemented in parallel with distinct file
+ownership. Eleven real dialog/button interaction cases passed, covering native
+activation, pending guards, failure/retry, and submitted model identity. No
+real model deletion or live Engine action was performed.
+
+Linux verification passed: lint, typecheck, quality/contract/asset checks,
+coverage floors, 2,875 frontend tests (six skipped), 119 extension tests, and
+1,076 Rust tests (27 ignored). Lint retains three warnings in unchanged files.
+The first focused invocation exposed a teardown error: the test reset the
+service store before unmounting the dialog. Explicit cleanup now precedes that
+reset. The initial full gate passed frontend and app Rust stages, then a
+plugin fixture rejected its synthetic GPU because the gate exported empty
+`CUDA_VISIBLE_DEVICES`. With that command-only override removed, the failed
+and remaining Rust stages passed; already-passed stages were retained. Future
+CPU-only gates must leave visibility unset for these fixtures. Windows runtime
+behavior has not been separately exercised.
+
+The private S1 build copy and exited containers were removed after
+verification; booking 2594 was cancelled and resources returned at 14:49Z.
+Gchat 3's dependency donor remains read-only and retained. The source worktree
+is retained for review; concise results are kept at
+`/ai/gchat/out/c4-model-delete-result-20261017/result.json`.
+The next step is the authorized merge; no further run is required.
+
 ## Assistant deletion single submission (C4, October 17)
 
 Repository `/ai/gchat`, branch `fix/c4-assistant-delete-single-submit-20261017`,

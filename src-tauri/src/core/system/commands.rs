@@ -259,45 +259,49 @@ pub fn relaunch<R: Runtime>(app: AppHandle<R>) {
 }
 
 #[tauri::command]
-pub fn open_app_directory<R: Runtime>(app: AppHandle<R>) {
-    let app_path = app.path().app_data_dir().unwrap();
-    if cfg!(target_os = "windows") {
-        std::process::Command::new("explorer")
-            .arg(app_path)
-            .status()
-            .expect("Failed to open app directory");
+pub fn open_app_directory<R: Runtime>(app: AppHandle<R>) -> Result<(), String> {
+    let app_path = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not find the GChat data folder: {error}"))?;
+    open_file_explorer_with(&app_path, |command| command.status())
+}
+
+fn open_file_explorer_with(
+    path: &Path,
+    run: impl FnOnce(&mut std::process::Command) -> std::io::Result<std::process::ExitStatus>,
+) -> Result<(), String> {
+    let program = if cfg!(target_os = "windows") {
+        "explorer"
     } else if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-            .arg(app_path)
-            .status()
-            .expect("Failed to open app directory");
+        "open"
     } else {
-        std::process::Command::new("xdg-open")
-            .arg(app_path)
-            .status()
-            .expect("Failed to open app directory");
+        "xdg-open"
+    };
+    let status = run(std::process::Command::new(program).arg(path)).map_err(|error| {
+        let hint = if cfg!(target_os = "linux") && error.kind() == std::io::ErrorKind::NotFound {
+            "Install xdg-utils and a desktop file manager, or open the folder manually."
+        } else {
+            "Check your desktop file manager, or open the folder manually."
+        };
+        format!(
+            "Could not open folder \"{}\" using {program}: {error}. {hint}",
+            path.display()
+        )
+    })?;
+    // Explorer can return a nonzero status after handing off to an existing window.
+    if !cfg!(target_os = "windows") && !status.success() {
+        return Err(format!(
+            "Could not open folder \"{}\" using {program}: {status}. Check your desktop file manager, or open the folder manually.",
+            path.display()
+        ));
     }
+    Ok(())
 }
 
 #[tauri::command]
-pub fn open_file_explorer(path: String) {
-    let path = PathBuf::from(path);
-    if cfg!(target_os = "windows") {
-        std::process::Command::new("explorer")
-            .arg(path)
-            .status()
-            .expect("Failed to open file explorer");
-    } else if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-            .arg(path)
-            .status()
-            .expect("Failed to open file explorer");
-    } else {
-        std::process::Command::new("xdg-open")
-            .arg(path)
-            .status()
-            .expect("Failed to open file explorer");
-    }
+pub fn open_file_explorer(path: String) -> Result<(), String> {
+    open_file_explorer_with(Path::new(&path), |command| command.status())
 }
 
 /// Deliver a desktop notification from the blocking pool.
@@ -4839,6 +4843,83 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+    fn folder_opener_exit_status(code: i32) -> std::process::ExitStatus {
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::ExitStatusExt;
+            std::process::ExitStatus::from_raw(code << 8)
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::ExitStatusExt;
+            std::process::ExitStatus::from_raw(code as u32)
+        }
+    }
+
+    #[test]
+    fn open_file_explorer_returns_recovery_guidance_when_opener_is_missing() {
+        let path = std::path::Path::new("selected workspace");
+        let error = super::open_file_explorer_with(path, |_| {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "fixture opener is not installed",
+            ))
+        })
+        .expect_err("a missing opener must return an error instead of panicking");
+
+        assert!(error.contains("Could not open folder"), "{error}");
+        assert!(error.contains("selected workspace"), "{error}");
+        assert!(error.contains("fixture opener is not installed"), "{error}");
+        assert!(error.contains("open the folder manually"), "{error}");
+        #[cfg(target_os = "linux")]
+        {
+            assert!(error.contains("xdg-open"), "{error}");
+            assert!(error.contains("Install xdg-utils"), "{error}");
+        }
+    }
+
+    #[test]
+    fn open_file_explorer_passes_selected_folder_as_one_literal_argument() {
+        let path = std::path::Path::new("selected folder 'quoted' $(not-a-command)");
+        let expected_program = if cfg!(target_os = "windows") {
+            "explorer"
+        } else if cfg!(target_os = "macos") {
+            "open"
+        } else {
+            "xdg-open"
+        };
+        let mut invoked = false;
+
+        super::open_file_explorer_with(path, |command| {
+            invoked = true;
+            assert_eq!(command.get_program(), std::ffi::OsStr::new(expected_program));
+            assert_eq!(command.get_args().collect::<Vec<_>>(), [path.as_os_str()]);
+            Ok(folder_opener_exit_status(0))
+        })
+        .expect("a successful folder opener must succeed");
+
+        assert!(invoked, "the selected folder must be handed to its opener");
+    }
+
+    #[test]
+    fn open_file_explorer_reports_failed_exit_except_for_windows_handoff() {
+        let path = std::path::Path::new("selected workspace");
+        let result = super::open_file_explorer_with(path, |_| Ok(folder_opener_exit_status(3)));
+
+        #[cfg(windows)]
+        assert!(
+            result.is_ok(),
+            "Explorer can report a nonzero exit after handing off to an existing window"
+        );
+        #[cfg(unix)]
+        {
+            let error = result.expect_err("a failed folder opener must return its exit status");
+            assert!(error.contains("selected workspace"), "{error}");
+            assert!(error.contains("exit status: 3"), "{error}");
+            assert!(error.contains("open the folder manually"), "{error}");
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn hermes_configuration_and_clear_use_the_selected_home() {

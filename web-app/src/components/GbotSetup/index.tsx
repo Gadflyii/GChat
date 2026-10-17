@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useBundledResources } from '@/hooks/useBundledResources'
@@ -93,11 +93,13 @@ export default function GbotSetup({
             : ''
   )
   const [saving, setSaving] = useState(false)
+  const submissionPending = useRef(false)
   const [error, setError] = useState('')
   const [lanReady, setLanReady] = useState(false)
   const [connecting, setConnecting] = useState(false)
   const [service, setService] = useState<ServiceTarget>({ kind: 'local' })
   const [serviceReady, setServiceReady] = useState(false)
+  const serviceChoiceVersion = useRef(0)
   const hosts = useEngineHosts((state) => state.hosts)
   const serviceName =
     service.kind === 'local'
@@ -108,21 +110,25 @@ export default function GbotSetup({
   const preparingService = step === 1 && saving && resources.ready !== true
   useEffect(() => {
     let current = true
+    const version = serviceChoiceVersion.current
     void getGbotServiceTarget()
       .then((target) => {
-        if (current) {
+        if (current && serviceChoiceVersion.current === version) {
           setService(target)
           setServiceReady(target.kind === 'local')
         }
       })
       .catch((cause) => {
-        if (current) setError(String(cause))
+        if (current && serviceChoiceVersion.current === version)
+          setError(String(cause))
       })
     return () => {
       current = false
     }
   }, [])
   const changeService = useCallback((target: ServiceTarget, ready: boolean) => {
+    if (submissionPending.current) return
+    ++serviceChoiceVersion.current
     setService(target)
     setServiceReady(ready)
   }, [])
@@ -158,8 +164,10 @@ export default function GbotSetup({
             ? (computer === 'lan' || guidedCloud) && lanReady
             : true
   const submit = async () => {
-    if (saving || connecting || !canContinue) return
+    if (submissionPending.current || saving || connecting || !canContinue)
+      return
     if (step === 1) {
+      submissionPending.current = true
       setSaving(true)
       setError('')
       try {
@@ -168,6 +176,7 @@ export default function GbotSetup({
       } catch (cause) {
         setError(String(cause))
       } finally {
+        submissionPending.current = false
         setSaving(false)
       }
       return
@@ -176,6 +185,7 @@ export default function GbotSetup({
       setStep(step + 1)
       return
     }
+    submissionPending.current = true
     setSaving(true)
     setError('')
     try {
@@ -189,6 +199,7 @@ export default function GbotSetup({
     } catch (cause) {
       setError(String(cause))
     } finally {
+      submissionPending.current = false
       setSaving(false)
     }
   }
@@ -235,7 +246,11 @@ export default function GbotSetup({
           </label>
         </div>
       )}
-      {step === 1 && <ServiceSetup target={service} change={changeService} />}
+      {step === 1 && (
+        <fieldset disabled={saving} aria-label="Gbot service selection">
+          <ServiceSetup target={service} change={changeService} />
+        </fieldset>
+      )}
       {step === 2 && (
         <>
           <fieldset className="space-y-2">
@@ -366,6 +381,11 @@ export default function GbotSetup({
           <p>{resources.error}</p>
           <p>Restart GChat to try resource preparation again.</p>
         </div>
+      )}
+      {step === 4 && saving && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Saving {connection.name.trim()} and its computer connection…
+        </p>
       )}
       {error && !(step === 1 && error === resources.error) && (
         <p role="alert" className="text-sm text-destructive">

@@ -4,7 +4,9 @@ import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
+import GbotTaskActions from '@/components/GbotTaskActions'
 import HumanHelp from '@/components/GbotHumanHelp'
+import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import GbotConnectors from '@/components/GbotConnectors'
 import GbotSchedules from '@/components/GbotSchedules'
@@ -66,8 +68,10 @@ function GbotPage() {
   })
   const [serviceReady, setServiceReady] = useState(false)
   const [serviceError, setServiceError] = useState('')
+  const serviceSelectionPending = useRef(false)
   const changeServiceDraft = useCallback(
     (target: ServiceTarget, ready: boolean) => {
+      if (serviceSelectionPending.current) return
       setServiceDraft(target)
       setServiceReady(ready)
     },
@@ -83,6 +87,8 @@ function GbotPage() {
   const [m365Setups, setM365Setups] = useState<M365SetupRecord[]>([])
   const [setupError, setSetupError] = useState('')
   const [prompts, setPrompts] = useState<Record<string, string>>({})
+  const [submittingTask, setSubmittingTask] = useState<string>()
+  const taskSubmission = useRef(false)
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const setGbotEnabled = useGeneralSetting((state) => state.setGbotEnabled)
@@ -208,7 +214,8 @@ function GbotPage() {
     }
   }
   const chooseService = async () => {
-    if (busy || !serviceReady) return
+    if (busy || serviceSelectionPending.current || !serviceReady) return
+    serviceSelectionPending.current = true
     setBusy(true)
     setServiceError('')
     try {
@@ -234,6 +241,7 @@ function GbotPage() {
     } catch (cause) {
       setServiceError(String(cause))
     } finally {
+      serviceSelectionPending.current = false
       setBusy(false)
     }
   }
@@ -352,6 +360,7 @@ function GbotPage() {
       savedAssignment.context_tokens > 0
   )
   const taskGuidance = (() => {
+    if (submittingTask === workspaceId) return 'Sending this task to the bot…'
     if (busy)
       return 'Wait for the current operation to finish before running a task.'
     if (setupBlocked) {
@@ -497,7 +506,9 @@ function GbotPage() {
           aria-label="Choose service computer"
           className="space-y-3 overflow-y-auto border-b p-5"
         >
-          <ServiceSetup target={serviceDraft} change={changeServiceDraft} />
+          <fieldset disabled={busy} aria-label="Gbot service selection">
+            <ServiceSetup target={serviceDraft} change={changeServiceDraft} />
+          </fieldset>
           {serviceError && (
             <p role="alert" className="text-sm text-destructive">
               {serviceError}
@@ -983,42 +994,16 @@ function GbotPage() {
                       history.some((task) => task.id === approval.task_id)
                     )
                     .map((approval) => (
-                      <div
+                      <GbotTaskApproval
                         key={approval.id}
-                        className="space-y-2 rounded-lg border p-3"
-                      >
-                        <p className="text-sm">Bot requests permission</p>
-                        <pre className="overflow-x-auto text-xs">
-                          {JSON.stringify(approval.request.operation, null, 2)}
-                        </pre>
-                        <Button
-                          disabled={busy}
-                          onClick={() =>
-                            void perform(() =>
-                              gbot('tasks/approval', {
-                                id: approval.id,
-                                allow: true,
-                              })
-                            )
-                          }
-                        >
-                          Allow
-                        </Button>{' '}
-                        <Button
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() =>
-                            void perform(() =>
-                              gbot('tasks/approval', {
-                                id: approval.id,
-                                allow: false,
-                              })
-                            )
-                          }
-                        >
-                          Deny
-                        </Button>
-                      </div>
+                        approval={approval}
+                        busy={busy}
+                        reply={(allow) =>
+                          perform(() =>
+                            gbot('tasks/approval', { id: approval.id, allow })
+                          )
+                        }
+                      />
                     ))}
                   {history.map((task) => (
                     <article
@@ -1029,40 +1014,20 @@ function GbotPage() {
                         <span className="text-sm capitalize">
                           {task.state.replaceAll('_', ' ')}
                         </span>
-                        {['running', 'waiting_for_human'].includes(
-                          task.state
-                        ) ? (
-                          <Button
-                            variant="ghost"
-                            disabled={busy}
-                            onClick={() =>
-                              void perform(() =>
-                                gbot('tasks/cancel', { id: task.id })
-                              )
-                            }
-                          >
-                            Stop
-                          </Button>
-                        ) : (
-                          [
-                            'ready',
-                            'paused',
-                            'interrupted',
-                            'cancelled',
-                          ].includes(task.state) && (
-                            <Button
-                              variant="ghost"
-                              disabled={busy || !ready || !botHasControl}
-                              onClick={() =>
-                                void perform(() =>
-                                  gbot('tasks/resume', { id: task.id })
-                                )
-                              }
-                            >
-                              Resume
-                            </Button>
-                          )
-                        )}
+                        <GbotTaskActions
+                          taskState={task.state}
+                          busy={busy}
+                          ready={ready}
+                          botHasControl={botHasControl}
+                          stopLabel="Stop"
+                          resumeLabel="Resume"
+                          size="default"
+                          onAction={(action) =>
+                            perform(() =>
+                              gbot(`tasks/${action}`, { id: task.id })
+                            )
+                          }
+                        />
                       </div>
                       {task.messages
                         .filter(
@@ -1098,17 +1063,29 @@ function GbotPage() {
                   ))}
                   <p
                     id="gbot-task-guidance"
+                    role={submittingTask === workspaceId ? 'status' : undefined}
                     className="text-sm text-muted-foreground"
                   >
                     {taskGuidance}
                   </p>
                   <form
                     className="flex gap-2"
+                    aria-busy={submittingTask === workspaceId}
                     onSubmit={(event) => {
                       event.preventDefault()
-                      if (!identity || !ready || !botHasControl) return
+                      if (
+                        busy ||
+                        taskSubmission.current ||
+                        !identity ||
+                        !ready ||
+                        !botHasControl ||
+                        !prompt.trim()
+                      )
+                        return
                       const submittedIdentity: Identity = identity
                       const submittedPrompt = prompt
+                      taskSubmission.current = true
+                      setSubmittingTask(submittedIdentity.workspace_id)
                       void perform(async () => {
                         await gbot('tasks/start', {
                           identity: submittedIdentity,
@@ -1123,6 +1100,9 @@ function GbotPage() {
                               }
                             : previous
                         )
+                      }).finally(() => {
+                        taskSubmission.current = false
+                        setSubmittingTask(undefined)
                       })
                     }}
                   >
@@ -1143,10 +1123,14 @@ function GbotPage() {
                     <Button
                       aria-describedby="gbot-task-guidance"
                       disabled={
-                        busy || !ready || !prompt.trim() || !botHasControl
+                        busy ||
+                        Boolean(submittingTask) ||
+                        !ready ||
+                        !prompt.trim() ||
+                        !botHasControl
                       }
                     >
-                      Run
+                      {submittingTask === workspaceId ? 'Sending…' : 'Run'}
                     </Button>
                   </form>
                 </fieldset>

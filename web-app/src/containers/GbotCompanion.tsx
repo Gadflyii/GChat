@@ -9,10 +9,12 @@ import {
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import GbotAvatar from '@/components/GbotAvatar'
+import GbotTaskActions from '@/components/GbotTaskActions'
 import GbotDesktopView, {
   type DesktopViewHandle,
 } from '@/components/GbotDesktopView'
 import GbotHumanHelp from '@/components/GbotHumanHelp'
+import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -57,6 +59,8 @@ export default function GbotCompanion() {
   const pageState = useGbotPage()
   const [owner] = useState(gbotControlOwner)
   const [busy, setBusy] = useState(false)
+  const [submittingTask, setSubmittingTask] = useState<string>()
+  const taskSubmission = useRef(false)
   const desktop = useRef<DesktopViewHandle>(null)
   const panel = useRef<HTMLElement>(null)
   const wasVisible = useRef(false)
@@ -380,44 +384,16 @@ export default function GbotCompanion() {
                 </p>
               )}
               {approvals.map((approval) => (
-                <article
+                <GbotTaskApproval
                   key={approval.id}
-                  className="space-y-2 rounded-lg border p-3"
-                >
-                  <p className="text-sm font-medium">Bot requests permission</p>
-                  <pre className="overflow-x-auto whitespace-pre-wrap break-words text-xs">
-                    {JSON.stringify(approval.request.operation, null, 2)}
-                  </pre>
-                  <div className="flex gap-2">
-                    <Button
-                      disabled={busy}
-                      onClick={() =>
-                        void perform(() =>
-                          gbot('tasks/approval', {
-                            id: approval.id,
-                            allow: true,
-                          })
-                        )
-                      }
-                    >
-                      Allow
-                    </Button>
-                    <Button
-                      disabled={busy}
-                      variant="outline"
-                      onClick={() =>
-                        void perform(() =>
-                          gbot('tasks/approval', {
-                            id: approval.id,
-                            allow: false,
-                          })
-                        )
-                      }
-                    >
-                      Deny
-                    </Button>
-                  </div>
-                </article>
+                  approval={approval}
+                  busy={busy}
+                  reply={(allow) =>
+                    perform(() =>
+                      gbot('tasks/approval', { id: approval.id, allow })
+                    )
+                  }
+                />
               ))}
               {history.map((task) => (
                 <article
@@ -426,37 +402,15 @@ export default function GbotCompanion() {
                 >
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>{task.state.replaceAll('_', ' ')}</span>
-                    {['running', 'waiting_for_human'].includes(task.state) ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() =>
-                          void perform(() =>
-                            gbot('tasks/cancel', { id: task.id })
-                          )
-                        }
-                      >
-                        Stop task
-                      </Button>
-                    ) : (
-                      ['ready', 'paused', 'interrupted', 'cancelled'].includes(
-                        task.state
-                      ) && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy || !ready || !botHasControl}
-                          onClick={() =>
-                            void perform(() =>
-                              gbot('tasks/resume', { id: task.id })
-                            )
-                          }
-                        >
-                          Resume task
-                        </Button>
-                      )
-                    )}
+                    <GbotTaskActions
+                      taskState={task.state}
+                      busy={busy}
+                      ready={ready}
+                      botHasControl={botHasControl}
+                      onAction={(action) =>
+                        perform(() => gbot(`tasks/${action}`, { id: task.id }))
+                      }
+                    />
                   </div>
                   {task.messages
                     .filter(
@@ -531,11 +485,21 @@ export default function GbotCompanion() {
           {tab === 'conversation' && (
             <form
               className="shrink-0 space-y-2 border-t p-4"
+              aria-busy={submittingTask === workspaceId}
               onSubmit={(event) => {
                 event.preventDefault()
-                if (!identity || !ready || !botHasControl || !draft.trim())
+                if (
+                  busy ||
+                  taskSubmission.current ||
+                  !identity ||
+                  !ready ||
+                  !botHasControl ||
+                  !draft.trim()
+                )
                   return
                 const submitted = draft
+                taskSubmission.current = true
+                setSubmittingTask(workspaceId)
                 void perform(async () => {
                   const request = useGbotPage
                     .getState()
@@ -549,6 +513,9 @@ export default function GbotCompanion() {
                   const current = useGbotCompanion.getState()
                   if (current.drafts[workspaceId] === submitted)
                     current.setDraft(workspaceId, '')
+                }).finally(() => {
+                  taskSubmission.current = false
+                  setSubmittingTask(undefined)
                 })
               }}
             >
@@ -593,6 +560,11 @@ export default function GbotCompanion() {
                   state.setDraft(workspaceId, event.target.value)
                 }
               />
+              {submittingTask === workspaceId && (
+                <p role="status" className="text-sm text-muted-foreground">
+                  Sending this task to the bot…
+                </p>
+              )}
               <div className="flex items-center justify-between gap-2">
                 <Link
                   to={route.gbot.index}
@@ -602,9 +574,15 @@ export default function GbotCompanion() {
                   Gbot settings
                 </Link>
                 <Button
-                  disabled={busy || !ready || !botHasControl || !draft.trim()}
+                  disabled={
+                    busy ||
+                    Boolean(submittingTask) ||
+                    !ready ||
+                    !botHasControl ||
+                    !draft.trim()
+                  }
                 >
-                  Send
+                  {submittingTask === workspaceId ? 'Sending…' : 'Send'}
                 </Button>
               </div>
             </form>

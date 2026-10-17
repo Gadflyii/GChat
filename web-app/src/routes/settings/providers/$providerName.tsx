@@ -447,6 +447,7 @@ function ProviderDetail() {
                   const actionComponent = (
                     <div className="mt-2">
                       <DynamicControllerSetting
+                        title={setting.title}
                         controllerType={setting.controller_type}
                         controllerProps={setting.controller_props}
                         onChange={(newValue) => {

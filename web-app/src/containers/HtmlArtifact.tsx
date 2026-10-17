@@ -59,7 +59,16 @@ function HtmlArtifactComponent({
   const { t } = useTranslation('chat')
   const [tab, setTab] = useState<ArtifactTab>('preview')
   const [copied, setCopied] = useState(false)
+  const [copying, setCopying] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
+  const copyPendingRef = useRef(false)
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [previewUrl, setPreviewUrl] = useState<string>('')
+  const [previewFailed, setPreviewFailed] = useState(false)
+  const [previewRetry, setPreviewRetry] = useState(0)
+  const [downloading, setDownloading] = useState(false)
+  const [downloadFailed, setDownloadFailed] = useState(false)
+  const downloadPendingRef = useRef(false)
   const [frameLoaded, setFrameLoaded] = useState(false)
   const [progress, setProgress] = useState(0)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -149,8 +158,15 @@ function HtmlArtifactComponent({
   const navigatedCodeRef = useRef('')
   useEffect(() => {
     if (!isPlatformTauri()) return
-    if (generating || !code || navigatedCodeRef.current === code) return
+    if (generating) {
+      setPreviewFailed(false)
+      return
+    }
+    if (!code || navigatedCodeRef.current === code) return
     let cancelled = false
+    navigatedCodeRef.current = ''
+    setPreviewFailed(false)
+    setPreviewUrl('')
     void (async () => {
       try {
         await invoke('set_artifact_html', {
@@ -164,13 +180,15 @@ function HtmlArtifactComponent({
           `${artifactBaseUrl()}/${artifactIdRef.current}?v=${versionRef.current}`
         )
       } catch (error) {
+        if (cancelled) return
         console.error('Failed to register artifact preview:', error)
+        setPreviewFailed(true)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [code, generating])
+  }, [code, generating, previewRetry])
 
   // Watchdog forces the loader to clear if the iframe never fires `load`.
   useEffect(() => {
@@ -188,12 +206,14 @@ function HtmlArtifactComponent({
     setProgress((previous) => Math.max(previous, estimateHtmlProgress(code)))
   }, [code, generating])
 
-  const showPreviewLoader = generating || !previewUrl || !frameLoaded
+  const showPreviewLoader =
+    !previewFailed && (generating || !previewUrl || !frameLoaded)
   const progressPct = Math.round((generating ? progress : 1) * 100)
 
   useEffect(() => {
     const id = artifactIdRef.current
     return () => {
+      clearTimeout(copyResetRef.current)
       if (isPlatformTauri()) {
         invoke('clear_artifact_html', { id }).catch(() => {})
       }
@@ -205,19 +225,32 @@ function HtmlArtifactComponent({
   }, [])
 
   const handleCopy = useCallback(async () => {
-    if (!navigator?.clipboard?.writeText) return
+    if (copyPendingRef.current) return
+    copyPendingRef.current = true
+    clearTimeout(copyResetRef.current)
+    setCopying(true)
+    setCopied(false)
+    setCopyFailed(false)
     try {
       await navigator.clipboard.writeText(code)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      copyResetRef.current = setTimeout(() => setCopied(false), 2000)
     } catch (error) {
       console.error('Failed to copy artifact code:', error)
+      setCopyFailed(true)
+    } finally {
+      copyPendingRef.current = false
+      setCopying(false)
     }
   }, [code])
 
   const handleDownload = useCallback(async () => {
-    if (isPlatformTauri()) {
-      try {
+    if (downloadPendingRef.current) return
+    downloadPendingRef.current = true
+    setDownloading(true)
+    setDownloadFailed(false)
+    try {
+      if (isPlatformTauri()) {
         const path = await getServiceHub()
           .dialog()
           .save({
@@ -228,14 +261,9 @@ function HtmlArtifactComponent({
           await fs.writeFileSync(path, code)
         }
         return
-      } catch (error) {
-        console.error('Failed to save artifact:', error)
-        return
       }
-    }
 
-    // Web/mobile: trigger a browser download.
-    try {
+      // Web/mobile: trigger a browser download.
       const url = URL.createObjectURL(new Blob([code], { type: 'text/html' }))
       const anchor = document.createElement('a')
       anchor.href = url
@@ -245,7 +273,11 @@ function HtmlArtifactComponent({
       anchor.remove()
       URL.revokeObjectURL(url)
     } catch (error) {
-      console.error('Failed to download artifact:', error)
+      console.error('Failed to save artifact:', error)
+      setDownloadFailed(true)
+    } finally {
+      downloadPendingRef.current = false
+      setDownloading(false)
     }
   }, [code])
 
@@ -330,6 +362,9 @@ function HtmlArtifactComponent({
                 className="h-7 gap-1 px-2 text-xs"
                 onClick={handleCopy}
                 title="Copy code"
+                aria-label="Copy HTML"
+                aria-busy={copying}
+                disabled={copying}
               >
                 <CopyIcon size={14} className="shrink-0" />
                 <span className="hidden @[26rem]:inline">
@@ -342,6 +377,9 @@ function HtmlArtifactComponent({
                 className="h-7 gap-1 px-2 text-xs"
                 onClick={handleDownload}
                 title="Download as .html"
+                aria-label="Download HTML"
+                aria-busy={downloading}
+                disabled={downloading}
               >
                 <Download size={14} className="shrink-0" />
                 <span className="hidden @[26rem]:inline">Download</span>
@@ -372,6 +410,21 @@ function HtmlArtifactComponent({
         </div>
       </div>
 
+      <span role="status" aria-live="polite" className="sr-only">
+        {copied ? 'HTML copied.' : ''}
+      </span>
+      {copyFailed && (
+        <p role="alert" className="px-3 py-2 text-sm text-destructive">
+          Could not copy the HTML. Try Copy again, or select the text in Code.
+        </p>
+      )}
+
+      {downloadFailed && (
+        <p role="alert" className="px-3 py-2 text-sm text-destructive">
+          Could not save the HTML file. Choose Download to try again.
+        </p>
+      )}
+
       <div
         ref={previewWrapRef}
         data-artifact-pane="preview"
@@ -392,6 +445,24 @@ function HtmlArtifactComponent({
             fill ? 'h-full' : 'h-[440px]'
           )}
         />
+        {previewFailed && (
+          <div
+            role="alert"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background px-8 text-center"
+          >
+            <p className="text-sm">Could not load the preview.</p>
+            <p className="text-sm text-muted-foreground">
+              You can still read the source in Code.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPreviewRetry((attempt) => attempt + 1)}
+            >
+              Retry preview
+            </Button>
+          </div>
+        )}
         {showPreviewLoader && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background px-8 text-muted-foreground">
             <div className="h-1.5 w-full max-w-[240px] overflow-hidden rounded-full bg-muted">

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,32 @@ export function WorkspacePicker({
   const [resolved, setResolved] = useState('')
   const [error, setError] = useState('')
   const [instructions, setInstructions] = useState<string>()
+  const [readingInstructions, setReadingInstructions] = useState(false)
+  const readingInstructionsRef = useRef(false)
+  const instructionsGeneration = useRef(0)
+  const [openingFolder, setOpeningFolder] = useState(false)
+  const openingFolderRef = useRef(false)
+  const folderOpenGeneration = useRef(0)
+  const [choosing, setChoosing] = useState(false)
+  const choosingRef = useRef(false)
+  const choiceGeneration = useRef(0)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      choiceGeneration.current += 1
+    }
+  }, [])
+  useEffect(() => {
+    choiceGeneration.current += 1
+    instructionsGeneration.current += 1
+    folderOpenGeneration.current += 1
+    openingFolderRef.current = false
+    setOpeningFolder(false)
+    readingInstructionsRef.current = false
+    setReadingInstructions(false)
+  }, [value, personalWhenEmpty])
   useEffect(() => {
     let cancelled = false
     setResolved('')
@@ -60,12 +86,20 @@ export function WorkspacePicker({
     }
   }, [value, personalWhenEmpty, onValidity])
   const choose = async () => {
+    if (choosingRef.current) return
+    choosingRef.current = true
+    setChoosing(true)
+    setError('')
+    const generation = choiceGeneration.current
+    const isCurrent = () =>
+      mounted.current && generation === choiceGeneration.current
     try {
       const path = await invoke<string | string[] | null>('open_dialog', {
         options: { directory: true, multiple: false },
       })
-      if (typeof path !== 'string') return
+      if (!isCurrent() || typeof path !== 'string') return
       const root = await resolveConversationWorkspaceRoot(path)
+      if (!isCurrent()) return
       const paths = [
         root.path,
         ...recentPaths().filter((p) => p !== root.path),
@@ -78,7 +112,66 @@ export function WorkspacePicker({
       setRecent(paths)
       onChange(root.path)
     } catch (e) {
-      setError(String(e))
+      if (isCurrent()) {
+        setError(`Could not choose a folder. Try Browse again. ${String(e)}`)
+      }
+    } finally {
+      choosingRef.current = false
+      if (mounted.current) setChoosing(false)
+    }
+  }
+  const readInstructions = async () => {
+    if (!resolved || readingInstructionsRef.current) return
+    readingInstructionsRef.current = true
+    setReadingInstructions(true)
+    setInstructions(undefined)
+    setError('')
+    const generation = instructionsGeneration.current
+    const workspaceGeneration = choiceGeneration.current
+    const isCurrentRequest = () =>
+      mounted.current && generation === instructionsGeneration.current
+    const isCurrentWorkspace = () =>
+      isCurrentRequest() && workspaceGeneration === choiceGeneration.current
+    try {
+      const result = await memoryCommand<{ text: string }>('instructions', {
+        workspace: resolved,
+      })
+      if (isCurrentWorkspace()) {
+        setInstructions(
+          result.text || 'No AGENTS.md file; workspace instructions are optional.'
+        )
+      }
+    } catch (e) {
+      if (isCurrentWorkspace()) {
+        setError(`Could not read AGENTS.md. Try View AGENTS.md again. ${String(e)}`)
+      }
+    } finally {
+      if (isCurrentRequest()) {
+        readingInstructionsRef.current = false
+        setReadingInstructions(false)
+      }
+    }
+  }
+  const openFolder = async () => {
+    if (!resolved || openingFolderRef.current) return
+    openingFolderRef.current = true
+    setOpeningFolder(true)
+    setError('')
+    const generation = folderOpenGeneration.current
+    const workspaceGeneration = choiceGeneration.current
+    const isCurrentRequest = () =>
+      mounted.current && generation === folderOpenGeneration.current
+    try {
+      await invoke('open_file_explorer', { path: resolved })
+    } catch (e) {
+      if (isCurrentRequest() && workspaceGeneration === choiceGeneration.current) {
+        setError(`Could not open the folder. Try Open folder again. ${String(e)}`)
+      }
+    } finally {
+      if (isCurrentRequest()) {
+        openingFolderRef.current = false
+        setOpeningFolder(false)
+      }
     }
   }
   return (
@@ -96,10 +189,19 @@ export function WorkspacePicker({
               ? 'Personal memory — no workspace'
               : 'Default GChat agent workspace'
           }
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            choiceGeneration.current += 1
+            onChange(e.target.value)
+          }}
         />
-        <Button type="button" variant="outline" onClick={() => void choose()}>
-          Browse
+        <Button
+          type="button"
+          variant="outline"
+          disabled={choosing}
+          aria-busy={choosing}
+          onClick={() => void choose()}
+        >
+          {choosing ? 'Choosing folder…' : 'Browse'}
         </Button>
       </div>
       <datalist id={`${id}-recent`}>
@@ -117,32 +219,21 @@ export function WorkspacePicker({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
-                void invoke('open_file_explorer', { path: resolved }).catch(
-                  (e) => setError(String(e))
-                )
-              }
+              disabled={openingFolder}
+              aria-busy={openingFolder}
+              onClick={() => void openFolder()}
             >
-              Open folder
+              {openingFolder ? 'Opening folder…' : 'Open folder'}
             </Button>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
-                void memoryCommand<{ text: string }>('instructions', {
-                  workspace: resolved,
-                })
-                  .then((r) =>
-                    setInstructions(
-                      r.text ||
-                        'No AGENTS.md file; workspace instructions are optional.'
-                    )
-                  )
-                  .catch((e) => setError(String(e)))
-              }
+              disabled={readingInstructions}
+              aria-busy={readingInstructions}
+              onClick={() => void readInstructions()}
             >
-              View AGENTS.md
+              {readingInstructions ? 'Reading AGENTS.md…' : 'View AGENTS.md'}
             </Button>
           </div>
         </div>

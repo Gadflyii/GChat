@@ -84,6 +84,7 @@ function General() {
   const relocatingData = useRef(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isValidatingToken, setIsValidatingToken] = useState(false)
+  const [showHuggingfaceToken, setShowHuggingfaceToken] = useState(false)
   const [cliInstalled, setCliInstalled] = useState<boolean | null>(null)
   const [cliPath, setCliPath] = useState<string | null>(null)
   const [isCliLoading, setIsCliLoading] = useState(false)
@@ -618,9 +619,13 @@ function General() {
                 }
               />
               <CardItem
-                title={t('settings:general.huggingfaceToken', {
-                  ns: 'settings',
-                })}
+                title={
+                  <label htmlFor="hf-token">
+                    {t('settings:general.huggingfaceToken', {
+                      ns: 'settings',
+                    })}
+                  </label>
+                }
                 description={t('settings:general.huggingfaceTokenDesc', {
                   ns: 'settings',
                 })}
@@ -628,11 +633,21 @@ function General() {
                   <div className="flex items-center gap-2">
                     <Input
                       id="hf-token"
+                      type={showHuggingfaceToken ? 'text' : 'password'}
                       value={huggingfaceToken || ''}
                       onChange={(e) => setHuggingfaceToken(e.target.value)}
                       placeholder={'hf_xxx_xxx'}
                       required
                     />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-controls="hf-token"
+                      onClick={() => setShowHuggingfaceToken((shown) => !shown)}
+                    >
+                      {showHuggingfaceToken ? 'Hide token' : 'Show token'}
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"

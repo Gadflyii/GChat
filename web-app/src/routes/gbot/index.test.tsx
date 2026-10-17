@@ -273,10 +273,12 @@ it('explains empty, ready and busy task states without changing task submission'
   expect(screen.getByText('Ready to run this task.')).toBeVisible()
   expect(run).toBeEnabled()
   fireEvent.click(run)
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
+  )
   expect(
-    screen.getByText(
-      'Wait for the current operation to finish before running a task.'
-    )
+    screen.getByRole('button', { name: 'Sending…', exact: true })
   ).toBeVisible()
   expect(run).toBeDisabled()
   expect(mocks.call).toHaveBeenCalledWith('tasks/start', {
@@ -1101,6 +1103,71 @@ it('keeps separate bot task drafts and submits each to its own ready bot', async
   ).toHaveLength(2)
 })
 
+it.each(['', '   '])(
+  'ignores forced empty task submissions (%j)',
+  async (prompt) => {
+    readyTaskBots()
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    const input = screen.getByLabelText('Bot task')
+    fireEvent.change(input, { target: { value: prompt } })
+    fireEvent.submit(input.closest('form')!)
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/start',
+      expect.anything()
+    )
+    expect(
+      screen.queryByText('Sending this task to the bot…')
+    ).not.toBeInTheDocument()
+  }
+)
+
+it('blocks same-tick duplicate tasks, then restores the failed draft for retry', async () => {
+  let reject!: (error: Error) => void
+  const submit = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail
+        })
+    )
+    .mockResolvedValueOnce({})
+  const [identity] = readyTaskBots(submit)
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  const input = screen.getByLabelText('Bot task')
+  fireEvent.change(input, { target: { value: 'Send exactly once' } })
+  const form = input.closest('form')!
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
+  expect(submit).toHaveBeenCalledExactlyOnceWith({
+    identity,
+    prompt: 'Send exactly once',
+  })
+  expect(form).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
+  )
+  fireEvent.submit(form)
+  expect(submit).toHaveBeenCalledTimes(1)
+  await act(async () => reject(new Error('Task admission refused')))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeEnabled()
+  )
+  expect(input).toHaveValue('Send exactly once')
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  fireEvent.submit(form)
+  await waitFor(() => expect(input).toHaveValue(''))
+  expect(submit).toHaveBeenCalledTimes(2)
+})
+
 it('keeps a rejected task draft available for retry', async () => {
   const submit = vi
     .fn()
@@ -1205,6 +1272,62 @@ it('resets task drafts only after explicit service selection succeeds', async ()
   expect(mocks.selectService).toHaveBeenCalledTimes(2)
   expect(mocks.selectService).toHaveBeenLastCalledWith({ kind: 'local' })
 })
+
+it.each(['success', 'failure'] as const)(
+  'keeps the selected service fixed during a pending change (%s)',
+  async (outcome) => {
+    readyTaskBots()
+    let finish!: () => void
+    let fail!: (cause: Error) => void
+    mocks.selectService.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          finish = resolve
+          fail = reject
+        })
+    )
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    fireEvent.click(screen.getByRole('button', { name: 'Service computer' }))
+    const choose = screen.getByRole('button', { name: 'Use this service' })
+    const otherComputer = screen.getByLabelText(
+      'Another PC on the home or office network (LAN)'
+    )
+    act(() => {
+      choose.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      choose.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      fireEvent.click(otherComputer)
+    })
+    expect(mocks.selectService).toHaveBeenCalledExactlyOnceWith({ kind: 'local' })
+    expect(
+      screen.getByRole('group', { name: 'Gbot service selection' })
+    ).toBeDisabled()
+    expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
+    expect(otherComputer).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Cancel service change' })
+    ).toBeDisabled()
+
+    await act(async () => {
+      if (outcome === 'failure') fail(new Error('Service selection failed'))
+      else finish()
+    })
+    if (outcome === 'failure') {
+      expect(screen.getByText('Error: Service selection failed')).toBeVisible()
+      expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
+      expect(otherComputer).toBeEnabled()
+      expect(choose).toBeEnabled()
+      fireEvent.click(choose)
+    }
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Use this service' })
+      ).not.toBeInTheDocument()
+    )
+    expect(mocks.selectService).toHaveBeenCalledTimes(outcome === 'failure' ? 2 : 1)
+    expect(mocks.selectService).toHaveBeenLastCalledWith({ kind: 'local' })
+  }
+)
 
 it('sends task-bound human replies and declines, retaining them after reload', async () => {
   const identity = { workspace_id: 'one', session_id: 'session' }

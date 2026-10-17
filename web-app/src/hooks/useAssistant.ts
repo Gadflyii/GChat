@@ -14,8 +14,8 @@ interface AssistantState {
    */
   pendingAssistant: Assistant | undefined
   setPendingAssistant: (assistant: Assistant | undefined) => void
-  addAssistant: (assistant: Assistant) => void
-  updateAssistant: (assistant: Assistant) => void
+  addAssistant: (assistant: Assistant) => Promise<void>
+  updateAssistant: (assistant: Assistant) => Promise<void>
   /**
    * Set a single sampling parameter on one assistant. Applied to the store
    * immediately (sliders stay responsive) and written to disk on a debounce,
@@ -127,18 +127,18 @@ export const useAssistant = create<AssistantState>((set, get) => ({
   ...getInitialAssistantState(),
   pendingAssistant: undefined,
   setPendingAssistant: (assistant) => set({ pendingAssistant: assistant }),
-  addAssistant: (assistant) => {
-    set({ assistants: [...get().assistants, assistant] })
-    getServiceHub()
+  addAssistant: async (assistant) => {
+    await getServiceHub()
       .assistants()
       .createAssistant(assistant as unknown as CoreAssistant)
-      .catch((error) => {
-        console.error('Failed to create assistant:', error)
-      })
+    set((state) => ({ assistants: [...state.assistants, assistant] }))
   },
-  updateAssistant: (assistant) => {
-    const state = get()
-    set({
+  updateAssistant: async (assistant) => {
+    // createAssistant also persists updates. Publish only after it succeeds.
+    await getServiceHub()
+      .assistants()
+      .createAssistant(assistant as unknown as CoreAssistant)
+    set((state) => ({
       assistants: state.assistants.map((a) =>
         a.id === assistant.id ? assistant : a
       ),
@@ -151,14 +151,7 @@ export const useAssistant = create<AssistantState>((set, get) => ({
         state.pendingAssistant?.id === assistant.id
           ? assistant
           : state.pendingAssistant,
-    })
-    // Create assistant already cover update logic
-    getServiceHub()
-      .assistants()
-      .createAssistant(assistant as unknown as CoreAssistant)
-      .catch((error) => {
-        console.error('Failed to update assistant:', error)
-      })
+    }))
   },
   updateAssistantParam: (id, key, value) => {
     const state = get()

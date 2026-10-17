@@ -50,6 +50,96 @@ const approvedGrant = {
   service_configured: true,
 } satisfies GbotControlGrant
 
+it.each(['success', 'failure'])(
+  'shows the automatic approval check until %s without claiming approval is needed',
+  async (outcome) => {
+    const initial = pendingGrant()
+    vi.mocked(gbotControlGrant).mockReturnValueOnce(initial.promise)
+    render(
+      <ServiceSetup
+        target={{ kind: 'paired_host', host_id: 'online' }}
+        change={vi.fn()}
+      />
+    )
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Checking Gbot control approval…'
+    )
+    expect(
+      screen.queryByText('Gbot control needs separate approval from pairing.')
+    ).not.toBeInTheDocument()
+    await act(async () => {
+      if (outcome === 'success') initial.resolve(approvedGrant)
+      else initial.reject(new Error('Service computer unavailable'))
+    })
+    expect(screen.getByRole('status')).toHaveTextContent(
+      outcome === 'success'
+        ? 'Gbot control approved for this device.'
+        : 'Could not confirm Gbot control approval. Try again.'
+    )
+  }
+)
+
+it.each([
+  {
+    status: 'not_requested' as const,
+    action: 'request',
+    label: 'Request Gbot control',
+    pendingLabel: 'Requesting control…',
+    progress: 'Requesting Gbot control from the service computer…',
+  },
+  {
+    status: 'pending' as const,
+    action: 'status',
+    label: 'Check approval',
+    pendingLabel: 'Checking approval…',
+    progress: 'Checking Gbot control approval…',
+  },
+])(
+  'reports $action progress, prevents duplicate requests and allows retry',
+  async ({ status, action, label, pendingLabel, progress }) => {
+    const pending = pendingGrant()
+    vi.mocked(gbotControlGrant)
+      .mockResolvedValueOnce({ status, service_configured: true })
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValueOnce(approvedGrant)
+    const change = vi.fn()
+    render(
+      <ServiceSetup
+        target={{ kind: 'paired_host', host_id: 'online' }}
+        change={change}
+      />
+    )
+    await waitFor(() => expect(change).toHaveBeenCalledTimes(1))
+    change.mockClear()
+    const button = screen.getByRole('button', { name: label })
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(gbotControlGrant).toHaveBeenCalledTimes(2)
+    expect(gbotControlGrant).toHaveBeenLastCalledWith('online', action)
+    expect(screen.getByRole('status')).toHaveTextContent(progress)
+    expect(screen.getByRole('button', { name: pendingLabel })).toBeDisabled()
+    expect(screen.getByRole('combobox')).toBeDisabled()
+    await act(async () =>
+      pending.reject(new Error('Service computer unavailable'))
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Service computer unavailable'
+    )
+    expect(screen.getByRole('combobox')).toHaveValue('online')
+    expect(change).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    await screen.findByText('Gbot control approved for this device.')
+    expect(gbotControlGrant).toHaveBeenCalledTimes(3)
+    expect(change).toHaveBeenCalledExactlyOnceWith(
+      { kind: 'paired_host', host_id: 'online' },
+      true
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
 it('ignores a pending approval after leaving the service step', async () => {
   const pending = pendingGrant()
   vi.mocked(gbotControlGrant)
@@ -128,7 +218,9 @@ it('does not let an older automatic status replace a newer approval request', as
     initial.resolve({ status: 'not_requested', service_configured: true })
   )
   expect(change).toHaveBeenCalledTimes(1)
-  expect(screen.getByText('Gbot control approved for this device.')).toBeVisible()
+  expect(
+    screen.getByText('Gbot control approved for this device.')
+  ).toBeVisible()
   expect(screen.getByRole('button', { name: 'Check approval' })).toBeEnabled()
 })
 

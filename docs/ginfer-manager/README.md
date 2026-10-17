@@ -1615,6 +1615,14 @@ and closes admission before acknowledging Stop. Passive refresh cannot restart
 that Host after acceptance. Linux, service-owned and remote Hosts keep their
 existing lifetime. Native Windows acceptance belongs to the Windows release gate.
 
+Desktop startup reconnects to the existing Host without terminating its Engine
+processes. Closing and reopening a desktop client preserves a loaded model and
+its session; the Host owns model shutdown and child cleanup. The former desktop
+startup scan by executable name and installation directory has been removed:
+those properties do not establish that a Host-owned process is orphaned. The
+managed-client lifecycle regression reconnects to the same Ready session and
+checks that the Engine still serves requests until the explicit model Stop.
+
 One selected coordinator owns durable revision/CAS pools and client assignments.
 Paired clients resolve its pinned locator through fleet members. Hosts receive
 read-only projections of their own membership. Studio browses the full catalog;

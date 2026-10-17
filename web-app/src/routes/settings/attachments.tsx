@@ -2,7 +2,10 @@ import { createFileRoute } from '@tanstack/react-router'
 import SettingsMenu from '@/containers/SettingsMenu'
 import HeaderPage from '@/containers/HeaderPage'
 import { Card, CardItem } from '@/containers/Card'
-import { useAttachments } from '@/hooks/useAttachments'
+import {
+  useAttachments,
+  type AttachmentsSettings as AttachmentValues,
+} from '@/hooks/useAttachments'
 import type { SettingComponentProps } from '@gchat/core'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { DynamicControllerSetting } from '@/containers/dynamicControllerSetting'
@@ -13,6 +16,31 @@ import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 // Longest-edge presets (px) offered for the image downscale setting. `0`
 // keeps the original resolution (no limit).
 const IMAGE_SIZE_PRESETS = [0, 768, 1024, 1536, 2048, 3072] as const
+
+// GInfer does not provide embeddings. Keep the extension's persisted settings,
+// but do not offer controls that cannot affect a supported document workflow.
+const DOCUMENT_SEARCH_SETTINGS = new Set([
+  'retrieval_limit',
+  'retrieval_threshold',
+  'chunk_size_chars',
+  'overlap_chars',
+  'search_mode',
+])
+
+const NUMERIC_SETTING_FIELDS = {
+  max_file_size_mb: 'maxFileSizeMB',
+  retrieval_limit: 'retrievalLimit',
+  retrieval_threshold: 'retrievalThreshold',
+  chunk_size_chars: 'chunkSizeChars',
+  overlap_chars: 'overlapChars',
+  auto_inline_context_ratio: 'autoInlineContextRatio',
+} as const
+
+type NumericSettingKey = keyof typeof NUMERIC_SETTING_FIELDS
+
+function reportSaveError(error: unknown) {
+  console.error('Failed to save attachment settings:', error)
+}
 
 export const Route = createFileRoute('/settings/attachments')({
   component: AttachmentsSettings,
@@ -76,15 +104,7 @@ function AttachmentsSettings() {
       searchMode: s.searchMode,
       parseMode: s.parseMode,
       autoInlineContextRatio: s.autoInlineContextRatio,
-      setEnabled: s.setEnabled,
-      setMaxFileSizeMB: s.setMaxFileSizeMB,
-      setRetrievalLimit: s.setRetrievalLimit,
-      setRetrievalThreshold: s.setRetrievalThreshold,
-      setChunkSizeChars: s.setChunkSizeChars,
-      setOverlapChars: s.setOverlapChars,
-      setSearchMode: s.setSearchMode,
-      setParseMode: s.setParseMode,
-      setAutoInlineContextRatio: s.setAutoInlineContextRatio,
+      saveSettings: s.saveSettings,
     }))
   )
 
@@ -93,94 +113,80 @@ function AttachmentsSettings() {
     Record<string, string | number | boolean | string[]>
   >({})
 
-  // Debounce timers
-  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const timersRef = useRef<
+    Partial<Record<NumericSettingKey, ReturnType<typeof setTimeout>>>
+  >({})
+  const pendingRef = useRef<
+    Partial<Record<NumericSettingKey, { value: unknown; def: SettingComponentProps }>>
+  >({})
 
-  // Cleanup timers on unmount
+  const flushPending = useCallback(
+    (keys: NumericSettingKey[], updateInputs: boolean) => {
+      const current = useAttachments.getState()
+      const changes: Partial<AttachmentValues> = {}
+      const validatedValues: Record<string, number> = {}
+      keys.forEach((key) => {
+        const pending = pendingRef.current[key]
+        if (!pending) return
+        delete pendingRef.current[key]
+        clearTimeout(timersRef.current[key])
+        delete timersRef.current[key]
+        const field = NUMERIC_SETTING_FIELDS[key]
+        const validated = clampValue(pending.value, pending.def, current[field])
+        changes[field] = validated
+        validatedValues[key] = validated
+      })
+      if (Object.keys(changes).length === 0) return
+
+      // One batch survives the page and cannot race other settings writes.
+      void current.saveSettings(changes).catch(reportSaveError)
+      if (updateInputs) {
+        setLocalValues((prev) => ({ ...prev, ...validatedValues }))
+      }
+    },
+    []
+  )
+
   useEffect(() => {
-    const timers = timersRef.current
+    const pending = pendingRef.current
     return () => {
-      Object.values(timers).forEach(clearTimeout)
+      // Leaving before the typing debounce expires must still save every edit.
+      flushPending(Object.keys(pending) as NumericSettingKey[], false)
     }
-  }, [])
+  }, [flushPending])
 
-  // Debounced setter with validation
   const debouncedSet = useCallback(
     (key: string, val: unknown, def: SettingComponentProps) => {
-      // Clear existing timer for this key
-      if (timersRef.current[key]) {
-        clearTimeout(timersRef.current[key])
-      }
-
-      // Set local value immediately for responsive UI
       setLocalValues((prev) => ({
         ...prev,
         [key]: val as string | number | boolean | string[],
       }))
 
-      // For non-numeric inputs, apply immediately without debounce
-      if (key === 'enabled' || key === 'search_mode' || key === 'parse_mode') {
-        if (key === 'enabled') sel.setEnabled(!!val)
-        else if (key === 'search_mode')
-          sel.setSearchMode(val as 'auto' | 'ann' | 'linear')
-        else if (key === 'parse_mode')
-          sel.setParseMode(val as 'auto' | 'inline' | 'embeddings' | 'prompt')
-        return
+      if (key === 'enabled') {
+        void sel.saveSettings({ enabled: !!val }).catch(reportSaveError)
+      } else if (key === 'search_mode') {
+        void sel
+          .saveSettings({ searchMode: val as AttachmentValues['searchMode'] })
+          .catch(reportSaveError)
+      } else if (key === 'parse_mode') {
+        void sel
+          .saveSettings({ parseMode: val as AttachmentValues['parseMode'] })
+          .catch(reportSaveError)
+      } else if (
+        Object.prototype.hasOwnProperty.call(NUMERIC_SETTING_FIELDS, key)
+      ) {
+        const numericKey = key as NumericSettingKey
+        clearTimeout(timersRef.current[numericKey])
+        pendingRef.current[numericKey] = { value: val, def }
+        timersRef.current[numericKey] = setTimeout(() => {
+          flushPending([numericKey], true)
+        }, 500)
       }
-
-      // For numeric inputs, debounce the validation and sync
-      timersRef.current[key] = setTimeout(() => {
-        const currentStoreValue = (() => {
-          switch (key) {
-            case 'max_file_size_mb':
-              return sel.maxFileSizeMB
-            case 'retrieval_limit':
-              return sel.retrievalLimit
-            case 'retrieval_threshold':
-              return sel.retrievalThreshold
-            case 'chunk_size_chars':
-              return sel.chunkSizeChars
-            case 'overlap_chars':
-              return sel.overlapChars
-            case 'auto_inline_context_ratio':
-              return sel.autoInlineContextRatio
-            default:
-              return 0
-          }
-        })()
-
-        const validated = clampValue(val, def, currentStoreValue)
-
-        switch (key) {
-          case 'max_file_size_mb':
-            sel.setMaxFileSizeMB(validated)
-            break
-          case 'retrieval_limit':
-            sel.setRetrievalLimit(validated)
-            break
-          case 'retrieval_threshold':
-            sel.setRetrievalThreshold(validated)
-            break
-          case 'chunk_size_chars':
-            sel.setChunkSizeChars(validated)
-            break
-          case 'overlap_chars':
-            sel.setOverlapChars(validated)
-            break
-          case 'auto_inline_context_ratio':
-            sel.setAutoInlineContextRatio(validated)
-            break
-        }
-
-        // Update local value to validated one
-        setLocalValues((prev) => ({
-          ...prev,
-          [key]: validated as string | number | boolean | string[],
-        }))
-      }, 500) // 500ms debounce
     },
-    [sel]
+    [sel.saveSettings, flushPending]
   )
+
+  const visibleDefs = defs.filter((d) => !DOCUMENT_SEARCH_SETTINGS.has(d.key))
 
   return (
     <div className="flex flex-col h-svh w-full">
@@ -194,7 +200,13 @@ function AttachmentsSettings() {
         <div className="p-4 pt-0 w-full overflow-y-auto">
           <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
             <Card title={t('common:attachments') || 'Attachments'}>
-              {defs.map((d) => {
+              <CardItem
+                title={t('settings:attachments.documentSearchUnavailable')}
+                description={t(
+                  'settings:attachments.documentSearchUnavailableDesc'
+                )}
+              />
+              {visibleDefs.map((d) => {
                 // Use local value if typing, else use store value
                 const storeValue = (() => {
                   switch (d.key) {
@@ -259,9 +271,16 @@ function AttachmentsSettings() {
                 }
 
                 const title = d.titleKey ? t(d.titleKey) : d.title
-                const description = d.descriptionKey
-                  ? t(d.descriptionKey)
-                  : d.description
+                const description =
+                  d.key === 'parse_mode'
+                    ? t('settings:attachments.availableParseModeDesc')
+                    : d.key === 'auto_inline_context_ratio'
+                      ? t(
+                          'settings:attachments.availableAutoInlineThresholdDesc'
+                        )
+                      : d.descriptionKey
+                        ? t(d.descriptionKey)
+                        : d.description
 
                 return (
                   <CardItem
@@ -269,11 +288,48 @@ function AttachmentsSettings() {
                     title={title}
                     description={description}
                     actions={
-                      <DynamicControllerSetting
-                        controllerType={d.controllerType}
-                        controllerProps={props}
-                        onChange={(val) => debouncedSet(d.key, val, d)}
-                      />
+                      d.key === 'parse_mode' ? (
+                        <div className="space-y-2">
+                          <select
+                            aria-label={title}
+                            className="border-input bg-background rounded-md border px-2 py-1 text-sm"
+                            value={String(normalizedValue)}
+                            onChange={(event) =>
+                              debouncedSet(d.key, event.target.value, d)
+                            }
+                          >
+                            {normalizedValue === 'embeddings' && (
+                              <option value="embeddings" disabled>
+                                {t(
+                                  'settings:attachments.savedDocumentSearchUnavailable'
+                                )}
+                              </option>
+                            )}
+                            <option value="auto">
+                              {t('settings:attachments.parseModeAuto')}
+                            </option>
+                            <option value="inline">
+                              {t('settings:attachments.parseModeInline')}
+                            </option>
+                            <option value="prompt">
+                              {t('settings:attachments.parseModePrompt')}
+                            </option>
+                          </select>
+                          {normalizedValue === 'embeddings' && (
+                            <p className="text-sm text-muted-foreground">
+                              {t(
+                                'settings:attachments.savedDocumentSearchUnavailableDesc'
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <DynamicControllerSetting
+                          controllerType={d.controllerType}
+                          controllerProps={props}
+                          onChange={(val) => debouncedSet(d.key, val, d)}
+                        />
+                      )
                     }
                   />
                 )

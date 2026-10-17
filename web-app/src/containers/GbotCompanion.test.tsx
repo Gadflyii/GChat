@@ -135,6 +135,64 @@ async function mount() {
   return view
 }
 
+it('sends a permission decision for the selected bot and shows its pending state', async () => {
+  tasks = [
+    {
+      id: 'atlas-task',
+      identity: { workspace_id: 'a', session_id: 'sa' },
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [],
+    },
+  ]
+  let approvals = [
+    {
+      id: 'atlas-permission',
+      task_id: 'atlas-task',
+      request: { operation: { kind: 'desktop_input' } },
+    },
+    {
+      id: 'bramble-permission',
+      task_id: 'bramble-task',
+      request: { operation: { kind: 'file_remove' } },
+    },
+  ]
+  const fallback = mocks.call.getMockImplementation()!
+  let finish!: () => void
+  mocks.call.mockImplementation((path: string, body?: unknown) => {
+    if (path === 'tasks/approvals') return Promise.resolve(approvals)
+    if (path === 'tasks/approval')
+      return new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    return fallback(path, body)
+  })
+  await mount()
+  const card = screen.getByRole('article', { name: 'Bot permission request' })
+  expect(within(card).getByText(/desktop_input/)).toBeVisible()
+  expect(screen.queryByText(/file_remove/)).not.toBeInTheDocument()
+  fireEvent.click(
+    within(card).getByRole('button', { name: 'Deny', exact: true })
+  )
+  expect(mocks.call).toHaveBeenCalledWith('tasks/approval', {
+    id: 'atlas-permission',
+    allow: false,
+  })
+  expect(within(card).getByRole('status')).toHaveTextContent(
+    'Denying this action…'
+  )
+  expect(
+    within(card).getByRole('button', { name: 'Allow', exact: true })
+  ).toBeDisabled()
+  approvals = []
+  await act(async () => finish())
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+  )
+})
+
 it('shows preparation and then service loading before deciding whether bots exist', async () => {
   mocks.resources.ready = false
   let finish!: (value: BotState) => void
@@ -392,6 +450,71 @@ it('submits a task to the chosen bot and keeps a newer draft typed during submis
   expect(screen.getByRole('textbox', { name: 'Main work' })).toHaveValue(
     'Main draft'
   )
+})
+
+it.each(['', '   '])(
+  'ignores forced empty companion tasks (%j)',
+  async (draft) => {
+    await mount()
+    const input = screen.getByRole('textbox', { name: 'Message bot' })
+    fireEvent.change(input, { target: { value: draft } })
+    fireEvent.submit(input.closest('form')!)
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/start',
+      expect.anything()
+    )
+    expect(
+      screen.queryByText('Sending this task to the bot…')
+    ).not.toBeInTheDocument()
+  }
+)
+
+it('blocks same-tick duplicate companion tasks and keeps a failed draft for retry', async () => {
+  await mount()
+  let reject!: (error: Error) => void
+  const submit = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail
+        })
+    )
+    .mockResolvedValueOnce({ id: 'task' })
+  mocks.call.mockImplementation(async (path: string, body: unknown) => {
+    if (path === 'tasks/start') return submit(body)
+    return path === 'state' ? snapshot : []
+  })
+  const input = screen.getByRole('textbox', { name: 'Message bot' })
+  fireEvent.change(input, { target: { value: 'Send exactly once' } })
+  const form = input.closest('form')!
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
+  expect(submit).toHaveBeenCalledExactlyOnceWith({
+    identity: snapshot.live_sessions[0],
+    prompt: 'Send exactly once',
+  })
+  expect(form).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
+  )
+  fireEvent.submit(form)
+  expect(submit).toHaveBeenCalledTimes(1)
+  await act(async () => reject(new Error('Task admission refused')))
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Send', exact: true })
+    ).toBeEnabled()
+  )
+  expect(input).toHaveValue('Send exactly once')
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  fireEvent.submit(form)
+  await waitFor(() => expect(input).toHaveValue(''))
+  expect(submit).toHaveBeenCalledTimes(2)
 })
 
 it('releases desktop input, audio and leases on hide, then reopens without restarting the bot', async () => {
@@ -877,4 +1000,58 @@ it('holds task and desktop admission until the KVM setup becomes Ready', async (
   expect(
     screen.getByRole('button', { name: 'Send', exact: true })
   ).toBeEnabled()
+})
+
+it('stops only the selected bot task and keeps progress through the state refresh', async () => {
+  tasks = [
+    {
+      id: 'atlas-task',
+      identity: snapshot.live_sessions[0],
+      state: 'running',
+      messages: [{ role: 'user', content: 'Atlas task' }],
+      help_requests: [],
+    },
+    {
+      id: 'bramble-task',
+      identity: { workspace_id: 'b', session_id: 'sb' },
+      state: 'running',
+      messages: [{ role: 'user', content: 'Bramble task' }],
+      help_requests: [],
+    },
+  ]
+  await mount()
+  const original = mocks.call.getMockImplementation()!
+  let finish!: () => void
+  let finishRefresh!: (value: BotState) => void
+  mocks.call.mockImplementation((path: string, body?: unknown) => {
+    if (path === 'tasks/cancel')
+      return new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    if (path === 'state')
+      return new Promise<BotState>((resolve) => {
+        finishRefresh = resolve
+      })
+    return original(path, body)
+  })
+  const stop = screen.getByRole('button', { name: 'Stop task' })
+  act(() => {
+    fireEvent.click(stop)
+    fireEvent.click(stop)
+  })
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'tasks/cancel')
+  ).toEqual([['tasks/cancel', { id: 'atlas-task' }]])
+  expect(screen.getByRole('status')).toHaveTextContent('Stopping this task…')
+  expect(screen.queryByText('Bramble task')).not.toBeInTheDocument()
+  await act(async () => finish())
+  await waitFor(() => expect(finishRefresh).toBeTypeOf('function'))
+  expect(screen.getByRole('button', { name: 'Stopping…' })).toBeDisabled()
+  tasks = [{ ...tasks[0], state: 'cancelled' }, tasks[1]]
+  await act(async () => finishRefresh(snapshot))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Resume task' })).toBeEnabled()
+  )
+  expect(screen.queryByText('Stopping this task…')).not.toBeInTheDocument()
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/resume', expect.anything())
 })

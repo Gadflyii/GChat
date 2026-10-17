@@ -125,6 +125,7 @@ function FilePreview({ tab }: { tab: WorkspaceFilePreviewTab }) {
           <img
             src={assetUrl}
             alt={tab.name}
+            onError={() => setError(`Could not read the image ${tab.name}.`)}
             className="max-h-full max-w-full rounded-md object-contain shadow-sm"
           />
         </div>

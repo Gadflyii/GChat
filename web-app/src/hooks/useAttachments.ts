@@ -19,18 +19,30 @@ export type AttachmentsSettings = {
 }
 
 type AttachmentsStore = AttachmentsSettings & {
-  // Dynamic controller definitions for rendering UI
   settingsDefs: SettingComponentProps[]
   loadSettingsDefs: () => Promise<boolean>
-  setEnabled: (v: boolean) => void
-  setMaxFileSizeMB: (v: number) => void
-  setRetrievalLimit: (v: number) => void
-  setRetrievalThreshold: (v: number) => void
-  setChunkSizeChars: (v: number) => void
-  setOverlapChars: (v: number) => void
-  setSearchMode: (v: 'auto' | 'ann' | 'linear') => void
-  setParseMode: (v: 'auto' | 'inline' | 'embeddings' | 'prompt') => void
-  setAutoInlineContextRatio: (v: number) => void
+  saveSettings: (values: Partial<AttachmentsSettings>) => Promise<void>
+  setEnabled: (v: boolean) => Promise<void>
+  setMaxFileSizeMB: (v: number) => Promise<void>
+  setRetrievalLimit: (v: number) => Promise<void>
+  setRetrievalThreshold: (v: number) => Promise<void>
+  setChunkSizeChars: (v: number) => Promise<void>
+  setOverlapChars: (v: number) => Promise<void>
+  setSearchMode: (v: 'auto' | 'ann' | 'linear') => Promise<void>
+  setParseMode: (v: 'auto' | 'inline' | 'embeddings' | 'prompt') => Promise<void>
+  setAutoInlineContextRatio: (v: number) => Promise<void>
+}
+
+const settingKeys: Record<keyof AttachmentsSettings, string> = {
+  enabled: 'enabled',
+  maxFileSizeMB: 'max_file_size_mb',
+  retrievalLimit: 'retrieval_limit',
+  retrievalThreshold: 'retrieval_threshold',
+  chunkSizeChars: 'chunk_size_chars',
+  overlapChars: 'overlap_chars',
+  searchMode: 'search_mode',
+  parseMode: 'parse_mode',
+  autoInlineContextRatio: 'auto_inline_context_ratio',
 }
 
 const getRagExtension = (): RAGExtension | undefined => {
@@ -43,269 +55,127 @@ const getRagExtension = (): RAGExtension | undefined => {
   }
 }
 
-export const useAttachments = create<AttachmentsStore>()((set) => ({
-  enabled: true,
-  maxFileSizeMB: 20,
-  retrievalLimit: 3,
-  retrievalThreshold: 0.3,
-  chunkSizeChars: 512,
-  overlapChars: 64,
-  searchMode: 'auto',
-  parseMode: 'auto',
-  autoInlineContextRatio: 0.75,
-  settingsDefs: [],
-  loadSettingsDefs: async () => {
-    const ext = getRagExtension()
-    if (!ext?.getSettings) return false
-    try {
-      const defs = await ext.getSettings()
-      if (!Array.isArray(defs)) return false
+export const useAttachments = create<AttachmentsStore>()((set, get) => {
+  // The extension updates its entire stored schema. Serialize reads and writes so
+  // separate controls cannot overwrite each other, and a remount sees flushed edits.
+  let settingsQueue: Promise<unknown> = Promise.resolve()
+  const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = settingsQueue.then(operation)
+    settingsQueue = result.catch(() => undefined)
+    return result
+  }
 
-      const map = new Map<string, unknown>()
-      defs.forEach((setting) =>
-        map.set(setting.key, setting?.controllerProps?.value)
-      )
+  return {
+    enabled: true,
+    maxFileSizeMB: 20,
+    retrievalLimit: 3,
+    retrievalThreshold: 0.3,
+    chunkSizeChars: 512,
+    overlapChars: 64,
+    searchMode: 'auto',
+    parseMode: 'auto',
+    autoInlineContextRatio: 0.75,
+    settingsDefs: [],
+    loadSettingsDefs: () =>
+      enqueue(async () => {
+        const ext = getRagExtension()
+        if (!ext?.getSettings) return false
+        try {
+          const defs = await ext.getSettings()
+          if (!Array.isArray(defs)) return false
 
-      set((prev) => ({
-        settingsDefs: defs,
-        enabled: (map.get('enabled') as boolean | undefined) ?? prev.enabled,
-        maxFileSizeMB:
-          (map.get('max_file_size_mb') as number | undefined) ??
-          prev.maxFileSizeMB,
-        retrievalLimit:
-          (map.get('retrieval_limit') as number | undefined) ??
-          prev.retrievalLimit,
-        retrievalThreshold:
-          (map.get('retrieval_threshold') as number | undefined) ??
-          prev.retrievalThreshold,
-        chunkSizeChars:
-          (map.get('chunk_size_chars') as number | undefined) ??
-          (map.get('chunk_size_tokens') as number | undefined) ??
-          prev.chunkSizeChars,
-        overlapChars:
-          (map.get('overlap_chars') as number | undefined) ??
-          (map.get('overlap_tokens') as number | undefined) ??
-          prev.overlapChars,
-        searchMode:
-          (map.get('search_mode') as 'auto' | 'ann' | 'linear' | undefined) ??
-          prev.searchMode,
-        parseMode:
-          (map.get('parse_mode') as
-            | 'auto'
-            | 'inline'
-            | 'embeddings'
-            | 'prompt'
-            | undefined) ?? prev.parseMode,
-        autoInlineContextRatio:
-          (map.get('auto_inline_context_ratio') as number | undefined) ??
-          prev.autoInlineContextRatio,
-      }))
+          const map = new Map<string, unknown>()
+          defs.forEach((setting) =>
+            map.set(setting.key, setting?.controllerProps?.value)
+          )
 
-      return true
-    } catch (e) {
-      console.debug('Failed to load attachment settings defs:', e)
-      return false
-    }
-  },
-  setEnabled: async (v) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'enabled',
-          controllerProps: { value: !!v },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      enabled: v,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'enabled'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: !!v },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-  setMaxFileSizeMB: async (val) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'max_file_size_mb',
-          controllerProps: { value: val },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      maxFileSizeMB: val,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'max_file_size_mb'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: val },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-  setRetrievalLimit: async (val) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'retrieval_limit',
-          controllerProps: { value: val },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      retrievalLimit: val,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'retrieval_limit'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: val },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-  setRetrievalThreshold: async (val) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'retrieval_threshold',
-          controllerProps: { value: val },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      retrievalThreshold: val,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'retrieval_threshold'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: val },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-  setChunkSizeChars: async (val) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'chunk_size_chars',
-          controllerProps: { value: val },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      chunkSizeChars: val,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'chunk_size_chars'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: val },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-  setOverlapChars: async (val) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'overlap_chars',
-          controllerProps: { value: val },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      overlapChars: val,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'overlap_chars'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: val },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-  setSearchMode: async (v) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'search_mode',
-          controllerProps: { value: v },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      searchMode: v,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'search_mode'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: v },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-  setParseMode: async (v) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'parse_mode',
-          controllerProps: { value: v },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      parseMode: v,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'parse_mode'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: v },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-  setAutoInlineContextRatio: async (val) => {
-    const ext = getRagExtension()
-    if (ext?.updateSettings) {
-      await ext.updateSettings([
-        {
-          key: 'auto_inline_context_ratio',
-          controllerProps: { value: val },
-        } as Partial<SettingComponentProps>,
-      ])
-    }
-    set((s) => ({
-      autoInlineContextRatio: val,
-      settingsDefs: s.settingsDefs.map((d) =>
-        d.key === 'auto_inline_context_ratio'
-          ? ({
-              ...d,
-              controllerProps: { ...d.controllerProps, value: val },
-            } as SettingComponentProps)
-          : d
-      ),
-    }))
-  },
-}))
+          set((prev) => ({
+            settingsDefs: defs,
+            enabled: (map.get('enabled') as boolean | undefined) ?? prev.enabled,
+            maxFileSizeMB:
+              (map.get('max_file_size_mb') as number | undefined) ??
+              prev.maxFileSizeMB,
+            retrievalLimit:
+              (map.get('retrieval_limit') as number | undefined) ??
+              prev.retrievalLimit,
+            retrievalThreshold:
+              (map.get('retrieval_threshold') as number | undefined) ??
+              prev.retrievalThreshold,
+            chunkSizeChars:
+              (map.get('chunk_size_chars') as number | undefined) ??
+              (map.get('chunk_size_tokens') as number | undefined) ??
+              prev.chunkSizeChars,
+            overlapChars:
+              (map.get('overlap_chars') as number | undefined) ??
+              (map.get('overlap_tokens') as number | undefined) ??
+              prev.overlapChars,
+            searchMode:
+              (map.get('search_mode') as 'auto' | 'ann' | 'linear' | undefined) ??
+              prev.searchMode,
+            parseMode:
+              (map.get('parse_mode') as
+                | 'auto'
+                | 'inline'
+                | 'embeddings'
+                | 'prompt'
+                | undefined) ?? prev.parseMode,
+            autoInlineContextRatio:
+              (map.get('auto_inline_context_ratio') as number | undefined) ??
+              prev.autoInlineContextRatio,
+          }))
+
+          return true
+        } catch (e) {
+          console.debug('Failed to load attachment settings defs:', e)
+          return false
+        }
+      }),
+    saveSettings: (updates) => {
+      const values = { ...updates }
+      return enqueue(async () => {
+        const changes = (Object.keys(values) as (keyof AttachmentsSettings)[]).map(
+          (key) =>
+            ({
+              key: settingKeys[key],
+              controllerProps: { value: values[key] },
+            }) as Partial<SettingComponentProps>
+        )
+        if (changes.length === 0) return
+
+        const ext = getRagExtension()
+        if (ext?.updateSettings) await ext.updateSettings(changes)
+        const changedValues = new Map(
+          changes.map((change) => [change.key, change.controllerProps?.value])
+        )
+        set((state) => ({
+          ...values,
+          settingsDefs: state.settingsDefs.map((def) =>
+            changedValues.has(def.key)
+              ? ({
+                  ...def,
+                  controllerProps: {
+                    ...def.controllerProps,
+                    value: changedValues.get(def.key),
+                  },
+                } as SettingComponentProps)
+              : def
+          ),
+        }))
+      })
+    },
+    setEnabled: (value) => get().saveSettings({ enabled: !!value }),
+    setMaxFileSizeMB: (value) => get().saveSettings({ maxFileSizeMB: value }),
+    setRetrievalLimit: (value) => get().saveSettings({ retrievalLimit: value }),
+    setRetrievalThreshold: (value) =>
+      get().saveSettings({ retrievalThreshold: value }),
+    setChunkSizeChars: (value) => get().saveSettings({ chunkSizeChars: value }),
+    setOverlapChars: (value) => get().saveSettings({ overlapChars: value }),
+    setSearchMode: (value) => get().saveSettings({ searchMode: value }),
+    setParseMode: (value) => get().saveSettings({ parseMode: value }),
+    setAutoInlineContextRatio: (value) =>
+      get().saveSettings({ autoInlineContextRatio: value }),
+  }
+})
 
 // Attempt to hydrate settings from the RAG extension, retrying briefly until it is registered
 const MAX_INIT_ATTEMPTS = 5

@@ -49,11 +49,11 @@ function AssistantContent() {
     }
   }
 
-  const handleSave = (assistant: Assistant) => {
+  const handleSave = async (assistant: Assistant) => {
     if (editingKey) {
-      updateAssistant(assistant)
+      await updateAssistant(assistant)
     } else {
-      addAssistant(assistant)
+      await addAssistant(assistant)
     }
     setOpen(false)
     setEditingKey(null)

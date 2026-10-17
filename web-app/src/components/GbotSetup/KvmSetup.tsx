@@ -32,17 +32,33 @@ export default function KvmSetup({
   const [preflight, setPreflight] = useState<Preflight | null>(null)
   const [records, setRecords] = useState<KvmSetupRecord[]>([])
   const [current, setCurrent] = useState<string | null>(initialId ?? null)
-  const [busy, setBusy] = useState(false)
+  const [action, setAction] = useState<{
+    kind: 'start' | 'remove' | 'use'
+    id: string
+    name: string
+  }>()
+  const busy = !!action
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
   const checkPending = useRef(false)
+  const actionPending = useRef(false)
+  const refreshVersion = useRef(0)
   const newId = useRef(crypto.randomUUID())
+  const invalidateRefresh = useCallback(() => {
+    ++refreshVersion.current
+  }, [])
   const refresh = useCallback(async () => {
-    const saved = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
-    setRecords(saved.filter((record) => record.stage !== 'removed'))
+    const version = ++refreshVersion.current
+    try {
+      const saved = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
+      if (version !== refreshVersion.current) return
+      setRecords(saved.filter((record) => record.stage !== 'removed'))
+    } catch (cause) {
+      if (version === refreshVersion.current) throw cause
+    }
   }, [])
   const check = useCallback(async () => {
-    if (checkPending.current) return
+    if (checkPending.current || actionPending.current) return
     checkPending.current = true
     setChecking(true)
     setPreflight(null)
@@ -64,23 +80,36 @@ export default function KvmSetup({
       void refresh().catch((cause) => setError(String(cause)))
     })
     return () => {
+      invalidateRefresh()
       void subscription.then((unlisten) => unlisten())
     }
-  }, [check, refresh])
+  }, [check, refresh, invalidateRefresh])
   const visibleRecords = initialId
     ? records.filter((saved) => saved.id === initialId)
     : records
   const record = records.find((saved) => saved.id === current)
-  const act = async (path: 'start' | 'remove', saved?: KvmSetupRecord) => {
-    setBusy(true)
+  const act = async (
+    path: 'start' | 'remove' | 'use',
+    saved?: KvmSetupRecord
+  ) => {
+    if (actionPending.current || checkPending.current) return
+    actionPending.current = true
+    const id = saved?.id ?? newId.current
+    const botName = saved?.name ?? name.trim()
+    setAction({ kind: path, id, name: botName })
     setError('')
     try {
-      const id = saved?.id ?? newId.current
+      if (path === 'use') {
+        await connected(id)
+        return
+      }
+      invalidateRefresh()
       setCurrent(id)
       const result = await gbot<KvmSetupRecord>(
         `setup/kvm/${path}`,
-        path === 'start' ? { id, name: saved?.name ?? name.trim() } : { id }
+        path === 'start' ? { id, name: botName } : { id }
       )
+      invalidateRefresh()
       setRecords((previous) => [
         ...previous.filter((item) => item.id !== id),
         ...(result.stage === 'removed' ? [] : [result]),
@@ -92,9 +121,10 @@ export default function KvmSetup({
       await refresh()
     } catch (cause) {
       setError(String(cause))
-      await refresh().catch(() => {})
+      if (path !== 'use') await refresh().catch(() => {})
     } finally {
-      setBusy(false)
+      actionPending.current = false
+      setAction(undefined)
     }
   }
   return (
@@ -117,6 +147,15 @@ export default function KvmSetup({
       {!preflight && !error && (
         <p role="status" aria-live="polite">
           Checking local VM prerequisites…
+        </p>
+      )}
+      {action && (
+        <p role="status" className="text-sm">
+          {action.kind === 'use'
+            ? `Connecting to ${action.name}’s computer…`
+            : action.kind === 'remove'
+              ? `Removing ${action.name}’s owned computer…`
+              : `Starting ${action.name}’s computer setup…`}
         </p>
       )}
       {preflight?.issues.map((issue, index) => (
@@ -171,13 +210,11 @@ export default function KvmSetup({
                   <Button
                     type="button"
                     disabled={busy || checking}
-                    onClick={() =>
-                      void connected(saved.id).catch((cause) =>
-                        setError(String(cause))
-                      )
-                    }
+                    onClick={() => void act('use', saved)}
                   >
-                    Use this computer
+                    {action?.id === saved.id && action.kind === 'use'
+                      ? 'Connecting…'
+                      : 'Use this computer'}
                   </Button>
                 ) : (
                   <Button
@@ -190,7 +227,9 @@ export default function KvmSetup({
                     }
                     onClick={() => void act('start', saved)}
                   >
-                    Resume setup
+                    {action?.id === saved.id && action.kind === 'start'
+                      ? 'Resuming setup…'
+                      : 'Resume setup'}
                   </Button>
                 )}
                 <Button
@@ -199,7 +238,9 @@ export default function KvmSetup({
                   disabled={busy || checking}
                   onClick={() => void act('remove', saved)}
                 >
-                  Remove owned computer
+                  {action?.id === saved.id && action.kind === 'remove'
+                    ? 'Removing computer…'
+                    : 'Remove owned computer'}
                 </Button>
               </div>
             </div>
