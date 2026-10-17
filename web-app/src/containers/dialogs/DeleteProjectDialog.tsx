@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,10 @@ export function DeleteProjectDialog({
   projectName,
 }: DeleteProjectDialogProps) {
   const { t } = useTranslation()
-  const deleteButtonRef = useRef<HTMLButtonElement>(null)
+  const cancelButtonRef = useRef<HTMLButtonElement>(null)
+  const deletionPending = useRef(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [hasError, setHasError] = useState(false)
   const threads = useThreads((state) => state.threads)
   const { deleteFolderWithThreads } = useThreadManagement()
 
@@ -40,7 +43,13 @@ export function DeleteProjectDialog({
   }, [projectId, threads])
 
   const handleConfirm = async () => {
-    if (!projectId) return
+    if (!projectId || deletionPending.current) return
+
+    // Lock before awaiting or rendering so repeated input cannot start another
+    // project/thread deletion while the first request is still in flight.
+    deletionPending.current = true
+    setIsDeleting(true)
+    setHasError(false)
 
     try {
       await deleteFolderWithThreads(projectId)
@@ -51,52 +60,79 @@ export function DeleteProjectDialog({
       )
       onOpenChange(false)
     } catch (error) {
+      setHasError(true)
       toast.error(t('projects.deleteProjectDialog.error'))
       console.error('Delete project error:', error)
+    } finally {
+      deletionPending.current = false
+      setIsDeleting(false)
     }
   }
 
-  const handleKeyDown = async (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      await handleConfirm()
-    }
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (deletionPending.current) return
+    setHasError(false)
+    onOpenChange(nextOpen)
   }
 
   const hasThreads = threadCount > 0
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        aria-busy={isDeleting}
+        showCloseButton={!isDeleting}
         onOpenAutoFocus={(e) => {
           e.preventDefault()
-          deleteButtonRef.current?.focus()
+          cancelButtonRef.current?.focus()
+        }}
+        onEscapeKeyDown={(e) => {
+          if (deletionPending.current) e.preventDefault()
+        }}
+        onInteractOutside={(e) => {
+          if (deletionPending.current) e.preventDefault()
         }}
       >
         <DialogHeader>
           <DialogTitle>{t('projects.deleteProjectDialog.title')}</DialogTitle>
           <DialogDescription>
-            {hasThreads ? (
-              <p>{t('projects.deleteProjectDialog.permanentDelete')}</p>
-            ) : (
-              <p>{t('projects.deleteProjectDialog.deleteEmptyProject', { projectName })}</p>
-            )}
+            {hasThreads
+              ? t('projects.deleteProjectDialog.permanentDelete')
+              : t('projects.deleteProjectDialog.deleteEmptyProject', {
+                  projectName,
+                })}
           </DialogDescription>
         </DialogHeader>
+        {hasError && (
+          <p role="alert" className="text-destructive text-sm">
+            {t('projects.deleteProjectDialog.error')}
+          </p>
+        )}
         <DialogFooter>
-          <Button size="sm" variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button
+            ref={cancelButtonRef}
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={isDeleting}
+            onClick={() => handleOpenChange(false)}
+          >
             {t('cancel')}
           </Button>
           <Button
-            ref={deleteButtonRef}
+            type="button"
             size="sm"
             variant="destructive"
+            disabled={isDeleting || !projectId}
+            aria-busy={isDeleting}
             onClick={handleConfirm}
-            onKeyDown={handleKeyDown}
             aria-label={t('projects.deleteProjectDialog.ariaLabel', {
               projectName: projectName || t('projects.title').toLowerCase(),
             })}
           >
-            {t('projects.deleteProjectDialog.deleteButton')}
+            {isDeleting
+              ? t('loading')
+              : t('projects.deleteProjectDialog.deleteButton')}
           </Button>
         </DialogFooter>
       </DialogContent>

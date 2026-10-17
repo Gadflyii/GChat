@@ -1,5 +1,32 @@
 # GChat remediation and code hygiene
 
+## Project deletion single submission (C4, October 17)
+
+Repository `/ai/gchat`, branch `fix/c4-project-delete-single-submit-20261017`,
+worktree `/ai/gchat-worktrees/c4-project-delete-single-submit-20261017`.
+The dialog previously handled Enter itself while the native button also
+activated its click handler, allowing duplicate deletion requests. It now
+uses native button activation and a synchronous in-flight guard. Cancel
+receives initial focus; pending deletion disables controls and dismissal,
+shows loading, and reports failures inline so the user can retry. Project
+and thread deletion still use the existing `deleteFolderWithThreads` route.
+
+Acceptance: one deletion per activation while pending; opening Enter safely
+cancels; failures remain visible and retryable; success closes the dialog.
+Six focused interaction tests passed without deleting real user data. Linux
+`make verify` passed: lint, typecheck, quality/contract/asset checks, coverage
+floors, 2,664 frontend tests (six skipped), 119 extension tests, and 1,073 Rust
+tests (27 ignored). Lint retains one unrelated warning in `ServiceSetup.tsx`.
+The tests use the real dialog/button components and mock the deletion hook;
+Windows runtime behavior was not separately exercised.
+
+The S1 CPU 64–71 private build copy and container were removed after the gate;
+booking 2530 was cancelled and resources returned at 13:24Z. The retained
+Gchat 3 dependency donor remains read-only. The source worktree is retained
+for review. Concise results are kept at
+`/ai/gchat/out/c4-project-delete-single-submit-20261017/result.json`.
+The next step is the authorized merge; no further run is required.
+
 ## GCHAT-RELEASE-CODE-REVIEW (C7, complete; merge-ready)
 
 Bubbs assigned this review on October 15 at 23:15Z; deadline October 16
