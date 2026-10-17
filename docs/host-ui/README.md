@@ -28,11 +28,10 @@ frozen main revision; the genuine bundled Engine resources are retained
 `5af502f1e59a99205750c9090874e2a0448f199f`, so this is not a current-Engine
 qualification. Local portability remains unproven until local `ldd` resolves.
 
-No C7 desktop, model, build, private runtime copy or booking exists. At 15:42Z,
-Codex 3 entered GMUL timing admission and renewed the S1 staging hold; Gchat 3's
-RC Load bulk-copy hold also remains pending its Ready/terminal handoff. Await
-both returns,
-then book the actual walkthrough and launch
+No C7 desktop, model, build, private runtime copy or booking exists. Codex 3
+returned GMUL at 15:49Z. Gchat 3 reported its RC Load still filling experts at
+15:50Z; that bulk-copy hold remains pending its Ready/terminal handoff. Await
+that return, then book the actual walkthrough and launch
 with separate Host/Inspector ports. Use a private `dbus-run-session` as well as
 fresh HOME/XDG: desktop single-instance ownership uses a session-bus name and
 is not isolated by the data directories alone. Keep WSLg display/runtime
