@@ -2,43 +2,31 @@
 
 ## Sleeping icon visual qualification — C7
 
-`GBOT-SLEEPING-ICON-PROPORTIONS-20261017` has merged source that enlarges
-both sleeping Zs by 75% while preserving their relative sizes. The remaining
-deliverable is one ordinary installed visual comparison against the read-only
-`avatar/gbot-avatar.html` and `avatar/gbot-avatar.design.dc.html` references:
-check proportions, animation clipping and readability at ordinary interface
-sizes in light and dark themes. Deadline: October 17, 15:00 UTC.
+`GBOT-SLEEPING-ICON-PROPORTIONS-20261017`: the ordinary installed functional
+GChat `707724776` / Engine `43b8bbf60` FRESH check passed at 36px (sidebar and
+companion) and 40px (Gbot settings heading), in both Light and Dark themes on
+October 17. Both sleeping Zs remain readable and unclipped through their rise
+and fade. No correction is needed at those observed sizes.
 
-The retained functional GChat `707724776` / Engine `43b8bbf60` FRESH fixture
-requires Codex 4's normal OFF/XML return and Gchat 2's explicit fixture grant
-before launch. Neither source readiness nor a rendered unit test closes this
-installed visual scope. No model, Start, Ensure, provider or destructive action
-is included. Source changes and fresh full verification are needed only if the
-visual check identifies an actual defect; potential correction is confined to
-`web-app/src/components/GbotAvatar/avatar.css`, with `index.tsx` only if essential.
+Both read-only design references use `0.16em / 0.12em`; the merged component
+uses `0.28em / 0.21em`, preserving the small-to-large ratio of 0.75. The installed
+animation retains that proportion. The 24px saved-bot list was unavailable
+because this fixture's Gbot service was disconnected. That size remains
+unqualified; no service or bot was created to extend the granted scope.
 
-The source comparison is complete: both reference HTMLs use `0.16em / 0.12em`
-Zs; the merged component uses `0.28em / 0.21em`, retaining the small-to-large
-ratio of 0.75. The 36px sidebar/companion size therefore renders 10.08px and
-7.56px glyphs; the ordinary settings list and heading use 24px and 40px avatars.
-The alternating 3.2-second animation must be observed through its rise and fade;
-an initially transparent frame does not show a missing glyph. This is preparation,
-not installed visual evidence.
+Evidence: `/ai/gchat/out/gbot-sleeping-icon-proportions-20261017/result.json`,
+with the retained light/dark companion and settings screenshots beside it.
+Codex 4 returned the fixture at 14:23 UTC; Gchat 2's visual-only grant preceded
+C7's 14:24–14:30 check. The original Dark theme was restored, the AppImage
+closed normally, and the VM shut down normally with its original XML unchanged.
+S1 CPU booking 2584 was canceled: returned 14:30Z. No model, Start, Ensure,
+provider, source edit or fresh build/test gate was used.
 
-Gchat 2 granted the existing FRESH domain
-`40130784-cfe4-4473-92ff-4b60c326ca58` on S1 for this visual-only check at
-14:18 UTC. Use the retained ordinary AppImage under
-`/home/gchat/gchat2-functional-707-43b/`, normal profile and existing guest bridge;
-reuse only the launch portion of the owner's existing procedure. Codex 4's
-benchmark check precedes this check and its OFF/original-XML return is still
-pending. No fixture access or launch is authorized by the clock alone.
-
-C7 owns `/ai/gchat-worktrees/c7-gbot-sleeping-visual-20261017`, branch
-`test/c7-gbot-sleeping-visual-20261017`, based on main `1e2d47fa9`. No build,
-artifact copy, running fixture or compute booking has been allocated. Next:
-receive Codex 4's fixture return, then book only the minutes of the installed
-check and restore the original theme and domain XML afterward. Windows host-port collision
-remains separately pending Gchat 2's installed-Windows handoff.
+Owned source: `/ai/gchat-worktrees/c7-gbot-sleeping-visual-20261017`, branch
+`test/c7-gbot-sleeping-visual-20261017`, based on main `1e2d47fa9`; no build or
+artifact copy was allocated. Next: Gchat 3 integrates this bounded visual result
+and retains any 24px remainder. Windows host-port collision remains separately
+pending Gchat 2's installed-Windows handoff.
 
 ## Outage reply notification fix — C7
 
