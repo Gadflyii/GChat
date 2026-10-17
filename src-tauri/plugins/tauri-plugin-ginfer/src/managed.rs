@@ -137,9 +137,7 @@ fn selected_profile(
                 && (requested.kv_dtype == "auto" || requested.kv_dtype == p.kv_dtype)
                 && (requested.draft_tp == 0 || requested.draft_tp == p.draft_tp)
                 && (requested.draft_tokens == 0 || requested.draft_tokens == p.draft_tokens)
-                && (requested.prefill_chunk == 0 || requested.prefill_chunk == p.prefill_chunk)
-                && (requested.kv_arena_bytes.is_none()
-                    || requested.kv_arena_bytes == p.kv_arena_bytes)))
+                && (requested.prefill_chunk == 0 || requested.prefill_chunk == p.prefill_chunk)))
                 .then_some((profile, group))
         })
         .max_by_key(|(profile, _)| (profile.max_context, profile.concurrency))
@@ -153,6 +151,9 @@ fn profile_request(
     requested: &LaunchOptions,
 ) -> LaunchRequest {
     let mut options = profile.options.clone();
+    // Catalog KV bytes describe historical qualification. Match Host's saved
+    // request: Automatic unless the caller explicitly supplies a byte budget.
+    options.kv_arena_bytes = requested.kv_arena_bytes;
     if !config.use_profile_defaults {
         options.structured_outputs = requested.structured_outputs;
     }
@@ -341,6 +342,7 @@ async fn load_on_host_inner(
         let result = control.request("/host/v1/profile-launch", Some(serde_json::json!({
             "profile_id": profile.id, "model_id": model.id, "gpu_uuids": launch.gpu_uuids,
             "structured_outputs": launch.options.structured_outputs,
+            "kv_arena_bytes": launch.options.kv_arena_bytes,
                     "load_operation_id":config.load_operation_id,
                 }))).await?;
         let instance_id: Uuid = serde_json::from_value(result["instance_id"].clone())
@@ -543,8 +545,7 @@ mod tests {
         launcher::LocalControl,
         service::{Gpu, Host},
     };
-    use hyper::{Body, Response};
-    use std::{convert::Infallible, os::unix::fs::PermissionsExt};
+    use std::os::unix::fs::PermissionsExt;
 
     fn ordered_snapshot() -> Value {
         serde_json::json!({
@@ -642,10 +643,8 @@ mod tests {
         assert_eq!(selected_group(&groups, &explicit, &visible), Some(vec!["GPU-zero".to_string()]));
     }
 
-    #[test]
-    fn installed_profile_defaults_select_the_screened_cap_without_model_overrides() {
-        let model = Uuid::new_v4();
-        let profile: LaunchProfile = serde_json::from_value(serde_json::json!({
+    fn screened_profile() -> LaunchProfile {
+        serde_json::from_value(serde_json::json!({
             "id": "rtx-pro6000-flash-next-smol-q2g64-tp1-c8-128k-int8-screened",
             "name": "RTX PRO 6000 Flash Next — screened, not full-context qualified",
             "platform": "linux",
@@ -660,7 +659,13 @@ mod tests {
             "qualification": {"tier":"screened-startup", "evidence":"pm-v2-20261015-caaddfaa",
                 "engine_revision":"caaddfaa", "free_bytes_per_gpu":18581880832u64,
                 "full_context_requests":0, "smoke_requests":8}
-        })).unwrap();
+        })).unwrap()
+    }
+
+    #[test]
+    fn installed_profile_defaults_select_the_screened_cap_without_model_overrides() {
+        let model = Uuid::new_v4();
+        let profile = screened_profile();
         profile.validate().unwrap();
         let snapshot = serde_json::json!({"launch_profiles":[{
             "model_id":model, "profile":profile, "gpu_groups":[["GPU-one"]]
@@ -707,6 +712,45 @@ mod tests {
         config.use_profile_defaults = true;
         assert!(!profile_request(model, &text_profile, vec!["GPU-one".into()], &config, &requested)
             .options.structured_outputs);
+    }
+
+    #[test]
+    fn installed_profile_kv_is_auto_unless_explicitly_overridden() {
+        let model = Uuid::new_v4();
+        let mut profile = screened_profile();
+        profile.options.kv_arena_bytes = Some(8 << 30);
+        let snapshot = serde_json::json!({"launch_profiles":[{
+            "model_id":model, "profile":profile, "gpu_groups":[["GPU-one"]]
+        }]});
+        let visible = vec!["GPU-one".into()];
+        let mut config = GinferConfig {
+            use_profile_defaults: true,
+            kv_arena_bytes: "saved custom value".into(),
+            ..Default::default()
+        };
+        let requested = options(&config).unwrap();
+        let (selected, group) = selected_profile(&snapshot, model, &config, &requested, &visible).unwrap();
+        let automatic = profile_request(model, &selected, group, &config, &requested);
+        let mut expected = profile.options.clone();
+        expected.kv_arena_bytes = None;
+        assert_eq!(automatic.options, expected);
+        assert!(automatic.qualified_profile_id.is_none());
+
+        config.use_profile_defaults = false;
+        config.vision = profile.options.vision;
+        config.kv_arena_bytes = (1_u64 << 30).to_string();
+        let requested = options(&config).unwrap();
+        let (selected, group) = selected_profile(&snapshot, model, &config, &requested, &visible).unwrap();
+        let explicit = profile_request(model, &selected, group, &config, &requested);
+        expected.kv_arena_bytes = Some(1 << 30);
+        assert_eq!(explicit.options, expected);
+        assert!(explicit.qualified_profile_id.is_none());
+
+        // Qualification survives only an exact match of the normalized options.
+        config.kv_arena_bytes = (8_u64 << 30).to_string();
+        let exact = profile_request(model, &profile, visible, &config, &options(&config).unwrap());
+        assert_eq!(exact.options, profile.options);
+        assert_eq!(exact.qualified_profile_id.as_deref(), Some(profile.id.as_str()));
     }
 
     #[test]
@@ -764,13 +808,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn desktop_reconnects_to_resident_and_dropping_sessions_leaves_host_running() {
+    async fn desktop_attaches_and_reuses_auto_kv_profiles_and_preserves_explicit_budgets() {
         let root = tempfile::tempdir().unwrap();
         let engine = root.path().join("ginfer-serve");
         std::fs::write(
             &engine,
             r#"#!/usr/bin/env python3
-import json, sys, time
+import http.server, json, sys
 args = sys.argv[1:]
 def arg(name):
     return args[args.index(name) + 1]
@@ -784,7 +828,13 @@ if '--quote-only' in args:
         headroom_bytes=int(arg('--kv-arena-headroom-bytes')),
         startup_peak_bytes=12288)])))
     sys.exit(0)
-time.sleep(30)
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(json.dumps(dict(data=[dict(id=arg('--model-id'))])).encode())
+    def log_message(self, *args): pass
+http.server.HTTPServer(('127.0.0.1', int(arg('--port'))), Handler).serve_forever()
 "#,
         )
         .unwrap();
@@ -798,6 +848,7 @@ def arg(name, default=None):
 # The resident fixture must pass the same selected-artifact preparation as
 # production. It cannot calibrate hardware or load weights.
 model = pathlib.Path(arg('--model')).resolve()
+model.with_suffix('.sha256').write_text(hashlib.sha256(model.read_bytes()).hexdigest())
 with model.open('rb') as source:
     prefix = source.read(16)
     directory = source.read(int.from_bytes(prefix[8:], 'little'))
@@ -862,17 +913,21 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
         let port = host.snapshot().await["instances"][0]["configuration"]["port"]
             .as_u64()
             .unwrap() as u16;
-        let upstream = hyper::Server::bind(&([127, 0, 0, 1], port).into()).serve(
-            hyper::service::make_service_fn(|_| async {
-                Ok::<_, Infallible>(hyper::service::service_fn(|_| async {
-                    Ok::<_, Infallible>(Response::new(Body::from(
-                        serde_json::json!({"data":[{"id":"muse-glimmer-30b/nvfp4"}]}).to_string(),
-                    )))
-                }))
-            }),
-        );
-        let upstream = tokio::spawn(upstream);
-        host.refresh_processes().await.unwrap();
+        let monitored_host = host.clone();
+        let monitor = tokio::spawn(async move {
+            loop {
+                monitored_host.refresh_processes().await.unwrap();
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if host.snapshot().await["instances"][0]["status"] == "ready" {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }).await.unwrap();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let origin = format!("https://{}", listener.local_addr().unwrap());
         let acceptor = host.data.lock().await.certificate.acceptor().unwrap();
@@ -980,7 +1035,7 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
             artifact.to_string_lossy().into_owned(),
             GinferConfig {
                 gpu_uuids: Some(vec!["GPU-test".into()]),
-                ..config
+                ..config.clone()
             },
             5,
         )
@@ -995,8 +1050,106 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
         } = session.owner;
         control.stop_session(&connection).await.unwrap();
         assert!(host.processes.lock().await.endpoint(id).is_err());
+
+        let active: LaunchRequest = serde_json::from_value(
+            host.snapshot().await["instances"][0]["profile"].clone(),
+        ).unwrap();
+        let mut profile = screened_profile();
+        profile.platform = std::env::consts::OS.into();
+        profile.identity.model_id = "muse-glimmer-30b".into();
+        profile.identity.weights_id = "nvfp4".into();
+        profile.artifact_sha256 = std::fs::read_to_string(artifact.with_extension("sha256")).unwrap();
+        profile.artifact_bytes = 4096;
+        profile.gpu_name = "Fixture".into();
+        profile.vram_tier_gib = 32;
+        profile.min_memory_mib_per_gpu = 32768;
+        profile.max_context = 8192;
+        profile.concurrency = 1;
+        profile.qualification.smoke_requests = Some(1);
+        profile.options = active.options;
+        profile.options.kv_arena_bytes = Some(8 << 30);
+        profile.validate().unwrap();
+        // Registering the artifact rescans the installed catalog on every Load.
+        std::fs::write(
+            directory.join("launch-profiles.json"),
+            serde_json::to_vec(&serde_json::json!({
+                "schema": "ginfer-launch-profiles-v1", "profiles": [profile]
+            })).unwrap(),
+        ).unwrap();
+        host.scan().await.unwrap();
+        let catalog = host.snapshot().await;
+        assert_eq!(catalog["launch_profiles"].as_array().unwrap().len(), 1);
+        assert_eq!(catalog["launch_profiles"][0]["model_id"], model_id.to_string());
+        assert_eq!(catalog["launch_profiles"][0]["gpu_groups"], serde_json::json!([["GPU-test"]]));
+
+        // A positive historical catalog arena becomes Auto in both the saved
+        // Host request and the adapter's attachment expectation.
+        let automatic_config = GinferConfig { use_profile_defaults: true, ..config.clone() };
+        let automatic = load_on_host(
+            sessions.clone(), control.clone(), "desktop-alias".into(),
+            artifact.to_string_lossy().into_owned(), automatic_config.clone(), 5,
+        ).await.unwrap();
+        assert_eq!(automatic.kv_arena_bytes, "auto");
+        assert_eq!(automatic.max_context, 8192);
+        assert_eq!(automatic.spec, "none");
+        let automatic_connection = sessions.lock().await[&automatic.pid].owner.connection.clone();
+        let snapshot = host.snapshot().await;
+        let automatic_instance = snapshot["instances"].as_array().unwrap().iter()
+            .find(|instance| instance["instance_id"] == automatic_connection.instance_id.to_string()).unwrap();
+        assert!(automatic_instance["profile"]["kv_arena_bytes"].is_null());
+        assert!(automatic_instance["profile"]["qualified_profile_id"].is_null());
+        let reused = load_on_host(
+            sessions.clone(), control.clone(), "desktop-alias".into(),
+            artifact.to_string_lossy().into_owned(), automatic_config, 5,
+        ).await.unwrap();
+        assert_eq!(reused.kv_arena_bytes, "auto");
+        assert_eq!(reused.port, automatic.port);
+        let reused_connection = sessions.lock().await[&reused.pid].owner.connection.clone();
+        assert_eq!(reused_connection.instance_id, automatic_connection.instance_id);
+        assert_eq!(reused_connection.session_id, automatic_connection.session_id);
+        control.stop_session(&automatic_connection).await.unwrap();
+
+        // A different positive budget must travel through profile-launch,
+        // remain exact in persisted settings, and attach without qualification.
+        let explicit = load_on_host(
+            sessions.clone(), control.clone(), "desktop-alias".into(),
+            artifact.to_string_lossy().into_owned(),
+            GinferConfig {
+                kv_arena_bytes: (1_u64 << 30).to_string(),
+                max_context: 0, max_concurrency: 0, ..config
+            }, 5,
+        ).await.unwrap();
+        assert_eq!(explicit.kv_arena_bytes, (1_u64 << 30).to_string());
+        assert_eq!(explicit.max_context, 8192);
+        assert_eq!(explicit.spec, "none");
+        let explicit_connection = sessions.lock().await[&explicit.pid].owner.connection.clone();
+        let snapshot = host.snapshot().await;
+        let explicit_instance = snapshot["instances"].as_array().unwrap().iter()
+            .find(|instance| instance["instance_id"] == explicit_connection.instance_id.to_string()).unwrap();
+        assert_eq!(explicit_instance["configuration"]["kv_arena_bytes"], 1_u64 << 30);
+        assert_eq!(explicit_instance["profile"]["kv_arena_bytes"], 1_u64 << 30);
+        assert!(explicit_instance["profile"]["qualified_profile_id"].is_null());
+        let persisted: Value = serde_json::from_slice(
+            &std::fs::read(directory.join("host.json")).unwrap(),
+        ).unwrap();
+        let explicit_id = explicit_connection.instance_id.to_string();
+        assert_eq!(persisted["profiles"][&explicit_id]["kv_arena_bytes"], 1_u64 << 30);
+        assert!(persisted["profiles"][&explicit_id]["qualified_profile_id"].is_null());
+        let saved: LaunchRequest = serde_json::from_value(explicit_instance["profile"].clone()).unwrap();
+        for (kv_arena_bytes, no_cuda_graph) in [(Some(2 << 30), false), (Some(1 << 30), true)] {
+            let mut drifted = saved.clone();
+            drifted.options.kv_arena_bytes = kv_arena_bytes;
+            drifted.options.no_cuda_graph = no_cuda_graph;
+            let error = attach(
+                sessions.clone(), control.clone(), drifted, explicit_connection.instance_id,
+                "desktop-alias".into(), artifact.to_string_lossy().into_owned(), 5, None,
+            ).await.unwrap_err();
+            assert_eq!(error, "Host launch settings changed while attaching");
+        }
+        assert!(host.processes.lock().await.endpoint(explicit_connection.instance_id).is_ok());
+        control.stop_session(&explicit_connection).await.unwrap();
         server.abort();
-        upstream.abort();
+        monitor.abort();
         host.processes.lock().await.shutdown().await.unwrap();
     }
 }
