@@ -21,9 +21,17 @@ and one full `make verify` pass: 2,981 frontend tests, 119 extension tests,
 27 Rust tests ignored; lint, types, quality checks and all six critical
 coverage floors passed. Lint retains four warnings. Returned 16:07Z;
 booking2647 canceled, with the private cache retained for the remaining gates.
-Next: integrate the separately gated attachment availability and labels,
-build the final native app, then capture the compact sidebar in the private
-fixture at the original window size.
+The final Hermes link correction is included in sidebar source `7eba3f873`.
+Its controls, controls test and SettingsMenu files are identical to combined
+source `0c598c378`, which passed 16 focused cases and one full `make verify`
+(2,996 frontend tests, 119 extension tests, 1,079 Rust tests and 59 Node
+contracts), plus production frontend/native builds. The native replay confirms
+providers visible and the Hermes link on its own line at the original window
+size. Keyboard Help expands the three descriptions and Enter opens OpenAI.
+See `/ai/gchat/out/c4-settings-sweep-20261017/final-attachments-sidebar-corrected.png`,
+`final-hermes-corrected-layout.json` and `final-combined/spacing-followup/result.json`.
+Returned 16:39Z: OLD OFF/original XML restored. The owned generated S1 cache
+is being retired; concise results and screenshots are retained. Next: coordinator merge.
 No Engine, model, provider request or real user-data action is in scope.
 
 ## Attachment edits survive navigation — C4
