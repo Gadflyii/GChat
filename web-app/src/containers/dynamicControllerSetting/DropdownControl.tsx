@@ -5,6 +5,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
+import { useContext, useId } from 'react'
+import { LabelledByContext } from '@/components/ui/labelled-by-context'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { ChevronsUpDown } from 'lucide-react'
@@ -24,6 +26,9 @@ export function DropdownControl({
 }: DropdownControlProps) {
   const isSelected =
     options.find((option) => option.value === value)?.name || value
+  // Name the button by its settings row, followed by the current choice.
+  const row = useContext(LabelledByContext)
+  const valueId = useId()
 
   return (
     <DropdownMenu>
@@ -32,8 +37,14 @@ export function DropdownControl({
           variant="outline"
           size="sm"
           className="w-full min-w-0 justify-between"
+          aria-labelledby={
+            row.labelId ? `${row.labelId} ${valueId}` : undefined
+          }
+          aria-describedby={row.descriptionId}
         >
-          <span className="truncate">{isSelected}</span>
+          <span id={valueId} className="truncate">
+            {isSelected}
+          </span>
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground ml-2" />
         </Button>
       </DropdownMenuTrigger>
