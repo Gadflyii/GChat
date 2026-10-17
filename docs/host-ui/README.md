@@ -29,7 +29,8 @@ frozen main revision; the genuine bundled Engine resources are retained
 qualification. Local portability remains unproven until local `ldd` resolves.
 
 No C7 desktop, model, build, private runtime copy or booking exists. Await
-Gchat 3's RC Load resource return, then book the actual walkthrough and launch
+Gchat 3's RC Load resource return and Codex 3's pending GMUL timing pair return,
+then book the actual walkthrough and launch
 with separate Host/Inspector ports. Use a private `dbus-run-session` as well as
 fresh HOME/XDG: desktop single-instance ownership uses a session-bus name and
 is not isolated by the data directories alone. Keep WSLg display/runtime
@@ -37,6 +38,17 @@ variables intact. Keep Ron's port 17483 and all existing data
 untouched. Retain concise results under
 `/ai/gchat/out/c7-models-hub-engine-hardware-20261017/` when observations exist;
 release private processes and disposable copies at completion.
+
+The source-reading helper mapped the ordinary sequence: Models → Installed /
+Recommended / Downloads; GInfer Hosts → Set up models on this computer;
+Advanced hardware profile options; Settings → Hardware; then Benchmark.
+Inspect the empty states and next-action wording before requesting any expensive
+operation. Model download availability depends on the genuine published catalog;
+an absent catalog is a scope limit, not a reason to inject one. Viewing hardware
+information is distinct from building a measured hardware profile. Downloads
+become Installed after verification, model unloading is labelled Stop, and
+Benchmark requires an already loaded instance. Observe these actual controls;
+do not claim download, profiling, Load or benchmark completion from source reads.
 
 ## Global conversation deletion — C7
 
