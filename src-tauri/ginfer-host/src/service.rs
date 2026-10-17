@@ -2434,7 +2434,13 @@ impl Host {
                 let request: crate::hardware_profile::HardwareProfileRequest =
                     serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
                 let _lifecycle = self.lifecycle.lock().await;
-                self.stop_background_profile().await?;
+                let explicit_cancel =
+                    request.action == crate::hardware_profile::HardwareProfileAction::Cancel;
+                // Explicit Cancel must persist its retry suppression before
+                // reaping. Foreground preemption deliberately remains resumable.
+                if !explicit_cancel {
+                    self.stop_background_profile().await?;
+                }
                 self.draft_width.cancel().await?;
                 let saved = self
                     .data
@@ -2450,7 +2456,7 @@ impl Host {
                 {
                     processes.ensure_hardware_if_idle(saved)?;
                 }
-                let result = if request.action
+                let mut result = if request.action
                     == crate::hardware_profile::HardwareProfileAction::Ensure
                     && request.gpu_uuids.is_none()
                 {
@@ -2463,6 +2469,17 @@ impl Host {
                     processes.hardware_profile_action(request)?
                 };
                 drop(processes);
+                if explicit_cancel && result.scope == "complete_remaining_formats" {
+                    self.stop_background_profile().await?;
+                    result = self
+                        .processes
+                        .lock()
+                        .await
+                        .hardware_profile
+                        .as_ref()
+                        .ok_or("Hardware profiling is not configured")?
+                        .status(None);
+                }
                 self.revision.fetch_add(1, Ordering::SeqCst);
                 Ok(json(
                     StatusCode::OK,

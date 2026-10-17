@@ -86,6 +86,48 @@ it('checks imported artifact settings without a catalog or download and uses the
   }))
 })
 
+it.each(['running', 'cancelling'] as const)('allows an imported model quote and Load during %s optional completion', async (status) => {
+  const data: EngineSnapshot = { ...importedModelSnapshot, hardware_profile: {
+    status, scope: 'complete_remaining_formats', base_complete: true, scope_complete: false, all_formats_complete: false,
+    pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', job_id: 'job', pid: 42,
+    reprofile: false, started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+    checkpoint_available: true, diagnostic_tail: '', error: null, available: true,
+  } }
+  vi.mocked(engineCommand).mockResolvedValue(importedQuote)
+  const view = render(<HostCard host={localHost} snapshot={data} />)
+  selectImportedModel()
+  expect(screen.getByRole('progressbar', { name: 'Hardware profiling in progress' })).toBeInTheDocument()
+  expect(screen.getByText(/The selected model is ready/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' }))
+  expect(await screen.findByText(/Verified artifact: qwen3.8-27b \/ int8/)).toBeInTheDocument()
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled())
+  refreshHosts.mockImplementationOnce(async () => {
+    view.rerender(<HostCard host={localHost} snapshot={{ ...data, instances: [{
+      instance_id: 'loaded', session_id: 'session', display_name: 'Imported model', upstream_model_id: 'model', status: 'starting',
+      configuration: { gpu_uuids: ['GPU-one'], max_context: 262144, concurrency: 1 },
+    }] }} />)
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
+  expect(await screen.findByText(/Imported model.*starting/)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
+  expect(engineCommand).toHaveBeenLastCalledWith('launch', expect.objectContaining({ body: expect.objectContaining({ model_id: 'imported-model' }) }))
+})
+
+it.each([
+  ['running', 'artifact'], ['cancelling', 'artifact'], ['running', 'all_formats'], ['cancelling', 'all_formats'],
+] as const)('keeps imported model launch blocked during %s %s profiling', (status, scope) => {
+  render(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, hardware_profile: {
+    status, scope, pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', job_id: 'job', pid: 42,
+    reprofile: false, started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+    checkpoint_available: true, diagnostic_tail: '', error: null, available: true,
+  } }} />)
+  selectImportedModel()
+  expect(screen.getByRole('button', { name: 'Check startup settings' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
+  expect(engineCommand).not.toHaveBeenCalled()
+})
+
 it('invalidates an imported-model quote when the Host restarts at the same revision', async () => {
   vi.mocked(engineCommand).mockResolvedValue(importedQuote)
   const { rerender } = render(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, boot_id: 'first-boot' }} />)

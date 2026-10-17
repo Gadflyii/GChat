@@ -1318,6 +1318,77 @@ test('hardware profiling updates through shared snapshots, blocks launch and kee
   assert.equal(app.calls.length, calls, 'closing the UI does not cancel the Host job')
 })
 
+for (const status of ['running', 'cancelling']) {
+  test(`background completion ${status} keeps launch and quote available while profiling controls stay busy`, async (t) => {
+    const view = fixture()
+    view.hosts[0].snapshot.launch_profiles = []
+    view.hosts[0].snapshot.hardware_profile = { scope: 'complete_remaining_formats', status,
+      gpu_uuids: ['GPU-local'], pending_gpu_groups: [], stale_groups: [], job_id: 'background-job',
+      available: true, started_unix_ms: null, finished_unix_ms: null, diagnostic_tail: '', error: null }
+    const app = await manager(t, view, (request, current) => {
+      if (request.operation === 'quote') return { model_identity: { model_id: 'muse-glimmer-30b', weights_id: 'nvfp4' },
+        instance_count: 1, kv_arena_bytes: null }
+      if (request.operation === 'instance' && request.args.operation === 'start') {
+        current.hosts[0].snapshot.instances.find(instance => instance.instance_id === stoppedId).status = 'starting'
+      }
+      return {}
+    })
+    assert.equal(button(app.document, 'Start a model…').disabled, false)
+    const saved = app.document.querySelector(`[data-instance="${stoppedId}"]`)
+    assert.equal(button(saved, 'Start').disabled, false)
+    assert.equal(button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Reload').disabled, false)
+    const hardware = app.document.querySelector('[aria-label="Hardware profile"]')
+    assert.ok(hardware.querySelector('progress'), 'background work remains visibly busy')
+    assert.equal(button(hardware, status === 'running' ? 'Cancel profiling' : 'Cancelling profiling…').disabled, status === 'cancelling')
+    assert.equal([...hardware.querySelectorAll('button')].some(control => control.textContent === 'Refresh hardware profile'), false)
+
+    button(saved, 'Start').click()
+    await completed(app, calls => calls.some(request => request.operation === 'instance'))
+    assert.equal(app.document.querySelector(`[data-instance="${stoppedId}"] .badge`).textContent, 'starting')
+    assert.equal(button(app.document.querySelector(`[data-instance="${stoppedId}"]`), 'Stop').disabled, false)
+
+    button(app.document, 'Start a model…').click()
+    const pane = app.document.querySelector('[role="dialog"]')
+    assert.ok(pane, 'background completion must admit the ordinary launch dialog')
+    pane.querySelector('input[name="gpu"]').checked = true
+    pane.querySelector('input[name="max_context"]').value = '32768'
+    assert.equal(button(pane, 'Check startup settings').disabled, false)
+    button(pane, 'Check startup settings').click()
+    await waitFor(() => pane.textContent.includes('Verified artifact: muse-glimmer-30b / nvfp4'), 'the admitted quote must render its artifact result')
+    submit(app)
+    await completed(app, calls => calls.some(request => request.operation === 'launch'))
+    assert.equal(app.document.querySelector('[role="dialog"]'), null)
+    assert.match(app.document.body.textContent, /Model starting/)
+    assert.deepEqual(requests(app).find(request => request.operation === 'launch').args.gpu_uuids, ['GPU-local'])
+  })
+}
+
+for (const scope of ['all_formats', 'artifact']) {
+  for (const status of ['running', 'cancelling']) {
+    test(`foreground ${scope} profiling ${status} blocks launch and an already open quote`, async (t) => {
+      const view = fixture()
+      view.hosts[0].snapshot.launch_profiles = []
+      const app = await manager(t, view)
+      button(app.document, 'Start a model…').click()
+      const pane = app.document.querySelector('[role="dialog"]')
+      pane.querySelector('input[name="gpu"]').checked = true
+      pane.querySelector('input[name="max_context"]').value = '32768'
+      const next = structuredClone(view)
+      next.hosts[0].snapshot.hardware_profile = { scope, status, gpu_uuids: ['GPU-local'],
+        pending_gpu_groups: [], stale_groups: [], available: true, diagnostic_tail: '', error: null }
+      await app.publish(next)
+      assert.equal(button(app.document, 'Start a model…').disabled, true)
+      assert.equal(button(app.document.querySelector(`[data-instance="${stoppedId}"]`), 'Start').disabled, true)
+      assert.equal(button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Reload').disabled, true)
+      assert.equal(button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Stop').disabled, false)
+      assert.equal(button(pane, 'Check startup settings').disabled, true)
+      submit(app)
+      await waitFor(() => pane.textContent.includes('hardware profiling has stopped'), 'foreground profiling must reject submission')
+      assert.equal(requests(app).length, 0)
+    })
+  }
+}
+
 test('draft-width calibration remains visible without blocking model start and reports offline snapshots', async (t) => {
   const view = fixture()
   view.hosts[0].snapshot.hardware_profile = { status: 'completed', pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-local'],

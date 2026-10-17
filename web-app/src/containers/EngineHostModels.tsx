@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { engineCommand, hardwareProfileBusy, type EngineHost, type EngineSnapshot, type EngineLaunchOptions, type EngineStartupQuote } from '@/services/engines'
+import { engineCommand, hardwareProfileBlocksLaunch, type EngineHost, type EngineSnapshot, type EngineLaunchOptions, type EngineStartupQuote } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { EngineHostSharing } from '@/containers/EngineHostSharing'
 import { EngineGbotControl } from '@/containers/EngineGbotControl'
@@ -23,7 +23,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [busy, setBusy] = useState(false)
   const [hostStopError, setHostStopError] = useState<string | null>(null)
   const [hostStopping, setHostStopping] = useState(false)
-  const profiling = hardwareProfileBusy(snapshot?.hardware_profile)
+  const profiling = hardwareProfileBlocksLaunch(snapshot?.hardware_profile)
   const [activeId, setActiveId] = useState('')
   const active = activeId === 'additional' ? undefined : snapshot?.instances.find(i => i.instance_id === activeId) ??
     snapshot?.instances.find(i => i.status === 'ready') ?? snapshot?.instances[0]

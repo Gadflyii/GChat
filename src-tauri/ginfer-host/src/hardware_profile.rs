@@ -258,6 +258,8 @@ struct ArtifactReceipts {
     gpu_uuids: Vec<String>,
     artifacts: Vec<ArtifactProfileIntent>,
     all_formats_complete: bool,
+    // A failure or explicit Cancel requires an explicit retry. Foreground
+    // preemption leaves this false so idle completion remains resumable.
     #[serde(default)]
     completion_failed: bool,
 }
@@ -962,6 +964,24 @@ impl HardwareProfiles {
         {
             return Err("Resume and cancel retain the original GPU group".into());
         }
+        if action == HardwareProfileAction::Cancel {
+            let key = group_key(&gpus);
+            if scope == ProfileScope::CompleteRemainingFormats {
+                state
+                    .record
+                    .artifact_receipts
+                    .entry(key.clone())
+                    .or_insert_with(|| ArtifactReceipts {
+                        gpu_uuids: gpus.clone(),
+                        artifacts: vec![],
+                        all_formats_complete: false,
+                        completion_failed: false,
+                    });
+            }
+            if let Some(receipt) = state.record.artifact_receipts.get_mut(&key) {
+                receipt.completion_failed = true;
+            }
+        }
         if let Some(cancel) = &state.cancel {
             if action != HardwareProfileAction::Cancel && scope != state.record.scope {
                 return Err("The active profiler owns a different artifact scope".into());
@@ -978,6 +998,18 @@ impl HardwareProfiles {
             return Ok(());
         }
         if action == HardwareProfileAction::Cancel {
+            self.save(&state.record)?;
+            self.revision.fetch_add(1, Ordering::SeqCst);
+            return Ok(());
+        }
+        if action == HardwareProfileAction::Ensure
+            && scope == ProfileScope::CompleteRemainingFormats
+            && state
+                .record
+                .artifact_receipts
+                .get(&group_key(&gpus))
+                .is_some_and(|receipt| receipt.completion_failed)
+        {
             return Ok(());
         }
         if action == HardwareProfileAction::Ensure
@@ -2219,6 +2251,142 @@ mod tests {
         )
         .unwrap();
         assert!(record.accepted_durations.is_empty());
+    }
+    #[tokio::test]
+    async fn hardware_profile_explicit_cancel_parks_idle_completion_until_resume() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let gpus = vec!["GPU-fixture".into()];
+        let cli = directory.path().join("ginfer");
+        let blocking_cli = std::fs::read(&cli).unwrap();
+        let intent = selected_intent(directory.path());
+        scoped_cli(directory.path(), &arguments, &selected_result(&intent));
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            Some(cli.clone()),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        let selected = observed(&job, |view| view.status == "completed").await;
+        let canonical = std::fs::read(&selected.profile_path).unwrap();
+        host.data.lock().await.first_run.complete = true;
+        assert!(!host.first_run_pending().await);
+        std::fs::write(&cli, blocking_cli).unwrap();
+        std::fs::remove_file(&arguments).unwrap();
+        host.idle_maintenance().await.unwrap();
+        begun(&arguments).await;
+        let running = observed(&job, |view| view.checkpoint_available).await;
+        assert_eq!(running.scope, "complete_remaining_formats");
+        assert!(running.pid.is_some());
+        let background_args = std::fs::read_to_string(&arguments).unwrap();
+        let output = PathBuf::from(background_args.lines().nth(2).unwrap());
+        let saved_checkpoint = std::fs::read(checkpoint(&output)).unwrap();
+
+        let cancelled = request(&host, HardwareProfileAction::Cancel).await.unwrap();
+        assert_eq!(cancelled["status"], "cancelled");
+        assert_eq!(cancelled["job_id"], serde_json::json!(running.job_id));
+        assert!(cancelled["finished_unix_ms"].is_number());
+        assert!(!job.busy());
+        #[cfg(target_os = "linux")]
+        assert!(!Path::new("/proc")
+            .join(running.pid.unwrap().to_string())
+            .exists());
+        assert!(job.artifact_is_accepted(&gpus, &intent));
+        assert!(job.deferred_groups().is_empty());
+        for _ in 0..2 {
+            host.idle_maintenance().await.unwrap();
+            assert!(!job.busy());
+            assert_eq!(job.status(None).job_id, running.job_id);
+        }
+        assert_eq!(std::fs::read_to_string(&arguments).unwrap(), background_args);
+        assert_eq!(std::fs::read(checkpoint(&output)).unwrap(), saved_checkpoint);
+        assert_eq!(std::fs::read(&selected.profile_path).unwrap(), canonical);
+        let reopened =
+            HardwareProfiles::open(directory.path().join("host"), Arc::new(AtomicU64::new(0)))
+                .unwrap();
+        assert_eq!(reopened.status(None).status, "cancelled");
+        assert!(reopened.deferred_groups().is_empty());
+        assert!(!reopened.artifact_is_accepted(&gpus, &intent));
+        reopened
+            .start_remaining_formats(Some(cli.clone()), gpus.clone())
+            .unwrap();
+        assert!(!reopened.busy());
+        assert_eq!(reopened.status(None).job_id, running.job_id);
+
+        let mut complete = selected_result(&intent);
+        complete["mode"] = serde_json::json!("complete_remaining_formats");
+        complete["scope"] = serde_json::json!("all_formats");
+        complete["all_formats_complete"] = serde_json::json!(true);
+        complete["artifact"] = serde_json::Value::Null;
+        scoped_cli(directory.path(), &arguments, &complete);
+        request(&host, HardwareProfileAction::Resume).await.unwrap();
+        let resumed = observed(&job, |view| view.status == "completed").await;
+        assert_ne!(resumed.job_id, running.job_id);
+        assert_eq!(resumed.all_formats_complete, Some(true));
+        assert!(job.artifact_is_accepted(&gpus, &intent));
+        assert!(job.deferred_groups().is_empty());
+        let resumed_args = std::fs::read_to_string(&arguments).unwrap();
+        assert_eq!(resumed_args.lines().nth(2), output.to_str());
+        assert_eq!(std::fs::read(checkpoint(&output)).unwrap(), saved_checkpoint);
+    }
+    #[tokio::test]
+    async fn hardware_profile_selected_ensure_retries_explicitly_cancelled_completion() {
+        let (directory, host, arguments) = fixture().await;
+        let job = host
+            .processes
+            .lock()
+            .await
+            .hardware_profile
+            .clone()
+            .unwrap();
+        let gpus = vec!["GPU-fixture".into()];
+        let cli = directory.path().join("ginfer");
+        let blocking_cli = std::fs::read(&cli).unwrap();
+        let intent = selected_intent(directory.path());
+        scoped_cli(directory.path(), &arguments, &selected_result(&intent));
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            Some(cli.clone()),
+            gpus.clone(),
+            intent.clone(),
+        )
+        .unwrap();
+        observed(&job, |view| view.status == "completed").await;
+        std::fs::write(&cli, blocking_cli).unwrap();
+        std::fs::remove_file(&arguments).unwrap();
+        job.start_remaining_formats(Some(cli.clone()), gpus.clone())
+            .unwrap();
+        begun(&arguments).await;
+        let background = job.status(None);
+        request(&host, HardwareProfileAction::Cancel).await.unwrap();
+        assert!(!job.busy());
+        assert!(job.deferred_groups().is_empty());
+
+        let mut next_intent = intent.clone();
+        next_intent.draft_tokens = Some(4);
+        let mut next_result = selected_result(&next_intent);
+        next_result["artifact"]["draft_tokens"] = serde_json::json!(4);
+        scoped_cli(directory.path(), &arguments, &next_result);
+        job.start_scoped(
+            HardwareProfileAction::Ensure,
+            Some(cli),
+            gpus.clone(),
+            next_intent.clone(),
+        )
+        .unwrap();
+        let selected = observed(&job, |view| view.status == "completed").await;
+        assert_ne!(selected.job_id, background.job_id);
+        assert_eq!(selected.scope, "artifact");
+        assert_eq!(selected.selected_artifact, Some(next_intent.clone()));
+        assert!(job.artifact_is_accepted(&gpus, &next_intent));
+        assert_eq!(job.deferred_groups(), vec![gpus]);
     }
     #[tokio::test]
     async fn hardware_profile_failed_completion_requires_explicit_retry() {
