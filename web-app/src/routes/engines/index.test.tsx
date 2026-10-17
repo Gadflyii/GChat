@@ -161,7 +161,7 @@ describe('Engines host intake and launch controls', () => {
   it('shares independently of discovery', async () => {
     mocks.local = true
     renderExpandedPage()
-    const share = screen.getByRole('checkbox', { name: 'Share this host' })
+    const share = screen.getByRole('switch', { name: 'Share this host' })
     expect(share).toBeChecked()
     expect(
       screen.getByRole('switch', { name: 'Discover nearby GInfer hosts' })
@@ -179,7 +179,7 @@ describe('Engines host intake and launch controls', () => {
   it('does not change sharing on a remote host', async () => {
     renderExpandedPage()
     expect(
-      screen.getByRole('checkbox', { name: 'Share this host' })
+      screen.getByRole('switch', { name: 'Share this host' })
     ).toBeDisabled()
     expect(
       screen.queryByRole('button', { name: 'Generate pairing code' })
