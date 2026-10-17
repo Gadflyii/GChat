@@ -107,7 +107,7 @@ it('keeps the saved key when editing and removes it only by explicit choice', as
   expect(screen.getByLabelText('API key')).toHaveValue('')
   expect(screen.getByLabelText('API key')).toHaveAttribute(
     'placeholder',
-    'Saved in vault'
+    'Saved in secure storage'
   )
   fireEvent.change(screen.getByLabelText('API key'), {
     target: { value: 'replacement' },

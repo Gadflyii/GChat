@@ -284,7 +284,7 @@ export function BrainSetup({
                     type="password"
                     autoComplete="off"
                     placeholder={
-                      saved?.credential_ref ? 'Saved in vault' : 'If required'
+                      saved?.credential_ref ? 'Saved in secure storage' : 'If required'
                     }
                     value={value.api_key || ''}
                     disabled={Boolean(
@@ -302,7 +302,7 @@ export function BrainSetup({
               <p className="text-xs text-muted-foreground">
                 {saved?.credential_ref
                   ? 'Leave the key blank to keep this bot’s saved key.'
-                  : 'This bot’s key is stored in the vault.'}
+                  : 'This bot’s key is stored in secure storage.'}
               </p>
               {saved?.credential_ref && (
                 <label className="flex items-center gap-2 text-sm">
