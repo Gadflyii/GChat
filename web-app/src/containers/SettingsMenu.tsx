@@ -241,7 +241,7 @@ const SettingsMenu = () => {
           })}
 
           <div className="mt-4 px-2">
-            <NativeIntegrationControls />
+            <NativeIntegrationControls compact />
           </div>
 
           {/* Model Providers section */}

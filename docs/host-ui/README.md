@@ -1,5 +1,24 @@
 # GInfer host UI
 
+## Compact Settings sidebar — C4
+
+`GUI-SETTINGS-SIDEBAR-DENSITY` was reproduced in the native Linux Settings
+walkthrough: the built-in tool descriptions push provider navigation below the
+initial window. Settings now shows compact switch rows and a keyboard-accessible
+Help button to expand their descriptions. Stop status/errors and the Hermes
+settings link remain visible. The Launch page retains the full descriptions.
+C7's provider keyboard links from `da2fe1f1e` are preserved.
+
+Acceptance: rendered help keyboard and switch persistence/stop/retry cases in
+both layouts, one full `make verify`, and a native screenshot at the original
+window size showing the provider section. Source is
+`/ai/gchat-worktrees/c4-settings-sidebar-density-20261017`, branch
+`fix/c4-settings-sidebar-density-20261017`. Evidence belongs to
+`/ai/gchat/out/c4-settings-sweep-20261017/sidebar-density/`. Source preparation is
+in progress; no build or native runtime has started. Next: verification after
+C3's timing return, then private native replay with the fixture owner's grant.
+No Engine, model, provider request or real user-data action is in scope.
+
 ## Provider settings keyboard navigation — C7
 
 `GUI-SETTINGS-PROVIDER-KEYBOARD` fixes the ordinary Settings provider entries
