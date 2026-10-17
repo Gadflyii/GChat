@@ -1,5 +1,31 @@
 # GInfer host UI
 
+## Hardware live statistics wording — C7
+
+`GUI-HARDWARE-LIVE-STATS-WORDING-20261017` corrects the Hardware and system
+monitor message shown below detected GPU details. The first private desktop
+walkthrough observed a stale llama.cpp explanation. Both consumers show this
+message without observing a backend failure, so it must state only that live
+memory statistics are unavailable and that the displayed details come from
+hardware detection. The four supported translations share that meaning.
+
+Owned tree: `/ai/gchat-worktrees/c7-hardware-live-stats-wording-20261017`, branch
+`fix/c7-hardware-live-stats-wording-20261017`, from main `7ac349d05`.
+Acceptance: corrected localized wording, the existing rendered Hardware tests,
+and one `make verify`; then push merge-ready. No new test for a static string,
+Engine/model/GPU execution, backend behavior or resource installation change.
+Implementation `2742956bd` passes all six existing rendered Hardware tests.
+One full `make verify` exited 0 at 16:11:49Z October 17: 3,092 JavaScript
+and 1,079 Rust tests passed, six were skipped and 27 ignored. Lint and types
+passed; lint retains four existing warnings. No Engine or model was run.
+
+Verification used S1 CPU48–55 nice10 in pinned image `ad7f9bf020d7`, private
+offline caches and retained read-only launch profiles. Returned 16:12Z;
+booking2646 canceled. The private S1 copy and container are retired; the donor
+is unchanged. Results are retained in
+`/ai/gchat/out/hardware-live-stats-wording-20261017/{result.json,summary.md}`.
+Next: coordinator merge. The private-catalog walkthrough continues separately.
+
 ## Attachment edits survive navigation — C4
 
 `GUI-SETTINGS-ATTACHMENT-EDIT-LOSS` was reproduced in the current native Linux

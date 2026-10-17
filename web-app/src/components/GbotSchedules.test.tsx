@@ -9,9 +9,12 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import GbotSchedules from './GbotSchedules'
 
-const { request } = vi.hoisted(() => ({ request: vi.fn() }))
+const { request, listen } = vi.hoisted(() => ({
+  request: vi.fn(),
+  listen: vi.fn(),
+}))
 vi.mock('@/services/gbot', () => ({ gbot: request }))
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => vi.fn()) }))
+vi.mock('@tauri-apps/api/event', () => ({ listen }))
 
 const assignment = {
   workspace_id: 'bot-one',
@@ -34,6 +37,8 @@ const schedule = {
 
 beforeEach(() => {
   request.mockReset()
+  listen.mockReset()
+  listen.mockImplementation(async () => vi.fn())
   request.mockImplementation(async (route: string) =>
     route === 'schedules'
       ? {
@@ -62,6 +67,107 @@ function deferred<T>() {
   })
   return { promise, resolve, reject }
 }
+
+function taskUpdate() {
+  const registration = listen.mock.calls.find(
+    ([event]) => event === 'gbot-task-update'
+  )
+  if (!registration) throw new Error('Task update listener is not registered')
+  act(() => registration[1]())
+}
+
+it('does not restore Enabled from an older task-update refresh after Disable succeeds', async () => {
+  const older = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  const disable = deferred<unknown>()
+  const latest = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  request
+    .mockResolvedValueOnce({ schedules: [schedule], stopped: null })
+    .mockReturnValueOnce(older.promise)
+    .mockReturnValueOnce(disable.promise)
+    .mockReturnValueOnce(latest.promise)
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+
+  taskUpdate()
+  fireEvent.click(screen.getByRole('button', { name: 'Disable schedule' }))
+  await act(async () => disable.resolve(undefined))
+  await act(async () =>
+    latest.resolve({
+      schedules: [{ ...schedule, enabled: false }],
+      stopped: null,
+    })
+  )
+  expect(screen.getByRole('button', { name: 'Enable schedule' })).toBeEnabled()
+  await act(async () =>
+    older.resolve({ schedules: [schedule], stopped: null })
+  )
+
+  expect(screen.getByRole('button', { name: 'Enable schedule' })).toBeEnabled()
+  expect(screen.queryByRole('button', { name: 'Disable schedule' })).toBeNull()
+  expect(screen.getByText(/^Disabled ·/)).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it('ignores an older task-update failure after a newer refresh succeeds', async () => {
+  const older = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  const latest = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  request
+    .mockResolvedValueOnce({ schedules: [schedule], stopped: null })
+    .mockReturnValueOnce(older.promise)
+    .mockReturnValueOnce(latest.promise)
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+
+  taskUpdate()
+  taskUpdate()
+  await act(async () =>
+    latest.resolve({
+      schedules: [{ ...schedule, enabled: false }],
+      stopped: null,
+    })
+  )
+  await act(async () => older.reject(new Error('Obsolete service failure')))
+
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Enable schedule' })).toBeEnabled()
+  expect(screen.getByText(/^Disabled ·/)).toBeInTheDocument()
+})
+
+it('keeps the newer stopped scheduler when an older task-update refresh succeeds', async () => {
+  const older = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  const latest = deferred<{
+    schedules: (typeof schedule)[]
+    stopped: string
+  }>()
+  request
+    .mockResolvedValueOnce({ schedules: [schedule], stopped: null })
+    .mockReturnValueOnce(older.promise)
+    .mockReturnValueOnce(latest.promise)
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+
+  taskUpdate()
+  taskUpdate()
+  await act(async () =>
+    latest.resolve({
+      schedules: [{ ...schedule, enabled: false }],
+      stopped: 'Journal failure',
+    })
+  )
+  await act(async () =>
+    older.resolve({ schedules: [schedule], stopped: null })
+  )
+
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Scheduling has stopped: Journal failure'
+  )
+  expect(screen.getByRole('button', { name: 'Enable schedule' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
+  expect(screen.getByText(/^Disabled ·/)).toBeInTheDocument()
+})
 
 it('shows a stopped scheduler outside the collapsed panel and prevents creating a schedule', async () => {
   request.mockResolvedValue({
