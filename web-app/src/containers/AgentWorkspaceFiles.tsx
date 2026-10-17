@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   IconDots,
@@ -193,6 +193,8 @@ export function AgentWorkspaceFiles({
   >({})
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const generation = useRef(0)
+  const latestReads = useRef(new Map<string, symbol>())
   const roots = useMemo(
     () =>
       [workspace.primaryRoot, ...workspace.externalRoots].filter(
@@ -212,6 +214,12 @@ export function AgentWorkspaceFiles({
       path: string
     ): Promise<AgentWorkspaceEntry[] | undefined> => {
       const key = entryKey(root.rootId, path)
+      const requestGeneration = generation.current
+      const request = Symbol()
+      latestReads.current.set(key, request)
+      const isCurrent = () =>
+        generation.current === requestGeneration &&
+        latestReads.current.get(key) === request
       setDirectories((state) => ({
         ...state,
         [key]: { ...state[key], loading: true, error: undefined },
@@ -222,12 +230,14 @@ export function AgentWorkspaceFiles({
           rootPath: root.path,
           relativePath: path || undefined,
         })
+        if (!isCurrent()) return undefined
         setDirectories((state) => ({
           ...state,
           [key]: { entries, loading: false },
         }))
         return entries
       } catch (error) {
+        if (!isCurrent()) return undefined
         setDirectories((state) => ({
           ...state,
           [key]: { loading: false, error: String(error) },
@@ -240,6 +250,9 @@ export function AgentWorkspaceFiles({
 
   useEffect(() => {
     let active = true
+    generation.current += 1
+    latestReads.current.clear()
+    setIsRefreshing(false)
     setDirectories({})
     setExpanded(new Set())
     void Promise.all(
@@ -250,17 +263,21 @@ export function AgentWorkspaceFiles({
     ).then((results) => {
       if (!active) return
       setExpanded(
-        new Set(
-          results
-            .filter(({ entries }) => Boolean(entries?.length))
-            .map(({ root }) => entryKey(root.rootId, ''))
-        )
+        (current) =>
+          new Set([
+            ...current,
+            ...results
+              .filter(({ entries }) => Boolean(entries?.length))
+              .map(({ root }) => entryKey(root.rootId, '')),
+          ])
       )
     })
     return () => {
       active = false
+      generation.current += 1
+      latestReads.current.clear()
     }
-  }, [entryKey, loadDirectory, refreshKey, roots])
+  }, [entryKey, loadDirectory, refreshKey, roots, threadId])
 
   const toggleDirectory = useCallback(
     async (root: ConversationWorkspaceRoot, path: string) => {
@@ -274,10 +291,11 @@ export function AgentWorkspaceFiles({
         return
       }
 
+      const requestGeneration = generation.current
       const cached = directories[key]
       if (cached?.loading) return
       const entries = cached?.entries ?? (await loadDirectory(root, path))
-      if (entries?.length === 0) return
+      if (generation.current !== requestGeneration || entries?.length === 0) return
 
       setExpanded((current) => new Set(current).add(key))
     },
@@ -286,6 +304,7 @@ export function AgentWorkspaceFiles({
 
   const refreshDirectories = useCallback(async () => {
     if (isRefreshing) return
+    const requestGeneration = generation.current
     setIsRefreshing(true)
     try {
       await Promise.all(
@@ -300,7 +319,7 @@ export function AgentWorkspaceFiles({
         })
       )
     } finally {
-      setIsRefreshing(false)
+      if (generation.current === requestGeneration) setIsRefreshing(false)
     }
   }, [directories, isRefreshing, loadDirectory, roots])
 
