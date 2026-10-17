@@ -1,5 +1,27 @@
 # GInfer host UI
 
+## Integration switch guidance — C7
+
+`GUI-INTEGRATION-TOGGLE-GUIDANCE` explains Gbot, OpenCode and Hermes beside
+their persisted switches in Settings and Integrations. Each has a visible
+**Enable** label and an accessible description. Gbot off hides the interface and
+disables sign-in startup while work continues. OpenCode off hides Code; the
+description tells users to use **Stop** first to end running work. Hermes off
+stops its terminal while retaining saved settings. Enabling the terminal tools
+can install them; enabling Gbot still opens its setup. **Hermes settings** remains
+available. Existing actions, defaults and saved choices are unchanged.
+
+Acceptance: focused rendered cases protect the explanations, saved choices,
+navigation and terminal actions; full `make verify` passes. Verification is
+pending. No Engine, installer, model or Windows acceptance run belongs to this
+GUI change. The Windows host-port collision leaf remains a separate item.
+
+Owned source: `/ai/gchat-worktrees/c7-integration-toggle-guidance-20261017`,
+branch `fix/c7-integration-toggle-guidance-20261017`, base `fb15341b1`.
+Results: `/ai/gchat/out/integration-toggle-guidance-20261017/`.
+No live build or model. Next action: focused tests and `make verify` on booked
+CPUs, then push for the coordinator's merge.
+
 ## Profile presentation — OI-077
 
 Ron approved model then card grouping, one recommended measured profile per card,
