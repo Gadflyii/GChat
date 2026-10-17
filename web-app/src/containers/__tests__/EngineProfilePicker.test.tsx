@@ -261,7 +261,7 @@ it('offers declared TP groups and explains cards without a matching profile', ()
   expect(gpu).toHaveValue(JSON.stringify(['GPU-one', 'GPU-two']))
   fireEvent.change(gpu, { target: { value: JSON.stringify(['GPU-three']) } })
   expect(screen.getByLabelText('Hardware profile')).toBeDisabled()
-  expect(screen.getByText(/No profiles match this model on the selected GPU group/)).toBeInTheDocument()
+  expect(screen.getByText(/No saved profile fits this model on the selected graphics cards/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start Server Instance' })).toBeDisabled()
   expect(launch).not.toHaveBeenCalled()
 })
@@ -322,4 +322,13 @@ it('labels screened PRO settings without recommending or increasing their witnes
   fireEvent.click(screen.getByRole('button', { name: 'Start Server Instance' }))
   expect(launch).toHaveBeenCalledWith(expect.objectContaining({ profile_id: 'fixture-c4', gpu_uuids: ['GPU-one'] }))
   expect(screen.queryByText(/256K/)).not.toBeInTheDocument()
+})
+
+it('explains a missing profile in plain words and points to the next step', () => {
+  const data = snapshot()
+  data.instances = []
+  data.launch_profiles = []
+  render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
+  expect(screen.getByText(/No saved hardware profile fits this exact model on this computer yet/)).toBeInTheDocument()
+  expect(document.body).not.toHaveTextContent(/draft format and TP degree/)
 })
