@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Models, Hub, Engine and Hardware walkthrough — C7
+
+`GUI-MODELS-HUB-ENGINE-HARDWARE-20261017` is an ordinary first-user walkthrough
+of Models/Hub, GInfer Hosts, Hardware and Benchmark: discovery, download and
+installation, Load/Unload, profiling, progress, errors and next-action wording.
+Use the current-main `77ccd3624` desktop/Host/resources closure supplied read-only
+by Codex 3, with a fresh private HOME/XDG on local Linux/WSLg. Initial results
+are due 16:00Z October 17. No duplicate build or source test rerun is needed for
+this observation-only pass.
+
+Acceptance: observe the actual ordinary screens and supported actions, distinguish
+completed leaves from missing catalog/resources or unavailable hardware, send real
+findings to Gchat 3's shared GUI list, and fix each confirmed defect on its own
+branch with focused tests and one `make verify`. Do not substitute a seeded
+catalog, fake model, altered defaults or another user's data. Windows host-port
+collision remains a separate leaf awaiting Gchat 2's installed-app handoff.
+
+Current preparation: owned source
+`/ai/gchat-worktrees/c7-models-hub-engine-hardware-20261017`, branch
+`test/c7-models-hub-engine-hardware-20261017`, from `77ccd3624`. Codex 3's
+build 2616 is the pending read-only runnable donor; no C7 desktop, model, build,
+private runtime copy or booking exists. Await its terminal closure receipt and
+Gchat 3's RC Load resource return, then book the actual walkthrough and launch
+with separate Host/Inspector ports. Keep Ron's port 17483 and all existing data
+untouched. Retain concise results under
+`/ai/gchat/out/c7-models-hub-engine-hardware-20261017/` when observations exist;
+release private processes and disposable copies at completion.
+
 ## Global conversation deletion — C7
 
 `GUI-GLOBAL-THREADS-DELETE-SINGLE-SUBMIT-20261017` applies the existing project
