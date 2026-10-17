@@ -118,6 +118,15 @@ it('does not show a number error before a model is chosen, then reports an empti
   expect(screen.getByRole('alert')).toHaveTextContent('Use whole numbers')
 })
 
+it('labels the advanced launch fields with sentence-case names', () => {
+  render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  fireEvent.click(screen.getByText('Server details'))
+  fireEvent.click(screen.getByText('Custom server settings'))
+  fireEvent.click(screen.getByText('Advanced launch settings'))
+  for (const name of ['Draft tokens', 'Draft TP', 'Prefill chunk']) expect(screen.getByLabelText(name)).toBeInTheDocument()
+  expect(screen.queryByLabelText('draft tp')).not.toBeInTheDocument()
+})
+
 it.each(['running', 'cancelling'] as const)('allows an imported model quote and Load during %s optional completion', async (status) => {
   const data: EngineSnapshot = { ...importedModelSnapshot, hardware_profile: {
     status, scope: 'complete_remaining_formats', base_complete: true, scope_complete: false, all_formats_complete: false,

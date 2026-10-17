@@ -12,6 +12,8 @@ import { EngineHardwareProfile } from '@/containers/EngineHardwareProfile'
 import { EngineFirstRun } from '@/containers/EngineFirstRun'
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 
+const advancedFieldLabels = { draft_tokens: 'Draft tokens', draft_tp: 'Draft TP', prefill_chunk: 'Prefill chunk' } as const
+
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
   const refresh = useEngineHosts((s) => s.refresh)
   const [modelId, setModelId] = useState('')
@@ -184,7 +186,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       {launchError && selected && <p role="alert" className="text-sm text-destructive">{launchError}</p>}
       <details className="space-y-3"><summary className="cursor-pointer text-sm">Advanced launch settings</summary>
         <p className="text-sm text-muted-foreground">Zero selects engine defaults for draft count, draft TP and prefill chunk. Draft TP must match the artifact. Memory budgets are bytes. Host KV cache is automatic when blank; zero disables it and a positive value sets its exact size.</p>
-        <div className="grid grid-cols-2 gap-3">{(['draft_tokens', 'draft_tp', 'prefill_chunk'] as const).map((key) => <label className="text-sm" key={key}>{key.replaceAll('_', ' ')}<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options[key]} onChange={(e) => setOptions({ ...options, [key]: Number(e.target.value) })} /></label>)}
+        <div className="grid grid-cols-2 gap-3">{(['draft_tokens', 'draft_tp', 'prefill_chunk'] as const).map((key) => <label className="text-sm" key={key}>{advancedFieldLabels[key]}<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options[key]} onChange={(e) => setOptions({ ...options, [key]: Number(e.target.value) })} /></label>)}
           <label className="text-sm">Host KV cache (bytes, blank = automatic, 0 = disabled)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options.host_kv_cache_bytes ?? ''} onChange={(e) => setOptions({ ...options, host_kv_cache_bytes: e.target.value === '' ? null : Number(e.target.value) })} /></label>
           <label className="text-sm">GPU KV budget (blank = automatic)<Input type="number" min={1} max={Number.MAX_SAFE_INTEGER} value={options.kv_arena_bytes ?? ''} onChange={(e) => setOptions({ ...options, kv_arena_bytes: e.target.value ? Number(e.target.value) : null })} /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Disable CUDA Graphs</label>
