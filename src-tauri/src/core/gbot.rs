@@ -120,7 +120,7 @@ async fn close_views(views: BTreeMap<uuid::Uuid, ViewLease>) {
 impl Connection {
     fn require_service(&self) -> Result<(), String> {
         if self.stopped || !self.authorized {
-            return Err("Gbot service disconnected. Connect to the service to continue.".into());
+            return Err("Gbot service is not running or connected. Use the service button at the top of the Gbot page to start or connect it.".into());
         }
         Ok(())
     }
@@ -892,7 +892,7 @@ mod tests {
             .call(app.handle(), "/v1/state", Value::Null)
             .await
             .unwrap_err();
-        assert!(error.contains("Connect to the service"));
+        assert!(error.contains("start or connect it"));
         for connect in [None, Some(false)] {
             let error = crate::core::connectors::connector_accounts(app.handle().clone(), connect)
                 .await
@@ -958,7 +958,7 @@ mod tests {
             .call(app.handle(), "/v1/state", Value::Null)
             .await
             .unwrap_err()
-            .contains("Connect to the service"));
+            .contains("start or connect it"));
         state.disconnect().await;
         assert!(!state.local_authorized().await);
         assert!(state.connection.lock().await.root.is_none());

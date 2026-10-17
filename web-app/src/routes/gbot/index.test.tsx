@@ -2359,3 +2359,25 @@ it.each([
     expect(mocks.call).not.toHaveBeenCalledWith('view/open', expect.anything())
   }
 )
+
+it('shows one plain not-connected message and hides it while the service starts', async () => {
+  const notConnected =
+    'Gbot service is not running or connected. Use the service button at the top of the Gbot page to start or connect it.'
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockRejectedValue(notConnected)
+  let finish!: () => void
+  mocks.startService.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve
+      })
+  )
+  render(<Page />)
+  expect(await screen.findByRole('alert')).toHaveTextContent(notConnected)
+  fireEvent.click(screen.getByRole('button', { name: 'Start Gbot service' }))
+  expect(
+    screen.getByRole('button', { name: 'Starting Gbot service…' })
+  ).toBeDisabled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  await act(async () => finish())
+})
