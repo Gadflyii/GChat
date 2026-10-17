@@ -13,8 +13,11 @@ reporting merge-ready. Native compilation is explicitly authorized; Ron's
 installed app, settings and sign-in session are excluded. Compilation and
 mocked dispatch do not establish physical inference qualification on RTX 30/40.
 
-Implementation now covers three-archive validation/staging, verified atomic
-installation under `ginfer/windows`, and GPU-selected Host dispatch. Native
+Implementation covers three-archive validation/staging, verified atomic
+installation under `ginfer/windows`, and GPU-selected Host dispatch. Codex 8
+found a P1 in the two CLI/menu cold-Host bootstrap paths: Linux-only runtime-map
+loading would leave Windows using the SM120a seed. Both paths and the real
+bootstrap regression test are being corrected before final review. Native
 PowerShell 5.1 archive-input tests pass (5 tests, including rejection cases).
 The prepared-toolchain option avoids workstation bootstrap/settings changes.
 
@@ -32,6 +35,13 @@ prepared CUDA/MSVC/vcpkg dependencies and durable memory guard, with builds on
 E:. The existing Ninja compile pool bounds compiler memory while retaining
 `cmake --build … -j`. Next: native three-image/package build and native dispatch
 test, then Codex 8 review and architecture startup-path sign-off.
+
+Architecture startup design is signed at `48d690ce8` (23:43Z). Its merge gate
+also requires one real request through a private installed Windows 5090 app,
+showing SM120a dispatch and output token IDs matching the Linux image for the
+same request. This must use an isolated fixture, preserving Ron's installation.
+Windows SM86/SM89 remain physically unqualified until requests run on the
+laptop/Ada hardware; compilation and mocked dispatch alone do not qualify them.
 
 The RC of record remains Linux release `ed68c7443` + Engine `e2282c336` PASS,
 with its Windows installer built and awaiting Ron's Windows sign-in result.

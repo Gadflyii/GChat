@@ -123,9 +123,9 @@ impl InstalledConfiguration {
                 binary: std::env::current_exe().map_err(|e| e.to_string())?,
                 engine: desktop.engine,
                 engine_runtimes: {
-                    #[cfg(target_os = "linux")]
+                    #[cfg(any(target_os = "linux", target_os = "windows"))]
                     { crate::local_host::desktop_runtimes(&desktop.provider)? }
-                    #[cfg(not(target_os = "linux"))]
+                    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
                     { Default::default() }
                 },
                 directory: self.data_dir.clone(),
@@ -1012,6 +1012,50 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[tokio::test]
+    async fn installed_desktop_bootstrap_carries_complete_platform_runtime_map() {
+        let root = tempfile::tempdir().unwrap();
+        let provider = root.path().join("ginfer");
+        let platform = std::env::consts::OS;
+        let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
+        let mut declared = serde_json::json!({"8.6":"sm86", "8.9":"sm89", "12.0":"sm120a"});
+        if cfg!(target_os = "linux") { declared["8.0"] = json!("sm80"); }
+        let mut expected = std::collections::BTreeMap::new();
+        for (architecture, image) in declared.as_object().unwrap() {
+            let path = provider.join(platform).join(image.as_str().unwrap()).join("bin").join(executable);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, image.as_str().unwrap()).unwrap();
+            expected.insert(architecture.clone(), path);
+        }
+        std::fs::write(provider.join(platform).join("runtime-set.json"),
+            serde_json::to_vec(&json!({
+                "schema":format!("ginfer-{platform}-runtime-set-v1"),
+                "platform":format!("{platform}-x64"),
+                "source_commit":"1111111111111111111111111111111111111111",
+                "runtimes":declared,
+            })).unwrap()).unwrap();
+        let directory = provider.join("host");
+        assert!(!directory.exists(), "Exercise a cold desktop Host");
+        let error = InstalledConfiguration {
+            data_dir: directory.clone(),
+            host_url: "https://127.0.0.1:17443".into(),
+            desktop: Some(DesktopBootstrap {
+                provider,
+                engine: expected["12.0"].clone(),
+            }),
+        }.connect_resolving(|owner| async move {
+            let crate::local_host_registry::Owner::Desktop(local) = owner else {
+                panic!("The installed desktop must bootstrap its own Host");
+            };
+            assert_eq!(local.directory, directory);
+            assert_eq!(local.engine_runtimes, expected,
+                "All architecture-specific runtimes must reach the cold-Host bootstrap");
+            Err("bootstrap inspected".into())
+        }).await.err().unwrap();
+        assert_eq!(error, "bootstrap inspected");
+    }
 
     #[test]
     fn local_placement_waits_for_verification_and_profiling_without_control_deadline() {
