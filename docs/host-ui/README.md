@@ -1,5 +1,44 @@
 # GInfer host UI
 
+## Hardware-profile novice guidance — C3, closed October 17
+
+`GCHAT-HARDWARE-PROFILE-NOVICE-GUIDANCE-20261017` is closed for the
+requested purpose, GPU-combination instructions, duration, next actions and
+installed Linux layout. Guidance source `79163635b` and the single-selection
+setup change `1e65674cf` (merge `87e95bf98`) are already in main. The retained
+hardware-card 7/7 and first-run 14/14 focused cases passed; the consolidated
+controls passed 58 focused cases and one `make verify`, recorded in
+`out/hardware-setup-controls-20261017/result.json`. No tests were repeated for
+this evidence-only closure; `git diff --check` is its gate.
+
+Retained native evidence resolves the previously pending layout check:
+
+- `out/claude-gui-models-20261017/hosts2.png` shows one guided GPU selection,
+  why a profile helps, the 1/2/4 matching-card rule, one profile per combination,
+  and **Use selected graphics cards**. **Graphics card details** and
+  **Advanced hardware profile options** are collapsed.
+- `out/claude-gui-models-20261017/hp1.png` shows the expanded manual profile
+  card. Its purpose, **Build profile** action, graphics-card explanation,
+  “10 minutes to an hour or longer” allowance and ability to close the window
+  are readable at 1280×900 without clipping or overlap. **Technical details**
+  remains collapsed; UUIDs, executable paths and raw producer details do not
+  displace the instructions. Build is disabled before a card is selected.
+- The release RC `ed68c7443` / Engine `e2282c336` independently retains the
+  guided text and GPU → folder → model progression in
+  `out/linux-rc-final-20261017/local5090-ed68c7443-e2282c336-release-flash-high/gui-dom-evidence.jsonl`
+  (`hosts-poll-1` and the next four snapshots). C7's private native walkthrough
+  at `77ccd3624` also records the advanced duration/prerequisite text in
+  `out/c7-models-hub-engine-hardware-20261017/result.json`.
+
+These are retained private Linux desktop observations. They establish this
+wording/layout result; measured profiling, later journey/progress changes and
+Windows/release-wide acceptance keep their own gates. No new app, model,
+profile, benchmark or build was launched. C3 owns only the small documentation
+tree `/ai/gchat-worktrees/c3-hardware-profile-guidance-evidence-20261017`,
+branch `docs/c3-hardware-profile-guidance-evidence-20261017`, retained for merge.
+The cited evidence remains with its existing owners; there is no new live job
+or disposable output. Next action: coordinator merge of this closure record.
+
 ## Hardware live statistics wording — C7
 
 `GUI-HARDWARE-LIVE-STATS-WORDING-20261017` corrects the Hardware and system
