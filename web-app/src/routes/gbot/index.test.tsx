@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -75,6 +76,41 @@ afterEach(() => {
   localStorage.removeItem('gbot-control-owner')
   vi.clearAllMocks()
 })
+
+function readyTaskBots(
+  startTask?: (body: Record<string, unknown>) => Promise<unknown>
+) {
+  const identities = [
+    { workspace_id: 'one', session_id: 'writer-session' },
+    { workspace_id: 'two', session_id: 'researcher-session' },
+  ]
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) => {
+      if (path === 'state')
+        return {
+          workspaces: [
+            { id: 'one', name: 'Writer' },
+            { id: 'two', name: 'Researcher' },
+          ],
+          live_sessions: identities,
+          controls: [],
+          assignments: identities.map((identity) => ({
+            workspace_id: identity.workspace_id,
+            connection: { kind: 'endpoint', api_base: 'http://host/v1' },
+            model: 'qwen',
+            context_tokens: 262144,
+            credential_ref: null,
+          })),
+        }
+      if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+      if (path === 'schedules') return { schedules: [], stopped: null }
+      if (path === 'tasks/start') return startTask ? startTask(body) : {}
+      return []
+    }
+  )
+  return identities
+}
 
 it('explicitly recovers an orphaned paused owner while keeping hand-back and setup resume separate', async () => {
   const identity = { workspace_id: 'orphaned-kvm', session_id: 'saved-session' }
@@ -845,6 +881,151 @@ it('isolates bot assignments and approvals, and holds new tasks during takeover'
   ).toBeDisabled()
   expect(sessionStorage.getItem('gbot-control-owner')).toBeTruthy()
   expect(JSON.stringify(sessionStorage)).not.toContain('bot-secret')
+})
+
+it('keeps separate bot task drafts and submits each to its own ready bot', async () => {
+  const identities = readyTaskBots()
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  fireEvent.change(screen.getByLabelText('Bot task'), {
+    target: { value: 'Write a note' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.getByLabelText('Bot task')).toHaveValue('')
+  fireEvent.change(screen.getByLabelText('Bot task'), {
+    target: { value: 'Find sources' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  expect(screen.getByLabelText('Bot task')).toHaveValue('Write a note')
+  fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
+  await waitFor(() => {
+    expect(mocks.call).toHaveBeenCalledWith('tasks/start', {
+      identity: identities[0],
+      prompt: 'Write a note',
+    })
+    expect(screen.getByLabelText('Bot task')).toHaveValue('')
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.getByLabelText('Bot task')).toHaveValue('Find sources')
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
+  await waitFor(() => {
+    expect(mocks.call).toHaveBeenCalledWith('tasks/start', {
+      identity: identities[1],
+      prompt: 'Find sources',
+    })
+    expect(screen.getByLabelText('Bot task')).toHaveValue('')
+  })
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'tasks/start')
+  ).toHaveLength(2)
+})
+
+it('keeps a rejected task draft available for retry', async () => {
+  const submit = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('Task admission refused'))
+    .mockResolvedValueOnce({})
+  const [identity] = readyTaskBots(submit)
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  fireEvent.change(screen.getByLabelText('Bot task'), {
+    target: { value: 'Keep this draft' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
+  await waitFor(() => {
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  })
+  expect(screen.getByLabelText('Bot task')).toHaveValue('Keep this draft')
+  fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
+  await waitFor(() => {
+    expect(submit).toHaveBeenCalledTimes(2)
+    expect(submit).toHaveBeenLastCalledWith({
+      identity,
+      prompt: 'Keep this draft',
+    })
+    expect(screen.getByLabelText('Bot task')).toHaveValue('')
+  })
+})
+
+it.each([false, true])(
+  'clears only the unchanged submitted bot draft after switching while pending (edited: %s)',
+  async (editSubmittedDraft) => {
+    let finish!: () => void
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const submit = vi.fn().mockReturnValue(pending)
+    const [identity] = readyTaskBots(submit)
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Original Writer task' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Run', exact: true }))
+    await waitFor(() =>
+      expect(submit).toHaveBeenCalledWith({
+        identity,
+        prompt: 'Original Writer task',
+      })
+    )
+    if (editSubmittedDraft)
+      fireEvent.change(screen.getByLabelText('Bot task'), {
+        target: { value: 'New Writer draft' },
+      })
+    fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+    expect(screen.getByLabelText('Bot task')).toHaveValue('')
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Researcher draft' },
+    })
+    await act(async () => finish())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+    )
+    expect(screen.getByLabelText('Bot task')).toHaveValue('Researcher draft')
+    fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+    expect(screen.getByLabelText('Bot task')).toHaveValue(
+      editSubmittedDraft ? 'New Writer draft' : ''
+    )
+    expect(submit).toHaveBeenCalledTimes(1)
+  }
+)
+
+it('resets task drafts only after explicit service selection succeeds', async () => {
+  readyTaskBots()
+  mocks.selectService
+    .mockRejectedValueOnce(new Error('Service selection failed'))
+    .mockResolvedValueOnce(undefined)
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  fireEvent.change(screen.getByLabelText('Bot task'), {
+    target: { value: 'Writer draft' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  fireEvent.change(screen.getByLabelText('Bot task'), {
+    target: { value: 'Researcher draft' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Service computer' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Use this service' }))
+  await screen.findByText('Error: Service selection failed')
+  expect(screen.getByLabelText('Bot task')).toHaveValue('Researcher draft')
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  expect(screen.getByLabelText('Bot task')).toHaveValue('Writer draft')
+  fireEvent.click(screen.getByRole('button', { name: 'Use this service' }))
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: 'Use this service' })
+    ).not.toBeInTheDocument()
+  )
+  await screen.findByRole('heading', { name: 'Writer' })
+  expect(screen.getByLabelText('Bot task')).toHaveValue('')
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.getByLabelText('Bot task')).toHaveValue('')
+  expect(mocks.selectService).toHaveBeenCalledTimes(2)
+  expect(mocks.selectService).toHaveBeenLastCalledWith({ kind: 'local' })
 })
 
 it('sends task-bound human replies and declines, retaining them after reload', async () => {
