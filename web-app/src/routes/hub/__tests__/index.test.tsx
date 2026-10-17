@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModelManagement } from '@/containers/ModelManagement'
+import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
 import type { ModelRelease } from '@/lib/model-release'
 import type { LocalModelLoadProgress } from '@/services/engines'
 const mocks = vi.hoisted(() => ({
@@ -98,6 +99,21 @@ describe('host-scoped Models', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('This download did not finish: SHA256 mismatch. Try again, or delete the partial download')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Resume download' })).not.toBeInTheDocument()
+  })
+  it('says it is checking, not that there are no downloads, until the Host has answered', async () => {
+    useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
+    let answer!: (jobs: unknown[]) => void
+    mocks.command.mockImplementation(action => action === 'local_model_downloads'
+      ? new Promise(resolve => { answer = resolve }) : Promise.resolve([]))
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    try {
+      expect(screen.getByText('Checking for downloads…')).toBeInTheDocument()
+      expect(screen.queryByText('No downloads on this host.')).not.toBeInTheDocument()
+    } finally {
+      await act(async () => { answer([]) })
+    }
+    expect(await screen.findByText('No downloads on this host.')).toBeInTheDocument()
   })
   it('disables mutations against an offline host even with saved inventory', async () => {
     const user = userEvent.setup()

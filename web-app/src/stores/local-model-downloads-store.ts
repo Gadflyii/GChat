@@ -8,9 +8,9 @@ import { AppEvent, events } from '@gchat/core'
 let pending: Promise<void> | null = null
 let installedSnapshot = ''
 const requested = new Set<string>()
-type State = { jobs: ModelDownload[]; error: string | null; acknowledge: (job: ModelDownload) => void; refresh: () => Promise<void> }
+type State = { jobs: ModelDownload[]; loaded: boolean; error: string | null; acknowledge: (job: ModelDownload) => void; refresh: () => Promise<void> }
 export const useLocalModelDownloads = create<State>((set, get) => ({
-  jobs: [], error: null,
+  jobs: [], loaded: false, error: null,
   acknowledge: job => { if (job.status !== 'installed') requested.add(job.id) },
   refresh: () => {
     if (pending) return pending
@@ -23,7 +23,7 @@ export const useLocalModelDownloads = create<State>((set, get) => ({
           useModelProvider.getState().setProviders(await getServiceHub().providers().getProviders())
           installedSnapshot = installed
         }
-        if (JSON.stringify(jobs) !== JSON.stringify(get().jobs) || get().error) set({ jobs, error: null })
+        if (JSON.stringify(jobs) !== JSON.stringify(get().jobs) || get().error || !get().loaded) set({ jobs, loaded: true, error: null })
         for (const job of newlyInstalled) {
           requested.delete(job.id)
           events.emit(AppEvent.onModelImported, {

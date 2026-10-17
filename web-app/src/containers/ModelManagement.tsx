@@ -70,6 +70,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const [showUnavailable, setShowUnavailable] = useState(false)
   const localDownloads = useLocalModelDownloads(s => s.jobs)
   const localDownloadError = useLocalModelDownloads(s => s.error)
+  const localDownloadsLoaded = useLocalModelDownloads(s => s.loaded)
   const refreshLocal = useLocalModelDownloads(s => s.refresh)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -280,7 +281,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
       </>}
       {tab === 'Downloads' && <>
         <p className="text-sm text-muted-foreground">{formatModelBytes(partialBytes)} not yet finished · {formatModelBytes(totalInstalled)} {local ? 'downloaded here' : 'installed'}. Only one model downloads at a time on each computer.</p>
-        {!downloads.length && <p className="rounded-xl border p-6 text-center text-muted-foreground">No downloads on this host.</p>}
+        {!downloads.length && <p className="rounded-xl border p-6 text-center text-muted-foreground">{local && !localDownloadsLoaded && !localDownloadError ? 'Checking for downloads…' : 'No downloads on this host.'}</p>}
         {downloads.map(job => <section key={job.id} className="space-y-2 rounded-xl border p-4"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-medium">{job.release.name}</h2><span className="text-sm text-muted-foreground">{downloadStatusLabel(job.status)}</span></div><progress aria-label={`${job.release.name} download`} className="h-2 w-full accent-primary" max={job.release.bytes} value={job.received} /><p className="font-mono text-xs tabular-nums">{formatModelBytes(job.received)} / {formatModelBytes(job.release.bytes)}{job.bytes_per_second > 0 ? ` · ${(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s · ~${Math.ceil((job.release.bytes - job.received) / job.bytes_per_second)}s remaining` : ''}</p>
           {job.status === 'failed' && <p role="alert" className="text-sm text-destructive">This download did not finish{job.error ? `: ${job.error.replace(/[.\s]+$/, '')}.` : '.'} Try again, or delete the partial download and start over.</p>}<div className="flex gap-2">
             {['queued', 'downloading'].includes(job.status) && <Button variant="outline" disabled={busy || offline} onClick={() => void transferAction(job, 'pause')}>Pause</Button>}
