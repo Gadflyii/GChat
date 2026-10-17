@@ -148,7 +148,7 @@ describe('host-scoped Models', () => {
   })
   it('explains a model with no saved startup settings by name and links to GInfer Hosts', async () => {
     spyConfirm().mockReturnValueOnce(true)
-    mocks.switchModel.mockRejectedValue(new Error('Failed to load 483343c2deadbeef: No qualified automatic profile is available for this model.'))
+    mocks.switchModel.mockRejectedValue(Object.assign(new Error('Failed to load 483343c2deadbeef: No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     const alert = await screen.findByRole('alert')

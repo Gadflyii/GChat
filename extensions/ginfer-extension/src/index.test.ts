@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { normalizeGinferConfig } from '../../../src-tauri/plugins/tauri-plugin-ginfer/guest-js/index'
+import { loadFailure } from './util'
 
 const settings = JSON.parse(
   readFileSync(resolve(process.cwd(), 'settings.json'), 'utf8')
@@ -41,5 +42,15 @@ describe('bundled GInfer profile', () => {
     expect(setting('lm_head_draft')).toBeUndefined()
     expect(setting('kv_capacity')).toBeUndefined()
     expect(setting('max_context')).toBeUndefined()
+  })
+})
+
+describe('Host load failures', () => {
+  it('exposes a leading Host code as error.code and keeps the message plain', () => {
+    const failure = loadFailure('Qwen', new Error('[no_qualified_profile] No qualified automatic profile is available.'))
+    expect(failure.message).toBe('Failed to load Qwen: No qualified automatic profile is available.')
+    expect((failure as Error & { code?: string }).code).toBe('no_qualified_profile')
+    expect(loadFailure('Qwen', 'boom')).toMatchObject({ message: 'Failed to load Qwen: boom' })
+    expect((loadFailure('Qwen', 'boom') as Error & { code?: string }).code).toBeUndefined()
   })
 })
