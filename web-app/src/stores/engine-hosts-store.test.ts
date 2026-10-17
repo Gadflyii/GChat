@@ -6,6 +6,8 @@ import { engineCommand } from '@/services/engines'
 const providers = vi.hoisted(() => ({
   getProviderByName: vi.fn(() => ({ provider: 'ginfer-lan' })),
   updateProvider: vi.fn(),
+  selectModelProvider: vi.fn(),
+  selectedModel: null as unknown,
 }))
 vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: { getState: () => providers },
@@ -171,5 +173,26 @@ describe('Host facade address projection', () => {
     await useEngineHosts.getState().refresh()
     const projection = providers.updateProvider.mock.calls.at(-1)?.[1]
     expect(projection.models[0].displayName).toBe('Qwen 3.8 27B — 2-bit mix — Ron-PC')
+  })
+  describe('chat model selection from the running instance', () => {
+    const host = { host_id: 'local', local: true, name: 'This computer' }
+    const snapshot = (ids: string[]) => ({ host_id: 'local', display_name: 'This computer',
+      instances: ids.map(id => ({ instance_id: id, display_name: id, status: 'ready', configuration: {} })) })
+    it('selects the only ready model when nothing is chosen', () => {
+      providers.selectModelProvider.mockClear()
+      providers.selectedModel = null
+      useEngineHosts.setState({ hosts: [host] as never, errors: {} })
+      useEngineHosts.getState().publishSnapshot('local', snapshot(['one']) as never)
+      expect(providers.selectModelProvider.mock.calls).toEqual([['ginfer-lan', 'ginfer/local/one']])
+    })
+    it('keeps an explicit choice and does not guess among several ready models', () => {
+      providers.selectModelProvider.mockClear()
+      useEngineHosts.setState({ hosts: [host] as never, errors: {} })
+      providers.selectedModel = { id: 'chosen' }
+      useEngineHosts.getState().publishSnapshot('local', snapshot(['one']) as never)
+      providers.selectedModel = null
+      useEngineHosts.getState().publishSnapshot('local', snapshot(['one', 'two']) as never)
+      expect(providers.selectModelProvider.mock.calls).toEqual([])
+    })
   })
 })

@@ -33,7 +33,7 @@ it('saves explicit GPU selection before choosing storage without starting profil
   const start = await screen.findByRole('button', { name: 'Use selected graphics cards' })
   expect(start).toBeDisabled()
   expect(screen.getByText(/each combination needs its own hardware profile/)).toBeVisible()
-  const technicalIdentity = screen.getByText(/RTX 5090: GPU-one/ )
+  const technicalIdentity = screen.getByText(/RTX 5090 · NVIDIA compatibility 12.0/)
   expect(technicalIdentity).not.toBeVisible()
   fireEvent.click(screen.getByText('Graphics card details'))
   expect(technicalIdentity).toBeVisible()
@@ -459,4 +459,14 @@ it('returns to model choice when the person picks a different model after a fail
   fireEvent.click(await screen.findByRole('button', { name: 'Choose a different model' }))
   expect(await screen.findByRole('button', { name: 'Download selected models' })).toBeInTheDocument()
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'reselect' })
+})
+
+it('scrolls the setup card into view after a step is saved', async () => {
+  const scroll = vi.fn()
+  Element.prototype.scrollIntoView = scroll
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => { cb(0); return 0 })
+  mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('models', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } }) : flow('storage', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } })))
+  await act(async () => { render(<EngineFirstRun />) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Use this folder' }))
+  await waitFor(() => expect(scroll.mock.calls.length).toBeGreaterThan(0))
 })

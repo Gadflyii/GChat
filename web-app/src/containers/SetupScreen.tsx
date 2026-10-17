@@ -46,8 +46,8 @@ export default function SetupScreen({ onSkipped }: { onSkipped?: () => void }) {
               Chat with a model, connect a GInfer host, or set up Gbot.
             </p>
           </div>
-          <CredentialSetup />
           <EngineFirstRun onComplete={() => finish(route.engines.index)} />
+          <CredentialSetup />
           <section className="space-y-3 rounded-xl border p-5">
             <h2 className="font-medium">Find a model for this computer</h2>
             <p className="text-sm text-muted-foreground">
