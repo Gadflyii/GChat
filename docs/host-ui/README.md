@@ -14,10 +14,18 @@ both layouts, one full `make verify`, and a native screenshot at the original
 window size showing the provider section. Source is
 `/ai/gchat-worktrees/c4-settings-sidebar-density-20261017`, branch
 `fix/c4-settings-sidebar-density-20261017`. Evidence belongs to
-`/ai/gchat/out/c4-settings-sweep-20261017/sidebar-density/`. The candidate includes the tested attachment-durability fix and current main.
-Next: focused and full verification using the retained private S1 cache, then
-private native replay with the fixture owner's grant; C3 returned at 15:49Z.
+`/ai/gchat/out/c4-settings-sweep-20261017/sidebar-density/`. The candidate includes
+the tested attachment-durability fix and current main. All 35 focused cases
+and one full `make verify` pass: 2,981 frontend tests, 119 extension tests,
+1,079 Rust tests and 59 Node contracts. Six frontend tests were skipped and
+27 Rust tests ignored; lint, types, quality checks and all six critical
+coverage floors passed. Lint retains four warnings. Returned 16:07Z;
+booking2647 canceled, with the private cache retained for the remaining gates.
+Next: integrate the separately gated attachment availability and labels,
+build the final native app, then capture the compact sidebar in the private
+fixture at the original window size.
 No Engine, model, provider request or real user-data action is in scope.
+
 ## Attachment edits survive navigation — C4
 
 `GUI-SETTINGS-ATTACHMENT-EDIT-LOSS` was reproduced in the current native Linux
