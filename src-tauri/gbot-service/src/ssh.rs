@@ -102,17 +102,17 @@ impl fmt::Display for SshError {
             Self::UnsupportedCredentialAlgorithm => f.write_str("SSH credentials must use Ed25519, ECDSA or RSA"),
             Self::ImportFailed => f.write_str("SSH credential import could not complete"),
             Self::InvalidPolicy => f.write_str("SSH timeouts and keepalive count must be positive"),
-            Self::PeerRejected => f.write_str("Guest SSH key does not match the selected peer"),
-            Self::AuthenticationRejected => f.write_str("Guest rejected the selected SSH credential"),
-            Self::Transport => f.write_str("Guest SSH transport failed"),
-            Self::TimedOut => f.write_str("Guest SSH connection or liveness check timed out"),
-            Self::Protocol => f.write_str("Guest transport did not return the expected protocol message"),
-            Self::Closed => f.write_str("Guest SSH connection is closed"),
-            Self::CleanupUnproven => f.write_str("Guest SSH transport cleanup could not be confirmed"),
+            Self::PeerRejected => f.write_str("This computer’s SSH identity does not match the one you approved. Check the address, or check its identity again if the computer was rebuilt."),
+            Self::AuthenticationRejected => f.write_str("The bot’s computer did not accept GChat’s SSH key. Add the public key GChat shows to that computer’s authorized keys, or check the user name."),
+            Self::Transport => f.write_str("GChat could not keep a secure SSH connection to the bot’s computer. Check that it is on, reachable and running SSH."),
+            Self::TimedOut => f.write_str("The bot’s computer did not answer in time. Check that it is turned on, on the same network, and that the address and SSH port are right."),
+            Self::Protocol => f.write_str("The bot’s computer replied in a way GChat did not expect. Check that the Gbot desktop tools are installed and up to date on it."),
+            Self::Closed => f.write_str("The connection to the bot’s computer was closed. Reconnect and try again."),
+            Self::CleanupUnproven => f.write_str("GChat could not confirm that it closed its connection to the bot’s computer. Reconnect before continuing."),
             Self::DesktopRestarted { saved_invocation_id, current_invocation_id, display } => write!(f,
-                "Guest desktop restarted on :{display} (saved invocation {}, current invocation {})",
+                "The bot’s desktop restarted (display :{display}) since this task began; its earlier session is gone. Saved invocation {}, current invocation {}.",
                 saved_invocation_id.simple(), current_invocation_id.simple()),
-            Self::UncertainOutcome { .. } => f.write_str("Guest operation outcome is unknown; inspect its operation identity before retrying"),
+            Self::UncertainOutcome { .. } => f.write_str("GChat cannot tell whether the bot’s computer finished that step. Check the bot’s desktop before retrying so nothing runs twice."),
         }
     }
 }
@@ -1210,4 +1210,27 @@ async fn view_owner(
         }
     }
     result
+}
+
+#[cfg(test)]
+mod plain_error_tests {
+    use super::*;
+
+    #[test]
+    fn connection_errors_speak_of_the_bots_computer_and_say_what_to_check() {
+        for error in [
+            SshError::PeerRejected,
+            SshError::AuthenticationRejected,
+            SshError::Transport,
+            SshError::TimedOut,
+            SshError::Protocol,
+            SshError::Closed,
+            SshError::CleanupUnproven,
+        ] {
+            let text = error.to_string();
+            assert!(!text.contains("Guest") && !text.contains("liveness"), "{text}");
+            assert!(text.contains("bot’s computer") || text.contains("computer’s"), "{text}");
+        }
+        assert!(SshError::TimedOut.to_string().contains("turned on"));
+    }
 }
