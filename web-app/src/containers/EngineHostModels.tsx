@@ -10,7 +10,7 @@ import { EngineInstanceSettings } from '@/containers/EngineInstanceSettings'
 import { EngineProfilePicker } from '@/containers/EngineProfilePicker'
 import { EngineHardwareProfile } from '@/containers/EngineHardwareProfile'
 import { EngineFirstRun } from '@/containers/EngineFirstRun'
-import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
+import { hostInstanceLabel, hostModelLabel, identityLabel, weightsDrafterDetail } from '@/lib/engine-host-labels'
 import { formatModelBytes } from '@/lib/model-release'
 
 const advancedFieldLabels = { draft_tokens: 'Draft tokens', draft_tp: 'Draft TP', prefill_chunk: 'Prefill chunk' } as const
@@ -169,7 +169,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         setGpus(model?.metadata.tp_size === 1 && available.length === 1 ? [available[0].uuid] : [])
       }}>
         <option value="">Choose an installed model</option>
-        {snapshot.models.map((m) => <option key={m.id} value={m.id}>{hostModelLabel(m)} · TP{m.metadata.tp_size} · {(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GB{m.artifact_set ? ' · deployment set' : ''}</option>)}
+        {snapshot.models.map((m) => <option key={m.id} value={m.id} title={weightsDrafterDetail(m.metadata.identity.weights_id)}>{hostModelLabel(m)} · TP{m.metadata.tp_size} · {(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GB{m.artifact_set ? ' · deployment set' : ''}</option>)}
       </select></label>
       <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />GPU {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
       <div className="flex flex-wrap gap-4">
@@ -204,7 +204,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             .catch(error => { if (quoteRevision.current === revision) setStartupQuote({ key, error: String(error) }) })
             .finally(() => setBusy(false))
         }}>Check startup settings</Button>
-        {currentQuote?.result && <p role="status" className="text-sm">Verified artifact: {currentQuote.result.model_identity.model_id} / {currentQuote.result.model_identity.weights_id}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'instance' : 'instances'}. {currentQuote.result.kv_arena_bytes === null ? 'Automatic KV; a solo startup must measure graph memory before sharing.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU memory for the conversation cache (KV) per instance.`} This check did not start a model.</p>}
+        {currentQuote?.result && <p role="status" className="text-sm">Verified artifact: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'instance' : 'instances'}. {currentQuote.result.kv_arena_bytes === null ? 'Automatic KV; a solo startup must measure graph memory before sharing.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU memory for the conversation cache (KV) per instance.`} This check did not start a model.</p>}
         {currentQuote?.error && <p role="alert" className="text-sm text-destructive">{currentQuote.error}</p>}
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {

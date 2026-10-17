@@ -375,10 +375,10 @@ describe('Engines host intake and launch controls', () => {
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(instance).toHaveTextContent(
-      'Qwen3.8 27B · NVFP4 · 4 concurrent · 131,072 context · GPU 1'
+      'Qwen 3.8 27B — NVFP4 · 4 concurrent · 131,072 context · GPU 1'
     )
     expect(instance).not.toHaveTextContent('internal-id')
-    expect(model).toHaveTextContent('Qwen3.8 27B · NVFP4')
+    expect(model).toHaveTextContent('Qwen 3.8 27B — NVFP4')
     fireEvent.change(instance, { target: { value: 'internal-id-0' } })
     fireEvent.click(screen.getByRole('button', { name: 'Start', exact: true }))
     await waitFor(() =>
