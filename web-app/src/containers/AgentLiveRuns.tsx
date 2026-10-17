@@ -82,6 +82,8 @@ function LiveRun({
   const deleting = useStudioRuns((s) => s.deleting)
   const [selected, setSelected] = useState<string>()
   const [pending, setPending] = useState<string[]>([])
+  const [stopping, setStopping] = useState(false)
+  const stopPending = useRef(false)
   const resolvingApprovals = useRef(new Set<string>())
   if (!run) return null
 
@@ -90,6 +92,19 @@ function LiveRun({
   )
   const stages = run.state.trace.stages
   const detail = stages.find((s) => `${id}:${s.id}` === selected)
+  const stop = async () => {
+    if (stopPending.current) return
+    stopPending.current = true
+    setStopping(true)
+    try {
+      await cancelAgentTurn(id)
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      stopPending.current = false
+      setStopping(false)
+    }
+  }
   return (
     <article key={id} className="rounded-lg border bg-card p-4 space-y-3">
       <div className="flex justify-between gap-3">
@@ -107,11 +122,11 @@ function LiveRun({
           {running && (
             <Button
               variant="outline"
-              onClick={() =>
-                void cancelAgentTurn(id).catch((e) => toast.error(String(e)))
-              }
+              disabled={stopping}
+              aria-busy={stopping}
+              onClick={() => void stop()}
             >
-              Stop run
+              {stopping ? 'Stopping…' : 'Stop run'}
             </Button>
           )}
           <Button
@@ -128,6 +143,11 @@ function LiveRun({
           </Button>
         </div>
       </div>
+      {stopping && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Requesting stop for {run.name}…
+        </p>
+      )}
       {run.approvals.map((approval) => {
         const approvalId =
           approval.type === 'approval_requested'
