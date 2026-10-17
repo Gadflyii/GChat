@@ -16,13 +16,22 @@ Engine, model, GPU or provider operation belongs to this source change.
 
 Owned source: `/ai/gchat-worktrees/c7-assistant-save-result-20261017`, branch
 `fix/c7-assistant-save-result-20261017`, base `68cc55bba`. Subject plan/results
-are here; concise verification results will be retained in
+are here; concise verification results are retained in
 `/ai/gchat/out/assistant-save-result-20261017/{result.json,summary.md}`.
-The persistence, editor and both caller changes are implemented, including
-pending/rejection/retry tests in the store, real editor, settings and nested
-project flow. S1 CPU48–55 booking2611 covers the private offline verification
-copy through15:22Z; no Engine or GPU operation. Next: run these focused cases
-and one full `make verify`, then retain concise results and retire that copy.
+Implementation `cc36c51cb` passes all 42 focused store, real-editor, settings
+and nested-project cases. One full `make verify` exited 0 at 15:04:18Z on
+October17: 2,926 frontend tests, 119 extension tests, 59 Node contract tests
+and 1,076 Rust tests passed; six frontend tests were skipped and 27 Rust tests
+ignored. Lint, types, quality checks and all six critical coverage floors passed;
+lint retains three existing warnings.
+
+Verification used S1 CPU48–55 nice10 in pinned image `ad7f9bf020d7`, private
+offline caches and retained read-only profiles. No installed UI, Engine, GPU,
+model, Ensure or install operation ran. Returned15:04Z; booking2611 canceled.
+The private verification source/cache copy and exited container were retired
+at15:06Z; the read-only donor remains untouched. Next: coordinator merge of the isolated branch, then the
+current-main Models/Hub/Engine/Hardware walkthrough with a fresh private home
+after Gchat3's RC Load return, using Codex3's read-only runnable closure.
 Windows host-port collision remains pending Gchat2's installed RC handoff.
 
 ## Global conversation deletion — C7
