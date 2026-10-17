@@ -276,7 +276,12 @@ fn last_log_reason(log: &Path) -> String {
     let Ok(text) = std::fs::read_to_string(log) else {
         return String::new();
     };
-    let Some(line) = text.lines().rev().map(str::trim).find(|line| !line.is_empty()) else {
+    let Some(line) = text
+        .lines()
+        .rev()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+    else {
         return String::new();
     };
     let reason = line.strip_prefix("Gbot service failed: ").unwrap_or(line);
@@ -377,7 +382,9 @@ mod tests {
         .err()
         .unwrap();
         assert!(
-            error.contains("(exit status: 1): Gbot secure storage: Secure storage is unavailable; see "),
+            error.contains(
+                "(exit status: 1): Gbot secure storage: Secure storage is unavailable; see "
+            ),
             "{error}"
         );
         assert!(!error.contains("old line"), "{error}");
