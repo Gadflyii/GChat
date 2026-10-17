@@ -183,6 +183,8 @@
   "regenerate": "Regenerate",
   "threadImage": "Thread image",
   "editMessage": "Edit Message",
+  "editMessageNeedsModel": "Select a model to edit this message",
+  "threadActionsFor": "More actions for {{title}}",
   "deleteMessage": "Delete Message",
   "deleteThread": "Delete Thread",
   "renameThread": "Rename Thread",

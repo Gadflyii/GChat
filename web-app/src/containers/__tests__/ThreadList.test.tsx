@@ -163,6 +163,18 @@ describe('ThreadList active highlight', () => {
     expect(inactiveButton).toHaveAttribute('data-active', 'false')
   })
 
+  it('names each row\'s actions button after its thread', async () => {
+    vi.mocked(useParams).mockReturnValue({ threadId: 'thread-1' } as never)
+
+    await act(async () => {
+      render(<ThreadList threads={threads} />)
+    })
+
+    expect(
+      screen.getByText('common:threadActionsFor')
+    ).toBeInTheDocument()
+  })
+
   it('marks no thread active when not on a thread route', async () => {
     vi.mocked(useParams).mockReturnValue({} as never)
 

@@ -230,7 +230,9 @@ const ThreadItem = memo(
               )}
             >
               <MoreHorizontal />
-              <span className="sr-only">More</span>
+              <span className="sr-only">
+                {t('common:threadActionsFor', { title: threadTitle })}
+              </span>
             </SidebarMenuAction>
           </DropdownMenuTrigger>
           <DropdownMenuContent
