@@ -214,6 +214,11 @@ If a generated HTML preview cannot load, GChat shows an error. Choose
 **Retry preview** to try again. **Code** remains available so you can read
 the HTML while the preview is unavailable.
 
+## Copying generated HTML
+
+Choose **Copy** to copy the generated HTML source. If copying fails, GChat
+shows an error. Try **Copy** again, or open **Code** and select the text.
+
 ## Saving generated HTML
 
 Choose **Download** to select where to save the generated HTML. If saving
