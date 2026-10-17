@@ -94,6 +94,8 @@ interface HardwareStore {
   hardwareData: HardwareData
   /** Fresh hardware enumeration completed during this app session. */
   hardwareReady: boolean
+  selectedGpuUuids: string[] | null
+  setSelectedGpuUuids: (uuids: string[] | null) => void
   systemUsage: SystemUsage
 
   // Update functions
@@ -126,6 +128,8 @@ export const useHardware = create<HardwareStore>()(
     (set) => ({
       hardwareData: defaultHardwareData,
       hardwareReady: false,
+      selectedGpuUuids: null,
+      setSelectedGpuUuids: (uuids) => set({ selectedGpuUuids: uuids === null ? null : [...uuids] }),
       systemUsage: defaultSystemUsage,
       gpuLoading: {},
       pollingPaused: false,

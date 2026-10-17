@@ -17,6 +17,7 @@ interface ChangeDataFolderLocationProps {
   currentPath: string
   newPath: string
   onConfirm: () => void
+  pending?: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -26,6 +27,7 @@ export default function ChangeDataFolderLocation({
   currentPath,
   newPath,
   onConfirm,
+  pending = false,
   open,
   onOpenChange,
 }: ChangeDataFolderLocationProps) {
@@ -33,7 +35,7 @@ export default function ChangeDataFolderLocation({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent>
+      <DialogContent aria-busy={pending}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <IconFolder size={20} />
@@ -68,15 +70,15 @@ export default function ChangeDataFolderLocation({
 
         <DialogFooter className="flex items-center gap-2">
           <DialogClose asChild>
-            <Button variant="ghost" size="sm">
+            <Button variant="ghost" size="sm" disabled={pending}>
               {t('settings:dialogs.changeDataFolder.cancel')}
             </Button>
           </DialogClose>
-          <DialogClose asChild>
-            <Button size="sm" onClick={onConfirm}>
-              {t('settings:dialogs.changeDataFolder.changeLocation')}
-            </Button>
-          </DialogClose>
+          <Button size="sm" onClick={onConfirm} disabled={pending}>
+            {pending
+              ? t('common:loading')
+              : t('settings:dialogs.changeDataFolder.changeLocation')}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

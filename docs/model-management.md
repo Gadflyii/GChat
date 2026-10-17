@@ -214,6 +214,16 @@ never manufacture Vision support or alter a profile's DFlash setting.
 
 - `full-context-tested`: `full_context_requests` equals profile concurrency.
   Full-length execution was physically tested. Omit `calculation` and `smoke_requests`.
+- `screened-startup`: **screened, not full-context qualified**. A recorded startup
+  and concurrent short-request witness is available, with measured startup free
+  memory meeting the saved headroom. Set `full_context_requests: 0`, set
+  `smoke_requests` to concurrency, and omit `calculation`; this tier makes no
+  full-context capacity claim. Automatic KV may remain unset. Keep context at or
+  below the exact witness and preserve its options, artifact hash and Engine.
+  The Linux RTX PRO 6000 Flash Next pure 2-bit entry (SHA256
+  `8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`)
+  is capped at 131072, TP1/C8/INT8 KV. Its historical startup witness is
+  `pm-v2-20261015-caaddfaa2f53831e`; full qualification is Ron's OI-072 release gate.
 - `calculated-startup-smoke`: `full_context_requests` is zero and `smoke_requests`
   equals profile concurrency. Actual short requests were submitted concurrently
   using the saved full-context settings; this does not assert an exact scheduler
@@ -422,3 +432,16 @@ settings. Start submits a profile selection, Manage provides start/stop/restart/
 switch, and Refresh rescans models and profiles. LAN clients pair from GChat when
 sharing is enabled. Quitting the menu leaves host-owned processes and downloads running.
 The menu shows starting state until a refreshed snapshot reports ready or failed.
+
+### GPUs for installed Load
+
+On **Models → Installed**, choose **Automatic (visible GPUs only)** or select the
+GPU UUIDs required by the model's TP size. The choice is saved in the existing
+hardware settings. Load waits for fresh hardware information; a disconnected saved
+GPU requires a new selection. An explicit device choice is passed to the Host and
+cannot silently reuse an instance running on different GPUs.
+
+The Host also enforces `CUDA_VISIBLE_DEVICES`. Automatic uses its ordered visible
+devices; an explicit selection outside that set is refused. An empty value or `-1`
+disables all devices. GPU UUIDs are stable identities; CUDA integer entries are
+resolved against the physical inventory before visibility is filtered.

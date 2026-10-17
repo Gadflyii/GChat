@@ -1,5 +1,5 @@
 use crate::{
-    engine_host::{EngineLaunch, HostProcesses, LaunchOptions},
+    engine_host::{EngineLaunch, GpuDeviceOrders, HostProcesses, LaunchOptions},
     engine_inventory::{artifact_set_members, inspect_artifact, ArtifactMetadata},
     transport::HostCertificate,
 };
@@ -29,6 +29,11 @@ pub struct Gpu {
     #[serde(default)]
     pub compute_capability: Option<String>,
 }
+pub struct GpuInventory {
+    pub gpus: Vec<Gpu>,
+    pub device_orders: GpuDeviceOrders,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ModelEntry {
     pub id: Uuid,
@@ -94,6 +99,9 @@ pub struct Persistent {
     /// Successful Flash startup graph allowances, bound to producer and recipe.
     #[serde(default)]
     pub graph_receipts: BTreeMap<String, u64>,
+    /// Exact payload receipts, including imported artifacts, survive Host restart.
+    #[serde(default)]
+    pub payload_verifications: BTreeMap<PathBuf, crate::payload_verification::PayloadVerification>,
     #[serde(default)]
     pub local_artifacts: Vec<PathBuf>,
     #[serde(default)]
@@ -116,6 +124,8 @@ pub struct Host {
     pub inventory_errors: RwLock<Vec<serde_json::Value>>,
     inventory_dirty: AtomicBool,
     pub gpus: Vec<Gpu>,
+    pub cuda_visible_gpu_uuids: Vec<String>,
+    pub gpu_device_orders: GpuDeviceOrders,
     pub boot_id: Uuid,
     pub revision: Arc<AtomicU64>,
     pub directory: PathBuf,
@@ -124,6 +134,7 @@ pub struct Host {
     pub(crate) lifecycle: Mutex<()>,
     pub(crate) first_run_operation: Mutex<()>,
     normal_stop_enabled: AtomicBool,
+    normal_stop_quit_enabled: AtomicBool,
     normal_stopping: AtomicBool,
     normal_stop_admission: RwLock<()>,
     normal_stop_notification: Notify,
@@ -274,6 +285,23 @@ impl Host {
         gpus: Vec<Gpu>,
         desktop_provider: Option<PathBuf>,
     ) -> Result<Arc<Self>, String> {
+        Self::open_with_gpu_inventory(
+            directory, name, engine, model_dirs, artifact_sets,
+            GpuInventory { gpus, device_orders: GpuDeviceOrders::default() },
+            desktop_provider,
+        ).await
+    }
+
+    pub async fn open_with_gpu_inventory(
+        directory: PathBuf,
+        name: String,
+        engine: PathBuf,
+        model_dirs: Vec<PathBuf>,
+        artifact_sets: Vec<PathBuf>,
+        inventory: GpuInventory,
+        desktop_provider: Option<PathBuf>,
+    ) -> Result<Arc<Self>, String> {
+        let GpuInventory { gpus, device_orders } = inventory;
         if desktop_provider
             .as_ref()
             .is_some_and(|provider| !provider.is_absolute() || directory != provider.join("host"))
@@ -320,6 +348,7 @@ impl Host {
                 models: BTreeMap::new(),
                 profiles: BTreeMap::new(),
                 graph_receipts: BTreeMap::new(),
+                payload_verifications: BTreeMap::new(),
                 local_artifacts: vec![],
                 managed_model_root: None,
                 first_run: Default::default(),
@@ -349,9 +378,21 @@ impl Host {
             &path,
             &serde_json::to_vec(&data).map_err(|e| e.to_string())?,
         )?;
+        let mask = std::env::var("CUDA_VISIBLE_DEVICES").map(Some).or_else(|error| {
+            if matches!(error, std::env::VarError::NotPresent) { Ok(None) }
+            else { Err("CUDA_VISIBLE_DEVICES must be valid Unicode".to_string()) }
+        })?;
+        let device_order = std::env::var("CUDA_DEVICE_ORDER").map(Some).or_else(|error| {
+            if matches!(error, std::env::VarError::NotPresent) { Ok(None) }
+            else { Err("CUDA_DEVICE_ORDER must be valid Unicode".to_string()) }
+        })?;
+        let cuda_visible_gpu_uuids = device_orders.resolve(
+            &gpus.iter().map(|gpu| gpu.uuid.clone()).collect::<Vec<_>>(),
+            mask.as_deref(), device_order.as_deref(),
+        )?;
         let mut processes = HostProcesses::new(
             engine,
-            gpus.iter().map(|g| g.uuid.clone()).collect(),
+            cuda_visible_gpu_uuids.iter().cloned().collect(),
             Duration::from_secs(600),
         )?;
         processes.configure_runtimes(
@@ -373,7 +414,7 @@ impl Host {
         processes.hardware_profile.as_ref().unwrap()
             .set_activity_notification(process_activity.clone());
         let draft_width = crate::draft_width::DraftWidths::open(
-            &directory, revision.clone(), process_activity)?;
+            &directory, revision.clone(), process_activity.clone())?;
         let downloads = match desktop_provider {
             Some(provider) => crate::model_downloads::ModelDownloads::open_local(
                 provider.join("models"),
@@ -384,6 +425,7 @@ impl Host {
                 directory.join("model-downloads.json"),
             )?,
         };
+        downloads.set_activity_notification(process_activity);
         if let Some(root) = &data.managed_model_root {
             std::fs::create_dir_all(root).map_err(|e| e.to_string())?;
             downloads.set_root(root.canonicalize().map_err(|e| e.to_string())?);
@@ -406,6 +448,8 @@ impl Host {
             inventory: RwLock::new(vec![]),
             inventory_errors: RwLock::new(vec![]),
             inventory_dirty: AtomicBool::new(false),
+            cuda_visible_gpu_uuids,
+            gpu_device_orders: device_orders,
             gpus,
             boot_id: Uuid::new_v4(),
             revision,
@@ -415,6 +459,7 @@ impl Host {
             lifecycle: Mutex::new(()),
             first_run_operation: Mutex::new(()),
             normal_stop_enabled: AtomicBool::new(false),
+            normal_stop_quit_enabled: AtomicBool::new(false),
             normal_stopping: AtomicBool::new(false),
             normal_stop_admission: RwLock::new(()),
             normal_stop_notification: Notify::new(),
@@ -425,9 +470,15 @@ impl Host {
         host.scan().await?;
         Ok(host)
     }
-    /// Only the Windows desktop-managed process enables this control. Services
-    /// retain their existing SCM/signal lifetime and Linux client quit is unchanged.
+    /// Windows desktop-managed processes offer an explicit Stop and Quit control.
     pub fn enable_normal_stop(&self) {
+        self.normal_stop_quit_enabled.store(true, Ordering::SeqCst);
+        self.enable_relocation_stop();
+    }
+
+    /// Linux desktop-managed processes support idle root handoff without changing
+    /// the existing client/Manager Quit behavior or advertising a Stop/Quit control.
+    pub fn enable_relocation_stop(&self) {
         self.normal_stop_enabled.store(true, Ordering::SeqCst);
     }
 
@@ -457,7 +508,7 @@ impl Host {
             return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"local administrator credential required"})));
         }
         if !self.normal_stop_enabled.load(Ordering::SeqCst) {
-            return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"Normal Host Stop is available only for a Windows desktop-managed Host"})));
+            return Ok(json(StatusCode::FORBIDDEN, serde_json::json!({"error":"Normal Host Stop is available only for a desktop-managed Host"})));
         }
         #[derive(Deserialize)]
         struct Stop {
@@ -603,6 +654,35 @@ impl Host {
         }
         self.downloads.set_root(root.clone());
         Ok(root)
+    }
+    async fn verify_qualified_payload(
+        &self, payload: PathBuf, sha256: String, bytes: u64,
+    ) -> Result<(), String> {
+        let mut previous: Vec<_> = self.data.lock().await.payload_verifications
+            .get(&payload).cloned().into_iter().collect();
+        if let Some(installed) = self.downloads.installed_verification(&payload, &sha256, bytes).await {
+            previous.push(installed);
+        }
+        let path = payload.clone();
+        let verification = tokio::task::spawn_blocking(move || {
+            crate::payload_verification::verify(&path, &sha256, bytes, previous.iter())
+        }).await.map_err(|e| e.to_string())?
+            .map_err(crate::launch_profiles::profile_verification_error)?;
+        let mut data = self.data.lock().await;
+        if data.payload_verifications.get(&payload) == Some(&verification) {
+            return Ok(());
+        }
+        let previous = data.payload_verifications.insert(payload.clone(), verification);
+        let persisted = serde_json::to_vec(&*data).map_err(|e| e.to_string())
+            .and_then(|bytes| write_private(&self.directory.join("host.json"), &bytes));
+        if let Err(error) = persisted {
+            match previous {
+                Some(record) => { data.payload_verifications.insert(payload, record); }
+                None => { data.payload_verifications.remove(&payload); }
+            }
+            return Err(error);
+        }
+        Ok(())
     }
     pub async fn save(&self) -> Result<(), String> {
         let data = self.data.lock().await;
@@ -1036,7 +1116,7 @@ impl Host {
         }
         let engine_presets_available = !available_profiles.is_empty() || !max_perf_profiles.is_empty();
         let mut snapshot = serde_json::json!({"protocol_version":1,"host_id":host_id,"boot_id":self.boot_id,
-            "can_stop_host":self.normal_stop_enabled.load(Ordering::SeqCst),
+            "can_stop_host":self.normal_stop_quit_enabled.load(Ordering::SeqCst),
             "local_identity":{"state_directory":state_directory,"platform":std::env::consts::OS},
             "management_origin":management_origin,"management_notice":management_notice,
             "lan_sharing": {"enabled":network["enabled"],"managed":network["managed"],
@@ -1049,7 +1129,7 @@ impl Host {
             "hardware_profile":hardware_profile,
             "first_run":{"complete":first_run_complete},
             "draft_width_calibrations":self.draft_width.status(),
-            "gpus":self.gpus,"models":models,
+            "gpus":self.gpus,"cuda_visible_gpu_uuids":self.cuda_visible_gpu_uuids,"gpu_device_orders":self.gpu_device_orders,"models":models,
             "inventory_errors":*self.inventory_errors.read().await,
             "profile_error":*self.profile_error.read().await,
             "model_management":{"version":1,"downloads":self.downloads.list().await,
@@ -1207,9 +1287,8 @@ impl Host {
             {
                 return Err("GPU group is not qualified for this profile".into());
             }
-            tokio::task::spawn_blocking(move || profile.verify_payload(&payload))
-                .await
-                .map_err(|e| e.to_string())??;
+            self.verify_qualified_payload(payload, profile.artifact_sha256, profile.artifact_bytes)
+                .await?;
         }
         let limit = request.options.validate_target(
             &metadata.identity,
@@ -2509,6 +2588,16 @@ mod normal_stop_tests {
     }
 
     #[tokio::test]
+    async fn relocation_stop_keeps_linux_quit_controls_hidden() {
+        let (_directory, host, token, body) = fixture().await;
+        host.enable_relocation_stop();
+        assert_eq!(host.snapshot().await["can_stop_host"], false);
+        let (status, reply) = stop(&host, &token, body).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        assert_eq!(reply["stopping"], true);
+    }
+
+    #[tokio::test]
     async fn normal_stop_requires_desktop_mode_admin_and_exact_process_identity() {
         let (_directory, host, token, body) = fixture().await;
         assert_eq!(host.snapshot().await["can_stop_host"], false);
@@ -2630,6 +2719,33 @@ mod normal_stop_tests {
 mod target_launch_tests {
     use super::*;
 
+    #[tokio::test]
+    async fn qualified_payload_receipt_survives_restart_and_rejects_modified_payload() {
+        use sha2::Digest;
+        let directory = tempfile::tempdir().unwrap();
+        let state = directory.path().join("state");
+        let payload = directory.path().join("imported.ginfer");
+        std::fs::write(&payload, b"verified").unwrap();
+        let sha256 = hex::encode(Sha256::digest(b"verified"));
+        let open = || Host::open(state.clone(), "Verification test".into(),
+            std::env::current_exe().unwrap(), vec![], vec![], vec![]);
+        let host = open().await.unwrap();
+        host.verify_qualified_payload(payload.clone(), sha256.clone(), 8).await.unwrap();
+        let journal = std::fs::read(state.join("host.json")).unwrap();
+        let recorded = host.data.lock().await.payload_verifications[&payload].clone();
+        drop(host);
+        let reopened = open().await.unwrap();
+        assert_eq!(reopened.data.lock().await.payload_verifications[&payload], recorded);
+        reopened.verify_qualified_payload(payload.clone(), sha256.clone(), 8).await.unwrap();
+        assert_eq!(std::fs::read(state.join("host.json")).unwrap(), journal,
+            "An unchanged receipt does not rewrite the journal");
+        std::fs::write(&payload, b"modified").unwrap();
+        assert_eq!(reopened.verify_qualified_payload(payload.clone(), sha256, 8).await.unwrap_err(),
+            "profile does not qualify this artifact payload");
+        assert_eq!(reopened.data.lock().await.payload_verifications[&payload], recorded,
+            "A failed hash must not replace the durable receipt");
+    }
+
     async fn installed_flash(
         weights: &str,
         calibrated: bool,
@@ -2693,6 +2809,142 @@ mod target_launch_tests {
             options: LaunchOptions::default(),
         };
         (dir, host, request)
+    }
+
+    #[tokio::test]
+    async fn ordinary_download_resume_wakes_parked_first_run_maintenance() {
+        use sha2::Digest;
+
+        let (dir, host, _) = installed_flash("groupwise-int", false).await;
+        let artifact = std::fs::read(&host.inventory.read().await[0].path).unwrap();
+        let sha256 = hex::encode(Sha256::digest(&artifact));
+        let root = host.downloads.root();
+        let id = Uuid::new_v4();
+        let release = crate::model_downloads::Release {
+            name: "Paused first-run fixture".into(),
+            identity: host.inventory.read().await[0].metadata.identity.clone(),
+            url: format!(
+                "https://huggingface.co/SectileLabs/fixture/resolve/{}/model.ginfer",
+                "a".repeat(40)
+            ),
+            sha256: sha256.clone(),
+            bytes: artifact.len() as u64,
+            tp: 1,
+            qualified_sm: vec!["12.0".into()],
+            min_vram_mib_per_gpu: 1,
+            capabilities: vec![],
+            launch_profiles: vec![],
+        };
+        release.validate().unwrap();
+        // Resume verifies this complete package locally; the test never needs
+        // a network transfer, and installed work still needs its startup quote.
+        let package = root.join(format!("{sha256}.ginfer"));
+        std::fs::write(&package, &artifact).unwrap();
+        let download = crate::model_downloads::Download {
+            id,
+            release,
+            status: "paused".into(),
+            received: artifact.len() as u64,
+            bytes_per_second: 0,
+            error: None,
+            path: None,
+            storage_root: root,
+            verification: None,
+        };
+        std::fs::write(
+            host.directory.join("model-downloads.json"),
+            serde_json::to_vec(&BTreeMap::from([(id, download)])).unwrap(),
+        )
+        .unwrap();
+        host.data.lock().await.first_run = crate::first_run::Progress {
+            gpu_uuids: vec!["GPU-test".into()],
+            storage_accepted: true,
+            catalog_loaded: true,
+            selected_release_ids: vec![sha256],
+            download_ids: vec![id],
+            ..Default::default()
+        };
+        host.save().await.unwrap();
+        drop(host);
+        let host = Host::open(
+            dir.path().join("state"),
+            "Resume fixture".into(),
+            std::env::current_exe().unwrap(),
+            vec![dir.path().join("models")],
+            vec![],
+            vec![Gpu {
+                uuid: "GPU-test".into(),
+                name: "Test".into(),
+                display_name: None,
+                memory_mib: 32768,
+                compute_capability: Some("12.0".into()),
+            }],
+        )
+        .await
+        .unwrap();
+        assert!(!host.processes.lock().await.needs_monitoring());
+        assert!(
+            !host.first_run_pending().await,
+            "A paused download must let the monitor park"
+        );
+        let activity = host.processes.lock().await.activity_notification();
+        let notified = activity.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        assert!(matches!(
+            futures_util::poll!(notified.as_mut()),
+            std::task::Poll::Pending
+        ));
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let request = |action| {
+            Request::post("/host/v1/download-actions")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::from(
+                    serde_json::json!({"id":id,"action":action}).to_string(),
+                ))
+                .unwrap()
+        };
+        let rejected = host.clone().route(request("invalid")).await.unwrap();
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+        assert!(
+            matches!(
+                futures_util::poll!(notified.as_mut()),
+                std::task::Poll::Pending
+            ),
+            "Rejected actions must not wake the parked monitor"
+        );
+
+        let response = host.clone().route(request("resume")).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(
+            matches!(
+                futures_util::poll!(notified.as_mut()),
+                std::task::Poll::Ready(())
+            ),
+            "Ordinary Resume must wake the already-parked monitor"
+        );
+        assert!(
+            host.first_run_pending().await,
+            "Resumed work must restore maintenance ticks"
+        );
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let jobs = host.downloads.list().await;
+                assert_ne!(jobs[0].status, "failed", "{:?}", jobs[0].error);
+                if jobs[0].status == "installed" {
+                    assert_eq!(jobs[0].path.as_ref(), Some(&package));
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(
+            host.first_run_pending().await,
+            "Installation must keep the pending startup quote awake"
+        );
+        assert!(!host.processes.lock().await.has_children());
     }
 
     #[tokio::test]
@@ -3760,6 +4012,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             host.downloads.seed_concurrent_resource_jobs(job_ids.iter().enumerate().map(|(index, id)| crate::model_downloads::Download {
                 id:*id,release:release.clone(),status:if index == 0 { "queued" } else { "paused" }.into(),received:0,bytes_per_second:0,error:None,path:None,
                 storage_root:host.downloads.root(),
+                verification: None,
             }).collect()).await;
             let mut expected_jobs = host.downloads.list().await;
             expected_jobs.iter_mut().find(|job| job.id == job_ids[0]).unwrap().status = "paused".into();
@@ -4187,6 +4440,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
                 capabilities: vec![], launch_profiles: vec![],
             }, status: "installed".into(), received: 4096, bytes_per_second: 0,
             error: None, path: Some(payload.clone()), storage_root: host.downloads.root(),
+            verification: None,
         };
         std::fs::write(
             dir.path().join("state/model-downloads.json"),

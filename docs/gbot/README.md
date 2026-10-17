@@ -117,6 +117,11 @@ failed media/transport cleanup remain explicit failures. Cached setup transports
 are rechecked before creating an operation. See the
 [desktop renewal decision](../decisions/2026-10-16-renew-idle-gbot-setup-after-proven-desktop-restart.md).
 
+Automatic saved setup renewals queue before acquiring workspace lifecycle and task
+admission. Cancellation and service stopping are rechecked after the wait;
+contention from user work or workspace removal still refuses renewal. Human,
+paused and unresolved-operation protections remain unchanged.
+
 Gbot bootstrap now reports a child's exit status and log path promptly when no
 concurrent service owns the data folder. Concurrent-owner waiting remains intact.
 Two focused Host cases, compilation and strict all-target Clippy pass on

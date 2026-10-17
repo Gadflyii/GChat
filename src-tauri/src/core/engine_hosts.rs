@@ -66,6 +66,138 @@ fn client_slot() -> &'static OnceLock<Arc<Client>> {
 fn client() -> &'static Arc<Client> {
     client_slot().get_or_init(|| Arc::new(Client::new(None, Arc::new(NativeVault))))
 }
+
+// A bootstrap must read the selected root and attach under the same fence as a
+// Settings move. Otherwise a waiter could restart the old root after cutover.
+pub(crate) fn data_folder_access() -> &'static tokio::sync::RwLock<()> {
+    static ACCESS: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
+    &ACCESS
+}
+
+pub async fn relocate_app_data_folder<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    destination: std::path::PathBuf,
+) -> Result<(), String> {
+    use crate::core::app::commands::{get_app_configurations, get_configuration_file_path};
+    use tauri::Manager;
+    crate::core::setup::wait_for_bundled_resources(app).await?;
+    let _access = data_folder_access().write().await;
+    let mut configuration = get_app_configurations(app.clone());
+    let current = std::path::PathBuf::from(&configuration.data_folder);
+    let configuration_file = get_configuration_file_path(app.clone());
+    let resources = app.path().resource_dir().map_err(|e| e.to_string())?;
+    relocate_data_folder_with(client(), &current, &destination, &resources, |selected| {
+        configuration.data_folder = selected.to_string_lossy().into_owned();
+        ginfer_host::service::write_private(&configuration_file,
+            &serde_json::to_vec(&configuration).map_err(|e| e.to_string())?)
+    }, |local| async move { local.ensure_running().await.map(|_| ()) }).await
+}
+
+fn validate_data_folder_move(current: &std::path::Path, destination: &std::path::Path)
+    -> Result<(std::path::PathBuf, std::path::PathBuf), String>
+{
+    if !current.is_absolute() || !destination.is_absolute() || destination.parent().is_none() {
+        return Err("App Data must use an absolute folder below a filesystem root".into());
+    }
+    std::fs::create_dir_all(current).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(destination).map_err(|e| format!("Cannot create the new App Data folder: {e}"))?;
+    let current = current.canonicalize().map_err(|e| e.to_string())?;
+    let destination = destination.canonicalize().map_err(|e| e.to_string())?;
+    if current.starts_with(&destination) || destination.starts_with(&current) {
+        return Err("Choose a separate App Data folder; the current folder and its parent or child folders cannot be used".into());
+    }
+    // A refused handoff can leave only the empty ownership-lock hierarchy. Keep
+    // retries possible without deleting/replacing an inode another process uses.
+    let mut directory = destination.clone();
+    for (name, regular_file) in [("ginfer", false), ("host", false), ("host.lock", true)] {
+        if !directory.try_exists().map_err(|e| e.to_string())? { break; }
+        for entry in std::fs::read_dir(&directory).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let kind = entry.file_type().map_err(|e| e.to_string())?;
+            if entry.file_name() != name || (regular_file && (!kind.is_file() || entry.metadata().map_err(|e| e.to_string())?.len() != 0))
+                || (!regular_file && !kind.is_dir())
+            {
+                return Err("Choose an empty App Data folder so existing files or another Host are not overwritten".into());
+            }
+        }
+        directory.push(name);
+    }
+    Ok((current, destination))
+}
+
+async fn relocate_data_folder_with<P, S, F>(
+    client: &Client,
+    current: &std::path::Path,
+    destination: &std::path::Path,
+    resources: &std::path::Path,
+    mut persist: P,
+    restart: S,
+) -> Result<(), String>
+where
+    P: FnMut(&std::path::Path) -> Result<(), String>,
+    S: Fn(ginfer_host::local_host::LocalHost) -> F,
+    F: std::future::Future<Output = Result<(), String>>,
+{
+    // Startup registration hashes the exact saved path, not its
+    // canonical spelling. Keep it until the reversible cutover is complete.
+    let configured_current = current.to_path_buf();
+    let (current, destination) = validate_data_folder_move(current, destination)?;
+    let rollback_current = &configured_current;
+    // The independent Gbot service also writes this tree. Do not copy its live
+    // state or allow another starter to acquire the old root during the move.
+    let gbot_directory = current.join("gbot");
+    let _gbot_owner = ginfer_host::service_owner::ServiceOwner::acquire(&gbot_directory)
+        .map_err(|error| format!("Quit the Gbot service before changing App Data, then try again. {error}"))?;
+    let old_local = relocation_desktop_host(&current, resources)?;
+    let guard = client.prepare_local_relocation(&old_local.directory, &destination.join("ginfer/host")).await?;
+    let was_running = guard.had_running_host();
+    // Host and Gbot ownership stay reserved. Copying host.lock would replace or
+    // write through a reserved lock file, defeating the handoff fence.
+    let prepared = (|| {
+        crate::core::app::helpers::copy_dir_recursive(&current, &destination,
+            &[".uvx", ".npx", "openclaw"],
+            &[old_local.directory.join("host.lock"), gbot_directory.join("host.lock")])
+            .map_err(|e| format!("Failed to copy App Data: {e}"))?;
+        let updated = relocation_desktop_host(&destination, resources)?;
+        Ok::<_, String>(updated)
+    })();
+    let updated = match prepared {
+        Ok(updated) => updated,
+        Err(error) => {
+            drop(guard);
+            if was_running {
+                if let Err(recovery) = restart(old_local).await {
+                    return Err(format!("{error}. App Data remains at {}; restarting its Host also failed: {recovery}", current.display()));
+                }
+            }
+            return Err(error);
+        }
+    };
+    let committed = crate::core::gbot::with_relocated_startup(
+        &configured_current, &destination, resources, || {
+            persist(&destination)?;
+            if let Err(error) = guard.commit(updated.clone()) {
+                if let Err(rollback) = persist(rollback_current) {
+                    return Err(format!("Host root handoff failed: {error}. Restoring App Data configuration also failed: {rollback}; restart GChat after checking Settings"));
+                }
+                return Err(error);
+            }
+            Ok(())
+        },
+    );
+    if let Err(error) = committed {
+        if was_running {
+            if let Err(recovery) = restart(old_local).await {
+                return Err(format!("{error}. App Data remains at {}; restarting its Host also failed: {recovery}", current.display()));
+            }
+        }
+        return Err(error);
+    }
+    if was_running {
+        restart(updated).await.map_err(|error| format!("Data moved to {}; Host restart failed: {error}. Start the Host again from Manager", destination.display()))?;
+    }
+    Ok(())
+}
 #[cfg(any(windows, test))]
 fn configured_stop_directory(configuration: &std::path::Path) -> Result<std::path::PathBuf, String> {
     let saved: crate::core::app::models::AppConfiguration = serde_json::from_slice(
@@ -99,6 +231,7 @@ pub async fn shared_client() -> Result<Arc<Client>, String> {
 }
 pub async fn initialize<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     crate::core::setup::wait_for_bundled_resources(app).await?;
+    let _access = data_folder_access().read().await;
     let data_folder = crate::core::app::commands::get_jan_data_folder_path(app.clone());
     #[cfg(test)]
     let _ = client_slot().set(Arc::new(Client::new(
@@ -148,11 +281,32 @@ fn installed_desktop_host(
     data_folder: &std::path::Path,
     _resource_directory: &std::path::Path,
 ) -> Result<ginfer_host::local_host::LocalHost, String> {
-    let provider = data_folder.join("ginfer");
+    let local = desktop_host_paths(data_folder, _resource_directory)?;
     #[cfg(target_os = "linux")]
-    let engine_runtimes = ginfer_host::local_host::desktop_runtimes(&provider)?;
-    #[cfg(not(target_os = "linux"))]
-    let engine_runtimes = Default::default();
+    let local = { let mut local = local; local.engine_runtimes = ginfer_host::local_host::desktop_runtimes(&data_folder.join("ginfer"))?; local };
+    Ok(local)
+}
+
+// Moving an unused installation is allowed before hardware/runtime setup. If a
+// runtime set exists, retain its strict validation and rebuild paths at the new root.
+fn relocation_desktop_host(data_folder: &std::path::Path, resources: &std::path::Path)
+    -> Result<ginfer_host::local_host::LocalHost, String>
+{
+    let local = desktop_host_paths(data_folder, resources)?;
+    #[cfg(target_os = "linux")]
+    let local = { let mut local = local;
+        if data_folder.join("ginfer/linux/runtime-set.json").try_exists().map_err(|e| e.to_string())? {
+            local.engine_runtimes = ginfer_host::local_host::desktop_runtimes(&data_folder.join("ginfer"))?;
+        }
+        local
+    };
+    Ok(local)
+}
+
+fn desktop_host_paths(data_folder: &std::path::Path, _resource_directory: &std::path::Path)
+    -> Result<ginfer_host::local_host::LocalHost, String>
+{
+    let provider = data_folder.join("ginfer");
     #[cfg(target_os = "linux")]
     let binary = provider.join("bin/ginfer-host");
     #[cfg(not(target_os = "linux"))]
@@ -176,7 +330,7 @@ fn installed_desktop_host(
         engine,
         directory: provider.join("host"),
         desktop_provider: Some(provider),
-        engine_runtimes,
+        engine_runtimes: Default::default(),
         models: vec![],
         artifact_sets: vec![],
         name: ginfer_host::local_host::computer_name()?,
@@ -206,6 +360,7 @@ async fn ensure_desktop_host<R: tauri::Runtime>(
 ) -> Result<ginfer_host::launcher::LocalControl, String> {
     use tauri::Manager;
     crate::core::setup::wait_for_bundled_resources(app).await?;
+    let _access = data_folder_access().read().await;
     #[cfg(feature = "hardware")]
     require_local_hardware().await?;
     let local = installed_desktop_host(
@@ -222,7 +377,8 @@ pub async fn prepare_installed_hardware<R: tauri::Runtime>(
 ) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
     use tauri::Manager;
     crate::core::setup::wait_for_bundled_resources(&app).await?;
-    prepare_installed_hardware_from_paths(
+    let _access = data_folder_access().read().await;
+    prepare_installed_hardware_unlocked(
         crate::core::app::commands::get_jan_data_folder_path(app.clone()),
         app.path().resource_dir().map_err(|e| e.to_string())?,
         None,
@@ -231,6 +387,15 @@ pub async fn prepare_installed_hardware<R: tauri::Runtime>(
 }
 
 pub async fn prepare_installed_hardware_from_paths(
+    data_folder: std::path::PathBuf,
+    resource_directory: std::path::PathBuf,
+    gpu_uuids: Option<Vec<String>>,
+) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
+    let _access = data_folder_access().read().await;
+    prepare_installed_hardware_unlocked(data_folder, resource_directory, gpu_uuids).await
+}
+
+async fn prepare_installed_hardware_unlocked(
     data_folder: std::path::PathBuf,
     resource_directory: std::path::PathBuf,
     gpu_uuids: Option<Vec<String>>,
@@ -839,6 +1004,126 @@ mod live_tests;
 #[cfg(test)]
 mod registration_tests {
     use super::*;
+
+    #[test]
+    fn data_folder_move_rejects_aliases_and_foreign_data_but_allows_lock_only_retry() {
+        let root = tempfile::tempdir().unwrap();
+        let current = root.path().join("current");
+        let destination = root.path().join("selected");
+        std::fs::create_dir_all(&current).unwrap();
+        assert!(validate_data_folder_move(&current, &current).is_err());
+        assert!(validate_data_folder_move(&current, root.path()).is_err());
+        assert!(validate_data_folder_move(&current, &current.join("nested")).is_err());
+        #[cfg(unix)]
+        {
+            let alias = root.path().join("alias");
+            std::os::unix::fs::symlink(&current, &alias).unwrap();
+            assert!(validate_data_folder_move(&current, &alias).is_err());
+        }
+        std::fs::create_dir_all(destination.join("ginfer/host")).unwrap();
+        std::fs::write(destination.join("ginfer/host/host.lock"), []).unwrap();
+        assert!(validate_data_folder_move(&current, &destination).is_ok());
+        std::fs::write(destination.join("ginfer/host/host.json"), b"foreign state").unwrap();
+        assert!(validate_data_folder_move(&current, &destination).unwrap_err().contains("empty"));
+        assert_eq!(std::fs::read(destination.join("ginfer/host/host.json")).unwrap(), b"foreign state");
+        assert!(validate_data_folder_move(&current, std::path::Path::new("relative")).is_err());
+    }
+
+    #[tokio::test]
+    async fn data_folder_move_refuses_a_running_gbot_before_copy_or_host_changes() {
+        let root = tempfile::tempdir().unwrap();
+        let current = root.path().join("old");
+        let destination = root.path().join("new");
+        let owner = ginfer_host::service_owner::ServiceOwner::acquire(&current.join("gbot")).unwrap();
+        std::fs::write(current.join("gbot/state.json"), b"live bot state").unwrap();
+        let client = Client::new(Some(root.path().join("shared-hosts.json")), Arc::new(NativeVault));
+        let error = relocate_data_folder_with(&client, &current, &destination, &root.path().join("resources"),
+            |_| panic!("a running Gbot must refuse configuration changes"),
+            |_| async { panic!("a running Gbot must refuse Host changes") }).await.unwrap_err();
+        assert!(error.contains("Quit the Gbot service"), "{error}");
+        assert_eq!(std::fs::read(current.join("gbot/state.json")).unwrap(), b"live bot state");
+        assert!(!destination.join("gbot").exists(), "live state must not be copied");
+        assert!(!current.join("ginfer").exists(), "Host handoff must not begin");
+        drop(owner);
+        let _available = ginfer_host::service_owner::ServiceOwner::acquire(&current.join("gbot")).unwrap();
+    }
+
+    #[tokio::test]
+    async fn data_folder_move_copies_owned_state_and_rolls_back_configuration_failure() {
+        const FIXTURE: &str = "GCHAT_DATA_FOLDER_MOVE_FIXTURE";
+        let root = match std::env::var_os(FIXTURE) {
+            Some(root) => std::path::PathBuf::from(root),
+            None => {
+                let root = tempfile::tempdir().unwrap();
+                let result = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "core::engine_hosts::registration_tests::data_folder_move_copies_owned_state_and_rolls_back_configuration_failure", "--nocapture"])
+                    .env(FIXTURE, root.path())
+                    .env("XDG_CONFIG_HOME", root.path().join("config"))
+                    .env("APPDATA", root.path().join("config"))
+                    .output().unwrap();
+                assert!(result.status.success(), "{}{}", String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+                return;
+            }
+        };
+        for refuse_configuration in [false, true] {
+            let selected = root.join(if refuse_configuration { "refused" } else { "committed" });
+            let current = selected.join("old");
+            let destination = selected.join("new");
+            let resources = selected.join("resources");
+            std::fs::create_dir_all(&current).unwrap();
+            std::fs::create_dir_all(&destination).unwrap();
+            let current = current.canonicalize().unwrap();
+            let destination = destination.canonicalize().unwrap();
+            let directory = current.join("ginfer/host");
+            let host = ginfer_host::service::Host::open(directory.clone(), "Move fixture".into(),
+                std::env::current_exe().unwrap(), vec![], vec![], vec![]).await.unwrap();
+            let snapshot = host.snapshot().await;
+            drop(host);
+            let original_state = std::fs::read(directory.join("host.json")).unwrap();
+            std::fs::write(directory.join("host.lock"), b"source lock must not be copied").unwrap();
+            std::fs::write(current.join("chat-history.json"), b"retained conversation").unwrap();
+            std::fs::create_dir_all(current.join("gbot")).unwrap();
+            std::fs::write(current.join("gbot/state.json"), b"retained bot state").unwrap();
+            let mut local = relocation_desktop_host(&current, &resources).unwrap();
+            local.listen = "127.0.0.1:17121".parse().unwrap();
+            let locator = ginfer_host::local_host_registry::locator_path().unwrap();
+            std::fs::create_dir_all(locator.parent().unwrap()).unwrap();
+            std::fs::write(locator.parent().unwrap().join("local-host.lock"), []).unwrap();
+            ginfer_host::service::write_private(&locator, &serde_json::to_vec(&json!({
+                "schema":"ginfer-local-host-v1", "owner":ginfer_host::local_host_registry::Owner::Desktop(Box::new(local))
+            })).unwrap()).unwrap();
+            let configuration = selected.join("settings.json");
+            let persist = |path: &std::path::Path| ginfer_host::service::write_private(&configuration,
+                &serde_json::to_vec(&json!({"data_folder":path})).unwrap());
+            persist(&current).unwrap();
+            let client = Client::new(Some(selected.join("shared-hosts.json")), Arc::new(NativeVault));
+            client.set_local_directory(directory.clone()).await.unwrap();
+            let result = relocate_data_folder_with(&client, &current, &destination, &resources,
+                |path| {
+                    assert!(ginfer_host::service_owner::ServiceOwner::acquire(&current.join("gbot")).is_err(),
+                        "Gbot ownership must remain reserved until the handoff commits");
+                    if refuse_configuration && path == destination.as_path() { Err("fixture configuration denied".into()) } else { persist(path) }
+                },
+                |_| async { panic!("an unused Host must not be started by a data move") }).await;
+            let expected = if refuse_configuration { &current } else { &destination };
+            if refuse_configuration { assert!(result.unwrap_err().contains("configuration denied")); } else { result.unwrap(); }
+            let saved: Value = serde_json::from_slice(&std::fs::read(&configuration).unwrap()).unwrap();
+            assert_eq!(saved["data_folder"], json!(expected));
+            let registered: Value = serde_json::from_slice(&std::fs::read(&locator).unwrap()).unwrap();
+            assert_eq!(registered["owner"]["directory"], json!(expected.join("ginfer/host")));
+            if !refuse_configuration { assert_eq!(registered["identity"]["host_id"], snapshot["host_id"]); }
+            assert_eq!(std::fs::read(destination.join("chat-history.json")).unwrap(), b"retained conversation");
+            assert_eq!(std::fs::read(destination.join("ginfer/host/host.json")).unwrap(), original_state);
+            assert_eq!(std::fs::read(destination.join("ginfer/host/host.lock")).unwrap(), b"");
+            assert_eq!(std::fs::read(directory.join("host.lock")).unwrap(), b"source lock must not be copied");
+            let _old_owner = ginfer_host::service_owner::ServiceOwner::acquire(&directory).unwrap();
+            let _new_owner = ginfer_host::service_owner::ServiceOwner::acquire(&destination.join("ginfer/host")).unwrap();
+            assert_eq!(std::fs::read(current.join("chat-history.json")).unwrap(), b"retained conversation");
+            assert!(!destination.join("gbot/host.lock").exists(), "never copy a Gbot ownership lock");
+            assert_eq!(std::fs::read(destination.join("gbot/state.json")).unwrap(), b"retained bot state");
+            let _gbot_owner = ginfer_host::service_owner::ServiceOwner::acquire(&current.join("gbot")).unwrap();
+        }
+    }
 
     #[test]
     fn normal_stop_reads_only_an_existing_absolute_configured_root() {

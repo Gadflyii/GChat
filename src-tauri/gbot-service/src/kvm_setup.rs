@@ -169,6 +169,7 @@ pub struct KvmSetup {
     records: Mutex<BTreeMap<WorkspaceId, SetupRecord>>,
     jobs: Mutex<BTreeSet<WorkspaceId>>,
     lifecycle: Mutex<BTreeMap<WorkspaceId, Arc<Mutex<()>>>>,
+    renewals: Mutex<()>,
     service: Arc<Service>,
     vault: Arc<dyn Vault>,
     runtime: Weak<WorkspaceRuntime>,
@@ -234,6 +235,7 @@ impl KvmSetup {
             records: Mutex::new(records),
             jobs: Mutex::new(BTreeSet::new()),
             lifecycle: Mutex::new(BTreeMap::new()),
+            renewals: Mutex::new(()),
             service,
             vault,
             runtime,
@@ -728,10 +730,9 @@ impl KvmSetup {
             return Err(SetupIssue::new("guest_not_ready", error.to_string(),
                 "Wait for guest cloud-init and the desktop session to complete, then retry this same setup."));
         }
-        let renewal = runtime.lock_for_setup_renewal(record.identity).await.map_err(|blocked| {
-            SetupIssue::new("guest_session_recovery_blocked", format!("{error}; {blocked}"),
-                "Keep human or paused control and unresolved operations intact. Review them before retrying setup.")
-        })?;
+        let (_serial, renewal) = self
+            .lock_setup_renewal(record.identity, runtime, &error)
+            .await?;
         let previous = record.identity;
         let mut next = record.clone();
         next.identity.session_id = SessionId::new();
@@ -745,6 +746,54 @@ impl KvmSetup {
             "guest_not_ready", error.to_string(),
             "Wait for the guest desktop, then retry this saved setup; its fresh session is retained.",
         ))
+    }
+
+    async fn lock_setup_renewal<'a>(
+        &'a self,
+        identity: SessionIdentity,
+        runtime: &'a WorkspaceRuntime,
+        cause: &crate::workspace::WorkspaceError,
+    ) -> Result<
+        (
+            tokio::sync::MutexGuard<'a, ()>,
+            crate::workspace::SetupSessionRenewal<'a>,
+        ),
+        SetupIssue,
+    > {
+        // Queue automatic renewals before workspace lifecycle: TaskRunner must
+        // still refuse contention with user tasks or removal without waiting.
+        let serial = self.renewals.lock().await;
+        if self.stopping.load(Ordering::Acquire)
+            || self
+                .cancellations
+                .lock()
+                .await
+                .contains(&identity.workspace_id)
+        {
+            return Err(SetupIssue::new(
+                "setup_cancelled",
+                "The saved setup renewal was cancelled.",
+                "Resume or remove this same setup.",
+            ));
+        }
+        let renewal = runtime.lock_for_setup_renewal(identity).await.map_err(|blocked| {
+            SetupIssue::new("guest_session_recovery_blocked", format!("{cause}; {blocked}"),
+                "Keep human or paused control and unresolved operations intact. Review them before retrying setup.")
+        })?;
+        if self.stopping.load(Ordering::Acquire)
+            || self
+                .cancellations
+                .lock()
+                .await
+                .contains(&identity.workspace_id)
+        {
+            return Err(SetupIssue::new(
+                "setup_cancelled",
+                "The saved setup renewal was cancelled.",
+                "Resume or remove this same setup.",
+            ));
+        }
+        Ok((serial, renewal))
     }
 
     async fn verify_guest(
@@ -1483,7 +1532,7 @@ mod tests {
         .unwrap();
     }
     #[tokio::test]
-    async fn renewed_setup_identity_survives_failed_connect_and_retry() {
+    async fn saved_setup_renewals_serialize_and_retain_identity_on_failed_connect() {
         use crate::{
             executor::{ExecutorProcesses, ProcessSpec},
             service::{
@@ -1503,7 +1552,7 @@ mod tests {
         let credential_ref = VaultCredentialRef::new();
         let pinned_host_key = ssh_public_key(&generate_ssh_key().unwrap()).unwrap();
         let state_path = root.path().join("state.json");
-        let initial = DurableState {
+        let mut initial = DurableState {
             service_id,
             service_pc: ServicePc::Local,
             workspaces: vec![WorkspaceConfig {
@@ -1540,6 +1589,23 @@ mod tests {
             assignments: vec![],
             connector_accounts: vec![],
         };
+        let other = SessionIdentity {
+            workspace_id: WorkspaceId::new(),
+            session_id: SessionId::new(),
+        };
+        let mut other_workspace = initial.workspaces[0].clone();
+        other_workspace.id = other.workspace_id;
+        other_workspace.bot_pc = BotPc::LocalVm {
+            host_id: service_id,
+            vm_id: other.workspace_id.as_uuid().to_string(),
+            hypervisor: Hypervisor::Kvm,
+        };
+        initial.workspaces.push(other_workspace);
+        initial.controls.push(SessionControl {
+            identity: other,
+            owner: None,
+            state: SessionControlState::Bot,
+        });
         let store = Arc::new(Store::open(state_path.clone()).await.unwrap());
         store.save(&initial).await.unwrap();
         drop(store);
@@ -1588,35 +1654,68 @@ mod tests {
             pinned_host_key: Some(pinned_host_key),
         };
         setup.save(record.clone()).await.unwrap();
-        service
-            .register_session(
-                previous,
-                GuestHello {
-                    protocol_version: GUEST_PROTOCOL_VERSION,
-                    identity: previous,
-                    capabilities: [
-                        GuestCapability::Exec,
-                        GuestCapability::Read,
-                        GuestCapability::Write,
-                        GuestCapability::Status,
-                        GuestCapability::Cancel,
-                    ]
-                    .into(),
-                    view: None,
-                },
-            )
-            .await
-            .unwrap();
-        assert_eq!(service.live_sessions().await, vec![previous]);
+        let mut other_record = SetupRecord {
+            id: other.workspace_id,
+            identity: other,
+            ..record.clone()
+        };
+        setup.save(other_record.clone()).await.unwrap();
+        for identity in [previous, other] {
+            service
+                .register_session(
+                    identity,
+                    GuestHello {
+                        protocol_version: GUEST_PROTOCOL_VERSION,
+                        identity,
+                        capabilities: [
+                            GuestCapability::Exec,
+                            GuestCapability::Read,
+                            GuestCapability::Write,
+                            GuestCapability::Status,
+                            GuestCapability::Cancel,
+                        ]
+                        .into(),
+                        view: None,
+                    },
+                )
+                .await
+                .unwrap();
+        }
 
         // Exercise the persistence/connection boundary after stale-desktop proof.
         // An absent credential fails before SSH or any guest process can start.
-        let renewal = runtime.lock_for_setup_renewal(previous).await.unwrap();
+        let cause = WorkspaceError::Transport(SshError::DesktopRestarted {
+            saved_invocation_id: Uuid::new_v4(),
+            current_invocation_id: Uuid::new_v4(),
+            display: 1,
+        });
+        let (serial, renewal) = setup
+            .lock_setup_renewal(previous, &runtime, &cause)
+            .await
+            .unwrap();
+        let waiting = setup.lock_setup_renewal(other, &runtime, &cause);
+        tokio::pin!(waiting);
+        // Poll deterministically while the first renewal owns TaskRunner. The
+        // second automatic setup must wait rather than fail task admission.
+        assert!(
+            std::future::poll_fn(|cx| std::task::Poll::Ready(
+                std::future::Future::poll(waiting.as_mut(), cx).is_pending()
+            ))
+            .await
+        );
         record.identity.session_id = SessionId::new();
         let fresh = record.identity;
         setup.save(record.clone()).await.unwrap();
         assert!(matches!(
             renewal.connect(fresh).await,
+            Err(WorkspaceError::Transport(SshError::MissingCredential))
+        ));
+        drop(serial);
+        let (_serial, renewal) = waiting.await.unwrap();
+        other_record.identity.session_id = SessionId::new();
+        setup.save(other_record.clone()).await.unwrap();
+        assert!(matches!(
+            renewal.connect(other_record.identity).await,
             Err(WorkspaceError::Transport(SshError::MissingCredential))
         ));
         let saved = setup
@@ -1625,10 +1724,20 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(saved.len(), 1);
+        assert_eq!(saved.len(), 2);
         assert_eq!(
-            serde_json::to_value(&saved[0]).unwrap(),
+            serde_json::to_value(saved.iter().find(|saved| saved.id == id).unwrap()).unwrap(),
             serde_json::to_value(&record).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(
+                saved
+                    .iter()
+                    .find(|saved| saved.id == other.workspace_id)
+                    .unwrap()
+            )
+            .unwrap(),
+            serde_json::to_value(&other_record).unwrap()
         );
         assert_ne!(fresh, previous);
         assert_eq!(service.snapshot().await, initial);
@@ -1661,6 +1770,64 @@ mod tests {
         ));
         tasks.close().await.unwrap();
         runtime.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn queued_setup_renewal_rechecks_cancellation_and_shutdown_before_workspace_lock() {
+        for stopping in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+            let vault = Arc::new(MemoryVault::default());
+            let runtime = Arc::new(WorkspaceRuntime::new(service.clone(), vault.clone()));
+            let setup = KvmSetup::open(
+                root.path().to_owned(),
+                service.clone(),
+                vault,
+                Arc::downgrade(&runtime),
+            )
+            .await
+            .unwrap();
+            let identity = SessionIdentity {
+                workspace_id: WorkspaceId::new(),
+                session_id: SessionId::new(),
+            };
+            let before = service.snapshot().await;
+            let cause = crate::workspace::WorkspaceError::Transport(
+                crate::ssh::SshError::DesktopRestarted {
+                    saved_invocation_id: Uuid::new_v4(),
+                    current_invocation_id: Uuid::new_v4(),
+                    display: 1,
+                },
+            );
+            let serial = setup.renewals.lock().await;
+            let waiting = setup.lock_setup_renewal(identity, &runtime, &cause);
+            tokio::pin!(waiting);
+            assert!(
+                std::future::poll_fn(|cx| std::task::Poll::Ready(
+                    std::future::Future::poll(waiting.as_mut(), cx).is_pending()
+                ))
+                .await
+            );
+            if stopping {
+                setup.close().await;
+            } else {
+                setup
+                    .cancellations
+                    .lock()
+                    .await
+                    .insert(identity.workspace_id);
+            }
+            drop(serial);
+            let issue = match waiting.await {
+                Err(issue) => issue,
+                Ok(_) => panic!("cancelled renewal reached the workspace"),
+            };
+            assert_eq!(issue.code, "setup_cancelled");
+            assert!(setup.status().await.is_empty());
+            assert_eq!(service.snapshot().await, before);
+            assert!(service.live_sessions().await.is_empty());
+            runtime.close().await.unwrap();
+        }
     }
 
     #[tokio::test]

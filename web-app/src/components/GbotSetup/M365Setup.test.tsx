@@ -176,10 +176,10 @@ it('explains a release without Microsoft sign-in and offers Advanced without an 
     })
   ).toHaveAttribute('href', '/settings/workspace-connections')
   expect(
-    screen.getByText(/Microsoft sign-in is not configured in this GChat release/)
+    screen.getByText(/Microsoft sign-in is unavailable in this GChat build/)
   ).toHaveTextContent('You do not need to find or enter a client ID.')
   expect(screen.getByRole('alert')).toHaveTextContent(
-    'Use an updated release when sign-in is available.'
+    'Install a release that includes Microsoft sign-in.'
   )
   expect(screen.getByRole('alert')).toHaveTextContent(
     'If your organization already has an approved Microsoft app, use Advanced'
@@ -205,6 +205,35 @@ it('recognizes Graph-qualified Cloud PC scopes already accepted by the account o
   expect(
     screen.queryByText(/Cloud PC read permission is missing/)
   ).not.toBeInTheDocument()
+})
+
+it('explains the personal-account limit and retains a plain work-account sign-in failure', async () => {
+  vi.mocked(connectorAccounts).mockResolvedValue({ ...accounts(), accounts: [] })
+  const message =
+    'This needs a work or school account. Sign in with the account your organization uses for Windows 365 Cloud PCs.'
+  vi.mocked(beginConnectorAuth).mockResolvedValue({
+    flow_id: 'personal-account-refused',
+    provider: 'microsoft',
+    status: 'failed',
+    error: message,
+  })
+  const saved = mount()
+  await screen.findByLabelText('Microsoft account')
+  expect(
+    screen.getByText(/Personal accounts can connect Outlook.com, Hotmail and OneDrive/)
+  ).toBeInTheDocument()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Sign in with Microsoft' })
+  )
+  expect(await screen.findByText(message)).toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Sign in with Microsoft' })
+  ).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Save Cloud PC setup' })
+  ).toBeDisabled()
+  expect(gbot).not.toHaveBeenCalled()
+  expect(saved).not.toHaveBeenCalled()
 })
 
 it('uses read-only account consent and checks sign-in only when requested', async () => {
@@ -336,15 +365,17 @@ it('does not adopt the connector default after a new account completes sign-in',
 })
 
 it('distinguishes no assignment from a failed permission lookup and allows retry', async () => {
+  const permissionMessage =
+    'This needs a work or school account with an assigned Windows 365 Cloud PC. Ask your organization’s administrator to approve access and check your license.'
   vi.mocked(gbot)
-    .mockRejectedValueOnce(new Error('Tenant denied CloudPC.Read.All'))
+    .mockRejectedValueOnce(new Error(permissionMessage))
     .mockResolvedValueOnce([])
   mount()
   await chooseAccount()
   fireEvent.click(
     screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
   )
-  await screen.findByText('Error: Tenant denied CloudPC.Read.All')
+  await screen.findByText(`Error: ${permissionMessage}`)
   expect(
     screen.queryByText(/No Cloud PCs are assigned/)
   ).not.toBeInTheDocument()

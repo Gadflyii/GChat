@@ -1,10 +1,12 @@
 //! Destination-owned, bounded transfers of immutable producer-final packages.
 use crate::{
     engine_inventory::{inspect_artifact, ArtifactIdentity},
+    payload_verification::PayloadVerification,
     service::write_private,
 };
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -14,7 +16,7 @@ use std::{
 };
 use tokio::{
     io::AsyncWriteExt,
-    sync::{Mutex, OwnedMutexGuard, Semaphore},
+    sync::{Mutex, Notify, OwnedMutexGuard, Semaphore},
 };
 use uuid::Uuid;
 
@@ -148,6 +150,8 @@ pub struct Download {
     pub path: Option<PathBuf>,
     #[serde(default)]
     pub storage_root: PathBuf,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verification: Option<PayloadVerification>,
 }
 pub struct RemovedPackage {
     pub journal_error: Option<String>,
@@ -160,6 +164,7 @@ pub struct ModelDownloads {
     state_path: PathBuf,
     jobs: Arc<Mutex<BTreeMap<Uuid, Download>>>,
     pending_journal: Arc<AtomicBool>,
+    activity: std::sync::Mutex<Option<Arc<Notify>>>,
     serial: Arc<Semaphore>,
     local_layout: bool,
 }
@@ -172,6 +177,14 @@ impl ModelDownloads {
             profiles.extend(job.release.launch_profiles.iter().cloned());
         }
         Ok(profiles)
+    }
+    pub(crate) async fn installed_verification(
+        &self, path: &std::path::Path, sha256: &str, bytes: u64,
+    ) -> Option<PayloadVerification> {
+        self.jobs.lock().await.values().find(|job| {
+            job.status == "installed" && job.path.as_deref() == Some(path)
+                && job.release.sha256 == sha256 && job.release.bytes == bytes
+        }).and_then(|job| job.verification.clone())
     }
     pub fn open(root: PathBuf, state_path: PathBuf) -> Result<Arc<Self>, String> {
         Self::open_layout(root, state_path, false)
@@ -228,6 +241,7 @@ impl ModelDownloads {
             state_path,
             jobs: Arc::new(Mutex::new(jobs)),
             pending_journal: Arc::new(AtomicBool::new(false)),
+            activity: std::sync::Mutex::new(None),
             serial: Arc::new(Semaphore::new(1)),
             local_layout,
         });
@@ -245,6 +259,9 @@ impl ModelDownloads {
     pub fn set_root(&self, root: PathBuf) {
         *self.root.write().unwrap() = root;
     }
+    pub(crate) fn set_activity_notification(&self, activity: Arc<Notify>) {
+        *self.activity.lock().unwrap() = Some(activity);
+    }
     // The journal worker owns the jobs guard through serialization, fsync and
     // atomic publication. No newer transition can overtake this durable write,
     // and cancellation of its async caller cannot release ownership early.
@@ -253,9 +270,15 @@ impl ModelDownloads {
         mut jobs: OwnedMutexGuard<BTreeMap<Uuid, Download>>,
         start_after_commit: Option<(Arc<Self>, Uuid)>,
         rollback_enqueue: bool,
+        wake_after_commit: bool,
     ) -> Result<(), String> {
         let path = self.state_path.clone();
         let pending = self.pending_journal.clone();
+        let activity = if start_after_commit.is_some() || wake_after_commit {
+            self.activity.lock().unwrap().clone()
+        } else {
+            None
+        };
         pending.store(true, Ordering::SeqCst);
         tokio::task::spawn_blocking(move || {
             let result = serde_json::to_vec(&*jobs)
@@ -268,6 +291,11 @@ impl ModelDownloads {
                 if let Some((manager, id)) = start_after_commit {
                     manager.spawn(id);
                 }
+                // Discard can also make missing first-run work actionable.
+                // Its wake survives caller cancellation just like admission.
+                if let Some(activity) = activity {
+                    activity.notify_one();
+                }
             } else if rollback_enqueue {
                 if let Some((_, id)) = start_after_commit {
                     jobs.remove(&id);
@@ -277,7 +305,7 @@ impl ModelDownloads {
         }).await.map_err(|e| e.to_string())?
     }
     async fn save(&self, jobs: OwnedMutexGuard<BTreeMap<Uuid, Download>>) -> Result<(), String> {
-        self.persist(jobs, None, false).await
+        self.persist(jobs, None, false, false).await
     }
     pub(crate) async fn flush_pending(&self) -> Result<(), String> {
         if !self.pending_journal.load(Ordering::SeqCst) {
@@ -348,9 +376,10 @@ impl ModelDownloads {
             error: None,
             path: None,
             storage_root,
+            verification: None,
         };
         jobs.insert(job.id, job.clone());
-        self.persist(jobs, Some((self.clone(), job.id)), true).await?;
+        self.persist(jobs, Some((self.clone(), job.id)), true, false).await?;
         Ok(job)
     }
     pub async fn action(self: &Arc<Self>, id: Uuid, action: &str) -> Result<(), String> {
@@ -380,7 +409,7 @@ impl ModelDownloads {
                     .map_err(|e| e.to_string())?;
             }
             jobs.remove(&id);
-            return self.save(jobs).await;
+            return self.persist(jobs, None, false, true).await;
         }
         let job = jobs.get_mut(&id).ok_or("unknown download")?;
         match action {
@@ -402,7 +431,7 @@ impl ModelDownloads {
             _ => return Err("download action is not available in its current state".into()),
         }
         let start = if action == "resume" { Some((self.clone(), id)) } else { None };
-        self.persist(jobs, start, false).await
+        self.persist(jobs, start, false, false).await
     }
     pub async fn remove_installed(&self, path: &std::path::Path) -> Result<RemovedPackage, String> {
         let path = tokio::fs::canonicalize(path).await.map_err(|e| e.to_string())?;
@@ -561,8 +590,8 @@ impl ModelDownloads {
         let staging = root.join(format!(".model-install-{id}"));
         if destination.is_file() {
             self.update(id, release.bytes, 0, "verifying").await?;
-            verify_package(destination.clone(), &release).await?;
-            return self.installed(id, destination).await;
+            let verification = verify_package(destination.clone(), &release).await?;
+            return self.installed(id, destination, verification).await;
         }
         if self.local_layout && !partial.exists() && staging.join("model.ginfer").exists() {
             tokio::fs::rename(staging.join("model.ginfer"), &partial)
@@ -646,7 +675,7 @@ impl ModelDownloads {
             return Err("download ended before the declared size; resume to retry".into());
         }
         self.update(id, received, 0, "verifying").await?;
-        verify_package(partial.clone(), &release).await?;
+        let verification = verify_package(partial.clone(), &release).await?;
         if self.local_layout {
             tokio::fs::create_dir_all(&staging)
                 .await
@@ -672,13 +701,17 @@ impl ModelDownloads {
                 .await
                 .map_err(|e| e.to_string())?;
         }
-        self.installed(id, destination).await
+        let published = destination.clone();
+        let verification = tokio::task::spawn_blocking(move || verification.after_rename(&published))
+            .await.map_err(|e| e.to_string())??;
+        self.installed(id, destination, verification).await
     }
-    async fn installed(&self, id: Uuid, destination: PathBuf) -> Result<(), String> {
+    async fn installed(&self, id: Uuid, destination: PathBuf, verification: PayloadVerification) -> Result<(), String> {
         let mut jobs = self.jobs.clone().lock_owned().await;
         let job = jobs.get_mut(&id).ok_or("unknown download")?;
         job.status = "installed".into();
         job.path = Some(destination);
+        job.verification = Some(verification);
         job.error = None;
         self.save(jobs).await
     }
@@ -784,7 +817,7 @@ fn finish_move(
     copied.sync_all().map_err(|e| e.to_string())?;
     drop(copied);
     drop(source);
-    verify_package_sync(&copied_path, &original.release)
+    let verification = verify_package_sync(&copied_path, &original.release)
         .map_err(|error| format!("Copied model failed verification; original retained: {error}"))?;
     if local_layout {
         let release = &original.release;
@@ -802,6 +835,7 @@ fn finish_move(
     }
     let mut moved = original.clone();
     moved.storage_root = prepared.target_root;
+    moved.verification = Some(verification.after_rename(&prepared.destination)?);
     moved.path = Some(prepared.destination);
     moved.bytes_per_second = 0;
     moved.error = None;
@@ -923,31 +957,20 @@ fn move_file_windows(
     Ok(())
 }
 
-async fn verify_package(path: PathBuf, release: &Release) -> Result<(), String> {
+async fn verify_package(path: PathBuf, release: &Release) -> Result<PayloadVerification, String> {
     let release = release.clone();
     tokio::task::spawn_blocking(move || verify_package_sync(&path, &release))
         .await.map_err(|e| e.to_string())?
 }
 
-fn verify_package_sync(path: &std::path::Path, release: &Release) -> Result<(), String> {
-    use std::io::Read;
-    let mut file = std::fs::File::open(path).map_err(|e| e.to_string())?;
-    if file.metadata().map_err(|e| e.to_string())?.len() != release.bytes {
-        return Err("package size differs from release".into());
-    }
-    let mut hasher = Sha256::new();
-    let mut buffer = vec![0; 1024 * 1024];
-    loop {
-        let n = file.read(&mut buffer).map_err(|e| e.to_string())?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buffer[..n]);
-    }
-    drop(file);
-    if hex::encode(hasher.finalize()) != release.sha256 {
-        return Err("SHA256 mismatch; remove incomplete files and download again. Package was not installed.".into());
-    }
+fn verify_package_sync(path: &std::path::Path, release: &Release) -> Result<PayloadVerification, String> {
+    // Downloads and moves always verify the complete payload before publication.
+    let verification = crate::payload_verification::verify(path, &release.sha256, release.bytes, None)
+        .map_err(|error| match error.as_str() {
+            "payload size mismatch" => "package size differs from release".into(),
+            "SHA256 mismatch" => "SHA256 mismatch; remove incomplete files and download again. Package was not installed.".into(),
+            _ => error,
+        })?;
     let metadata = inspect_artifact(path)?;
     if metadata.identity != release.identity || metadata.tp_size != release.tp {
         return Err("package identity or TP differs from its release declaration".into());
@@ -955,7 +978,7 @@ fn verify_package_sync(path: &std::path::Path, release: &Release) -> Result<(), 
     if release.launch_profiles.iter().any(|profile| profile.draft_tp != metadata.draft_tp) {
         return Err("package draft TP differs from its qualified launch profiles".into());
     }
-    Ok(())
+    Ok(verification)
 }
 
 pub async fn available_bytes(path: PathBuf) -> Result<u64, String> {
@@ -1122,6 +1145,7 @@ time.sleep(60)
             error: None,
             path: Some(path),
             storage_root: manager.root(),
+            verification: None,
         };
         let mut jobs = manager.jobs.clone().lock_owned().await;
         jobs.insert(job.id, job.clone());
@@ -1174,6 +1198,12 @@ time.sleep(60)
             let reopened_job = reopened.list().await.pop().unwrap();
             assert_eq!(reopened_job.path, moved.path);
             assert_eq!(reopened_job.storage_root, moved.storage_root);
+            let recorded = reopened.installed_verification(
+                moved.path.as_ref().unwrap(), &moved.release.sha256, moved.release.bytes,
+            ).await.unwrap();
+            assert_eq!(Some(&recorded), moved.verification.as_ref());
+            assert_eq!(crate::payload_verification::verify(moved.path.as_ref().unwrap(),
+                &moved.release.sha256, moved.release.bytes, Some(&recorded)).unwrap(), recorded);
             assert!(std::fs::read_dir(&moved.storage_root)
                 .unwrap()
                 .all(|entry| {
@@ -1326,6 +1356,7 @@ time.sleep(60)
                 error: None,
                 path: None,
                 storage_root: manager.root(),
+                verification: None,
             },
         );
         manager.save(jobs).await.unwrap();
@@ -1399,6 +1430,7 @@ time.sleep(60)
             id: old_id, release: release.clone(), status: "paused".into(),
             received: 16, bytes_per_second: 0, error: None, path: None,
             storage_root: original.clone(),
+            verification: None,
         };
         let expected_old = serde_json::to_value(&old_job).unwrap();
         let saved = serde_json::to_vec(&BTreeMap::from([(old_id, old_job)])).unwrap();
@@ -1459,6 +1491,12 @@ time.sleep(60)
         let job = manager.list().await.pop().unwrap();
         assert_eq!(job.status, "installed");
         assert_eq!(std::fs::read(job.path.as_ref().unwrap()).unwrap(), bytes);
+        let reopened = ModelDownloads::open(manager.root(), manager.state_path.clone()).unwrap();
+        let recorded = reopened.installed_verification(job.path.as_ref().unwrap(),
+            &release.sha256, release.bytes).await.unwrap();
+        assert_eq!(Some(&recorded), job.verification.as_ref());
+        assert_eq!(crate::payload_verification::verify(job.path.as_ref().unwrap(),
+            &release.sha256, release.bytes, Some(&recorded)).unwrap(), recorded);
         let outside = dir.path().join("external.ginfer");
         std::fs::write(&outside, &bytes).unwrap();
         assert!(manager.remove_installed(&outside).await.is_err());
@@ -1487,6 +1525,49 @@ time.sleep(60)
         assert!(!root.join(format!("{id}.part")).exists());
         assert!(installed.exists());
     }
+    #[tokio::test]
+    async fn discard_wakes_parked_first_run_maintenance_after_durable_removal() {
+        let dir = tempfile::tempdir().unwrap();
+        let host = crate::service::Host::open(
+            dir.path().join("state"), "Discard fixture".into(),
+            dir.path().join("missing-engine"), vec![], vec![], vec![],
+        ).await.unwrap();
+        let (release, _) = fixture();
+        let sha256 = release.sha256.clone();
+        let id = insert(&host.downloads, release).await;
+        let mut jobs = host.downloads.jobs.clone().lock_owned().await;
+        jobs.get_mut(&id).unwrap().status = "paused".into();
+        host.downloads.save(jobs).await.unwrap();
+        host.data.lock().await.first_run = crate::first_run::Progress {
+            gpu_uuids: vec!["GPU-test".into()],
+            storage_accepted: true,
+            catalog_loaded: true,
+            selected_release_ids: vec![sha256],
+            download_ids: vec![id],
+            ..Default::default()
+        };
+        assert!(!host.processes.lock().await.needs_monitoring());
+        assert!(!host.first_run_pending().await, "Paused work must let the monitor park");
+        let activity = host.processes.lock().await.activity_notification();
+        let notified = activity.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        assert!(matches!(futures_util::poll!(notified.as_mut()), std::task::Poll::Pending));
+        assert!(host.downloads.action(id, "pause").await.is_err());
+        assert!(matches!(futures_util::poll!(notified.as_mut()), std::task::Poll::Pending),
+            "Rejected actions must not wake the monitor");
+
+        host.downloads.action(id, "discard").await.unwrap();
+        assert!(matches!(futures_util::poll!(notified.as_mut()), std::task::Poll::Ready(())),
+            "Durable discard must wake the already-parked monitor");
+        let saved: BTreeMap<Uuid, Download> = serde_json::from_slice(
+            &std::fs::read(&host.downloads.state_path).unwrap()).unwrap();
+        assert!(saved.is_empty(), "The removal must be durable before the wake");
+        assert!(host.downloads.list().await.is_empty());
+        assert!(host.first_run_pending().await, "Missing selected work must restore maintenance");
+        assert!(!host.processes.lock().await.has_children());
+    }
+
     #[tokio::test]
     async fn corrupted_partial_is_not_installed() {
         let dir = tempfile::tempdir().unwrap();
@@ -2344,6 +2425,80 @@ time.sleep(60)
                     assert!(!partial.exists());
                     assert!(manager.list().await[0].error.is_none());
                 }
+            });
+    }
+
+    #[test]
+    fn cancelled_admission_caller_still_wakes_maintenance_and_installs() {
+        use std::{future::Future, task::Poll};
+
+        tokio::runtime::Builder::new_current_thread().enable_all().max_blocking_threads(1)
+            .build().unwrap().block_on(async {
+                let directory = tempfile::tempdir().unwrap();
+                let (manager, original, bytes) = seed_installed_move(directory.path(), false).await;
+                let activity = Arc::new(Notify::new());
+                manager.set_activity_notification(activity.clone());
+                let mut jobs = manager.jobs.clone().lock_owned().await;
+                let job = jobs.get_mut(&original.id).unwrap();
+                job.status = "paused".into();
+                job.path = None;
+                manager.save(jobs).await.unwrap();
+                let notified = activity.notified();
+                tokio::pin!(notified);
+                notified.as_mut().enable();
+                assert!(matches!(futures_util::poll!(notified.as_mut()), Poll::Pending),
+                    "Journal-only writes must not wake maintenance");
+                assert!(manager.action(original.id, "pause").await.is_err());
+                assert!(matches!(futures_util::poll!(notified.as_mut()), Poll::Pending),
+                    "Rejected actions must not wake maintenance");
+
+                // Queue the actual durable Resume commit behind the only
+                // blocking worker, then drop its caller before publication.
+                let (unblock, blocked) = std::sync::mpsc::channel();
+                let (started, ready) = tokio::sync::oneshot::channel();
+                let blocker = tokio::task::spawn_blocking(move || {
+                    let _ = started.send(());
+                    let _ = blocked.recv();
+                });
+                ready.await.unwrap();
+                let mut jobs = manager.jobs.clone().lock_owned().await;
+                jobs.get_mut(&original.id).unwrap().status = "queued".into();
+                let mut admission = Box::pin(manager.persist(
+                    jobs, Some((manager.clone(), original.id)), false, false));
+                futures_util::future::poll_fn(|cx| {
+                    assert!(matches!(admission.as_mut().poll(cx), Poll::Pending));
+                    Poll::Ready(())
+                }).await;
+                drop(admission);
+                assert!(manager.pending_journal.load(Ordering::SeqCst));
+                assert!(manager.jobs.try_lock().is_err(), "The queued commit must retain admission ownership");
+                let saved: BTreeMap<Uuid, Download> = serde_json::from_slice(
+                    &std::fs::read(&manager.state_path).unwrap()).unwrap();
+                assert_eq!(saved[&original.id].status, "paused");
+                assert!(matches!(futures_util::poll!(notified.as_mut()), Poll::Pending));
+
+                unblock.send(()).unwrap();
+                blocker.await.unwrap();
+                tokio::time::timeout(Duration::from_secs(5), notified).await.unwrap();
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    loop {
+                        let job = manager.list().await.remove(0);
+                        assert_ne!(job.status, "failed", "{:?}", job.error);
+                        if job.status == "installed" {
+                            assert_eq!(job.path, original.path);
+                            break;
+                        }
+                        tokio::task::yield_now().await;
+                    }
+                }).await.unwrap();
+                assert_eq!(std::fs::read(original.path.as_ref().unwrap()).unwrap(), bytes);
+                let saved: BTreeMap<Uuid, Download> = serde_json::from_slice(
+                    &std::fs::read(&manager.state_path).unwrap()).unwrap();
+                assert_eq!(saved[&original.id].status, "installed");
+                let extra = activity.notified();
+                tokio::pin!(extra);
+                assert!(matches!(futures_util::poll!(extra.as_mut()), Poll::Pending),
+                    "Transfer progress writes must not add maintenance wakeups");
             });
     }
 

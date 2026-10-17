@@ -583,10 +583,18 @@ impl LocalControl {
     }
 
     pub async fn stop_host_if_idle(&self, directory: &Path) -> Result<Value, String> {
+        self.stop_host(directory, true).await
+    }
+
+    pub(crate) async fn stop_host_for_relocation(&self, directory: &Path) -> Result<Value, String> {
+        self.stop_host(directory, false).await
+    }
+
+    async fn stop_host(&self, directory: &Path, require_quit_control: bool) -> Result<Value, String> {
         let snapshot = self.snapshot().await?;
         crate::local_host::validate_local_identity(directory, &snapshot)?;
-        if snapshot["can_stop_host"] != true {
-            return Err("This Host does not support Windows desktop normal Stop; it was left running".into());
+        if require_quit_control && snapshot["can_stop_host"] != true {
+            return Err("This Host does not support desktop normal Stop; it was left running. Update and restart this Host before moving App Data".into());
         }
         let boot_id: uuid::Uuid = serde_json::from_value(snapshot["boot_id"].clone())
             .map_err(|_| "The selected Host cannot prove its current process identity")?;
@@ -669,6 +677,7 @@ fn choices(snapshot: &Value, replacing: Option<&str>) -> Vec<Choice> {
                     profile["max_context"],
                     match profile["qualification"]["tier"].as_str() {
                         Some("full-context-tested") => "Full-context tested",
+                        Some("screened-startup") => "Screened, not full-context qualified",
                         Some("calculated-startup-smoke") => "Calculated + startup/smoke checked (not full-context tested)",
                         Some("calculated-pending-validation") => "Calculated — pending validation (startup/memory/inference unverified; may require engine update)",
                         _ => "Unknown evidence tier",

@@ -142,8 +142,10 @@ export default function M365Setup({
   return (
     <section aria-label="M365 Cloud PC setup" className="space-y-3 text-sm">
       <p>
-        Use an existing Cloud PC assigned to your Microsoft work or school
-        account. No Cloud PC is purchased or provisioned here.
+        This needs a work or school account with an assigned Windows 365 Cloud
+        PC. Personal accounts can connect Outlook.com, Hotmail and OneDrive in
+        Settings → Workspace connections. No Cloud PC is purchased or
+        provisioned here.
       </p>
       <p className="text-muted-foreground">
         Desktop control is not connected yet. Save your setup and open
@@ -173,9 +175,9 @@ export default function M365Setup({
       </Button>
       {view && !configured && (
         <p role="alert">
-          Microsoft sign-in is not configured in this GChat release yet. You do
-          not need to find or enter a client ID. Use an updated release when
-          sign-in is available. If your organization already has an approved
+          Microsoft sign-in is unavailable in this GChat build. You do not need
+          to find or enter a client ID. Install a release that includes
+          Microsoft sign-in. If your organization already has an approved
           Microsoft app, use Advanced in{' '}
           {remote ? (
             'Settings → Workspace connections on the service computer'
@@ -237,8 +239,8 @@ export default function M365Setup({
             Sign in with your Microsoft work or school account in your browser.
             GChat requests read-only access to find your assigned Cloud PCs.
             Microsoft may ask for multifactor authentication (MFA) or your
-            organization’s administrator approval. Account tokens stay in
-            GChat’s existing account vault.
+            organization’s administrator approval. Your saved sign-in stays in
+            GChat’s protected credential store.
           </p>
           <Button
             type="button"
@@ -310,7 +312,7 @@ export default function M365Setup({
           {flow.status === 'failed' && (
             <p>
               {flow.error ||
-                'Microsoft sign-in failed. Retry sign-in or ask your tenant administrator.'}
+                'Microsoft sign-in failed. Try again or ask your organization’s administrator for help.'}
             </p>
           )}
         </div>
@@ -336,13 +338,13 @@ export default function M365Setup({
       {removed && (
         <p role="alert">
           The saved Cloud PC is no longer assigned to this account. Choose an
-          available assignment or ask your tenant administrator.
+          available assignment or ask your organization’s administrator.
         </p>
       )}
       {pcs?.length === 0 && (
         <p>
           No Cloud PCs are assigned to this account. Check the account and ask
-          your tenant administrator to assign a Cloud PC.
+          your organization’s administrator to assign a Cloud PC.
         </p>
       )}
       {pcs && pcs.length > 0 && (
@@ -409,14 +411,14 @@ export default function M365Setup({
           Worker in the Cloud PC user session
         </label>
         <p className="text-muted-foreground">
-          Ask your tenant administrator to approve installation of the Gbot
-          worker in your signed-in Cloud PC session and a network connection to
-          the computer running Gbot. The worker must run in that desktop
-          session.
+          Ask your organization’s administrator to approve installation of the
+          Gbot worker in your signed-in Cloud PC session and a network
+          connection to the computer running Gbot. The worker must run in that
+          desktop session.
         </p>
         <p className="text-muted-foreground">
-          Keep the Cloud PC signed in and unlocked. Your tenant’s sign-in and
-          screen capture policies may limit desktop access.
+          Keep the Cloud PC signed in and unlocked. Your organization’s sign-in
+          and screen capture policies may limit desktop access.
         </p>
         <label className="flex items-start gap-2">
           <input

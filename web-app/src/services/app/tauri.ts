@@ -52,7 +52,7 @@ export class TauriAppService extends DefaultAppService {
   }
 
   async relocateGchatDataFolder(path: string): Promise<void> {
-    await window.core?.api?.changeAppDataFolder({ newDataFolder: path })
+    await invoke('change_app_data_folder', { newDataFolder: path })
   }
 
   async getAutostartPreference(): Promise<AutostartPreference> {

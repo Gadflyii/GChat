@@ -27,6 +27,12 @@ function asString(v: any, defaultValue = ''): string {
 
 export function normalizeGinferConfig(config: any): GinferConfig {
   const value = config ?? {}
+  if (value.gpu_uuids !== undefined &&
+      (!Array.isArray(value.gpu_uuids) || value.gpu_uuids.length === 0 ||
+       value.gpu_uuids.some((id: unknown) => typeof id !== "string" || !id.trim()) ||
+       new Set(value.gpu_uuids).size !== value.gpu_uuids.length)) {
+    throw new Error("Choose at least one unique GPU")
+  }
   return {
     vision: value.vision === undefined ? true : asBool(value.vision),
     spec: asString(value.spec, 'auto'),
@@ -38,6 +44,7 @@ export function normalizeGinferConfig(config: any): GinferConfig {
     prefill_chunk: asNumber(value.prefill_chunk),
     max_concurrency: asNumber(value.max_concurrency),
     no_cuda_graph: asBool(value.no_cuda_graph),
+    ...(value.gpu_uuids === undefined ? {} : { gpu_uuids: [...value.gpu_uuids] }),
   }
 }
 

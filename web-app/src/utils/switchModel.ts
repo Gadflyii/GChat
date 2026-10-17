@@ -295,6 +295,7 @@ export async function switchToModel(params: {
   providerName: string
   serviceHub: ServiceHub
   isAutoStart?: boolean
+  gpuUuids?: string[]
 }): Promise<void> {
   if (params.isAutoStart && isIntentionallyStopped(params.providerName, params.modelId)) return
   // Claim a slot in the queue. `mySeq` lets us detect if a newer switch was
@@ -327,7 +328,7 @@ export async function switchToModel(params: {
       useAppState.getState().setIntentionalModelStop(params.providerName, params.modelId, false)
     }
 
-    if (await isTargetModelAlreadyServing(params)) {
+    if (params.gpuUuids === undefined && await isTargetModelAlreadyServing(params)) {
       const activeModels = await params.serviceHub
         .models()
         .getActiveModels()
@@ -401,8 +402,9 @@ async function doSwitchToModel(params: {
   providerName: string
   serviceHub: ServiceHub
   isAutoStart?: boolean
+  gpuUuids?: string[]
 }): Promise<void> {
-  const { modelId, providerName, serviceHub, isAutoStart } = params
+  const { modelId, providerName, serviceHub, isAutoStart, gpuUuids } = params
 
   const { setServerStatus, setActiveModels, updateLoadingModel } =
     useAppState.getState()
@@ -491,7 +493,9 @@ async function doSwitchToModel(params: {
 
     if (isLocal) {
       await taggedWithTimeout(
-        serviceHub.models().startModel(provider, modelId, true),
+        gpuUuids === undefined
+          ? serviceHub.models().startModel(provider, modelId, true)
+          : serviceHub.models().startModel(provider, modelId, true, gpuUuids),
         MODEL_LOAD_WATCHDOG_MS,
         `Timed out waiting for model "${modelId}" to finish loading.`
       )

@@ -26,6 +26,35 @@ Windows runtime acceptance remains a separate platform gate. See the
 [ownership decision](../decisions/2026-10-16-bind-managed-host-to-data-root-and-free-ports.md)
 and [data-folder behavior](../../DEVELOP.md#custom-data-folder).
 
+## Installed model GPU selection
+
+The Installed page keeps the selected GPU UUIDs through Load and verifies them
+against fresh hardware inventory. Automatic remains available. A resident on
+another GPU group is never reused; unavailable selections fail clearly.
+Selection also respects each process's `CUDA_VISIBLE_DEVICES`: numeric entries
+use PCI order only for `CUDA_DEVICE_ORDER=PCI_BUS_ID`; default ordering comes from
+the Engine's unmasked CUDA runtime query. UUID masks preserve their declared order
+and work without that newer Engine query. Empty masks expose no GPUs.
+
+## Qualified-profile payload verification — October 17
+
+A qualified-profile Start requires the selected package's whole-file SHA-256
+and size to match the profile. Host retains successful verification with the
+file's size, high-resolution modification and change times, and operating-system
+file identity: device/inode on Linux, volume/file ID on Windows. The record
+survives Host restart, including for imported local packages. Start reuses it
+only when the expected package SHA and current file information still match;
+a missing or changed record requires a full hash before loading. An explicit
+verification operation always reads and hashes the file.
+
+Successful managed download/install verification supplies the same record.
+This avoids repeating a complete payload read at every qualified Start while
+preserving verification when the file changes. Artifact-directory SHA values
+identify metadata and cannot substitute for whole-file package verification.
+The shared policy covers both platforms; native Windows acceptance remains a
+separate release gate. See the
+[verification decision](../decisions/2026-10-17-reuse-verified-model-payloads-with-file-identity.md).
+
 ## Fresh startup quotes — October 15
 
 Installed and imported local models can use **Check startup settings** without
@@ -1065,8 +1094,10 @@ No Engine, catalog value, profile tier or launch behavior changed in this audit.
 Host validation checks the declared tier's counts/calculation/headroom facts;
 it does not read archived measurements or compare `engine_revision` with the
 selected executable. Availability matches identity, TP/draft degree and size.
-Launch then verifies the exact payload SHA256, context/concurrency/options and
-platform/SKU/SM/selected GPU group. Engine startup owns live memory and topology.
+Launch then verifies the exact payload SHA256, reusing a successful whole-file
+verification only when the recorded file information still matches, and checks
+context/concurrency/options and platform/SKU/SM/selected GPU group. Engine startup
+owns live memory and topology.
 These checks preserve historical settings; they do not make historical evidence
 current qualification. GChat, Manager and the text launcher already show the
 recorded Engine/workload and changed-Engine disclaimer. Any future current-match

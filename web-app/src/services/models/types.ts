@@ -149,7 +149,8 @@ export interface ModelsService {
   startModel(
     provider: ProviderObject,
     model: string,
-    bypassAutoUnload?: boolean
+    bypassAutoUnload?: boolean,
+    gpuUuids?: string[]
   ): Promise<SessionInfo | undefined>
   isToolSupported(modelId: string): Promise<boolean>
   checkMmprojExistsAndUpdateOffloadMMprojSetting(

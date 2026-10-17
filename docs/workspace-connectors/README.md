@@ -15,14 +15,29 @@ the source flow; live provider consent is a release gate for Ron. See
 User-connected SaaS accounts are integrations,
 not an expansion of GChat LAN host/workspace management or paid Arbitor features.
 
-Microsoft sign-in uses an approved public release app identity when supplied at
-build time, while retaining any saved organization registration. Gbot Cloud PC
-setup guides browser sign-in and explicit account/PC choice. Without a release
-identity, it explains the missing release setup without asking novices for a
+Microsoft sign-in uses the built-in public app registration in release builds
+with tenant `common`, supporting work, school and personal Microsoft accounts,
+while retaining any saved organization registration. Outlook.com, Hotmail and
+personal OneDrive are supported by the available account-specific Graph APIs;
+SharePoint, Teams and Windows 365 Cloud PC require a work or school account.
+Calendar free/busy and Teams online meetings also require a supported work or
+school account. Gbot Cloud PC setup guides browser sign-in and explicit
+account/PC choice. In a build without that registration, it explains that
+Microsoft sign-in is unavailable without asking novices for a
 client ID; custom registration stays in an advanced Settings option with steps.
-Ron owns the release Entra registration and live-consent gate. See
+Ron owns confirmation of the Entra redirect configuration and live-consent gate. See
 [setup and release configuration](operations.md) and the
-[decision](../decisions/2026-10-16-guide-microsoft-sign-in-with-release-identity.md).
+[guided sign-in decision](../decisions/2026-10-16-guide-microsoft-sign-in-with-release-identity.md)
+and [account audience decision](../decisions/2026-10-16-allow-personal-microsoft-accounts.md).
+
+Google uses each user's own Desktop OAuth client, with no built-in Google release
+identity. Settings guides project creation, API enablement, External consent and
+production publishing, then imports the downloaded client JSON with a file picker.
+GChat's protected credential store saves any registration secret; imported endpoint URLs
+never change provider routing. Expired or revoked sign-in prompts account
+reconnection in plain language. These source changes use mocks; live consent
+remains Ron's release gate. See [the Google setup guide](operations.md#google-register-your-own-desktop-app)
+and [the registration decision](../decisions/2026-10-16-guide-google-desktop-registration.md).
 
 Google services: Gmail, Calendar, Drive, Docs, Sheets, Slides, People contacts and
 Tasks. Microsoft Graph services: Outlook mail/calendar/contacts, OneDrive,
@@ -31,14 +46,15 @@ with exact schemas and truthful provider/account limitations; do not claim every
 provider API or unsupported native Word/PowerPoint editing. Binary file operations
 use deliberate content ownership, never model-visible authenticated download URLs.
 
-## Existing evidence
+## Historical baseline before native connectors
 
 Baseline `f111810ec` bundles `gog-workspace` v0.1.8, an external CLI skill with
 Darwin/Linux admission; its Windows setup script does not make it Windows-enabled.
-Gmail, Calendar and Drive examples exist, but native managed Google OAuth and
-owned service adapters do not. Its promise that read commands bypass approval
-conflicts with the shared classification of all shell calls as approval-gated.
-Microsoft 365 adapters and native account sign-in are absent. Local Office file
+At that baseline, Gmail, Calendar and Drive examples existed, but native managed
+Google OAuth and owned service adapters did not. Its promise that read commands
+bypass approval conflicts with the shared classification of all shell calls as
+approval-gated. Microsoft 365 adapters and native account sign-in were also absent
+at that baseline; the current native implementation is described below. Local Office file
 reading, synced OneDrive paths and Azure OpenAI are separate capabilities.
 The single master backlog is [GInfer open work](/ai/ginfer-worktrees/open-work/docs/maintainer/open-work.md).
 
@@ -46,7 +62,9 @@ The single master backlog is [GInfer open work](/ai/ginfer-worktrees/open-work/d
 
 One native account owner manages browser-based OAuth PKCE, public app registration
 configuration, per-service grants, selected accounts and refresh. Refresh tokens
-and any Google desktop registration secret are stored in the OS credential vault;
+and any Google desktop registration secret are stored in GChat's protected
+credential store (the native Windows store, or Secret Service or a selected
+passphrase vault on Linux);
 access tokens are cached only in native memory. Frontend and model receive public
 metadata only. Use existing dependencies. Provider adapters
 own exact API hosts, endpoints, methods, schemas, paging and response conversion.

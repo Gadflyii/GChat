@@ -108,7 +108,7 @@ export type EngineSnapshot = {
   launch_profiles?: { model_id: string; gpu_groups: string[][]; compatible_gpu_groups: string[][];
     profile: { id: string; name: string; tp: number; max_context: number; concurrency: number;
       options: Partial<EngineLaunchOptions> & { vision: boolean };
-      qualification: { tier: 'full-context-tested' | 'calculated-startup-smoke' | 'calculated-pending-validation'; engine_revision: string } } }[];
+      qualification: { tier: 'full-context-tested' | 'screened-startup' | 'calculated-startup-smoke' | 'calculated-pending-validation'; engine_revision: string } } }[];
   profile_error?: string | null;
   host_id: string; display_name: string; revision: number; boot_id?: string;
   gpus: import('@/lib/model-release').ModelGpu[];

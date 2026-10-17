@@ -267,6 +267,63 @@ Own processes and
 private state are retired; accepted binaries remain. No rebuild/model/GPU run.
 Evidence: `/ai/gchat/out/oi119-native-idle-20261013/result.json`.
 
+## WINDOWS-IDLE-CPU — incomplete first-run maintenance
+
+The private, model-free Windows Host trace at `dcb11c14cd98ae594d56531782469247d47acce9`
+records **14.3383% of one core** and **30 × 30,303,018 bytes** read in
+**29.9679143 s** (31 endpoints). An incomplete setup with GPU selection kept the
+one-second monitor active; each maintenance call read and parsed the full
+hardware profile while waiting for model choice. The candidate predicate keeps
+maintenance active for automatic work, admitted downloads and pending startup
+quotes, and waits for an explicit action at input/error/approval boundaries.
+Durable download admission and discard wake the parked monitor even when the
+HTTP caller is canceled; transfer-progress writes do not add wakeups. Regressions
+cover ordinary Models Resume, cancellation during journal publication, and a
+paused job discarded while the monitor is parked. The discard case proves the
+wake and restored pending state, not completion of the wizard.
+The counters corroborate this source path without a file-path or stack trace;
+logical read bytes do not establish physical disk throughput. Capture recovery
+and forced Host cleanup remain recorded. There is **no post-fix physical sample
+or measured improvement claim**. Saved OI-119 Linux/WSLg evidence (Host 0%,
+Manager family 0.133307% of one core over 30.005842534 s, zero models/profiles)
+is an unmatched source/workload comparison.
+
+Current-main integration at `9b4c4d9f8` preserves selected-artifact readiness:
+a reopened Host or reconfigured runtime must accept each exact selected artifact
+before retained quotes can authorize startup. Maintenance parks at the first
+interrupted scope until **Resume**, or at its stored error until correction;
+later unquoted selections cannot bypass that scope. This check avoids reading
+the full hardware profile while waiting. New regressions cover restart/runtime
+reconfiguration, a genuine interrupted scoped-job journal and the first blocked
+scope among two selections. At `ce950a163`, the affected suites pass
+**18 tests / 1 ignored**, with Host check and strict Clippy passing. The first
+merged attempt retained 12 passes, two failures and one ignored: two new tests
+expected single-poll completion across asynchronous artifact validation. They now
+hold the operation lock while awaiting bounded maintenance completion, proving
+that parked setup does not wait for that lock. Production code is unchanged from
+`9b4c4d9f8`. Two incorrectly named service selectors initially ran zero cases;
+the corrected selectors ran all three intended cases and only those receive
+credit. These focused results do not relabel the earlier broad gate below.
+All owned local child processes/groups returned by 17:20:18.755Z and both CPU
+bookings were canceled. The shared build guard had already passed to another
+owner, so the subsequent busy probe is retained without a global-free claim.
+
+Earlier source `846f782da` passed five focused regressions, Host check and
+strict Clippy. The literal `make verify` exited 2 at two unchanged descendant-
+process liveness tests, after lint, typecheck, quality guards, frontend 2,465
+passed/6 skipped, extensions 114 passed and main Rust 695 passed/7 ignored.
+The original failure is retained: orphan zombies in the container without an
+init process are a hypothesis, not a captured process-state diagnosis. With
+Docker `--init`, those two tests passed, followed by all five previously
+unreached Rust suites. This is a **composed completion of the verification
+scope**, totaling 971 Rust passed/27 ignored, rather than a literal successful
+`make verify` run. Both attempts checked the same 3,021 tracked blobs/modes and
+unchanged Cargo lock before and after execution. The continuation container and
+shared guards returned by 16:36:09.765Z; local helpers exited by 16:36:12.153Z.
+Independent process-group absence checks finished at 16:36:59.176Z. The build bookings were canceled and
+the successor notified. [Result and retained failures](/ai/gchat/out/windows-idle-cpu-20261016/result.json);
+recovered trace and limitations are in `/ai/gchat/out/windows-idle-cpu-20261016/`.
+
 ## Accepted OI-116 and OI-118 lifecycle review
 
 Repository `/ai/gchat`, subject `docs/code-hygiene/`, owner GChat coordinator.

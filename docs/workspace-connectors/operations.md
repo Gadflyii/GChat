@@ -1,8 +1,8 @@
 # Workspace connection setup and operations
 
-This describes the implemented source. Focused checks pass; live Windows/Linux
-sign-in acceptance requires registered clients and approved test accounts. The
-installed application does not yet contain these connectors. See
+These instructions describe the current implementation. Focused source checks
+pass; live Windows/Linux sign-in acceptance remains a separate release gate with
+approved test accounts and registrations. See
 [current delivery status](README.md).
 
 ## Connect an account
@@ -14,49 +14,150 @@ continues to take precedence. Google still requires its Desktop registration.
 Select the account to use by default. Multiple connected accounts
 can be addressed by their public account IDs; email addresses are not account IDs.
 
-Google needs a Desktop application OAuth client and the selected service APIs
-enabled in that project. The callback uses `http://127.0.0.1:<port>/oauth/callback`
-on a temporary local listener. Enter a registration secret only if required by
-that Desktop client; GChat stores it in the OS vault. Test users, consent status
-and organization policy must admit the account and requested scopes.
-[Google native-app authorization](https://developers.google.com/identity/protocols/oauth2/native-app).
+### Google: register your own Desktop app
 
-For Microsoft, select **Sign in with Microsoft**. In Gbot Cloud PC setup, use the
-work or school account with an assigned Windows 365 Cloud PC, complete browser
-sign-in and any MFA or administrator approval, then explicitly choose the account
-and Cloud PC. GChat requests read-only Cloud PC discovery; signing in does not
-select a PC or grant bot control.
+Each user supplies their own Google Desktop OAuth client. GChat has no built-in
+Google release identity. Settings provides these steps and imports the downloaded
+JSON, so users do not need to copy a client ID or secret:
 
-If Microsoft sign-in is not configured in the release, GChat explains this and
-disables sign-in. Users do not need to find or create an app ID. Ron must supply
-the approved release registration before the default flow can be released.
+1. [Create or select a Google Cloud project](https://console.cloud.google.com/projectcreate).
+2. Enable the [Gmail](https://console.cloud.google.com/apis/library/gmail.googleapis.com),
+   [Calendar](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com),
+   [Drive](https://console.cloud.google.com/apis/library/drive.googleapis.com),
+   [Docs](https://console.cloud.google.com/apis/library/docs.googleapis.com),
+   [Sheets](https://console.cloud.google.com/apis/library/sheets.googleapis.com),
+   [Slides](https://console.cloud.google.com/apis/library/slides.googleapis.com),
+   [Tasks](https://console.cloud.google.com/apis/library/tasks.googleapis.com) and
+   [People](https://console.cloud.google.com/apis/library/people.googleapis.com) APIs
+   in that project.
+3. Open [Google Auth Platform → Branding](https://console.cloud.google.com/auth/branding)
+   to configure the consent screen, then [Audience](https://console.cloud.google.com/auth/audience)
+   and choose **External**. While testing, add your own Google account as a test
+   user. Set the publishing status to **In production** before relying on the
+   connection: External apps left in Testing receive refresh tokens that expire
+   after seven days for these Workspace scopes. Production status removes that
+   testing limit; users can still revoke consent and other token expiry rules
+   still apply.
+4. Open [Clients](https://console.cloud.google.com/auth/clients), create an OAuth
+   client with application type **Desktop app**, and download its client JSON.
+5. In **Settings → Workspace connections → Google**, choose the JSON file.
+   GChat accepts Desktop-client JSON, saves the public ID
+   and stores any registration secret in GChat's protected credential store.
+   Importing another client replaces the registration and requires reconnecting
+   existing Google accounts. Keep the downloaded file private; do not paste it
+   into chat.
+6. Choose services and access, then sign in through the system browser. If Google
+   shows **Google hasn't verified this app**, proceed only if this is the app
+   you just created in your own project and its requested permissions are expected.
+   Expand **Advanced**, choose **Go to your app (unsafe)**, then review permissions
+   and **Continue** when offered. This warning does not override an organization
+   restriction or an access-denied screen. Publishing and verification are separate;
+   making your app public for other users can require Google's verification.
+
+The callback uses `http://127.0.0.1:<port>/oauth/callback` on a temporary local
+listener. Imported authorization and token URLs are ignored; GChat continues to
+use its fixed Google endpoints and PKCE. Import does not sign in or grant access.
+If Google sign-in expires or access is removed, GChat explains that the account
+must be reconnected in **Settings → Workspace connections**. A temporary network,
+throttling or server error does not become a consent-revoked message.
+
+Google documents [project creation](https://developers.google.com/workspace/guides/create-project),
+[API enablement](https://developers.google.com/workspace/guides/enable-apis),
+[consent configuration](https://developers.google.com/workspace/guides/configure-oauth-consent),
+[Desktop credentials](https://developers.google.com/workspace/guides/create-credentials),
+[refresh-token expiry](https://developers.google.com/identity/protocols/oauth2#expiration)
+and [unverified-app warnings](https://developers.google.com/data-manager/api/devguides/concepts/oauth-verification).
+
+### Microsoft: use the release sign-in
+
+For Microsoft, select **Sign in with Microsoft**. The release registration uses
+the `common` tenant and accepts work, school and personal Microsoft accounts,
+including Outlook.com, Hotmail and personal OneDrive. Available services still
+depend on the account. SharePoint, Teams and Windows 365 Cloud PC need a work or
+school account; GChat explains that requirement when those services are selected
+or the provider reports an unsupported account. It does not guess account type from an
+email address or treat every permission failure as a personal account.
+Calendar free/busy and Teams online meetings also need a supported work or school
+account; ordinary personal calendar operations remain available where supported.
+
+In Gbot Cloud PC setup, use the work or school account with an assigned Windows
+365 Cloud PC, complete browser sign-in and any MFA or administrator approval,
+then explicitly choose the account and Cloud PC. GChat requests read-only Cloud
+PC discovery; signing in does not select a PC or grant bot control. If the
+organization requires approval, ask its administrator to approve the requested
+permissions, then retry. Permission and license failures remain distinct from
+network, throttling and server failures.
+
+If Microsoft sign-in is unavailable in a build, GChat explains this and disables
+sign-in. Install a release that includes Microsoft sign-in; users do not need to
+find or create an app ID. Development or explicitly unconfigured builds can
+still use an existing approved registration through the advanced option below.
 
 Organizations with an existing approved registration can expand **Advanced: use
 your organization's Microsoft app** in Settings. Copy its Application (client) ID
 from Microsoft Entra, confirm the Mobile and desktop applications reply URI is
 `http://localhost/oauth/callback`, and supply a directory (tenant) ID if required
 by the administrator. Save, choose services, then sign in. GChat uses a temporary
-localhost port. The advanced form retains the existing `common` default for an
-omitted tenant; the release identity defaults to `organizations`. No Microsoft
+localhost port. Both the release identity and an omitted advanced tenant default
+to `common`. A directory tenant ID intentionally restricts the advanced app to
+that directory; the release does not use Ron's directory tenant ID. No Microsoft
 client secret is used. Some service permissions need tenant administrator consent.
 [Microsoft authorization flow](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow),
 [localhost reply URI rules](https://learn.microsoft.com/en-us/entra/identity-platform/reply-url).
 
-Release maintainers compile the approved public identity with
-`GCHAT_MICROSOFT_CLIENT_ID` and, if required, `GCHAT_MICROSOFT_TENANT`. A missing,
-invalid or nil client UUID, or an invalid tenant, leaves default sign-in
-unavailable. These are public application identifiers, never client secrets.
+Release builds compile the registered public client ID
+`e618bfb1-eb1d-4112-ad84-e3ff963f585c` with tenant `common` through the shared
+native build configuration on Linux and Windows. Build-time
+`GCHAT_MICROSOFT_CLIENT_ID` and `GCHAT_MICROSOFT_TENANT` override those defaults;
+an explicitly empty client ID disables default sign-in. Non-release builds do
+not assume a registration. A missing, invalid or nil client UUID, or an invalid
+tenant, leaves default sign-in unavailable. These are public application
+identifiers, never client secrets.
 The native account owner applies the default only when no Microsoft registration
 is saved, without startup vault access or a configuration-file write. A later
 ordinary metadata save may retain that identity; future upgrades preserve saved
 registrations and their account bindings. Changing a saved registration remains
-an explicit advanced action requiring account reconnection. No release identity
-is fabricated; tests use synthetic identifiers only.
+an explicit advanced action requiring account reconnection. Tests use synthetic
+identifiers and local mocks; they do not sign in using the release app.
+
+Ron must confirm the portal configuration: **Microsoft Entra → App registrations
+→ GChat → Authentication → Mobile and desktop applications** must contain exactly
+`http://localhost/oauth/callback`. The native callback uses this path on a
+temporary localhost port, following Microsoft's loopback-port matching rules.
+**Supported account types** must be **Accounts in any organizational directory
+and personal Microsoft accounts**. The repository confirms the requested URL
+and audience, but cannot verify the portal's saved redirect configuration.
+No Microsoft client secret is required. Live consent remains Ron's release gate.
+
+### If sign-in needs attention
+
+- **Permission approval or a security step:** finish sign-in in the browser and
+  review the requested permissions. If a work or school organization requires
+  administrator approval, ask its administrator to approve GChat, then retry.
+  A personal Microsoft account does not need an organization administrator.
+- **A work or school account is required:** choose that account for SharePoint,
+  Teams or Windows 365 Cloud PC. If you already use one, have the organization's
+  administrator check service permissions and any required license. This message
+  does not mean GChat determined your account type from your email address.
+- **Sign-in expired, access removed or registration rejected:** use
+  **Settings → Workspace connections → Reconnect** for the affected account.
+  For Google, also check whether your own app is still in Testing, where these
+  refresh tokens expire after seven days.
+- **Temporary connection, rate-limit or server failure:** retry the operation
+  later. A temporary failure, including a token response with HTTP 429 or 503,
+  does not remove the saved credential or mark the account for reconnection.
+  Recreating an app registration or disconnecting the account is unnecessary.
+
+Recognized Microsoft permission and security errors use fixed guidance instead
+of displaying the provider's raw response. Other failures can include an HTTP
+status; a status alone does not establish an account-type or consent problem.
+
+### Grants and stored credentials
 
 The provider consent screen controls actual grants. Settings displays the granted
 scopes and reconnect status. Changing registration or expired consent requires
-reconnection. Windows uses the existing native credential store; Linux requires
-the existing Secret Service credential backend. Tokens are not exposed to models
+reconnection. Windows uses the native credential store; Linux uses Secret Service
+or a user-selected passphrase vault. Tokens are not exposed to models
 or saved in the public connection metadata.
 
 Read-only access restricts GChat operations. Provider permissions can be broader:
@@ -125,9 +226,10 @@ account/organization portal; GChat does not revoke unrelated application session
 
 ## Acceptance still needed
 
-Registered Google and Microsoft client IDs and user-approved test accounts are
-needed to verify sign-in, refresh, cancellation, reconnect, consent, disconnect
-and a disposable read/write operation on both desktop platforms. Enter credentials
-through Settings and provider consent pages, not chat. Passing focused fixtures
+Ron supplies his own Google Desktop registration and uses the Microsoft release
+identity for live acceptance. User-approved accounts are needed to verify sign-in,
+refresh, cancellation, reconnect, consent, disconnect and a disposable read/write
+operation on both desktop platforms. Import Google credentials through Settings
+and use the provider consent pages, not chat. Passing focused fixtures
 cover request construction, state transitions, shared dispatch and connection UI;
 they do not establish live provider or credential-store qualification.
