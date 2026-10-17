@@ -470,7 +470,7 @@ function BenchmarkPage() {
             <IconChartLine className="size-5 text-primary" />
             <span className="font-studio text-base font-medium">Benchmark</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => void refreshSessions()} disabled={loadingSessions || !!activeRunId}>
+          <Button variant="outline" size="sm" onClick={() => void refreshSessions()} disabled={loadingSessions || !!activeRunId}>
             <IconRefresh className={cn(loadingSessions && 'animate-spin')} />
             Refresh server
           </Button>

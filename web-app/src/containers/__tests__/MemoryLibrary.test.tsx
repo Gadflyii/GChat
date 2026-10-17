@@ -78,3 +78,18 @@ it('keeps edits visible when a concurrent revision prevents saving', async () =>
   )
   expect(screen.getByLabelText('Title')).toHaveValue('Preference')
 })
+
+it('puts Refresh and New memory in the page header slot and does not repeat the page title', async () => {
+  const slot = document.createElement('div')
+  slot.id = 'page-header-actions'
+  document.body.appendChild(slot)
+  try {
+    render(<MemoryLibrary />)
+    await screen.findByText(/No saved memories yet/)
+    expect(slot).toContainElement(screen.getByRole('button', { name: 'Refresh' }))
+    expect(slot).toContainElement(screen.getByRole('button', { name: 'New memory' }))
+    expect(screen.queryByRole('heading', { name: 'Memory' })).not.toBeInTheDocument()
+  } finally {
+    slot.remove()
+  }
+})

@@ -6,6 +6,7 @@ import { CredentialSetup } from '@/containers/CredentialSetup'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { IconRefresh } from '@tabler/icons-react'
 import { route } from '@/constants/routes'
 import { engineCommand } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
@@ -49,7 +50,7 @@ function EnginesPage() {
     catch (e) { toast.error(String(e)) } finally { setBusy(null) }
   }
   return <div className="flex h-svh min-h-0 flex-col overflow-hidden">
-    <HeaderPage><div className="flex w-full items-center justify-between pr-4"><h1>GInfer Hosts</h1><Button variant="outline" disabled={refreshing} onClick={() => void refresh().catch((e) => toast.error(String(e)))}>Refresh</Button></div></HeaderPage>
+    <HeaderPage><div className="flex w-full items-center justify-between pr-4"><h1>GInfer Hosts</h1><Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh().catch((e) => toast.error(String(e)))}><IconRefresh size={16} className={refreshing ? 'animate-spin' : undefined} />Refresh</Button></div></HeaderPage>
     <main className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
       <p className="text-muted-foreground">Manage local serving and GInfer hosts on your network. Your computer does not need a local GPU to use remote hosts.</p>
       <div className="flex flex-wrap items-center gap-6">
