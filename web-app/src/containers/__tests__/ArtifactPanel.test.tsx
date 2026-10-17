@@ -117,4 +117,50 @@ describe('ArtifactPanel', () => {
     settlePanelAnimation()
     expect(useArtifactStore.getState().isOpen).toBe(false)
   })
+
+  it('re-clamps an oversized panel when the window narrows, never widening it', () => {
+    const original = window.innerWidth
+    const setWindowWidth = (px: number) => {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: px,
+      })
+      act(() => {
+        window.dispatchEvent(new Event('resize'))
+      })
+    }
+    try {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: 1400,
+      })
+      render(<Harness content={SETTLED} streaming={false} />)
+      act(() => {
+        fireEvent.click(trigger()!)
+      })
+      settlePanelAnimation()
+      const panel = () =>
+        document.querySelector<HTMLElement>('div.border-l.shrink-0')!
+      const wide = parseInt(panel().style.width, 10)
+      expect(wide).toBe(630)
+
+      setWindowWidth(900)
+      const narrowed = parseInt(panel().style.width, 10)
+      expect(narrowed).toBeLessThan(wide)
+      // Chat keeps at least MIN_CHAT_WIDTH (panel minimum + 100) of room.
+      expect(900 - narrowed).toBeGreaterThanOrEqual(480)
+
+      // Widening the window again does not widen the panel past that choice.
+      setWindowWidth(1400)
+      expect(parseInt(panel().style.width, 10)).toBe(narrowed)
+    } finally {
+      Object.defineProperty(window, 'innerWidth', {
+        configurable: true,
+        writable: true,
+        value: original,
+      })
+    }
+  })
 })

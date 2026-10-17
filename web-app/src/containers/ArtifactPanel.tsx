@@ -169,6 +169,14 @@ export function ArtifactPanel() {
     return () => clearTimeout(t)
   }, [isOpen])
 
+  // Narrowing the window must not leave the panel wider than the room allows:
+  // re-clamp the current width (never widens a width the user already chose).
+  useEffect(() => {
+    const onResize = () => setWidth((w) => clampPanelWidth(w))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
   // Overlay (below) keeps mousemove/up firing while the iframe swallows pointer events.
   useEffect(() => {
     if (!dragging) return
