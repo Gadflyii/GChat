@@ -265,6 +265,34 @@ returned at 08:09Z. Evidence:
 `/ai/gchat/out/oi068-process-death-20261017/{host-loss-result.json,host-loss-summary.md}`;
 result SHA256 `deee51b6ef02fa3629865694916ecaa7fc3d6cbd9e0820864d4a381fa1a2581c`.
 
+## OI-068 native in-flight Engine loss and explicit restart — October 17
+
+The retained d31 AppImage with Engine `db265e6b2` ran Qwen 27B NVFP4
+(artifact SHA256 `4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6`)
+on the local RTX 5090. The same saved profile
+used C1, context 131072 and KV arena 5368709120 bytes; the effective maximum
+request context was 77824. Engine PID302373 received SIGKILL at
+09:56:54.380021Z after a fresh Ready observation with one active request.
+Run `937ca287-5623-4a0f-a472-f0a2509044ae` failed with zero completed model
+steps and an explicit connection-closed error.
+
+An ordinary Start of the same profile at 09:58:33Z was followed by distinct
+run `0bb48385-189d-4585-9bc1-1fbbdca72180`. It used `os.fs.read` and finished
+with a Reply after two steps at 09:59:14Z, reproducing the observation file's
+exact contents. Ordinary Runs history showed the original FAILED record and
+the new FINISHED record, and reopening the latter preserved its reply.
+
+This passes bounded in-flight Engine-loss reporting and explicit restart/new-run
+recovery. It does not qualify automatic replay or resume, power-loss recovery,
+literal 262144-token input, Hermes or Windows; OI-068 remains PARTIAL. Normal UI
+Stop at 09:59:50Z reached stopped at 10:00:00Z; normal desktop close exited zero,
+then the idle Host received SIGTERM with all instances stopped and no active
+requests. Owned resources were returned at 10:00Z.
+Evidence under `/ai/gchat/out/oi068-process-death-20261017/`:
+`engine-loss-result.json` (SHA256
+`72edd92d65eea0cbf2ddb3152b5ddc616205493355bb99cbc6542f93776be218`) and
+`engine-loss-{fault,recovery-monitor-1,recovery-finished-ui,recovery-history-opened,normal-stop}.json`.
+
 ## Native attachment chooser current tools — October 17
 
 In an existing private conversation on the same desktop, the document reader
