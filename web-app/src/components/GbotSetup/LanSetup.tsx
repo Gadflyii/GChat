@@ -273,10 +273,25 @@ export default function LanSetup({
               </label>
             </div>
           )}
+          {!connection.workspaceId && !working && (!identity || !verified) && (
+            <p
+              id="lan-create-key-hint"
+              className="text-sm text-muted-foreground"
+            >
+              {identity
+                ? 'Confirm the fingerprint above to turn on Create bot key.'
+                : 'To create the bot key, first choose Check computer identity.'}
+            </p>
+          )}
           {!connection.workspaceId && (
             <Button
               type="button"
               disabled={working || !verified || !identity}
+              aria-describedby={
+                !working && (!identity || !verified)
+                  ? 'lan-create-key-hint'
+                  : undefined
+              }
               onClick={() => void run('create', () => create(false))}
             >
               {action === 'create' ? actionLabels.create : 'Create bot key'}
