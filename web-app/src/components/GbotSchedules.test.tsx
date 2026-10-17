@@ -80,6 +80,11 @@ it('shows a stopped scheduler outside the collapsed panel and prevents creating 
     target: { value: '2030-01-02T09:00' },
   })
   expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  expect(request).not.toHaveBeenCalledWith(
+    'schedules/create',
+    expect.anything()
+  )
 })
 
 it('lists this bot schedules, states the background lifetime requirement and disables future dispatch', async () => {
@@ -102,8 +107,18 @@ it('lists this bot schedules, states the background lifetime requirement and dis
 })
 
 it('creates an explicit interval prompt and missed-run policy for the selected bot', async () => {
+  const create = deferred<unknown>()
+  const refreshed = deferred<{
+    schedules: (typeof schedule)[]
+    stopped: null
+  }>()
+  request
+    .mockResolvedValueOnce({ schedules: [schedule], stopped: null })
+    .mockReturnValueOnce(create.promise)
+    .mockReturnValueOnce(refreshed.promise)
   render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
   fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
   fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
     target: { value: 'Prepare my daily notes' },
   })
@@ -119,23 +134,159 @@ it('creates an explicit interval prompt and missed-run policy for the selected b
   fireEvent.change(screen.getByLabelText('Missed run policy'), {
     target: { value: 'skip_missed' },
   })
+  const form = screen.getByRole('form', { name: 'Schedule a bot task' })
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
+  expect(
+    request.mock.calls.filter(([route]) => route === 'schedules/create')
+  ).toEqual([
+    [
+      'schedules/create',
+      {
+        workspace_id: 'bot-one',
+        prompt: 'Prepare my daily notes',
+        timing: {
+          kind: 'interval',
+          first_at: Math.floor(new Date('2030-01-02T09:00').getTime() / 1000),
+          every_seconds: 86400,
+        },
+        missed_run_policy: 'skip_missed',
+      },
+    ],
+  ])
+  expect(
+    screen.getByRole('button', { name: 'Creating schedule…' })
+  ).toBeDisabled()
+  expect(screen.getByLabelText('Scheduled task prompt')).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Creating schedule…')
+  expect(screen.getByRole('status').closest('details')).toBeNull()
+  await act(async () => create.resolve(undefined))
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
+  expect(
+    screen.getByRole('button', { name: 'Creating schedule…' })
+  ).toBeDisabled()
+  fireEvent.submit(form)
+  expect(
+    request.mock.calls.filter(([route]) => route === 'schedules/create')
+  ).toHaveLength(1)
+  await act(async () =>
+    refreshed.resolve({ schedules: [schedule], stopped: null })
+  )
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
+})
+
+it.each([
+  [true, 'Disable schedule', 'Disabling schedule…'],
+  [false, 'Enable schedule', 'Enabling schedule…'],
+])(
+  'shows progress and allows retry when changing enabled=%s fails',
+  async (enabled, label, progress) => {
+    const change = deferred<unknown>()
+    const retry = deferred<unknown>()
+    const current = { ...schedule, enabled }
+    request
+      .mockResolvedValueOnce({
+        schedules: [
+          current,
+          {
+            ...schedule,
+            id: 'second',
+            prompt: 'Another task',
+            enabled: !enabled,
+          },
+        ],
+        stopped: null,
+      })
+      .mockReturnValueOnce(change.promise)
+      .mockReturnValueOnce(retry.promise)
+      .mockResolvedValueOnce({
+        schedules: [{ ...current, enabled: !enabled }],
+        stopped: null,
+      })
+    render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+    fireEvent.click(screen.getByText('Scheduled tasks'))
+    await screen.findByText('Check the calendar')
+    const button = screen.getByRole('button', { name: label })
+    act(() => {
+      fireEvent.click(button)
+      fireEvent.click(button)
+    })
+    expect(
+      request.mock.calls.filter(([route]) => route === 'schedules/enabled')
+    ).toEqual([['schedules/enabled', { id: schedule.id, enabled: !enabled }]])
+    expect(screen.getByRole('button', { name: progress })).toBeDisabled()
+    expect(
+      screen.getByRole('button', {
+        name: enabled ? 'Enable schedule' : 'Disable schedule',
+      })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Create schedule' })
+    ).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent(progress)
+
+    await act(async () => change.reject(new Error('Service unavailable')))
+    expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: label })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(progress)
+    await act(async () => retry.resolve(undefined))
+    expect(
+      request.mock.calls.filter(([route]) => route === 'schedules/enabled')
+    ).toEqual([
+      ['schedules/enabled', { id: schedule.id, enabled: !enabled }],
+      ['schedules/enabled', { id: schedule.id, enabled: !enabled }],
+    ])
+    expect(
+      screen.getByRole('button', {
+        name: enabled ? 'Enable schedule' : 'Disable schedule',
+      })
+    ).toBeEnabled()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  }
+)
+
+it('retains a failed schedule draft and lets the user retry creating it', async () => {
+  const create = deferred<unknown>()
+  request
+    .mockResolvedValueOnce({ schedules: [], stopped: null })
+    .mockReturnValueOnce(create.promise)
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce({ schedules: [], stopped: null })
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await waitFor(() => expect(request).toHaveBeenCalledWith('schedules'))
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Check task' },
+  })
+  fireEvent.change(screen.getByLabelText('Schedule start time'), {
+    target: { value: '2030-01-02T09:00' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Create schedule' }))
+  await act(async () => create.reject(new Error('Could not save schedule')))
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not save schedule')
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Check task'
+  )
+  expect(screen.getByLabelText('Schedule start time')).toHaveValue(
+    '2030-01-02T09:00'
+  )
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Create schedule' }))
   await waitFor(() =>
-    expect(request).toHaveBeenCalledWith('schedules/create', {
-      workspace_id: 'bot-one',
-      prompt: 'Prepare my daily notes',
-      timing: {
-        kind: 'interval',
-        first_at: Math.floor(new Date('2030-01-02T09:00').getTime() / 1000),
-        every_seconds: 86400,
-      },
-      missed_run_policy: 'skip_missed',
-    })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
   )
-  await waitFor(() =>
-    expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
+  const calls = request.mock.calls.filter(
+    ([route]) => route === 'schedules/create'
   )
-  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
+  expect(calls).toHaveLength(2)
+  expect(calls[1]).toEqual(calls[0])
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
 })
 
 it('requires a saved bot inference assignment before schedule creation', async () => {
@@ -149,10 +300,21 @@ it('requires a saved bot inference assignment before schedule creation', async (
   expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
   expect(screen.getByLabelText('Scheduled task prompt')).toBeDisabled()
   await screen.findByText('Check the calendar')
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Check task' },
+  })
+  fireEvent.change(screen.getByLabelText('Schedule start time'), {
+    target: { value: '2030-01-02T09:00' },
+  })
+  fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  expect(request).not.toHaveBeenCalledWith(
+    'schedules/create',
+    expect.anything()
+  )
 })
 
 it('removes the previous bot schedules and draft immediately while the new bot loads', async () => {
-  const next = deferred<{ schedules: typeof schedule[]; stopped: null }>()
+  const next = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
   request
     .mockResolvedValueOnce({ schedules: [schedule], stopped: null })
     .mockReturnValueOnce(next.promise)
@@ -184,7 +346,12 @@ it('removes the previous bot schedules and draft immediately while the new bot l
   await act(async () =>
     next.resolve({
       schedules: [
-        { ...schedule, id: 'two', workspace_id: 'bot-two', prompt: 'Bot two task' },
+        {
+          ...schedule,
+          id: 'two',
+          workspace_id: 'bot-two',
+          prompt: 'Bot two task',
+        },
       ],
       stopped: null,
     })
@@ -194,21 +361,26 @@ it('removes the previous bot schedules and draft immediately while the new bot l
 })
 
 it('ignores a previous bot schedule response after the current list is ready', async () => {
-  const previous = deferred<{ schedules: typeof schedule[]; stopped: null }>()
-  request
-    .mockReturnValueOnce(previous.promise)
-    .mockResolvedValueOnce({
-      schedules: [
-        { ...schedule, id: 'two', workspace_id: 'bot-two', prompt: 'Bot two task' },
-      ],
-      stopped: null,
-    })
+  const previous = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  request.mockReturnValueOnce(previous.promise).mockResolvedValueOnce({
+    schedules: [
+      {
+        ...schedule,
+        id: 'two',
+        workspace_id: 'bot-two',
+        prompt: 'Bot two task',
+      },
+    ],
+    stopped: null,
+  })
   const view = render(<GbotSchedules workspaceId="bot-one" />)
   view.rerender(<GbotSchedules workspaceId="bot-two" />)
   fireEvent.click(screen.getByText('Scheduled tasks'))
   await screen.findByText('Bot two task')
 
-  await act(async () => previous.resolve({ schedules: [schedule], stopped: null }))
+  await act(async () =>
+    previous.resolve({ schedules: [schedule], stopped: null })
+  )
 
   expect(screen.getByText('Bot two task')).toBeInTheDocument()
   expect(screen.queryByText('Check the calendar')).not.toBeInTheDocument()
@@ -233,7 +405,9 @@ it('keeps the new bot usable when the previous bot pending action fails', async 
   fireEvent.click(screen.getByText('Scheduled tasks'))
   await screen.findByText('Check the calendar')
   fireEvent.click(screen.getByRole('button', { name: 'Disable schedule' }))
-  expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Disabling schedule…' })
+  ).toBeDisabled()
 
   view.rerender(
     <GbotSchedules
