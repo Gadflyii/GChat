@@ -2655,6 +2655,8 @@ const ChatInput = memo(function ChatInput({
                         variant="secondary"
                         size="icon-sm"
                         className="rounded-full mr-2 mb-1"
+                        aria-label={t('chat:attachMenu.label')}
+                        title={t('chat:attachMenu.label')}
                       >
                         <PlusIcon
                           size={18}
@@ -2715,10 +2717,21 @@ const ChatInput = memo(function ChatInput({
                             className="text-muted-foreground"
                           />
                         )}
-                        <span>
-                          {ingestingDocs
-                            ? 'Indexing documents…'
-                            : 'Add documents or files'}
+                        <span className="flex flex-col">
+                          <span>
+                            {ingestingDocs
+                              ? 'Indexing documents…'
+                              : 'Add documents or files'}
+                          </span>
+                          {!selectedModel?.capabilities?.includes('tools') && (
+                            <span className="text-xs text-muted-foreground">
+                              {t(
+                                selectedModel
+                                  ? 'chat:attachMenu.documentsNeedTools'
+                                  : 'chat:attachMenu.documentsNeedModel'
+                              )}
+                            </span>
+                          )}
                         </span>
                       </DropdownMenuItem>
                     </DropdownMenuContent>

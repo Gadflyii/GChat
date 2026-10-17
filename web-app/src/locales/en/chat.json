@@ -29,6 +29,11 @@
     "placeholder": "Describe a task for the agent...",
     "providerUnavailable": "Agent mode is available only with a local llama.cpp model."
   },
+  "attachMenu": {
+    "label": "Attach files",
+    "documentsNeedModel": "Select a model first.",
+    "documentsNeedTools": "This model cannot read files. Choose a model that can use tools."
+  },
   "agentApprovals": {
     "manualSelected": "Manually",
     "manual": "Manually approve",

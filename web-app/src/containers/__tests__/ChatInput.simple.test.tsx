@@ -432,6 +432,17 @@ describe('ChatInput', () => {
     unmount()
   })
 
+  it('names the attach button and says why documents are unavailable for a model without tools', async () => {
+    const { unmount } = render(<ChatInput />)
+    const attach = screen.getByRole('button', { name: 'chat:attachMenu.label' })
+    fireEvent.keyDown(attach, { key: 'ArrowDown' })
+
+    const documents = await screen.findByRole('menuitem', { name: /Add documents or files/ })
+    expect(documents).toHaveAttribute('aria-disabled', 'true')
+    expect(documents).toHaveTextContent('chat:attachMenu.documentsNeedTools')
+    unmount()
+  })
+
   it('toggles native web tools through the shared defaults without a hosted web-search capability', () => {
     useModelProvider.setState((state) => ({ selectedModel: { ...state.selectedModel!, capabilities: ['tools'] } }))
     useAppState.setState({ tools: [...webTools, fileTool] })
