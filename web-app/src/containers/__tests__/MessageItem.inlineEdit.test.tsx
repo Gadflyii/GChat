@@ -10,9 +10,12 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
 
+const modelState = vi.hoisted(() => ({
+  selectedModel: { id: 'test-model' } as { id: string } | undefined,
+}))
 vi.mock('@/hooks/useModelProvider', () => ({
   useModelProvider: (selector: (s: unknown) => unknown) =>
-    selector({ selectedModel: { id: 'test-model' } }),
+    selector({ selectedModel: modelState.selectedModel }),
 }))
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
@@ -60,11 +63,20 @@ const renderMessage = (message: UIMessage = userMessage) =>
   )
 
 beforeEach(() => {
+  modelState.selectedModel = { id: 'test-model' }
   onEdit.mockClear()
   seedServiceHub()
 })
 
 describe('MessageItem inline editing', () => {
+  it('explains why Edit is disabled when no model is selected', () => {
+    modelState.selectedModel = undefined
+    renderMessage()
+    const edit = editButton()
+    expect(edit).toBeDisabled()
+    expect(edit).toHaveAttribute('title', 'common:editMessageNeedsModel')
+  })
+
   it('replaces the message text in place instead of opening a dialog', () => {
     renderMessage()
     expect(screen.getByText('original text')).toBeInTheDocument()
