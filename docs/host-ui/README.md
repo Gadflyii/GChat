@@ -13,9 +13,10 @@ Acceptance: rendered checks find fields by their visible translated names,
 edit the named file limit and verify persistence after navigation; attachment
 availability and durability checks plus one full `make verify` must pass.
 This candidate includes current main, accepted attachment durability, the
-separate availability fix and C6's tested label change. Next: finish the
-sidebar and availability gates, integrate the sidebar, then run this combined
-candidate's focused/full verification and private native replay.
+separate availability and sidebar fixes, and C6's tested label change. Source
+is frozen for the combined focused/full verification after the availability
+gate. Next: build the verified native app and replay the changes in the
+private fixture, retaining screenshots.
 
 Owned source: `/ai/gchat-worktrees/c4-settings-attachment-labels-20261017`,
 branch `fix/c4-settings-attachment-labels-20261017`. Evidence belongs to
@@ -43,7 +44,8 @@ sidebar gate, then the final private native replay.
 Owned source: `/ai/gchat-worktrees/c4-settings-attachment-availability-20261017`,
 branch `fix/c4-settings-attachment-availability-20261017`. The original evidence is retained in
 `/ai/gchat/out/c4-settings-sweep-20261017/{attachment-parse-options.json,settings-attachment-unsupported-mode.png}`.
-No new build, runtime, model or fixture resource is allocated.
+No new model or fixture resource is allocated.
+
 ## Compact Settings sidebar — C4
 
 `GUI-SETTINGS-SIDEBAR-DENSITY` was reproduced in the native Linux Settings
@@ -86,15 +88,28 @@ controls, validation and retry after a failed write; one full `make verify`.
 No model, Engine, provider request or real user-data operation is in scope.
 
 Source: `/ai/gchat-worktrees/c4-attachment-edit-durability-20261017`, branch
-`fix/c4-attachment-edit-durability-20261017`, base `0099e0a1d`. The route, hook and
-dedicated tests are ready for verification. Results and the original native
-screenshots belong to `/ai/gchat/out/c4-settings-sweep-20261017/`; the reproduced
-loss is in `attachments-quick-navigation.json`. The private S1 cache at
-`/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/` is retained for this gate;
-no build is running. Next: focused tests and full verification after C3's GMUL
-timing return, then merge-ready. Provider labels are owned separately by C6,
-provider keyboard navigation by C7; unsupported attachment choices and sidebar
-density remain separate findings in Gchat3's shared GUI list.
+`fix/c4-attachment-edit-durability-20261017`, integrated source `1788ee4336`.
+All six focused persistence regressions and one full `make verify` pass:
+2,971 frontend tests, 119 extension tests, 1,079 Rust tests and 59 Node
+contracts. Six frontend tests were skipped and 27 Rust tests ignored; lint,
+types, quality checks and all six critical coverage floors passed. Lint retains
+four warnings, including the existing attachment `sel` dependency warning.
+
+Results and the original native screenshots belong to
+`/ai/gchat/out/c4-settings-sweep-20261017/`; the reproduced loss is in
+`attachments-quick-navigation.json`, and passing commands are linked from
+`attachment-fix/result.json`. Retained source permissions were repaired before
+tests began. A stale post-run phase reader failed after both requested commands
+and the container exited 0; its separate error does not replace their results.
+No passing test was repeated. Returned 15:55Z; booking2638 canceled.
+
+The private S1 cache at `/media/ron/SSD_RAID/ai/tmp-c4-settings-sweep-20261017/`
+is retained for the remaining isolated Settings fixes. Next: coordinator merge,
+then replay the accepted Settings changes in the private native app. Provider
+labels are owned separately by C6, provider keyboard navigation by C7;
+unsupported attachment choices and sidebar density remain separate findings in
+Gchat3's shared GUI list.
+
 ## Provider field labels — C6
 
 `GUI-SETTINGS-CONTROL-LABELS` gives provider API Key and Base URL inputs
