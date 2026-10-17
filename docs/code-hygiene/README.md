@@ -1,5 +1,35 @@
 # GChat remediation and code hygiene
 
+## Message deletion single submission (C4, October 17)
+
+Repository `/ai/gchat`, branch `fix/c4-message-delete-single-submit-20261017`,
+worktree `/ai/gchat-worktrees/c4-message-delete-single-submit-20261017`,
+baseline `f27eeaac0`. The message dialog handled Enter itself while its native
+button also fired a click, allowing duplicate deletion. The fix uses native
+activation, focuses Cancel initially, and guards deletion synchronously. It
+shows pending state, blocks dismissal while a returned callback is unresolved,
+and exposes failures with retry. The existing synchronous message caller is
+unchanged; the dialog can await callbacks that return a promise.
+
+Acceptance: opening Enter safely cancels; explicit Delete activates once;
+repeated input while pending cannot delete again; failed callbacks stay visible
+and retryable; success closes. Source and real dialog/button interaction tests
+are owned by separate parallel agents. No live user data is deleted.
+
+All nine focused cases passed against the real dialog/button components.
+Linux `make verify` passed: lint, typecheck, quality/contract/asset checks,
+coverage floors, 2,755 frontend tests (six skipped), 119 extension tests, and
+1,073 Rust tests (27 ignored). Lint retains two unrelated warnings in
+`ServiceSetup.tsx` and `AgentWorkspaceFiles.tsx`. Windows runtime behavior was
+not separately exercised.
+
+The private S1 build copy and container were removed after verification;
+booking 2556 was cancelled and resources returned at 13:59Z. Gchat 3's inactive
+dependency donor remains read-only and retained. The source worktree is retained
+for review; concise results are kept at
+`/ai/gchat/out/c4-message-delete-single-submit-20261017/result.json`.
+The next step is the authorized merge; no further run is required.
+
 ## Thread deletion single submission (C4, October 17)
 
 Repository `/ai/gchat`, branch `fix/c4-thread-delete-single-submit-20261017`,
