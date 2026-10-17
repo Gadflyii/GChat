@@ -446,3 +446,13 @@ it('shows only the manual progress controls while advanced options are open', as
   expect(screen.getAllByRole('button', { name: 'Cancel profiling' })).toHaveLength(1)
   expect(screen.getByLabelText('Model download folder')).toBeVisible()
 })
+
+it('scrolls the setup card into view after a step is saved', async () => {
+  const scroll = vi.fn()
+  Element.prototype.scrollIntoView = scroll
+  vi.spyOn(window, 'requestAnimationFrame').mockImplementation(cb => { cb(0); return 0 })
+  mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('models', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } }) : flow('storage', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } })))
+  await act(async () => { render(<EngineFirstRun />) })
+  fireEvent.click(await screen.findByRole('button', { name: 'Use this folder' }))
+  await waitFor(() => expect(scroll).toHaveBeenCalled())
+})
