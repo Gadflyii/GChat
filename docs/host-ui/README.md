@@ -37,6 +37,11 @@ then replay the accepted Settings changes in the private native app. Provider
 labels are owned separately by C6, provider keyboard navigation by C7;
 unsupported attachment choices and sidebar density remain separate findings in
 Gchat3's shared GUI list.
+## Retrying an image preview
+
+If a workspace image cannot be displayed, GChat shows an error instead of an
+empty preview. Check that the file is still available, then choose **Retry
+preview**. The same file stays selected while GChat tries again.
 
 ## Provider settings keyboard navigation — C7
 
