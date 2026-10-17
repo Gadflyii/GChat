@@ -5,6 +5,8 @@ import {
 } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
+import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
+import { formatModelBytes } from '@/lib/model-release'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { DownloadEvent, DownloadState, events, AppEvent } from '@gchat/core'
@@ -57,6 +59,13 @@ export function DownloadManagement() {
     clearDownloadOrigin,
   } = useDownloadStore()
   const { updateState } = useAppUpdater()
+  // Models downloaded through the Models page are managed by the local Host, not
+  // by the legacy download store, so list them here too.
+  const managedJobs = useLocalModelDownloads((s) => s.jobs)
+  const managedTransfers = useMemo(
+    () => managedJobs.filter((job) => job.status !== 'installed'),
+    [managedJobs]
+  )
 
   const [appUpdateState, setAppUpdateState] = useState({
     isDownloading: false,
@@ -139,9 +148,9 @@ export function DownloadManagement() {
   const downloadCount = useMemo(() => {
     const modelDownloads = downloadProcesses.length
     const appUpdateDownload = appUpdateState.isDownloading ? 1 : 0
-    const total = modelDownloads + appUpdateDownload
+    const total = modelDownloads + appUpdateDownload + managedTransfers.length
     return total
-  }, [downloadProcesses, appUpdateState.isDownloading])
+  }, [downloadProcesses, appUpdateState.isDownloading, managedTransfers])
 
   useEffect(() => {
     const prev = prevDownloadCount.current
@@ -188,8 +197,10 @@ export function DownloadManagement() {
       ? appUpdateState.downloadedBytes
       : 0
 
-    const total = modelTotal + appUpdateTotal
-    const current = modelCurrent + appUpdateCurrent
+    const managedTotal = managedTransfers.reduce((n, job) => n + job.release.bytes, 0)
+    const managedCurrent = managedTransfers.reduce((n, job) => n + job.received, 0)
+    const total = modelTotal + appUpdateTotal + managedTotal
+    const current = modelCurrent + appUpdateCurrent + managedCurrent
 
     return total > 0 ? current / total : 0
   }, [
@@ -197,6 +208,7 @@ export function DownloadManagement() {
     appUpdateState.isDownloading,
     appUpdateState.totalBytes,
     appUpdateState.downloadedBytes,
+    managedTransfers,
   ])
 
   const onFileDownloadUpdate = useCallback(
@@ -614,7 +626,7 @@ export function DownloadManagement() {
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <div className="flex flex-col">
-            {appUpdateState.isDownloading || downloadProcesses.length > 0 ? (
+            {appUpdateState.isDownloading || downloadProcesses.length > 0 || managedTransfers.length > 0 ? (
               <>
                 <div className="px-3 pt-2 flex items-center justify-between">
                   <p>{t('downloading')}</p>
@@ -643,6 +655,38 @@ export function DownloadManagement() {
                       </div>
                     </div>
                   )}
+                  {managedTransfers.map((job) => (
+                    <div key={job.id} className="rounded-lg p-2 bg-secondary">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate">{job.release.name}</p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setIsPopoverOpen(false)
+                            navigate({ to: route.hub.index })
+                          }}
+                        >
+                          Manage
+                        </Button>
+                      </div>
+                      <div className="relative z-40 my-2 h-6">
+                        <Progress
+                          value={(job.received / Math.max(job.release.bytes, 1)) * 100}
+                          indicatorClassName={DOWNLOAD_PROGRESS_INDICATOR}
+                          className="absolute inset-0 h-full bg-muted-foreground/15 dark:bg-muted-foreground/20 rounded-md"
+                        />
+                        <div className="pointer-events-none absolute inset-0 z-1 flex items-center justify-between px-2">
+                          <p className="text-xs font-medium tabular-nums text-foreground">
+                            {Math.round((job.received / Math.max(job.release.bytes, 1)) * 100)}%
+                          </p>
+                          <p className="text-xs font-medium tabular-nums text-foreground">
+                            {formatModelBytes(job.received)} / {formatModelBytes(job.release.bytes)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                   {downloadProcesses.map((download) => (
                     <div
                       key={download.id}
