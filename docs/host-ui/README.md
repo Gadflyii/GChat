@@ -1,5 +1,21 @@
 # GInfer host UI
 
+## Folder launcher failure — GCHAT-OPEN-FOLDER-NATIVE-FAILURE-20261017
+
+Open folder and the data-folder shortcut return a clear error when the desktop
+file manager cannot start. A missing Linux `xdg-open` explains how to install
+`xdg-utils` or open the selected folder manually; GChat stays open. Windows
+Explorer keeps its existing handoff behavior. Paths remain literal arguments.
+
+An ordinary model-free XFCE walkthrough on source `68cc55bba` reproduced an
+abort at 15:02:50Z on October17: `xdg-open` was absent and the native command
+used `expect()`. Browse, text preview/retry and View AGENTS.md passed before
+the crash. Evidence and the normal guest return are retained in
+`out/gui-folder-walkthrough-20261017/{result.json,summary.md,open-folder-crash.txt}`.
+Three native regressions cover missing launcher, literal arguments and failed
+exit status. Full Linux verification is required before merge; a corrected
+installed native walkthrough and Windows execution are not yet qualified.
+
 ## Global conversation deletion — C7
 
 `GUI-GLOBAL-THREADS-DELETE-SINGLE-SUBMIT-20261017` applies the existing project
