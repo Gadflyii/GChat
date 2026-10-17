@@ -82,9 +82,12 @@ settings change is accounted for on the next start. Catalog KV bytes are
 historical evidence, not a current allocation: profile selection uses Automatic
 unless the user explicitly supplies a byte budget.
 
-Automatic sizing derives an aligned explicit arena from the fresh quote and
-passes it only to that Engine launch. The saved request retains Automatic, so
-later starts quote and size again. A positive user budget retains its exact
+For a solo Automatic start on idle selected GPUs, the fresh quote is an estimate:
+Host leaves the Engine arena automatic so it uses actual free memory after
+weights, workspace and graph startup allocations. Shared placement or multiple
+requested instances derive an aligned explicit arena from the fresh quote to
+preserve each instance's share. The saved request retains Automatic, so later
+starts quote and size again. A positive user budget retains its exact
 meaning; Host checks it against the fresh quote and refuses an oversized value
 before loading the model. Existing saved positive values have no provenance
 that distinguishes a user choice from an older derived value. If one no longer
@@ -92,18 +95,61 @@ fits, select Custom settings and clear the GPU KV budget to return to Automatic.
 Host does not silently shrink an exact request. Changed runtime options do not
 inherit historical profile qualification.
 
-Resolving Automatic to a fresh byte budget preserves a selected Max Perf recipe
-and its Max Perf profile identity, including after Restart and reopening Host. The saved
-request stays Automatic; Standard GBench can still validate the selected recipe
-against the current session. An explicit custom KV budget clears the Max Perf
+Automatic sizing preserves a selected Max Perf recipe and its Max Perf profile
+identity, including after Restart and reopening Host. Shared placement resolves
+a fresh byte budget; a solo start leaves sizing to the Engine. The saved request
+stays Automatic; Standard GBench can still validate the selected recipe against
+the current session. An explicit custom KV budget clears the Max Perf
 marker. This identity does not imply a measured performance result.
 
-Flash with graphs enabled has one bootstrap exception. If a solo Automatic
+Flash with graphs enabled has one preview exception. If a solo Automatic
 start has no matching graph-memory receipt, its quote reports an unknown graph
 allowance. Host leaves the arena automatic for that Engine start; a successful
-Ready receipt then permits quote-derived explicit sizing with the same recipe.
+Ready receipt then permits a numeric preview and shared sizing with the same recipe.
 An explicit arena or shared placement requires known graph memory. No unknown
 graph allowance is treated as measured capacity.
+
+`GCHAT-AUTO-KV-POST-STARTUP-ADMISSION-20261017` is implemented on
+`fix/c1-auto-kv-post-startup-20261017`, production source `db98f236b` and
+test-only correction `767dff0a3`. The retained desktop RTX 5090 failure converted
+Automatic into an exact 6,512,509,696-byte request, while the loaded Engine could
+fit 6,111,178,752 bytes with unchanged 1 GiB headroom. Host now preserves Engine
+Automatic for the solo idle-GPU route. Explicit overrides and shared placement
+retain their limits; Engine allocation and headroom are unchanged.
+
+The focused regression passes with lower post-startup capacity, a request after
+Ready, fresh sizing on Restart/Reload, exact explicit limits and pre-load refusal
+of an oversized override. Native acceptance passes on the same RTX 5090 with
+Qwen NVFP4 package SHA256 `4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6`
+and frozen Engine `d9674255`: context 262144, C1, Vision and structured outputs
+on, speculation off, unchanged 1 GiB headroom. Host saved/configured arena stays
+Automatic and the Engine arguments omit `--kv-arena-bytes`. Engine sizes 5.61 GiB
+after startup; Ready, one proxied real request (HTTP 200, 59 prompt / 8 generated
+tokens), and normal Stop pass. The output limit ends that request; this is
+admission acceptance, with no full-context, quality or performance claim.
+The existing profile covers CPUs 11–17 used here. An earlier unprofiled CPU grant
+was refused before model load, and a later evidence check missed a child spawned
+by a Tokio worker; both invalid attempts are retained separately. The check now
+reads child lists across Host threads before issuing the required request.
+
+`cargo check --all-targets`, Clippy with warnings denied and the focused test
+pass. Repository verification passes as a composite gate: frontend 2,530 tests,
+extension 118, app 711, plugin 20, Host library 222 and remaining integrations 30,
+Manager 4, hardware 12 and utils 36. Previously passing phases were retained;
+the full Host suite's one stale expectation about Automatic clearing an unchanged
+profile ID was corrected in `767dff0a3` and that case rerun. Existing ignored or
+skipped cases remain unchanged. This is not one final `make verify` invocation.
+Arch signed `db98f236b` conditional on the focused and native gates, both now
+passed; `767dff0a3` changes tests only.
+Owned candidate source is `/ai/gchat-worktrees/c1-auto-kv-post-startup-20261017`;
+S1 verification uses the private
+`/media/ron/SSD_RAID/ai/tmp-c1-auto-kv-post-startup-20261017` cache/build tree.
+Native acceptance and verification JSON belong to
+`/ai/gchat/out/auto-kv-post-startup-20261017` (`native-result.json`,
+`native-inference.json`, `native-effective-argv.json` and per-check receipts).
+The 5090 returned at 04:48Z. Retained model/profile/runtime inputs stay in place;
+private build copies are disposable after acceptance. Verification returned at
+04:51Z. The source and acceptance packet are merge-ready; Bubbs owns the merge.
 
 One merged-Host RTX 5090 startup passes with source `16a338aff` (Host SHA
 `d4863c80…`) and Engine `5af502f1`: C1, context 262144, structured outputs on,

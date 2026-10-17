@@ -1475,7 +1475,15 @@ impl Host {
         remaining: u32,
     ) -> Result<Uuid, String> {
         let (_, kv_arena_bytes) = self.quote_prepared(&launch, remaining).await?;
-        launch.options.kv_arena_bytes = kv_arena_bytes;
+        // A pre-load quote estimates capacity; it does not reserve VRAM or
+        // include every allocation made during startup. A solo AUTO launch
+        // must let the Engine size its arena after those allocations. Shared
+        // placement and positive user overrides retain their exact limits.
+        let sharing = self.processes.lock().await.reserved_gpus(Some(launch.instance_id))
+            .iter().any(|gpu| launch.gpu_uuids.contains(gpu));
+        if launch.options.kv_arena_bytes.is_some() || remaining > 1 || sharing {
+            launch.options.kv_arena_bytes = kv_arena_bytes;
+        }
         if request.options.kv_arena_bytes != launch.options.kv_arena_bytes {
             request.qualified_profile_id = None;
             // Resolving AUTO changes capacity, not the selected Max Perf recipe.
@@ -3634,6 +3642,12 @@ if '--quote-only' in args:
     with (root/'quotes.jsonl').open('a') as out: out.write(json.dumps(dict(args=args, quote=quote))+'\n')
     print(json.dumps(quote))
     sys.exit(0)
+# Startup consumes additional memory after the dry quote. An exact maximum
+# copied from that quote no longer fits; Engine AUTO uses the actual capacity.
+memory = json.loads((root/'memory.json').read_text())
+maximum = memory['free']-8192-memory['state']-1024-int(arg('--kv-arena-headroom-bytes'))-1024
+if '--kv-arena-bytes' in args and int(arg('--kv-arena-bytes')) > maximum:
+    sys.exit('explicit KV arena exceeds post-startup bytes')
 with (root/'loads.jsonl').open('a') as out: out.write(json.dumps(args)+'\n')
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -3641,6 +3655,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_response(401); self.end_headers(); return
         body=json.dumps(dict(data=[dict(id=arg('--model-id'))])).encode()
         self.send_response(200); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
+    def do_POST(self):
+        assert self.path == '/v1/chat/completions'
+        assert self.headers.get('Authorization') == 'Bearer '+arg('--api-key')
+        request=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        assert request['messages'][0]['content'] == 'Reply with ok.'
+        body=json.dumps(dict(choices=[dict(message=dict(role='assistant',content='ok'),finish_reason='stop')])).encode()
+        self.send_response(200); self.send_header('Content-Type','application/json'); self.send_header('Content-Length',str(len(body))); self.end_headers(); self.wfile.write(body)
     def log_message(self,*args): pass
 http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
 "#).unwrap();
@@ -3733,9 +3754,18 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{launched}");
-        assert_eq!(launched["kv_arena_bytes"], 54272);
+        assert!(launched["kv_arena_bytes"].is_null());
         let id = Uuid::parse_str(launched["instance_id"].as_str().unwrap()).unwrap();
         let first = ready(&host, id).await;
+        let (status, completion) = post(
+            &host,
+            &token,
+            &format!("/host/v1/instances/{id}/inference/v1/chat/completions"),
+            serde_json::json!({"messages":[{"role":"user","content":"Reply with ok."}],"max_tokens":8}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{completion}");
+        assert_eq!(completion["choices"][0]["message"]["content"], "ok");
         assert_eq!(first["configuration"]["max_context"], 131072);
         assert_eq!(first["configuration"]["concurrency"], 1);
         assert_eq!(first["configuration"]["structured_outputs"], true);
@@ -3759,7 +3789,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         assert_eq!(status, StatusCode::OK, "{response}");
         let restarted = ready(&host, id).await;
         assert_ne!(restarted["session_id"], first["session_id"]);
-        assert_eq!(restarted["configuration"]["kv_arena_bytes"], 44032);
+        assert!(restarted["configuration"]["kv_arena_bytes"].is_null());
         assert!(restarted["profile"]["kv_arena_bytes"].is_null());
 
         memory(61440, 6144);
@@ -3778,7 +3808,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         .await;
         assert_eq!(status, StatusCode::OK, "{response}");
         let reloaded = ready(&host, id).await;
-        assert_eq!(reloaded["configuration"]["kv_arena_bytes"], 41984);
+        assert!(reloaded["configuration"]["kv_arena_bytes"].is_null());
         assert!(reloaded["profile"]["kv_arena_bytes"].is_null());
         configuration = reloaded["profile"].clone();
         configuration["kv_arena_bytes"] = 4096.into();
@@ -3846,13 +3876,14 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
                 index >= 3
             );
         }
-        for (load, expected) in loads.iter().zip([54272_u64, 44032, 41984, 4096]) {
+        for (index, load) in loads.iter().enumerate() {
             let args = load.as_array().unwrap();
-            let position = args
-                .iter()
-                .position(|arg| arg == "--kv-arena-bytes")
-                .unwrap();
-            assert_eq!(args[position + 1], expected.to_string());
+            let position = args.iter().position(|arg| arg == "--kv-arena-bytes");
+            if index < 3 {
+                assert!(position.is_none(), "Automatic must be resolved after startup");
+            } else {
+                assert_eq!(args[position.unwrap() + 1], "4096");
+            }
         }
         host.processes.lock().await.shutdown().await.unwrap();
     }
@@ -4886,7 +4917,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         assert_eq!(instance["profile"]["benchmark_profile"], reference);
         assert!(instance["profile"]["qualified_profile_id"].is_null());
         assert!(instance["profile"]["kv_arena_bytes"].is_null());
-        assert_eq!(instance["configuration"]["kv_arena_bytes"].as_u64().is_some_and(|bytes| bytes > 0), dense);
+        assert!(instance["configuration"]["kv_arena_bytes"].is_null());
         tokio::time::timeout(Duration::from_secs(2), async {
             while !dir.path().join("argv-ready").is_file() { tokio::time::sleep(Duration::from_millis(10)).await; }
         }).await.unwrap();
@@ -4898,7 +4929,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             ["--draft-tokens",if dense { "7" } else { "3" }],["--kv-dtype","int8"]] {
             assert!(argv.windows(2).any(|actual| actual == pair));
         }
-        assert_eq!(argv.contains(&"--kv-arena-bytes"), dense);
+        assert!(!argv.contains(&"--kv-arena-bytes"));
         for flag in ["--host-kv-cache-bytes","--prefill-chunk","--no-cuda-graph"] {
             assert!(!argv.contains(&flag));
         }
@@ -4926,7 +4957,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         assert_ne!(restarted["instances"][0]["session_id"], instance["session_id"]);
         assert_eq!(restarted["instances"][0]["configuration"]["benchmark_profile"], reference);
         assert!(restarted["instances"][0]["profile"]["kv_arena_bytes"].is_null());
-        assert_eq!(restarted["instances"][0]["configuration"]["kv_arena_bytes"].as_u64().is_some_and(|bytes| bytes > 0), dense);
+        assert!(restarted["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
         let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(state.join("host.json")).unwrap()).unwrap();
         assert_eq!(saved["profiles"][id.to_string()]["benchmark_profile"], reference);
         assert!(saved["profiles"][id.to_string()]["kv_arena_bytes"].is_null());
@@ -5353,9 +5384,9 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             .is_success());
         let snapshot = host.snapshot().await;
         assert_eq!(snapshot["instances"][0]["profile"]["concurrency"], 4);
-        assert!(snapshot["instances"][0]["profile"]["qualified_profile_id"].is_null());
+        assert_eq!(snapshot["instances"][0]["profile"]["qualified_profile_id"], qualified.id);
         assert_ne!(snapshot["instances"][0]["session_id"], session);
-        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].as_u64().unwrap() > 0);
+        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
         let saved: serde_json::Value =
             serde_json::from_slice(&std::fs::read(dir.path().join("state/host.json")).unwrap())
                 .unwrap();
@@ -5372,7 +5403,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             .status()
             .is_success());
         let snapshot = host.snapshot().await;
-        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].as_u64().unwrap() > 0);
+        assert!(snapshot["instances"][0]["configuration"]["kv_arena_bytes"].is_null());
         let mut recorded = serde_json::to_value(&qualified).unwrap();
         recorded["options"].as_object_mut().unwrap().remove("structured_outputs");
         let recorded: crate::launch_profiles::LaunchProfile = serde_json::from_value(recorded).unwrap();
