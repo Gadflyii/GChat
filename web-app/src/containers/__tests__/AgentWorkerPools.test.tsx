@@ -126,6 +126,34 @@ it('requires an explicit paired coordinator choice for a first pool', async () =
   expect(mocks.refresh).toHaveBeenCalledOnce()
 })
 
+it('explains a first-time worker pool without an alert before any coordinator exists', () => {
+  mocks.catalog.pools = []
+  mocks.catalog.fleetHosts = []
+  mocks.catalog.fleet = { connected: false, migrationIssues: [] }
+  render(<AgentWorkerPools />)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'A worker pool lets your paired computers share agent work.'
+  )
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'pair one in GInfer Hosts first'
+  )
+  expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Create pool' })).toBeDisabled()
+  expect(
+    screen.getByText(/You can create one after a coordinator computer is chosen/)
+  ).toBeVisible()
+})
+
+it('keeps the offline alert and Retry for a coordinator that was chosen', () => {
+  mocks.catalog.fleet.connected = false
+  render(<AgentWorkerPools />)
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Fleet coordinator offline. Last-known pools are read-only.'
+  )
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled()
+})
+
 it('requires a reachable address when this computer has no advertised shared origin', async () => {
   mocks.catalog.fleet = { connected: false, migrationIssues: [] }
   mocks.catalog.fleetHosts = [

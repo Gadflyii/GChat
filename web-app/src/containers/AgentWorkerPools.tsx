@@ -97,15 +97,23 @@ export function AgentWorkerPools() {
         </p>
       )}
       {catalog.fleet && !catalog.fleet.connected && (
-        <p role="alert" className="text-sm text-destructive">
-          {catalog.fleet.authorityId
-            ? 'Fleet coordinator offline. Last-known pools are read-only.'
-            : 'Choose a shared fleet coordinator to manage work pools.'}
-          {catalog.fleet.error && ` ${catalog.fleet.error}`}{' '}
-          <Button variant="outline" onClick={() => void refresh()}>
-            Retry
-          </Button>
-        </p>
+        catalog.fleet.authorityId ? (
+          <p role="alert" className="text-sm text-destructive">
+            Fleet coordinator offline. Last-known pools are read-only.
+            {catalog.fleet.error && ` ${catalog.fleet.error}`}{' '}
+            <Button variant="outline" onClick={() => void refresh()}>
+              Retry
+            </Button>
+          </p>
+        ) : (
+          <p role="status" className="text-sm text-muted-foreground">
+            A worker pool lets your paired computers share agent work. First
+            choose the computer that coordinates the pools, then create a pool.
+            {!catalog.fleetHosts?.length &&
+              ' No paired computers are available yet; pair one in GInfer Hosts first.'}
+            {catalog.fleet.error && ` ${catalog.fleet.error}`}
+          </p>
+        )
       )}
       {!catalog.fleet?.authorityId && !!catalog.fleetHosts?.length && (
         <div className="flex flex-wrap items-center gap-3">
@@ -205,8 +213,9 @@ export function AgentWorkerPools() {
         <div className="space-y-2">
           {!catalog.pools.length && (
             <p className="rounded-lg border p-6 text-muted-foreground">
-              Create a pool to distribute independent workers across your paired
-              hosts.
+              {catalog.fleet?.connected
+                ? 'Create a pool to distribute independent workers across your paired hosts.'
+                : 'No pools yet. You can create one after a coordinator computer is chosen.'}
             </p>
           )}
           {catalog.pools.map((pool) => (
