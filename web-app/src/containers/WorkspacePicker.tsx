@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,20 @@ export function WorkspacePicker({
   const [resolved, setResolved] = useState('')
   const [error, setError] = useState('')
   const [instructions, setInstructions] = useState<string>()
+  const [choosing, setChoosing] = useState(false)
+  const choosingRef = useRef(false)
+  const choiceGeneration = useRef(0)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      choiceGeneration.current += 1
+    }
+  }, [])
+  useEffect(() => {
+    choiceGeneration.current += 1
+  }, [value, personalWhenEmpty])
   useEffect(() => {
     let cancelled = false
     setResolved('')
@@ -60,12 +74,20 @@ export function WorkspacePicker({
     }
   }, [value, personalWhenEmpty, onValidity])
   const choose = async () => {
+    if (choosingRef.current) return
+    choosingRef.current = true
+    setChoosing(true)
+    setError('')
+    const generation = choiceGeneration.current
+    const isCurrent = () =>
+      mounted.current && generation === choiceGeneration.current
     try {
       const path = await invoke<string | string[] | null>('open_dialog', {
         options: { directory: true, multiple: false },
       })
-      if (typeof path !== 'string') return
+      if (!isCurrent() || typeof path !== 'string') return
       const root = await resolveConversationWorkspaceRoot(path)
+      if (!isCurrent()) return
       const paths = [
         root.path,
         ...recentPaths().filter((p) => p !== root.path),
@@ -78,7 +100,12 @@ export function WorkspacePicker({
       setRecent(paths)
       onChange(root.path)
     } catch (e) {
-      setError(String(e))
+      if (isCurrent()) {
+        setError(`Could not choose a folder. Try Browse again. ${String(e)}`)
+      }
+    } finally {
+      choosingRef.current = false
+      if (mounted.current) setChoosing(false)
     }
   }
   return (
@@ -96,10 +123,19 @@ export function WorkspacePicker({
               ? 'Personal memory — no workspace'
               : 'Default GChat agent workspace'
           }
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            choiceGeneration.current += 1
+            onChange(e.target.value)
+          }}
         />
-        <Button type="button" variant="outline" onClick={() => void choose()}>
-          Browse
+        <Button
+          type="button"
+          variant="outline"
+          disabled={choosing}
+          aria-busy={choosing}
+          onClick={() => void choose()}
+        >
+          {choosing ? 'Choosing folder…' : 'Browse'}
         </Button>
       </div>
       <datalist id={`${id}-recent`}>
