@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { engineCommand, type EngineHardwareProfile } from '@/services/engines'
@@ -19,7 +19,9 @@ type FirstRun = {
 }
 
 /** All progress and long-running work belongs to the shared local Host. */
-export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComplete?: () => void }) {
+export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: {
+  hostId?: string; onComplete?: () => void; hardwareProfileControls?: ReactNode
+}) {
   const hosts = useEngineHosts(s => s.hosts)
   const snapshots = useEngineHosts(s => s.snapshots)
   const errors = useEngineHosts(s => s.errors)
@@ -30,6 +32,7 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [checked, setChecked] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
   const [gpus, setGpus] = useState<string[]>([])
   const [path, setPath] = useState('')
   const [releases, setReleases] = useState<string[]>([])
@@ -85,7 +88,17 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
       if (next.step === 'complete') await refresh().catch(() => undefined)
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
   }
-  if (step === 'complete') return null
+  const profileAction = async (action: 'cancel' | 'resume') => {
+    if (!localId) return
+    revision.current++
+    setBusy(true); setError('')
+    try {
+      const hardware = await engineCommand<EngineHardwareProfile>('hardware_profile', { host_id: localId, body: { action } })
+      setFlow(current => current ? { ...current, hardware_profile: hardware } : current)
+      await refresh().catch(() => undefined)
+    } catch (e) { setError(String(e)) } finally { setBusy(false) }
+  }
+  if (step === 'complete') return <>{hardwareProfileControls}</>
   const known = snapshot?.gpus.filter(gpu => ['8.0', '8.6', '8.9', '12.0'].includes(gpu.compute_capability ?? '')) ?? []
   const selected = known.filter(gpu => gpus.includes(gpu.uuid))
   const validGroup = [1, 2, 4].includes(gpus.length) && selected.length === gpus.length && selected.every(gpu => gpu.name === selected[0].name && gpu.compute_capability === selected[0].compute_capability)
@@ -109,7 +122,7 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
     {!localId && <p role="status" className="text-sm">{checked ? 'GInfer could not connect on this computer. Check that a supported NVIDIA graphics card and the GInfer engine are installed. You can also connect to another computer running GInfer.' : 'Connecting to GInfer on this computer…'}</p>}
     {localId && !flow && !unavailable && <p role="status">Reading saved setup…</p>}
     {flow?.error && <p role="alert" className="text-sm text-destructive">{flow.error}</p>}
-    {step === 'gpu' && <fieldset disabled={busy} className="space-y-3"><legend className="font-medium">Select graphics cards</legend>
+    {step === 'gpu' && !manualOpen && <fieldset disabled={busy} className="space-y-3"><legend className="font-medium">Select graphics cards</legend>
       <p className="text-sm">Select the graphics card you want GInfer to use. You can use 1, 2 or 4 cards of the same model together; each combination needs its own hardware profile. If you have one card, select it below, then select Use selected graphics cards to continue.</p>
       {known.map(gpu => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={() => setGpus(toggle(gpus, gpu.uuid))} />{gpu.display_name ?? gpu.name} · {formatModelBytes(gpu.memory_mib * 1024 ** 2)} graphics memory</label>)}
       {!!known.length && <details className="text-sm"><summary className="cursor-pointer">Graphics card details</summary>{known.map(gpu => <p key={gpu.uuid}>{gpu.display_name ?? gpu.name}: {gpu.uuid} · NVIDIA compatibility {gpu.compute_capability}</p>)}</details>}
@@ -119,13 +132,13 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
     {selectedReady && <p role="status">Your hardware profile is ready for the selected models. GInfer will now check their startup memory needs.</p>}
     {hardware?.all_formats_complete === false && <p className="text-sm text-muted-foreground">Other model types can be measured later. They do not need to be measured before you use your selected models.</p>}
     {hardware?.all_formats_complete === true && <p className="text-sm text-muted-foreground">This hardware profile is ready for all supported model types.</p>}
-    {profiling && <div className="space-y-3"><p role="status">{hardware?.status === 'running' ? 'Building your hardware profile…' : hardware?.status === 'completed' ? 'Hardware profile ready' : hardware?.status === 'failed' ? 'Hardware profile could not finish' : hardware?.status === 'cancelled' ? 'Hardware profile cancelled' : hardware?.status === 'interrupted' ? 'Hardware profile interrupted' : 'Preparing your hardware profile…'}</p><p className="text-sm">{phase}{elapsed != null ? ` · Time so far: ${minutes(elapsed)}` : ''}</p>
+    {profiling && !manualOpen && <div className="space-y-3"><p role="status">{hardware?.status === 'running' ? 'Building your hardware profile…' : hardware?.status === 'cancelling' ? 'Stopping hardware profiling…' : hardware?.status === 'completed' ? 'Hardware profile ready' : hardware?.status === 'failed' ? 'Hardware profile could not finish' : hardware?.status === 'cancelled' ? 'Hardware profile cancelled' : hardware?.status === 'interrupted' ? 'Hardware profile interrupted' : 'Preparing your hardware profile…'}</p><p className="text-sm">{phase}{elapsed != null ? ` · Time so far: ${minutes(elapsed)}` : ''}</p>
       <p className="text-sm text-muted-foreground">GInfer measures how quickly your graphics cards, processor and memory can run models, then saves the results. Run this at first setup and again after changing your hardware. It can take 10 minutes to an hour or longer, depending on your hardware and the profile selected.</p>
       <p className="text-sm text-muted-foreground">{remaining != null ? `About ${minutes(remaining)} remaining, based on an earlier profile for these graphics cards. The time may change if processor resources differ.` : overdue ? 'This is taking longer than the earlier profile. GInfer cannot yet estimate the time left.' : 'GInfer cannot yet estimate the time left for these graphics cards.'} {choosing ? 'You can keep choosing your model folder and models below. Closing this window leaves GInfer working in the background.' : 'Closing this window leaves GInfer working in the background.'}</p>
       <p className="text-sm text-muted-foreground">{choosing ? 'Save your choices below when ready. Folder checks and downloads will continue after this measurement finishes.' : 'Your downloaded models and saved choices are kept. GInfer is measuring the hardware needed by these models.'}</p>
-      {flow?.hardware_profile.status === 'running' && <progress aria-label="Hardware profiling" />}
+      {(hardware?.status === 'running' || hardware?.status === 'cancelling') && <><progress aria-label="Hardware profiling" /><Button variant="outline" disabled={busy || !!(localId && errors[localId]) || hardware.status === 'cancelling'} onClick={() => void profileAction('cancel')}>{hardware.status === 'cancelling' ? 'Cancelling profiling…' : hardware.pending_gpu_groups?.length ? 'Cancel profiling and queue' : 'Cancel profiling'}</Button></>}
       {flow?.hardware_profile.error && <p role="alert">{flow.hardware_profile.error}</p>}
-      {['failed', 'interrupted', 'cancelled'].includes(flow?.hardware_profile.status ?? '') && <Button disabled={busy} onClick={() => void act({ action: 'resume' })}>Resume building profile</Button>}
+      {['failed', 'interrupted', 'cancelled'].includes(hardware?.status ?? '') && <><p className="text-sm text-muted-foreground">Your model downloads and choices are kept. GInfer checks saved measurements before reusing them.</p><Button disabled={busy || !!(localId && errors[localId])} onClick={() => void (selectedScope ? act({ action: 'resume' }) : profileAction('resume'))}>Resume building profile</Button></>}
       <details className="text-sm"><summary className="cursor-pointer">Details</summary><p>Profile scope: {selectedScope ? 'Selected models' : 'All model types'} · Status: {hardware?.status}</p>{hardware?.phase_detail && <p className="text-muted-foreground">{hardware.phase_detail}</p>}{flow?.hardware_profile.diagnostic_tail && <pre className="max-h-40 overflow-auto whitespace-pre-wrap text-xs">{flow.hardware_profile.diagnostic_tail}</pre>}</details>
     </div>}
     {choosing && <div className="space-y-3"><h3 className="font-medium">Choose where to keep models</h3><p className="text-sm text-muted-foreground">Models can be large. Keep the recommended folder, or enter a folder on a fast drive with enough free space. Select Use this folder when ready; during profiling, select Save folder choice.</p><p className="text-sm">{profiling ? 'GInfer will check drive speed, free space and permission to save files after hardware measurement finishes.' : flow?.storage.available_bytes == null ? 'GInfer could not check free space for this folder yet.' : `${formatModelBytes(flow.storage.available_bytes)} available in the current folder.`}</p>
@@ -156,5 +169,10 @@ export function EngineFirstRun({ hostId, onComplete }: { hostId?: string; onComp
       </form></details>
     </div>)}<p className="text-sm text-muted-foreground">GInfer checks that these settings fit in memory. Finish setup when all checks pass, then load a model when you are ready to chat.</p><Button disabled={busy || !flow?.startup_profiles.length || flow.startup_profiles.some(profile => profile.error || !profile.quote)} onClick={() => void act({ action: 'complete' })}>Finish local setup</Button></div>}
     {unavailable && <Button variant="outline" disabled={busy} onClick={() => { void refresh().catch(e => setError(String(e))); if (localId) void act({}) }}>Retry local setup</Button>}
+    {hardwareProfileControls && <details open={manualOpen} onToggle={event => setManualOpen(event.currentTarget.open)} className="space-y-3">
+      <summary className="cursor-pointer font-medium">Advanced hardware profile options</summary>
+      <p className="text-sm text-muted-foreground">Build, rebuild or resume a hardware profile without downloading a model. Your folder and model choices are kept. Close these options to return to guided setup.</p>
+      <div hidden={!manualOpen}>{hardwareProfileControls}</div>
+    </details>}
   </section>
 }

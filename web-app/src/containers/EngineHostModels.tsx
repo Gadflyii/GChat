@@ -76,6 +76,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     }
     catch (e) { toast.error(String(e)); return false } finally { setBusy(false) }
   }
+  const hardwareProfileControls = snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
+    action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />
   return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'GInfer offline' : snapshot ? 'Connected' : host.local ? 'Connecting' : 'Not connected'}</p></div>
@@ -111,9 +113,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     {hostStopError && <p role="alert" className="text-sm text-destructive">{hostStopError}</p>}
     {hostStopping && <p role="status" className="text-sm text-muted-foreground">Host is stopping. Quitting GChat…</p>}
     {!host.local && !snapshot && <p className="text-sm text-muted-foreground">Choose Connect to use this saved host. Your desktop may ask you to unlock its stored credential.</p>}
-    {snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
-      action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />}
-    {host.local && <EngineFirstRun hostId={host.host_id} />}
+    {host.local ? <EngineFirstRun hostId={host.host_id} hardwareProfileControls={hardwareProfileControls} /> : hardwareProfileControls}
     {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} managementNotice={snapshot.management_notice} />}
       {host.local && snapshot && <EngineGbotControl clients={snapshot.clients} disabled={busy || !!error} change={(client_id, action) => act('gbot_grant', { body: { client_id, action } })} />}
     {snapshot && <details className="rounded-lg border p-4 space-y-3">
