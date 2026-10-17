@@ -82,9 +82,12 @@ settings change is accounted for on the next start. Catalog KV bytes are
 historical evidence, not a current allocation: profile selection uses Automatic
 unless the user explicitly supplies a byte budget.
 
-Automatic sizing derives an aligned explicit arena from the fresh quote and
-passes it only to that Engine launch. The saved request retains Automatic, so
-later starts quote and size again. A positive user budget retains its exact
+For a solo Automatic start on idle selected GPUs, the fresh quote is an estimate:
+Host leaves the Engine arena automatic so it uses actual free memory after
+weights, workspace and graph startup allocations. Shared placement or multiple
+requested instances derive an aligned explicit arena from the fresh quote to
+preserve each instance's share. The saved request retains Automatic, so later
+starts quote and size again. A positive user budget retains its exact
 meaning; Host checks it against the fresh quote and refuses an oversized value
 before loading the model. Existing saved positive values have no provenance
 that distinguishes a user choice from an older derived value. If one no longer
@@ -98,12 +101,22 @@ request stays Automatic; Standard GBench can still validate the selected recipe
 against the current session. An explicit custom KV budget clears the Max Perf
 marker. This identity does not imply a measured performance result.
 
-Flash with graphs enabled has one bootstrap exception. If a solo Automatic
+Flash with graphs enabled has one preview exception. If a solo Automatic
 start has no matching graph-memory receipt, its quote reports an unknown graph
 allowance. Host leaves the arena automatic for that Engine start; a successful
-Ready receipt then permits quote-derived explicit sizing with the same recipe.
+Ready receipt then permits a numeric preview and shared sizing with the same recipe.
 An explicit arena or shared placement requires known graph memory. No unknown
 graph allowance is treated as measured capacity.
+
+`GCHAT-AUTO-KV-POST-STARTUP-ADMISSION-20261017` is in progress on
+`fix/c1-auto-kv-post-startup-20261017`. The retained desktop RTX 5090 failure
+converted Automatic into an exact 6,512,509,696-byte request, while the loaded
+Engine could fit 6,111,178,752 bytes with unchanged 1 GiB headroom. Acceptance
+requires a regression covering a lower post-startup capacity and a request after
+Ready, plus one native Qwen NVFP4 Automatic start/request on that 5090. Explicit
+overrides and shared placement must retain their limits; no Engine allocator or
+headroom change is planned. The remaining question is whether this Host change
+completes the retained launch settings and a real request on the desktop GPU.
 
 One merged-Host RTX 5090 startup passes with source `16a338aff` (Host SHA
 `d4863c80…`) and Engine `5af502f1`: C1, context 262144, structured outputs on,
