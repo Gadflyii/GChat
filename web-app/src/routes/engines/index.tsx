@@ -62,16 +62,18 @@ function EnginesPage() {
       <CredentialSetup onReady={setCredentialReady} />
       {enabled && nearby.filter((h) => !ignored[h.host_id] && !hosts.some((saved) => saved.host_id === h.host_id)).map((host) => <div key={host.host_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-4">
         <span>New host found: {host.name}</span><div className="flex gap-2">
-          <Button disabled={!credentialReady || busy !== null} onClick={() => void pair(host.host_id)}>{busy === host.host_id ? 'Pairing…' : 'Pair'}</Button>
+          <Button aria-describedby={credentialReady ? undefined : `pair-needs-storage-${host.host_id}`} disabled={!credentialReady || busy !== null} onClick={() => void pair(host.host_id)}>{busy === host.host_id ? 'Pairing…' : 'Pair'}</Button>
           <Button variant="outline" disabled={busy === host.host_id} onClick={() => ignore(host.host_id, host.name)}>Ignore</Button>
         </div>
+        {!credentialReady && <p id={`pair-needs-storage-${host.host_id}`} className="w-full text-sm text-muted-foreground">Pairing needs secure storage. Choose Check secure storage above first.</p>}
         <details className="w-full text-xs text-muted-foreground"><summary className="cursor-pointer">Connection details</summary>{host.urls.map(url => <p key={url} className="break-all font-mono">{url}</p>)}</details>
       </div>)}
       {!!Object.keys(ignored).length && <details className="rounded-lg border p-4"><summary className="cursor-pointer">Ignored hosts ({Object.keys(ignored).length})</summary><p className="text-sm text-muted-foreground">Ignored hosts do not appear in nearby results or trigger notifications. This does not revoke an existing pairing.</p>{Object.entries(ignored).map(([id, name]) => <div key={id} className="mt-2 flex items-center justify-between gap-2"><span>{name}</span><Button variant="outline" onClick={() => restore(id)}>Show again</Button></div>)}</details>}
       <details className="rounded-xl border p-5 space-y-3">
         <summary className="cursor-pointer font-semibold">Enter a host address manually</summary>
         <label className="block text-sm">Host address<Input placeholder="https://192.168.1.10:7444" value={address} onChange={(e) => setAddress(e.target.value)} /></label>
-        <Button disabled={!credentialReady || busy !== null || !address.trim()} onClick={() => void pair()}>{busy === 'manual' ? 'Pairing…' : 'Pair host'}</Button>
+        <Button aria-describedby={credentialReady ? undefined : 'pair-needs-storage'} disabled={!credentialReady || busy !== null || !address.trim()} onClick={() => void pair()}>{busy === 'manual' ? 'Pairing…' : 'Pair host'}</Button>
+        {!credentialReady && <p id="pair-needs-storage" className="text-sm text-muted-foreground">Pairing needs secure storage. Choose Check secure storage above first.</p>}
       </details>
       {hosts.map((host) => <HostCard key={host.host_id} host={host} snapshot={snapshots[host.host_id]} error={errors[host.host_id]} />)}
 

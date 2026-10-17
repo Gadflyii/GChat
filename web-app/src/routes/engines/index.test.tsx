@@ -203,7 +203,9 @@ describe('Engines host intake and launch controls', () => {
       screen.queryByRole('button', { name: /https:/ })
     ).not.toBeInTheDocument()
     const pair = screen.getByRole('button', { name: 'Pair', exact: true })
+    expect(pair).toHaveAccessibleDescription(/Pairing needs secure storage/)
     await waitFor(() => expect(pair).toBeEnabled())
+    expect(pair).not.toHaveAccessibleDescription(/Pairing needs secure storage/)
     fireEvent.click(pair)
     await waitFor(() =>
       expect(mocks.command).toHaveBeenCalledWith('pair', {
@@ -385,6 +387,19 @@ describe('Engines host intake and launch controls', () => {
         instance_id: 'internal-id-0',
         body: {},
       })
+    )
+  })
+
+  it('says why Pair host is disabled until secure storage has been checked', () => {
+    renderExpandedPage()
+    fireEvent.click(screen.getByText('Enter a host address manually'))
+    fireEvent.change(screen.getByLabelText('Host address'), {
+      target: { value: 'https://host:7443' },
+    })
+    const pair = screen.getByRole('button', { name: 'Pair host' })
+    expect(pair).toBeDisabled()
+    expect(pair).toHaveAccessibleDescription(
+      'Pairing needs secure storage. Choose Check secure storage above first.'
     )
   })
 
