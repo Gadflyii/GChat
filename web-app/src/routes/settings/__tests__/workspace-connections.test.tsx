@@ -138,6 +138,26 @@ describe('Workspace connections', () => {
     expect(api.connectorAccounts).toHaveBeenCalledTimes(2)
   })
 
+  it('shows the cause of an account-service failure in plain words and keeps technical details behind Show details', async () => {
+    api.connectorAccounts
+      .mockRejectedValueOnce(new Error('Connect the account service first'))
+      .mockRejectedValueOnce(
+        new Error(
+          'Account connections could not start: Secure storage is unavailable.\n\nDetails: the Gbot service exited before becoming ready (exit status: 1); log: /data/gbot/service.log'
+        )
+      )
+    render(<WorkspaceConnections />)
+    await userEvent
+      .setup()
+      .click(await screen.findByRole('button', { name: 'Connect account service' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Account connections could not start: Secure storage is unavailable.')
+    const details = within(alert).getByText('Show details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toHaveTextContent('log: /data/gbot/service.log')
+    expect(within(alert).getByText(/could not start/).textContent).not.toMatch(/service\.log|exit status/)
+  })
+
   it('requires saved registration and explicit services before sign-in', async () => {
     const view = initialView()
     view.configs[0].client_id = ''

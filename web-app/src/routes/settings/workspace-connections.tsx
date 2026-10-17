@@ -1046,6 +1046,28 @@ function ProviderCard({
   )
 }
 
+/** A host error is "summary\n\nDetails: technical text"; show the summary and keep the rest one click away. */
+function ErrorWithDetails({ message }: { message: string }) {
+  const separator = '\n\nDetails: '
+  const at = message.indexOf(separator)
+  if (at < 0) {
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        {message}
+      </p>
+    )
+  }
+  return (
+    <div role="alert" className="space-y-1 text-sm text-destructive">
+      <p>{message.slice(0, at)}</p>
+      <details className="text-xs">
+        <summary className="cursor-pointer">Show details</summary>
+        <p className="mt-1 break-all">{message.slice(at + separator.length)}</p>
+      </details>
+    </div>
+  )
+}
+
 export function WorkspaceConnections() {
   const { t } = useTranslation()
   const [view, setView] = useState<ConnectorAccountsView | null>(null)
@@ -1225,9 +1247,7 @@ export function WorkspaceConnections() {
             storage; you do not enter your account password in GChat.
           </p>
           {error && !disconnecting && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
+            <ErrorWithDetails message={error} />
           )}
           {busy && (
             <p role="status" className="text-sm">

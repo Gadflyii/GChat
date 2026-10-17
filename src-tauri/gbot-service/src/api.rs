@@ -34,7 +34,7 @@ pub enum ApiError {
 impl std::fmt::Display for ApiError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Vault(error) => write!(formatter, "Gbot secure storage: {error}"),
+            Self::Vault(error) => error.fmt(formatter),
             Self::Listener(_) => formatter.write_str("Gbot loopback listener is unavailable"),
             Self::Http(_) => formatter.write_str("Gbot HTTP service could not complete"),
             Self::Workspace(error) => error.fmt(formatter),
