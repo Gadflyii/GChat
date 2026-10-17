@@ -153,8 +153,16 @@ class HostPackage(unittest.TestCase):
                 'licenses/llguidance-crates/memchr/COPYING': b'Copying terms\n',
                 'licenses/llguidance-crates/memchr/UNLICENSE': b'Public domain terms\n',
             }
+            documents = {
+                'README.md': b'Runtime overview\n',
+                'LICENSE': b'Runtime license\n',
+                'VERSION': b'1.0\n',
+                'docs/cli.md': b'CLI reference\n',
+                'docs/serving.md': b'Serving reference\n',
+                'docs/release-names/README.md': b'Release names\n',
+            }
             for name, data in {**dict.fromkeys(('bin/ginfer.exe', 'bin/ginfer-serve.exe'),
-                                             bytes(pe)), **licenses}.items():
+                                             bytes(pe)), **licenses, **documents}.items():
                 member = runtime / name
                 member.parent.mkdir(parents=True, exist_ok=True)
                 member.write_bytes(data)
@@ -179,7 +187,7 @@ class HostPackage(unittest.TestCase):
                 self.assertIn('scripts/setup-ginfer-windows.ps1', names)
                 self.assertIn('setup.cmd', names)
                 self.assertNotIn('runtime/private-model.ginfer', names)
-                for name, content in licenses.items():
+                for name, content in {**licenses, **documents}.items():
                     self.assertEqual(archive.read(f'{prefix}runtime/{name}'), content)
                 self.assertEqual(json.loads(archive.read(
                     f'{prefix}runtime/runtime-manifest.json')), manifest)
@@ -202,7 +210,8 @@ class HostPackage(unittest.TestCase):
                     'licenses/vendor/../LICENSE', 'licenses/vendor//LICENSE',
                     'licenses/vendor./LICENSE', 'licenses/vendor/LICENSE.',
                     'licenses/vendor/LICENSE/', 'licenses/vendor/LICENSE\n',
-                    'README.md\n',
+                    'README.md\n', 'VERSION\n', 'docs/other.md',
+                    'docs/../cli.md', 'docs/release-names/../README.md',
                 ):
                     with self.subTest(rejected=forbidden):
                         self.assertIsNone(allowed.search(forbidden))

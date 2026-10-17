@@ -36,6 +36,15 @@ public static class SetupHardwareHandoff {
         [IO.File]::WriteAllText($file, 'fixture; never executed')
         $files += @{ path = "bin/$name"; bytes = (Get-Item $file).Length; sha256 = (Get-FileHash $file).Hash }
     }
+    # Match the generator's finite documentation set and actual nested vendor licenses.
+    $metadata = @('README.md', 'LICENSE', 'VERSION', 'docs/cli.md', 'docs/serving.md',
+        'docs/release-names/README.md', 'licenses/vcpkg/zlib/copyright')
+    foreach ($name in $metadata) {
+        $file = Join-Path $bundle "runtime\$name"
+        [IO.Directory]::CreateDirectory((Split-Path -Parent $file)) | Out-Null
+        [IO.File]::WriteAllText($file, "fixture metadata: $name")
+        $files += @{ path = $name; bytes = (Get-Item $file).Length; sha256 = (Get-FileHash $file).Hash }
+    }
     @{ schema = 'ginfer-windows-runtime-v1'; platform = 'windows-x64'; files = $files } |
         ConvertTo-Json -Depth 5 | Set-Content (Join-Path $bundle 'runtime\runtime-manifest.json')
     $target = Join-Path $env:LOCALAPPDATA 'GInfer'
@@ -48,6 +57,13 @@ public static class SetupHardwareHandoff {
     if (Test-Path $config.desktop.provider) { throw 'Setup must not create host/model storage' }
     if (-not (Test-Path (Join-Path $target 'bin\ginfer-host.exe'))) { throw 'Host is not a launcher sibling' }
     if ([IO.File]::ReadAllText((Join-Path $target 'bin\launch-profiles.json')) -ne $profiles) { throw 'Profile catalog was not installed' }
+    foreach ($name in $metadata) {
+        $installed = Join-Path $target $name
+        if (-not (Test-Path -LiteralPath $installed -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $installed).Hash -ne (Get-FileHash -LiteralPath (Join-Path $bundle "runtime\$name")).Hash) {
+            throw "Runtime metadata was not installed intact: $name"
+        }
+    }
     $arguments = [IO.File]::ReadAllLines($env:GINFER_SETUP_TEST_ARGUMENTS)
     $expected = @('prepare-hardware', '--engine', (Join-Path $target 'bin\ginfer.exe'), '--installed-configuration', (Join-Path $target 'bin\ginfer-launch.json'), '--gpu', 'GPU-second', '--gpu', 'GPU-first')
     if (($arguments -join "`n") -cne ($expected -join "`n")) { throw 'First installation did not hand off the typed installed configuration' }
