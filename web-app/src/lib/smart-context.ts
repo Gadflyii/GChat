@@ -48,7 +48,6 @@ export class SmartContextError extends Error {
   constructor(
     public readonly code:
       | 'context_turn_too_large'
-      | 'context_output_conflict'
       | 'context_checkpoint_failed',
     message: string,
     public readonly details: Record<string, number> = {}
@@ -72,6 +71,9 @@ type ContextFetch = (
 
 const RESPONSE_TOKEN_DEFAULT = 8_192
 const INPUT_SAFETY_MARGIN = 256
+// Share of the usable context the prompt may always keep before compaction;
+// the rest stays reserved for the answer even on small servers.
+const PROMPT_CONTEXT_SHARE = 0.75
 const CHECKPOINT_MAX_TOKENS = 3_072
 const CHECKPOINT_LABEL = 'GChat conversation checkpoint'
 const checkpointCache = new Map<string, CheckpointCacheEntry>()
@@ -141,24 +143,43 @@ function isMessage(value: unknown): value is JsonObject & { role: string } {
   return isJsonObject(value) && typeof value.role === 'string'
 }
 
-function responseReserve(body: JsonObject): number {
+function requestedOutputTokens(body: JsonObject): number {
   const requested = Number(body.max_completion_tokens ?? body.max_tokens)
   return Number.isFinite(requested) && requested > 0
     ? Math.floor(requested)
     : RESPONSE_TOKEN_DEFAULT
 }
 
-function contextInputBudget(configured: number, body: JsonObject): number {
-  const reservedOutputTokens = responseReserve(body)
-  const inputBudget = configured - reservedOutputTokens - INPUT_SAFETY_MARGIN
-  if (inputBudget <= 0) {
-    throw new SmartContextError(
-      'context_output_conflict',
-      `The server is configured for ${configured.toLocaleString('en-US')} context tokens, but this request reserves ${reservedOutputTokens.toLocaleString('en-US')} output tokens plus ${INPUT_SAFETY_MARGIN} safety tokens. Increase the server context or lower the requested output tokens before sending. GChat has not changed either setting.`,
-      { configuredContextTokens: configured, reservedOutputTokens, inputSafetyMargin: INPUT_SAFETY_MARGIN, inputBudget }
-    )
-  }
-  return inputBudget
+interface ContextBudget {
+  inputBudget: number
+  reservedOutputTokens: number
+}
+
+/**
+ * Plan this request's output reservation from the server's context and the
+ * prompt size. The requested (or default) output is reserved in full when it
+ * fits beside the prompt. Otherwise the reservation shrinks to what the prompt
+ * leaves, but never below the quarter of the usable context kept for the
+ * answer; a prompt beyond its three-quarter share is compacted to that share.
+ * The reservation alone never blocks a send, and no setting is changed.
+ */
+function contextBudget(
+  configured: number,
+  body: JsonObject,
+  inputTokens: number
+): ContextBudget {
+  const safety = Math.min(INPUT_SAFETY_MARGIN, Math.floor(configured / 8))
+  const usable = Math.max(1, configured - safety)
+  const requested = requestedOutputTokens(body)
+  const outputFloor = Math.max(
+    1,
+    Math.min(requested, usable - Math.floor(usable * PROMPT_CONTEXT_SHARE))
+  )
+  const reservedOutputTokens = Math.min(
+    requested,
+    Math.max(outputFloor, usable - inputTokens)
+  )
+  return { inputBudget: usable - reservedOutputTokens, reservedOutputTokens }
 }
 
 function stableMessageSignature(messages: JsonObject[]): string {
@@ -728,7 +749,7 @@ async function prepareContextRequest(
 ): Promise<PreparedContextRequest> {
   const configured = Math.floor(policy.configuredContextTokens)
   const messages = validateMessages(body)
-  const inputBudget = contextInputBudget(configured, body)
+  const { inputBudget } = contextBudget(configured, body, fullInputTokens)
   if (policy.state?.manualCompactionRequested && fullInputTokens <= inputBudget) {
     return prepareManualCompaction(
       completionUrl,
@@ -923,12 +944,12 @@ export async function prepareGInferContextRequest(
     return { body: JSON.stringify(body) }
   }
   const messages = validateMessages(body)
-  const inputBudget = contextInputBudget(configured, body)
   const inputTokens = await exactInputTokens(completionUrl, body, headers, fetcher, signal)
+  const { inputBudget } = contextBudget(configured, body, inputTokens)
   const usage = (count: number) => policy.onUsage?.({
     inputTokens: count,
     contextTokens: configured,
-    reservedOutputTokens: responseReserve(body),
+    reservedOutputTokens: contextBudget(configured, body, count).reservedOutputTokens,
   })
   usage(inputTokens)
   const cachedTools = inputTokens > inputBudget || policy.state?.manualCompactionRequested
