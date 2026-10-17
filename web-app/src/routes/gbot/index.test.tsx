@@ -114,6 +114,70 @@ function readyTaskBots(
   return identities
 }
 
+it('attributes saved task messages to you or the selected bot in conversation order', async () => {
+  const [identity] = readyTaskBots()
+  const call = mocks.call.getMockImplementation()!
+  const longPath = `/Documents/${'saved-note-'.repeat(30)}.txt`
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) =>
+      path === 'tasks'
+        ? [
+            {
+              id: 'saved-conversation',
+              identity,
+              state: 'completed',
+              messages: [
+                { role: 'system', content: 'Internal task instructions' },
+                { role: 'user', content: 'Write a note' },
+                { role: 'assistant', content: 'What should the note say?' },
+                { role: 'user', content: 'Save the meeting agenda' },
+                { role: 'tool', content: 'Internal file operation' },
+                { role: 'assistant', content: longPath },
+              ],
+            },
+          ]
+        : call(path, body)
+  )
+
+  const expectConversation = async () => {
+    const reply = await screen.findByText(longPath)
+    const history = reply.closest('article')!
+    const speakers = within(history).getAllByText(/^(You|Writer)$/)
+    expect(speakers.map((speaker) => speaker.textContent)).toEqual([
+      'You',
+      'Writer',
+      'You',
+      'Writer',
+    ])
+    const messages = [
+      'Write a note',
+      'What should the note say?',
+      'Save the meeting agenda',
+      longPath,
+    ]
+    speakers.forEach((speaker, index) => {
+      expect(speaker).toBeVisible()
+      expect(
+        within(speaker.parentElement!).getByText(messages[index])
+      ).toBeVisible()
+    })
+    expect(
+      screen.queryByText('Internal task instructions')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Internal file operation')).not.toBeInTheDocument()
+  }
+
+  render(<Page />)
+  await expectConversation()
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.queryByText(longPath)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  await expectConversation()
+  cleanup()
+  render(<Page />)
+  await expectConversation()
+})
+
 it('explains that a disconnected bot must connect before a task can run', async () => {
   readyTaskBots(undefined, { live_sessions: [] })
   render(<Page />)

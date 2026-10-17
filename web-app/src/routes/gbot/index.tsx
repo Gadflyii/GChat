@@ -1048,12 +1048,14 @@ function GbotPage() {
                             message.role === 'assistant'
                         )
                         .map((message, index) => (
-                          <p
-                            key={index}
-                            className="whitespace-pre-wrap text-sm"
-                          >
-                            {messageText(message.content)}
-                          </p>
+                          <div key={index} className="space-y-1">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {message.role === 'user' ? 'You' : bot.name}
+                            </p>
+                            <p className="whitespace-pre-wrap break-words text-sm">
+                              {messageText(message.content)}
+                            </p>
+                          </div>
                         ))}
                       {task.help_requests?.map((request) => (
                         <HumanHelp
