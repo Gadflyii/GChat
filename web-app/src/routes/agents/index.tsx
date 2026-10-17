@@ -395,6 +395,7 @@ function AgentStudioPage() {
   useEffect(() => () => {
     ++draftRevision.current
     ++runSetupRequest.current
+    ++historyRequest.current
     useGbotPage.getState().clear(pageId)
   }, [pageId])
 
@@ -406,16 +407,18 @@ function AgentStudioPage() {
 
   useEffect(() => {
     const request = ++historyRequest.current
+    let active = true
     void Promise.all([listAgentTemplates(), listAgentRuns()])
       .then(([nextTemplates, nextRuns]) => {
-        if (request !== historyRequest.current) return
+        if (!active) return
         setTemplates(nextTemplates)
-        setRuns(nextRuns)
+        if (request === historyRequest.current) setRuns(nextRuns)
       })
       .catch((reason) => {
         if (request === historyRequest.current) toast.error(String(reason))
       })
     return () => {
+      active = false
       if (request === historyRequest.current) ++historyRequest.current
     }
   }, [historyRevision])
@@ -436,6 +439,18 @@ function AgentStudioPage() {
   }, [view])
 
   const selectedRun = runs.find((run) => run.id === selectedRunId) ?? null
+
+  const refreshRuns = async () => {
+    const request = ++historyRequest.current
+    try {
+      const nextRuns = await listAgentRuns()
+      if (request === historyRequest.current) setRuns(nextRuns)
+    } catch (reason) {
+      if (request === historyRequest.current) {
+        toast.error(`Could not refresh runs: ${String(reason)}`)
+      }
+    }
+  }
 
   const selectView = (next: StudioView) => {
     invalidateRunSetup()
@@ -593,18 +608,7 @@ function AgentStudioPage() {
             return
           }
           selectView(section)
-          if (section === 'runs') {
-            void listAgentRuns()
-              .then((nextRuns) => {
-                setRuns(nextRuns)
-                setSelectedRunId(
-                  (current) => current ?? nextRuns[0]?.id ?? null
-                )
-              })
-              .catch((reason) =>
-                toast.error(`Could not refresh runs: ${String(reason)}`)
-              )
-          }
+          if (section === 'runs') void refreshRuns()
         }}
       />
 
@@ -785,20 +789,7 @@ function AgentStudioPage() {
             onRerun={(run) => void rerun(run)}
             onContinue={(run) => void rerun(run, true)}
             onDelete={(run) => void deleteRun(run)}
-            onRefresh={() => {
-              void listAgentRuns()
-                .then((nextRuns) => {
-                  setRuns(nextRuns)
-                  setSelectedRunId((current) =>
-                    nextRuns.some((run) => run.id === current)
-                      ? current
-                      : (nextRuns[0]?.id ?? null)
-                  )
-                })
-                .catch((reason) =>
-                  toast.error(`Could not refresh runs: ${String(reason)}`)
-                )
-            }}
+            onRefresh={() => void refreshRuns()}
           />
         </div>
       )}

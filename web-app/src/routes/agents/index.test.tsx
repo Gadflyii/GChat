@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
-import type { AgentDefinition, AgentRunRecord } from '@/types/agent'
+import type { AgentDefinition, AgentRunRecord, AgentTemplate } from '@/types/agent'
 import { Route } from './index'
 import GbotCompanion from '@/containers/GbotCompanion'
 import { useGbotPage } from '@/stores/gbot-page-store'
@@ -305,26 +305,78 @@ describe('AgentStudioPage', () => {
     expect(screen.getByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
   })
 
-  it('does not restore a deleted history record from an older pending refresh', async () => {
-    const refresh = deferred<AgentRunRecord[]>()
-    const deletion = deferred<void>()
-    deleteAgentRun.mockReturnValue(deletion.promise)
+  it.each(['Refresh runs', 'Runs tab'] as const)(
+    'does not restore a deleted history record from an older pending %s response', async (refreshControl) => {
+      const refresh = deferred<AgentRunRecord[]>()
+      const deletion = deferred<void>()
+      deleteAgentRun.mockReturnValue(deletion.promise)
+      await renderRunHistory()
+      listAgentRuns.mockReturnValueOnce(refresh.promise)
+      const callsBeforeRefresh = listAgentRuns.mock.calls.length
+      fireEvent.click(refreshControl === 'Refresh runs'
+        ? screen.getByTitle('Refresh runs')
+        : screen.getByRole('button', { name: 'Runs', exact: true }))
+      expect(listAgentRuns).toHaveBeenCalledTimes(callsBeforeRefresh + 1)
+      fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
+        .getByRole('menuitem', { name: 'Delete', exact: true }))
+
+      await act(async () => deletion.resolve())
+      expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+
+      await act(async () => refresh.resolve([firstHistoricalRun, secondHistoricalRun]))
+
+      expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
+      expect(screen.getAllByText(secondHistoricalRun.finalReply).length).toBeGreaterThan(0)
+    }
+  )
+
+  it('keeps the newer history refresh when an older request from another control finishes last', async () => {
+    const firstRefresh = deferred<AgentRunRecord[]>()
+    const secondRefresh = deferred<AgentRunRecord[]>()
     await renderRunHistory()
-    listAgentRuns.mockReturnValueOnce(refresh.promise)
+    listAgentRuns.mockReturnValueOnce(firstRefresh.promise).mockReturnValueOnce(secondRefresh.promise)
     const callsBeforeRefresh = listAgentRuns.mock.calls.length
+
     fireEvent.click(screen.getByTitle('Refresh runs'))
-    expect(listAgentRuns).toHaveBeenCalledTimes(callsBeforeRefresh + 1)
-    fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
-      .getByRole('menuitem', { name: 'Delete', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'Runs', exact: true }))
+    expect(listAgentRuns).toHaveBeenCalledTimes(callsBeforeRefresh + 2)
 
-    await act(async () => deletion.resolve())
-    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
-
-    await act(async () => refresh.resolve([firstHistoricalRun, secondHistoricalRun]))
+    await act(async () => secondRefresh.resolve([secondHistoricalRun]))
 
     expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
     expect(screen.getAllByText(secondHistoricalRun.finalReply).length).toBeGreaterThan(0)
+
+    await act(async () => firstRefresh.resolve([firstHistoricalRun]))
+
+    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
+    expect(screen.getAllByText(secondHistoricalRun.finalReply).length).toBeGreaterThan(0)
+  })
+
+  it('keeps delayed templates available without replacing newer refreshed history', async () => {
+    const templates = deferred<AgentTemplate[]>()
+    listAgentTemplates.mockReturnValue(templates.promise)
+    listAgentRuns.mockResolvedValueOnce([firstHistoricalRun]).mockResolvedValue([secondHistoricalRun])
+    render(<AgentStudioPage />)
+    await waitFor(() => expect(listAgentRuns).toHaveBeenCalledOnce())
+
+    fireEvent.click(screen.getByRole('button', { name: 'Runs', exact: true }))
+    expect(await screen.findByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
+
+    await act(async () => templates.resolve([{
+      id: 'authentication-review-template',
+      name: 'Authentication review template',
+      description: 'Review authentication changes and report findings.',
+      definition: firstAgent,
+    }]))
+
+    expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+    expect(screen.getByRole('heading', { name: 'Authentication review template' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use template' })).toBeEnabled()
   })
 
   it.each(['Re-run', 'Continue as new run…'] as const)(
