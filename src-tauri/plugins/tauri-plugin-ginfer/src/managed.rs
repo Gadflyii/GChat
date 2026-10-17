@@ -238,6 +238,11 @@ pub async fn load(
     load_on_host(sessions, control, model_id, model_path, config, timeout).await
 }
 
+/// Typed code the UI keys off when a model has no qualified automatic profile; the Tauri
+/// command error is a string, so the code leads it as `[code] message` and the extension
+/// parses it into `error.code`.
+pub const NO_QUALIFIED_PROFILE: &str = "no_qualified_profile";
+
 async fn load_on_host(
     sessions: Arc<Mutex<HashMap<i32, GinferSession>>>,
     control: Arc<ginfer_host::launcher::LocalControl>,
@@ -353,7 +358,7 @@ async fn load_on_host_inner(
         ).await;
     }
     if config.use_profile_defaults || config.max_context == 0 || config.max_concurrency == 0 {
-        return Err("No qualified automatic profile is available for this model. Open GInfer Hosts and choose Custom server settings to pick a context size and number of concurrent requests, or select a saved hardware profile.".into());
+        return Err(format!("[{NO_QUALIFIED_PROFILE}] {}", "No qualified automatic profile is available for this model. Open GInfer Hosts and choose Custom server settings to pick a context size and number of concurrent requests, or select a saved hardware profile."));
     }
     let occupied: BTreeSet<&str> = snapshot["instances"]
         .as_array()
@@ -1026,7 +1031,7 @@ print(json.dumps(dict(schema_version=2, mode='ensure', scope='artifact',
             artifact.to_string_lossy().into_owned(),
             GinferConfig { use_profile_defaults: true, ..config.clone() }, 5,
         ).await.unwrap_err();
-        assert!(automatic.contains("No qualified automatic profile"));
+        assert!(automatic.starts_with(&format!("[{NO_QUALIFIED_PROFILE}] ")));
         assert_eq!(host.processes.lock().await.instances().count(), 1);
         assert!(host.processes.lock().await.endpoint(id).is_ok());
         let changed = GinferConfig {

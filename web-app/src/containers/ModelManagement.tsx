@@ -211,7 +211,7 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
         ...(selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
       load.ready = true
     } catch (e) {
-      if (/No qualified automatic profile/.test(errorMessage(e))) {
+      if ((e as { code?: string } | null)?.code === 'no_qualified_profile') {
         const m = localModels.find(x => x.id === modelId)
         throw new Error(plainModelName(m?.displayName ?? modelId) + NO_SETTINGS)
       }
