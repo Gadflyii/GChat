@@ -66,6 +66,32 @@ export const connectorAccounts = (connect = false) =>
 export const configureConnector = (request: ConfigureConnectorRequest) =>
   invoke<ConnectorAccountsView>('connector_configure', { request })
 
+export async function configureGoogleDesktopRegistration(
+  clientId: string,
+  clientSecret: string
+): Promise<ConnectorAccountsView> {
+  if (
+    !clientId.trim() ||
+    clientId.length > 4096 ||
+    !clientSecret.trim() ||
+    clientSecret.length > 4096
+  )
+    throw new Error(
+      'Paste the client ID and client secret from your Google Desktop app. Each must be no longer than 4096 characters.'
+    )
+  try {
+    return await configureConnector({
+      provider: 'google',
+      client_id: clientId.trim(),
+      client_secret: clientSecret.trim(),
+    })
+  } catch {
+    throw new Error(
+      'Could not save the Google registration. Unlock secure storage if asked, then paste the Desktop client details and try again.'
+    )
+  }
+}
+
 const GOOGLE_REGISTRATION_MAX_BYTES = 64 * 1024
 const GOOGLE_REGISTRATION_INVALID =
   'Choose the downloaded Google Desktop app JSON file, no larger than 64 KB.'

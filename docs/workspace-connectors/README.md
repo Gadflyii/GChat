@@ -31,11 +31,15 @@ Ron owns confirmation of the Entra redirect configuration and live-consent gate.
 and [account audience decision](../decisions/2026-10-16-allow-personal-microsoft-accounts.md).
 
 Google uses each user's own Desktop OAuth client, with no built-in Google release
-identity. Settings guides project creation, API enablement, External consent and
-production publishing, then imports the downloaded client JSON with a file picker.
-GChat's protected credential store saves any registration secret; imported endpoint URLs
-never change provider routing. Expired or revoked sign-in prompts account
-reconnection in plain language. These source changes use mocks; live consent
+identity or Sectile Google account. Settings guides project creation, API enablement,
+External consent and production publishing, then accepts the client ID and secret
+or imports the downloaded client JSON with a file picker. Personal use follows
+Google's verification exception, without a paid review. Consent uses the system
+browser and a temporary loopback callback. GChat's protected credential vault
+saves the registration secret and refresh token; access refresh continues after
+restart. Imported endpoint URLs never change provider routing. Expired or revoked
+sign-in prompts account reconnection in plain language; temporary failures retain
+the account. These source changes use mocks; live consent
 remains Ron's release gate. See [the Google setup guide](operations.md#google-register-your-own-desktop-app)
 and [the registration decision](../decisions/2026-10-16-guide-google-desktop-registration.md).
 

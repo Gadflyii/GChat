@@ -19,6 +19,7 @@ import {
   beginConnectorAuth,
   cancelConnectorAuth,
   configureConnector,
+  configureGoogleDesktopRegistration,
   connectorAccounts,
   connectorAuthStatus,
   disconnectConnectorAccount,
@@ -76,27 +77,32 @@ function GoogleRegistration({
   configured,
   disabled,
   onImport,
+  onSave,
 }: {
   configured: boolean
   disabled: boolean
-  onImport: (file: File) => Promise<void>
+  onImport: (file: File) => Promise<boolean>
+  onSave: (clientId: string, clientSecret: string) => Promise<boolean>
 }) {
   const importing = useRef(false)
   const [open, setOpen] = useState(false)
   const [step, setStep] = useState(0)
   const [reading, setReading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [clientId, setClientId] = useState('')
+  const [clientSecret, setClientSecret] = useState('')
   const titles = [
     'Create your Google project',
     'Turn on the services you need',
     'Set up the Google permission screen',
     'Download your app registration',
-    'Import the downloaded file',
+    'Save your Google setup',
     'Google setup is saved',
   ]
   const importFiles = async (files: readonly File[]) => {
     if (disabled || importing.current) return
     setError(null)
+    setClientSecret('')
     if (files.length !== 1) {
       setError('Choose one downloaded Google Desktop app JSON file.')
       return
@@ -104,14 +110,34 @@ function GoogleRegistration({
     importing.current = true
     setReading(true)
     try {
-      await onImport(files[0])
-      setStep(5)
+      if (await onImport(files[0])) setStep(5)
     } catch (cause) {
       // The import service returns only sanitized validation/save errors.
       setError(
         cause instanceof Error
           ? cause.message
           : 'Could not import the Google registration. Choose the downloaded file and try again.'
+      )
+    } finally {
+      importing.current = false
+      setReading(false)
+    }
+  }
+  const saveManualRegistration = async () => {
+    if (disabled || importing.current) return
+    importing.current = true
+    setReading(true)
+    setError(null)
+    const secret = clientSecret
+    setClientSecret('')
+    try {
+      if (await onSave(clientId, secret)) setStep(5)
+    } catch (cause) {
+      // The service returns only sanitized validation/save errors.
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : 'Could not save the Google registration. Unlock secure storage if asked, then paste the Desktop client details and try again.'
       )
     } finally {
       importing.current = false
@@ -135,6 +161,7 @@ function GoogleRegistration({
         disabled={disabled}
         onClick={() => {
           setError(null)
+          setClientSecret('')
           setStep(0)
           setOpen(true)
         }}
@@ -144,7 +171,10 @@ function GoogleRegistration({
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          if (!reading) setOpen(next)
+          if (!reading) {
+            if (!next) setClientSecret('')
+            setOpen(next)
+          }
         }}
       >
         <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
@@ -277,6 +307,15 @@ function GoogleRegistration({
                     .
                   </li>
                   <li>
+                    Open{' '}
+                    {link(
+                      'https://console.cloud.google.com/auth/scopes',
+                      'Data Access'
+                    )}
+                    . Review the permissions for the services you enabled and
+                    choose only the access you intend to grant.
+                  </li>
+                  <li>
                     For a lasting connection, set the publishing status to{' '}
                     <strong>In production</strong> when Google permits it.{' '}
                     {link(
@@ -322,11 +361,19 @@ function GoogleRegistration({
                     download option.
                   </li>
                   <li>
-                    Keep the file private and return to this guide. You do not
-                    need to copy a client ID or secret into GChat. Select{' '}
-                    <strong>Next</strong> to import the file.
+                    Keep the file private and return to this guide. Select{' '}
+                    <strong>Next</strong> to import it. If you cannot download
+                    the file, copy the Desktop client ID and secret into the
+                    alternative form on the next step instead. Do not put these
+                    app credentials in chat.
                   </li>
                 </ol>
+                <p>
+                  Google Desktop apps use a temporary local callback at{' '}
+                  <code>http://127.0.0.1:&lt;port&gt;/oauth/callback</code>.
+                  Choose Desktop app when creating the client; you do not need
+                  to register a website redirect.
+                </p>
                 <p>
                   Need help finding the download? Open Google’s{' '}
                   {link(
@@ -338,39 +385,100 @@ function GoogleRegistration({
               </div>
             )}
             {step === 4 && (
-              <div
-                role="group"
-                aria-label="Google Desktop app JSON import"
-                aria-busy={reading}
-                className="space-y-3 rounded border border-border p-3"
-              >
-                <p>
-                  Choose the JSON file you downloaded for the Desktop app.
-                  Importing it saves the registration; it does not sign you in
-                  yet.
-                </p>
-                <label className="block">
-                  Import Google Desktop app JSON
-                  <Input
-                    type="file"
-                    accept=".json,application/json"
-                    disabled={disabled || reading}
-                    onChange={(event) => {
-                      const files = Array.from(event.target.files ?? [])
-                      event.target.value = ''
-                      void importFiles(files)
+              <div className="space-y-3">
+                <div
+                  role="group"
+                  aria-label="Google Desktop app JSON import"
+                  aria-busy={reading}
+                  className="space-y-3 rounded border border-border p-3"
+                >
+                  <p>
+                    Choose the JSON file you downloaded for the Desktop app.
+                    Importing it saves the registration; it does not sign you in
+                    yet.
+                  </p>
+                  <label className="block">
+                    Import Google Desktop app JSON
+                    <Input
+                      type="file"
+                      accept=".json,application/json"
+                      disabled={disabled || reading}
+                      onChange={(event) => {
+                        const files = Array.from(event.target.files ?? [])
+                        event.target.value = ''
+                        void importFiles(files)
+                      }}
+                    />
+                  </label>
+                  <p>Choose one downloaded JSON file, up to 64 KB.</p>
+                  <p>
+                    The app secret goes directly to GChat’s protected credential
+                    store. GChat does not display or keep it in this form.
+                  </p>
+                </div>
+                <details>
+                  <summary className="cursor-pointer text-foreground">
+                    Paste a Desktop client ID and secret instead
+                  </summary>
+                  <form
+                    className="mt-3 space-y-3"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      void saveManualRegistration()
                     }}
-                  />
-                </label>
-                <p>Choose one downloaded JSON file, up to 64 KB.</p>
-                <p>
-                  The app secret goes directly to GChat’s protected credential
-                  store. GChat does not display or keep it in this form.
-                </p>
+                  >
+                    <p>
+                      In Google Auth Platform → Clients, open the Desktop app
+                      you created and copy its Client ID and Client secret.
+                      These are app credentials, not your Google password.
+                    </p>
+                    <label className="block">
+                      Google Desktop client ID
+                      <Input
+                        value={clientId}
+                        autoComplete="off"
+                        spellCheck={false}
+                        maxLength={4096}
+                        disabled={disabled || reading}
+                        onChange={(event) => setClientId(event.target.value)}
+                      />
+                    </label>
+                    <label className="block">
+                      Google Desktop client secret
+                      <Input
+                        type="password"
+                        value={clientSecret}
+                        autoComplete="new-password"
+                        spellCheck={false}
+                        maxLength={4096}
+                        disabled={disabled || reading}
+                        onChange={(event) => setClientSecret(event.target.value)}
+                      />
+                    </label>
+                    <p>
+                      Save sends the secret to the same protected credential
+                      store used for sign-in tokens, then clears this field,
+                      including if saving fails.
+                    </p>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        disabled ||
+                        reading ||
+                        !clientId.trim() ||
+                        !clientSecret.trim()
+                      }
+                    >
+                      Save Google registration
+                    </Button>
+                  </form>
+                </details>
                 {configured && (
                   <p>
-                    Google registration saved. Importing a different
-                    registration requires reconnecting existing accounts.
+                    Google registration saved. Saving a different registration
+                    requires reconnecting existing accounts.
                   </p>
                 )}
                 {reading && <p role="status">Saving your Google setup…</p>}
@@ -399,7 +507,10 @@ function GoogleRegistration({
                   <li>
                     Select <strong>Connect Google Workspace</strong>, sign in to
                     the account you added and review Google’s permissions.
-                    Return to GChat and wait for the account to appear under{' '}
+                    Keep GChat open while signing in. Your browser returns the
+                    result automatically; do not paste a callback URL or
+                    authorization code anywhere. Return to GChat and wait for
+                    the account to appear under{' '}
                     <strong>Connected accounts</strong>.
                   </li>
                 </ol>
@@ -454,7 +565,8 @@ type ProviderCardProps = {
   busy: boolean
   disabled: boolean
   onConfigure: (request: ConfigureConnectorRequest) => Promise<void>
-  onImportGoogle: (file: File) => Promise<void>
+  onImportGoogle: (file: File) => Promise<boolean>
+  onSaveGoogle: (clientId: string, clientSecret: string) => Promise<boolean>
   onConnect: (request: BeginConnectorAuthRequest) => Promise<void>
   onSelect: (account: ConnectorAccount) => Promise<void>
   onDisconnect: (account: ConnectorAccount) => void
@@ -477,6 +589,7 @@ function ProviderCard({
   disabled,
   onConfigure,
   onImportGoogle,
+  onSaveGoogle,
   onConnect,
   onSelect,
   onDisconnect,
@@ -541,6 +654,7 @@ function ProviderCard({
           configured={Boolean(config?.client_id)}
           disabled={disabled}
           onImport={onImportGoogle}
+          onSave={onSaveGoogle}
         />
       ) : (
         <details className="mb-4">
@@ -1168,6 +1282,22 @@ export function WorkspaceConnections() {
                   setError(null)
                   try {
                     acceptSnapshot(await importGoogleDesktopRegistration(file))
+                    return true
+                  } finally {
+                    setBusy(null)
+                  }
+                }}
+                onSaveGoogle={async (clientId, clientSecret) => {
+                  setBusy('Saving Google registration')
+                  setError(null)
+                  try {
+                    acceptSnapshot(
+                      await configureGoogleDesktopRegistration(
+                        clientId,
+                        clientSecret
+                      )
+                    )
+                    return true
                   } finally {
                     setBusy(null)
                   }

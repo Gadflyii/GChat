@@ -190,6 +190,7 @@ describe('Workspace connections', () => {
     for (const [name, page] of [
       ['Branding', 'branding'],
       ['Audience', 'audience'],
+      ['Data Access', 'scopes'],
     ]) {
       expect(guide.getByRole('link', { name })).toHaveAttribute(
         'href',
@@ -210,8 +211,11 @@ describe('Workspace connections', () => {
       'https://console.cloud.google.com/auth/clients'
     )
     expect(
-      guide.getByText(/You do not need to copy a client ID or secret/)
+      guide.getByText(/alternative form on the next step/)
     ).toBeInTheDocument()
+    expect(guide.getByText(/temporary local callback at/)).toHaveTextContent(
+      'http://127.0.0.1:<port>/oauth/callback'
+    )
     await user.click(guide.getByRole('button', { name: 'Next' }))
     expect(
       guide.getByLabelText('Import Google Desktop app JSON')
@@ -228,7 +232,7 @@ describe('Workspace connections', () => {
     ).toBeVisible()
   })
 
-  it('imports a Desktop JSON file directly to the native vault without credential fields', async () => {
+  it('imports a Desktop JSON file directly to the native vault without displaying its secret', async () => {
     await ready()
     const guide = await openGoogleImport()
     expect(
@@ -278,6 +282,118 @@ describe('Workspace connections', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByText(/private-desktop-secret/)).not.toBeInTheDocument()
     expect(api.beginConnectorAuth).not.toHaveBeenCalled()
+  })
+
+  it('saves pasted Desktop credentials, clears the secret before saving, then enables explicit browser sign-in', async () => {
+    const empty = initialView()
+    empty.configs[0].client_id = ''
+    api.connectorAccounts.mockResolvedValue(empty)
+    let finish!: (view: ConnectorAccountsView) => void
+    api.nativeInvoke.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve
+        })
+    )
+    await ready()
+    const user = userEvent.setup()
+    const guide = await openGoogleImport()
+    await user.click(
+      guide.getByText('Paste a Desktop client ID and secret instead')
+    )
+    const client = guide.getByLabelText('Google Desktop client ID')
+    const secret = guide.getByLabelText('Google Desktop client secret')
+    const save = guide.getByRole('button', { name: 'Save Google registration' })
+    expect(save).toBeDisabled()
+    expect(secret).toHaveAttribute('type', 'password')
+    await user.type(client, 'pasted.apps.googleusercontent.com')
+    await user.type(secret, 'synthetic-desktop-secret')
+    await user.click(save)
+    await waitFor(() =>
+      expect(api.nativeInvoke).toHaveBeenCalledExactlyOnceWith(
+        'connector_configure',
+        {
+          request: {
+            provider: 'google',
+            client_id: 'pasted.apps.googleusercontent.com',
+            client_secret: 'synthetic-desktop-secret',
+          },
+        }
+      )
+    )
+    expect(secret).toHaveValue('')
+    expect(save).toBeDisabled()
+    fireEvent.submit(save.closest('form')!)
+    expect(api.nativeInvoke).toHaveBeenCalledTimes(1)
+    expect(api.beginConnectorAuth).not.toHaveBeenCalled()
+    const saved = initialView()
+    saved.configs[0].client_id = 'pasted.apps.googleusercontent.com'
+    saved.configs[0].has_client_secret = true
+    await act(async () => {
+      finish(saved)
+    })
+    expect(
+      await guide.findByText(/Your Google registration has been saved in GChat/)
+    ).toHaveTextContent('Your account is not connected yet')
+    expect(guide.getByText(/Keep GChat open/)).toHaveTextContent(
+      'do not paste a callback URL or authorization code anywhere'
+    )
+    expect(
+      guide.queryByLabelText('Google Desktop client secret')
+    ).not.toBeInTheDocument()
+    await user.click(guide.getByRole('button', { name: 'Choose services' }))
+    const google = googleCard()
+    await user.click(google.getByLabelText('Gmail'))
+    api.beginConnectorAuth.mockResolvedValue(waiting)
+    await user.click(
+      google.getByRole('button', { name: 'Connect Google Workspace' })
+    )
+    expect(api.beginConnectorAuth).toHaveBeenCalledExactlyOnceWith({
+      provider: 'google',
+      services: ['gmail'],
+      access: 'read_only',
+    })
+  })
+
+  it('clears a pasted secret on save failure and shows safe retry guidance without claiming success', async () => {
+    const empty = initialView()
+    empty.configs[0].client_id = ''
+    api.connectorAccounts.mockResolvedValue(empty)
+    api.nativeInvoke.mockRejectedValue(
+      new Error('synthetic-private-native-secret')
+    )
+    await ready()
+    const user = userEvent.setup()
+    const guide = await openGoogleImport()
+    await user.click(
+      guide.getByText('Paste a Desktop client ID and secret instead')
+    )
+    await user.type(guide.getByLabelText('Google Desktop client ID'), 'client')
+    const secret = guide.getByLabelText('Google Desktop client secret')
+    await user.type(secret, 'synthetic-private-desktop-secret')
+    await user.click(
+      guide.getByRole('button', { name: 'Save Google registration' })
+    )
+    await guide.findByText(
+      /Could not save the Google registration. Unlock secure storage if asked/
+    )
+    expect(secret).toHaveValue('')
+    expect(
+      guide.getByRole('button', { name: 'Save Google registration' })
+    ).toBeDisabled()
+    expect(
+      guide.queryByText(
+        /synthetic-private-native-secret|synthetic-private-desktop-secret/
+      )
+    ).not.toBeInTheDocument()
+    expect(
+      guide.queryByText(/Your Google registration has been saved/)
+    ).not.toBeInTheDocument()
+    expect(api.beginConnectorAuth).not.toHaveBeenCalled()
+    await user.click(guide.getByRole('button', { name: 'Close' }))
+    expect(
+      googleCard().getByRole('button', { name: 'Connect Google Workspace' })
+    ).toBeDisabled()
   })
 
   it('imports a replacement Desktop JSON and clears any previously saved vault secret when absent', async () => {

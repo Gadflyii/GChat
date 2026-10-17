@@ -17,49 +17,89 @@ can be addressed by their public account IDs; email addresses are not account ID
 ### Google: register your own Desktop app
 
 Each user supplies their own Google Desktop OAuth client. GChat has no built-in
-Google release identity. Settings provides these steps and imports the downloaded
-JSON, so users do not need to copy a client ID or secret:
+Google release identity or Sectile Google account. You create the client once in
+your own Google account, then save its client ID and secret in GChat or import its
+downloaded JSON. Personal use does not require submitting your app for Google's
+verification or a paid security assessment; Google's
+[personal-use exception](https://developers.google.com/identity/protocols/oauth2/production-readiness/restricted-scope-verification#personal-use)
+still has an unverified-app user limit and does not override organization policy.
 
 1. [Create or select a Google Cloud project](https://console.cloud.google.com/projectcreate).
-2. Enable the [Gmail](https://console.cloud.google.com/apis/library/gmail.googleapis.com),
+2. In that project, enable the APIs for the services you want:
+   [Gmail](https://console.cloud.google.com/apis/library/gmail.googleapis.com),
    [Calendar](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com),
    [Drive](https://console.cloud.google.com/apis/library/drive.googleapis.com),
    [Docs](https://console.cloud.google.com/apis/library/docs.googleapis.com),
    [Sheets](https://console.cloud.google.com/apis/library/sheets.googleapis.com),
    [Slides](https://console.cloud.google.com/apis/library/slides.googleapis.com),
-   [Tasks](https://console.cloud.google.com/apis/library/tasks.googleapis.com) and
-   [People](https://console.cloud.google.com/apis/library/people.googleapis.com) APIs
-   in that project.
+   [Tasks](https://console.cloud.google.com/apis/library/tasks.googleapis.com) or
+   [People](https://console.cloud.google.com/apis/library/people.googleapis.com).
 3. Open [Google Auth Platform → Branding](https://console.cloud.google.com/auth/branding)
-   to configure the consent screen, then [Audience](https://console.cloud.google.com/auth/audience)
-   and choose **External**. While testing, add your own Google account as a test
-   user. Set the publishing status to **In production** before relying on the
+   and choose **Get started** if needed. Give the app a name you will recognize
+   when signing in, such as **My GChat**, and use your email for the support and
+   contact addresses. In [Audience](https://console.cloud.google.com/auth/audience),
+   choose **External** and add your own Google email under **Test users** while
+   testing. Review your service permissions under **Data Access**. Set the
+   publishing status to **In production** before relying on the
    connection: External apps left in Testing receive refresh tokens that expire
    after seven days for these Workspace scopes. Production status removes that
    testing limit; users can still revoke consent and other token expiry rules
    still apply.
-4. Open [Clients](https://console.cloud.google.com/auth/clients), create an OAuth
-   client with application type **Desktop app**, and download its client JSON.
-5. In **Settings → Workspace connections → Google**, choose the JSON file.
-   GChat accepts Desktop-client JSON, saves the public ID
-   and stores any registration secret in GChat's protected credential store.
-   Importing another client replaces the registration and requires reconnecting
-   existing Google accounts. Keep the downloaded file private; do not paste it
-   into chat.
-6. Choose services and access, then sign in through the system browser. If Google
+4. Open [Clients](https://console.cloud.google.com/auth/clients), choose
+   **Create client → Desktop app**, give it a name and choose **Create**. Copy the
+   displayed **Client ID** and **Client secret**, or download its client JSON.
+   Use the Desktop app type; you do not need to configure a website or enter a
+   fixed redirect port.
+5. In **Settings → Workspace connections → Google**, paste that client's ID and
+   secret and save, or choose **Import Google Desktop app JSON** and select the
+   downloaded file. Both paths use GChat's protected credential store for the
+   secret. Saving a different client requires reconnecting existing Google
+   accounts. Keep the secret and downloaded file private; do not paste them into
+   chat. Saving the registration does not grant access to your Google account.
+6. Choose services and read-only or read/write access, then choose **Connect**.
+   Keep GChat open while completing sign-in in your system browser. If Google
    shows **Google hasn't verified this app**, proceed only if this is the app
    you just created in your own project and its requested permissions are expected.
    Expand **Advanced**, choose **Go to your app (unsafe)**, then review permissions
    and **Continue** when offered. This warning does not override an organization
    restriction or an access-denied screen. Publishing and verification are separate;
    making your app public for other users can require Google's verification.
+   Return to GChat after the browser's completion message and check that the
+   account says **Connected**. Select it as the default if you want operations
+   without an explicit account to use it.
 
 The callback uses `http://127.0.0.1:<port>/oauth/callback` on a temporary local
-listener. Imported authorization and token URLs are ignored; GChat continues to
-use its fixed Google endpoints and PKCE. Import does not sign in or grant access.
-If Google sign-in expires or access is removed, GChat explains that the account
-must be reconnected in **Settings → Workspace connections**. A temporary network,
-throttling or server error does not become a consent-revoked message.
+listener on the computer running GChat. Use a browser on that same computer;
+`127.0.0.1` on another device cannot reach it. No authorization code needs to be
+copied back into GChat. Imported authorization and token URLs are ignored; GChat
+continues to use its fixed Google endpoints and PKCE.
+
+GChat stores the refresh token in the same protected credential vault as other
+Workspace accounts and refreshes access automatically when needed, including
+after restarting GChat. Access tokens stay in native memory; the public account
+record contains no token or client secret. A locked or unavailable vault must be
+unlocked before credentials can be saved or used. If sign-in expires or access is
+removed, use **Reconnect** for the affected account. A temporary network,
+throttling or server error does not remove the saved token or require new consent.
+
+If sign-in does not finish:
+
+- **Wrong app or redirect:** check that the ID and secret belong to the same
+  **Desktop app** client, rather than a Web application or service account.
+- **Saved Google client details are missing or rejected:** save your own
+  **Desktop app** client ID and secret again in **Settings → Workspace
+  connections → Google**, then retry sign-in. Reconnecting alone cannot repair
+  missing or rejected client details.
+- **Access denied:** if the app is in Testing, add the exact Google email you are
+  signing in with under **Audience → Test users**. A managed Workspace account
+  may also need its administrator to allow the client and requested permissions.
+- **Cancelled or timed out:** return to GChat and connect again; finish the new
+  browser flow while GChat remains open. An earlier callback cannot complete a
+  new sign-in attempt.
+- **Expired or removed access:** reconnect the account. If this happens after
+  seven days, check the app's publishing status before reconnecting.
+- **A service API is disabled:** enable that service's API in the same Google
+  Cloud project as the saved client, then retry the operation.
 
 Google documents [project creation](https://developers.google.com/workspace/guides/create-project),
 [API enablement](https://developers.google.com/workspace/guides/enable-apis),
@@ -157,10 +197,13 @@ No Microsoft client secret is required. Live consent remains Ron's release gate.
   Teams or Windows 365 Cloud PC. If you already use one, have the organization's
   administrator check service permissions and any required license. This message
   does not mean GChat determined your account type from your email address.
-- **Sign-in expired, access removed or registration rejected:** use
+- **Sign-in expired or access removed:** use
   **Settings → Workspace connections → Reconnect** for the affected account.
   For Google, also check whether your own app is still in Testing, where these
   refresh tokens expire after seven days.
+- **Google registration is missing or rejected:** save your own **Desktop app**
+  client ID and secret again in **Settings → Workspace connections → Google**,
+  then retry sign-in. This requires correcting the saved client details first.
 - **Temporary connection, rate-limit or server failure:** retry the operation
   later. A temporary failure, including a token response with HTTP 429 or 503,
   does not remove the saved credential or mark the account for reconnection.
