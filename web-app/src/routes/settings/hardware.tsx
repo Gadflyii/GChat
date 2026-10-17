@@ -130,6 +130,11 @@ function HardwareContent() {
             </div>
           ) : (
             <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
+              <p className="text-sm text-muted-foreground">
+                See the hardware detected on this computer. Select Refresh
+                hardware after connecting or changing a graphics card to update
+                this list.
+              </p>
               {/* OS Information */}
               <Card title={t('settings:hardware.os')}>
                 <CardItem
@@ -261,7 +266,7 @@ function HardwareContent() {
               {/* GPU Information */}
               {!IS_MACOS && (
                 <Card
-                  title="GPUs"
+                  title={t('settings:hardware.gpus')}
                   header={
                     <div className="flex items-center justify-end mb-2">
                       <Button
@@ -270,7 +275,7 @@ function HardwareContent() {
                         onClick={handleRefreshHardware}
                         disabled={isLoading}
                       >
-                        {isLoading ? '...' : 'Refresh'}
+                        {isLoading ? 'Refreshing…' : 'Refresh hardware'}
                       </Button>
                     </div>
                   }
@@ -302,7 +307,7 @@ function HardwareContent() {
                       </p>
                     </>
                   ) : (
-                    <CardItem title="No devices found" actions={<></>} />
+                    <CardItem title="No graphics cards detected" actions={<></>} />
                   )}
                 </Card>
               )}

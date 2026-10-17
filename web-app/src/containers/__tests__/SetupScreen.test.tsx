@@ -10,7 +10,18 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => mocks.navigate }))
 vi.mock('@/containers/HeaderPage', () => ({ default: () => <header /> }))
-vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ onComplete }: { onComplete: () => void }) => <button onClick={onComplete}>Finish shared local setup</button> }))
+vi.mock('@/containers/CredentialSetup', () => ({
+  CredentialSetup: () => (
+    <section aria-label="Secure storage setup">
+      Protect your connections
+    </section>
+  ),
+}))
+vi.mock('../EngineFirstRun', () => ({
+  EngineFirstRun: ({ onComplete }: { onComplete: () => void }) => (
+    <button onClick={onComplete}>Finish shared local setup</button>
+  ),
+}))
 vi.mock('@/containers/EngineIntake', () => ({
   EngineIntake: ({ onConnect }: { onConnect: () => void }) => (
     <button onClick={onConnect}>Connect a network host</button>
@@ -33,6 +44,9 @@ describe('model intake', () => {
   it('offers one hardware-aware model path without starting downloads', () => {
     render(<SetupScreen />)
     expect(screen.getByText('Welcome to GChat')).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Secure storage setup' })
+    ).toBeInTheDocument()
     expect(mocks.navigate).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Choose a model' }))
     expect(mocks.navigate).toHaveBeenCalledWith({ to: '/hub/', replace: true })
@@ -54,8 +68,13 @@ describe('model intake', () => {
   })
   it('finishes onboarding when the shared local setup is approved', () => {
     render(<SetupScreen />)
-    fireEvent.click(screen.getByRole('button', { name: 'Finish shared local setup' }))
-    expect(mocks.navigate).toHaveBeenCalledWith({ to: '/engines/', replace: true })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Finish shared local setup' })
+    )
+    expect(mocks.navigate).toHaveBeenCalledWith({
+      to: '/engines/',
+      replace: true,
+    })
     expect(localStorage.getItem(localStorageKey.setupCompleted)).toBe('true')
   })
   it('allows an explicit exit without an automatic timeout or model load', () => {

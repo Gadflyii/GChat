@@ -84,6 +84,10 @@ function Shortcuts() {
         <SettingsMenu />
         <div className="p-4 pt-0 w-full overflow-y-auto">
           <div className="flex flex-col justify-between gap-4 gap-y-3 w-full">
+            <p className="text-sm text-muted-foreground">
+              Press the keys shown together to perform each action without the
+              mouse. Chat shortcuts apply while you are writing a message.
+            </p>
             {/* Application */}
             <Card title={t('settings:shortcuts.application')}>
               <CardItem

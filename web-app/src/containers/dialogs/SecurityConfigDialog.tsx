@@ -152,7 +152,7 @@ export function SecurityConfigDialog({
       const result = await invoke<AccessLogEntry[]>('security_get_logs', { limit: 100 })
       setLogs(result)
     } catch {
-      toast.error('Failed to load access logs')
+      toast.error('Could not load the access history')
     } finally {
       setIsLoadingLogs(false)
     }
@@ -199,10 +199,10 @@ export function SecurityConfigDialog({
       setAuthMode(newMode)
       setGeneratedToken(null)
       await fetchStatus()
-      toast.success(`Authentication mode changed to ${newMode}`)
+      toast.success('Connection sign-in method updated')
       onSave?.()
     } catch {
-      toast.error('Failed to change authentication mode')
+      toast.error('Could not update the connection sign-in method')
     } finally {
       setIsChangingAuthMode(false)
       setConfirmAction({ type: null })
@@ -217,10 +217,10 @@ export function SecurityConfigDialog({
       setGeneratedToken(token)
       setShowToken(true)
       await fetchStatus()
-      toast.success('New access token generated')
+      toast.success('New access key created. Copy it before closing this window.')
       onSave?.()
     } catch {
-      toast.error('Failed to generate token')
+      toast.error('Could not create an access key')
     } finally {
       setIsGeneratingToken(false)
     }
@@ -232,10 +232,10 @@ export function SecurityConfigDialog({
     try {
       await navigator.clipboard.writeText(generatedToken)
       setTokenCopied(true)
-      toast.success('Token copied to clipboard')
+      toast.success('Access key copied')
       setTimeout(() => setTokenCopied(false), 2000)
     } catch {
-      toast.error('Failed to copy token')
+      toast.error('Could not copy the access key')
     }
   }
 
@@ -257,7 +257,7 @@ export function SecurityConfigDialog({
       setPassword('')
       setConfirmPassword('')
       await fetchStatus()
-      toast.success('Password set successfully')
+      toast.success('Connection password saved')
       onSave?.()
     } catch {
       toast.error('Failed to set password')
@@ -274,11 +274,11 @@ export function SecurityConfigDialog({
       setRequirePairing(enabled)
       await fetchStatus()
       toast.success(
-        enabled ? 'Device pairing required' : 'Device pairing disabled'
+        enabled ? 'New devices need your approval' : 'Device approval is turned off'
       )
       onSave?.()
     } catch {
-      toast.error('Failed to update pairing setting')
+      toast.error('Could not update device approval')
     } finally {
       setIsTogglingPairing(false)
     }
@@ -307,9 +307,9 @@ export function SecurityConfigDialog({
     try {
       await invoke('security_clear_logs')
       setLogs([])
-      toast.success('Access logs cleared')
+      toast.success('Access history cleared')
     } catch {
-      toast.error('Failed to clear logs')
+      toast.error('Could not clear the access history')
     } finally {
       setIsClearingLogs(false)
       setConfirmAction({ type: null })
@@ -345,7 +345,7 @@ export function SecurityConfigDialog({
         )}
       >
         <IconKey size={16} />
-        Authentication
+        Sign-in
       </button>
       <button
         onClick={() => setActiveTab('devices')}
@@ -369,7 +369,7 @@ export function SecurityConfigDialog({
         )}
       >
         <IconHistory size={16} />
-        Logs
+        Access history
       </button>
     </div>
   )
@@ -380,17 +380,21 @@ export function SecurityConfigDialog({
       {/* Current Status */}
       {status && (
         <div className="bg-secondary/30 rounded-lg p-4 space-y-2">
-          <h4 className="font-medium text-foreground text-sm">Current Status</h4>
+          <h4 className="font-medium text-foreground text-sm">Current security settings</h4>
           <div className="grid grid-cols-2 gap-2 text-sm">
-            <span className="text-muted-foreground">Auth Mode:</span>
-            <span className="text-foreground capitalize">{status.auth_mode}</span>
-            <span className="text-muted-foreground">Has Token:</span>
+            <span className="text-muted-foreground">Sign-in method:</span>
+            <span className="text-foreground">
+              {{ token: 'Access key', password: 'Password', none: 'No sign-in' }[
+                status.auth_mode
+              ]}
+            </span>
+            <span className="text-muted-foreground">Access key set:</span>
             <span className="text-foreground">{status.has_token ? 'Yes' : 'No'}</span>
-            <span className="text-muted-foreground">Has Password:</span>
+            <span className="text-muted-foreground">Password set:</span>
             <span className="text-foreground">{status.has_password ? 'Yes' : 'No'}</span>
             {status.recent_auth_failures > 0 && (
               <>
-                <span className="text-muted-foreground">Recent Failures:</span>
+                <span className="text-muted-foreground">Recent failed sign-ins:</span>
                 <span className="text-destructive">{status.recent_auth_failures}</span>
               </>
             )}
@@ -401,7 +405,7 @@ export function SecurityConfigDialog({
       {/* Auth Mode Selection */}
       <div className="space-y-3">
         <label className="text-sm font-medium text-foreground">
-          Authentication Mode
+          How apps sign in
         </label>
         <RadioGroup
           value={authMode}
@@ -412,9 +416,9 @@ export function SecurityConfigDialog({
           <div className="flex items-center space-x-3 p-3 rounded-lg border border-border hover:bg-secondary/30 transition-colors">
             <RadioGroupItem value="token" id="auth-token" />
             <label htmlFor="auth-token" className="flex-1 cursor-pointer">
-              <span className="font-medium text-foreground">Token</span>
+              <span className="font-medium text-foreground">Access key (token)</span>
               <p className="text-sm text-muted-foreground">
-                Require a secret token for API access
+                Other apps must send this secret key when they connect.
               </p>
             </label>
           </div>
@@ -423,16 +427,16 @@ export function SecurityConfigDialog({
             <label htmlFor="auth-password" className="flex-1 cursor-pointer">
               <span className="font-medium text-foreground">Password</span>
               <p className="text-sm text-muted-foreground">
-                Require a password for access
+                Other apps must sign in with the password you set below.
               </p>
             </label>
           </div>
           <div className="flex items-center space-x-3 p-3 rounded-lg border border-border hover:bg-secondary/30 transition-colors">
             <RadioGroupItem value="none" id="auth-none" />
             <label htmlFor="auth-none" className="flex-1 cursor-pointer">
-              <span className="font-medium text-foreground">None</span>
+              <span className="font-medium text-foreground">No sign-in</span>
               <p className="text-sm text-muted-foreground">
-                No authentication required (not recommended)
+                Anyone who can reach this server can connect without signing in.
               </p>
             </label>
           </div>
@@ -442,7 +446,7 @@ export function SecurityConfigDialog({
       {/* Token Section */}
       {authMode === 'token' && (
         <div className="space-y-3 p-4 border border-border rounded-lg">
-          <h4 className="font-medium text-foreground">Access Token</h4>
+          <h4 className="font-medium text-foreground">Access key (token)</h4>
 
           {generatedToken ? (
             <div className="space-y-3">
@@ -455,6 +459,7 @@ export function SecurityConfigDialog({
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => setShowToken(!showToken)}
+                    aria-label={showToken ? 'Hide access key' : 'Show access key'}
                   >
                     {showToken ? <IconEyeOff size={16} /> : <IconEye size={16} />}
                   </Button>
@@ -462,6 +467,7 @@ export function SecurityConfigDialog({
                     variant="ghost"
                     size="icon-sm"
                     onClick={handleCopyToken}
+                    aria-label="Copy access key"
                   >
                     {tokenCopied ? (
                       <IconCheck size={16} className="text-green-500" />
@@ -474,16 +480,17 @@ export function SecurityConfigDialog({
               <div className="flex items-start gap-2 text-amber-500 text-sm">
                 <IconAlertTriangle size={16} className="shrink-0 mt-0.5" />
                 <span>
-                  Save this token now. It cannot be retrieved later. You will
-                  need to generate a new one if lost.
+                  Copy this key into the app you want to connect and save it
+                  somewhere private. GChat cannot show it again after you close
+                  this window. Create a new key if you lose it.
                 </span>
               </div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
               {status?.has_token
-                ? 'A token is already configured. Generate a new one to replace it.'
-                : 'No token configured. Generate one to enable token authentication.'}
+                ? 'An access key is already set. Creating a new key replaces it; update any apps that use the old key.'
+                : 'Create an access key, then paste it into each app you want to connect.'}
             </p>
           )}
 
@@ -501,7 +508,7 @@ export function SecurityConfigDialog({
             ) : (
               <>
                 <IconKey className="mr-2 h-4 w-4" />
-                Generate New Token
+                Create new access key
               </>
             )}
           </Button>
@@ -511,11 +518,11 @@ export function SecurityConfigDialog({
       {/* Password Section */}
       {authMode === 'password' && (
         <div className="space-y-3 p-4 border border-border rounded-lg">
-          <h4 className="font-medium text-foreground">Set Password</h4>
+          <h4 className="font-medium text-foreground">Set password</h4>
           <p className="text-sm text-muted-foreground">
             {status?.has_password
               ? 'Enter a new password to replace the existing one.'
-              : 'Set a password to enable password authentication.'}
+              : 'Choose a password of at least 8 characters, then use it in the apps you want to connect.'}
           </p>
 
           <div className="space-y-3">
@@ -524,7 +531,8 @@ export function SecurityConfigDialog({
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder="Enter a new password"
+                aria-label="New access password"
                 className="pr-10"
               />
               <Button
@@ -532,6 +540,7 @@ export function SecurityConfigDialog({
                 size="icon-sm"
                 className="absolute right-1 top-1/2 -translate-y-1/2"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
               >
                 {showPassword ? <IconEyeOff size={16} /> : <IconEye size={16} />}
               </Button>
@@ -540,7 +549,8 @@ export function SecurityConfigDialog({
               type={showPassword ? 'text' : 'password'}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm password"
+              placeholder="Enter the same password again"
+              aria-label="Confirm access password"
             />
             {password && confirmPassword && password !== confirmPassword && (
               <p className="text-sm text-destructive">Passwords do not match</p>
@@ -568,7 +578,7 @@ export function SecurityConfigDialog({
                 Setting...
               </>
             ) : (
-              'Set Password'
+              'Save password'
             )}
           </Button>
         </div>
@@ -582,12 +592,13 @@ export function SecurityConfigDialog({
       {/* Pairing Toggle */}
       <div className="flex items-center justify-between p-4 border border-border rounded-lg">
         <div className="space-y-1">
-          <h4 className="font-medium text-foreground">Require Device Pairing</h4>
+          <h4 className="font-medium text-foreground">Approve devices before they connect</h4>
           <p className="text-sm text-muted-foreground">
-            Devices must be approved before they can access
+            Turn this on to require your approval before a new device can use GChat.
           </p>
         </div>
         <Switch
+          aria-label="Approve devices before they connect"
           checked={requirePairing}
           onCheckedChange={handleTogglePairing}
           loading={isTogglingPairing}
@@ -598,10 +609,11 @@ export function SecurityConfigDialog({
       {/* Approved Devices */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="font-medium text-foreground">Approved Devices</h4>
+          <h4 className="font-medium text-foreground">Approved devices</h4>
           <Button
             variant="ghost"
             size="icon-sm"
+            aria-label="Refresh approved devices"
             onClick={fetchDevices}
             disabled={isLoadingDevices}
           >
@@ -655,6 +667,7 @@ export function SecurityConfigDialog({
                   onClick={() =>
                     setConfirmAction({ type: 'revoke', data: device.id })
                   }
+                  aria-label={`Remove access for ${device.name}`}
                   disabled={revokingDeviceId === device.id}
                   className="shrink-0 text-destructive hover:text-destructive"
                 >
@@ -677,11 +690,12 @@ export function SecurityConfigDialog({
     <div className="space-y-4">
       {/* Header with actions */}
       <div className="flex items-center justify-between">
-        <h4 className="font-medium text-foreground">Recent Access Logs</h4>
+        <h4 className="font-medium text-foreground">Recent access history</h4>
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
             size="icon-sm"
+            aria-label="Refresh access history"
             onClick={fetchLogs}
             disabled={isLoadingLogs}
           >
@@ -698,7 +712,7 @@ export function SecurityConfigDialog({
             className="text-destructive hover:text-destructive"
           >
             <IconTrash size={16} className="mr-1" />
-            Clear
+            Clear history
           </Button>
         </div>
       </div>
@@ -711,7 +725,7 @@ export function SecurityConfigDialog({
       ) : logs.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">
           <IconHistory size={32} className="mx-auto mb-2 opacity-50" />
-          <p>No access logs</p>
+          <p>No connections have been recorded yet.</p>
         </div>
       ) : (
         <div className="space-y-2 max-h-[300px] overflow-y-auto">
@@ -768,24 +782,24 @@ export function SecurityConfigDialog({
 
     switch (confirmAction.type) {
       case 'revoke':
-        title = 'Revoke Device Access'
+        title = 'Remove this device’s access?'
         description =
-          'Are you sure you want to revoke access for this device? The device will need to be approved again to access.'
-        confirmText = 'Revoke'
+          'This device will need your approval again before it can connect to GChat.'
+        confirmText = 'Remove access'
         onConfirm = () => handleRevokeDevice(confirmAction.data as string)
         break
       case 'clear_logs':
-        title = 'Clear Access Logs'
+        title = 'Clear access history?'
         description =
-          'Are you sure you want to clear all access logs? This action cannot be undone.'
-        confirmText = 'Clear Logs'
+          'This deletes the connection history shown here. It does not remove approved devices and cannot be undone.'
+        confirmText = 'Clear history'
         onConfirm = handleClearLogs
         break
       case 'change_auth_mode':
-        title = 'Change Authentication Mode'
+        title = 'Change how apps sign in?'
         description =
-          'Changing the authentication mode will affect how clients access your GChat instance. Are you sure you want to continue?'
-        confirmText = 'Change'
+          'Connected apps may need updated sign-in settings before they can connect again.'
+        confirmText = 'Change sign-in method'
         onConfirm = () => changeAuthMode(confirmAction.data as AuthMode)
         break
     }
@@ -827,7 +841,8 @@ export function SecurityConfigDialog({
               <DialogTitle>Security Settings</DialogTitle>
             </div>
             <DialogDescription>
-              Configure authentication, device management, and view access logs
+              Choose how other apps and devices sign in to GChat, review approved
+              devices and see recent connections.
             </DialogDescription>
           </DialogHeader>
 
