@@ -200,7 +200,10 @@ not a prerequisite.
 The accepted integration includes Cua native media and Ron's supplied avatar. The
 service opens scoped view-only or human-controlled media sessions over the
 existing vault-backed SSH connection. The browser receives a session ticket,
-never the guest's root RPC token. Hand-back revokes the interactive stream
+never the guest's root RPC token. In human control, click the desktop to send
+keyboard input there, including app shortcuts. Press Ctrl+Alt+Shift+Esc or click
+Return keyboard to GChat to use app shortcuts again; this keeps the view open
+and the bot paused. Hand-back revokes the interactive stream
 before resuming the bot. Focused UI, media lease and guest-install checks are
 complete: UI 3/3, media policy/revocation 1/1 and guest installation 6/6
 pass, together with frontend types and strict Rust Clippy. The pinned guest

@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-17** — [Contain Gbot desktop keyboard input](2026-10-17-contain-gbot-desktop-keyboard-input.md)
+
 - **2026-10-17** — [Own cancellable Installed Load preparation](2026-10-17-own-cancellable-installed-load-preparation.md)
 
 - **2026-10-17** — [Scope Installed Load hardware profiling to its model](2026-10-17-scope-installed-load-profiling-and-await-preparation.md)

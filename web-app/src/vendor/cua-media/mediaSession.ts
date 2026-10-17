@@ -92,6 +92,8 @@ export interface MediaSessionOptions {
   onServerError?: (payload: Record<string, unknown>) => void;
   /** A frame was drawn (after decode). */
   onFrame?: (width: number, height: number) => void;
+  /** Ctrl+Alt+Shift+Escape returns keyboard focus to the containing app. */
+  onInputEscape?: () => void;
 }
 
 /** Counters for the stats overlay and tests. */
@@ -746,14 +748,37 @@ export class MediaSession {
       },
       { passive: false },
     );
+    const pressedKeys = new Map<string, Extract<InteractiveInputEvent, { kind: "key" }>>();
+    const releaseKeys = () => {
+      for (const input of [...pressedKeys.values()].reverse()) {
+        this.queueInput({ ...input, state: "up", modifiers: [], repeat: false });
+      }
+      pressedKeys.clear();
+    };
+    on("blur", releaseKeys);
     on("keydown", (event) => {
       event.preventDefault();
+      // The remote desktop owns these keys, including GChat's app shortcuts.
+      event.stopPropagation();
+      if (event.key === "Escape" && event.ctrlKey && event.altKey && event.shiftKey && !event.metaKey) {
+        releaseKeys();
+        canvas.blur();
+        this.options.onInputEscape?.();
+        return;
+      }
       const input = keyEventToInput(event, "down");
+      if (input?.kind === "key") pressedKeys.set(event.code || event.key.toLowerCase(), input);
       if (input) this.queueInput(input);
     });
     on("keyup", (event) => {
       event.preventDefault();
-      const input = keyEventToInput(event, "up");
+      event.stopPropagation();
+      const code = event.code || event.key.toLowerCase();
+      const pressed = pressedKeys.get(code);
+      pressedKeys.delete(code);
+      const input = pressed
+        ? { ...pressed, state: "up" as const, modifiers: modifiersOf(event), repeat: false }
+        : null;
       if (input) this.queueInput(input);
     });
   }
