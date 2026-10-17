@@ -618,7 +618,7 @@ function GbotPage() {
                 Refresh
               </Button>
             </div>
-            {error && (
+            {error && !serviceAction && (
               <p role="alert" className="text-destructive">
                 {error}
               </p>
