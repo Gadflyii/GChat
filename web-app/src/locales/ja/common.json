@@ -468,6 +468,8 @@
   "uploadSkillDescription": "スキルの定義ファイルをアップロードします。",
   "dropSkillToUpload": "ドラッグ＆ドロップまたはクリックしてアップロード",
   "uploadingSkill": "スキルをアップロード中…",
+  "creatingSkill": "スキルを作成中…",
+  "savingSkill": "スキルを保存中…",
   "uploadOneSkill": "一度に1つのスキルをアップロードしてください",
   "skillFiles": "スキルファイル",
   "skillFileRequirements": "ファイルの要件",

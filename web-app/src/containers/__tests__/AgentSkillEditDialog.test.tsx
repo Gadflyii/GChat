@@ -101,7 +101,9 @@ describe('Agent skill edit lifetime', () => {
     enterDraft()
     fireEvent.click(screen.getByRole('button', { name: 'common:save' }))
 
-    expect(screen.getByRole('button', { name: 'common:save' })).toBeDisabled()
+    const saving = screen.getByRole('button', { name: 'common:savingSkill' })
+    expect(saving).toBeDisabled()
+    expect(saving).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('button', { name: 'common:cancel' })).toBeDisabled()
     expect(screen.getByLabelText('common:description')).toBeDisabled()
     expect(screen.getByLabelText('common:instructions')).toBeDisabled()
@@ -115,6 +117,8 @@ describe('Agent skill edit lifetime', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expectDraft()
     expect(screen.getByLabelText('Saved skill updates')).toHaveTextContent('[]')
+    expect(saving).toHaveAccessibleName('common:savingSkill')
+    expect(saving).toHaveAttribute('aria-busy', 'true')
 
     await act(async () => {
       save.resolve(undefined)
@@ -142,6 +146,8 @@ describe('Agent skill edit lifetime', () => {
     })
 
     expect(saveButton).toBeDisabled()
+    expect(saveButton).toHaveAccessibleName('common:savingSkill')
+    expect(saveButton).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(screen.getByLabelText('Saved skill updates')).toHaveTextContent('[]')
     expect(mocks.update).toHaveBeenCalledExactlyOnceWith(request)
@@ -167,6 +173,10 @@ describe('Agent skill edit lifetime', () => {
     render(<SkillEditing />)
     enterDraft()
     fireEvent.click(screen.getByRole('button', { name: 'common:save' }))
+    expect(
+      screen.getByRole('button', { name: 'common:savingSkill' })
+    ).toHaveAttribute('aria-busy', 'true')
+    expectDraft()
 
     await act(async () => {
       failedSave.reject(new Error('Could not update the skill file'))
@@ -179,6 +189,13 @@ describe('Agent skill edit lifetime', () => {
     expect(screen.getByLabelText('common:description')).toBeEnabled()
     expect(screen.getByLabelText('common:instructions')).toBeEnabled()
     expect(screen.getByRole('button', { name: 'common:save' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'common:save' })).toHaveAttribute(
+      'aria-busy',
+      'false'
+    )
+    expect(
+      screen.queryByRole('button', { name: 'common:savingSkill' })
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'common:cancel' })).toBeEnabled()
     expect(screen.getByLabelText('Saved skill updates')).toHaveTextContent('[]')
     expect(mocks.error).toHaveBeenCalledWith(
@@ -186,7 +203,10 @@ describe('Agent skill edit lifetime', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'common:save' }))
-    expect(screen.getByRole('button', { name: 'common:save' })).toBeDisabled()
+    const saving = screen.getByRole('button', { name: 'common:savingSkill' })
+    expect(saving).toBeDisabled()
+    expect(saving).toHaveAttribute('aria-busy', 'true')
+    expectDraft()
     expect(screen.getByLabelText('Saved skill updates')).toHaveTextContent('[]')
 
     await act(async () => {
@@ -224,6 +244,10 @@ describe('Agent skill edit lifetime', () => {
     expect(screen.getByLabelText('common:instructions')).toHaveValue(skill.body)
     expect(screen.getByLabelText('common:description')).toBeEnabled()
     expect(screen.getByRole('button', { name: 'common:save' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'common:save' })).toHaveAttribute(
+      'aria-busy',
+      'false'
+    )
     expect(mocks.error).not.toHaveBeenCalled()
   })
 })

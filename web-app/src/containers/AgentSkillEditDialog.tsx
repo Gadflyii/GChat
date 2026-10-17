@@ -122,10 +122,11 @@ export function AgentSkillEditDialog({
             {t('common:cancel')}
           </Button>
           <Button
+            aria-busy={submitting}
             disabled={submitting || !description.trim() || !instructions.trim()}
             onClick={() => void submit()}
           >
-            {t('common:save')}
+            {submitting ? t('common:savingSkill') : t('common:save')}
           </Button>
         </DialogFooter>
       </DialogContent>

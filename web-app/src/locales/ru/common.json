@@ -52,6 +52,8 @@
   "uploadSkillDescription": "Загрузите определение навыка.",
   "dropSkillToUpload": "Перетащите файл или нажмите для загрузки",
   "uploadingSkill": "Загрузка навыка…",
+  "creatingSkill": "Создание навыка…",
+  "savingSkill": "Сохранение навыка…",
   "uploadOneSkill": "Загружайте по одному навыку",
   "skillFiles": "Файлы навыков",
   "skillFileRequirements": "Требования к файлу",
