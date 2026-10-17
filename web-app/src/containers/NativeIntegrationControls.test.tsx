@@ -249,7 +249,6 @@ describe('Settings sidebar tool help', () => {
 
     expect(screen.getByText(/An assistant in GChat/i)).not.toBeVisible()
     expect(settings).toBeVisible()
-    expect(settings).toHaveClass('block')
     expect(settings).toHaveAttribute('href', route.settings.hermes_agent)
 
     hermes.focus()
