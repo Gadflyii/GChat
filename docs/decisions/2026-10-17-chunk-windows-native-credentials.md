@@ -48,6 +48,11 @@ credential in that case. The digest detects incomplete or inconsistent
 storage; it does not add protection against another process running as the
 same Windows user.
 
+A replacement may retire chunks while a reader holds the old manifest. After
+a read failure, re-read the manifest and retry only if its generation changed.
+Allow two generation reads, then report a conflict if replacement keeps racing
+the reader. An unchanged damaged generation remains an error.
+
 When no new manifest exists, read the original service/account entry using
 its existing text or binary convention. Callers keep their credential
 references, and existing accounts need no sign-in migration. Successful new

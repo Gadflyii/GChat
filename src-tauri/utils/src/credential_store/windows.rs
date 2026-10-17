@@ -91,24 +91,13 @@ impl WindowsNative {
         }
         Ok(())
     }
-}
 
-impl Native for WindowsNative {
-    fn present(&self) -> Result<bool, Error> {
-        self.legacy.present()
-    }
-
-    fn get(&self, reference: &Reference) -> Result<Option<Vec<u8>>, Error> {
-        let root = root(reference)?;
-        let Some(manifest) = self.manifest(&root)? else {
-            // Preserve historical UTF-16 passwords and Gbot byte secrets.
-            return self.legacy.get(reference);
-        };
+    fn read_generation(&self, root: &Reference, manifest: &Manifest) -> Result<Vec<u8>, Error> {
         let mut bytes = Zeroizing::new(Vec::new());
         for index in 0..manifest.chunks() {
             let chunk = Zeroizing::new(
                 self.storage
-                    .get(&manifest.chunk(&root, index))?
+                    .get(&manifest.chunk(root, index))?
                     .ok_or(Error::InvalidCredential)?,
             );
             let expected = (manifest.length - bytes.len()).min(CHUNK_SIZE);
@@ -120,7 +109,39 @@ impl Native for WindowsNative {
         if bytes.len() != manifest.length || digest(&bytes) != manifest.sha256 {
             return Err(Error::InvalidCredential);
         }
-        Ok(Some(std::mem::take(&mut *bytes)))
+        Ok(std::mem::take(&mut *bytes))
+    }
+}
+
+impl Native for WindowsNative {
+    fn present(&self) -> Result<bool, Error> {
+        self.legacy.present()
+    }
+
+    fn get(&self, reference: &Reference) -> Result<Option<Vec<u8>>, Error> {
+        let root = root(reference)?;
+        let Some(mut manifest) = self.manifest(&root)? else {
+            // Preserve historical UTF-16 passwords and Gbot byte secrets.
+            return self.legacy.get(reference);
+        };
+        for _ in 0..2 {
+            match self.read_generation(&root, &manifest) {
+                Ok(bytes) => return Ok(Some(bytes)),
+                Err(error) => {
+                    let Some(current) = self.manifest(&root)? else {
+                        return Err(error);
+                    };
+                    if current.generation == manifest.generation {
+                        return Err(error);
+                    }
+                    // A replacement can retire chunks after this reader took
+                    // its manifest snapshot. Retry only a newly published
+                    // generation; unchanged damaged data must fail closed.
+                    manifest = current;
+                }
+            }
+        }
+        Err(Error::Conflict)
     }
 
     fn put(&self, reference: &Reference, bytes: &[u8]) -> Result<(), Error> {
