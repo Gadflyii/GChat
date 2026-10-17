@@ -87,6 +87,23 @@ For explicit setup, run `scripts/setup-ginfer-windows.ps1 -InstallDirectory PATH
 -ProviderDirectory PATH -Install`; omit `-Install` to preview, and add `-NoPath`
 to avoid editing the user PATH. Existing installation directories are rejected,
 not overwritten. Runtime manifest verification happens before installation.
+
+For a first installation with no registered local Host, `-HostPort` selects the
+preferred HTTPS loopback endpoint at `127.0.0.1`. It accepts integers from 1 to
+65535 and defaults to 7443. Explicit `-HostPort` is rejected when a local Host
+locator already exists, even when the requested port is 7443; it cannot change
+that owner's endpoint. Managed collision handling and saved endpoints still apply.
+For an isolated installation, use a separate PowerShell session with private
+`APPDATA` and `LOCALAPPDATA`, separate runtime/state directories, and an unused
+nondefault port, for example:
+
+```powershell
+$env:APPDATA = 'C:\GInfer-test\roaming'
+$env:LOCALAPPDATA = 'C:\GInfer-test\local'
+.\scripts\setup-ginfer-windows.ps1 -InstallDirectory 'C:\GInfer-test\runtime' `
+    -ProviderDirectory 'C:\GInfer-test\data' -HostPort 17443 -Install -NoPath
+```
+
 For Linux, pass a staged `ginfer-linux-runtime-v1` directory to the same packager
 with `--target linux-x86_64`. Extract the resulting combined archive, then run
 `python3.11 setup.py`. Interactive setup offers binary, model/state and launcher

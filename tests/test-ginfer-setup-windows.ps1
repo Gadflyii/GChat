@@ -51,9 +51,22 @@ public static class SetupHardwareHandoff {
     & $script -NoPath
     if (Test-Path $target) { throw 'Preview wrote installation files' }
     if (Test-Path $env:GINFER_SETUP_TEST_ARGUMENTS) { throw 'Preview requested hardware preparation' }
+    $invalidTarget = Join-Path $root 'invalid-port-install'
+    $invalidProvider = Join-Path $root 'invalid-port-data'
+    foreach ($invalidPort in @(0, -1, 65536, 'not-a-port')) {
+        $rejected = $false
+        try {
+            & $script -InstallDirectory $invalidTarget -ProviderDirectory $invalidProvider -HostPort $invalidPort -Install -NoPath
+        } catch { $rejected = $true }
+        if (-not $rejected -or (Test-Path $invalidTarget) -or (Test-Path $invalidProvider)) {
+            throw "Invalid HostPort was accepted or wrote installation/state files: $invalidPort"
+        }
+        if (Test-Path $env:GINFER_SETUP_TEST_ARGUMENTS) { throw 'Invalid HostPort requested hardware preparation' }
+    }
     & $script -Install -NoPath -GpuUuids @('GPU-second', 'GPU-first')
     $config = Get-Content (Join-Path $target 'bin\ginfer-launch.json') -Raw | ConvertFrom-Json
     if ($config.desktop.provider -ne (Join-Path $env:APPDATA 'GInfer\data')) { throw 'Wrong default provider' }
+    if ($config.host_url -cne 'https://127.0.0.1:7443') { throw 'Wrong default Host endpoint' }
     if (Test-Path $config.desktop.provider) { throw 'Setup must not create host/model storage' }
     if (-not (Test-Path (Join-Path $target 'bin\ginfer-host.exe'))) { throw 'Host is not a launcher sibling' }
     if ([IO.File]::ReadAllText((Join-Path $target 'bin\launch-profiles.json')) -ne $profiles) { throw 'Profile catalog was not installed' }
@@ -70,11 +83,39 @@ public static class SetupHardwareHandoff {
     $rejected = $false
     try { & $script -Install -NoPath } catch { $rejected = $true }
     if (-not $rejected) { throw 'Setup overwrote an existing installation' }
+    $privateTarget = Join-Path $root 'private-install'
+    $privateProvider = Join-Path $root 'private-data'
+    & $script -InstallDirectory $privateTarget -ProviderDirectory $privateProvider -HostPort 17443 -Install -NoPath
+    $config = Get-Content (Join-Path $privateTarget 'bin\ginfer-launch.json') -Raw | ConvertFrom-Json
+    if ($config.host_url -cne 'https://127.0.0.1:17443') { throw 'Private Host port was not saved' }
+    if ($config.data_dir -ne (Join-Path $privateProvider 'host') -or $config.desktop.provider -ne $privateProvider) {
+        throw 'Private Host port changed provider-owned storage'
+    }
+    if (Test-Path $privateProvider) { throw 'Private setup created host/model storage' }
+    $arguments = [IO.File]::ReadAllLines($env:GINFER_SETUP_TEST_ARGUMENTS)
+    $expected = @('prepare-hardware', '--engine', (Join-Path $privateTarget 'bin\ginfer.exe'), '--installed-configuration', (Join-Path $privateTarget 'bin\ginfer-launch.json'))
+    if (($arguments -join "`n") -cne ($expected -join "`n")) { throw 'Private installation did not hand off the saved Host configuration' }
     $locatorDir = Join-Path $env:APPDATA 'GInfer'
     [IO.Directory]::CreateDirectory($locatorDir) | Out-Null
     $locator = Join-Path $locatorDir 'local-host.json'
     $record = '{"schema":"ginfer-local-host-v1","owner":{"mode":"service","directory":"C:\\existing-host","origin":"https://127.0.0.1:7443"}}'
     [IO.File]::WriteAllText($locator, $record)
+    $lastHandoff = [IO.File]::ReadAllText($env:GINFER_SETUP_TEST_ARGUMENTS)
+    $rejectedTarget = Join-Path $root 'existing-owner-port-install'
+    $rejectedProvider = Join-Path $root 'existing-owner-port-data'
+    foreach ($explicitPort in @(7443, 17443)) {
+        $rejected = $false
+        try {
+            & $script -InstallDirectory $rejectedTarget -ProviderDirectory $rejectedProvider -HostPort $explicitPort -Install -NoPath
+        } catch { $rejected = $true }
+        if (-not $rejected -or (Test-Path $rejectedTarget) -or (Test-Path $rejectedProvider)) {
+            throw 'Explicit HostPort with an existing owner was accepted or wrote installation/state files'
+        }
+        if ([IO.File]::ReadAllText($locator) -cne $record) { throw 'Rejected HostPort altered the registered owner' }
+        if ([IO.File]::ReadAllText($env:GINFER_SETUP_TEST_ARGUMENTS) -cne $lastHandoff) {
+            throw 'Explicit HostPort with an existing owner requested hardware preparation'
+        }
+    }
     $second = Join-Path $root 'second-install'
     & $script -InstallDirectory $second -Install -NoPath
     if (Test-Path (Join-Path $second 'bin\ginfer-launch.json')) { throw 'Setup created a competing owner configuration' }
@@ -89,7 +130,7 @@ public static class SetupHardwareHandoff {
     try { & $script -InstallDirectory $bad -Install -NoPath } catch { $rejected = $true }
     if (-not $rejected -or (Test-Path $bad)) { throw 'Invalid runtime was installed' }
     if ([IO.File]::ReadAllText($env:GINFER_SETUP_TEST_ARGUMENTS) -cne $lastHandoff) { throw 'Invalid runtime requested hardware preparation' }
-    Write-Output 'PASS: default paths, preview, runtime handoff, owner preservation, overwrite and integrity rejection.'
+    Write-Output 'PASS: default paths/Host port, private-port handoff, preview, invalid-port/registered-owner rejection, owner preservation, overwrite and integrity rejection.'
 } finally {
     $env:APPDATA = $savedAppData
     $env:LOCALAPPDATA = $savedLocalAppData
