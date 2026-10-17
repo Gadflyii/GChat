@@ -1084,7 +1084,7 @@ function GbotPage() {
                           request={request}
                           busy={busy}
                           reply={(response) =>
-                            void perform(() =>
+                            perform(() =>
                               gbot('tasks/help', {
                                 id: task.id,
                                 request_id: request.id,
