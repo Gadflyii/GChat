@@ -435,6 +435,11 @@ it('shows only the manual progress controls while advanced options are open', as
   render(<EngineFirstRun hardwareProfileControls={manualControls('running')} />)
   expect(await screen.findByRole('progressbar')).toHaveAccessibleName('Hardware profiling')
   expect(screen.getAllByRole('button', { name: 'Cancel profiling' })).toHaveLength(1)
+  // The bar fills its own row; an inline bar ran underneath the Cancel button.
+  const bar = screen.getByRole('progressbar')
+  expect(bar).toHaveClass('block', 'w-full')
+  expect(bar.parentElement).toHaveClass('space-y-3')
+  expect(bar.parentElement).toContainElement(screen.getByRole('button', { name: 'Cancel profiling' }))
   fireEvent.click(screen.getByText('Advanced hardware profile options'))
   await waitFor(() => expect(screen.getAllByRole('progressbar')).toHaveLength(1))
   expect(screen.getByRole('progressbar')).toHaveAccessibleName('Hardware profiling in progress')
