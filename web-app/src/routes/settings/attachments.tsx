@@ -325,6 +325,7 @@ function AttachmentsSettings() {
                         </div>
                       ) : (
                         <DynamicControllerSetting
+                          title={title}
                           controllerType={d.controllerType}
                           controllerProps={props}
                           onChange={(val) => debouncedSet(d.key, val, d)}

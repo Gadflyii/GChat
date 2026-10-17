@@ -58,6 +58,7 @@ vi.mock('@/containers/Card', () => ({
     actions?: ReactNode
   }) => (
     <div role="group" aria-label={title}>
+      <span>{title}</span>
       {description}
       {actions}
     </div>
@@ -134,7 +135,7 @@ function storedValues() {
 }
 
 function input(key: keyof typeof text) {
-  return within(screen.getByRole('group', { name: text[key] })).getByRole('textbox')
+  return screen.getByRole('textbox', { name: text[key] })
 }
 
 async function drainSettingsQueue() {
@@ -260,6 +261,28 @@ describe('Attachment settings availability', () => {
 })
 
 describe('Attachment settings persistence', () => {
+  it('names fields with their visible translated titles and persists a named edit', async () => {
+    const page = await openSettings()
+    const maxFileSize = screen.getByRole('textbox', { name: text.maxFile })
+    const autoInlineRatio = screen.getByRole('textbox', {
+      name: text.autoInlineThreshold,
+    })
+
+    expect(screen.getByText(text.maxFile)).toBeVisible()
+    expect(screen.getByText(text.autoInlineThreshold)).toBeVisible()
+    expect(maxFileSize).toHaveValue('20')
+    expect(autoInlineRatio).toHaveValue('0.75')
+
+    fireEvent.change(maxFileSize, { target: { value: '21' } })
+    page.unmount()
+    await drainSettingsQueue()
+    await openSettings()
+
+    expect(screen.getByRole('textbox', { name: text.maxFile })).toHaveValue('21')
+    expect(storedValues().max_file_size_mb).toBe(21)
+    expect(updateSettings).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps the 500 ms typing debounce and saves the latest value once', async () => {
     const page = await openSettings()
     const maxFileSize = input('maxFile')
