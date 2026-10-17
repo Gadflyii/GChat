@@ -1,5 +1,40 @@
 # GInfer host UI
 
+## Provider settings keyboard navigation — C7
+
+`GUI-SETTINGS-PROVIDER-KEYBOARD` fixes the ordinary Settings provider entries
+observed as clickable divs that keyboard users cannot reach. Use native router
+links for active and hidden providers, keeping the current destinations, remote
+setup search, provider ordering, selected-model marker and sidebar layout.
+Keyboard focus must be visible and Enter must open the selected provider.
+
+Acceptance: focused rendered navigation regressions and one `make verify`, then
+push the isolated branch merge-ready. Existing installed evidence is
+`/ai/gchat/out/c4-settings-sweep-20261017/provider-navigation-semantics.json`;
+the parent retains the ordinary installed keyboard recheck. No provider setup,
+model, GPU, Engine, install or existing user data is involved in this source fix.
+
+Owned tree: `/ai/gchat-worktrees/c7-settings-provider-keyboard-20261017`, branch
+`fix/c7-settings-provider-keyboard-20261017`, base `0099e0a1d`. Implementation
+`da2fe1f1e` passes 20 focused cases, including three real-router keyboard
+regressions. All `make verify` components passed on S1 CPU48–55 nice10:
+lint, types, 59 Node contracts, 2,958 frontend tests, 119 extension tests,
+1,079 Rust tests and all six critical coverage floors. Six frontend tests
+were skipped and 27 Rust tests ignored; lint retains three existing warnings.
+
+The single `make verify` invocation initially stopped because the private cache
+lacked the current core package's `dist` entry point. Building that exact core
+source repaired the fixture; only the failed coverage and unrun Rust targets
+were resumed, and both passed. No passing stage was repeated.
+
+Returned15:35Z; booking2630 canceled. The private verification copy and four
+exited containers were removed, with the read-only donor untouched. Concise
+results are retained in
+`/ai/gchat/out/settings-provider-keyboard-20261017/{result.json,summary.md}`.
+Next: coordinator merge, then Codex4's sidebar-density integration and Gchat3's
+ordinary installed keyboard recheck. The Models/Hub/Engine/Hardware hands-on
+pass waits for Gchat3's RC Load and Codex3's GMUL TIMING pair to return;
+Windows collision remains pending Gchat2's installed RC handoff.
 ## Copy result and accessible control — C6
 
 `GUI-COPY-RESULT-ACCESSIBILITY-20261017` fixes the shared Copy button in
