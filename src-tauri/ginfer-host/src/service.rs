@@ -3248,7 +3248,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
 }
 
 #[cfg(all(test, unix))]
-fn write_selected_profile_fixture(path: &Path) {
+pub(crate) fn write_selected_profile_fixture(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
     std::fs::write(path, r#"#!/usr/bin/env python3
 import hashlib, json, pathlib, sys, time
@@ -5252,6 +5252,14 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             concurrency: 1,
             options: LaunchOptions::default(),
         };
+        // Calibrate both synthetic GPU groups while idle, before either owns a child.
+        {
+            let mut second = profile.clone();
+            second.gpu_uuids = vec!["GPU-second".into()];
+            let _lifecycle = host.lifecycle.lock().await;
+            let launch = host.prepare_launch(&second).await.unwrap();
+            host.ensure_selected_profile(&launch).await.unwrap();
+        }
         let id = host.launch(profile.clone()).await.unwrap();
         let before = host.snapshot().await;
         let token = format!("{}.test", Uuid::new_v4());
