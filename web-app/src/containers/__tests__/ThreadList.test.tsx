@@ -170,9 +170,10 @@ describe('ThreadList active highlight', () => {
       render(<ThreadList threads={threads} />)
     })
 
-    expect(
-      screen.getByText('common:threadActionsFor')
-    ).toBeInTheDocument()
+    // One actions button per row, each named from its own thread.
+    expect(screen.getAllByText('common:threadActionsFor')).toHaveLength(
+      threads.length
+    )
   })
 
   it('marks no thread active when not on a thread route', async () => {
