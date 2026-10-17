@@ -3392,7 +3392,7 @@ time.sleep(60)
         let (dir, host, request) = fixture().await;
         std::fs::write(dir.path().join("fail-profile"), b"").unwrap();
         let error = host.launch(request).await.unwrap_err();
-        assert!(error.contains("fixture selected calibration failed"), "{error}");
+        assert!(error.contains("Selected hardware profiling failed") && error.contains("23"), "{error}");
         let job = host.processes.lock().await.hardware_profile.clone().unwrap();
         assert!(!job.busy());
         assert_eq!(job.status(None).status, "failed");
