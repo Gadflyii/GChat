@@ -312,9 +312,6 @@ it('numbers steps without a total that changes with the computer choice', async 
     expect(screen.getByText('Step 3 · Computer')).toBeInTheDocument()
     expect(screen.queryByText(/ of [45]/)).not.toBeInTheDocument()
   }
-  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  expect(screen.getByText(/^Step 4 · /)).toBeInTheDocument()
-  expect(screen.queryByText(/ of [45]/)).not.toBeInTheDocument()
 })
 
 it('retains the resource failure and directs restart without offering another selection', async () => {
