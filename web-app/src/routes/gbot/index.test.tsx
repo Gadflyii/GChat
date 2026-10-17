@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
-import type { KvmSetupRecord } from '@/services/gbot'
+import type { BotState, KvmSetupRecord } from '@/services/gbot'
 import { connectorAccounts } from '@/services/workspace-connectors'
 
 const mocks = vi.hoisted(() => ({
@@ -78,7 +78,8 @@ afterEach(() => {
 })
 
 function readyTaskBots(
-  startTask?: (body: Record<string, unknown>) => Promise<unknown>
+  startTask?: (body: Record<string, unknown>) => Promise<unknown>,
+  stateOverrides: Partial<BotState> = {}
 ) {
   const identities = [
     { workspace_id: 'one', session_id: 'writer-session' },
@@ -102,6 +103,7 @@ function readyTaskBots(
             context_tokens: 262144,
             credential_ref: null,
           })),
+          ...stateOverrides,
         }
       if (path === 'connectors/get') return { account_ids: [], accounts: [] }
       if (path === 'schedules') return { schedules: [], stopped: null }
@@ -111,6 +113,182 @@ function readyTaskBots(
   )
   return identities
 }
+
+it('explains that a disconnected bot must connect before a task can run', async () => {
+  readyTaskBots(undefined, { live_sessions: [] })
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  const guidance = 'Connect this bot’s computer before running a task.'
+  const input = screen.getByLabelText('Bot task')
+  fireEvent.change(input, { target: { value: 'Write a note' } })
+  expect(screen.getByText(guidance)).toBeVisible()
+  expect(input).toHaveAccessibleDescription(guidance)
+  const run = screen.getByRole('button', { name: 'Run', exact: true })
+  expect(run).toBeDisabled()
+  expect(run).toHaveAccessibleDescription(guidance)
+  expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
+  fireEvent.click(run)
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+})
+
+it.each(['missing', 'connection', 'model', 'context'])(
+  'explains the %s saved brain prerequisite without admitting a task',
+  async (invalid) => {
+    readyTaskBots(undefined, {
+      assignments:
+        invalid === 'missing'
+          ? []
+          : [
+              {
+                workspace_id: 'one',
+                connection: {
+                  kind: 'endpoint',
+                  api_base: invalid === 'connection' ? '' : 'http://host/v1',
+                },
+                model: invalid === 'model' ? ' ' : 'qwen',
+                context_tokens: invalid === 'context' ? 0 : 262144,
+                credential_ref: null,
+              },
+            ],
+    })
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Write a note' },
+    })
+    expect(
+      screen.getByText(
+        invalid === 'missing'
+          ? 'Configure and save a brain above before running a task.'
+          : 'The saved brain settings are incomplete or invalid. Edit the brain settings above and save a valid connection, model and context limit.'
+      )
+    ).toBeVisible()
+    const run = screen.getByRole('button', { name: 'Run', exact: true })
+    expect(run).toBeDisabled()
+    fireEvent.click(run)
+    expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+  }
+)
+
+it('explains unsaved brain changes while retaining the task draft', async () => {
+  readyTaskBots()
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  fireEvent.change(screen.getByLabelText('Bot task'), {
+    target: { value: 'Write a note' },
+  })
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  fireEvent.change(screen.getByLabelText('Model ID'), {
+    target: { value: 'muse' },
+  })
+  expect(
+    screen.getByText('Save the brain settings above before running a task.')
+  ).toBeVisible()
+  expect(screen.getByLabelText('Bot task')).toHaveValue('Write a note')
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+})
+
+it.each([
+  ['human', true],
+  ['paused', true],
+  ['human', false],
+  ['paused', false],
+] as const)(
+  'explains %s control without offering another session’s hand-back (owned: %s)',
+  async (state, owned) => {
+    const owner = 'current-owner'
+    localStorage.setItem('gbot-control-owner', owner)
+    readyTaskBots(undefined, {
+      controls: [
+        {
+          identity: { workspace_id: 'one', session_id: 'writer-session' },
+          state,
+          owner: owned ? owner : 'another-owner',
+        },
+      ],
+    })
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Write a note' },
+    })
+    const guidance = owned
+      ? 'This bot is paused while you have control. Choose Hand back before running a task.'
+      : 'This bot is paused under another session’s control. Its owner must hand back control before a task can run.'
+    expect(screen.getByText(guidance)).toBeVisible()
+    const handBack = screen.getByRole('button', { name: 'Hand back' })
+    if (owned) expect(handBack).toBeEnabled()
+    else {
+      expect(handBack).toBeDisabled()
+      expect(screen.queryByText(/Choose Hand back/)).not.toBeInTheDocument()
+    }
+    const run = screen.getByRole('button', { name: 'Run', exact: true })
+    expect(run).toBeDisabled()
+    fireEvent.click(run)
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'control/hand-back',
+      expect.anything()
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+  }
+)
+
+it('explains a task runner issue before suggesting brain or task changes', async () => {
+  readyTaskBots(undefined, { assignments: [] })
+  const call = mocks.call.getMockImplementation()!
+  mocks.call.mockImplementation((path: string, body: Record<string, unknown>) =>
+    path === 'tasks'
+      ? Promise.reject(new Error('Task runner connection lost'))
+      : call(path, body)
+  )
+  render(<Page />)
+  await screen.findByText('Error: Task runner connection lost')
+  expect(
+    screen.getByText(
+      'The task runner is unavailable. Resolve the task runner issue above before running a task.'
+    )
+  ).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
+  expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+})
+
+it('explains empty, ready and busy task states without changing task submission', async () => {
+  let finish!: () => void
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  const [identity] = readyTaskBots(() => pending)
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  expect(screen.getByText('Enter a task, then choose Run.')).toBeVisible()
+  const run = screen.getByRole('button', { name: 'Run', exact: true })
+  expect(run).toBeDisabled()
+  fireEvent.change(screen.getByLabelText('Bot task'), {
+    target: { value: 'Write a note' },
+  })
+  expect(screen.getByText('Ready to run this task.')).toBeVisible()
+  expect(run).toBeEnabled()
+  fireEvent.click(run)
+  expect(
+    screen.getByText(
+      'Wait for the current operation to finish before running a task.'
+    )
+  ).toBeVisible()
+  expect(run).toBeDisabled()
+  expect(mocks.call).toHaveBeenCalledWith('tasks/start', {
+    identity,
+    prompt: 'Write a note',
+  })
+  await act(async () => finish())
+  await waitFor(() =>
+    expect(screen.getByLabelText('Bot task')).toHaveValue('')
+  )
+  expect(await screen.findByText('Enter a task, then choose Run.')).toBeVisible()
+})
 
 it('explicitly recovers an orphaned paused owner while keeping hand-back and setup resume separate', async () => {
   const identity = { workspace_id: 'orphaned-kvm', session_id: 'saved-session' }
@@ -1530,6 +1708,9 @@ it('renders service session identities, holds unfinished KVM and admits actions 
   )
   render(<Page />)
   await screen.findByText('Checking setup status…')
+  expect(
+    screen.getByText('Wait for setup status before running a task.')
+  ).toBeVisible()
   fireEvent.change(screen.getByLabelText('Bot task'), {
     target: { value: 'Write a note' },
   })
@@ -1546,6 +1727,11 @@ it('renders service session identities, holds unfinished KVM and admits actions 
 
   resolveStatus([record])
   await screen.findByText('Desktop readiness is unfinished.')
+  expect(
+    screen.getByText(
+      'Finish this bot’s setup with Resume setup before running a task.'
+    )
+  ).toBeVisible()
   expect(
     await screen.findByRole('button', { name: 'Resume', exact: true })
   ).toBeDisabled()
