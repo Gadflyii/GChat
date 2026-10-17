@@ -154,6 +154,86 @@ receipt are in `token-fix/result.json` beneath the retained evidence directory.
 
 Next: merge the token fix, then validate attachment edit durability. Assistant create/update remains C7-owned; existing Engine and
 Hardware work remains with its owners. No model or shared FRESH fixture is in scope.
+## Models, Hub, Engine and Hardware walkthrough — C7
+
+`GUI-MODELS-HUB-ENGINE-HARDWARE-20261017` is an ordinary first-user walkthrough
+of Models/Hub, GInfer Hosts, Hardware and Benchmark: discovery, download and
+installation, Load/Unload, profiling, progress, errors and next-action wording.
+Use the current-main `77ccd3624` desktop/Host/resources closure supplied read-only
+by Codex 3, with a fresh private HOME/XDG on local Linux/WSLg. Initial results
+are due 16:00Z October 17. No duplicate build or source test rerun is needed for
+this observation-only pass.
+
+Acceptance: observe the actual ordinary screens and supported actions, distinguish
+completed leaves from missing catalog/resources or unavailable hardware, send real
+findings to Gchat 3's shared GUI list, and fix each confirmed defect on its own
+branch with focused tests and one `make verify`. Do not substitute a seeded
+catalog, fake model, altered defaults or another user's data. Windows host-port
+collision remains a separate leaf awaiting Gchat 2's installed-app handoff.
+
+Current preparation: owned source
+`/ai/gchat-worktrees/c7-models-hub-engine-hardware-20261017`, branch
+`test/c7-models-hub-engine-hardware-20261017`, from `77ccd3624`. Codex 3's
+read-only build 2616 passed at 15:06:36Z and returned at 15:08Z. Its S1 runnable
+root is `/media/ron/SSD_RAID/ai/tmp-c3-chat-area-hands-on-20261017/runnable`;
+the receipt and layout are under
+`/ai/gchat/out/c3-chat-area-hands-on-20261017/`. Desktop and Host are from the
+frozen main revision; the genuine bundled Engine resources are retained
+`5af502f1e59a99205750c9090874e2a0448f199f`, so this is not a current-Engine
+qualification. The actual desktop and Host local `ldd` checks resolve.
+
+Codex 3 returned GMUL at 15:49Z. Gchat 3 reached Ready at 15:51Z and clarified
+its staging/launch release at 15:52Z. The sole read-only donor copy is staged at
+`/ai/gchat/out/c7-models-hub-engine-hardware-20261017/runtime`; desktop and Host
+hashes match the retained receipt, and both actual local `ldd` checks resolve.
+S1 staging is returned at 15:54Z. Local CPU20–23 is booked for the ordinary
+private-home desktop; no C7 model or GPU operation is admitted. Launch
+with separate Host/Inspector ports. Use a private `dbus-run-session` as well as
+fresh HOME/XDG: desktop single-instance ownership uses a session-bus name and
+is not isolated by the data directories alone. Keep WSLg display/runtime
+variables intact. Keep Ron's port 17483 and all existing data
+untouched. Retain concise results under
+`/ai/gchat/out/c7-models-hub-engine-hardware-20261017/` when observations exist;
+release private processes and disposable copies at completion.
+
+Local preparation found an available WSLg display, private Inspector ports and
+37 GB free disk before staging. The actual local dependency checks supersede
+the earlier static six-SONAME warning; no extra dependency copy was needed.
+Observed at 15:58Z: the ordinary private desktop opens, identifies the RTX 5090,
+and displays Installed, Recommended, Downloads, GInfer Hosts, Hardware and
+Benchmark. Installed and Downloads are empty; Recommended reports no published
+recommendation with verified release metadata. Benchmark explains the missing
+loaded model and disables Run. No download, installation, Load/Stop, measured
+profile or benchmark execution is qualified.
+
+The raw donor used lowercase `lib/gchat`; Tauri uses productName `GChat` when
+resolving its Linux resource directory. Only the owned staged copy was renamed
+to `lib/GChat`, then normally reopened in a second fresh private HOME. Extensions
+now install successfully. This was launch preparation, not a product defect.
+The donor remains unchanged.
+
+Two observations need follow-through: Hub still says “Preparing local model
+runtime…” and Hosts is unavailable while bundled resource installation is
+pending; the Hardware GPU fallback message incorrectly refers to a “llama.cpp
+backend”. The latter is a confirmed wording defect in
+`web-app/src/locales/en/system-monitor.json`; check current main and claim a
+separate fix before editing. The runtime state needs its completion/error result
+before classification. Saved observations are `screens.json`,
+`model-tabs-hardware.json`, and `hardware.png` under the owned output root.
+Current desktop is private and model-free; CPU20–23 booking1357 ends16:13Z.
+Next: finish resource-startup diagnosis, report the leaf limits to Gchat3, and
+fix the confirmed wording on a distinct branch.
+
+The source-reading helper mapped the ordinary sequence: Models → Installed /
+Recommended / Downloads; GInfer Hosts → Set up models on this computer;
+Advanced hardware profile options; Settings → Hardware; then Benchmark.
+Inspect the empty states and next-action wording before requesting any expensive
+operation. Model download availability depends on the genuine published catalog;
+an absent catalog is a scope limit, not a reason to inject one. Viewing hardware
+information is distinct from building a measured hardware profile. Downloads
+become Installed after verification, model unloading is labelled Stop, and
+Benchmark requires an already loaded instance. Observe these actual controls;
+do not claim download, profiling, Load or benchmark completion from source reads.
 
 ## Global conversation deletion — C7
 
