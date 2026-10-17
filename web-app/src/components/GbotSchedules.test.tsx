@@ -534,3 +534,14 @@ it('keeps the new bot usable when the previous bot pending action fails', async 
   expect(screen.getByLabelText('Scheduled task prompt')).toBeEnabled()
   expect(screen.queryByText('Check the calendar')).not.toBeInTheDocument()
 })
+
+it('keeps the schedule explanation inside the Scheduled tasks section like Linked accounts', async () => {
+  request.mockResolvedValue({ schedules: [], stopped: null })
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  const summary = await screen.findByText('Scheduled tasks')
+  const section = summary.closest('details')!
+  expect(section).toContainElement(
+    screen.getByText(/Scheduled tasks can keep running after GChat closes/)
+  )
+  expect(section.parentElement?.firstElementChild).toBe(section)
+})
