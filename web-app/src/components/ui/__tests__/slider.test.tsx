@@ -166,10 +166,22 @@ describe('Slider', () => {
   })
 
   it('handles aria attributes', () => {
-    render(<Slider aria-label="Volume" />)
+    render(<Slider value={[50]} aria-label="Volume" />)
     
     const slider = document.querySelector('[data-slot="slider"]')
     expect(slider).toHaveAttribute('aria-label', 'Volume')
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveAttribute('aria-valuenow', '50')
+  })
+
+  it('names the interactive thumb from a visible label', () => {
+    render(
+      <>
+        <span id="volume-label">Volume</span>
+        <Slider value={[50]} aria-labelledby="volume-label" />
+      </>
+    )
+
+    expect(screen.getByRole('slider', { name: 'Volume' })).toHaveAttribute('aria-valuenow', '50')
   })
 
   it('handles custom props', () => {

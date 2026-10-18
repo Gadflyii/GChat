@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
@@ -53,6 +54,7 @@ export function ParametersSection({
   className,
 }: ParametersSectionProps) {
   const { t } = useTranslation()
+  const id = useId()
   const visible = new Set(paramKeys)
 
   return (
@@ -70,6 +72,8 @@ export function ParametersSection({
             {keys.map((key) => {
               const setting = paramsSettings[key]
               if (!setting) return null
+              const inputId = `${id}-${key}`
+              const labelId = `${inputId}-label`
 
               if (setting.controllerType === 'checkbox') {
                 const checked = readBoolean(parameters, setting)
@@ -78,13 +82,17 @@ export function ParametersSection({
                     key={key}
                     className="flex items-center justify-between gap-4"
                   >
-                    <span
+                    <label
+                      id={labelId}
+                      htmlFor={inputId}
                       className="text-sm text-muted-foreground truncate"
                       title={setting.description}
                     >
                       {setting.title}
-                    </span>
+                    </label>
                     <Switch
+                      id={inputId}
+                      aria-labelledby={labelId}
                       checked={checked}
                       onCheckedChange={(value) => onChange(key, value)}
                     />
@@ -96,13 +104,16 @@ export function ParametersSection({
               return (
                 <div key={key} className="space-y-1">
                   <div className="flex items-center justify-between gap-3">
-                    <span
+                    <label
+                      id={labelId}
+                      htmlFor={inputId}
                       className="text-sm text-muted-foreground truncate"
                       title={setting.description}
                     >
                       {setting.title}
-                    </span>
+                    </label>
                     <Input
+                      id={inputId}
                       type="number"
                       value={value}
                       min={setting.min}
@@ -118,6 +129,7 @@ export function ParametersSection({
                   </div>
                   {setting.controllerType === 'slider' && (
                     <Slider
+                      aria-labelledby={labelId}
                       value={[value]}
                       min={setting.min ?? 0}
                       max={setting.max ?? 1}

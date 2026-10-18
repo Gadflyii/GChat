@@ -22,6 +22,19 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Sampling control labels — October 18
+
+A private native Chat pass opened Sampling and found all seven numeric inputs
+and interactive slider thumbs unnamed. Clicking Temperature's visible text left
+focus on the dialog. The affected source matched main `9c93804cf`; the baseline
+receipts and viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1348/`.
+
+Parameter titles now label their numeric inputs and slider thumbs. Each mounted
+section has unique associations; the shared Stream control also has its visible
+label. The slider wrapper forwards accessible names to the interactive thumb.
+Sampling values, bounds and update callbacks keep their existing behavior.
+
 ## Skill availability on this computer — October 18
 
 A private native Linux pass selected Apple Calendar and opened its actions.
