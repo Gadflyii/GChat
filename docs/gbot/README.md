@@ -56,13 +56,33 @@ Native Windows service all-target checking, test-executable compilation and
 10 focused service tests pass. The compile findings were Linux-only vault
 control routes and a Linux-only KVM example being included on Windows; both
 now follow their platform boundary. The updated production PowerShell
-dispatcher and module fake pass 224 assertions on Windows PowerShell 5.1.
+dispatcher and module fake pass 228 assertions on Windows PowerShell 5.1,
+including refusal of a private guest disk that inherits the source Read-only
+flag. The final source `0ebe36606` service executable rebuilt successfully.
+The native shell asset-installer regression also completed with Cargo exit 0
+using `--no-default-features --features test-tauri,cli`; its stdout was lost
+after a monitor error, so the receipt records process termination and binary
+provenance rather than a test-count claim. The initial default-feature command
+failed on an unstaged Bun bundle resource. Neither command's result is hidden,
+and the successful command was not repeated. See
+`out/gchat2-windows-hyperv-20261018/native-final-summary.json`.
+
 Read-only detection on Ron's Windows 11 Pro `.143` reports no prerequisite
-issues, and all three pinned guest resources are staged in the private C:
-fixture. No native guest has yet been created; worker readiness, view/input,
-persistence and retirement remain open while the machine's timed model run
-finishes. The native shell asset-installer regression is also pending its
-separate compile slot.
+issues. The first native attempt created a separate guest without elevation,
+then found that real `Get-VMComPort` objects identify COM1 by `Name` and do not
+have the fake's `Number` property. The ownership check now uses `Name`; the
+fake matches the native object shape and checks foreign COM2 pipes too.
+Its regression fails against the previous dispatcher and all 234 assertions
+pass with the correction on Windows PowerShell 5.1. The corrected production
+ownership check retired the first guest, and its private disk directory was
+removed at 12:14 UTC. The immutable source image remains read-only.
+
+The corrected native service executable rebuilt successfully in 19 seconds
+at 12:21 UTC with all ten adapter source hashes matching. Its copy and a fresh
+native lifecycle attempt wait for the current benchmark slots to return.
+Worker readiness, view/input, stop/start persistence and full lifecycle
+retirement remain open. Receipts:
+`out/gchat2-windows-hyperv-20261018/{native-lifecycle-result.json,native-com-port-shape-fixed-result.json,native-first-retirement.json}`.
 
 ## Saved human replies keep recovery errors visible — Gchat 2
 
