@@ -1284,12 +1284,12 @@ function DefinitionEditor({
 
 function StandardAgentGuide({ draft }: { draft: AgentDefinition }) {
   return (
-    <section className="space-y-3 rounded-2xl border bg-muted/15 p-4">
+    <section className="@container space-y-3 rounded-2xl border bg-muted/15 p-4">
       <SectionTitle
         title="Standard agent execution"
         body="One role owns the whole task. This is the simplest composition and the best place to start when no independent review or fixed handoff is required."
       />
-      <div className="grid gap-2 text-xs sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
+      <div className="grid gap-2 text-xs @[32rem]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] @[32rem]:items-center">
         <GuideStep
           title="1. Receive the task"
           body="The user’s run prompt is combined with the role instructions above."
@@ -1311,7 +1311,7 @@ function StandardAgentGuide({ draft }: { draft: AgentDefinition }) {
 
 function GuideStep({ title, body }: { title: string; body: string }) {
   return (
-    <div className="h-full rounded-lg border bg-background p-3">
+    <div className="h-full min-w-0 rounded-lg border bg-background p-3">
       <p className="font-medium text-foreground">{title}</p>
       <p className="mt-1 text-muted-foreground">{body}</p>
     </div>
@@ -1319,7 +1319,7 @@ function GuideStep({ title, body }: { title: string; body: string }) {
 }
 
 function GuideArrow() {
-  return <span className="hidden text-muted-foreground sm:block">→</span>
+  return <span className="hidden text-muted-foreground @[32rem]:block">→</span>
 }
 
 function GoalLoopEditor({
@@ -1332,12 +1332,12 @@ function GoalLoopEditor({
   modelInstances: AgentModelInstance[]
 }) {
   return (
-    <section className="space-y-4 rounded-2xl border bg-muted/15 p-4">
+    <section className="@container space-y-4 rounded-2xl border bg-muted/15 p-4">
       <SectionTitle
         title="Evaluator loop"
         body="The executor produces the deliverable. A separate evaluator judges that result against explicit success criteria and either accepts it or sends focused feedback into the next cycle."
       />
-      <div className="grid gap-2 text-xs sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
+      <div className="grid gap-2 text-xs @[32rem]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] @[32rem]:items-center">
         <GuideStep
           title="1. Execute"
           body={`Create or revise the result in up to ${draft.maxSteps} rounds.`}
@@ -1457,12 +1457,12 @@ function CoordinatorEditor({
     })
 
   return (
-    <section className="space-y-4 rounded-2xl border bg-muted/15 p-4">
+    <section className="@container space-y-4 rounded-2xl border bg-muted/15 p-4">
       <SectionTitle
         title="Coordinator team"
         body="A coordinator creates the plan, named specialists complete distinct assignments in isolated workspaces, and a synthesizer turns their reports into one final result."
       />
-      <div className="grid gap-2 text-xs sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
+      <div className="grid gap-2 text-xs @[32rem]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] @[32rem]:items-center">
         <GuideStep
           title="1. Plan"
           body="Break the user goal into useful, non-overlapping assignments."
@@ -1631,12 +1631,12 @@ function WorkflowEditor({
   }
 
   return (
-    <section className="space-y-4 rounded-2xl border bg-muted/15 p-4">
+    <section className="@container space-y-4 rounded-2xl border bg-muted/15 p-4">
       <SectionTitle
         title="Workflow graph"
         body="Define a repeatable set of stages and explicit handoffs. Stages with no dependency between them can run in parallel; exactly one final stage must receive the completed work."
       />
-      <div className="grid gap-2 text-xs sm:grid-cols-[1fr_auto_1fr_auto_1fr] sm:items-center">
+      <div className="grid gap-2 text-xs @[32rem]:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] @[32rem]:items-center">
         <GuideStep
           title="1. Define stages"
           body="Give each stage one clear job, step budget, model, and workspace."
