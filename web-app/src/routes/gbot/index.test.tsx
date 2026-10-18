@@ -10,6 +10,9 @@ import {
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
+import { toast } from 'sonner'
+import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
+import { settleConfirm } from '@/lib/confirm'
 import type { BotState, KvmSetupRecord } from '@/services/gbot'
 import { connectorAccounts } from '@/services/workspace-connectors'
 
@@ -72,6 +75,7 @@ beforeEach(() => {
   useGeneralSetting.setState({ gbotEnabled: true })
 })
 afterEach(() => {
+  settleConfirm(false)
   cleanup()
   sessionStorage.clear()
   localStorage.removeItem('gbot-control-owner')
@@ -842,6 +846,169 @@ it('resumes a saved cloud price review without creating a workspace or offering 
       ([path]) => path === 'workspaces/ssh' || path === 'workspaces'
     )
   ).toBe(false)
+})
+
+function savedCloudSetup(remove: () => Promise<void> = async () => {}) {
+  let saved = true
+  mocks.listen.mockResolvedValue(() => {})
+  mocks.call.mockImplementation(async (path: string) => {
+    if (path === 'state')
+      return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+    if (path === 'setup/cloud/status')
+      return saved
+        ? [
+            {
+              id: 'saved-review',
+              name: 'Cloud researcher',
+              provider: 'hetzner',
+              fetched_at: 1,
+              expires_at: 2,
+              confirmed: false,
+              quote: null,
+              catalog: { currency: 'EUR', tax: 'VAT', regions: [], plans: [] },
+            },
+          ]
+        : []
+    if (path === 'setup/cloud/remove') {
+      await remove()
+      saved = false
+    }
+    return []
+  })
+}
+
+it('explains saved cloud setup credential removal and defaults to cancellation', async () => {
+  savedCloudSetup()
+  render(
+    <>
+      <Page />
+      <ConfirmDialogHost />
+    </>
+  )
+  const card = await screen.findByRole('region', {
+    name: 'Cloud setup Cloud researcher',
+  })
+  fireEvent.click(
+    within(card).getByRole('button', { name: /^Remove saved (review|setup)$/ })
+  )
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'setup/cloud/remove')
+  ).toHaveLength(0)
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Remove Cloud researcher’s saved cloud setup?',
+  })
+  expect(dialog).toHaveTextContent(
+    'its cloud provider access key and any saved SSH connection key'
+  )
+  expect(dialog).toHaveTextContent('enter your access key again to restart setup')
+  expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(card).toBeInTheDocument()
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'setup/cloud/remove')
+  ).toHaveLength(0)
+})
+
+it('removes only the confirmed cloud setup and holds its control until completion', async () => {
+  let finish!: () => void
+  savedCloudSetup(
+    () => new Promise<void>((resolve) => {
+      finish = resolve
+    })
+  )
+  render(
+    <>
+      <Page />
+      <ConfirmDialogHost />
+    </>
+  )
+  const card = await screen.findByRole('region', {
+    name: 'Cloud setup Cloud researcher',
+  })
+  const remove = within(card).getByRole('button', {
+    name: /^Remove saved (review|setup)$/,
+  })
+  fireEvent.click(remove)
+  const dialog = await screen.findByRole('dialog')
+  fireEvent.click(
+    within(dialog).getByRole('button', { name: 'Remove saved setup' })
+  )
+  await waitFor(() => expect(remove).toBeDisabled())
+  fireEvent.click(remove)
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'setup/cloud/remove')
+  ).toEqual([
+    ['setup/cloud/remove', { id: 'saved-review' }],
+  ])
+  await act(async () => finish())
+  await waitFor(() => expect(card).not.toBeInTheDocument())
+})
+
+it('keeps a rejected cloud setup removal available for an explicitly confirmed retry', async () => {
+  const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+  try {
+    let attempts = 0
+    savedCloudSetup(async () => {
+      if (++attempts === 1) throw new Error('Saved setup could not be removed')
+    })
+    render(
+      <>
+        <Page />
+        <ConfirmDialogHost />
+      </>
+    )
+    const card = await screen.findByRole('region', {
+      name: 'Cloud setup Cloud researcher',
+    })
+    const remove = within(card).getByRole('button', {
+      name: /^Remove saved (review|setup)$/,
+    })
+    fireEvent.click(remove)
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Remove saved setup',
+      })
+    )
+    await waitFor(() =>
+      expect(errorToast).toHaveBeenCalledWith('Error: Saved setup could not be removed')
+    )
+    await waitFor(() => expect(remove).toBeEnabled())
+    expect(card).toBeInTheDocument()
+    fireEvent.click(remove)
+    expect(attempts).toBe(1)
+    fireEvent.click(
+      within(await screen.findByRole('dialog')).getByRole('button', {
+        name: 'Remove saved setup',
+      })
+    )
+    await waitFor(() => expect(card).not.toBeInTheDocument())
+    expect(attempts).toBe(2)
+  } finally {
+    errorToast.mockRestore()
+  }
+})
+
+it('does not remove a saved cloud setup after leaving its page during confirmation', async () => {
+  savedCloudSetup()
+  const page = render(
+    <>
+      <Page />
+      <ConfirmDialogHost />
+    </>
+  )
+  const card = await screen.findByRole('region', {
+    name: 'Cloud setup Cloud researcher',
+  })
+  fireEvent.click(
+    within(card).getByRole('button', { name: /^Remove saved (review|setup)$/ })
+  )
+  await screen.findByRole('dialog')
+  page.unmount()
+  await act(async () => settleConfirm(true))
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'setup/cloud/remove')
+  ).toHaveLength(0)
 })
 
 it('resumes saved M365 prerequisites without presenting a connected bot workspace', async () => {
