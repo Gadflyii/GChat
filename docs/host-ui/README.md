@@ -1894,3 +1894,26 @@ One `make verify` passed: lint, type checking, quality checks, 3,281 app tests, 
 tests and all six coverage floors (six app skips, 28 Rust ignores). Changed source/test hashes matched locally
 and on S1 before and after verification. Private build data was removed and CPUs returned at 03:07 UTC.
 Commands and results: `/ai/gchat/out/gchat2-stop-paused-tasks-20261018/result.json`.
+
+
+## Cancelling brain edits restores task readiness, October 18 (Gchat 2)
+
+`GBOT-BRAIN-CANCEL-EDITS-RESTORE-READINESS`: opening Edit brain and choosing Cancel edits
+restored the visible saved brain but created an unsaved draft in the parent page, even if no field
+was changed. Run and Resume then stayed disabled with instructions to save settings that were
+no longer visible. Cancellation now explicitly discards the selected bot's draft. The page returns
+to its saved assignment, keeps the task text and permits Run or Resume when the bot is ready.
+Other bots' drafts and saved API-key handling retain their existing behavior.
+
+Both new route cases fail on main baseline `faa818658`: cancel with unchanged fields and cancel
+a changed model. With the fix, all 82 route and brain-component tests pass, including restored
+Run/Resume readiness, retained task text and a subsequent task start without saving an assignment.
+The component cases retain cancellation during pending/busy operations and saved-key coverage.
+These are rendered React checks against a mocked service; no new native VM, Windows or live
+model acceptance is claimed. Commands and results:
+`/ai/gchat/out/gchat2-brain-cancel-readiness-20261018/result.json`.
+
+One `make verify` passed: lint, type checking, quality checks, 3,288 app tests, 121 extension tests,
+1,216 Rust tests and all six coverage floors (six app skips, 28 Rust ignores). Changed source/test
+hashes matched locally and on S1 before and after verification. Private build data was removed
+and CPUs returned at 03:20 UTC.

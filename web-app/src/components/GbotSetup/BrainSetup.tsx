@@ -24,6 +24,7 @@ interface Props {
   busy: boolean
   computerReady: boolean
   onChange: (value: Assignment) => void
+  onCancel: () => void
   onSave: () => Promise<void>
 }
 
@@ -33,6 +34,7 @@ export function BrainSetup({
   busy,
   computerReady,
   onChange,
+  onCancel,
   onSave,
 }: Props) {
   const [editing, setEditing] = useState(!saved)
@@ -105,11 +107,7 @@ export function BrainSetup({
 
   function cancelEdits() {
     if (!saved || disabled || savingRef.current) return
-    onChange({
-      connection: saved.connection,
-      model: saved.model,
-      context_tokens: saved.context_tokens,
-    })
+    onCancel()
     setError(undefined)
     setEditing(false)
   }
