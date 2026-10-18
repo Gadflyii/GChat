@@ -188,6 +188,16 @@ pub struct LocalRelocation<'a> {
     had_running_host: bool,
 }
 
+/// Keep this reservation until reset has finished deleting the configured data.
+/// It prevents passive attachment and another local Host owner during deletion.
+#[must_use = "Keep the local reset reservation alive until data deletion is complete"]
+pub struct LocalReset<'a> {
+    // Release process ownership before reopening the client's attachment fence.
+    _ownership: Option<crate::service_owner::ServiceOwner>,
+    _selection: tokio::sync::MutexGuard<'a, LocalOwnerSelection>,
+    _attachment: tokio::sync::MutexGuard<'a, bool>,
+}
+
 fn relocation_identity(directory: &Path) -> Result<Option<(Uuid, String)>, String> {
     let bytes = match std::fs::read(directory.join("host.json")) {
         Ok(bytes) => bytes,
@@ -598,6 +608,51 @@ impl Client {
             *local = (Some(directory), None);
         }
         Ok(())
+    }
+
+    /// Drain and stop only the configured desktop root, retaining its ownership
+    /// through reset. Missing Hosts are never bootstrapped or discovered.
+    pub async fn prepare_local_reset(&self, directory: &Path) -> Result<LocalReset<'_>, String> {
+        if !directory.is_absolute() {
+            return Err("Local Host reset requires an absolute data folder".into());
+        }
+        let (mut attachment, mut selection) = tokio::time::timeout(
+            std::time::Duration::from_secs(2),
+            async { (self.local_attachment.lock().await, self.local_owner.lock().await) },
+        ).await.map_err(|_| "Local Host bootstrap is still in progress; reset was refused".to_string())?;
+
+        let ownership = if directory.try_exists().map_err(|e| e.to_string())? {
+            match relocation_source_owner(directory)? {
+                Some(owner) => Some(owner),
+                None => {
+                    let reply = crate::local_host::stop_existing_for_reset(directory).await?;
+                    if reply["stopping"] != true {
+                        return Err("Host did not acknowledge idle Stop; reset was refused".into());
+                    }
+                    // Once Stop is accepted, passive polling must not restart
+                    // the Host even if its ownership release later times out.
+                    *selection = (Some(directory.to_owned()), None);
+                    *attachment = true;
+                    Some(tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                        loop {
+                            if let Some(owner) = relocation_source_owner(directory)? {
+                                break Ok::<_, String>(owner);
+                            }
+                            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        }
+                    }).await.map_err(|_| "Host acknowledged Stop but has not released its ownership; reset was refused".to_string())??)
+                }
+            }
+        } else {
+            None
+        };
+        *selection = (Some(directory.to_owned()), None);
+        *attachment = true;
+        Ok(LocalReset {
+            _ownership: ownership,
+            _selection: selection,
+            _attachment: attachment,
+        })
     }
 
     /// Reserve both configured roots before copying. Stop only the process at

@@ -51,14 +51,61 @@ pub(crate) fn validate_local_identity(directory: &Path, snapshot: &serde_json::V
 /// Missing state or authority fails closed; no discovery, credentials or bootstrap.
 pub(crate) async fn stop_existing_if_idle(directory: &Path) -> Result<serde_json::Value, String> {
     tokio::time::timeout(Duration::from_secs(5), async {
-        let private: crate::service::Persistent = serde_json::from_slice(
-            &std::fs::read(directory.join("host.json")).map_err(|e| e.to_string())?,
-        ).map_err(|e| e.to_string())?;
-        private.management_origin.ok_or("The configured Host has no saved management endpoint; data folder move was refused")?;
-        let address = management_address(directory, SocketAddr::from(([127, 0, 0, 1], 1)))?;
-        let control = LocalControl::open(directory, &format!("https://{address}"))?;
+        let control = existing_control(directory)?;
         control.stop_host_for_relocation(directory).await
     }).await.map_err(|_| "The configured Host did not confirm idle Stop in time; data folder move was refused and no forced stop was sent".to_string())?
+}
+
+fn existing_control(directory: &Path) -> Result<LocalControl, String> {
+    let private: crate::service::Persistent = serde_json::from_slice(
+        &std::fs::read(directory.join("host.json")).map_err(|e| e.to_string())?,
+    ).map_err(|e| e.to_string())?;
+    private.management_origin.ok_or("The configured Host has no saved management endpoint")?;
+    let address = management_address(directory, SocketAddr::from(([127, 0, 0, 1], 1)))?;
+    LocalControl::open(directory, &format!("https://{address}"))
+}
+
+/// Reset owns this configured root, including every process-backed instance in
+/// its fresh inventory. Drain normally, then seal Host admission with idle Stop.
+pub(crate) async fn stop_existing_for_reset(directory: &Path) -> Result<serde_json::Value, String> {
+    let (control, snapshot) = tokio::time::timeout(Duration::from_secs(5), async {
+        let control = existing_control(directory)?;
+        let snapshot = control.snapshot().await?;
+        validate_local_identity(directory, &snapshot)?;
+        Ok::<_, String>((control, snapshot))
+    }).await.map_err(|_| "The configured Host did not confirm its identity in time; reset was refused".to_string())??;
+    let instances = snapshot["instances"].as_array()
+        .ok_or("The configured Host did not provide an instance inventory; reset was refused")?;
+    let mut sessions = Vec::new();
+    for instance in instances {
+        let session = instance.get("session_id")
+            .ok_or("The configured Host omitted an instance session; reset was refused")?;
+        if session.is_null() { continue; }
+        let session_id: uuid::Uuid = serde_json::from_value(session.clone())
+            .map_err(|_| "The configured Host returned an invalid instance session; reset was refused")?;
+        let instance_id: uuid::Uuid = serde_json::from_value(instance["instance_id"].clone())
+            .map_err(|_| "The configured Host returned an invalid instance identity; reset was refused")?;
+        sessions.push((instance_id, session_id));
+    }
+    let mut errors = Vec::new();
+    for (instance_id, session_id) in sessions {
+        let stopped = tokio::time::timeout(Duration::from_secs(35), control.request(
+            &format!("/host/v1/instances/{instance_id}/stop"),
+            Some(serde_json::json!({"expected_session_id":session_id,"force":false})),
+        )).await;
+        match stopped {
+            Ok(Ok(_)) => {},
+            Ok(Err(error)) => errors.push(format!("{instance_id}: {error}")),
+            Err(_) => errors.push(format!("{instance_id}: Host drain did not complete in time")),
+        }
+    }
+    if !errors.is_empty() {
+        return Err(format!("Could not unload all configured Host instances; reset was refused: {}", errors.join("; ")));
+    }
+    // This repeats authenticated identity validation and atomically refuses
+    // Stop if another instance or maintenance operation appeared during drain.
+    tokio::time::timeout(Duration::from_secs(5), control.stop_host_for_relocation(directory))
+        .await.map_err(|_| "The configured Host did not confirm idle Stop in time; reset was refused and no forced stop was sent".to_string())?
 }
 
 #[cfg(windows)]

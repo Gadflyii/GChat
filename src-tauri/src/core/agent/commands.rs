@@ -1741,6 +1741,478 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
+    async fn factory_reset_stops_host_owned_children_before_deleting_data() {
+        use crate::core::agent::test_support::TestFleet;
+        use std::time::Duration;
+
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let models = data.join("models");
+        fs::create_dir_all(&models).unwrap();
+        let sentinel = models.join("reset-sentinel.txt");
+        fs::write(&sentinel, "PRESERVE_UNTIL_HOST_EXIT").unwrap();
+        let fleet = TestFleet::desktop_reset(&data).await;
+        let pids = start_reset_host_children(&fleet, &models).await;
+        let ginfer = GinferState::default();
+        assert!(ginfer.ginfer_process.lock().await.is_empty());
+        let app = tauri::test::mock_builder()
+            .manage(ginfer)
+            .manage(fleet.client.clone())
+            .manage(crate::core::gbot::GbotState::stopped_for_test())
+            .manage(AppState::default())
+            .manage(crate::test_support::TestDataRoot(data.clone()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let state = app.state::<AppState>();
+        let resetting = crate::core::system::commands::reset_app_data(app.handle(), &state, &data);
+        tokio::pin!(resetting);
+        tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::select! {
+                result = &mut resetting => panic!("reset finished before the Host released its root: {result:?}"),
+                () = fleet.wait_for_reset_stop() => {}
+            }
+            // The real Host accepted idle Stop only after reaping both owned
+            // sessions. Its root lock remains held to separate exit from ACK.
+            assert_eq!(fs::read_to_string(&sentinel).unwrap(), "PRESERVE_UNTIL_HOST_EXIT");
+            for pid in &pids {
+                assert!(nix::sys::signal::kill(nix::unistd::Pid::from_raw(*pid), None).is_err());
+            }
+            let processes = fleet.host.processes.lock().await;
+            assert!(!processes.needs_monitoring());
+            assert!(processes.reserved_gpus(None).is_empty());
+            assert!(processes.instances().all(|instance| {
+                instance.status == ginfer_host::engine_registry::InstanceStatus::Stopped
+            }));
+            drop(processes);
+            assert!(ginfer_host::service_owner::ServiceOwner::acquire(&data.join("ginfer/host")).is_err());
+            assert!(tokio::time::timeout(Duration::from_millis(20), &mut resetting).await.is_err());
+            assert!(sentinel.exists(), "HTTP Stop acknowledgment must not authorize deletion");
+            fleet.release_reset_owner();
+            resetting.await.unwrap();
+        })
+        .await
+        .expect("reset must stop Host-owned Ready and Starting children and await ownership release");
+        assert!(!models.exists());
+        assert!(!data.join("ginfer/host/host.json").exists());
+        assert!(app
+            .state::<GinferState>()
+            .ginfer_process
+            .lock()
+            .await
+            .is_empty());
+        fs::write(
+            fleet.directory.path().join("release-engine"),
+            "must never continue",
+        )
+        .unwrap();
+        assert!(!fleet.directory.path().join("late-engine-write").exists());
+        assert!(
+            !models.exists(),
+            "stopped Host children must not recreate reset data"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn factory_reset_unavailable_host_preserves_data_and_dependencies() {
+        use crate::core::agent::test_support::TestFleet;
+        use std::time::Duration;
+
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let models = data.join("models");
+        fs::create_dir_all(&models).unwrap();
+        let sentinel = models.join("reset-sentinel.txt");
+        fs::write(&sentinel, "PRESERVE_UNTIL_HOST_EXIT").unwrap();
+        let fleet = TestFleet::desktop_reset(&data).await;
+        let pids = start_reset_host_children(&fleet, &models).await;
+        let host_state = fs::read(data.join("ginfer/host/host.json")).unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(GinferState::default())
+            .manage(fleet.client.clone())
+            .manage(crate::core::gbot::GbotState::stopped_for_test())
+            .manage(AppState::default())
+            .manage(crate::test_support::TestDataRoot(data.clone()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let state = app.state::<AppState>();
+        state.mcp_active_servers.lock().await.insert(
+            "still-needed".into(),
+            serde_json::json!({"command":"fixture"}),
+        );
+        state
+            .mcp_start_generations
+            .lock()
+            .await
+            .insert("still-needed".into(), 7);
+        fleet.stop();
+        tokio::task::yield_now().await;
+        let result = tokio::time::timeout(Duration::from_secs(7), async {
+            crate::core::system::commands::reset_app_data(app.handle(), &state, &data).await
+        })
+        .await;
+        // Reap fixture children even if the regression fails an assertion.
+        let live_before_cleanup = pids
+            .iter()
+            .all(|pid| nix::sys::signal::kill(nix::unistd::Pid::from_raw(*pid), None).is_ok());
+        let reservations = fleet.host.processes.lock().await.reserved_gpus(None);
+        fleet.host.processes.lock().await.shutdown().await.unwrap();
+        let error = result
+            .expect("unavailable Host must fail reset in bounded time")
+            .unwrap_err();
+        assert!(error.contains("Host"), "{error}");
+        assert!(
+            live_before_cleanup,
+            "a disconnected management endpoint cannot confirm child shutdown"
+        );
+        assert!(!reservations.is_empty());
+        assert_eq!(
+            fs::read_to_string(&sentinel).unwrap(),
+            "PRESERVE_UNTIL_HOST_EXIT"
+        );
+        assert_eq!(
+            fs::read(data.join("ginfer/host/host.json")).unwrap(),
+            host_state
+        );
+        assert_eq!(
+            state.mcp_active_servers.lock().await.get("still-needed"),
+            Some(&serde_json::json!({"command":"fixture"}))
+        );
+        assert_eq!(
+            state.mcp_start_generations.lock().await.get("still-needed"),
+            Some(&7)
+        );
+        assert!(
+            ginfer_host::service_owner::ServiceOwner::acquire(&data.join("ginfer/host")).is_err()
+        );
+    }
+
+    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "requires an exclusively booked NVIDIA GPU and GCHAT_RESET_TEST_ENGINE, GCHAT_RESET_TEST_MODEL, GCHAT_RESET_TEST_GPU"]
+    async fn factory_reset_releases_real_gpu_allocation() {
+        use crate::core::agent::test_support::TestFleet;
+        use ginfer_host::engine_host::{EngineLaunch, HostProcesses, LaunchOptions};
+        use ginfer_host::engine_registry::InstanceStatus;
+        use std::collections::BTreeSet;
+        use std::time::Duration;
+
+        async fn gpu_state(gpu: &str) -> (Vec<(u32, u64)>, u64) {
+            let applications = tokio::process::Command::new("nvidia-smi")
+                .args([
+                    "--id",
+                    gpu,
+                    "--query-compute-apps=pid,used_gpu_memory",
+                    "--format=csv,noheader,nounits",
+                ])
+                .output()
+                .await
+                .expect("query booked GPU compute applications");
+            assert!(
+                applications.status.success(),
+                "{}",
+                String::from_utf8_lossy(&applications.stderr)
+            );
+            let apps = String::from_utf8(applications.stdout)
+                .unwrap()
+                .lines()
+                .filter(|line| !line.trim().is_empty())
+                .map(|line| {
+                    let (pid, memory) = line.split_once(',').expect("GPU application PID and MiB");
+                    (pid.trim().parse().unwrap(), memory.trim().parse().unwrap())
+                })
+                .collect();
+            let memory = tokio::process::Command::new("nvidia-smi")
+                .args([
+                    "--id",
+                    gpu,
+                    "--query-gpu=memory.used",
+                    "--format=csv,noheader,nounits",
+                ])
+                .output()
+                .await
+                .expect("query booked GPU used memory");
+            assert!(
+                memory.status.success(),
+                "{}",
+                String::from_utf8_lossy(&memory.stderr)
+            );
+            let used = String::from_utf8(memory.stdout)
+                .unwrap()
+                .trim()
+                .parse()
+                .unwrap();
+            (apps, used)
+        }
+
+        let engine = PathBuf::from(
+            std::env::var_os("GCHAT_RESET_TEST_ENGINE").expect("absolute ginfer-serve path"),
+        );
+        let model = PathBuf::from(
+            std::env::var_os("GCHAT_RESET_TEST_MODEL").expect("absolute real Muse .ginfer path"),
+        );
+        let gpu = std::env::var("GCHAT_RESET_TEST_GPU").expect("exclusively booked GPU UUID");
+        assert!(engine.is_absolute() && engine.is_file());
+        assert!(model.is_absolute() && model.is_file());
+        assert!(gpu.starts_with("GPU-"));
+        let (baseline_apps, baseline_mib) = gpu_state(&gpu).await;
+        assert!(
+            baseline_apps.is_empty(),
+            "booked GPU must have no compute owner: {baseline_apps:?}"
+        );
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let models = data.join("models");
+        fs::create_dir_all(&models).unwrap();
+        let sentinel = models.join("reset-sentinel.txt");
+        fs::write(&sentinel, "PRESERVE_UNTIL_GPU_RELEASE").unwrap();
+        let fleet = TestFleet::desktop_reset(&data).await;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let mut processes = HostProcesses::new(
+            engine.clone(),
+            BTreeSet::from([gpu.clone()]),
+            Duration::from_secs(240),
+        )
+        .unwrap();
+        let instance_id = Uuid::new_v4();
+        processes
+            .launch(EngineLaunch {
+                instance_id,
+                artifact: model.clone(),
+                artifact_dependencies: vec![model.clone()],
+                artifact_set: false,
+                model_id: "muse-glimmer-30b/groupwise-int-dflash-q4".into(),
+                gpu_uuids: vec![gpu.clone()],
+                tp: 1,
+                port,
+                max_context: 4096,
+                concurrency: 1,
+                benchmark_profile: None,
+                options: LaunchOptions {
+                    spec: "none".into(),
+                    kv_arena_bytes: Some(512 * 1024 * 1024),
+                    ..Default::default()
+                },
+            })
+            .unwrap();
+        *fleet.host.processes.lock().await = processes;
+        tokio::time::timeout(Duration::from_secs(240), async {
+            loop {
+                fleet.host.refresh_processes().await.unwrap();
+                let processes = fleet.host.processes.lock().await;
+                let instance = processes
+                    .instances()
+                    .find(|instance| instance.instance_id == instance_id)
+                    .unwrap();
+                if instance.status == InstanceStatus::Ready {
+                    break;
+                }
+                assert_eq!(
+                    instance.status,
+                    InstanceStatus::Starting,
+                    "real engine failed before Ready: {:?}: {:?}",
+                    instance.status,
+                    instance.last_error
+                );
+                drop(processes);
+                tokio::time::sleep(Duration::from_millis(250)).await;
+            }
+        })
+        .await
+        .expect("real Muse engine must reach Ready within 240 seconds");
+        let (ready_apps, ready_mib) = gpu_state(&gpu).await;
+        assert!(!ready_apps.is_empty());
+        assert!(
+            ready_apps.iter().map(|(_, mib)| *mib).sum::<u64>() > 1024,
+            "Ready must own a real model allocation: {ready_apps:?}"
+        );
+        let app = tauri::test::mock_builder()
+            .manage(GinferState::default())
+            .manage(fleet.client.clone())
+            .manage(crate::core::gbot::GbotState::stopped_for_test())
+            .manage(AppState::default())
+            .manage(crate::test_support::TestDataRoot(data.clone()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        assert!(app
+            .state::<GinferState>()
+            .ginfer_process
+            .lock()
+            .await
+            .is_empty());
+        let state = app.state::<AppState>();
+        let resetting = crate::core::system::commands::reset_app_data(app.handle(), &state, &data);
+        tokio::pin!(resetting);
+        tokio::time::timeout(Duration::from_secs(10), async {
+            tokio::select! {
+                result = &mut resetting => panic!("reset finished before Host ownership release: {result:?}"),
+                () = fleet.wait_for_reset_stop() => {}
+            }
+            assert_eq!(fs::read_to_string(&sentinel).unwrap(), "PRESERVE_UNTIL_GPU_RELEASE");
+            assert!(fleet.host.processes.lock().await.reserved_gpus(None).is_empty());
+            let (apps, used) = gpu_state(&gpu).await;
+            assert!(apps.is_empty(), "GPU owner must exit before reset deletion: {apps:?}");
+            assert!(used <= baseline_mib + 16,
+                "GPU memory must be released before deleting data: baseline={baseline_mib}, current={used} MiB");
+            fleet.release_reset_owner();
+            resetting.await.unwrap();
+        }).await.expect("reset must release the real engine and Host ownership");
+        assert!(!models.exists());
+        let (after_apps, after_mib) = gpu_state(&gpu).await;
+        assert!(after_apps.is_empty());
+        assert!(after_mib <= baseline_mib + 16);
+        println!(
+            "{}",
+            serde_json::json!({
+                "test":"factory_reset_releases_real_gpu_allocation", "gpu":gpu,
+                "engine":engine, "model":model, "instance_id":instance_id,
+                "baseline":{"apps":baseline_apps,"used_mib":baseline_mib},
+                "ready":{"apps":ready_apps,"used_mib":ready_mib},
+                "after_reset":{"apps":after_apps,"used_mib":after_mib},
+                "legacy_session_map_empty":true, "data_deleted":!models.exists()
+            })
+        );
+    }
+
+    #[cfg(unix)]
+    async fn start_reset_host_children(
+        fleet: &crate::core::agent::test_support::TestFleet,
+        models: &Path,
+    ) -> Vec<i32> {
+        use ginfer_host::engine_host::{EngineLaunch, HostProcesses, LaunchOptions};
+        use ginfer_host::engine_registry::InstanceStatus;
+        use std::collections::BTreeSet;
+        use std::os::unix::fs::PermissionsExt;
+        use std::time::Duration;
+
+        let executable = fleet.directory.path().join("reset-engine");
+        // Both processes are real Host children. One supplies actual readiness;
+        // the other owns its GPU reservation without ever becoming Ready.
+        fs::write(&executable, r#"#!/usr/bin/env python3
+import http.server, json, os, pathlib, sys, time
+args = sys.argv[1:]
+def arg(name): return args[args.index(name)+1]
+root = pathlib.Path(__file__).parent
+artifact = pathlib.Path(args[0])
+port = int(arg('--port'))
+model = arg('--model-id')
+(root / ('engine-%s.pid' % port)).write_text(str(os.getpid()))
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = json.dumps(dict(data=[dict(id=model)])).encode()
+        self.send_response(200); self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
+    def log_message(self, *args): pass
+server = None
+if model == 'fixture-ready/model':
+    server = http.server.HTTPServer(('127.0.0.1', port), Handler)
+    server.timeout = 0.01
+while True:
+    if (root / 'release-engine').exists():
+        artifact.parent.mkdir(parents=True, exist_ok=True)
+        (artifact.parent / 'recreated-by-engine').write_text('UNSAFE')
+        (root / 'late-engine-write').write_text('UNSAFE')
+    if server is None: time.sleep(0.01)
+    else: server.handle_request()
+"#).unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = models.join("fixture.ginfer");
+        fs::write(&artifact, "owned child fixture").unwrap();
+        let mut processes = HostProcesses::new(
+            executable,
+            BTreeSet::from(["GPU-reset-ready".into(), "GPU-reset-starting".into()]),
+            Duration::from_secs(60),
+        )
+        .unwrap();
+        let listeners: Vec<_> = (0..2)
+            .map(|_| std::net::TcpListener::bind("127.0.0.1:0").unwrap())
+            .collect();
+        let mut ports = Vec::new();
+        for (index, listener) in listeners.into_iter().enumerate() {
+            let port = listener.local_addr().unwrap().port();
+            drop(listener);
+            let (model, gpu) = if index == 0 {
+                ("fixture-ready/model", "GPU-reset-ready")
+            } else {
+                ("fixture-starting/model", "GPU-reset-starting")
+            };
+            processes
+                .launch(EngineLaunch {
+                    instance_id: Uuid::new_v4(),
+                    artifact: artifact.clone(),
+                    artifact_dependencies: vec![artifact.clone()],
+                    artifact_set: false,
+                    model_id: model.into(),
+                    gpu_uuids: vec![gpu.into()],
+                    tp: 1,
+                    port,
+                    max_context: 4096,
+                    concurrency: 1,
+                    benchmark_profile: None,
+                    options: LaunchOptions {
+                        kv_arena_bytes: Some(4096),
+                        ..Default::default()
+                    },
+                })
+                .unwrap();
+            ports.push(port);
+        }
+        *fleet.host.processes.lock().await = processes;
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                fleet.host.refresh_processes().await.unwrap();
+                let processes = fleet.host.processes.lock().await;
+                let ready = processes
+                    .instances()
+                    .any(|instance| instance.status == InstanceStatus::Ready);
+                let started = ports.iter().all(|port| {
+                    fleet
+                        .directory
+                        .path()
+                        .join(format!("engine-{port}.pid"))
+                        .exists()
+                });
+                if ready && started {
+                    assert_eq!(processes.instances().count(), 2);
+                    assert!(processes
+                        .instances()
+                        .any(|instance| instance.status == InstanceStatus::Starting));
+                    assert_eq!(processes.reserved_gpus(None).len(), 2);
+                    break;
+                }
+                drop(processes);
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("CPU Host fixture must own a Ready child and a Starting child");
+        let snapshot = fleet.host.snapshot().await;
+        let instances = snapshot["instances"].as_array().unwrap();
+        assert_eq!(instances.len(), 2);
+        assert!(instances
+            .iter()
+            .all(|instance| instance["session_id"].is_string()));
+        assert!(instances
+            .iter()
+            .any(|instance| instance["status"] == "ready"));
+        assert!(instances
+            .iter()
+            .any(|instance| instance["status"] == "starting"));
+        ports
+            .into_iter()
+            .map(|port| {
+                fs::read_to_string(fleet.directory.path().join(format!("engine-{port}.pid")))
+                    .unwrap()
+                    .parse()
+                    .unwrap()
+            })
+            .collect()
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
     async fn shutdown_waits_for_direct_studio_durability_after_window_closes() {
         studio_run_durability_after_window_loss(false).await;
     }
