@@ -1,5 +1,30 @@
 # Gbot design
 
+## Saving a LAN bot name once — Gchat 2
+
+`GBOT-LAN-RENAME-SUBMIT-PROGRESS`, based on main `b659383f3`, guards
+Save name immediately, before the parent busy state renders. Previously, two
+submits in that interval could send two rename requests. Saving name and
+Saving bot name progress now stay visible through the request and its following
+refresh; name edits, cancellation and other bot actions remain disabled.
+
+A failed request retains its draft and recovery guidance for an explicit retry.
+A successful retry reopens with the confirmed name after refresh. The rendered
+regression follows duplicate submits, delayed failure/refresh and retry/success;
+existing removal behavior is unchanged. Source/rendered scope only, with no
+service or native contract change.
+
+Validation: original production failed the new regression because it submitted
+twice; fixed focus passed 117 cases. Lint had zero errors and five existing
+warnings. ONE `make verify`, 18 October 19:38:11–19:44:25 UTC, passed 3,780 app
+tests (six skipped), 127 extension tests, 1,316 Rust tests (28 ignored, 23
+summaries), six coverage floors and lint/typecheck/guards. All 3,460 tracked raw
+source bytes and modes matched before and after testing, with tracked timestamps
+refreshed beforehand. Product and test source are unchanged by this receipt.
+CPU80–87 booking3522 returned19:44Z; private cache retired19:46:58Z.
+Evidence: `out/gchat2-lan-rename-submit-progress-20261018/result.json` and
+adjacent raw logs. Native acceptance remains separate.
+
 ## Fresh readiness when rechecking service approval — Gchat 2
 
 `GBOT-SERVICE-APPROVAL-RECHECK-READINESS`, based on main `e97f30aa0`,
