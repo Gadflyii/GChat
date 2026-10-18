@@ -1,5 +1,38 @@
 # GInfer host UI
 
+## Network sharing command and refresh feedback — Gchat 3, October 18
+
+`GUI-HOST-SHARING-REFRESH-RESULT-20261018`: a successful sharing change now
+publishes the command's authoritative Host snapshot before refreshing the host
+list. A failed read preserves the accepted switch setting and completed-action
+message, with separate persistent guidance for read and command failures.
+Refresh retries only the read; a later authoritative snapshot still controls the
+switch. Another sharing change requires an explicit action. No native sharing
+or Engine contract changes.
+
+The allocated base `4ba089a88` reproduces all three rendered defects (three
+failed, 21 skipped): accepted OFF/ON leave the old setting and a rejected command
+lacks persistent guidance. The fixed route passes all 24 focused cases, including
+pending duplicate prevention and explicit retry. Lint passes with zero errors
+and five existing warnings. ONE `make verify` passed: 3,359 app tests (six
+skipped), 121 extension tests, all six critical coverage floors and 1,222 Rust
+tests (28 ignored). Candidate chain: 04:49:11–04:57:18Z, exit zero; frozen
+source/test hashes match afterward. The coordinator reviewed the actual logs,
+effective commands and source/test diffs. Current main `70c61dfb0` has no
+intervening changes to either owned file.
+
+Owner: `/ai/gchat-worktrees/gchat3-host-sharing-refresh-result-20261018`, branch
+`fix/gchat3-host-sharing-refresh-result-20261018`, base `4ba089a88`.
+Retained evidence: `out/host-sharing-refresh-result-20261018/test-result.json`
+and adjacent `test-summary.md`. S1 AIS-2-8592-L01 CPUs104–111, booking 2996,
+used independent offline dependency/cache copies from the unchanged RC donor.
+The owned root `/media/ron/SSD_RAID/ai/tmp-gchat3-host-sharing-refresh-tests-20261018`
+(42.32 GB), two containers and local source archive were removed; returned
+04:59Z and booking canceled. Only concise result/summary evidence remains.
+Next: commit/push and merge review. Rendered mocked behavior and the Linux
+source gate are qualified; live sharing/network, installed GUI, account/pairing,
+Engine/GPU, Windows and installer qualification remain separate.
+
 ## Scheduled tasks brain setup guidance — October 18
 
 `GBOT-SCHEDULE-BRAIN-SETUP-GUIDANCE`: the disabled schedule form previously
