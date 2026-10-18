@@ -1,6 +1,7 @@
 import type { Chat, UIMessage } from '@ai-sdk/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CustomChatTransport } from '@/lib/custom-chat-transport'
+import type { AgentRunRecord } from '@/types/agent'
 import { isSessionBusy, useChatSessions } from '@/stores/chat-session-store'
 
 function createChat(messages: UIMessage[]): Chat<UIMessage> {
@@ -47,6 +48,22 @@ describe('chat session message routing', () => {
 
     expect(chatA.messages).toEqual([threadAMessage, agentMessage])
     expect(chatB.messages).toEqual([threadBMessage])
+  })
+
+  it('drops restored run history when a conversation is removed or sessions are cleared', () => {
+    const transport = {} as CustomChatTransport
+    const record = { runId: 'interrupted-worker', status: 'incomplete' } as AgentRunRecord
+    for (const id of ['removed-chat', 'cleared-chat']) {
+      useChatSessions.getState().getSessionData(id).agentRunRecords = [record]
+      useChatSessions.getState().ensureSession(id, transport, () => createChat([]))
+    }
+    useChatSessions.getState().removeSession('removed-chat')
+    useChatSessions.getState().ensureSession('removed-chat', transport, () => createChat([]))
+    expect(useChatSessions.getState().getSessionData('removed-chat').agentRunRecords).toEqual([])
+    expect(useChatSessions.getState().getSessionData('cleared-chat').agentRunRecords).toEqual([record])
+
+    useChatSessions.getState().clearSessions()
+    expect(useChatSessions.getState().getSessionData('cleared-chat').agentRunRecords).toEqual([])
   })
 
   it('releases a finished chat after an earlier tool batch drains', () => {

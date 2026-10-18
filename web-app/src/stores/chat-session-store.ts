@@ -2,6 +2,7 @@
 import { create } from "zustand";
 import type { Chat, UIMessage } from "@ai-sdk/react";
 import type { ChatStatus } from "ai";
+import type { AgentRunRecord } from "@/types/agent";
 import { CustomChatTransport } from "@/lib/custom-chat-transport";
 import { notifyThreadCompleted } from "@/lib/notifications";
 import { useThreadNotifications } from "@/hooks/useThreadNotifications";
@@ -14,6 +15,7 @@ export type SessionData = {
   toolCallAbortController: AbortController | null;
   messages: UIMessage[];
   idMap: Map<string, string>;
+  agentRunRecords: AgentRunRecord[];
 };
 
 export type ChatSession = {
@@ -66,6 +68,7 @@ const createSessionData = (): SessionData => ({
   toolCallAbortController: null,
   messages: [],
   idMap: new Map<string, string>(),
+  agentRunRecords: [],
 });
 
 // Standalone data store for sessions that don't have a Chat yet

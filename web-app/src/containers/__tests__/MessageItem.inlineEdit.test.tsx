@@ -1,6 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessage } from 'ai'
+import { Chat } from '@ai-sdk/react'
+import type { CustomChatTransport } from '@/lib/custom-chat-transport'
+import { useChatSessions } from '@/stores/chat-session-store'
 import type { AgentRunRecord, AgentRunSummary } from '@/types/agent'
 import { MessageItem } from '../MessageItem'
 import { projectChatRunActivity } from '@/lib/agent-run-message'
@@ -67,6 +70,7 @@ beforeEach(() => {
   modelState.selectedModel = { id: 'test-model' }
   onEdit.mockClear()
   seedServiceHub()
+  useChatSessions.getState().clearSessions()
 })
 
 describe('MessageItem inline editing', () => {
@@ -164,7 +168,7 @@ describe('MessageItem agent outcome', () => {
 })
 
 describe('MessageItem restored worker activity', () => {
-  it('shows interruption for a saved uncollected spawn with no completed stage or finish reason', () => {
+  it('keeps an interrupted worker after leaving and reopening its cached conversation', () => {
     const message = convertThreadMessageToUIMessage(JSON.parse(JSON.stringify({
       id: 'spawn-message', role: 'assistant',
       content: [
@@ -188,8 +192,26 @@ describe('MessageItem restored worker activity', () => {
       totalSteps: 0, finalReply: 'Completion was not recorded.',
       defaultModelInstanceId: 'selected-model', stages: [],
     }
-    const projection = projectChatRunActivity([message], {}, [record])
-    render(<MessageItem message={message} agentRuns={projection.byMessageId.get(message.id)} onCancelAgentRun={vi.fn()} isFirstMessage isLastMessage status="ready" />)
+    const transport = {} as CustomChatTransport
+    const chat = new Chat<UIMessage>({ messages: [message] })
+    useChatSessions.getState().ensureSession('chat', transport, () => chat)
+    useChatSessions.getState().getSessionData('chat').agentRunRecords = [record]
+    const renderCachedWorker = () => {
+      const cached = useChatSessions.getState().sessions.chat
+      const projection = projectChatRunActivity(cached.chat.messages, {}, cached.data.agentRunRecords)
+      return render(<MessageItem message={cached.chat.messages[0]} agentRuns={projection.byMessageId.get(message.id)} onCancelAgentRun={vi.fn()} isFirstMessage isLastMessage status="ready" />)
+    }
+    const initial = renderCachedWorker()
+    expect(screen.getByRole('button', { name: 'Run interrupted' })).toBeInTheDocument()
+
+    // Leaving Chat destroys page state while the SDK conversation remains cached.
+    initial.unmount()
+    useChatSessions.getState().ensureSession('other-chat', transport, () => new Chat<UIMessage>({}))
+    expect(useChatSessions.getState().getSessionData('other-chat').agentRunRecords).toEqual([])
+    const recreate = vi.fn(() => new Chat<UIMessage>({}))
+    expect(useChatSessions.getState().ensureSession('chat', transport, recreate)).toBe(chat)
+    expect(recreate).not.toHaveBeenCalled()
+    renderCachedWorker()
 
     expect(screen.getByText('Worker started: worker')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Run interrupted' })).toHaveLength(1)
