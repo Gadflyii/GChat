@@ -34,6 +34,14 @@
       "production_control_lint": "PASS (test path ignored by repository lint configuration)",
       "frontend_build": "PASS",
       "native_build": "PASS"
+    },
+    "after_main_merge": {
+      "source": "45354f116",
+      "main": "548d73ed8",
+      "focused_files_passed": 6,
+      "focused_tests_passed": 214,
+      "typecheck": "PASS",
+      "resolution": "Preserved coordinator default-parallelism regression and all eight reasoning save cases."
     }
   },
   "native": {
@@ -63,5 +71,5 @@
     "Windows native UI is unqualified.",
     "No model start, measurement, GPU computation, Fleet authority change or release-wide qualification."
   ],
-  "isolation": "Private HOME/XDG/runtime700, dbus session, unlocked keyring, Xvfb :78; native session and fixture Hosts stopped by exact owned PIDs; build cache retained only through integration check."
+  "isolation": "Private HOME/XDG/runtime700, dbus session, unlocked keyring, Xvfb :78; native session and fixture Hosts stopped by exact owned PIDs. Five stopped containers and the 39 GiB private SSD build/cache removed; CPUs104-111 returned04:04Z. Read-only donors unchanged."
 }

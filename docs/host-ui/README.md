@@ -1059,8 +1059,11 @@ pass. This is a continued stage result, not a second full verification run.
 
 C7 owns `/ai/gchat-worktrees/c7-dropdown-host-selectors-20261018`, branch
 `test/c7-dropdown-host-selectors-20261018`, based on `d03667c8d`. The native
-session is stopped. Private SSD build/cache cleanup follows the final merge
-reconciliation check. Read-only ed68 AppDir and Flash Next pure 2-bit donors
+session and all fixture services are stopped. The 39 GiB private SSD build/cache
+and five stopped containers are removed; CPUs104–111 returned04:04Z. Merge of
+main `548d73ed8` at `45354f116` preserves both adjacent regression suites and
+passes 214 focused cases across six affected files plus typecheck. Read-only
+ed68 AppDir and Flash Next pure 2-bit donors
 were unchanged (package SHA256
 `8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`).
 No model start, GPU computation, Fleet authority change, Windows account change
