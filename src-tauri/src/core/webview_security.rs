@@ -372,14 +372,15 @@ mod windows_native_admission {
     };
 
     struct PrivateDesktop {
-        original: HDESK,
         owned: Option<HDESK>,
     }
 
     impl PrivateDesktop {
-        fn enter(name: &str) -> Result<Self, String> {
+        fn create(name: &str) -> Result<Self, String> {
             unsafe {
-                let original = GetThreadDesktop(GetCurrentThreadId()).map_err(|e| e.to_string())?;
+                // Associate the owner with its existing desktop before creating
+                // another one. Only the spawned GUI thread attaches to it.
+                GetThreadDesktop(GetCurrentThreadId()).map_err(|e| e.to_string())?;
                 let owned = CreateDesktopW(
                     &HSTRING::from(name),
                     PCWSTR::null(),
@@ -393,21 +394,13 @@ mod windows_native_admission {
                     None,
                 )
                 .map_err(|e| e.to_string())?;
-                if let Err(error) = SetThreadDesktop(owned) {
-                    let _ = CloseDesktop(owned);
-                    return Err(error.to_string());
-                }
-                Ok(Self {
-                    original,
-                    owned: Some(owned),
-                })
+                Ok(Self { owned: Some(owned) })
             }
         }
 
         fn close(&mut self) -> Result<(), String> {
             if let Some(owned) = self.owned {
                 unsafe {
-                    SetThreadDesktop(self.original).map_err(|e| e.to_string())?;
                     CloseDesktop(owned).map_err(|e| e.to_string())?;
                 }
                 self.owned = None;
@@ -420,6 +413,35 @@ mod windows_native_admission {
         fn drop(&mut self) {
             let _ = self.close();
         }
+    }
+
+    struct NativeInitLogger;
+
+    impl log::Log for NativeInitLogger {
+        fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+            metadata.level() <= log::Level::Warn
+        }
+
+        fn log(&self, record: &log::Record<'_>) {
+            if self.enabled(record.metadata()) {
+                // Wry logs a failed native creation but still returns a
+                // detached dispatcher. Preserve that error before a later
+                // with_webview callback is dropped with a closed channel.
+                eprintln!(
+                    "GCHAT_WINDOWS_NATIVE_ADMISSION_RUNTIME {}",
+                    json!({"level":record.level().as_str(),"target":record.target(),"message":record.args().to_string()})
+                );
+            }
+        }
+
+        fn flush(&self) {}
+    }
+
+    static NATIVE_INIT_LOGGER: NativeInitLogger = NativeInitLogger;
+
+    struct FixtureOutcome {
+        result: Result<(), String>,
+        cleanup: Value,
     }
 
     /// These paths did not exist before this fixture and have a UUID identifier
@@ -793,11 +815,11 @@ if (location.pathname === '/logs') {
         )
     }
 
-    fn run_fixture() -> Result<(), String> {
+    fn run_fixture() -> Result<FixtureOutcome, String> {
+        log::set_logger(&NATIVE_INIT_LOGGER)
+            .map_err(|e| format!("Could not capture native initialization errors: {e}"))?;
+        log::set_max_level(log::LevelFilter::Warn);
         let uuid = uuid::Uuid::new_v4().simple().to_string();
-        // Set the thread desktop before Tauri/COM creates any windows. Never
-        // switch the interactive input desktop, and never use product setup.
-        let mut desktop = PrivateDesktop::enter(&format!("gchat-native-admission-{uuid}"))?;
         let identifier = format!("app.gchat.windows-native-admission.{uuid}");
         let private = PrivateData::new(&identifier)?;
         let root = std::env::var_os("GCHAT_WINDOWS_NATIVE_ADMISSION_ROOT")
@@ -867,9 +889,11 @@ if (location.pathname === '/logs') {
                 data_directory: None,
                 ..Default::default()
             };
-            let window = build_window(app.handle(), &config).map_err(|e| e.to_string())?;
+            let window = build_window(app.handle(), &config)
+                .map_err(|e| format!("Protected main webview creation failed: {e}"))?;
             let state = Arc::new(Mutex::new(Observations::default()));
-            install_observers(&window, state.clone(), uuid)?;
+            install_observers(&window, state.clone(), uuid)
+                .map_err(|e| format!("Native observer installation failed: {e}"))?;
             window
                 .navigate(Url::parse("http://tauri.localhost/").unwrap())
                 .map_err(|e| e.to_string())?;
@@ -896,23 +920,45 @@ if (location.pathname === '/logs') {
         // UUID children are separate from the explicit owned input root.
         let data_cleanup = private.cleanup();
         let input_cleanup = temp.close().map_err(|e| e.to_string());
-        let desktop_cleanup = desktop.close();
-        println!(
-            "GCHAT_WINDOWS_NATIVE_ADMISSION_CLEANUP {}",
-            json!({"privateData":data_cleanup.as_ref().err(),"inputs":input_cleanup.as_ref().err(),"desktop":desktop_cleanup.as_ref().err(),"paths":private.paths})
-        );
-        run_result
-            .and(data_cleanup)
-            .and(input_cleanup)
-            .and(desktop_cleanup)
+        Ok(FixtureOutcome {
+            cleanup: json!({"privateData":data_cleanup.as_ref().err(),"inputs":input_cleanup.as_ref().err(),"paths":private.paths}),
+            result: run_result.and(data_cleanup).and(input_cleanup),
+        })
     }
 
     #[test]
     #[ignore = "Requires an explicitly booked Windows host; creates a private Win32 desktop and removes UUID browser data"]
     fn windows_private_desktop_enforces_frame_and_command_admission() {
-        let result = std::thread::spawn(run_fixture)
-            .join()
-            .expect("Private GUI fixture thread panicked");
+        let mut desktop = PrivateDesktop::create(&format!(
+            "gchat-native-admission-{}",
+            uuid::Uuid::new_v4().simple()
+        ))
+        .expect("Could not create private fixture desktop");
+        // Keep the handle owned here until join. Windows releases the GUI
+        // thread's Tao/COM windows when that thread exits; closing the desktop
+        // on the still-running GUI thread otherwise fails with ERROR_BUSY.
+        let desktop_handle = desktop.owned.unwrap().0 as usize;
+        let joined = std::thread::spawn(move || {
+            unsafe { SetThreadDesktop(HDESK(desktop_handle as *mut _)) }
+                .map_err(|e| format!("Could not attach private fixture desktop: {e}"))?;
+            run_fixture()
+        })
+        .join();
+        let desktop_cleanup = desktop.close();
+        let (result, mut cleanup) = match joined {
+            Ok(Ok(outcome)) => (outcome.result, outcome.cleanup),
+            Ok(Err(error)) => (
+                Err(error),
+                json!({"privateData":"fixture exited before cleanup receipt","inputs":"fixture exited before cleanup receipt","paths":[]}),
+            ),
+            Err(_) => (
+                Err("Private GUI fixture thread panicked".into()),
+                json!({"privateData":"fixture thread panicked","inputs":"fixture thread panicked","paths":[]}),
+            ),
+        };
+        cleanup["desktop"] = json!(desktop_cleanup.as_ref().err());
+        println!("GCHAT_WINDOWS_NATIVE_ADMISSION_CLEANUP {cleanup}");
+        let result = result.and(desktop_cleanup);
         assert!(result.is_ok(), "{}", result.unwrap_err());
     }
 }
