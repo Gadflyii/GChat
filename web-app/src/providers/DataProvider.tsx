@@ -147,11 +147,12 @@ export function DataProvider() {
 
   useEffect(() => {
     console.log('Initializing DataProvider...')
+    const inventoryRevision = useModelProvider.getState().inventoryRevision
     serviceHub
       .providers()
       .getProviders()
       .then((providers) => {
-        setProviders(providers)
+        setProviders(providers, inventoryRevision)
         // Register active remote providers with the backend
         providers.forEach((provider) => {
           if (provider.active) {
@@ -284,9 +285,12 @@ export function DataProvider() {
     const handleModelImported = async (eventData?: Record<string, unknown>) => {
       console.log('[LocalAPI] onModelImported fired, eventData:', eventData)
 
+      const modelId = eventData?.modelId as string | undefined
+      if (modelId) useModelProvider.getState().recordModelInstall(modelId)
+      const revision = useModelProvider.getState().inventoryRevision
       try {
         const fetchedProviders = await serviceHub.providers().getProviders()
-        setProviders(fetchedProviders)
+        setProviders(fetchedProviders, revision)
         syncRemoteProviders()
       } catch (err) {
         console.error(
@@ -296,7 +300,6 @@ export function DataProvider() {
         return
       }
 
-      const modelId = eventData?.modelId as string | undefined
       if (!modelId) {
         console.warn(
           '[LocalAPI] onModelImported: no modelId in event data, skipping'
