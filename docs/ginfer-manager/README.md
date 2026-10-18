@@ -15,6 +15,61 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## C7 native hardware-profile lifetime — October 18
+
+The remaining native Windows Cancel/Host-loss leaf of
+`GCHAT-HARDWARE-PROFILE-INSTALL` **passed** at 13:26 UTC on October 18.
+Booking 1470 ran 13:25:41–13:26:54 UTC on RON-9950X3D2 with its RTX 5090.
+Refresh created a real native producer and a 2,195,646-byte
+`ginfer-profile-install-state-v1` checkpoint. Abrupt loss of its owning Host
+reaped the producer through the Windows Job. A replacement Host retained its
+host identity, changed boot identity and reported the job interrupted. Resume
+used the same workspace and forced-refresh recipe, and the native diagnostic
+confirmed checkpoint resume. Cancel reaped that producer while preserving the
+checkpoint and prior accepted profile. The read-only donor profile was unchanged.
+
+This is the approved bounded interrupt/resume acceptance: no model was loaded
+and full calibration and artifact-scoped installer acceptance were excluded.
+Matching complete-v2 reuse already has the accepted Linux evidence below.
+The result does not claim completed CPU-format reuse; the resume diagnostic
+reported zero completed node/format groups.
+
+Tested native Host `691fdcc1006ac85be40f70c66d282046a96298c8` retains the
+Refresh/Resume/Cancel state machine and Windows Job owner used by main
+`e16adae7d1905b85207835f06e7bd7364b34d7d8`. Its API accepts action and GPU UUIDs;
+the newer `artifact` field was omitted. Relevant Host files remained unchanged
+through main `528288db26d7e7cc39d2d572a002806a1afb5755` (checked at 13:30 UTC).
+The source-bound executable is
+`C:\Users\Ron\gchat-windows-gate-20261016\native-target\release\ginfer-host.exe`,
+SHA256 `43ddb573411c433a804c64463a5fe2f4f3d6f1109af43bd4ec408c0c40d2dbdb`;
+binding receipt is
+`/ai/gchat/out/windows-gate-20261016/windows-functional-691fdcc10-d35c4722d-20261017/final-file-check.json`.
+The native Engine was accepted `b76ce57a3` sm120a, from the read-only ZIP
+`E:\gchat3-windows-multiarch-20261017\accepted\runtimes\ginfer-windows-x64-sm120a.zip`.
+A fresh private identity, nondefault loopback port and disabled LAN sharing kept
+the check isolated. Native Windows authorization was restored October 17; the
+October 11 hold below is historical.
+
+Two earlier setup attempts (bookings 1464 and 1466) were inconclusive: the
+PowerShell bridge remained alive after launching the private Host, so waiting
+for bridge completion timed out before any profile API action. The first
+cleanup also incorrectly inferred absence from an empty captured PID set;
+a private-root query found and reaped the Host and console before return.
+The passing run observed a PID receipt or the sole private-root Host without
+waiting for the bridge, tracked both launcher bridges through native shutdown,
+and verified private-root process absence before removing copies. This corrects
+the repeated launcher failure; no product source change was needed.
+
+Owned inventory: source worktree
+`/ai/gchat-worktrees/c7-hardware-profile-native-20261018`, branch
+`test/c7-hardware-profile-native-20261018`, baseline `e16adae7d190`.
+The small [native lifetime receipt](native-hardware-profile-lifetime-20261018.json)
+and `E:\gchat7-hardware-profile-native-20261018\result.json` retain the result.
+Disposable runtime/provider copies and launcher bridges are removed; no owned
+native process, model copy, build or booking remains. The accepted Host, Engine
+ZIP and donor profile remain read-only. Next action: merge this acceptance
+packet and close the canonical row after verifying its ancestry on main.
+
 ## C7 native profiling exit 2 — closed October 18
 
 The first C7 native profile failed because a newer Host invoked an obsolete
