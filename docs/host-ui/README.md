@@ -53,7 +53,7 @@ bundled-file preparation is not a release startup speed measurement. Its
 restart outlived the private DBus fixture, so the post-restart secure-storage
 card was unavailable; local attachment still succeeded without vault access.
 No GPU/model/profile or real account/remote enrollment was run. All private
-native processes stopped and CPUs64–71 returned07:03Z (build CPUs80–87
+native processes stopped and CPUs64–71 returned07:01Z (build CPUs80–87
 returned06:47Z). Inactive independent source/build/cache copies under
 `/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018` were retired
 (31.82GB logical bytes). The tested candidate and required stopped resources
