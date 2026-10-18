@@ -1,0 +1,283 @@
+{
+  "scope": "native Windows bounded Refresh/Host-loss/restart/Resume/Cancel",
+  "native_windows": true,
+  "host_source": "691fdcc1006ac85be40f70c66d282046a96298c8",
+  "engine_source": "b76ce57a3cc4823f127a1ce718da454ef1f3510f",
+  "model_loaded": false,
+  "full_calibration": false,
+  "cells": {
+    "host_loss": {
+      "result": "PASS",
+      "producer": {
+        "pid": 82112,
+        "parent": 74188,
+        "exe": "E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe",
+        "command": "\"E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe\" \"profile-hardware\" \"--hardware-profile\" \"E:\\gchat7-hardware-profile-native-20261018\\provider\\host\\hardware-profiles\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json.install-8e6dd6a0-1ff5-400a-bbb7-842aa593ac28.json\" \"--reprofile\"",
+        "created": "2026-10-18T13:25:54.4562200Z"
+      },
+      "producer_reaped": true,
+      "checkpoint_bytes": 2195646,
+      "checkpoint_sha256": "446f827ae464a5d48e7d89740dcd6f1bda1050dac9ed0d1c1b7c41de57c6f123",
+      "checkpoint_schema": "ginfer-profile-install-state-v1"
+    },
+    "resume_cancel": {
+      "result": "PASS",
+      "producer": {
+        "pid": 688,
+        "parent": 59812,
+        "exe": "E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe",
+        "command": "\"E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe\" \"profile-hardware\" \"--hardware-profile\" \"E:\\gchat7-hardware-profile-native-20261018\\provider\\host\\hardware-profiles\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json.install-8e6dd6a0-1ff5-400a-bbb7-842aa593ac28.json\" \"--reprofile\"",
+        "created": "2026-10-18T13:26:47.8588420Z"
+      },
+      "same_workspace": true,
+      "forced_refresh_preserved": true,
+      "resume_diagnostic": true,
+      "producer_reaped": true,
+      "checkpoint_preserved": true
+    }
+  },
+  "prior_attempts": [
+    {
+      "result": "INCONCLUSIVE",
+      "start": "2026-10-18T12:34:01.790298+00:00",
+      "end": "2026-10-18T12:35:57.703453+00:00",
+      "error": "PowerShell Start-Process launcher timed out after 15 seconds before returning PID; no profile API action occurred.",
+      "cleanup_correction": {
+        "host_pid": 89096,
+        "own_host_absent": true,
+        "producer_never_started": true,
+        "console_reaped": true,
+        "initial_empty_pid_set_was_invalid": true
+      }
+    },
+    {
+      "result": "INCONCLUSIVE",
+      "start": "2026-10-18T12:50:01.749767+00:00",
+      "end": "2026-10-18T12:50:25.035178+00:00",
+      "error": "PowerShell command timed out with regular output files"
+    }
+  ],
+  "booking": 1470,
+  "start": "2026-10-18T13:25:41.242852+00:00",
+  "ram_samples": [
+    {
+      "computer": "RON-9950X3D2",
+      "available_bytes": 86180327424
+    },
+    {
+      "computer": "RON-9950X3D2",
+      "available_bytes": 86471548928
+    },
+    {
+      "computer": "RON-9950X3D2",
+      "available_bytes": 86514180096
+    },
+    {
+      "computer": "RON-9950X3D2",
+      "available_bytes": 86604034048
+    },
+    {
+      "computer": "RON-9950X3D2",
+      "available_bytes": 86526115840
+    },
+    {
+      "computer": "RON-9950X3D2",
+      "available_bytes": 86559776768
+    },
+    {
+      "computer": "RON-9950X3D2",
+      "available_bytes": 86710157312
+    }
+  ],
+  "accepted_profile_sha256": "96160787952869a6ea9d478546c3f3c1191061a200fba8d9dfae83e1302710c0",
+  "port": 62556,
+  "launcher_receipts": [
+    {
+      "label": "first",
+      "pid_receipt_observed": false,
+      "receipt_kind": "private_root_process_query",
+      "bridge_running_at_receipt": true
+    },
+    {
+      "label": "restart",
+      "pid_receipt_observed": true,
+      "receipt_kind": "pid_file",
+      "bridge_running_at_receipt": true
+    }
+  ],
+  "initial": {
+    "host_id": "85035af2-cb3e-496e-8f1a-eb29ade165e6",
+    "boot_id": "395f79cc-0c75-45f7-8893-9cbc85e5f83a",
+    "local_identity": {
+      "platform": "windows",
+      "state_directory": "\\\\?\\E:\\gchat7-hardware-profile-native-20261018\\provider\\host"
+    },
+    "lan_sharing": {
+      "active": false,
+      "enabled": false,
+      "error": null,
+      "managed": true,
+      "notice": null,
+      "port": 7444
+    }
+  },
+  "refresh": {
+    "all_formats_complete": null,
+    "available": true,
+    "base_complete": null,
+    "checkpoint_available": false,
+    "diagnostic_tail": "",
+    "duration_source": null,
+    "elapsed_ms": 0,
+    "engine_path": "E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe",
+    "error": null,
+    "expected_duration_ms": null,
+    "finished_unix_ms": null,
+    "gpu_uuids": [
+      "GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e"
+    ],
+    "job_id": "99854d9e-eec4-4a2a-aa9c-995e8a94859e",
+    "pending_gpu_groups": [],
+    "phase": "preparing",
+    "phase_detail": null,
+    "pid": 82112,
+    "profile_path": "E:\\gchat7-hardware-profile-native-20261018\\provider\\host\\hardware-profiles\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json",
+    "remaining_ms": null,
+    "reprofile": true,
+    "scope": "all_formats",
+    "scope_complete": null,
+    "selected_artifact": null,
+    "stale_groups": [],
+    "started_unix_ms": 1792329954451,
+    "status": "running"
+  },
+  "restart": {
+    "all_formats_complete": null,
+    "available": true,
+    "base_complete": null,
+    "checkpoint_available": true,
+    "diagnostic_tail": "",
+    "duration_source": null,
+    "elapsed_ms": 0,
+    "engine_path": "E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe",
+    "error": "Host stopped before profiling completed; resume retains native checkpoint validation",
+    "expected_duration_ms": null,
+    "finished_unix_ms": 1792330007119,
+    "gpu_uuids": [
+      "GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e"
+    ],
+    "job_id": "99854d9e-eec4-4a2a-aa9c-995e8a94859e",
+    "pending_gpu_groups": [],
+    "phase": "preparing",
+    "phase_detail": null,
+    "pid": 82112,
+    "profile_path": "E:\\gchat7-hardware-profile-native-20261018\\provider\\host\\hardware-profiles\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json",
+    "remaining_ms": null,
+    "reprofile": true,
+    "scope": "all_formats",
+    "scope_complete": null,
+    "selected_artifact": null,
+    "stale_groups": [],
+    "started_unix_ms": 1792329954451,
+    "status": "interrupted"
+  },
+  "resume": {
+    "all_formats_complete": null,
+    "available": true,
+    "base_complete": null,
+    "checkpoint_available": true,
+    "diagnostic_tail": "",
+    "duration_source": null,
+    "elapsed_ms": 0,
+    "engine_path": "E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe",
+    "error": null,
+    "expected_duration_ms": null,
+    "finished_unix_ms": null,
+    "gpu_uuids": [
+      "GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e"
+    ],
+    "job_id": "6055f156-6925-4932-ac00-7c3848d65dd4",
+    "pending_gpu_groups": [],
+    "phase": "preparing",
+    "phase_detail": null,
+    "pid": 688,
+    "profile_path": "E:\\gchat7-hardware-profile-native-20261018\\provider\\host\\hardware-profiles\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json",
+    "remaining_ms": null,
+    "reprofile": true,
+    "scope": "all_formats",
+    "scope_complete": null,
+    "selected_artifact": null,
+    "stale_groups": [],
+    "started_unix_ms": 1792330007854,
+    "status": "running"
+  },
+  "resume_observed": {
+    "all_formats_complete": null,
+    "available": true,
+    "base_complete": null,
+    "checkpoint_available": true,
+    "diagnostic_tail": "Hardware install resume: 0 completed node/format groups retained from \"E:\\\\gchat7-hardware-profile-native-20261018\\\\provider\\\\host\\\\hardware-profiles\\\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json.install-8e6dd6a0-1ff5-400a-bbb7-842aa593ac28.json.install-state.json\"\r\n",
+    "duration_source": null,
+    "elapsed_ms": 535,
+    "engine_path": "E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe",
+    "error": null,
+    "expected_duration_ms": null,
+    "finished_unix_ms": null,
+    "gpu_uuids": [
+      "GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e"
+    ],
+    "job_id": "6055f156-6925-4932-ac00-7c3848d65dd4",
+    "pending_gpu_groups": [],
+    "phase": "preparing",
+    "phase_detail": null,
+    "pid": 688,
+    "profile_path": "E:\\gchat7-hardware-profile-native-20261018\\provider\\host\\hardware-profiles\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json",
+    "remaining_ms": null,
+    "reprofile": true,
+    "scope": "all_formats",
+    "scope_complete": null,
+    "selected_artifact": null,
+    "stale_groups": [],
+    "started_unix_ms": 1792330007854,
+    "status": "running"
+  },
+  "cancelled": {
+    "all_formats_complete": null,
+    "available": true,
+    "base_complete": null,
+    "checkpoint_available": true,
+    "diagnostic_tail": "Hardware install resume: 0 completed node/format groups retained from \"E:\\\\gchat7-hardware-profile-native-20261018\\\\provider\\\\host\\\\hardware-profiles\\\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json.install-8e6dd6a0-1ff5-400a-bbb7-842aa593ac28.json.install-state.json\"\r\n",
+    "duration_source": null,
+    "elapsed_ms": 719,
+    "engine_path": "E:\\gchat7-hardware-profile-native-20261018\\runtime\\bin\\ginfer.exe",
+    "error": null,
+    "expected_duration_ms": null,
+    "finished_unix_ms": 1792330008573,
+    "gpu_uuids": [
+      "GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e"
+    ],
+    "job_id": "6055f156-6925-4932-ac00-7c3848d65dd4",
+    "pending_gpu_groups": [],
+    "phase": "preparing",
+    "phase_detail": null,
+    "pid": 688,
+    "profile_path": "E:\\gchat7-hardware-profile-native-20261018\\provider\\host\\hardware-profiles\\fc3e2f48e83911f35e54e562a346360b6268337b95d14448a10fec5c37d86b9d.json",
+    "remaining_ms": null,
+    "reprofile": true,
+    "scope": "all_formats",
+    "scope_complete": null,
+    "selected_artifact": null,
+    "stale_groups": [],
+    "started_unix_ms": 1792330007854,
+    "status": "cancelled"
+  },
+  "accepted_profile_preserved": true,
+  "source_profile_preserved": true,
+  "result": "PASS",
+  "own_processes_absent": true,
+  "private_root_process_query_verified": true,
+  "launcher_bridges_reaped": true,
+  "disposable_runtime_and_provider_removed": true,
+  "booking_cancelled": true,
+  "end": "2026-10-18T13:26:54.679341+00:00"
+}
