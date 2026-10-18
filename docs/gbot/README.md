@@ -188,8 +188,8 @@ was retired at 17:34 UTC. Protected inputs remain. Logs and source bindings:
 `/ai/gchat/out/gchat2-lan-setup-error-guidance-20261018/result.json`.
 ## Windows Cua runtime packaging — Codex 7
 
-`GBOT-CUA-RUNTIME-PACKAGING` is implemented and qualified on branch
-`feat/c7-gbot-cua-windows-runtime-20261018`, base `8482f841c`.
+`GBOT-CUA-RUNTIME-PACKAGING` is implemented and qualified at `525de6223`,
+merged to main in `ea14ea1f3`.
 Bubbs authorized the Windows runtime and a real Hyper-V guest task on Ada4090;
 Gchat 2 owns Gbot/guest lifecycle, Codex 7 owns packaging/resource discovery.
 
@@ -262,18 +262,20 @@ addition requires a private working directory; noninteractive SSH needs the
 absolute WSL `nvidia-smi` path. The latter preflight stopped before model or
 guest launch. Passed checks were not repeated.
 
-Owned inventory: source at
-`/ai/gchat-worktrees/c7-gbot-cua-windows-runtime-20261018`; S1 SSD fixture
+Owned inventory: S1 SSD fixture
 `/media/ron/SSD_RAID/ai/tmp-c7-gbot-cua-windows-runtime-20261018` contains the
 staged release input, frozen source and pinned inputs. Its disposable test/build
 caches and superseded native archive were retired at 19:15Z, freeing 35.95 GiB.
-Ada's private fixture is
-`C:\Users\Ron\AppData\Local\GChat\c7-gbot-cua-acceptance-20261018`;
-the local private native test build is
-`C:\Users\Ron\AppData\Local\GChat\c7-gbot-cua-native-20261018`.
-Retain the S1 release input until its release-builder consumer is done; retire
-owned build/guest copies after acceptance, keeping small receipts. Accepted
-Linux/model/guest donors remain read-only.
+Ada's private fixture
+`C:\Users\Ron\AppData\Local\GChat\c7-gbot-cua-acceptance-20261018`
+was removed at 19:25Z after guest retirement and runtime shutdown (1.70 GB
+logical bytes). The local private native test build
+`C:\Users\Ron\AppData\Local\GChat\c7-gbot-cua-native-20261018` was removed
+at the shared native gate's returned boundary, returning at 19:29Z and freeing
+4.23 GiB on C:. No owned job remains. Small acceptance and cleanup receipts
+are retained in the evidence folder. Retain the S1 release input until its
+release-builder consumer is done; frozen source and pinned test inputs remain
+protected. Accepted Linux/model/guest donors remain read-only.
 
 ## Human-help response error recovery — Gchat 2
 
