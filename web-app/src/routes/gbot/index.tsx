@@ -412,15 +412,33 @@ function GbotPage() {
   const setupBlocked = Boolean(
     isLocalVm && (setups === undefined || (setup && setup.stage !== 'ready'))
   )
-  const localVmErrorKey = JSON.stringify([serviceTarget, setup?.id])
-  const savedLocalVmError = localVmErrors[localVmErrorKey]
-  const localVmError =
-    savedLocalVmError &&
-    (savedLocalVmError.kind === 'start'
-      ? setup?.stage !== 'ready'
-      : setup?.stage !== 'stopped')
-      ? savedLocalVmError
-      : undefined
+  const renderLocalVmError = (record?: KvmSetupRecord) => {
+    const failure = localVmErrors[JSON.stringify([serviceTarget, record?.id])]
+    if (
+      !failure ||
+      (failure.kind === 'start'
+        ? record?.stage === 'ready'
+        : record?.stage === 'stopped')
+    )
+      return null
+    const recovery =
+      record?.stage === 'stopped'
+        ? 'Start computer'
+        : record?.stage === 'ready' || record?.stage === 'stopping_computer'
+          ? 'Stop computer'
+          : 'Resume setup'
+    return (
+      <div role="alert" className="space-y-1 text-sm">
+        <p>
+          Could not {failure.kind} this computer. Choose {recovery} to try again.
+        </p>
+        <details className="text-muted-foreground">
+          <summary>Details</summary>
+          <p className="whitespace-pre-wrap break-words">{failure.details}</p>
+        </details>
+      </div>
+    )
+  }
   const changeLocalVm = async (
     kind: 'start' | 'stop',
     record: KvmSetupRecord
@@ -980,11 +998,7 @@ function GbotPage() {
                           : 'Stop computer'
                         : 'Resume setup'}
                   </Button>
-                  {localVmErrors[JSON.stringify([serviceTarget, record.id])] && (
-                    <p role="alert" className="break-words text-destructive">
-                      {localVmErrors[JSON.stringify([serviceTarget, record.id])]?.details}
-                    </p>
-                  )}
+                  {renderLocalVmError(record)}
                 </section>
               ))}
             {!adding &&
@@ -1241,18 +1255,7 @@ function GbotPage() {
                     )}
                   </div>
                 )}
-                {localVmError && (
-                  <div
-                    role="alert"
-                    className="space-y-1 text-sm text-destructive"
-                  >
-                    <p>
-                      Could not {localVmError.kind}{' '}
-                      this computer. Try again.
-                    </p>
-                    <p className="break-words">{localVmError.details}</p>
-                  </div>
-                )}
+                {renderLocalVmError(setup)}
                 {controlError && (
                   <div
                     id="gbot-settings-control-error"

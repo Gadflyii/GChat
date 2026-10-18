@@ -180,9 +180,13 @@ it.each(['kvm', 'hyper_v'])(
     )
     expect(
       await screen.findByText('The guest did not shut down.')
-    ).toBeVisible()
+    ).not.toBeVisible()
+    fireEvent.click(within(screen.getByRole('alert')).getByText('Details'))
+    expect(screen.getByText('The guest did not shut down.')).toBeVisible()
     expect(
-      screen.getByText('Could not stop this computer. Try again.')
+      screen.getByText(
+        'Could not stop this computer. Choose Stop computer to try again.'
+      )
     ).toBeVisible()
     await waitFor(() =>
       expect(
@@ -209,14 +213,22 @@ it.each(['kvm', 'hyper_v'])(
       screen.queryByRole('button', { name: 'View bot’s desktop' })
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByText('Could not stop this computer. Try again.')
+      screen.queryByText(
+        'Could not stop this computer. Choose Stop computer to try again.'
+      )
     ).not.toBeInTheDocument()
     fireEvent.click(start)
     expect(
       await screen.findByText('The saved VM is temporarily unavailable.')
+    ).not.toBeVisible()
+    fireEvent.click(within(screen.getByRole('alert')).getByText('Details'))
+    expect(
+      screen.getByText('The saved VM is temporarily unavailable.')
     ).toBeVisible()
     expect(
-      screen.getByText('Could not start this computer. Try again.')
+      screen.getByText(
+        'Could not start this computer. Choose Start computer to try again.'
+      )
     ).toBeVisible()
     await waitFor(() =>
       expect(
@@ -234,7 +246,9 @@ it.each(['kvm', 'hyper_v'])(
       screen.getByRole('button', { name: 'View bot’s desktop' })
     ).toBeEnabled()
     expect(
-      screen.queryByText('Could not start this computer. Try again.')
+      screen.queryByText(
+        'Could not start this computer. Choose Start computer to try again.'
+      )
     ).not.toBeInTheDocument()
     expect(
       mocks.call.mock.calls.filter(([path]) =>
@@ -246,6 +260,139 @@ it.each(['kvm', 'hyper_v'])(
       ['setup/local-vm/start', { id: 'one', name: 'Writer' }],
       ['setup/local-vm/start', { id: 'one', name: 'Writer' }],
     ])
+  }
+)
+
+it.each([
+  ['start', 'Error', false],
+  ['start', 'native', false],
+  ['stop', 'Error', false],
+  ['stop', 'native', false],
+  ['start', 'Error', true],
+  ['start', 'native', true],
+] as const)(
+  'recovers a saved local setup %s failure (%s, partial progress %s) and clears it after confirmed progress',
+  async (kind, failureType, partial) => {
+    readyTaskBots(undefined, {
+      workspaces: [],
+      live_sessions: [],
+      controls: [],
+      assignments: [],
+    })
+    const original = mocks.call.getMockImplementation()!
+    let record: KvmSetupRecord = {
+      id: 'saved-local',
+      name: 'Saved researcher',
+      stage: kind === 'start' ? 'stopped' : 'stopping_computer',
+      issue: null,
+    }
+    const diagnostic = `local-vm/${kind}: transport closed before confirmation`
+    let rejectAction!: (cause: unknown) => void
+    const pending = new Promise<never>((_, reject) => {
+      rejectAction = reject
+    })
+    let attempts = 0
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'setup/local-vm/status') return [record]
+        if (path === 'setup/local-vm/preflight')
+          return {
+            hypervisor: 'kvm',
+            ready: false,
+            issues: [{
+              code: 'fixture_not_ready',
+              message: 'KVM access is not ready.',
+              next_action: 'Check prerequisites again.',
+            }],
+          }
+        if (path === `setup/local-vm/${kind}`) {
+          if (++attempts === 1) {
+            if (partial) record = { ...record, stage: 'connecting' }
+            return pending
+          }
+          record = { ...record, stage: 'ready' }
+          throw new Error('Response lost after the computer started')
+        }
+        return original(path, body)
+      }
+    )
+    render(<Page />)
+    const card = await screen.findByRole('region', {
+      name: 'Local setup Saved researcher',
+    })
+    const label = kind === 'start' ? 'Start computer' : 'Stop computer'
+    const action = within(card).getByRole('button', { name: label })
+    act(() => {
+      action.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      action.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(attempts).toBe(1)
+    expect(
+      within(card).getByRole('button', {
+        name: kind === 'start' ? 'Starting computer…' : 'Stopping computer…',
+      })
+    ).toBeDisabled()
+    await act(async () =>
+      rejectAction(failureType === 'Error' ? new Error(diagnostic) : diagnostic)
+    )
+    const alert = await within(card).findByRole('alert')
+    const recovery = partial ? 'Resume setup' : label
+    expect(alert).toHaveTextContent(
+      `Could not ${kind} this computer. Choose ${recovery} to try again.`
+    )
+    expect(within(alert).getByText(diagnostic)).not.toBeVisible()
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(within(alert).getByText(diagnostic)).toBeVisible()
+    await waitFor(() =>
+      expect(within(card).getByRole('button', { name: recovery })).toBeEnabled()
+    )
+    expect(attempts).toBe(1)
+    if (partial) {
+      fireEvent.click(within(card).getByRole('button', { name: recovery }))
+      await screen.findByRole('form', { name: 'Set up Gbot' })
+      expect(attempts).toBe(1)
+      expect(mocks.call).not.toHaveBeenCalledWith('connect', expect.anything())
+      expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+      return
+    }
+    if (kind === 'start') {
+      // Explicit retry confirms saved progress even if its response is lost.
+      fireEvent.click(within(card).getByRole('button', { name: label }))
+      await waitFor(() =>
+        expect(
+          within(card).getByRole('button', { name: 'Resume setup' })
+        ).toBeEnabled()
+      )
+      expect(attempts).toBe(2)
+    } else {
+      // A read-only refresh can confirm a previously requested stop completed.
+      record = { ...record, stage: 'stopped' }
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+      await waitFor(() =>
+        expect(
+          within(card).getByRole('button', { name: 'Start computer' })
+        ).toBeEnabled()
+      )
+      expect(attempts).toBe(1)
+    }
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(([path]) =>
+        /setup\/local-vm\/(start|stop|remove)$/.test(path)
+      )
+    ).toEqual(
+      Array.from({ length: attempts }, () => [
+        `setup/local-vm/${kind}`,
+        kind === 'start'
+          ? { id: 'saved-local', name: 'Saved researcher' }
+          : { id: 'saved-local' },
+      ])
+    )
+    expect(mocks.call).not.toHaveBeenCalledWith('connect', expect.anything())
+    expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
   }
 )
 

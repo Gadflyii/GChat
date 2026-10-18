@@ -1,5 +1,21 @@
 # Gbot design
 
+## Saved local computer action recovery — Gchat 2
+
+Saved local setups and connected local bots share Start/Stop error feedback.
+A failed action names Start computer, Stop computer or Resume setup for an
+explicit retry, according to the saved progress;
+technical diagnostics stay in closed Details. Once saved status confirms the
+computer is ready after Start or stopped after Stop, the old warning is hidden.
+Previously, unfinished setup cards retained the raw warning even after a
+read-only Refresh confirmed the stop completed.
+
+Rendered journeys cover Error and native-string failures, pending duplicate
+clicks, explicit retry, read-only Refresh and confirmation after a lost action
+response, plus resuming partially advanced setup. No automatic retry,
+connection or task is added. This is source and
+rendered acceptance; live Linux/Windows guest acceptance is unchanged.
+
 ## Recovering a failed Microsoft sign-in result — Gchat 2
 
 `GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names
