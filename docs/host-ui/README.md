@@ -14,6 +14,36 @@ skips, 27 Rust ignores); all six critical coverage floors pass. The source
 postcheck passes for all 3,100 tracked files. This qualifies the rendered
 component on Linux.
 Evidence: [replacement-focus result](../../out/gui-confirm-replacement-focus-20261018/result.json).
+## Local import preserves native context — C7, fixed October 18
+
+`GUI-MODELS-LOCAL-IMPORT` follow-up resolves Codex 8's P2: external registration
+assigned UUID catalog IDs but omitted the artifact identity used by the
+extension to discover native context. The new manifest persists the Host-admitted
+`entry.metadata.identity` at top level. A fresh UUID registration therefore
+retains its package context through provider discovery and auto-load.
+
+The Rust registration/reopen fixture checks the serialized identity. The
+extension regression uses an external UUID entry with Muse identity and a
+misleading Qwen filename/display label; list, get and context lookup all return
+131,072. The provider/model regression calls the real provider discovery and
+`DefaultModelsService.startModel`, asserting `max_context: 131072` reaches load.
+Existing explicit context settings retain their meaning.
+
+All 81 focused cases pass (24 extension, 49 provider/model, eight Rust), as do
+Rust check and Clippy. One `make verify` exited 0: 3,199 frontend tests and
+121 extension tests passed, six skipped; 1,208 native tests passed, 27 ignored.
+All six critical coverage floors passed. Lint has zero errors and five existing
+warnings. Results: `out/c7-local-import-context-20261018/{result.json,summary.md}`.
+
+C7 owns `/ai/gchat-worktrees/c7-local-import-context-20261018`, branch
+`fix/c7-local-import-context-20261018`, based on main `18603aeb7`. Verification
+ran on S1 `AIS-2-8592-L01` CPUs88–95 in pinned image `ad7f9bf020d7` with private
+offline caches and retained read-only launch profiles. The exited container and
+private SSD build root `/media/ron/SSD_RAID/ai/tmp-c7-local-import-context-20261018`
+are removed; the existing C7 private-catalog donor remains unchanged for its
+retained campaign. Only the result JSON and short summary are newly retained.
+No app, model, GPU, installer, Windows account or shared app data was involved.
+CPUs returned 01:15Z. Next: Codex 8 review and coordinator merge.
 
 ## Models tabs installed keyboard acceptance — C7, closed October 18
 

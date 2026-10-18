@@ -147,6 +147,26 @@ describe('GInfer library model context and names', () => {
     })
   })
 
+  it('resolves an externally registered UUID to its artifact context', async () => {
+    const id = '8d76994a-a344-4bb5-9e42-c643011f8d2a'
+    const modelDir = `/data/ginfer/models/${id}`
+    const path = '/external/qwen38_27b_int_df2.ginfer'
+    config.locations = [{ modelId: id, modelDir, manifestPath: `${modelDir}/model.yml` }]
+    config.manifests[`${modelDir}/model.yml`] = {
+      identity: { model_id: 'muse-glimmer-30b', weights_id: 'groupwise-int' },
+      model_path: path,
+      name: 'My Qwen model',
+      size_bytes: 1234,
+      source: 'external',
+    }
+    const extension = new GinferExtension()
+    const expected = { id, path, source: 'external', nativeContextTokens: 131_072 }
+
+    expect(await extension.list()).toMatchObject([expected])
+    expect(await extension.get(id)).toMatchObject(expected)
+    expect(await extension.getMaxCtxTrain(id)).toBe(131_072)
+  })
+
   it('leaves context unknown when only the editable label names a known family', async () => {
     config.value = {
       model_path: 'ginfer/models/custom/custom.ginfer',
