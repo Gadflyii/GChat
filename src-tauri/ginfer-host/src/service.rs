@@ -333,6 +333,15 @@ pub fn write_private(path: &Path, bytes: &[u8]) -> Result<(), String> {
     result
 }
 
+fn startup_quote_marker(instance_id: Uuid, model_id: &str, rank: &serde_json::Value) -> String {
+    format!(
+        "Engine startup quote instance_id={instance_id} model_id={model_id} rank={} graph_allowance_source={} graph_allowance_bytes={}",
+        rank["rank"],
+        rank["graph_allowance_source"].as_str().unwrap_or("unspecified"),
+        rank["graph_allowance_bytes"],
+    )
+}
+
 impl Host {
     pub async fn open(
         directory: PathBuf,
@@ -1662,7 +1671,10 @@ impl Host {
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
         let receipt_key = self.processes.lock().await.graph_receipt_key(launch)?;
-        let graph_allowance = self.data.lock().await.graph_receipts.get(&receipt_key).copied();
+        let graph_allowance = match receipt_key {
+            Some(key) => self.data.lock().await.graph_receipts.get(&key).copied(),
+            None => None,
+        };
         let mut command = self.processes.lock().await.startup_quote_command(launch, graph_allowance)?;
         let output = tokio::time::timeout(Duration::from_secs(600), command.output()).await
             .map_err(|_| "Engine startup quote timed out")?
@@ -1718,7 +1730,7 @@ impl Host {
                 None,
             );
         }
-        let (_, kv_arena_bytes) = self.quote_prepared(&launch, remaining).await?;
+        let (quote, kv_arena_bytes) = self.quote_prepared(&launch, remaining).await?;
         check_load()?;
         // A pre-load quote estimates capacity; it does not reserve VRAM or
         // include every allocation made during startup. A solo AUTO launch
@@ -1735,6 +1747,9 @@ impl Host {
         }
         let id = launch.instance_id;
         check_load()?;
+        for rank in quote["ranks"].as_array().expect("validated startup quote ranks") {
+            eprintln!("{}", startup_quote_marker(id, &launch.model_id, rank));
+        }
         self.processes.lock().await.launch(launch)?;
         request.instance_id = Some(id);
         let previous = self.data.lock().await.profiles.insert(id, request);
@@ -3630,6 +3645,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         *host.processes.lock().await = HostProcesses::new(engine.clone(), BTreeSet::from(["GPU-test".into()]), Duration::from_secs(10)).unwrap();
         host.processes.lock().await.configure_runtimes(BTreeMap::new(),
             BTreeMap::from([("GPU-test".into(), "12.0".into())])).unwrap();
+        host.processes.lock().await.configure_nvidia_driver_version("580.126.09").unwrap();
         request.max_context = 8192;
         request.concurrency = 4;
         request.options.kv_arena_bytes = Some(1024);
@@ -3641,6 +3657,11 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         assert!(quote["kv_arena_bytes"].is_null());
         assert_eq!(quote["instance_count"], 1);
         assert_eq!(quote["model_identity"], serde_json::json!({"model_id":model,"weights_id":weights}));
+        let marker_id = Uuid::new_v4();
+        assert_eq!(
+            startup_quote_marker(marker_id, &format!("{model}/{weights}"), &quote["quote"]["ranks"][0]),
+            format!("Engine startup quote instance_id={marker_id} model_id={model}/{weights} rank=0 graph_allowance_source=unknown graph_allowance_bytes=0"),
+        );
         assert!(host.data.lock().await.profiles.is_empty());
         assert_eq!(host.processes.lock().await.instances().count(), 0);
         if model == "qwen3.8-flash-next" {
@@ -3688,16 +3709,27 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let reopened = Host::open(dir.path().join("state"), "Test".into(), engine.clone(),
             vec![dir.path().join("models")], vec![], host.gpus.clone()).await.unwrap();
         reopened.processes.lock().await.hardware_profile = None;
+        let error = reopened.quote(request.clone(), 2).await.unwrap_err();
+        assert!(error.contains("graph memory is unknown"), "{error}");
+        reopened.processes.lock().await.configure_nvidia_driver_version("581.05").unwrap();
+        let error = reopened.quote(request.clone(), 2).await.unwrap_err();
+        assert!(error.contains("graph memory is unknown"), "{error}");
+        reopened.processes.lock().await.configure_nvidia_driver_version("580.126.09").unwrap();
         let placement = reopened.place(request.clone(), 2).await;
         if placement.is_err() { reopened.processes.lock().await.shutdown().await.unwrap(); }
-        placement.unwrap();
+        let placed_id = placement.unwrap();
         let quotes = std::fs::read_to_string(dir.path().join("quotes.jsonl")).unwrap();
         let args: Vec<String> = serde_json::from_str(quotes.lines().last().unwrap()).unwrap();
         assert!(args.windows(2).any(|pair| pair == ["--graph-allowance-bytes", "1200"]));
         if model == "qwen3.8-flash-next" {
             assert!(args.windows(2).any(|pair| pair == ["--vram-budget-bytes", "4096"]));
         }
-        assert_eq!(reopened.quote(request.clone(), 2).await.unwrap()["quote"]["ranks"][0]["graph_allowance_source"], "receipt");
+        let saved_quote = reopened.quote(request.clone(), 2).await.unwrap();
+        assert_eq!(saved_quote["quote"]["ranks"][0]["graph_allowance_source"], "receipt");
+        assert_eq!(
+            startup_quote_marker(placed_id, &format!("{model}/{weights}"), &saved_quote["quote"]["ranks"][0]),
+            format!("Engine startup quote instance_id={placed_id} model_id={model}/{weights} rank=0 graph_allowance_source=receipt graph_allowance_bytes=1200"),
+        );
         request.concurrency = 3;
         let error = reopened.place(request.clone(), 2).await.unwrap_err();
         reopened.processes.lock().await.shutdown().await.unwrap();

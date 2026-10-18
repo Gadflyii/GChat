@@ -647,6 +647,7 @@ impl StartupQuote {
 pub struct HostProcesses {
     executable: PathBuf,
     request_log_jsonl: Option<PathBuf>,
+    nvidia_driver_version: Option<String>,
     known_gpus: BTreeSet<String>,
     runtimes: BTreeMap<String, PathBuf>,
     gpu_architectures: BTreeMap<String, String>,
@@ -714,6 +715,7 @@ impl HostProcesses {
         Ok(Self {
             executable,
             request_log_jsonl: None,
+            nvidia_driver_version: None,
             known_gpus: gpu_uuids,
             runtimes: BTreeMap::new(),
             gpu_architectures: BTreeMap::new(),
@@ -728,6 +730,19 @@ impl HostProcesses {
     /// Process diagnostics are separate from model settings and graph topology.
     pub fn configure_request_log_jsonl(&mut self, path: PathBuf) {
         self.request_log_jsonl = Some(path);
+    }
+
+    /// The NVML-backed inventory supplies this once at Host startup. Unknown
+    /// drivers cannot authorize reuse of a previous process's graph residency.
+    pub fn configure_nvidia_driver_version(&mut self, version: &str) -> Result<(), String> {
+        self.nvidia_driver_version = None;
+        let version = version.trim();
+        if !version.contains('.') || !version.split('.').all(|part|
+            !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())) {
+            return Err("NVIDIA driver version is unavailable; graph-memory receipts cannot be saved or reused".into());
+        }
+        self.nvidia_driver_version = Some(version.to_owned());
+        Ok(())
     }
 
     pub fn configure_runtimes(
@@ -1031,8 +1046,9 @@ impl HostProcesses {
     // A receipt is bound to the actual artifact/runtime/profile files' metadata
     // stamps and startup recipe. Ports, identities and the KV share are not
     // graph topology inputs. Changing a producer or recipe invalidates reuse.
-    pub(crate) fn graph_receipt_key(&self, launch: &EngineLaunch) -> Result<String, String> {
+    pub(crate) fn graph_receipt_key(&self, launch: &EngineLaunch) -> Result<Option<String>, String> {
         use sha2::{Digest, Sha256};
+        let Some(driver_version) = &self.nvidia_driver_version else { return Ok(None); };
         let mut recipe = launch.clone();
         recipe.instance_id = Uuid::nil();
         recipe.port = 0;
@@ -1052,9 +1068,9 @@ impl HostProcesses {
         }).collect::<Result<Vec<_>, String>>()?;
         let architectures: Vec<_> = launch.gpu_uuids.iter()
             .map(|gpu| (gpu, self.gpu_architectures.get(gpu))).collect();
-        Ok(hex::encode(Sha256::digest(serde_json::to_vec(&(
-            recipe, stamps, architectures, std::env::consts::OS, std::env::consts::ARCH,
-        )).map_err(|e| e.to_string())?)))
+        Ok(Some(hex::encode(Sha256::digest(serde_json::to_vec(&(
+            recipe, stamps, architectures, driver_version, std::env::consts::OS, std::env::consts::ARCH,
+        )).map_err(|e| e.to_string())?))))
     }
 
     pub(crate) fn ready_graph_receipts(&self) -> Vec<(String, u64)> {
@@ -1078,7 +1094,7 @@ impl HostProcesses {
     }
 
     fn spawn(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
-        let graph_receipt_key = Some(self.graph_receipt_key(&launch)?);
+        let graph_receipt_key = self.graph_receipt_key(&launch)?;
         let graph_receipt = Arc::new(Mutex::new(GraphReceipt::default()));
         let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
         let hardware_profile_path = self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()?;
@@ -1490,7 +1506,21 @@ mod tests {
         processes.configure_runtimes(BTreeMap::new(),
             BTreeMap::from([("GPU-fixture".into(), "12.0".into())])).unwrap();
         let launch = fixture_launch(&artifact, Uuid::new_v4());
+        assert_eq!(processes.graph_receipt_key(&launch).unwrap(), None,
+            "An unknown driver cannot reuse or publish graph receipts");
+        processes.configure_nvidia_driver_version("580.126.09").unwrap();
         let key = processes.graph_receipt_key(&launch).unwrap();
+        assert!(key.is_some());
+
+        processes.configure_nvidia_driver_version("581.05").unwrap();
+        assert_ne!(processes.graph_receipt_key(&launch).unwrap(), key,
+            "A different NVIDIA driver requires a fresh Ready receipt");
+        for unknown in ["", "N/A", "[Not Supported]", "580..09"] {
+            assert!(processes.configure_nvidia_driver_version(unknown).is_err());
+            assert_eq!(processes.graph_receipt_key(&launch).unwrap(), None);
+        }
+        processes.configure_nvidia_driver_version("580.126.09").unwrap();
+        assert_eq!(processes.graph_receipt_key(&launch).unwrap(), key);
 
         let mut same_recipe = launch.clone();
         same_recipe.instance_id = Uuid::new_v4();
@@ -1564,6 +1594,7 @@ fi
         let mut processes = HostProcesses::new(executable,
             BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
         let launch = fixture_launch(&artifact, Uuid::new_v4());
+        processes.configure_nvidia_driver_version("580.126.09").unwrap();
         let key = processes.graph_receipt_key(&launch).unwrap();
         let log = directory.path().join("first startup requests.jsonl");
         processes.configure_request_log_jsonl(log.clone());
