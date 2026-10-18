@@ -18,6 +18,7 @@ type FirstRun = {
   startup_profiles: { download_id: string; model_id: string; gpu_uuids: string[]; concurrency: number; max_context: number; kv_arena_bytes: number | null; instance_count: number; quote?: unknown; error?: string }[]
   catalog_loaded?: boolean
   error?: string | null
+  maintenance_error?: string | null
 }
 
 /** All progress and long-running work belongs to the shared local Host. */
@@ -162,6 +163,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     {unavailable && <FirstRunError message="GChat could not read or update setup on this computer. Check that GInfer is running, then select Retry local setup." details={unavailable} label="Connection error details" />}
     {!localId && !resources.error && <p role="status" className="text-sm">{!resourcesReady ? 'Preparing GInfer to run models on this computer… GChat is installing and checking its bundled files. This may take a few minutes.' : checked ? 'GInfer could not connect on this computer. Check that a supported NVIDIA graphics card and the GInfer engine are installed. You can also connect to another computer running GInfer.' : 'Starting GInfer on this computer…'}</p>}
     {localId && !flow && !unavailable && <p role="status">Reading saved setup…</p>}
+    {flow?.maintenance_error && <div className="space-y-2"><p role="alert" className="text-sm text-destructive">Setup could not continue. {flow.maintenance_error} Your saved folder and model choices are kept.</p><Button variant="outline" disabled={busy} onClick={() => void act({ action: 'resume' })}>Retry setup</Button></div>}
     {flow?.error && <FirstRunError message="Setup could not finish this step. Check the details below, then try the step again. Your saved folder and model choices are kept." details={flow.error} label="Setup error details" />}
     {step === 'gpu' && !manualOpen && <fieldset disabled={busy} className="space-y-3"><legend className="font-medium">Select graphics cards</legend>
       <p className="text-sm">Select the graphics card you want GInfer to use. You can use 1, 2 or 4 cards of the same model together; each combination needs its own saved settings. If you have one card, select it below, then select Use selected graphics cards to continue.</p>
