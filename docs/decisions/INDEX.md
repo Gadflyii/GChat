@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-18** — [Retire the deleted local Host registration after reset](2026-10-18-retire-deleted-local-host-registration-after-reset.md)
+
 - **2026-10-18** — [Refresh desktop Host registration from current runtime](2026-10-18-refresh-desktop-host-registration-from-current-runtime.md)
 - **2026-10-18** — [Own Linux XDG autostart registration](2026-10-18-own-linux-xdg-autostart-registration.md)
 

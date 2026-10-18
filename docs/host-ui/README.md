@@ -1,5 +1,42 @@
 # GInfer host UI
 
+## Retire the reset local Host connection — C3, October 18
+
+`GUI-RESET-STALE-LOCAL-HOST-CONNECTION`: the completed private installed walk
+found a stale saved Host beside **This computer**. Reset deletes the selected
+`ginfer/host/host.json`, while the per-user `ginfer/hosts.json` is outside App
+Data and retains that UUID and certificate. The next local Host receives a new
+identity. An obsolete connection cannot authenticate to the replacement.
+
+Acceptance: a successful reset removes only the selected deleted identity from
+the shared saved registry; the replacement appears once, and unrelated paired
+Hosts and concurrent Manager edits survive. An incomplete or refused reset
+preserves the saved connection. Missing identity must never trigger URL-based
+removal, discovery, bootstrap or vault access. Keep the existing Agent drain,
+Host/Engine teardown and relocation fence. No GPU/model/profile rerun is needed.
+See the [registration ownership decision](../decisions/2026-10-18-retire-deleted-local-host-registration-after-reset.md).
+
+The reset reservation captures UUID and certificate only after the selected
+Host releases ownership. Completion first verifies its identity file is gone,
+then locks and reloads the shared registry before removing an exact match and
+its in-memory routes/credentials. It preserves a concurrently changed pin and
+all other records. The system reset calls completion after its existing data
+deletion and binary restoration. Failures return an actionable error instead
+of claiming restart completed.
+
+Owner/inventory: `/ai/gchat-worktrees/c3-reset-stale-host-connection-20261018`,
+branch `fix/c3-reset-stale-host-connection-20261018`, baseline `04866d698`.
+Private S1 root `/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018`
+will use independent offline copies of the inactive Gchat3 RC donor granted
+06:24Z. The stopped broad walkthrough profile and locator candidate in
+`tmp-c3-first-user-setup-20261018` remain retained as regression context; no
+live job or GPU allocation belongs to this row. Evidence is
+`out/c3-reset-stale-host-connection-20261018/`; prior native observation is
+`out/c3-host-locator-deleted-runtime-20261018/native-model-settings.json`.
+Current state: implementation and regression tests in progress. Next action:
+focused registry/reset tests, check/Clippy/lint and ONE make verify, followed
+by an isolated native reset/restart acceptance and Arch's startup-path sign.
+
 ## Gbot task-control failure recovery — October 18
 
 `GBOT-TASK-ACTION-INLINE-ERRORS`: rejected **Stop** and **Resume** requests

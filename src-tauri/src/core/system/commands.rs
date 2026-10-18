@@ -170,7 +170,7 @@ async fn reset_app_data_with<R: Runtime>(
         .await;
     let data_folder = select_data_folder()?;
     let client = crate::core::engine_hosts::reset_client(app_handle);
-    let _host = client
+    let host = client
         .prepare_local_reset(&data_folder.join("ginfer/host"))
         .await
         .map_err(|error| format!("GChat reset could not stop its local Host: {error}. Your data has not been deleted. Check Host status, then try resetting again."))?;
@@ -241,7 +241,7 @@ async fn reset_app_data_with<R: Runtime>(
         }
     }
 
-    Ok(())
+    host.complete().await.map_err(|error| format!("GChat reset could not finish cleaning its local Host connection: {error}. Check GInfer Hosts before resetting again."))
 }
 
 #[cfg(any(target_os = "linux", test))]
