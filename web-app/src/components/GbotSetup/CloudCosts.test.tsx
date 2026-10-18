@@ -310,6 +310,96 @@ function deployment(
   }
 }
 
+it.each([
+  ['Error', new Error('SSH authentication failed')],
+  ['native string', 'SSH authentication failed'],
+])(
+  'keeps failed SSH access guidance through progress refresh (%s)',
+  async (_kind, failure) => {
+    const initial = deployment(review(), 'running')
+    const identity: SshIdentity = {
+      public_key: { algorithm: 'ssh-ed25519', public_key: 'fixture-key' },
+      fingerprint: 'SHA256:fixture',
+    }
+    const progress = deferred<CloudReview>()
+    const retry = deferred<object>()
+    vi.mocked(gbot).mockImplementation(async (path) => {
+      if (path === 'setup/cloud/identity') return identity
+      if (path === 'setup/cloud/check') return progress.promise
+      return {}
+    })
+    render(
+      <CloudCosts
+        name="Research bot"
+        initial={initial}
+        busy={vi.fn()}
+        reviewed={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Check SSH identity' }))
+    await screen.findByText(identity.fingerprint)
+    fireEvent.click(screen.getByRole('checkbox', { name: /fingerprint matches/ }))
+    vi.mocked(gbot).mockResolvedValueOnce({}).mockRejectedValueOnce(failure)
+    fireEvent.click(screen.getByRole('button', { name: 'Verify SSH access' }))
+    await screen.findByText('SSH authentication failed')
+    expect(gbot).toHaveBeenCalledWith('setup/cloud/attach', {
+      id: 'review',
+      pinned_host_key: identity.public_key,
+      verified: true,
+    })
+    expect(gbot).toHaveBeenCalledWith('workspaces/ssh/check', {
+      workspace_id: 'review',
+    })
+    const sshCalls = () =>
+      vi.mocked(gbot).mock.calls.filter(([path]) =>
+        ['setup/cloud/attach', 'workspaces/ssh/check'].includes(path)
+      )
+    expect(sshCalls()).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Check progress' }))
+    expect(screen.getByRole('button', { name: 'Verify SSH access' })).toBeDisabled()
+    await act(async () => progress.resolve(initial))
+    const guidance = screen.getByRole('alert')
+    expect(guidance).toHaveTextContent(
+      'Could not verify SSH access. Try Verify SSH access again before continuing.'
+    )
+    expect(
+      screen.getByText('SSH authentication failed').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(screen.getByRole('button', { name: 'Connect bot desktop' })).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'Check tools' })
+    ).not.toBeInTheDocument()
+    expect(sshCalls()).toHaveLength(2)
+
+    vi.mocked(gbot).mockResolvedValueOnce({}).mockReturnValueOnce(retry.promise)
+    fireEvent.click(screen.getByRole('button', { name: 'Verify SSH access' }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Verifying SSH access…' })
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Connect bot desktop' })).toBeDisabled()
+    await act(async () => retry.resolve({}))
+    expect(screen.getByRole('button', { name: 'Check tools' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('checkbox', { name: /fingerprint matches/ })
+    ).toBeChecked()
+    expect(sshCalls()).toEqual([
+      [
+        'setup/cloud/attach',
+        { id: 'review', pinned_host_key: identity.public_key, verified: true },
+      ],
+      ['workspaces/ssh/check', { workspace_id: 'review' }],
+      [
+        'setup/cloud/attach',
+        { id: 'review', pinned_host_key: identity.public_key, verified: true },
+      ],
+      ['workspaces/ssh/check', { workspace_id: 'review' }],
+    ])
+  }
+)
+
 it('creates only after separate billing consent with the reviewed quote and explicit SSH sources', async () => {
   const initial = { ...review(), confirmed: true }
   const creation = deferred<CloudReview>()
