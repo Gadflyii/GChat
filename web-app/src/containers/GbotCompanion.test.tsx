@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
 import GbotCompanion from './GbotCompanion'
 import GbotAvatars from '@/components/GbotAvatars'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
@@ -19,6 +20,7 @@ import type { MediaSessionOptions } from '@/vendor/cua-media/mediaSession'
 
 const mocks = vi.hoisted(() => ({
   call: vi.fn(),
+  getTarget: vi.fn(),
   listen: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
@@ -46,7 +48,7 @@ vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }))
 vi.mock('@/services/gbot', async (original) => ({
   ...(await original<object>()),
   gbot: mocks.call,
-  getGbotServiceTarget: () => Promise.resolve({ kind: 'local' }),
+  getGbotServiceTarget: mocks.getTarget,
 }))
 vi.mock('@/vendor/cua-media/mediaSession', () => ({
   MediaSession: class {
@@ -66,6 +68,7 @@ let tasks: Task[]
 const events = new Map<string, () => void>()
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.getTarget.mockResolvedValue({ kind: 'local' })
   mocks.resources.ready = true
   mocks.resources.error = ''
   useGbotCompanion.getState().reset()
@@ -1270,6 +1273,131 @@ it('closes a late desktop ticket after hiding and never starts its media session
     'Main draft'
   )
 })
+
+it.each([
+  ['Take over', 'control/take-over', 'Could not take over this desktop. Try again.'],
+  ['Hand back', 'control/hand-back', 'Could not hand back control. Try again.'],
+] as const)(
+  'keeps a failed desktop control %s inline and retries its companion session',
+  async (action, path, message) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      const identity = snapshot.live_sessions[0]
+      snapshot.live_sessions.push({ workspace_id: 'b', session_id: 'sb' })
+      let human = action === 'Hand back'
+      let fail!: (cause: Error) => void
+      let finish!: () => void
+      const change = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => {
+          fail = reject
+        }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          finish = resolve
+        }))
+      const fallback = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementation((request: string, body?: unknown) => {
+        if (request === 'state') return Promise.resolve({
+          ...snapshot,
+          controls: [{
+            identity: snapshot.live_sessions[0],
+            state: human ? 'human' : 'bot',
+            owner: human ? sessionStorage.getItem('gbot-control-owner') : null,
+          }],
+        })
+        if (request === path) {
+          if (action === 'Hand back') expect(mocks.stop).toHaveBeenCalled()
+          return change(body)
+        }
+        if (request === 'view/open') return Promise.resolve({
+          lease_id: 'control-lease',
+          ws_url: 'ws://127.0.0.1/mock',
+          media_session_id: 'control-media',
+          interactive: (body as { interactive: boolean }).interactive,
+        })
+        return fallback(request, body)
+      })
+      await mount()
+      fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+      fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+      await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1))
+      const pane = () => within(screen.getByRole('region', { name: 'Bot desktop controls' }))
+      const originalStatus = human ? 'Bot paused · human control' : 'Bot has control'
+      const payload = { identity, owner: sessionStorage.getItem('gbot-control-owner') }
+      const button = pane().getByRole('button', { name: action, exact: true })
+      act(() => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(change).toHaveBeenCalledExactlyOnceWith(payload)
+      expect(button).toBeDisabled()
+      expect(pane().getByText(originalStatus, { exact: true })).toBeVisible()
+      await act(async () => fail(new Error('Desktop control unavailable')))
+      const alert = await pane().findByRole('alert')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText('Desktop control unavailable')).not.toBeVisible()
+      expect(button).toBeEnabled()
+      expect(pane().getByText(originalStatus, { exact: true })).toBeVisible()
+      expect(errorToast).not.toHaveBeenCalled()
+
+      const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+      await act(async () => events.get('gbot-task-update')?.())
+      expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks')).toHaveLength(reads + 1)
+      expect(pane().getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: /Open Bramble/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+      expect(pane().getByRole('alert')).toHaveTextContent(message)
+
+      snapshot.live_sessions[0] = { ...identity, session_id: 'replacement' }
+      await act(async () => events.get('gbot-task-update')?.())
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      snapshot.live_sessions[0] = identity
+      await act(async () => events.get('gbot-task-update')?.())
+      expect(pane().getByRole('alert')).toHaveTextContent(message)
+      mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+      await act(async () => events.get('gbot-task-update')?.())
+      fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      mocks.getTarget.mockResolvedValue({ kind: 'local' })
+      await act(async () => events.get('gbot-task-update')?.())
+      fireEvent.click(screen.getByRole('button', { name: /Open Atlas/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+      expect(pane().getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+
+      if (action === 'Hand back') {
+        fireEvent.click(pane().getByRole('button', { name: 'View bot’s desktop' }))
+        await waitFor(() => expect(mocks.start).toHaveBeenLastCalledWith(
+          expect.objectContaining({ interactive: true })
+        ))
+      }
+      const retry = pane().getByRole('button', { name: action, exact: true })
+      fireEvent.click(retry)
+      expect(change.mock.calls).toEqual([[payload], [payload]])
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      expect(retry).toBeDisabled()
+      expect(pane().getByText(originalStatus, { exact: true })).toBeVisible()
+      human = !human
+      await act(async () => finish())
+      expect(await pane().findByRole('button', {
+        name: action === 'Take over' ? 'Hand back' : 'Take over', exact: true,
+      })).toBeEnabled()
+      expect(pane().getByText(human ? 'Bot paused · human control' : 'Bot has control', { exact: true })).toBeVisible()
+      expect(pane().queryByRole('alert')).not.toBeInTheDocument()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request.startsWith('control/') || (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([[path, payload], [path, payload]])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      errorToast.mockRestore()
+    }
+  }
+)
 
 it('updates actual tool activity from service events and stops input before hand back', async () => {
   await mount()

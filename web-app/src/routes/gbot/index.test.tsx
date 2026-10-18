@@ -2355,6 +2355,124 @@ it('sends task-bound human replies and declines, retaining them after reload', a
   expect(screen.queryByLabelText('Your reply')).not.toBeInTheDocument()
 })
 
+it.each([
+  ['Take over', 'control/take-over', 'Could not take over this desktop. Try again.'],
+  ['Hand back', 'control/hand-back', 'Could not hand back control. Try again.'],
+] as const)(
+  'keeps a failed desktop control %s inline and retries its settings session',
+  async (action, path, message) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      const [identity, other] = readyTaskBots()
+      let session = identity
+      let human = action === 'Hand back'
+      let fail!: (cause: string) => void
+      let finish!: () => void
+      const change = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => {
+          fail = reject
+        }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          finish = resolve
+        }))
+      const fallback = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementation(async (request: string, body: Record<string, unknown>) => {
+        if (request === 'state') return {
+          ...await fallback(request, body) as BotState,
+          live_sessions: [session, other],
+          controls: [{
+            identity: session,
+            state: human ? 'human' : 'bot',
+            owner: human ? sessionStorage.getItem('gbot-control-owner') : null,
+          }],
+        }
+        if (request === path) {
+          if (action === 'Hand back') expect(mocks.mediaStop).toHaveBeenCalled()
+          return change(body)
+        }
+        if (request === 'view/open') return {
+          lease_id: 'control-lease',
+          ws_url: 'ws://127.0.0.1/mock',
+          media_session_id: 'control-media',
+          interactive: body.interactive,
+        }
+        return fallback(request, body)
+      })
+      const updates = new Set<() => void>()
+      mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+        if (event === 'gbot-task-update') updates.add(update)
+        return () => updates.delete(update)
+      })
+      render(<Page />)
+      await screen.findByRole('heading', { name: 'Writer' })
+      fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+      await waitFor(() => expect(mocks.mediaStart).toHaveBeenCalled())
+      const originalStatus = human ? 'Bot paused · you have control' : 'Connected'
+      const payload = { identity, owner: sessionStorage.getItem('gbot-control-owner') }
+      const button = screen.getByRole('button', { name: action, exact: true })
+      act(() => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(change).toHaveBeenCalledExactlyOnceWith(payload)
+      expect(button).toBeDisabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      await act(async () => fail('Desktop control unavailable'))
+      const alert = await screen.findByRole('alert')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText('Desktop control unavailable')).not.toBeVisible()
+      expect(button).toBeEnabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      expect(errorToast).not.toHaveBeenCalled()
+
+      const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+      await act(async () => updates.forEach((update) => update()))
+      expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks').length).toBeGreaterThan(reads)
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      session = { ...identity, session_id: 'replacement' }
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      session = identity
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      mocks.getTarget.mockResolvedValue({ kind: 'local' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+
+      const retry = screen.getByRole('button', { name: action, exact: true })
+      fireEvent.click(retry)
+      expect(change.mock.calls).toEqual([[payload], [payload]])
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(retry).toBeDisabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      human = !human
+      await act(async () => finish())
+      expect(await screen.findByRole('button', {
+        name: action === 'Take over' ? 'Hand back' : 'Take over', exact: true,
+      })).toBeEnabled()
+      expect(screen.getByText(human ? 'Bot paused · you have control' : 'Connected', { exact: true })).toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request.startsWith('control/') || (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([[path, payload], [path, payload]])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      errorToast.mockRestore()
+    }
+  }
+)
+
 it('opens view-only and closes interactive input before handing back to the bot', async () => {
   const identity = { workspace_id: 'one', session_id: 'session' }
   let human = false
