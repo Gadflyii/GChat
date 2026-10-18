@@ -28,7 +28,7 @@ export async function deleteLocalModel(
   useModelProvider.getState().deleteModel(modelId)
 
   try {
-    await refreshModelProviders(serviceHub, modelId)
+    await refreshModelProviders(serviceHub)
     return null
   } catch (error) {
     return error instanceof Error ? error.message : String(error)
@@ -37,14 +37,9 @@ export async function deleteLocalModel(
 
 /** Read inventory without repeating deletion or rediscovering/adopting files. */
 export async function refreshModelProviders(
-  serviceHub: ServiceHub,
-  deletedModelId: string
+  serviceHub: ServiceHub
 ): Promise<void> {
+  const revision = useModelProvider.getState().inventoryRevision
   const providers = await serviceHub.providers().getProviders()
-  useModelProvider.getState().setProviders(
-    providers.map((entry) => ({
-      ...entry,
-      models: entry.models.filter((model) => model.id !== deletedModelId),
-    }))
-  )
+  useModelProvider.getState().setProviders(providers, revision)
 }

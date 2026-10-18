@@ -97,8 +97,8 @@ instances, insufficient/unknown context, deferred Save and retry. ONE
 `make verify`, with failed/unreached targets resumed after visible-outcome
 assertions corrected the test-quality failure, passes: 3818 app, 127 extension
 and 1318 Rust tests; six app skips and 28 Rust ignores. Normal Release desktop,
-CLI and Host builds pass. Source is `fix/c3-hermes-ready-host-20261018`, based
-on main `af8d1b4dc`; desktop SHA256 is
+CLI and Host builds pass. Source fix `9ad8796ba`, based on main `af8d1b4dc`,
+merged as `e5d0f3c38`; desktop SHA256 is
 `8fc19e3f3f3c55cb288a073ffa92f820959847b8ddd251cac81793ef09cf6120`.
 
 The candidate used the retained extracted release DEB's normal installed paths
@@ -115,14 +115,14 @@ Small receipts, transcript and viewed screenshots:
 (`current-result.json`, `candidate-session-transcript.json`); build/verification:
 `out/c3-hermes-ready-host-20261018/`. The owned 11 GiB native fixture
 `/media/ron/SSD_RAID/ai/tmp-c3-hermes-native-20261018` and 59 GiB candidate build
-`/media/ron/SSD_RAID/ai/tmp-c3-hermes-ready-host-20261018` are retained only
-until merge, then removed. The accepted DEB/AppImage under
+`/media/ron/SSD_RAID/ai/tmp-c3-hermes-ready-host-20261018` and their stopped
+containers were removed after merge at 22:18Z. The accepted DEB/AppImage under
 `tmp-c3-linux-rc-20261018/packages/` remain protected.
 
 Windows, Hermes compaction/restart/crash recovery and a full 262144-token input
-remain outside this leaf. OI-068 stays PARTIAL. Next: merge the verified fix,
-retire its disposable fixture/build and coordinate the remaining Windows leaf;
-do not repeat this passing Linux gate.
+remain outside this leaf. OI-068 stays PARTIAL. Next: recover the supported
+Hermes compaction/session-resume prerequisite with Gchat 1 and coordinate the
+remaining Windows leaf; do not repeat this passing Linux gate.
 
 ## Try in chat skill catalog failures — October 18
 
