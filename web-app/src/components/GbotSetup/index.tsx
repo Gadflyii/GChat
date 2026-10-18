@@ -97,6 +97,11 @@ export default function GbotSetup({
   const [error, setError] = useState('')
   const [lanReady, setLanReady] = useState(false)
   const [connecting, setConnecting] = useState(false)
+  const connectionPending = useRef(false)
+  const changeConnecting = useCallback((value: boolean) => {
+    connectionPending.current = value
+    setConnecting(value)
+  }, [])
   const [service, setService] = useState<ServiceTarget>({ kind: 'local' })
   const [serviceReady, setServiceReady] = useState(false)
   const serviceChoiceVersion = useRef(0)
@@ -168,7 +173,13 @@ export default function GbotSetup({
       ? 'Add the public key to the bot computer, then choose Check SSH access and Check tools. Continue turns on when the tools are installed.'
       : ''
   const submit = async () => {
-    if (submissionPending.current || saving || connecting || !canContinue)
+    if (
+      submissionPending.current ||
+      connectionPending.current ||
+      saving ||
+      connecting ||
+      !canContinue
+    )
       return
     if (step === 1) {
       submissionPending.current = true
@@ -302,6 +313,7 @@ export default function GbotSetup({
           name={connection.name}
           initialId={resume?.id}
           connected={localReady}
+          busy={changeConnecting}
         />
       )}
       {step === 3 && computer === 'lan' && (
@@ -309,7 +321,7 @@ export default function GbotSetup({
           connection={connection}
           change={setConnection}
           ready={setLanReady}
-          busy={setConnecting}
+          busy={changeConnecting}
         />
       )}
       {step === 3 && computer === 'cloud' && (
@@ -319,7 +331,7 @@ export default function GbotSetup({
           connection={connection}
           change={setConnection}
           ready={setLanReady}
-          busy={setConnecting}
+          busy={changeConnecting}
           reviewed={cloudReviewed}
           connected={localReady}
         />
@@ -328,7 +340,7 @@ export default function GbotSetup({
         <M365Setup
           name={connection.name}
           initial={resume?.m365}
-          busy={setConnecting}
+          busy={changeConnecting}
           saved={m365Saved}
         />
       )}
@@ -430,6 +442,7 @@ export default function GbotSetup({
             variant="outline"
             disabled={saving || connecting}
             onClick={() => {
+              if (submissionPending.current || connectionPending.current) return
               setError('')
               setStep(step - 1)
             }}
@@ -441,7 +454,10 @@ export default function GbotSetup({
           type="button"
           variant="ghost"
           disabled={saving || connecting}
-          onClick={cancel}
+          onClick={() => {
+            if (submissionPending.current || connectionPending.current) return
+            cancel()
+          }}
         >
           {connection.workspaceId || (step === 3 && computer === 'm365')
             ? 'Finish later'
