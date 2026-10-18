@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { spyConfirm } from '@/test/confirm'
 import {
   act,
@@ -121,14 +122,14 @@ it.each([
     expect(gbotControlGrant).toHaveBeenLastCalledWith('online', action)
     expect(screen.getByRole('status')).toHaveTextContent(progress)
     expect(screen.getByRole('button', { name: pendingLabel })).toBeDisabled()
-    expect(screen.getByRole('combobox')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Paired service computer' })).toBeDisabled()
     await act(async () =>
       pending.reject(new Error('Service computer unavailable'))
     )
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Service computer unavailable'
     )
-    expect(screen.getByRole('combobox')).toHaveValue('online')
+    expect(screen.getByRole('button', { name: 'Paired service computer' })).toHaveTextContent('Service PC')
     expect(change).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: label }))
     await screen.findByText('Gbot control approved for this device.')
@@ -242,12 +243,11 @@ it('requires approved and configured service control before continuing', async (
     { kind: 'paired_host', host_id: 'online' },
     false
   )
-  expect(
-    screen.getByRole('option', { name: 'Offline PC · Offline' })
-  ).toBeDisabled()
-  expect(
-    screen.queryByRole('option', { name: 'This PC' })
-  ).not.toBeInTheDocument()
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: 'Paired service computer' }))
+  expect(screen.getByRole('menuitemradio', { name: 'Offline PC · Offline' })).toHaveAttribute('aria-disabled', 'true')
+  expect(screen.queryByRole('menuitemradio', { name: 'This PC' })).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
   vi.mocked(gbotControlGrant).mockResolvedValue({
     status: 'pending',
     service_configured: true,

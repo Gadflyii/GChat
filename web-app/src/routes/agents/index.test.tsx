@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -981,10 +982,11 @@ describe('AgentStudioPage', () => {
     render(<AgentStudioPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
 
-    const selector = await screen.findByLabelText('Default model instance')
-    fireEvent.change(selector, { target: { value: 'muse' } })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Default model instance' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'muse · port 8124' }))
 
-    expect(screen.getByLabelText('Default model instance')).toHaveValue('muse')
+    expect(screen.getByRole('button', { name: 'Default model instance' })).toHaveTextContent('muse · port 8124')
   })
 
   it('preserves and saves the default goal when changing composition', async () => {
@@ -994,8 +996,11 @@ describe('AgentStudioPage', () => {
     fireEvent.change(await screen.findByLabelText('Default goal'), {
       target: { value: 'Run existing performance tests and report timings.' },
     })
-    fireEvent.change(screen.getByLabelText('Write, edit, or delete files'), { target: { value: 'deny' } })
-    fireEvent.change(screen.getByLabelText('Run shell commands'), { target: { value: 'ask' } })
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Write, edit, or delete files' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Block' }))
+    await user.click(screen.getByRole('button', { name: 'Run shell commands' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Ask every time' }))
     fireEvent.click(screen.getByRole('button', { name: /Goal Loop/i }))
     expect(screen.getByLabelText('Default goal')).toHaveValue('Run existing performance tests and report timings.')
     fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
@@ -1004,24 +1009,68 @@ describe('AgentStudioPage', () => {
     ))
   })
 
-  it('offers every GInfer reasoning effort', async () => {
+  it('saves a new coordinator with valid default parallelism and allows more specialists', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: /Coordinator Team/i }))
+
+    expect(screen.getByLabelText('Maximum parallel workers')).toHaveValue(1)
+    expect(screen.getAllByLabelText('Specialist ID')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledOnce())
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        kind: 'coordinator',
+        maxParallel: 1,
+        workers: [expect.objectContaining({ id: 'researcher' })],
+      })
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Add specialist' }))
+    fireEvent.change(screen.getByLabelText('Maximum parallel workers'), {
+      target: { value: '2' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledTimes(2))
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        maxParallel: 2,
+        workers: [
+          expect.objectContaining({ id: 'researcher' }),
+          expect.objectContaining({ id: 'specialist-2' }),
+        ],
+      })
+    )
+  })
+
+  it.each([
+    ['Off', 'none'], ['Minimal', 'minimal'], ['Low', 'low'], ['Medium', 'medium'],
+    ['High', 'high'], ['Extra high', 'xhigh'], ['Maximum', 'max'], ['Model default', null],
+  ] as const)('offers every GInfer reasoning effort and saves %s', async (label, value) => {
+    definitionState.value.createDraft.mockResolvedValue({
+      ...editableDraft,
+      reasoningEffort: value === null ? 'max' : null,
+    })
+    definitionState.value.save.mockImplementation(async (definition) => definition)
     render(<AgentStudioPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
 
-    const selector = await screen.findByLabelText('Default reasoning effort')
-    const values = Array.from(selector.querySelectorAll('option')).map(
-      (option) => option.value
-    )
-    expect(values).toEqual([
-      '',
-      'none',
-      'minimal',
-      'low',
-      'medium',
-      'high',
-      'xhigh',
-      'max',
+    const user = userEvent.setup()
+    const selector = await screen.findByRole('button', { name: 'Default reasoning effort' })
+    await user.click(selector)
+    expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
+      'Model default', 'Off', 'Minimal', 'Low', 'Medium', 'High', 'Extra high', 'Maximum',
     ])
+    await user.click(screen.getByRole('menuitemradio', { name: label }))
+    expect(selector).toHaveTextContent(label)
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ reasoningEffort: value })
+    ))
   })
 
   it.each([
@@ -1121,17 +1170,14 @@ describe('AgentStudioPage', () => {
     render(<AgentStudioPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
 
-    fireEvent.change(await screen.findByLabelText('Synthesizer model instance'), {
-      target: { value: 'muse' },
-    })
-    fireEvent.change(screen.getByLabelText('Model instance'), {
-      target: { value: 'qwen' },
-    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Synthesizer model instance' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'muse · port 8124' }))
+    await user.click(screen.getByRole('button', { name: 'Model instance' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'qwen · port 8123' }))
 
-    expect(screen.getByLabelText('Synthesizer model instance')).toHaveValue(
-      'muse'
-    )
-    expect(screen.getByLabelText('Model instance')).toHaveValue('qwen')
+    expect(screen.getByRole('button', { name: 'Synthesizer model instance' })).toHaveTextContent('muse · port 8124')
+    expect(screen.getByRole('button', { name: 'Model instance' })).toHaveTextContent('qwen · port 8123')
   })
   it('ties every editor field label to its control', async () => {
     render(<AgentStudioPage />)

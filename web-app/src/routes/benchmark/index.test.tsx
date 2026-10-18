@@ -1,4 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { spyConfirm } from '@/test/confirm'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
@@ -85,17 +86,23 @@ beforeEach(() => {
 })
 
 it('keeps saved results visible without an online server', async () => {
+  const user = userEvent.setup()
   mocks.list.mockResolvedValue([])
-  useBenchmarkStore.setState({ runs: [{ benchmark_id: 'custom', hardware: null, methodology: 'ginfer-resident-max-perf-v1', run_id: 'saved', started_at_ms: 1, completed_at_ms: 1001, points: [],
+  const savedRun: BenchmarkResult = { benchmark_id: 'custom', hardware: null, methodology: 'ginfer-resident-max-perf-v1', run_id: 'saved', started_at_ms: 1, completed_at_ms: 1001, points: [],
     session: { display_name: 'Saved Muse run', pid: null, target_id: 'ginfer/local/instance', session_id: 'session',
       model_id: 'model', model_path: '/model.ginfer', max_context: 8192, max_concurrency: 1, vision: true,
       spec: 'auto', draft_tokens: 0, draft_tp: 0, kv_dtype: 'int8', prefill_chunk: 0, cuda_graph: true },
-  }], selectedRunId: 'saved' })
+  }
+  useBenchmarkStore.setState({ runs: [savedRun, { ...savedRun, run_id: 'other', session: { ...savedRun.session, display_name: 'Other saved run' } }], selectedRunId: 'saved' })
   render(<Page />)
   await screen.findByText('Load a model to benchmark it')
   expect(screen.getByRole('img', { name: 'Prompt and generation throughput by concurrency' })).toBeInTheDocument()
   expect(screen.getByText('Saved Muse run')).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'Benchmark result' }))
+  await user.click(screen.getByRole('menuitemradio', { name: /^Other saved run/ }))
+  expect(useBenchmarkStore.getState().selectedRunId).toBe('other')
+  expect(screen.getByText('Other saved run')).toBeInTheDocument()
 })
 it('explains what a benchmark measures without engine internals', async () => {
   render(<Page />)
@@ -193,7 +200,7 @@ it('keeps receipt-owned public removal available after deleting the last local r
 it('offers the new workloads and every supported concurrency outside Standard Benchmark', async () => {
   mocks.list.mockResolvedValue([{ target_id: 'ginfer/local/instance', model_id: 'model', max_concurrency: 8, max_context: 131072, pid: null, is_embedding: false }])
   render(<Page />)
-  await screen.findByRole('option', { name: /Current settings/ })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Saved model settings' })).toHaveTextContent('Current settings'))
   fireEvent.click(screen.getByRole('button', { name: /^Standard Benchmark/ }))
   expect(screen.getByRole('button', { name: 'C8', exact: true })).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'C3', exact: true })).not.toBeInTheDocument()
@@ -212,24 +219,25 @@ it('offers the new workloads and every supported concurrency outside Standard Be
 })
 
 it('defaults to the running local model, excludes unavailable targets and benchmarks the selected remote instance', async () => {
+  const user = userEvent.setup()
   render(<Page />)
-  await waitFor(() => expect(screen.getByLabelText('Host / Instance')).toHaveValue('ginfer/local/instance'))
-  const selector = screen.getByLabelText('Host / Instance')
-  expect(screen.queryByRole('option', { name: 'offline' })).not.toBeInTheDocument()
-  expect(screen.getByLabelText('Saved model settings')).toHaveValue('')
-  expect(screen.getByRole('option', { name: /Current settings · 1 replies at once/ })).toBeInTheDocument()
-  fireEvent.change(selector, { target: { value: 'ginfer/remote/instance' } })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Host / Instance' })).toHaveTextContent(/^This computer ·/))
+  expect(screen.getByRole('button', { name: 'Saved model settings' })).toHaveTextContent('Current settings · 1 replies at once')
+  await user.click(screen.getByRole('button', { name: 'Host / Instance' }))
+  expect(screen.queryByRole('menuitemradio', { name: 'offline' })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('menuitemradio', { name: /^Server 2 ·/ }))
   fireEvent.click(screen.getByRole('button', { name: /^Serving/ }))
   fireEvent.click(screen.getByRole('button', { name: /Run benchmark/ }))
   await waitFor(() => expect(mocks.run).toHaveBeenCalledWith(expect.anything(), 'ginfer/remote/instance'))
 })
 
 it('blocks benchmarking for pending changes and confirms before restarting the selected server', async () => {
+  const user = userEvent.setup()
   render(<Page />)
-  await screen.findByRole('option', { name: /Current settings · 1 replies at once/ })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Saved model settings' })).toHaveTextContent('Current settings · 1 replies at once'))
   fireEvent.click(screen.getByRole('button', { name: /^Serving/ }))
-  const option = screen.getByRole('option', { name: /Full conversations tested · 4 replies at once · 4K tokens/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  await user.click(screen.getByRole('menuitemradio', { name: /Full conversations tested · 4 replies at once · 4K tokens/ }))
   expect(screen.getByRole('alert')).toHaveTextContent('stops the current model and starts it again')
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
   const confirm = spyConfirm().mockReturnValue(false)
@@ -243,7 +251,7 @@ it('blocks benchmarking for pending changes and confirms before restarting the s
 
 it('refuses a mismatched Standard session and pins the Max Perf session and all three points', async () => {
   const first = render(<Page />)
-  await screen.findByRole('option', { name: /Current settings · 1 replies at once/ })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Saved model settings' })).toHaveTextContent('Current settings · 1 replies at once'))
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: /Run benchmark/ }))
   expect(mocks.run).not.toHaveBeenCalled()

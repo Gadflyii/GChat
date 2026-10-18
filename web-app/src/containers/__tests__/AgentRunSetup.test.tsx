@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentRunSetup } from '../AgentRunSetup'
 import { useStudioRuns } from '@/stores/studio-run-store'
@@ -251,6 +252,7 @@ describe('Agent Studio run setup', () => {
   })
 
   it('submits explicit client fleet placement without a current model or changing saved defaults', async () => {
+    const user = userEvent.setup()
     mocks.current = ''
     render(
       <AgentRunSetup
@@ -259,16 +261,17 @@ describe('Agent Studio run setup', () => {
         onRun={vi.fn()}
       />
     )
-    await screen.findAllByRole('option', {
-      name: 'Use client fleet assignment',
-    })
     fireEvent.change(screen.getByLabelText('Task or goal'), {
       target: { value: 'Use the assigned fleet workers' },
     })
-    for (const name of ['Executor assignment', 'Evaluator assignment'])
-      fireEvent.change(screen.getByLabelText(name), {
-        target: { value: 'fleet' },
+    for (const name of ['Executor assignment', 'Evaluator assignment']) {
+      await user.click(screen.getByRole('button', { name }))
+      const fleet = await screen.findByRole('menuitemradio', {
+        name: 'Use client fleet assignment',
       })
+      await waitFor(() => expect(fleet).not.toHaveAttribute('aria-disabled', 'true'))
+      await user.click(fleet)
+    }
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Run', exact: true })
@@ -283,6 +286,7 @@ describe('Agent Studio run setup', () => {
     expect(mocks.save).not.toHaveBeenCalled()
   })
   it('keeps Current usable when the fleet coordinator is offline and blocks an explicit pooled role', async () => {
+    const user = userEvent.setup()
     mocks.catalog.fleet.connected = false
     render(
       <AgentRunSetup
@@ -299,18 +303,17 @@ describe('Agent Studio run setup', () => {
         screen.getByRole('button', { name: 'Run', exact: true })
       ).toBeEnabled()
     )
-    fireEvent.change(screen.getByLabelText('Executor assignment'), {
-      target: { value: 'pool:coding' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Executor assignment' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Use client fleet assignment' })).toHaveAttribute('aria-disabled', 'true')
+    await user.click(screen.getByRole('menuitemradio', { name: 'Coding workers · 1 members' }))
     expect(
       screen.getByRole('button', { name: 'Run', exact: true })
     ).toBeDisabled()
     expect(
       screen.getByText(/Connect before starting pooled work/)
     ).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Executor assignment'), {
-      target: { value: 'current' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Executor assignment' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Current model · local' }))
     expect(
       screen.getByRole('button', { name: 'Run', exact: true })
     ).toBeEnabled()
@@ -356,23 +359,21 @@ describe('Agent Studio run setup', () => {
   })
 
   it('assigns a pool to a Vision role and a fixed evaluator without mutating the definition', async () => {
+    const user = userEvent.setup()
     const onRun = vi.fn()
     render(
       <AgentRunSetup definition={definition} onClose={vi.fn()} onRun={onRun} />
     )
-    await screen.findAllByRole('option', { name: 'Coding workers · 1 members' })
     fireEvent.change(screen.getByLabelText('Task or goal'), {
       target: { value: 'Inspect the image files in the workspace' },
     })
-    fireEvent.change(screen.getByLabelText('Executor assignment'), {
-      target: { value: 'pool:coding' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Executor assignment' }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Coding workers · 1 members' }))
     fireEvent.click(
       screen.getAllByRole('checkbox', { name: 'Requires Vision' })[0]
     )
-    fireEvent.change(screen.getByLabelText('Evaluator assignment'), {
-      target: { value: 'instance:local' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Evaluator assignment' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Muse · C4 · Vision' }))
     await waitFor(() =>
       expect(
         screen.getByRole('button', { name: 'Run', exact: true })

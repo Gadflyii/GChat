@@ -4,6 +4,7 @@ import { useStudioCatalog } from '@/hooks/useStudioCatalog'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { studioCommand } from '@/services/agent/studio'
 import type { AgentWorkerPool } from '@/types/agent'
 
@@ -123,23 +124,17 @@ export function AgentWorkerPools() {
         <div className="flex flex-wrap items-center gap-3">
           <label>
             Fleet coordinator{' '}
-            <select
+            <ChoiceSelect
               aria-label="Fleet coordinator"
               disabled={busy}
               value={coordinator}
-              onChange={(event) => {
-                setCoordinator(event.target.value)
+              onValueChange={(value) => {
+                setCoordinator(value)
                 setCoordinatorAddress('')
               }}
               className="rounded border bg-background p-2"
-            >
-              <option value="">Choose a paired host</option>
-              {catalog.fleetHosts.map((host) => (
-                <option key={host.id} value={host.id}>
-                  {host.name}
-                </option>
-              ))}
-            </select>
+              options={[{ value: '', label: 'Choose a paired host' }, ...catalog.fleetHosts.map(host => ({ value: host.id, label: host.name }))]}
+            />
           </label>
           {needsCoordinatorAddress && (
             <label className="text-sm">

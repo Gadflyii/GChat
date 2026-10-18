@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import {
   act,
   cleanup,
@@ -231,15 +232,14 @@ it('creates an explicit interval prompt and missed-run policy for the selected b
   fireEvent.change(screen.getByLabelText('Schedule start time'), {
     target: { value: '2030-01-02T09:00' },
   })
-  fireEvent.change(screen.getByLabelText('Schedule repetition'), {
-    target: { value: 'interval' },
-  })
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: 'Schedule repetition' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'At an interval' }))
   fireEvent.change(screen.getByLabelText('Schedule interval in seconds'), {
     target: { value: '86400' },
   })
-  fireEvent.change(screen.getByLabelText('Missed run policy'), {
-    target: { value: 'skip_missed' },
-  })
+  await user.click(screen.getByRole('button', { name: 'Missed run policy' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Skip missed occurrences' }))
   const form = screen.getByRole('form', { name: 'Schedule a bot task' })
   act(() => {
     fireEvent.submit(form)
