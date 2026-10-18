@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { ChoiceSelect } from '@/components/ui/choice-select'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
@@ -28,14 +28,39 @@ export default function ServiceSetup({
     target.kind === 'paired_host' && !!target.host_id
   )
   const [error, setError] = useState('')
+  const [computerListError, setComputerListError] = useState('')
+  const [refreshingComputers, setRefreshingComputers] = useState(false)
+  const computerListPending = useRef(false)
+  const mounted = useRef(false)
   const requestVersion = useRef(0)
   const activeRequest = useRef<number | null>(null)
   const busy = pendingAction !== null
   const hostId = target.kind === 'paired_host' ? target.host_id : ''
   const remote = hosts.filter((host) => !host.local)
-  useEffect(() => {
-    void refresh().catch((cause) => setError(String(cause)))
+  const refreshComputers = useCallback(async () => {
+    if (computerListPending.current) return
+    computerListPending.current = true
+    setRefreshingComputers(true)
+    setComputerListError('')
+    try {
+      await refresh()
+    } catch (cause) {
+      if (mounted.current)
+        setComputerListError(
+          cause instanceof Error ? cause.message : String(cause)
+        )
+    } finally {
+      computerListPending.current = false
+      if (mounted.current) setRefreshingComputers(false)
+    }
   }, [refresh])
+  useEffect(() => {
+    mounted.current = true
+    void refreshComputers()
+    return () => {
+      mounted.current = false
+    }
+  }, [refreshComputers])
   useEffect(() => {
     const version = ++requestVersion.current
     setGrant(undefined)
@@ -158,6 +183,25 @@ export default function ServiceSetup({
             service. Return here and choose it from the list. You will see that
             computer's bots; existing bots stay on their original service.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={refreshingComputers}
+            onClick={() => void refreshComputers()}
+          >
+            {refreshingComputers ? 'Refreshing computers…' : 'Refresh computers'}
+          </Button>
+          {computerListError && (
+            <div role="alert" className="space-y-1 text-sm text-destructive">
+              <p>
+                Could not load paired computers. Try Refresh computers again.
+              </p>
+              <details>
+                <summary>Details</summary>
+                <p className="break-words">{computerListError}</p>
+              </details>
+            </div>
+          )}
           {hostId && (
             <>
               <p role="status" className="text-sm">

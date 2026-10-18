@@ -1,5 +1,24 @@
 # Gbot design
 
+## Service computer lists can be refreshed without repeating approval — Gchat 2
+
+`GBOT-SERVICE-COMPUTER-LIST-RETRY`, based on main `f414a35bc`, fixes
+an empty paired-computer picker with no recovery after its initial read fails.
+A late list failure could also replace an unrelated control-approval error.
+
+The service setup step now offers **Refresh computers**, with pending feedback
+and a synchronous duplicate guard. List errors have plain recovery guidance
+and closed diagnostic Details. Refresh preserves the selected computer and
+approval error; it reads the computer list without repeating a control request.
+
+Deferred rendered regressions cover an empty-list failure, repeated clicks,
+another read failure, recovery with a selectable computer, and a late list
+failure after rejected approval. Only an explicit approval retry requests
+access again. Baseline, focused tests and full `make verify` are pending cache
+handoff. Evidence will be recorded in
+`out/gchat2-service-computer-list-retry-20261018/result.json`.
+FRESH and OLD remain untouched; no native Windows or live grant is qualified.
+
 ## Task controls discard errors after confirmed progress — Gchat 2
 
 `GBOT-TASK-ACTION-ERROR-RECONCILIATION`, based on main `d67e8fdb2`,
