@@ -17,7 +17,12 @@ installed configuration cannot be overridden with `--runtime-set`. Existing
 registrations retain their current owner. Engine source and accepted Engine
 runtime `e2282c336` are unchanged. The
 [decision record](../decisions/2026-10-18-declare-installed-launcher-runtime-ownership.md)
-describes the contract; Arch startup-path sign-off is pending.
+describes the contract. Arch conditionally signed `576449a5c` at 04:35:34Z and
+accepted the supported fresh-install/desktop-repair scope at 04:37:07Z. The
+shared configuration reader now supplies actionable reinstall guidance for an
+old document missing `runtime_set`, and preparation uses that same reader.
+Standalone installers intentionally reject existing destinations; no overwrite
+upgrade was added. The desktop install/repair writer atomically rewrites `true`.
 
 Acceptance is focused installed-launcher/setup regressions, one full verification,
 a refreshed archive containing the current Host/setup and accepted runtime, and
@@ -41,10 +46,21 @@ previously unexecuted Rust suite passed at **04:32:42Z** (1,223 tests passed,
 28 ignored), and the release Host build passed at **04:34:12Z**. No full
 `make verify` or passed focused, lint, type or contract stage was repeated. Keep
 the generated core entry as a checked prerequisite for archived-source gates.
-Packaging started immediately after release. The final package will use the exact
-`docs/lan-host-setup.md` from the separate Python-command correction `65df08dda`;
-that guide is an explicit packaging input, not a launcher-source change. Reuse
-the release binary and repeat packaging only to incorporate that correction.
+The first package and the subsequent whole-guide replacement package completed
+at 04:35:25Z and 04:36:44Z. Both are intermediate: the latter replaced the new
+runtime-ownership paragraph with an older guide. Booking 2980 was canceled at
+04:38Z after all jobs were terminal. The two new shared-reader and preparation
+regressions each executed one case and passed; affected Host check and clippy
+also passed. The incremental release build and packaging are running under
+booking 2985 (CPUs 120–127, 04:39–04:54Z), recovery PID 2761081. No full verification or previously
+passing suite is repeated. The first follow-up overlay retained epoch mtimes, so Cargo
+reused cached test binaries and both new exact filters matched zero tests. That
+container was stopped; its receipts are invalid. The recovery advances the two
+changed source mtimes and requires each exact test name plus a one-test PASS
+before continuing. This prevents stale-cache and zero-test results from being
+accepted. The final packaging guide combines this branch's
+runtime-ownership text with only the Python command/prerequisite change from
+`65df08dda`; both source inputs are recorded. It must retain both fixes.
 Next: finish the archive and replay the private installation through GPU intent,
 storage and the actual published catalog. Empty/unavailable catalogs must remain
 reported as such. Calibration/Ready wait for Arch startup-path sign-off and a
@@ -54,7 +70,7 @@ real eligible measurements.
 | Owner / host | Path | State / retention |
 | --- | --- | --- |
 | Codex 4 / local | `/ai/gchat-worktrees/c4-standalone-launcher-20261018` | Frozen launcher source, current authority and `out/c4-standalone-launcher-20261018/command.json` |
-| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | Recovery PID 2648729, CPUs 120–127 through 04:46Z; focused, recovered coverage, Rust and release PASS, packaging active. Original invalid gate and per-stage receipts retained; no Engine build |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | Recovery PID 2648729 terminal PASS; both intermediate packages terminal. CPUs 120–127 returned at 04:38Z. Follow-up exact two regressions/check/clippy PASS; recovery PID 2761081 release/package active, CPUs 120–127 booked 04:39–04:54Z. Original invalid gate and per-stage receipts retained; no Engine build |
 | Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018` | Retained failed private install, original archive and owned release cache until fix acceptance; no live job |
 
 ## Windows RC refresh — release installer delivered, October 18

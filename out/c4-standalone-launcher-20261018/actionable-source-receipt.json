@@ -1,0 +1,9 @@
+{
+  "source_base": "576449a5cf168eabbf7269a63db9a517d73cdd1a",
+  "working_patch_sha256": "096852e45aba1259c5f23451f7ea9f0ead69fc2c16b70dfced88ebde9281d243",
+  "guide_base": "576449a5cf168eabbf7269a63db9a517d73cdd1a",
+  "guide_python_diff_commit": "65df08dda152089801bfb4eeb76d2a9578da53af",
+  "combined_guide_sha256": "f41aee785c2d14c9f9a13ce7e09b0ff404ee7e1e159413fb48c7b9272d4d492a",
+  "runtime_source": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
+  "status": "unexecuted"
+}

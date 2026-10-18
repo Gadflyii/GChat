@@ -1,0 +1,63 @@
+{
+  "status": "source focused PASS; incremental release/package and native replay pending",
+  "source_base": "bca080b7166f1f1dbdb70b07a6116e98e2ada6e5",
+  "initial_source_commit": "576449a5cf168eabbf7269a63db9a517d73cdd1a",
+  "engine_source_unchanged": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
+  "host": "ron@192.168.1.109 / AIS-2-8592-L01",
+  "remote_root": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018",
+  "runtime_contract": {
+    "standalone_runtime_set": false,
+    "desktop_runtime_set": true,
+    "missing_field": "strict error with config path and owning setup/reinstall commands; preparation and menu share reader",
+    "standalone_upgrade": "No overwrite/in-place upgrade supported. Choose unused paths.",
+    "desktop_repair": "Existing writer atomically replaces installed configuration."
+  },
+  "arch": {
+    "initial_signed": "2026-10-18T04:35:34Z",
+    "accepted_supported_scope": "2026-10-18T04:37:07Z"
+  },
+  "verification": {
+    "focused_original": "Linux setup, installed launcher, runtime selection and desktop writer PASS; Host clippy PASS",
+    "make_verify_invocations": 1,
+    "original_verify": "Invalid generated-core prerequisite; early lint/types/contracts passed, root tests failed unresolved @gchat/core",
+    "authorized_recovery": "Built existing core; root3344passed/6skipped, extension121passed, coverage floors6files, Rust1223passed/28ignored",
+    "new_actionable_error": {
+      "launcher": {
+        "exit": 0,
+        "ended": "2026-10-18T04:41:02Z"
+      },
+      "preparation": {
+        "exit": 0,
+        "ended": "2026-10-18T04:41:13Z"
+      },
+      "check": {
+        "exit": 0,
+        "ended": "2026-10-18T04:41:19Z"
+      },
+      "clippy": {
+        "exit": 0,
+        "ended": "2026-10-18T04:41:30Z"
+      }
+    },
+    "new_focused_counts": {
+      "launcher": 1,
+      "preparation": 1
+    },
+    "invalid_incremental_attempt": "Epoch overlay mtimes reused stale Cargo binaries; exact filters matched0. Stopped. Fixed changed-source mtimes and enforce exact named-one-test receipts before continuation.",
+    "full_verify_repeated": false
+  },
+  "packaging": {
+    "status": "pending final actionable-error binary",
+    "guide": "Frozen launcher guide plus only Python command/prerequisite diff65df08dda; ownership paragraph preserved",
+    "intermediate_archives": "distribution and distribution-final superseded; retire after validated final archive"
+  },
+  "native": {
+    "status": "unexecuted fresh replay",
+    "gpu_calibration_or_model_started": false
+  },
+  "inventory": {
+    "cpu_booking": "S1 CPU120\u2013127 04:39\u201304:54Z",
+    "job_pid": 2761081,
+    "retention": "Own caches pending final archive/replay; shared donor untouched"
+  }
+}

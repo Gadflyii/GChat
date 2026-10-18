@@ -69,7 +69,7 @@ fn installed_configuration_path() -> Result<std::path::PathBuf, String> {
         .join("ginfer-launch.json"))
 }
 
-fn read_installed_configuration(path: &Path) -> Result<Option<InstalledConfiguration>, String> {
+pub fn read_installed_configuration(path: &Path) -> Result<Option<InstalledConfiguration>, String> {
     let file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -83,7 +83,7 @@ fn read_installed_configuration(path: &Path) -> Result<Option<InstalledConfigura
     let config: InstalledConfiguration = serde_json::from_reader(std::io::BufReader::new(file))
         .map_err(|error| {
             format!(
-                "Invalid installed launcher configuration {}: {error}",
+                "Invalid installed launcher configuration {}: {error}. Recreate it with its owning installer: for a standalone bundle, run python3 setup.py on Linux or setup.cmd on Windows, choosing unused installation and launcher paths. In GChat, uninstall and reinstall the CLI in Settings > General > Advanced. Existing standalone installations are not overwritten.",
                 path.display()
             )
         })?;
@@ -1295,6 +1295,21 @@ mod tests {
         let config = read_installed_configuration(&path).unwrap().unwrap();
         assert_eq!(config.data_dir, root.path());
         assert_eq!(config.host_url, "https://127.0.0.1:17443");
+    }
+
+    #[test]
+    fn old_installed_configuration_requires_actionable_reinstallation() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("ginfer-launch.json");
+        std::fs::write(&path, serde_json::to_vec(&json!({
+            "data_dir":root.path(), "host_url":"https://127.0.0.1:17443",
+            "desktop":{"provider":root.path(), "engine":root.path().join("ginfer-serve")}
+        })).unwrap()).unwrap();
+        let error = read_installed_configuration(&path).err().unwrap();
+        for required in [path.to_str().unwrap(), "missing field `runtime_set`", "python3 setup.py",
+            "setup.cmd", "unused installation and launcher paths", "Settings > General > Advanced"] {
+            assert!(error.contains(required), "missing {required:?} in {error}");
+        }
     }
 
     #[test]

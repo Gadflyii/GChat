@@ -173,9 +173,8 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
     use ginfer_host::hardware_profile::{Configuration, HardwareProfileAction};
     let (directory, provider, origin, configured_engine, configured_runtimes) =
         if let Some(path) = args.installed_configuration {
-            let config: ginfer_host::launcher::InstalledConfiguration =
-                serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
-                    .map_err(|e| e.to_string())?;
+            let config = ginfer_host::launcher::read_installed_configuration(&path)?
+                .ok_or_else(|| format!("Missing installed launcher configuration {}", path.display()))?;
             let desktop = config.desktop;
             let runtimes = desktop.as_ref().map(|d| d.engine_runtimes()).transpose()?;
             (
@@ -743,6 +742,23 @@ fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn installed_preparation_reports_the_shared_reinstallation_guidance() {
+        use clap::Parser;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("ginfer-launch.json");
+        std::fs::write(&path, serde_json::to_vec(&serde_json::json!({
+            "data_dir":root.path(), "host_url":"https://127.0.0.1:17443",
+            "desktop":{"provider":root.path(), "engine":root.path().join("ginfer-serve")}
+        })).unwrap()).unwrap();
+        let args = super::PrepareHardware::try_parse_from([
+            "prepare-hardware", "--engine", "ginfer", "--installed-configuration", path.to_str().unwrap()
+        ]).unwrap();
+        let error = super::prepare_hardware(args).await.unwrap_err();
+        assert_eq!(error, ginfer_host::launcher::read_installed_configuration(&path).err().unwrap());
+        assert!(error.contains("python3 setup.py"));
+    }
+
     #[test]
     fn installed_preparation_owns_runtime_selection() {
         use clap::Parser;

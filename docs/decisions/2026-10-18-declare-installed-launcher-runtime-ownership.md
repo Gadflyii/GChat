@@ -17,8 +17,12 @@ title: "Declare installed launcher runtime ownership"
 - **Consequences:** a single-image install needs no desktop manifest. A desktop
   install still fails on missing, invalid or incomplete manifests. There is no
   missing-manifest fallback or implicit migration: regenerate old launcher
-  configurations with their owning installer. Engine execution is unchanged.
-  Architecture startup-path sign-off and native acceptance are pending.
+  configurations with their owning installer. The shared reader names the setup
+  commands and unused-path requirement, or GChat CLI reinstall, for invalid old
+  configurations; preparation uses this same reader. Standalone setup is
+  fresh-install only, while desktop install rewrites its configuration atomically.
+  Engine execution is unchanged. Architecture accepted this startup contract at
+  04:37:07Z; the actionable-error focused checks passed; native acceptance remains pending.
 - **Owner:** team (Codex 4).
 - **Links:** [current work](../installer-refresh/README.md),
   [installed owner contract](../lan-host-setup.md#shared-local-owner),
