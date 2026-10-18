@@ -78,11 +78,60 @@ ownership check retired the first guest, and its private disk directory was
 removed at 12:14 UTC. The immutable source image remains read-only.
 
 The corrected native service executable rebuilt successfully in 19 seconds
-at 12:21 UTC with all ten adapter source hashes matching. Its copy and a fresh
-native lifecycle attempt wait for the current benchmark slots to return.
-Worker readiness, view/input, stop/start persistence and full lifecycle
-retirement remain open. Receipts:
-`out/gchat2-windows-hyperv-20261018/{native-lifecycle-result.json,native-com-port-shape-fixed-result.json,native-first-retirement.json}`.
+at 12:21 UTC with all ten adapter source hashes matching. The second native
+attempt created and started the guest, then captured its SSH host key through
+the trusted serial channel. Its first SSH transport connection failed before
+Ready. Production retirement passed: the guest registration, private guest
+directory and fixture credential are absent. The source image stays read-only.
+
+The pinned Debian image inventory and shared seed omit `hyperv-daemons`.
+Hyper-V's address discovery depends on guest KVP integration, so the Windows
+seed now installs that package and starts `hv-kvp-daemon.service` before
+publishing readiness. The relay waits up to 20 seconds for the owned guest's
+address and TCP listener, preserving the failure cause. It never retries an
+authenticated guest operation. Native failure evidence now captures a bounded
+serial tail and the endpoint error before retirement. This addresses a concrete
+missing dependency; the live continuation must establish the final outcome.
+See [Microsoft's KVP/IP guidance](https://learn.microsoft.com/en-us/troubleshoot/windows-server/virtualization/get-vmnetworkadapter-doesnt-report-ip-addresses)
+and [Debian's package contents](https://packages.debian.org/trixie/amd64/hyperv-daemons/filelist).
+
+The KVP/relay source `5bb539c7d` passes four focused relay tests, six
+Hyper-V boundary tests, all-target service checking and strict Clippy. ONE
+S1 `make verify`, 12:53:47–12:59:06 UTC, passes 3,537 app tests (6 skipped),
+127 extension tests and 1,301 Rust tests (28 ignored), all six coverage floors,
+lint, type checking and guards. All 3,405 tracked source files match the
+frozen committed bytes after the gate. Booking3292 was returned and canceled;
+the private cache is retained idle. The Windows warm rebuild then passed at
+13:15 UTC, including all four relay tests. All ten adapter source files match
+the committed bytes. The 34,549,248-byte executable has SHA256
+`ba9006819d2548d920252fe63f53e311cf50259a6141cfde95aa0e4d8acf569d`
+and is staged on S1. Local booking1468 was canceled and both guards returned.
+
+The third native run reached Ready: bootstrap, pinned SSH, worker commands and
+files, desktop capture, keyboard input saved to a file, and the view handshake
+pass. Graceful Stop preserved the disk. Start then reached SSH before the
+lingering desktop service became ready and failed its initial session check.
+Production retirement and runtime shutdown passed; no guest registration,
+private guest directory or fixture credential remained. The source VHDX stayed
+read-only.
+
+The initial read-only session hello now waits up to 20 seconds for a stable,
+active desktop service before binding its identity. Command and file operations
+do not wait or replay. A restarted desktop still requires the existing
+pinned-SSH proof and guarded session renewal. The executable regression fails
+with status 69 on the previous script and passes with the fix, including bounded
+failure and immediate refusal of an unready operation. The three existing
+renewal/binding checks, all-target checking and strict Clippy pass. A Windows
+warm rebuild completed at 13:36 UTC; all 13 changed adapter/guest source hashes
+match the receipt. The 34,553,344-byte executable has SHA256
+`ba16ec2b88b54520b5e3b66985dabc50b2ccebb539c2c2d4d02c18d9f454a2bd`.
+The fresh native lifecycle and one full source verification are running.
+
+Receipts are under `out/gchat2-windows-hyperv-20261018/`: the first attempts
+in `native-lifecycle-result.json` and `native-lifecycle-r2-result.json`, KVP
+finding in `native-kvp-finding.json`, third run in
+`native-lifecycle-r3-result.json`, and the current build in
+`native-restart-build-result.json`.
 
 ## Saved human replies keep recovery errors visible — Gchat 2
 
