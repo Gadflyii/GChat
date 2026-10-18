@@ -1007,6 +1007,22 @@ Resume-time `make verify` cannot start lint without this worktree's Yarn
 dependency state; no dependencies were installed and no passing live gate was
 repeated.
 
+## Support link publication check — W12
+
+`GUI-SETTINGS-SUPPORT-LINK-404` is **WAITING ON W12 PUBLICATION**. Ron confirmed
+on October 18 that the GitHub repositories exist but are private, so an
+anonymous 404 is expected until release. Keep the existing single
+`GCHAT_ISSUES_URL` constant pointing to
+`https://github.com/SectileLabs/gchat/issues`; no code change is required.
+
+- [ ] Once the repositories are public, confirm that Issues is enabled on the
+  linked `SectileLabs/gchat` repository and that Settings → Open an issue opens
+  the Issues page successfully.
+
+The release owner performs this check under the W12 publication gate. The
+[original observation and accepted constant extraction](../host-ui/README.md#support-issue-destination--c3-october-18)
+remain recorded; this note does not claim that public access has been verified.
+
 ## SectileLabs updater feed — OI-110
 
 All GChat check/download paths and release asset URLs use the configured feed:

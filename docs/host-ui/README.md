@@ -2253,13 +2253,22 @@ AppDir donor remains in place.
 Docs-only acceptance is recorded; merge is pending.
 ## Support issue destination — C3, October 18
 
-`GUI-SETTINGS-SUPPORT-LINK-404` is **WAITING ON RON** for the supported public
-support destination. The private first-user walk opened Settings → Open an
-issue through the native browser at `https://github.com/SectileLabs/gchat/issues`
-and observed GitHub 404. OI110 designates the repository artifacts-only; no
-replacement public issue URL has been supplied. The browser keyring prompt was
-canceled without secrets, then the private browser received normal TERM.
-Evidence: `out/c3-first-user-setup-20261018/private-browser-after-cancel.png`.
+`GUI-SETTINGS-SUPPORT-LINK-404` is **WAITING ON W12 PUBLICATION**. Ron confirmed
+on October 18 that the GitHub repositories exist but are private; the anonymous
+404 is expected until they become public at release. Keep
+`https://github.com/SectileLabs/gchat/issues` as the support destination, shared
+by the existing `GCHAT_ISSUES_URL` constant. No code change is required.
+
+The [W12 release checklist](../installer-refresh/README.md#support-link-publication-check--w12)
+requires the release owner, once the repositories are public, to confirm that
+Issues is enabled on the linked repository and that Settings → Open an issue
+opens it successfully. This check remains pending; no publication or live-link
+acceptance is claimed.
+
+The private first-user walk opened that URL through the native browser and
+observed GitHub 404. The browser keyring prompt was canceled without secrets,
+then the private browser received normal TERM. Evidence:
+`out/c3-first-user-setup-20261018/private-browser-after-cancel.png`.
 
 The active link now shares one named `GCHAT_ISSUES_URL` constant between its
 `href` and external-opener action. The destination and observable behavior are
@@ -2272,7 +2281,7 @@ for private constant shape. All 26 General cases pass. Lint passes with zero
 errors and five existing warnings. The ONE `make verify` passes 3297 app cases,
 121 extension cases, 1220 native cases and all six coverage floors; six app cases
 are skipped and 28 native cases ignored. No failure, retry or continuation was
-needed. Reuse the existing native 404 evidence; the URL is still unresolved.
+needed. Reuse the existing native 404 evidence; public access awaits W12.
 Results: `out/c3-support-url-constant-20261018/{result.json,summary.md}`.
 
 Owner/source:
@@ -2286,8 +2295,9 @@ source archives are removed. The runnable baseline binary is unchanged; the
 coordinator removed the closed older candidates independently. Source,
 dependencies, native target and caches pass to the next owned GUI gate. No new
 build, model, GPU, browser or dependency-install work. This bounded source change
-is merge-ready for coordinator integration. Next: Ron chooses the supported
-public support destination; do not claim that the 404 is fixed.
+was merged as `78ce5f45f`. Next: the W12 release owner completes the public
+Issues check above. This documentation-only decision passes `git diff --check`;
+no build, test rerun, fixture, browser session or publication was needed.
 ## Gbot tools and SSH checks — Gchat2, October 18
 
 `GBOT-LAN-TOOLS-SSH-CHECK-OVERLAP`: Rechecking SSH while Check tools or Prepare
