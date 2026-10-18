@@ -13,20 +13,31 @@ description names the defaults that Reset restores.
 Outcome and acceptance: ordinary Reset from Light with a larger text size
 restores Dark/Medium, reports success after completion, and preserves the
 chosen settings on a rejected theme operation. Existing hook and rendered-route
-tests cover those behaviors. Source self-check and `git diff --check` pass;
-tests, lint, ONE `make verify` and changed-build native acceptance have not run.
-Native baseline confirmation is also pending in the pinned current-main release
-walk. No passing native result is inferred from source inspection.
+tests cover those behaviors. Native acceptance remains pending and no passing
+native result is inferred from source inspection.
 
 Owner Codex 3; worktree
 `/ai/gchat-worktrees/c3-interface-reset-theme-20261018`, branch
-`fix/c3-interface-reset-theme-20261018`, base `d0a8d06bf`. No dependencies,
-native settings service, model/profile or GPU behavior change. No build or
-remote scratch is allocated for this row yet. The shared S1 source/build stage
-is exclusively held by the current-main release refresh; the download-count
-wording gate is next. After that handoff, run the focused Interface/theme cases,
-lint and one verify/build in that existing owned stage, then ordinary native
-input at narrow/wide sizes in Light/Dark. The source candidate is not merge-ready.
+`fix/c3-interface-reset-theme-20261018`, original base `d0a8d06bf`, source
+`18c405b1d`. Current main `072655126` was merged normally before gates.
+Main still lacked the known first-run disk-full test synchronization correction:
+the alert can commit before the folder hydration effect. This branch includes
+only the same one-line `waitFor` before Retry, preserving all assertions; the
+unrelated folder-reveal runtime fix is excluded.
+
+Next: focused Interface hook/route/theme and first-run suites, lint, ONE
+`make verify`, then Vite and default desktop/custom-protocol debug build in the
+existing owned S1 stage. No Rust source is changed by this row; separate native
+check/clippy is not required. Parent owns ordinary native Reset acceptance in
+Light/Dark and narrow/wide layouts. Packet:
+`out/c3-interface-reset-theme-20261018/{result.json,summary.md}`. Shared source,
+private cargo/yarn caches and native target are reused under
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`; the new immutable
+`interface-candidate` must preserve the installed current-main AppDir/home,
+folder-reveal and badge candidates, runnable resources and private GUI tools.
+No dependencies, model/profile, GPU or native settings service change.
+The source candidate is not merge-ready.
+
 ## Gbot Hand back and task resume guidance — October 18
 
 `GBOT-HAND-BACK-RESUME-GUIDANCE`: the desktop viewer and companion previously
