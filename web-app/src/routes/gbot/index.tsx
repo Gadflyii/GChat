@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { listen } from '@tauri-apps/api/event'
 import { toast } from 'sonner'
+import { confirmAction } from '@/lib/confirm'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotTaskActions from '@/components/GbotTaskActions'
@@ -47,6 +48,13 @@ import {
 export const Route = createFileRoute('/gbot/')({ component: GbotPage })
 
 function GbotPage() {
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+    }
+  }, [])
   const [state, setState] = useState<BotState>()
   const [tasks, setTasks] = useState<Task[]>([])
   const [approvals, setApprovals] = useState<Approval[]>([])
@@ -262,6 +270,18 @@ function GbotPage() {
         setBusy(false)
       }
     }
+  }
+  const removeCloudSetup = async (review: CloudReview) => {
+    if (busy) return
+    const accepted = await confirmAction({
+      title: `Remove ${review.name}’s saved cloud setup?`,
+      message:
+        'This removes the saved setup, its cloud provider access key and any saved SSH connection key from GChat. You’ll need to enter your access key again to restart setup.',
+      confirmLabel: 'Remove saved setup',
+      destructive: true,
+    })
+    if (accepted && mounted.current)
+      await perform(() => gbot('setup/cloud/remove', { id: review.id }))
   }
   const workspaceId = selected || state?.workspaces[0]?.id
   const prompt = prompts[workspaceId || ''] || ''
@@ -738,13 +758,9 @@ function GbotPage() {
                           )
                         )
                       }
-                      onClick={() =>
-                        void perform(() =>
-                          gbot('setup/cloud/remove', { id: review.id })
-                        )
-                      }
+                      onClick={() => void removeCloudSetup(review)}
                     >
-                      Remove saved review
+                      Remove saved setup
                     </Button>
                   </div>
                 </section>
