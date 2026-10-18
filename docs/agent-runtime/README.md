@@ -39,8 +39,20 @@ change the name shown in the confirmation. Approval for an older draft cannot
 delete after a newer edit or selection. A failed deletion keeps the draft and
 requires fresh confirmation to retry. New unsaved drafts retain **Discard**.
 
-Validation and rebuilt private native acceptance are pending; receipts will be
-recorded in `/ai/gchat/out/gchat-agent-delete-confirmation-20261018/`.
+Validation: 101 focused tests and workspace lint PASS; one `make verify`
+PASS (3,573 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `22b69002b`.
+Rebuilt private native acceptance PASS: Cancel starts focused, Enter and
+Escape retain the draft and return focus to Delete, and edited Name and
+Identifier do not change the saved name in the dialog. Explicit **Delete agent**
+removes only the original disposable definition; new unsaved **Discard** remains
+local. The candidate screenshot was viewed. Normal close at 12:08:56Z kept
+original definitions and run history byte-identical; CPU booking 3271 was
+returned at 12:09Z. Receipts:
+`/ai/gchat/out/gchat-agent-delete-confirmation-20261018/`.
+This qualifies private Linux source-native deletion; Windows, agent execution
+and inference are outside this check. Only a disposable definition was saved
+and deleted.
 
 ## Unsaved Agent Studio navigation — October 18
 
