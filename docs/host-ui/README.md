@@ -13,9 +13,14 @@ Owned branch `fix/gchat3-first-run-cleared-choice-remount-20261018`, base
 `15dbad1e6`, uses the matching `/ai/gchat-worktrees/` source tree. Acceptance
 is rendered new-user/clear/remount behavior, durable Host null/empty behavior,
 focused tests and one `make verify`. No GPU, installed-app or Windows claim is
-made. The independent S1 SSD fixture is being prepared from the inactive RC
-donor; no build or model is running. Next: freeze the focused correction and
-run the existing gates on a booked eight-CPU S1 slot.
+made. The independent S1 SSD fixture uses the inactive RC donor. The initial
+focused run passed 54 cases, including clear/remount, and stopped on the
+existing pending-profile test: Clear now appears while profiling, so waiting
+for that button no longer waits for the completed poll. The test now waits
+for the changed recommendation before checking that edits survived. No
+production change was needed for this failure. CPU88–95 returned 18:45Z;
+booking3499 is canceled. Next: run only the failed case, then the unrun native,
+lint and single full verification stages.
 
 ## First-run action recovery — verified, Gchat 3, October 18
 
