@@ -58,6 +58,70 @@ custody. Windows: not built (dev phase); the change uses shared frontend APIs.
 
 Result: `out/gchat2-cloud-setup-remove-confirmation-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-cloud-setup-remove-confirmation-20261018`.
+## Passphrase-vault feedback — Gchat 3 native acceptance, October 18
+
+`GCHAT-SECURE-STORAGE-SETUP-FEEDBACK-20261017`: native Linux vault creation,
+Lock, wrong-Unlock feedback and correct retry pass in a fresh private profile.
+Matching drafts followed by Cancel close the form and clear both fields.
+Mismatched drafts retain the form and show “The passphrases do not match.”
+Cancel after that error reproduced a defect: the form disappeared but the error
+remained on the native-ready card. Cancel now clears the discarded error along
+with both secret drafts. Reopening creation shows blank fields and dispatches
+no vault action. The rendered regression fails against the unchanged base
+(1 failed, 10 skipped), then the corrected component suite passes all 11 cases.
+Lint passes with zero errors and five existing warnings. ONE `make verify`
+passes: 3316 app cases with 6 skipped, 121 extension cases, 1220 native cases
+with 28 ignored, and all six critical coverage floors.
+
+Explicit Check secure storage showed native ready. Creating an inert passphrase
+vault showed ready and Lock vault; Lock showed the locked state and Unlock
+form. Wrong Unlock displayed the actionable error and cleared the secret field;
+correct retry returned ready. A new process with the same complete private
+profile started locked, then unlocked correctly. The encrypted vault remained
+byte-identical across Lock, failed/correct Unlock and that restart. The attempted
+`xdotool windowclose` destroyed the X window and caused GTK BadDrawable:
+new-process persistence is qualified, clean normal shutdown is excluded.
+Future close checks must use the supported app exit or window-manager close
+protocol, rather than XDestroyWindow. No additional lifecycle repeat is needed.
+
+Allocated base `36c278f28`, branch
+`test/gchat3-passphrase-vault-native-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-passphrase-vault-native-20261018`.
+The retained `ed68c7443` AppDir has unchanged vault handlers, native storage,
+credential-control and relevant initialization paths. Its only CredentialSetup
+difference before the correction is the unchecked hint; adapter reset/model/
+Windows differences are outside this leaf. The installed donor stayed unchanged:
+these observations reproduce the original Cancel behavior and qualify the
+existing vault route, not native rendering of the correction. Accepted
+native backend lifecycle gates are reused; the new frontend regression and
+focused/lint/full checks qualify the source correction.
+
+The private vault was 0600, active passphrase, with zero records/references and
+no migration. Private `gbot/service.json`, workspace-connections metadata and
+Host identity stayed absent. The unchanged credential-control path returns
+without starting that service when its configuration is absent. Existing
+credential migration, accounts, Host pairing, model/GPU, external services,
+Windows and installer behavior remain unqualified.
+
+Canonical result, short summary, source binding, six visually reviewed masked
+screenshots and storage/isolation/cleanup receipts:
+`out/passphrase-vault-native-20261018/{result.json,summary.md}`.
+S1 `AIS-2-8592-L01` used CPU104–111, private HOME/runtime0700,
+D-Bus/unlocked keyring, Xvfb and a uid-1000 container with all capabilities
+dropped and software rendering. Native pointer/keyboard drove controls;
+WebKit only observed. At 04:11:25Z the exact owned root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-passphrase-vault-native-20261018`,
+container, private helpers and display socket were retired; 3.43 GB was released,
+the inspector forward closed and booking 2960 returned. The read-only donor at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+was untouched. The separate correction gate ran 04:12:35–04:20:26Z on S1
+CPU112–119 with an independent offline dependency copy. Its owned SSD fixture
+(42.31 GB logical file lengths), two exited containers and local source archive
+were removed; booking 2964 returned at 04:22Z. Source bindings, expected baseline
+failure, full logs and cleanup are in `test-result.json` and `test-summary.md`
+beside the native packet. The correction and scoped native acceptance are ready
+for branch integration. Windows and installed rendering of the correction
+remain unqualified.
 
 ## Model deletion confirmation — Gchat 3 native acceptance, October 18
 
