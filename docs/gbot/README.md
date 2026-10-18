@@ -1,5 +1,18 @@
 # Gbot design
 
+## Companion keyboard focus with no saved bot — Gchat 2
+
+`GBOT-EMPTY-COMPANION-FOCUS-RETURN` restores keyboard focus to the sidebar
+opener when Escape or Hide bot pane closes an empty companion. The selected
+named bot remains the preferred return target; when that bot is absent, the
+empty opener provides a fallback. Previously, the empty opener had no focus
+restoration target, leaving focus in the hidden pane or on the document.
+
+Rendered keyboard journeys cover opening and closing the empty companion and
+a named bot using Escape and Hide. Source is frozen for parent serial baseline,
+focused, lint and ONE `make verify` validation; none has run for this packet.
+This is rendered UI scope, with no native, task, desktop or service changes.
+
 ## Recovering a failed Microsoft sign-in result — Gchat 2
 
 `GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names
