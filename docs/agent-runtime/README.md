@@ -49,6 +49,22 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Untouched Coordinator Team defaults — October 18
+
+An isolated native Linux Studio pass found that **New agent** → **Coordinator
+Team** created one `researcher` specialist but set **Maximum parallel workers**
+to 2. Selecting **Save definition** without editing these defaults displayed
+“Coordinator parallelism must be between 1 and the worker count.” The affected
+`withKind` helper is byte-identical from observed role-ID candidate
+`26608cb72d2f` (base `80424bb41`) through main `ff3361720`.
+
+The correction should start the default one-specialist team at parallelism 1 so
+its generated definition can save untouched. Corrected gates, build and native
+replay are pending. Baseline receipts and source-region equivalence are in
+`/ai/gchat/out/gchat-coordinator-default-parallelism-20261018/`. This baseline
+used a private Linux debug profile, retained sidecars and no GPU or model
+request. Windows: not built (dev phase).
+
 ## Uncollected Chat worker history — October 18
 
 A worker dispatched through Chat's `agent_spawn` could disappear from its

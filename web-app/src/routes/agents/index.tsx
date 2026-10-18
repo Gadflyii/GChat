@@ -303,7 +303,7 @@ function withKind(
       return {
         ...base,
         kind,
-        maxParallel: 2,
+        maxParallel: 1,
         coordinatorInstructions:
           'Decompose the goal into concise, non-overlapping assignments.',
         synthesisInstructions:
