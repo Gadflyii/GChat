@@ -144,6 +144,59 @@ three exited containers were removed at 03:59:59Z, releasing 42.31 GB; the
 280 MB disposable source archive was also removed. Read-only donors remain.
 CPU 88–95 booking 2944 was canceled; returned 04:00Z. Next: reviewed branch
 integration; no further test run is required.
+## Downloads popover transfer status — C3, October 18
+
+`GUI-DOWNLOADS-POPOVER-STATUS` is fixed and merge-ready. The private native
+first-user walk reproduced a paused Host-managed transfer under the generic
+Downloading heading with no
+per-job status. Models Downloads correctly showed Paused and Resume for the
+same retained journal. Baseline evidence is
+`out/c3-first-user-setup-20261018/{downloads-popover-baseline.png,downloads-paused-baseline.png}`;
+the active row is 222 in the GInfer open-work authority.
+
+The candidate labels the popover Downloads and shows each managed transfer's
+existing plain-language Models status: Waiting to download, Downloading model,
+Saving progress before pausing, Paused; resume to continue, Checking the
+downloaded file, or Download stopped. Each status is associated with its model
+for assistive technology. Rendered polling coverage retains distinct labels
+when only status changes and byte count/job count stay unchanged. Progress,
+transfer actions and the separate Manage destination fix are unchanged.
+
+All 56 focused cases in the three existing Downloads/Models suites pass. Lint
+passes with zero errors and five existing warnings. The ONE `make verify`
+passes typecheck, the 355-file quality guard, 3319 app cases, 121 extension cases,
+1220 native cases and all six coverage floors. Six app cases are skipped and
+28 native cases ignored. No failure, retry or continuation occurred. The
+production Vite frontend and debug custom-protocol native candidate build
+passes. Native Linux acceptance also passes: real pointer/keyboard opened the
+popover over the retained paused journal and showed Downloads plus Paused;
+resume to continue. The accessible status is associated with Paused navigation
+fixture. The coordinator reviewed Light 1500×1000 and Dark 1024×740 screenshots
+with no horizontal overflow. No Resume/Delete, transfer, model or GPU action
+occurred. This is source-native Linux evidence; no installed-release or Windows
+claim. Evidence: `out/c3-downloads-popover-status-20261018/` contains
+`result.json`, `native-result.json`, `summary.md`, `status-light-wide.png` and
+`status-dark-narrow.png`. Next: coordinator merges the reviewed branch.
+
+Owner/source `/ai/gchat-worktrees/c3-downloads-popover-status-20261018`, branch
+`fix/c3-downloads-popover-status-20261018`, baseline `7b17e06da`, source commit
+`909a8a7e9`, normal main merge `4e635c35a` including accepted Manage `d4b0b9c8c`.
+Only the popover, its existing managed rendered tests and this subject section
+change. S1 `AIS-2-8592-L01` CPU 112–119 ran nice 10 with the shared socket 1 lock,
+03:54:24–04:01:24Z. Booking 2948 was returned at 04:02:56Z. All 35 retained
+dependency manifests/locks matched. The terminal container and owned local/remote
+280156160-byte source archives are removed; concise command/stage/results are
+retained, with raw passing logs remote until coordinator cleanup.
+
+The existing root `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`
+retains the accepted `status-candidate/{bin/gchat,lib/GChat,pre-install}`;
+its resource symlink targets `runnable/lib/GChat`. The gate preserved the
+accepted Manage donor, runnable resources, launch profiles, dependencies and
+native cache. Native app, private Host and Xvfb received TERM; at 04:10Z the
+coordinator verified no processes or mounts using downloads-home/status-candidate
+and returned GUI booking 2957 CPU 8–15. Accepted candidate/home evidence remains
+through merge. Shared `gchat`/`native-target`, caches and AppDir are handed to the
+current-main release refresh helper. Parent owns retained-build cleanup.
 
 ## Conversation Rename keyboard — Gchat 3 native acceptance, October 18
 

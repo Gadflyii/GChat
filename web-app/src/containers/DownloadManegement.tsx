@@ -6,7 +6,7 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { useDownloadStore } from '@/hooks/useDownloadStore'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
-import { formatModelBytes } from '@/lib/model-release'
+import { downloadStatusLabel, formatModelBytes } from '@/lib/model-release'
 import { useAppUpdater } from '@/hooks/useAppUpdater'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { DownloadEvent, DownloadState, events, AppEvent } from '@gchat/core'
@@ -629,7 +629,7 @@ export function DownloadManagement() {
             {appUpdateState.isDownloading || downloadProcesses.length > 0 || managedTransfers.length > 0 ? (
               <>
                 <div className="px-3 pt-2 flex items-center justify-between">
-                  <p>{t('downloading')}</p>
+                  <p>{t('common:downloads')}</p>
                 </div>
                 <div className="p-2 max-h-[300px] overflow-y-auto space-y-2">
                   {appUpdateState.isDownloading && (
@@ -670,6 +670,13 @@ export function DownloadManagement() {
                           Manage
                         </Button>
                       </div>
+                      <p
+                        role="status"
+                        aria-label={`${job.release.name} download status`}
+                        className="mt-1 text-xs text-muted-foreground"
+                      >
+                        {downloadStatusLabel(job.status)}
+                      </p>
                       <div className="relative z-40 my-2 h-6">
                         <Progress
                           value={(job.received / Math.max(job.release.bytes, 1)) * 100}
