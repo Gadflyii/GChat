@@ -11,8 +11,20 @@ reports that the setup was saved. No request is retried automatically.
 
 Rendered regressions cover initial and explicit account reads, an unconfirmed
 Save, accepted Save with failed list refresh, and native-client failure/retry.
-Baseline, focused tests, lint and one `make verify` are pending. This is a
-source change; native Microsoft sign-in and Cloud PC control remain unqualified.
+Acceptance: unchanged production failed all five new cases (29 filtered);
+the full M365Setup suite passed all 34 with
+`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotSetup/M365Setup.test.tsx`.
+Workspace lint passed with zero errors and five existing warnings. ONE isolated
+S1 `make verify` passed 18 October 11:57:21–12:00:48 UTC: 3,564 application tests /
+6 skipped, 127 extension tests, 1,288 Rust tests / 28 ignored, six coverage floors,
+lint, typecheck and guards. All 3,451 tracked source hashes matched before and
+after the gate. The remote fixture included only the initial `/models` hydration
+wait from owner `ad121b656`, now merged in main `7727db673`; the pinned branch
+predates that prerequisite. No owner production or additional tests were copied.
+This final receipt was added afterward; production and test hashes stayed
+unchanged. Evidence: `out/gchat2-m365-setup-error-guidance-20261018/result.json`.
+FRESH and OLD are untouched; rendered service and opener responses do not
+qualify native Microsoft sign-in, Cloud PC control or Windows execution.
 
 ## Refreshing Hosts preserves failed brain saves — Gchat 2
 
