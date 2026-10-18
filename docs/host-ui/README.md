@@ -20,6 +20,35 @@ Windows: not built (dev phase); shared frontend copy only.
 
 Result: `out/gchat2-schedule-brain-guidance-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-schedule-brain-guidance-20261018`.
+## Gbot task interruption reason — October 18
+
+`GBOT-TASK-HISTORY-INTERRUPTION-REASON`: task cards previously showed
+**Interrupted** and **Resume** without the cause saved by the service. The
+Gbot settings and companion conversation now display the latest persisted
+interruption reason beneath the task state through one shared component.
+For an empty model answer this includes “resume the task to try again.”
+The most recent matching event is selected by insertion order because event
+timestamps use whole seconds. Completed tasks do not retain stale interruption
+guidance, and older records without history still render normally.
+
+The rendered regression checks the latest reason across bot selection and
+reopening, preserves the saved prompt and dispatches Resume for the correct
+task. It fails on baseline `98a814b13`; the completed-task case passes there.
+The companion case also fails on the old code and checks Resume, clearing
+the message on completion and older records without history. All 100 focused
+settings/companion cases pass. ONE `make verify` passed the initial settings
+snapshot on S1 CPUs96–103, 04:27:57–04:35:45Z: lint, typecheck, quality guards,
+3,347 app cases (six skipped), 121 extension cases, six coverage floors and
+1,220 Rust cases (28 ignored). The final shared-component/companion change
+then passed a refreshed `make verify-fast` (3,348 app cases, six skipped;
+121 extension cases; six floors); Rust source was unchanged. Source hashes
+matched before and after each gate. This uses existing serialized task history;
+backend state and recovery behavior are unchanged. No VM, native Windows, model or live task
+was run. FRESH/OLD remain OFF/original XML/custody Gchat 2.
+Windows: not built (dev phase).
+
+Result: `out/gchat2-task-interruption-reason-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-task-interruption-reason-20261018`.
 
 ## Google client ID validation — Gchat 3 native acceptance, October 18
 

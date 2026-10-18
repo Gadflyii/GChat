@@ -183,6 +183,89 @@ it('attributes saved task messages to you or the selected bot in conversation or
   await expectConversation()
 })
 
+it('shows the latest interruption reason after reopening and resumes that task', async () => {
+  const [identity] = readyTaskBots()
+  const call = mocks.call.getMockImplementation()!
+  const reason = 'model returned no answer; resume the task to try again'
+  const previousReason = 'previous connection failed'
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) =>
+      path === 'tasks'
+        ? [
+            {
+              id: 'interrupted-task',
+              identity,
+              state: 'interrupted',
+              messages: [{ role: 'user', content: 'Write the saved note' }],
+              history: [
+                { state: 'interrupted', reason: previousReason, at: 42 },
+                { state: 'running', reason: 'started', at: 42 },
+                { state: 'interrupted', reason, at: 42 },
+              ],
+            },
+          ]
+        : call(path, body)
+  )
+  const expectInterruption = async () => {
+    const message = await screen.findByText(reason)
+    const card = message.closest('article')!
+    expect(message).toBeVisible()
+    expect(within(card).getByText('Write the saved note')).toBeVisible()
+    expect(within(card).getByRole('button', { name: 'Resume' })).toBeEnabled()
+    expect(screen.queryByText(previousReason)).not.toBeInTheDocument()
+    return card
+  }
+
+  render(<Page />)
+  await expectInterruption()
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  await expectInterruption()
+  cleanup()
+  render(<Page />)
+  const card = await expectInterruption()
+  fireEvent.click(within(card).getByRole('button', { name: 'Resume' }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('tasks/resume', {
+      id: 'interrupted-task',
+    })
+  )
+})
+
+it('does not show an old interruption reason after a task completes', async () => {
+  const [identity] = readyTaskBots()
+  const call = mocks.call.getMockImplementation()!
+  const reason = 'model returned no answer; resume the task to try again'
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) =>
+      path === 'tasks'
+        ? [
+            {
+              id: 'completed-task',
+              identity,
+              state: 'completed',
+              messages: [{ role: 'assistant', content: 'Saved the note' }],
+              history: [
+                { state: 'interrupted', reason, at: 42 },
+                { state: 'running', reason: 'started', at: 43 },
+                { state: 'completed', reason: 'completed', at: 44 },
+              ],
+            },
+          ]
+        : call(path, body)
+  )
+  render(<Page />)
+  const reply = await screen.findByText('Saved the note')
+  const card = reply.closest('article')!
+  expect(reply).toBeVisible()
+  expect(within(card).getByText('completed')).toBeVisible()
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  expect(
+    within(card).queryByRole('button', { name: 'Resume' })
+  ).not.toBeInTheDocument()
+})
+
 it('explains that a disconnected bot must connect before a task can run', async () => {
   readyTaskBots(undefined, { live_sessions: [] })
   render(<Page />)

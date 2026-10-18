@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotTaskActions from '@/components/GbotTaskActions'
+import GbotTaskInterruption from '@/components/GbotTaskInterruption'
 import GbotDesktopView, {
   type DesktopViewHandle,
 } from '@/components/GbotDesktopView'
@@ -412,6 +413,7 @@ export default function GbotCompanion() {
                       }
                     />
                   </div>
+                  <GbotTaskInterruption task={task} />
                   {task.messages
                     .filter(
                       (m) =>
