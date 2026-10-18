@@ -289,6 +289,37 @@ describe('AgentStudioPage', () => {
     }
   })
 
+  it.each(['saved agent', 'unsaved template'] as const)(
+    'moves keyboard focus into the template editor from an %s without interrupting edits', async (source) => {
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template', name: 'Review template', description: '', definition: firstAgent,
+      }])
+      const router = await renderNavigableStudio()
+      navigate.mockImplementation((options) => router.navigate(options))
+      const user = userEvent.setup()
+      for (let attempt = 0; attempt < (source === 'unsaved template' ? 2 : 1); attempt++) {
+        screen.getByRole('button', { name: 'Templates', exact: true }).focus()
+        await user.keyboard('{Enter}')
+        const useTemplate = await screen.findByRole('button', { name: 'Use template' })
+        useTemplate.focus()
+        await user.keyboard('{Enter}')
+        await waitFor(() => expect(screen.getByLabelText('Name')).toHaveFocus())
+        expect(screen.getByLabelText('Name')).toHaveValue(`${firstAgent.name} Copy`)
+        expect(screen.getByRole('button', { name: 'Agents & flows', current: 'page' })).toBeInTheDocument()
+      }
+      await user.keyboard('{Control>}a{/Control}')
+      await user.type(screen.getByLabelText('Name'), 'My keyboard template')
+      expect(screen.getByLabelText('Name')).toHaveFocus()
+      await user.tab()
+      expect(screen.getByLabelText('Identifier')).toHaveFocus()
+      await user.type(screen.getByLabelText('Identifier'), 'keyboard-template')
+      expect(screen.getByLabelText('Identifier')).toHaveFocus()
+      expect(screen.getByLabelText('Name')).toHaveValue('My keyboard template')
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    }
+  )
+
   it.each(['saved', 'new', 'template'] as const)(
     'guards navigation away from an edited %s draft until discard is explicit', async (source) => {
       listAgentTemplates.mockResolvedValue([{
