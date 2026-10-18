@@ -28,6 +28,9 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [startupQuote, setStartupQuote] = useState<{ key: string; result?: EngineStartupQuote; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<{ message: string; details: string } | null>(null)
+  const [connectionRemoved, setConnectionRemoved] = useState(false)
+  const [connectionCleanupWarning, setConnectionCleanupWarning] = useState<string | null>(null)
+  const [connectionRefreshError, setConnectionRefreshError] = useState<string | null>(null)
   const [hostStopError, setHostStopError] = useState<string | null>(null)
   const [hostStopping, setHostStopping] = useState(false)
   const profiling = hardwareProfileBlocksLaunch(snapshot?.hardware_profile)
@@ -77,18 +80,13 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     setBusy(true)
     setActionError(null)
     try {
-      const result = await engineCommand<{ credential_cleanup_warning?: string | null }>(action, { host_id: host.host_id, ...args })
-      if (result?.credential_cleanup_warning) {
-        setActionError({ message: 'The saved connection was removed, but its saved sign-in could not be cleared from this computer.', details: result.credential_cleanup_warning })
-        toast.warning('Connection removed. Its saved sign-in could not be cleared.')
-      }
+      await engineCommand(action, { host_id: host.host_id, ...args })
       await refresh()
       return true
     }
     catch (e) {
       const message = action === 'connect' ? 'Could not connect to this computer. Check that it is on and reachable, then try Connect again.'
-        : action === 'forget' ? 'Could not remove this saved connection. Try again.'
-          : action === 'scan' ? 'Could not refresh the model list. Check that the model files are available, then try again.'
+        : action === 'scan' ? 'Could not refresh the model list. Check that the model files are available, then try again.'
             : action === 'stop' ? 'Could not stop this model. Check its status and try again.'
               : action === 'restart' || action === 'reload' ? 'Could not restart this model. Check the settings and try again.'
                 : action === 'hardware_profile' ? 'Could not change the graphics-card setup. Check the connection and try again.'
@@ -99,6 +97,37 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       return false
     } finally { setBusy(false) }
   }
+  const refreshRemovedConnection = async () => {
+    setBusy(true)
+    try {
+      await refresh()
+      setConnectionRefreshError(null)
+    } catch (e) { setConnectionRefreshError(String(e)) }
+    finally { setBusy(false) }
+  }
+  const removeConnection = async () => {
+    if (busy || connectionRemoved) return
+    setBusy(true)
+    setActionError(null)
+    try {
+      const result = await engineCommand<{ credential_cleanup_warning?: string | null }>('forget', { host_id: host.host_id })
+      setConnectionRemoved(true)
+      setConnectionCleanupWarning(result?.credential_cleanup_warning ?? null)
+      toast.success('Connection removed')
+      if (result?.credential_cleanup_warning) toast.warning('Connection removed. Its saved sign-in could not be cleared.')
+      await refreshRemovedConnection()
+    } catch (e) {
+      const message = 'Could not remove this saved connection. Try again.'
+      setActionError({ message, details: String(e) })
+      toast.error(message)
+    } finally { setBusy(false) }
+  }
+  if (connectionRemoved) return <section className="rounded-xl border p-5 space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{host.name}</h2><Button variant="outline" disabled>Remove connection</Button></div>
+    <p role="status" className="text-sm">The saved connection was removed.</p>
+    {connectionCleanupWarning && <div role="alert" className="text-sm text-destructive"><p>The saved connection was removed, but its saved sign-in could not be cleared from this computer.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{connectionCleanupWarning}</p></details></div>}
+    {connectionRefreshError !== null && <div role="alert" className="space-y-2 text-sm text-destructive"><p>Could not refresh the host list. Choose Refresh host list to try again.</p><details><summary className="cursor-pointer">Host refresh error details</summary><p className="whitespace-pre-wrap break-all">{connectionRefreshError}</p></details><Button variant="outline" disabled={busy} onClick={() => void refreshRemovedConnection()}>Refresh host list</Button></div>}
+  </section>
   const hardwareProfileControls = snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
     action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />
   return <section className="rounded-xl border p-5 space-y-4">
@@ -120,7 +149,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         </div>
       </div>}
       {host.local ? <span className="text-sm text-muted-foreground">This computer</span> : <Button variant="outline" disabled={busy} onClick={async () => {
-        if (await confirmAction({ title: `Remove the connection to ${host.name}?`, message: 'GChat will remove this saved connection. Models and downloads on that computer will keep running.', confirmLabel: 'Remove connection', destructive: true })) void act('forget')
+        if (await confirmAction({ title: `Remove the connection to ${host.name}?`, message: 'GChat will remove this saved connection. Models and downloads on that computer will keep running.', confirmLabel: 'Remove connection', destructive: true })) void removeConnection()
       }}>Remove connection</Button>}
       {host.local && snapshot?.can_stop_host && <Button variant="outline" disabled={busy || hostStopping || !!error} onClick={async () => {
         setBusy(true)

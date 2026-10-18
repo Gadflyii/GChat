@@ -1,0 +1,8 @@
+{
+  "armed": 1792297545.8524835,
+  "host_pid": 2635956,
+  "host_binary_sha256": "c0a15137ad2d4ea880faba677ba5010c267dd7e8b83e30db28201403b7163281",
+  "publication_block": "private host.json replaced by empty directory after Host opened",
+  "folder_block": "private models directory retained; regular file at same requested path",
+  "gpu_children": false
+}

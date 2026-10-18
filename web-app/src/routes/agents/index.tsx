@@ -343,6 +343,13 @@ function newNode(
   return { ...newRole(id, name), workspace }
 }
 
+function nextRoleNumber(prefix: string, roles: AgentRole[]): number {
+  const ids = new Set(roles.map((role) => role.id))
+  let next = roles.length + 1
+  while (ids.has(`${prefix}-${next}`)) next += 1
+  return next
+}
+
 function cloneDefinition(definition: AgentDefinition): AgentDefinition {
   return structuredClone(definition)
 }
@@ -1474,7 +1481,7 @@ function CoordinatorEditor({
         variant="outline"
         disabled={draft.workers.length >= 8}
         onClick={() => {
-          const next = draft.workers.length + 1
+          const next = nextRoleNumber('specialist', draft.workers)
           onChange({
             ...draft,
             workers: [
@@ -1579,31 +1586,21 @@ function WorkflowEditor({
                 }
               />
               <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <Field
-                  label="Depends on stage IDs"
-                  help="Comma-separate the IDs of stages that must finish before this one starts. Leave empty for an entry stage."
-                >
-                  <Input
-                    value={dependencies}
-                    placeholder="Example: research, review"
-                    onChange={(event) => {
-                      const from = event.target.value
-                        .split(',')
-                        .map((value) => slug(value))
-                        .filter(Boolean)
-                      onChange({
-                        ...draft,
-                        edges: [
-                          ...draft.edges.filter((edge) => edge.to !== node.id),
-                          ...from.map((source) => ({
-                            from: source,
-                            to: node.id,
-                          })),
-                        ],
-                      })
-                    }}
-                  />
-                </Field>
+                <WorkflowDependencyInput
+                  value={dependencies}
+                  onChange={(from) => {
+                    onChange({
+                      ...draft,
+                      edges: [
+                        ...draft.edges.filter((edge) => edge.to !== node.id),
+                        ...from.map((source) => ({
+                          from: source,
+                          to: node.id,
+                        })),
+                      ],
+                    })
+                  }}
+                />
                 <Field
                   label="Workspace"
                   help="Isolated stages can safely run in parallel and receive the source workspace read-only. A main-workspace stage can edit the user’s files and must be the only writer at its level."
@@ -1633,7 +1630,7 @@ function WorkflowEditor({
         variant="outline"
         disabled={draft.nodes.length >= 8}
         onClick={() => {
-          const next = draft.nodes.length + 1
+          const next = nextRoleNumber('stage', draft.nodes)
           onChange({
             ...draft,
             nodes: [...draft.nodes, newNode(`stage-${next}`, `Stage ${next}`)],
@@ -1643,6 +1640,42 @@ function WorkflowEditor({
         <IconPlus /> Add stage
       </Button>
     </section>
+  )
+}
+
+function WorkflowDependencyInput({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (dependencies: string[]) => void
+}) {
+  const [draftValue, setDraftValue] = useState<{
+    text: string
+    normalized: string
+  } | null>(null)
+
+  return (
+    <Field
+      label="Depends on stage IDs"
+      help="Comma-separate the IDs of stages that must finish before this one starts. Leave empty for an entry stage."
+    >
+      <Input
+        // Preserve punctuation while typing; external graph edits take precedence.
+        value={draftValue?.normalized === value ? draftValue.text : value}
+        placeholder="Example: research, review"
+        onChange={(event) => {
+          const text = event.target.value
+          const dependencies = text
+            .split(',')
+            .map((source) => slug(source))
+            .filter(Boolean)
+          setDraftValue({ text, normalized: dependencies.join(', ') })
+          onChange(dependencies)
+        }}
+        onBlur={() => setDraftValue(null)}
+      />
+    </Field>
   )
 }
 

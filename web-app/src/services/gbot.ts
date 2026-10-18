@@ -166,6 +166,7 @@ export type Task = {
   id: string
   identity: Identity
   state: string
+  history?: { state: string; reason: string; at: number }[]
   messages: { role: string; content: unknown }[]
   help_requests: HelpRequest[]
   calls?: { call_id: string; name: string; reply: unknown | null; not_executed?: boolean }[]

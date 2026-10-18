@@ -641,3 +641,17 @@ it('explains startup errors, hides diagnostics and keeps completion blocked unti
   expect(screen.getByText('Ready to start with these settings.')).toBeVisible()
   expect(mocks.command.mock.calls.every(([, args]) => !args.action || args.action === 'startup')).toBe(true)
 })
+
+it('shows background disk-full failures and clears the alert after a successful retry', async () => {
+  let saved = flow('storage', { storage: { path: '/models', requested_path: '/models', available_bytes: 0 }, maintenance_error: 'The disk is full. Free some space, then try again.' })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'resume') saved = flow('models', { maintenance_error: null })
+    return Promise.resolve(saved)
+  })
+  render(<EngineFirstRun />)
+  expect(await screen.findByRole('alert')).toHaveTextContent('The disk is full. Free some space, then try again.')
+  expect(screen.getByLabelText('Model download folder')).toHaveValue('/models')
+  fireEvent.click(screen.getByRole('button', { name: 'Retry setup' }))
+  await waitFor(() => expect(screen.queryByText(/Setup could not continue/)).not.toBeInTheDocument())
+  expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'resume' })
+})

@@ -189,6 +189,31 @@ describe('AgentStudioPage', () => {
     await screen.findByDisplayValue(firstAgent.name)
   }
 
+  async function renderThreeStageWorkflow() {
+    const role = {
+      instructions: '', skills: [], maxSteps: 12,
+      modelInstanceId: null, reasoningEffort: null,
+    }
+    definitionState.value.definitions = [{
+      ...editableDraft,
+      id: 'dependency-keyboard',
+      name: 'Dependency keyboard workflow',
+      kind: 'workflow',
+      nodes: [
+        { ...role, id: 'deliver', name: 'Deliver', workspace: 'isolated' },
+        { ...role, id: 'stage-2', name: 'Stage 2', workspace: 'isolated' },
+        { ...role, id: 'stage-3', name: 'Stage 3', workspace: 'shared' },
+      ],
+      edges: [],
+    }]
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue('Dependency keyboard workflow')
+    return {
+      dependencies: screen.getAllByLabelText('Depends on stage IDs')[2],
+      saveButton: screen.getByRole('button', { name: 'Save definition' }),
+    }
+  }
+
   async function renderRunHistory() {
     listAgentRuns.mockResolvedValue([firstHistoricalRun, secondHistoricalRun])
     const view = render(<AgentStudioPage />)
@@ -1048,6 +1073,94 @@ describe('AgentStudioPage', () => {
   })
 
   it.each([
+    { kind: 'workflow', manualCollision: false },
+    { kind: 'coordinator', manualCollision: false },
+    { kind: 'workflow', manualCollision: true },
+    { kind: 'coordinator', manualCollision: true },
+  ] as const)('appends a unique $kind role after middle removal (manual collision: $manualCollision)', async ({ kind, manualCollision }) => {
+    const prefix = kind === 'workflow' ? 'stage' : 'specialist'
+    const label = kind === 'workflow' ? 'Stage ID' : 'Specialist ID'
+    const roleName = kind === 'workflow' ? 'Stage' : 'Specialist'
+    const role = (id: string, name: string) => ({
+      id, name, instructions: `Preserve ${id} instructions.`, skills: [],
+      maxSteps: 17, modelInstanceId: 'qwen', reasoningEffort: null,
+    })
+    const roles = [
+      role(kind === 'workflow' ? 'deliver' : 'researcher', 'Original lead'),
+      role(`${prefix}-2`, 'Removed middle'),
+      role(`${prefix}-3`, 'Original third'),
+    ]
+    const definition: AgentDefinition = kind === 'workflow'
+      ? {
+        ...editableDraft, id: 'append-roles', name: 'Append roles workflow', kind,
+        nodes: roles.map((node, index) => ({
+          ...node, workspace: index === 0 ? 'shared' as const : 'isolated' as const,
+        })),
+        edges: [
+          { from: 'stage-2', to: 'deliver' },
+          { from: 'stage-3', to: 'deliver' },
+        ],
+      }
+      : {
+        ...editableDraft, id: 'append-roles', name: 'Append roles team', kind,
+        workers: roles, maxParallel: 2,
+        coordinatorInstructions: 'Plan', synthesisInstructions: 'Combine',
+        synthesisModelInstanceId: null, synthesisReasoningEffort: null,
+      }
+    const originalRoles = definition.kind === 'workflow' ? definition.nodes : definition.workers
+    definitionState.value.definitions = [definition]
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue(definition.name)
+
+    fireEvent.click(screen.getAllByTitle(`Remove ${prefix}`)[1])
+    const firstId = manualCollision ? `${prefix}-4` : originalRoles[0].id
+    if (manualCollision) {
+      const firstIdentifier = screen.getAllByLabelText(label)[0]
+      fireEvent.change(firstIdentifier, { target: { value: firstId } })
+      fireEvent.blur(firstIdentifier)
+    }
+    fireEvent.click(screen.getByRole('button', { name: `Add ${prefix}` }))
+
+    const next = manualCollision ? 5 : 4
+    const appendedId = `${prefix}-${next}`
+    expect(screen.getAllByLabelText(label).map((input) => (input as HTMLInputElement).value))
+      .toEqual([firstId, `${prefix}-3`, appendedId])
+    expect(screen.getAllByLabelText('Display name').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['Original lead', 'Original third', `${roleName} ${next}`])
+    if (kind === 'workflow') {
+      const dependencies = screen.getAllByLabelText('Depends on stage IDs')
+      expect(dependencies[0]).toHaveValue('stage-3')
+      expect(dependencies[1]).toHaveValue('')
+      expect(dependencies[2]).toHaveValue('')
+      fireEvent.change(dependencies[0], {
+        target: { value: `stage-3, ${appendedId}` },
+      })
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        kind,
+        [kind === 'workflow' ? 'nodes' : 'workers']: [
+          { ...originalRoles[0], id: firstId },
+          originalRoles[2],
+          expect.objectContaining({
+            id: appendedId, name: `${roleName} ${next}`,
+            ...(kind === 'workflow' ? { workspace: 'isolated' } : {}),
+          }),
+        ],
+        ...(kind === 'workflow'
+          ? { edges: [
+            { from: 'stage-3', to: firstId },
+            { from: appendedId, to: firstId },
+          ] }
+          : { maxParallel: 2 }),
+      })
+    ))
+  })
+
+  it.each([
     ['Off', 'none'], ['Minimal', 'minimal'], ['Low', 'low'], ['Medium', 'medium'],
     ['High', 'high'], ['Extra high', 'xhigh'], ['Maximum', 'max'], ['Model default', null],
   ] as const)('offers every GInfer reasoning effort and saves %s', async (label, value) => {
@@ -1144,6 +1257,108 @@ describe('AgentStudioPage', () => {
     await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
       expect.objectContaining({ edges: [{ from: 'review-stage', to: 'stage-2' }] })
     ))
+  })
+
+  it('retains dependency punctuation and focus while typing and saves both incoming edges', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    const { dependencies, saveButton } = await renderThreeStageWorkflow()
+    const text = 'deliver, stage-2'
+    dependencies.focus()
+    for (let length = 1; length <= text.length; length++) {
+      const value = text.slice(0, length)
+      fireEvent.change(dependencies, { target: { value } })
+      expect(dependencies.isConnected).toBe(true)
+      expect(dependencies).toHaveFocus()
+      expect(dependencies).toHaveValue(value)
+    }
+    expect(screen.getAllByLabelText('Depends on stage IDs')[2]).toBe(dependencies)
+
+    // Saving must use the current parsed edges even before a blur commits formatting.
+    fireEvent.click(saveButton)
+    const edges = [
+      { from: 'deliver', to: 'stage-3' },
+      { from: 'stage-2', to: 'stage-3' },
+    ]
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: 'workflow', edges })
+    ))
+  })
+
+  it('normalizes trailing dependency punctuation on blur without changing the saved edges', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    const { dependencies, saveButton } = await renderThreeStageWorkflow()
+    const text = 'deliver, stage-2'
+    dependencies.focus()
+    fireEvent.change(dependencies, { target: { value: `${text}-` } })
+    expect(dependencies).toHaveValue(`${text}-`)
+    expect(dependencies).toHaveFocus()
+    fireEvent.blur(dependencies)
+    expect(dependencies).toHaveValue(text)
+    dependencies.focus()
+    fireEvent.change(dependencies, { target: { value: `${text}, ` } })
+    expect(dependencies).toHaveValue(`${text}, `)
+    fireEvent.blur(dependencies)
+    expect(dependencies).toHaveValue(text)
+    fireEvent.click(saveButton)
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ edges: [
+        { from: 'deliver', to: 'stage-3' },
+        { from: 'stage-2', to: 'stage-3' },
+      ] })
+    ))
+  })
+
+  it('refreshes dependency text after removing a stage and selecting another workflow', async () => {
+    const role = {
+      instructions: '', skills: [], maxSteps: 12,
+      modelInstanceId: null, reasoningEffort: null,
+    }
+    const workflow: AgentDefinition = {
+      ...editableDraft,
+      id: 'first-dependency-workflow',
+      name: 'First dependency workflow',
+      kind: 'workflow',
+      nodes: [
+        { ...role, id: 'research', name: 'Research', workspace: 'isolated' },
+        { ...role, id: 'review-stage', name: 'Review', workspace: 'isolated' },
+        { ...role, id: 'deliver', name: 'Deliver', workspace: 'shared' },
+      ],
+      edges: [
+        { from: 'research', to: 'deliver' },
+        { from: 'review-stage', to: 'deliver' },
+      ],
+    }
+    const otherWorkflow: AgentDefinition = {
+      ...workflow,
+      id: 'second-dependency-workflow',
+      name: 'Second dependency workflow',
+      edges: [{ from: 'research', to: 'deliver' }],
+    }
+    definitionState.value.definitions = [workflow, otherWorkflow]
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue(workflow.name)
+
+    const dependencies = screen.getAllByLabelText('Depends on stage IDs')[2]
+    dependencies.focus()
+    fireEvent.change(dependencies, {
+      target: { value: 'research, review-stage, ' },
+    })
+    expect(dependencies).toHaveValue('research, review-stage, ')
+    fireEvent.blur(dependencies)
+    fireEvent.click(screen.getAllByTitle('Remove stage')[0])
+
+    expect(screen.getAllByLabelText('Stage ID').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['review-stage', 'deliver'])
+    expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['', 'review-stage'])
+
+    fireEvent.click(screen.getByRole('button', { name: /Second dependency workflow/ }))
+    expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['', '', 'research'])
+    fireEvent.click(screen.getByRole('button', { name: /First dependency workflow/ }))
+    expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['', '', 'research, review-stage'])
   })
 
   it('routes a swarm worker and synthesizer independently', async () => {

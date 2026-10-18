@@ -255,6 +255,7 @@ export function CredentialSetup({
                 setIntent(undefined)
                 setPassphrase('')
                 setConfirmation('')
+                setMessage('')
               }}
             >
               Cancel

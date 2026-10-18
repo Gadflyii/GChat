@@ -1,0 +1,8 @@
+{
+  "time": 1792297703.0086296,
+  "requested_storage": "/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018/home/data/GChat/data/ginfer/models",
+  "storage_accepted": false,
+  "storage_error": "File exists (os error 17)",
+  "catalog_loaded": true,
+  "selection_empty": true
+}

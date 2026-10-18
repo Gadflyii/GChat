@@ -22,6 +22,33 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Chat search query selection — October 18
+
+An isolated native Linux pass reproduced a stale keyboard selection when a new
+search query returned the same number of chats. After selecting the second
+match for `a`, replacing the query with `v` kept the second position selected
+even though the matching chats changed. Enter opened that chat instead of the
+first match. The Search dialog and sidebar are unchanged between the observed
+native source `edcd74e49` and main `beee1f2f9`.
+
+Search now resets selection when its items change and scrolls the selected
+item into view when results change. Arrow navigation within the current results
+is preserved. Three focused regressions, one `make verify`, the frontend build
+and the native build passed on frozen source `3c0a8ba45`. The unchanged-source
+negative control failed the selection regression as expected; its other two
+tests passed.
+
+The corrected native Linux replay selected the first `v` result after changing
+an equal-count query, kept it visible, and opened the expected saved HTML chat
+with Enter. Recent-chat reopening and Clear also passed. All eight saved
+thread/session files were unchanged. Candidate SHA256:
+`4b15c5a4df9fd73d581bb931f8de890a74e5425031c5306668315b5a08861e98`.
+The isolated HOME/XDG, Xvfb, D-Bus and unlocked test-keyring replay used no model
+or GPU; CPUs were returned at 04:55Z. Evidence is in
+`/ai/gchat/out/gchat-chat-search-keyboard-20261018/`. This qualifies the Linux
+debug desktop interaction; Windows was not built (dev phase), and installer
+behavior was not checked.
+
 ## First-use duplicate agent names — October 17
 
 An isolated native Linux pass of main `9e75fc31e` reproduced silent replacement:
@@ -48,6 +75,92 @@ Evidence:
 `/ai/gchat/out/gchat1-chat-agents-pass-20261017/` (launch receipt, duplicate-name
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
+
+## Skill slash-menu keyboard visibility — October 18
+
+An isolated native Linux Chat pass qualified the pending keyboard interaction
+for `GCHAT-SKILL-SLASH-KEYBOARD-VISIBILITY-20261017`. With 24 enabled private
+`keyboard-01` through `keyboard-24` skills, Up/Down wrapped between the first
+and last entries while keeping the selection visible. Twelve Down presses
+selected `keyboard-13` fully inside the scrolled menu. Filtering to
+`/keyboard-2` selected `keyboard-20` among five matches; adding `4` selected
+the sole `keyboard-24` match. Composer focus remained intact. Tab inserted the
+inline `/keyboard-24` token; Backspace removed it from the empty composer.
+Backspace after a bare `/` closed the menu, and Escape closed the menu while
+preserving the typed query. The private draft was cleared without sending.
+
+The original source stack `4d60afdf1`, merged by `5d153ae12`, passed 62 focused
+tests and one cumulative `make verify`; those existing receipts remain in
+`/ai/gchat/out/skill-slash-keyboard-visibility-20261017/result.json`.
+The native pass used retained binary source `edcd74e49`, SHA256
+`bba3976355aca7a8c8721866f2eb5f3376be33181ae067dc12e4efb82d1a63be`.
+Its four slash-menu surfaces are byte-identical through `59dfad250`.
+Native DOM receipts, the viewed scrolling screenshot and the stopped-session
+record are in `/ai/gchat/out/gchat-skill-slash-native-20261018/`. This qualifies
+the Linux debug interaction with retained sidecars and a private HOME/XDG,
+Xvfb, D-Bus and unlocked test keyring. No model or GPU was used; CPU resources
+were returned at 04:44Z. Installer behavior was not checked.
+Windows: not built (dev phase).
+
+## Adding roles after removal — October 18
+
+An isolated native Linux Studio pass reproduced duplicate generated IDs after
+removing a middle role and adding another: `deliver, stage-2, stage-3` became
+`deliver, stage-3, stage-3`, and the workflow could not save. Coordinator Team
+specialists reproduced the same collision with `specialist-3`. Both Add handlers
+are unchanged between native source `a7debe294` and main `bca080b71`.
+
+Add stage and Add specialist now advance past IDs already in the current draft,
+including manually renamed IDs. Existing role IDs and workflow handoffs remain
+unchanged. Four rendered regressions cover middle removal and manual collisions
+for both kinds. The focused Studio suite passed 63 tests; one `make verify`,
+frontend build and native build passed on frozen source `edcd74e49`.
+
+Native Linux replay created `stage-4` / `specialist-4` after middle removal,
+then skipped manually occupied `*-4` IDs to create `stage-5` / `specialist-5`.
+Both definitions saved and reselected with the expected IDs; the workflow
+retained both handoff edges, and all eight prior definitions were unchanged.
+The candidate SHA256 is
+`bba3976355aca7a8c8721866f2eb5f3376be33181ae067dc12e4efb82d1a63be`.
+The private HOME/XDG, Xvfb, D-Bus and unlocked test keyring replay used no model
+or GPU and returned CPUs at 04:32Z. Evidence is in
+`/ai/gchat/out/gchat-appended-role-identifiers-20261018/`.
+This qualifies the Linux debug desktop interaction; Windows was not built
+(dev phase), and installer behavior was not checked.
+
+## Workflow dependency keyboard entry — October 18
+
+An isolated native Linux Studio pass reproduced a dependency editor that removed
+commas and separators during typing: entering `deliver, stage-2` produced
+`deliverstage2`. The affected Workflow editor is byte-identical between observed
+candidate source `3818d7a2` and main `548d73ed8`.
+
+The correction keeps the typed dependency text until blur and updates canonical
+workflow edges on every edit, so saving uses the current dependencies. External
+stage renames, removals and workflow selection refresh the displayed values.
+Rendered regressions cover per-character punctuation and focus, blur formatting,
+exact saved edges, removal and selection. The revised focused suite passed 52
+tests; its sole `make verify`, frontend build and native build passed. The first
+coverage attempt timed out the new test; the revised test uses a direct fixture
+and fewer repeated queries, retaining the unchanged five-second limit. The typing
+case then took 1.32 seconds under coverage.
+
+Native Linux replay retained `deliver, stage-2` and focus, saved both expected
+edges while the field was focused, and preserved a trailing `-` until Tab.
+Renaming the upstream stage refreshed the dependent field; removing the first
+stage, saving and reselecting the workflow retained only
+`research-stage` → `stage-3`. All seven existing definitions remained unchanged.
+Candidate SHA256 is
+`b5ece4cc00fd09d6fcb2d380ac65cd9777c0525a1b2b89d95313de9a4a0d3162`
+(source `a7debe294`). Main `3bbea776c` was subsequently merged without conflicts;
+the corrected dependency input remained byte-identical, and all 59 composed
+Agent Studio tests passed. The native binary predates that merge.
+
+Baseline, gate, native DOM and saved-definition receipts, plus the viewed typing
+screenshot, are in `/ai/gchat/out/gchat-workflow-dependency-keyboard-20261018/`.
+This is an isolated Linux debug editor check with retained sidecars and no GPU or
+model request. CPU resources were returned at 04:15Z.
+Windows: not built (dev phase).
 
 ## Untouched Coordinator Team defaults — October 18
 
