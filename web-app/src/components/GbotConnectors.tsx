@@ -93,7 +93,10 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
   }
 
   const nothingToSave =
-    settings !== undefined && !settings.accounts.length && !linked.length
+    settings !== undefined &&
+    !settings.accounts.length &&
+    !settings.account_ids.length &&
+    !linked.length
   return (
     <details className="rounded-lg border p-3">
       <summary className="cursor-pointer text-sm">Linked accounts</summary>
