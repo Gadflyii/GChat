@@ -1,5 +1,47 @@
 # GChat installer refresh
 
+## First-run step guidance — gates and native prompt PASS, October 18
+
+`CLI-FIRST-RUN-STEP-GUIDANCE` changes exactly two CLI wizard messages on
+`fix/c4-cli-first-run-step-guidance-20261018`, based on merged main `84d6b23f0`
+(including launcher repair `a82f8c1e0`). The GPU prompt explains that storage and
+models come next, followed by profiling after selected downloads are verified.
+The profiling page says: “Profiling the selected models before startup.
+Profiling continues if you close this menu.” It removes the obsolete 22–73
+minute full-install estimate, consistent with the
+[selected-artifact decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md).
+Behavior, setup ordering, standalone `runtime_set=false`, and Engine are unchanged.
+
+Existing first-run progression cases passed **2/2**, Host check/clippy passed,
+and the **one `make verify` passed at 05:03:36Z**: root Vitest 3357 passed
+(6 skipped), extension Vitest 121 passed, six critical coverage floors passed,
+and Rust suites totaled 1228 passed (28 ignored). Lint had zero errors and five
+existing warnings. The release Host built at 05:05:04Z; `ldd` has no missing
+dependencies. Its SHA256 is
+`a2920cc133201fc260dc38ea25f9d907c19d3d519bf45273f860748aca06f24e`.
+[Gate and command receipts](../../out/c4-cli-first-run-step-guidance-20261018/gates.json).
+
+The fresh isolated native replay ran **05:06:53–05:07:08Z** with those exact Host
+bytes. It displayed the corrected GPU prompt; selecting GPU 1 advanced to the
+recommended private SSD storage and then the actual empty model catalog. Status
+is `models`, with no models, downloads or startup profiles and hardware profiling
+`idle`. The Host and private keyring stopped; CPU booking **3005** (112–119) was
+canceled at **05:07Z**. No archive rebuild, GPU/model execution or calibration ran.
+The profiling-page message is source/build checked; publication remains necessary
+to reach that page natively. No catalog, model or recommendation was fabricated.
+[Result and native receipt](../../out/c4-cli-first-run-step-guidance-20261018/result.json).
+
+One prompt-only attempt had no keyboard forwarding because a Python heredoc
+occupied subprocess stdin. It was stopped and cleaned up before the fresh replay.
+The corrected launcher uses `python -c` with inherited PTY stdin; no verification
+or build was repeated. Next: parent review/merge; the downstream model/profile
+walk still waits for W12/Ron release-bearing publication.
+
+| Owner / host | Path | State / retention |
+| --- | --- | --- |
+| Codex 4 / local | `/ai/gchat-worktrees/c4-cli-first-run-step-guidance-20261018` | Separate source and concise evidence branch; complete, awaiting review |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | No live job/CPU reservation; owned cache, prior accepted archive and native evidence retained temporarily for coordinated merge/cleanup; new outputs use `step-guidance-*` names |
+
 ## Linux archive install command — Python 3.11 or newer, October 18
 
 The novice archive walk on S1 found that the delivered guide's literal
