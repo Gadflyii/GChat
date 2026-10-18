@@ -1,0 +1,57 @@
+{
+  "time_utc": "2026-10-18T04:12:35.401499+00:00",
+  "row": "GUI-MODELS-RUNNING-HOST-INSTANCE",
+  "result": "PASS",
+  "host": "S1 AIS-2-8592-L01",
+  "source": {
+    "donor": "be69f91907160f5ff1abf779a2004bbbda6c63c4 + f928613b17fbba3434486f6bb4a1d782eae625a4",
+    "evidence_base": "e6b28e8d495b9fb15441da75484a757b8aff3df2",
+    "source_fix": "8db6fe57595530a92755032a87a5425dbba520e8",
+    "comparison": "No diff be69f9190..e6b28e8d4 for routes/hub/index.tsx, stores/engine-hosts-store.ts, containers/EngineHostModels.tsx, src-tauri/src/core/ginfer_models.rs"
+  },
+  "app_sha256": "f50466b90f01bd7bf0886eb83703eb5f12719697f09d4c0960f70cc924756b20",
+  "private_root": "/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018",
+  "display": ":196 1200x800",
+  "isolation": "private HOME/XDG/D-Bus/keyring/Xauthority; Wayland unset; native XTest actions, inspector read only",
+  "model": {
+    "path": "/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer",
+    "inventory_id": "aa8d792d-6cdb-4a2d-8b5e-6b068df2e3e0",
+    "instance_id": "2f5c70c7-be87-4ae7-9367-d9776414e131",
+    "registered_identity": "qwen3.8-27b/smol-q2g64-dflash2-q4",
+    "gpu_uuid": "GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c",
+    "max_context": 262144,
+    "concurrency": 1,
+    "copies": 1,
+    "spec": "auto",
+    "vision": true,
+    "kv": "auto",
+    "registered_package_sha256": "ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61",
+    "hash_source": "Existing registered package hash supplied by C7; package not rehashed."
+  },
+  "observations": [
+    {
+      "view": "Models Installed after Hosts custom start",
+      "text": "qwen38_27b_smol_df2 Running",
+      "load_disabled": true,
+      "stop_disabled": false,
+      "screenshot": "models-running.png"
+    },
+    {
+      "action": "Native Models Stop model click at 447,664",
+      "result": "Model stopped; no Engine serve process remains"
+    },
+    {
+      "view": "Models Installed after Stop",
+      "text": "qwen38_27b_smol_df2 Installed",
+      "screenshot": "models-stopped.png"
+    },
+    {
+      "view": "Hosts after Models Stop",
+      "text": "Stopped; Finishing graphics-card speed tuning (about 1 minute). Your graphics card is busy until it finishes. Starting a model stops the tuning.",
+      "screenshot": "hosts-stopped-tuning.png"
+    }
+  ],
+  "limits": "Linux isolated native qualification, not Windows or release installer. Existing source tests reused. No inference quality or performance claim.",
+  "acceptance": "C7 visually accepted the three scoped Models/Hosts PNGs 2026-10-18 04:13Z; main01b localHostModel/store/sync compare exact, ModelManagement differs only tab ownership with same labels/Running/Stop handlers.",
+  "resource_return": "2026-10-18 04:16Z: serve and draft calibration terminal; optional CompleteRemainingFormats profiling stopped with native Stop setup. GPU1 returned."
+}
