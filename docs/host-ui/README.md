@@ -3838,6 +3838,14 @@ or disable it. Focus stays on that switch while GChat saves the change; repeated
 activation waits for the current save. If saving fails, the switch keeps its
 saved state and you can press Space again to retry. Other skills remain usable.
 
+Linux acceptance (`GUI-AGENT-SKILL-TOGGLE-FOCUS-20261018`): a genuine permission
+error left the switch enabled, checked, and focused. Restoring write access and
+pressing Space disabled the skill; another Space restored its initial state,
+with focus retained throughout. The original 17 saved records, 45 skill files,
+two workspace inputs, disabled-state bytes, and directory mode were unchanged
+afterward. The native packet is
+[`out/gchat-skill-toggle-focus-20261018/`](../../out/gchat-skill-toggle-focus-20261018/).
+
 ## Creating and editing skills
 
 After you choose **Create** or **Save**, the button shows **Creating skill…**
