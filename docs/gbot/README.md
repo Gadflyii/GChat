@@ -1,5 +1,35 @@
 # Gbot design
 
+## Schedule error guidance and list checks — Gchat 2
+
+`GBOT-SCHEDULE-ERROR-GUIDANCE`, based on main `ddf46f9d8`, gives failed
+Create, Enable and Disable requests plain guidance about their unconfirmed
+outcome. The existing Retry loading schedules control is now available after
+those failures, so users can check saved state before changing it again.
+Failed list reads also name the recovery control. Technical diagnostics stay in
+Details, initially closed.
+
+List checks preserve the schedule draft and action warning and send no write.
+The same pending guard blocks duplicate reads or writes during recovery. Only
+an explicit action retry clears its warning; confirmed saved results continue
+to survive a failed follow-up read. Invalid form entries keep plain validation
+without technical Details or a service retry. Rendered regressions cover both
+enabled states, creation, failed and successful list checks, and validation.
+This is source/rendered UI scope with no service contract change.
+
+All five guidance regressions failed on unchanged production. The fixed suite
+passed all 21 unique cases: 17 initially, then the four failed diagnostic-text
+cases after correcting Error.message formatting. Passing focused cases were
+not repeated. Lint passed with zero errors and five existing warnings.
+ONE `make verify`, 18 October 17:12:06–17:18:11 UTC, passed 3,716 app tests
+(six skipped), 127 extension tests, 1,311 Rust tests (28 ignored, 23 summaries),
+six coverage floors and lint/typecheck/guards. All 3,459 tracked raw source bytes
+and modes matched before and after the gate; tracked timestamps were refreshed.
+This receipt was added afterward with product and test source unchanged.
+CPU120–127 booking3438 returned 17:18Z. Evidence:
+`out/gchat2-schedule-error-guidance-20261018/result.json` and adjacent raw logs.
+No whole-gate repeat or native acceptance claimed.
+
 ## Keep confirmed schedule changes after a failed reload — Gchat 2
 
 `GBOT-SCHEDULE-ACTION-RESULT`, based on main `739d5da2f`, displays the saved

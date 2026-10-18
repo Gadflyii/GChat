@@ -63,7 +63,10 @@ function WorkspaceSchedules({
   }>()
   const pendingRef = useRef(false)
   const busy = !!pending
-  const [error, setError] = useState('')
+  const [error, setError] = useState<{
+    message: string
+    details?: string
+  } | null>(null)
   const [refreshError, setRefreshError] = useState('')
   const [stopped, setStopped] = useState<string | null>(null)
   const refreshVersion = useRef(0)
@@ -82,7 +85,7 @@ function WorkspaceSchedules({
       setRefreshError('')
     } catch (cause) {
       if (version !== refreshVersion.current) return
-      setRefreshError(String(cause))
+        setRefreshError(cause instanceof Error ? cause.message : String(cause))
     }
   }, [workspaceId])
   useEffect(() => {
@@ -109,12 +112,13 @@ function WorkspaceSchedules({
   async function perform(
     label: string,
     action: () => Promise<Schedule>,
+    failureMessage: string,
     scheduleId?: string
   ) {
     if (pendingRef.current) return
     pendingRef.current = true
     setPending({ label, scheduleId })
-    setError('')
+    setError(null)
     try {
       const saved = await action()
       setSchedules((current) =>
@@ -126,7 +130,10 @@ function WorkspaceSchedules({
       )
       await refresh()
     } catch (cause) {
-      setError(String(cause))
+      setError({
+        message: failureMessage,
+        details: cause instanceof Error ? cause.message : String(cause),
+      })
     } finally {
       pendingRef.current = false
       setPending(undefined)
@@ -142,23 +149,37 @@ function WorkspaceSchedules({
         </p>
       )}
       {error && (
-        <p role="alert" className="mb-3 text-sm text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="mb-3 space-y-2 text-sm text-destructive">
+          <p>{error.message}</p>
+          {error.details !== undefined && (
+            <details className="text-muted-foreground">
+              <summary>Details</summary>
+              <p className="whitespace-pre-wrap break-words">{error.details}</p>
+            </details>
+          )}
+        </div>
       )}
       {refreshError && (
-        <div className="mb-3 space-y-2">
-          <p role="alert" className="text-sm text-destructive">
-            Could not load scheduled tasks. {refreshError}
+        <div role="alert" className="mb-3 space-y-2 text-sm text-destructive">
+          <p>
+            Could not load scheduled tasks. Check the Gbot service connection,
+            then choose Retry loading schedules.
           </p>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() => void retryRefresh()}
-          >
-            Retry loading schedules
-          </Button>
+          <details className="text-muted-foreground">
+            <summary>Details</summary>
+            <p className="whitespace-pre-wrap break-words">{refreshError}</p>
+          </details>
         </div>
+      )}
+      {(error?.details !== undefined || refreshError) && (
+        <Button
+          className="mb-3"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void retryRefresh()}
+        >
+          Retry loading schedules
+        </Button>
       )}
       {pending && (
         <p role="status" className="mb-3 text-sm text-muted-foreground">
@@ -216,6 +237,7 @@ function WorkspaceSchedules({
                       id: schedule.id,
                       enabled: !schedule.enabled,
                     }),
+                  `Could not confirm whether this schedule was ${schedule.enabled ? 'disabled' : 'enabled'}. Choose Retry loading schedules to check its current state before changing it again.`,
                   schedule.id
                 )
               }
@@ -265,28 +287,33 @@ function WorkspaceSchedules({
                 (!Number.isSafeInteger(Number(seconds)) ||
                   Number(seconds) <= 0))
             ) {
-              setError(
-                'Enter a prompt, start time and positive whole interval in seconds.'
-              )
+              setError({
+                message:
+                  'Enter a prompt, start time and positive whole interval in seconds.',
+              })
               return
             }
-            void perform('Creating schedule…', async () => {
-              const saved = await gbot<Schedule>('schedules/create', {
-                workspace_id: workspaceId,
-                prompt,
-                timing:
-                  kind === 'once'
-                    ? { kind, at: timestamp }
-                    : {
-                        kind,
-                        first_at: timestamp,
-                        every_seconds: Number(seconds),
-                      },
-                missed_run_policy: policy,
-              })
-              setPrompt('')
-              return saved
-            })
+            void perform(
+              'Creating schedule…',
+              async () => {
+                const saved = await gbot<Schedule>('schedules/create', {
+                  workspace_id: workspaceId,
+                  prompt,
+                  timing:
+                    kind === 'once'
+                      ? { kind, at: timestamp }
+                      : {
+                          kind,
+                          first_at: timestamp,
+                          every_seconds: Number(seconds),
+                        },
+                  missed_run_policy: policy,
+                })
+                setPrompt('')
+                return saved
+              },
+              'Could not confirm that the schedule was created. Your draft is still here. Choose Retry loading schedules to check for it before trying Create schedule again.'
+            )
           }}
         >
           <label className="block text-sm">
