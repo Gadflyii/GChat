@@ -21,6 +21,18 @@ const actionLabels = {
   save: 'Saving cost review…',
 }
 
+const failureMessages = {
+  prices:
+    'Could not load current prices. Enter your provider API token again, then choose Load live prices to retry.',
+  refreshPrices:
+    'Could not refresh current prices. Review Details, then choose Refresh prices to try again. Enter the API token again if it needs to be replaced.',
+  quote:
+    'Could not calculate the cost. Your region and plan are still selected. Choose Review cost to try again.',
+  save: 'Could not confirm the cost review was saved. Your cost consent is still selected. Choose Save cost review to try again.',
+  refreshSaved:
+    'Your cost review was saved, but the computer list could not be refreshed. Close setup to try refreshing the list again.',
+}
+
 function Choice({
   label,
   value,
@@ -93,7 +105,10 @@ export default function CloudCosts({
   const [pending, setPending] = useState(false)
   const [action, setAction] = useState<keyof typeof actionLabels>()
   const pendingRef = useRef(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<{
+    action: keyof typeof failureMessages
+    details: string
+  }>()
   const [expired, setExpired] = useState(false)
   const [refreshFailed, setRefreshFailed] = useState(false)
   useEffect(() => {
@@ -112,11 +127,14 @@ export default function CloudCosts({
     setPending(true)
     setAction(kind)
     busy(true)
-    setError('')
+    setError(undefined)
     try {
       await operation()
     } catch (cause) {
-      setError(String(cause))
+      setError({
+        action: kind === 'prices' && review ? 'refreshPrices' : kind,
+        details: cause instanceof Error ? cause.message : String(cause),
+      })
     } finally {
       pendingRef.current = false
       setPending(false)
@@ -324,7 +342,17 @@ export default function CloudCosts({
                         quote_id: quote.id,
                       })
                     )
-                    await reviewed()
+                    try {
+                      await reviewed()
+                    } catch (cause) {
+                      setError({
+                        action: 'refreshSaved',
+                        details:
+                          cause instanceof Error
+                            ? cause.message
+                            : String(cause),
+                      })
+                    }
                   })
                 }
               >
@@ -356,9 +384,13 @@ export default function CloudCosts({
         </p>
       )}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>{failureMessages[error.action]}</p>
+          <details>
+            <summary>Details</summary>
+            <p className="whitespace-pre-wrap break-words">{error.details}</p>
+          </details>
+        </div>
       )}
     </section>
   )

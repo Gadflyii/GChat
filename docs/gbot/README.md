@@ -1,5 +1,31 @@
 # Gbot design
 
+## Cloud cost review error recovery — Gchat 2
+
+`GBOT-CLOUD-COST-ERROR-GUIDANCE`, based on main `3693f932e`, gives
+price loading/refresh, cost calculation and review-save failures plain recovery
+steps naming the existing control. Technical diagnostics remain in Details,
+initially closed; opening them sends no request. Initial price failures explain
+that the cleared API token must be entered again; refresh can reuse its saved
+token. Region/plan selection and cost consent survive the corresponding failed
+actions, and retries remain explicit with the existing pending guards.
+
+A saved review stays confirmed if the follow-up computer-list refresh rejects.
+Its guidance asks the user to close setup and refresh the list, rather than save
+again. Token clearing, price expiry, current quote checks and separate billing
+consent keep their existing contract. This is source/rendered UI scope.
+
+Validation: the unchanged-source baseline failed all six recovery regressions.
+The fixed CloudCosts/wizard focus passed 54 unique cases, including the single
+failed-case continuation after correcting an assertion's capitalization; passing
+cases were not repeated. Lint had zero errors and five existing warnings.
+ONE `make verify`, 18 October 17:44:34–17:50:32 UTC, passed 3,731 app tests
+(six skipped), 127 extension tests, 1,316 Rust tests (28 ignored) and six coverage
+floors. All 3,459 tracked raw input bytes/modes matched before and after the gate,
+with fresh build timestamps. CPUs returned at 17:51 UTC. This receipt was added
+afterward with product/test source unchanged. Evidence:
+`/ai/gchat/out/gchat2-cloud-cost-error-guidance-20261018/result.json`.
+
 ## SSH connection setup error guidance — Gchat 2
 
 `GBOT-LAN-SETUP-ERROR-GUIDANCE`, based on main `250df804a`, gives
