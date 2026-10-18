@@ -31,11 +31,22 @@ unchanged. The affected service is identical between native source
 `f1c7c73b0` and main `d4ec7abab`.
 
 Thread updates now preserve the existing creation date and refresh only the
-update date. Regression tests, one `make verify` and a corrected native replay
-are pending. Baseline evidence is in
+update date. All 23 focused tests passed, including a persisted favorite/project
+roundtrip regression; the unchanged-source negative control failed that
+regression as expected. One `make verify` passed on frozen source `40573bd8a`
+(3,394 app, 127 extension and 1,252 Rust tests), followed by passing frontend
+and native builds.
+
+The corrected native replay favorited the chat, moved it into and out of a
+project, opened its retained HTML preview and unfavorited it. All four updates
+preserved `created` while advancing `updated`. The seven other saved
+thread/message/session files remained byte-identical. The isolated HOME/XDG,
+Xvfb, D-Bus and unlocked test-keyring replay used no model or GPU; CPUs were
+returned at 06:04Z. Baseline evidence is in
 `/ai/gchat/out/gchat-chat-project-membership-20261018/`; the fix packet is
 `/ai/gchat/out/gchat-chat-created-timestamp-20261018/`. This is a Linux debug
-desktop check; Windows was not built (dev phase).
+desktop check; Windows was not built (dev phase), and installer behavior was
+not checked.
 
 ## Chat search query selection — October 18
 
