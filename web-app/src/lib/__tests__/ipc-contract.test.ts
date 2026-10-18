@@ -288,16 +288,31 @@ function frontendInvokeCommands(): Map<string, Set<string>> {
   return commands
 }
 
-function configuredDesktopPluginDefaults(): Set<string> {
+type DesktopCapability = {
+  permissions: Array<string | { identifier: string }>
+  local?: boolean
+  remote?: { urls: string[] }
+  windows?: string[]
+  webviews?: string[]
+  platforms?: string[]
+}
+
+function configuredDesktopCapabilities(): DesktopCapability[] {
   const config = JSON.parse(read(join(TAURI_ROOT, 'tauri.conf.json'))) as {
-    app: { security: { capabilities: string[] } }
+    app: { security: { capabilities: Array<string | DesktopCapability> } }
   }
+  return config.app.security.capabilities.map((capability) =>
+    typeof capability === 'string'
+      ? (JSON.parse(
+          read(join(TAURI_ROOT, 'capabilities', `${capability}.json`))
+        ) as DesktopCapability)
+      : capability
+  )
+}
+
+function configuredDesktopPluginDefaults(): Set<string> {
   const granted = new Set<string>()
-  for (const capability of config.app.security.capabilities) {
-    const path = join(TAURI_ROOT, 'capabilities', `${capability}.json`)
-    const parsed = JSON.parse(read(path)) as {
-      permissions: Array<string | { identifier: string }>
-    }
+  for (const parsed of configuredDesktopCapabilities()) {
     for (const permission of parsed.permissions) {
       const identifier =
         typeof permission === 'string' ? permission : permission.identifier
@@ -317,6 +332,25 @@ describe('Tauri IPC contract', () => {
   const plugins = pluginContracts()
   const pluginById = new Map(plugins.map((plugin) => [plugin.id, plugin]))
   const frontendInvokes = frontendInvokeCommands()
+
+  it('allows confirmed window destruction only from the local main webview', () => {
+    const grants = configuredDesktopCapabilities().filter((capability) =>
+      capability.permissions.some(
+        (permission) =>
+          (typeof permission === 'string'
+            ? permission
+            : permission.identifier) === 'core:window:allow-destroy'
+      )
+    )
+    expect(grants).toHaveLength(1)
+    expect(grants[0]).toMatchObject({
+      local: true,
+      webviews: ['main'],
+      platforms: ['linux', 'windows'],
+    })
+    expect(grants[0].remote).toBeUndefined()
+    expect(grants[0].windows ?? []).toEqual([])
+  })
 
   it('keeps the documented desktop/mobile handler split', () => {
     expect(

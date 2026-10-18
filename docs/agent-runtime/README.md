@@ -25,6 +25,48 @@ The [installed Unix PTY check](remaining-acceptance.md#current-unix-pty-window-g
 also passes whole-window pixel reporting, a one-pixel resize at an unchanged
 grid, and ordinary Code model-menu mouse selection on native Linux.
 
+## Unsaved agent drafts on window close — October 18
+
+A private Linux native walk found that ordinary window Close discarded an
+edited new agent without confirmation. After relaunch, **Weekly planning
+helper** was gone. Saved definitions, run history and chat messages were
+unchanged. Baseline source `91db9b295` matched the relevant current-main
+`a8e599cd4` files; receipts are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1951/`.
+
+Closing Agent Studio with an edited saved, new or template draft now asks
+**Discard unsaved agent changes?** and names the draft. **Cancel** is the
+keyboard default. Cancel, Enter on Cancel and Escape keep the window and draft.
+Repeated close requests retain the pending confirmation. Approval for an older
+revision or an unmounted Studio cannot close over newer work. Clean and saved
+drafts keep ordinary close behavior.
+
+Agent-run admission now closes when the main window is destroyed; the existing
+exit-request and exit fences remain. Cancelling the confirmation therefore
+leaves agent turns available. The Tauri SDK finishes an approved close using
+`core:window:allow-destroy`, granted only to local content in the `main` webview
+on Linux and Windows through the existing Tauri configuration. Remote content
+and secondary webviews receive no new permission.
+
+Native Linux acceptance of frozen source `9c1f5d739` passed at 1,024 × 740.
+Edited saved, new and template drafts displayed the confirmation. Enter on
+Cancel, Escape and clicking Cancel retained the live draft; repeated Close
+requests kept one dialog. A new draft remained protected while hidden behind
+the Templates tab. Explicit **Discard changes** destroyed the window and
+completed application cleanup. Relaunch selected the unchanged saved agent;
+its clean draft closed normally. Protected definitions, run history, thread
+metadata, messages and the private skill retained their original hashes and
+file modes. No agent run or model load was started during the native walk.
+
+The 134 Agent Studio/confirmation tests, five IPC tests, native admission
+regression, Cargo check and Clippy passed. One `make verify` attempt completed
+through an exact failed-stage continuation after test-only assertion
+corrections: 3,804 app tests, 127 extension tests and 1,319 Rust tests passed,
+plus lint, type checking, quality and critical-coverage gates.
+Receipts: `/ai/gchat/out/gchat-agent-window-close-draft-20261018/`.
+This check covers normal Linux window close. Page reload, process-loss draft
+recovery and Windows platform acceptance remain outside it.
+
 ## Try in chat skill catalog failures — October 18
 
 A private Linux native walk found that **Try in chat** silently lost the chosen

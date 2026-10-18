@@ -5,10 +5,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from 'react'
-import { invoke } from '@tauri-apps/api/core'
+import { invoke, isTauri } from '@tauri-apps/api/core'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { continuationTask } from '@/lib/agent-continuation'
 import { confirmAction } from '@/lib/confirm'
 import { AgentRunSetup } from '@/containers/AgentRunSetup'
@@ -418,6 +420,8 @@ function AgentStudioPage() {
 
   const draftBaseline = useRef<string | null>(null)
   const draftRevision = useRef(0)
+  const closeDraft = useRef(draft)
+  useLayoutEffect(() => { closeDraft.current = draft }, [draft])
   const mutatingDraft = useRef(false)
   const setDraft = useCallback(
     (next: AgentDefinition | null, savedId?: string | null) => {
@@ -445,6 +449,52 @@ function AgentStudioPage() {
   const draftBusy = saving || creating || deleting
   const historyRevision = useStudioRuns((s) => s.historyRevision)
   const pageId = useId()
+
+  useEffect(() => {
+    if (!isTauri()) return
+    const window = getCurrentWindow()
+    let active = true
+    let unlisten: (() => void) | undefined
+    let confirming = false
+    void window.onCloseRequested(async (event) => {
+      if (!active) {
+        event.preventDefault()
+        return
+      }
+      const current = closeDraft.current
+      if (!current || JSON.stringify(current) === draftBaseline.current) return
+      if (confirming) {
+        event.preventDefault()
+        return
+      }
+      confirming = true
+      const revision = draftRevision.current
+      try {
+        const accepted = await confirmAction({
+          title: 'Discard unsaved agent changes?',
+          message: `Your changes to "${current.name || 'Untitled Agent'}" have not been saved. Discard them to close GChat.`,
+          confirmLabel: 'Discard changes',
+          destructive: true,
+        })
+        // Tauri awaits this handler before allowing the original close.
+        if (!active || !accepted || revision !== draftRevision.current) event.preventDefault()
+      } catch {
+        event.preventDefault()
+        toast.error('Could not confirm closing GChat. Save your changes before closing.')
+      } finally {
+        confirming = false
+      }
+    }).then((stop) => {
+      if (active) unlisten = stop
+      else stop()
+    }).catch(() => {
+      if (active) toast.error('Could not protect unsaved agent changes when closing GChat. Save your changes before closing.')
+    })
+    return () => {
+      active = false
+      unlisten?.()
+    }
+  }, [])
 
   useBlocker({
     enableBeforeUnload: false,

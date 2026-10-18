@@ -2656,6 +2656,83 @@ while True:
             .is_empty());
     }
 
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[tokio::test]
+    async fn cancelled_window_close_keeps_turn_admission_until_main_destroyed() {
+        let root = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::test_support::TestDataRoot(root.path().to_owned()));
+        let state = app.state::<AppState>();
+        // Get a real close-request API from Tauri's mock runtime rather than
+        // constructing its private sender. Keep the application under test
+        // separate from the mock event loop used to deliver the request.
+        let close_app = tauri::test::mock_app();
+        let close_window = tauri::WebviewWindowBuilder::new(&close_app, "main", Default::default())
+            .build()
+            .unwrap();
+        let admission_app = app.handle().clone();
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let observed = cancelled.clone();
+        let started = std::time::Instant::now();
+        close_app.run_return(move |handle, event| match event {
+            tauri::RunEvent::Ready => close_window.close().unwrap(),
+            tauri::RunEvent::WindowEvent {
+                label,
+                event: event @ tauri::WindowEvent::CloseRequested { .. },
+                ..
+            } => {
+                crate::handle_agent_window_event(
+                    &admission_app.state::<AppState>(),
+                    &label,
+                    &event,
+                );
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                }
+                observed.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            tauri::RunEvent::MainEventsCleared => {
+                assert!(started.elapsed() < std::time::Duration::from_secs(10));
+                if observed.load(std::sync::atomic::Ordering::SeqCst) {
+                    assert!(handle.get_webview_window("main").is_some());
+                    close_window.destroy().unwrap();
+                }
+            }
+            _ => {}
+        });
+        assert!(cancelled.load(std::sync::atomic::Ordering::SeqCst));
+        // A secondary window disappearing must not disable the main window.
+        crate::handle_agent_window_event(&state, "other", &tauri::WindowEvent::Destroyed);
+        let request: AgentTurnRequest = serde_json::from_value(serde_json::json!({
+            "run_id":"after-cancel","session_id":Uuid::new_v4().to_string(),
+            "model_id":"unused","definition_id":"missing-definition","user_message":"not started"
+        }))
+        .unwrap();
+        let error = run_turn_with_sink(app.handle().clone(), request.clone(), Arc::new(|_| Ok(())))
+            .await
+            .unwrap_err();
+        assert!(
+            error.contains("missing-definition"),
+            "turn was admitted: {error}"
+        );
+
+        let cancellation = CancellationToken::new();
+        let _active = state
+            .agent_runs
+            .register("during-confirmation", cancellation.clone())
+            .unwrap();
+        crate::handle_agent_window_event(&state, "main", &tauri::WindowEvent::Destroyed);
+        assert!(cancellation.is_cancelled());
+        let error = run_turn_with_sink(app.handle().clone(), request, Arc::new(|_| Ok(())))
+            .await
+            .unwrap_err();
+        assert!(
+            error.contains("GChat is shutting down"),
+            "late turn: {error}"
+        );
+    }
+
     #[tokio::test]
     async fn failed_studio_preflight_releases_exit_tracking() {
         let root = tempfile::tempdir().unwrap();
