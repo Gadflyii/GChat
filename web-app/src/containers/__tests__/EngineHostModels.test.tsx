@@ -250,6 +250,48 @@ it.each([
   expect(engineCommand).toHaveBeenCalledTimes(2)
 })
 
+it.each([300, 0, 768, 0.5])('forwards %s MB of GPU reserve unchanged to check and launch', async (mb) => {
+  vi.mocked(engineCommand).mockResolvedValue(importedQuote)
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  await selectImportedModel()
+  fireEvent.click(screen.getByText('Advanced model settings'))
+  const reserve = screen.getByLabelText('GPU memory to keep free (MB)')
+  expect(reserve).toHaveValue(300)
+  expect(reserve).toHaveAccessibleDescription(/Raise this if other apps on this GPU, like your desktop or games, cause slowdowns/)
+  fireEvent.change(reserve, { target: { value: String(mb) } })
+  const body = expect.objectContaining({
+    model_id: 'imported-model', gpu_uuids: ['GPU-one'], kv_arena_headroom_bytes: mb * 1024 ** 2,
+  })
+  const check = screen.getByRole('button', { name: 'Check model settings' })
+  fireEvent.click(check)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('quote', { host_id: 'host', body })
+  await waitFor(() => expect(check).toBeEnabled())
+  fireEvent.click(screen.getByRole('button', { name: 'Start model with these settings' }))
+  await waitFor(() => expect(engineCommand).toHaveBeenCalledTimes(2))
+  expect(engineCommand).toHaveBeenLastCalledWith('launch', { host_id: 'host', body })
+})
+
+it.each(['', '-1', '0.0000001', '8589934592'])('blocks invalid GPU reserve %s before checking or launching', async (input) => {
+  render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  await selectImportedModel()
+  fireEvent.click(screen.getByText('Advanced model settings'))
+  const reserve = screen.getByLabelText('GPU memory to keep free (MB)')
+  fireEvent.change(reserve, { target: { value: input } })
+  expect(screen.getByRole('alert')).toHaveTextContent('Enter GPU memory to keep free as a nonnegative number of MB')
+  const check = screen.getByRole('button', { name: 'Check model settings' })
+  const launch = screen.getByRole('button', { name: 'Start model with these settings' })
+  expect(check).toBeDisabled()
+  expect(launch).toBeDisabled()
+  fireEvent.click(check)
+  fireEvent.click(launch)
+  expect(engineCommand).not.toHaveBeenCalled()
+  fireEvent.change(reserve, { target: { value: '300' } })
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(check).toBeEnabled()
+  expect(launch).toBeEnabled()
+})
+
 it.each(['-1', '1.5', '9007199254740992'])('rejects invalid Flash headroom %s before checking or launching', async (input) => {
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   await selectImportedModel()
@@ -391,13 +433,14 @@ it.each([
   ['Conversation length (tokens)', '32768'], ['Requests at once', '4'], ['Model copies', '2'],
   ['Reply speedup', 'auto'], ['Conversation memory format', 'int8'],
   ['Computer memory headroom for Flash (GiB)', '0'], ['Update the Flash expert cache', 'off'],
+  ['GPU memory to keep free (MB)', '600'],
 ])('discards a pending startup check when %s changes', async (label, value) => {
   let finishQuote!: (quote: EngineStartupQuote) => void
   vi.mocked(engineCommand).mockReturnValueOnce(new Promise<EngineStartupQuote>(resolve => { finishQuote = resolve }))
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
-  if (label === 'Computer memory headroom for Flash (GiB)' || label === 'Update the Flash expert cache') fireEvent.click(screen.getByText('Advanced model settings'))
+  if (['Computer memory headroom for Flash (GiB)', 'Update the Flash expert cache', 'GPU memory to keep free (MB)'].includes(label)) fireEvent.click(screen.getByText('Advanced model settings'))
   if (label === 'Reply speedup' || label === 'Conversation memory format') {
     await userEvent.click(screen.getByLabelText(label))
     await userEvent.click(screen.getByRole('menuitemradio', { name: label === 'Reply speedup' ? 'Automatic' : 'INT8' }))
@@ -966,6 +1009,64 @@ const savedModelProfile = {
   vision: true, structured_outputs: true, spec: 'none' as const, draft_tokens: 0, draft_tp: 0,
   kv_dtype: 'auto' as const, kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false,
 }
+
+it.each(['quote', 'launch', 'instance'] as const)('shows the actual post-attach reserve failure and recovery for %s', async (source) => {
+  const reason = 'final KV arena violates physical headroom on rank 0; free_bytes=209715200; headroom_bytes=314572800'
+  const diagnostic = `engine exited unexpectedly: exit status: 1\n${reason}`
+  const snapshot: EngineSnapshot = source === 'instance' ? { ...importedModelSnapshot, instances: [{
+    instance_id: 'failed', session_id: null, display_name: 'Failed model', upstream_model_id: 'imported-model',
+    status: 'failed', configuration: { ...savedModelProfile, kv_arena_bytes: 1073741824 },
+    profile: { ...savedModelProfile, kv_arena_bytes: 1073741824 }, last_error: diagnostic,
+  }] } : importedModelSnapshot
+  vi.mocked(engineCommand).mockRejectedValue(new Error(diagnostic))
+  render(<HostCard host={localHost} snapshot={snapshot} />)
+  if (source === 'instance') fireEvent.click(screen.getByText('Model and memory settings'))
+  else {
+    await selectImportedModel()
+    fireEvent.click(screen.getByRole('button', { name: source === 'quote' ? 'Check model settings' : 'Start model with these settings' }))
+  }
+  expect(await screen.findByText(reason, { exact: true })).toBeVisible()
+  expect(screen.getByText(/The model could not keep your chosen GPU memory free/)).toBeVisible()
+  const alert = screen.getByRole('alert')
+  expect(within(alert).getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+  expect(within(alert).getByText(source === 'instance' ? diagnostic : `Error: ${diagnostic}`, { exact: true, normalizer: (text) => text })).not.toBeVisible()
+  if (source !== 'instance') expect(screen.getByRole('button', { name: source === 'quote' ? 'Check model settings' : 'Start model with these settings' })).toBeEnabled()
+})
+
+it.each([undefined, 0, 1024, 4096 / 1024 ** 2])('inherits saved GPU reserve %s MB and applies edits only through confirmed reload', async (mb) => {
+  const profile = { ...savedModelProfile, ...(mb === undefined ? {} : { kv_arena_headroom_bytes: mb * 1024 ** 2 }) }
+  const snapshot: EngineSnapshot = { ...importedModelSnapshot, instances: [{
+    instance_id: 'saved', session_id: 'session', display_name: 'Saved model', upstream_model_id: 'imported-model', status: 'ready',
+    configuration: profile, profile,
+  }] }
+  vi.mocked(engineCommand).mockResolvedValue(snapshot)
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  render(<HostCard host={localHost} snapshot={snapshot} />)
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+  fireEvent.click(screen.getByText('Advanced model settings'))
+  const reserve = screen.getByLabelText('GPU memory to keep free (MB)')
+  expect(reserve).toHaveValue(mb ?? 300)
+  const save = screen.getByRole('button', { name: 'Save and restart model' })
+  expect(save).toBeEnabled()
+  expect(engineCommand).not.toHaveBeenCalled()
+  fireEvent.change(reserve, { target: { value: '-1' } })
+  expect(save).toBeDisabled()
+  fireEvent.change(reserve, { target: { value: '700' } })
+  expect(save).toBeEnabled()
+  expect(engineCommand).not.toHaveBeenCalled()
+  fireEvent.click(save)
+  expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?' })
+  await act(async () => settleConfirm(false))
+  expect(engineCommand).not.toHaveBeenCalled()
+  expect(reserve).toHaveValue(700)
+  fireEvent.click(save)
+  await act(async () => settleConfirm(true))
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining({ kv_arena_headroom_bytes: 700 * 1024 ** 2 }), expected_session_id: 'session',
+  } })
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Save and restart model' })).not.toBeInTheDocument())
+})
 
 it.each([
   { name: 'omitted settings', options: {}, headroom: null, lfu: true },

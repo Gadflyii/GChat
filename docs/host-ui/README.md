@@ -65,6 +65,67 @@ protected RC donor is unchanged. Only
 and [short summary](../../out/secure-storage-locked-guidance-20261018/test-summary.md)
 are retained. Merged as `73fac6573`; continue the next owned GUI row without
 repeating these accepted checks.
+## GPU memory reserve setting — verified, merge pending, C3, October 18
+
+`KV-HEADROOM-USER-SETTING` delivers Ron’s per-launch setting in each Host’s
+model editor under Advanced: **GPU memory to keep free (MB)**. New custom
+launches default to 300 MB (314572800 bytes); editing inherits the saved
+profile’s value. The same `kv_arena_headroom_bytes` must reach quote and launch
+unchanged. Saving changes uses the existing confirmed instance reload, so
+editing alone never changes a running model. Signed profile recipes retain
+all recorded values and qualification checks.
+
+Acceptance: validate representable nonnegative MB input before quote/start/save;
+cover conversion, profile inheritance, restart and Host argument forwarding;
+show the Engine’s reserve-related startup failure with an actionable explanation;
+run focused tests, exactly one `make verify`, and capture the real native editor
+in an isolated S1 session. No Engine arithmetic/admission change, new release
+package, GPU benchmark, global preference map, or CredentialSetup/EngineFirstRun
+edit belongs to this item. Arch confirmed this launch/profile ownership at
+17:40Z; C1 owns GInfer config/profile support and no GChat files.
+
+Owner/worktree: C3, `fix/c3-gpu-memory-reserve`,
+`/ai/gchat-worktrees/c3-gpu-memory-reserve-20261018`, baseline `5b48adfd9`.
+The private S1 build fixture used independent read copies of the inactive granted
+Gchat 3 dependencies; no GPU claim. Small evidence is under
+`out/c3-gpu-memory-reserve-20261018`. New launches explicitly send
+300 MB; editing preserves saved bytes, including zero and fractional MB; invalid
+values block quote/start/save. The Engine has no dedicated error code for strict
+post-attach reserve failure: C1 confirmed the exact `final KV arena violates
+physical headroom on rank …; free_bytes=…; headroom_bytes=…` diagnostic. Quote,
+action rejection and asynchronous instance failure show it visibly with recovery
+guidance while retaining the full log in closed Technical details. See the
+[decision](../decisions/2026-10-18-expose-per-launch-gpu-memory-reserve.md).
+Focused verification passed: **85 rendered UI tests**, the exact Host arena
+argument test, the existing quote/saved-launch pipeline test, lint, Rust check
+and strict clippy. Three initial full-log assertions needed an exact-whitespace
+matcher because Testing Library normalized multiline text; the corrected 85-test
+run passed. The one unmodified `make verify` passed 3,750 app tests / 6 skipped,
+127 extension tests and all six critical coverage floors, then reached the main
+Rust suite, where 774 tests passed and two unrelated agent-tool
+tests failed. Both were caused by the private `src-tauri/target` symlink:
+the shell returned a canonical working directory and the diff labels could not
+strip the lexical workspace prefix. The fixture now uses a physical
+`src-tauri/target`, a matching `CARGO_TARGET_DIR` and a reverse convenience alias;
+no product or test source changed. Both exact failed tests now pass, and all six
+remaining Rust suites pass: 1,316 tests passed across the original run and
+targeted continuation, with 28 ignored. There was no second full verify.
+
+Normal Release sidecars and desktop passed at **18:26Z**. The coordinator
+reviewed the actual build output and frozen source hashes, then paired the native
+desktop with a real empty private Host. A private S1 HOME, Xvfb display, D-Bus
+session and unlocked keyring isolated it from Ron’s session. Ordinary input
+showed default **300 MB**, changed it to **600 MB**, and restored **300 MB**;
+all three unmodified screenshots were viewed. The setting and full help text
+fit the native window. No GPU or model execution was used for this editor check;
+focused tests cover forwarding and confirmed restart.
+
+The app closed normally, private services stopped, and CPUs40–47 returned
+**18:32Z**. The owned 63 GiB S1 build/private-HOME fixture is retired; accepted
+RC packages, dependency donors and protected inputs remain intact. See
+`out/c3-gpu-memory-reserve-20261018/result.json`, `native-result.json`,
+`terminal-summary.json` and `reserve-default-300.png`. Next: push the verified
+branch for Bubbs’s merge, then release EngineHostModels.tsx to Gchat 3.
 
 ## Check-again locked-vault recovery — verified, Gchat 3, October 18
 

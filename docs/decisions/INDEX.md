@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-18** — [Expose the per-launch GPU memory reserve](2026-10-18-expose-per-launch-gpu-memory-reserve.md)
+
 - **2026-10-18** — [Forward Host residency controls](2026-10-18-forward-host-residency-controls.md)
 
 - **2026-10-18** — [Retire the deleted local Host registration after reset](2026-10-18-retire-deleted-local-host-registration-after-reset.md)

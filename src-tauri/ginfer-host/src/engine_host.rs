@@ -1393,15 +1393,30 @@ mod residency_options_tests {
 #[cfg(all(test, unix))]
 mod tests {
     #[test]
-    fn dynamic_arena_launch_keeps_headroom_without_a_fixed_pool() {
-        let options = super::LaunchOptions {
-            kv_arena_bytes: None,
-            kv_arena_headroom_bytes: 314572800,
-            ..Default::default()
-        };
-        let args = options.args();
-        assert!(!args.iter().any(|arg| arg == "--kv-arena-bytes"));
-        assert!(args.windows(2).any(|pair| pair == ["--kv-arena-headroom-bytes", "314572800"]));
+    fn arena_launch_forwards_user_headroom_unchanged_for_automatic_and_fixed_pools() {
+        for reserve in [0, 314572800, 805306368, u64::MAX] {
+            for arena in [None, Some(4096)] {
+                let options: super::LaunchOptions = serde_json::from_value(serde_json::json!({
+                    "kv_arena_bytes": arena, "kv_arena_headroom_bytes": reserve,
+                })).unwrap();
+                options.validate(1).unwrap();
+                let args = options.args();
+                assert!(args.windows(2).any(|pair| {
+                    pair[0] == "--kv-arena-headroom-bytes" && pair[1] == reserve.to_string()
+                }));
+                assert_eq!(args.iter().any(|arg| arg == "--kv-arena-bytes"), arena.is_some());
+                if let Some(bytes) = arena {
+                    assert!(args.windows(2).any(|pair| {
+                        pair[0] == "--kv-arena-bytes" && pair[1] == bytes.to_string()
+                    }));
+                }
+            }
+        }
+        for invalid in [serde_json::json!(-1), serde_json::json!(1.5)] {
+            assert!(serde_json::from_value::<super::LaunchOptions>(serde_json::json!({
+                "kv_arena_headroom_bytes": invalid,
+            })).is_err());
+        }
     }
     use super::*;
     use std::os::unix::fs::PermissionsExt;
