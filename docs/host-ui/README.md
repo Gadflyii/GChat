@@ -1,5 +1,47 @@
 # GInfer host UI
 
+## First-run queued model choices — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-CLEAR-MODEL-CHOICES` fixes the case where unchecking the final
+saved model during hardware measurement disabled Save while leaving the old
+download queued. **Clear saved model choices** now explicitly clears a
+pre-admission selection. Edited choices stop claiming they are saved; accepted
+clearing persists across polling, maintenance and Host restart, leaves the
+measurement running and admits no removed model when measurement ends.
+Omitting `release_ids` preserves the saved choice and its error state; an
+explicit empty list clears it. Already admitted downloads still reject
+model-choice edits.
+
+First-run download cards expose the existing **Pause download** and
+**Discard download** actions under Arch's approved wording. Pause keeps the
+partial file. Discard removes it and appears only after the Host reports paused
+or failed. The card stays visible while the request is pending and never claims
+an active download has stopped before acknowledgement. These use existing Host
+actions without new download semantics or stored formats.
+
+Candidate: `/ai/gchat-worktrees/gchat3-first-run-clear-model-choices-20261018`,
+branch `fix/gchat3-first-run-clear-model-choices-20261018`, base `ef2ef2d79`.
+The new rendered regression reproduced the stale saved confirmation on the
+unchanged base. Candidate validation passed all 49 rendered tests, both focused
+native regressions, Host `cargo check --all-targets` and `cargo clippy --all-targets`.
+The sole `make verify` exited 0 at 14:15:43 UTC: 3,607 app tests, 127 extension
+tests, six coverage floors and 1,290 native tests passed; six app tests were
+skipped and 28 native tests ignored. Lint had no errors and five existing
+unrelated warnings. A pinned-future fixture borrow initially blocked native
+compilation; scoping it before reopening the Host corrected that test, and only
+the failed/unrun stages continued. No passing focused suite or full gate was
+repeated. Final source and all eight catalog input bindings match the tested
+candidate. No GPU/model, Windows or installed-desktop qualification is claimed.
+
+The independent S1 SSD fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-clear-model-choices-tests-20261018`
+was removed at 14:20:49 UTC after raw evidence review, along with its three
+exited containers and prep log (29.83 GB logical bytes). CPU88–95 returned
+14:16Z. The inactive RC donor remains protected. Small reviewed results are
+`out/gchat-first-run-clear-model-choices-20261018/test-result.json` and
+`test-summary.md`. Next: merge this verified candidate, then mirror the three
+signed Muse consumer profile catalogs in one separate branch.
+
 ## First-run refresh feedback — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-REFRESH-LIFETIME` extends the existing setup request lifetime
