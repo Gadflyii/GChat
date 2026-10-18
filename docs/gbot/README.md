@@ -1,5 +1,33 @@
 # Gbot design
 
+## LAN removal follows its bot panel — Gchat 2
+
+`GBOT-LAN-REMOVAL-REQUEST-LIFETIME`, based on main `82ad083b1`, ignores a
+removal confirmation after the initiating saved-bot panel has left. Previously,
+accepting the old dialog could still remove that bot. An already submitted
+removal may finish, but its result cannot clear a replacement bot selection or
+show a failure in its panel.
+
+The replacement bot requires its own explicit removal confirmation. Rendered
+journeys cover replacement while the dialog is open and while the request is
+pending, followed by a freshly confirmed action for the replacement. Existing
+confirmation cancellation and failure/retry feedback remain. This is
+source/rendered UI scope, with no service or native removal contract change.
+
+
+Validation: both new journeys failed against the original production code;
+fixed focus passed 119 tests (12 LAN bot, 107 Gbot route). Lint passed with
+zero errors and five existing warnings. ONE `make verify`
+(2026-10-18 20:14:10–20:20:13 UTC) passed 3,801 app tests (six skipped),
+127 extension tests, 1,318 Rust tests (28 ignored), all six coverage floors and
+lint/typecheck/quality guards. All 3,461 tracked bytes and modes matched before
+and after the gates, with fresh tracked timestamps. Only this receipt was added
+afterward. Booking3540 returned20:20Z; the private cache and both local exports
+were removed by20:21:30Z. Small evidence:
+`/ai/gchat/out/gchat2-lan-removal-request-lifetime-20261018/SUMMARY.md`.
+Final gate SHA256 `6a2a969a3f9cd3dde1fd4ee731444aa7e6e2cd9603d0deef66442e275b81dfba`;
+cleanup SHA256 `5be045353c469aaea76b7068bbb66764bc3f6df691e0633bcd3ae872107bd780`.
+
 ## Recovering linked-account failures — Gchat 2
 
 `GBOT-LINKED-ACCOUNTS-ERROR-GUIDANCE`, based on main `2f6e397d9`, names
