@@ -1,5 +1,55 @@
 # Gbot design
 
+## Independent-service paired-model sessions — Codex 3
+
+`GUI-GBOT-PAIRED-MODELS-SESSION-20261018`, based on main `ef64363fb`,
+corrects the installed Linux RC's empty brain-model picker when Chat already
+has a ready Qwen instance. The independent Gbot process previously polled saved
+Hosts without attaching its local owner or opening its own authorized saved-Host
+sessions, then discarded every poll error. Desktop sessions are process-local.
+
+The candidate attaches through Client's existing local-owner API and explicitly
+connects saved Hosts when discovering brain models. It also connects the saved
+target before dispatch so a persisted brain works after service restart without
+opening the picker first. The existing certificate pin, credential store,
+instance identity and exact session rejection remain authoritative; a restarted
+instance cannot replace the saved session. Successful ready models survive an
+unavailable second Host; failure with no ready model returns the Host diagnostic
+instead of a misleading empty list. A healthy Host with no ready instance still
+returns an empty list.
+
+Four focused CPU-only native TLS/Host regressions passed for cold saved sessions,
+late model availability, local-owner attachment, partial success, credential/poll
+errors and dispatch without discovery. Rust check and Clippy passed. Installed
+native brain selection and execution remain with the release owner. No Host
+server, Engine, GPU, frontend or passive Client authorization changes.
+
+Owned source: `fix/c3-gbot-paired-model-session-20261018` at
+`/ai/gchat-worktrees/c3-gbot-paired-model-session-20261018`. S1 disposable source,
+read-copied caches and check output remain inactive at
+`/media/ron/SSD_RAID/ai/tmp-c3-gbot-paired-model-session-20261018` pending release
+integration; remove the owned copy after merge. Small retained evidence is
+`out/c3-gbot-paired-model-session-20261018/` in the main checkout. Discovery also
+checks that a credential failure cannot
+advertise a previous ready snapshot; only Hosts connected successfully in the
+current operation contribute models.
+
+The single `make verify` invocation passed lint, typecheck, guards and all 3,605
+application tests (6 skipped), then stopped before extension coverage because the
+private cache copy omitted `extensions/ginfer-extension/node_modules`. This is
+a fixture preparation failure, not a source-test failure. The missing nested
+cache has been read-copied under the existing grant. Before continuation, its
+actual `vitest/vitest.mjs` entry was checked; future cache preparations must check
+each workspace's executable entry rather than assuming a root cache is complete.
+Only the unreached extension coverage, coverage-floor check and `make test-rust`
+continued once, 13:56:28–14:01:23Z: 127 extension tests, six critical coverage
+floors and 1,294 Rust tests passed (28 ignored across 23 summaries). The gate is
+complete by continuation; the failed full invocation and each completed stage
+have separate receipts in `verification-result.json` and the adjacent logs.
+Production/test source stayed unchanged throughout. CPU88–95 booking3314 was
+returned after all jobs exited. Next: release-owner installed native brain
+selection and execution from the integrated candidate.
+
 ## Failed cloud SSH checks keep retry guidance — Gchat 2
 
 `GBOT-CLOUD-SSH-ERROR-PERSISTENCE`, based on main `5e371d36e`, keeps
