@@ -1,11 +1,21 @@
 import { useState } from 'react'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   AgentSkillDetail,
   UpdateAgentSkillRequest,
 } from '@/services/agent/skills'
 import { AgentSkillEditDialog } from '../AgentSkillEditDialog'
+import { ConfirmDialogHost } from '../dialogs/ConfirmDialogHost'
+import { settleConfirm } from '@/lib/confirm'
 
 const mocks = vi.hoisted(() => ({ update: vi.fn(), error: vi.fn() }))
 
@@ -53,6 +63,7 @@ function SkillEditing() {
           setUpdates((saved) => [...saved, update])
         }}
       />
+      <ConfirmDialogHost />
       <output aria-label="Saved skill updates">{JSON.stringify(updates)}</output>
     </>
   )
@@ -87,7 +98,10 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  settleConfirm(false)
+})
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.update.mockResolvedValue(undefined)
@@ -222,32 +236,78 @@ describe('Agent skill edit lifetime', () => {
     expect(mocks.error).toHaveBeenCalledOnce()
   })
 
-  it('discards an idle draft on Cancel and restores the original fields on reopen', () => {
+  it.each(['Escape', 'Close', 'Cancel'])(
+    'protects unsaved edits on %s until the user explicitly discards them',
+    async (dismissal) => {
+      const user = userEvent.setup()
+      render(<SkillEditing />)
+      enterDraft()
+      expectDraft()
+
+      const instructions = screen.getByLabelText('common:instructions')
+      instructions.focus()
+      const dismiss = async () => {
+        if (dismissal === 'Escape') await user.keyboard('{Escape}')
+        else {
+          await user.click(
+            screen.getByRole('button', {
+              name: dismissal === 'Cancel' ? 'common:cancel' : 'Close',
+            })
+          )
+        }
+      }
+      await dismiss()
+      const keepEditing = screen.getByRole('button', { name: 'Keep editing' })
+      await waitFor(() => expect(keepEditing).toHaveFocus())
+      expect(
+        screen.getByRole('dialog', { name: 'Discard unsaved skill changes?' })
+      ).toBeInTheDocument()
+      expect(mocks.update).not.toHaveBeenCalled()
+      // Enter defaults to keeping the draft, including the keyboard Escape path.
+      await user.keyboard('{Enter}')
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('dialog', {
+            name: 'Discard unsaved skill changes?',
+          })
+        ).not.toBeInTheDocument()
+      )
+      expectDraft()
+      if (dismissal === 'Escape') {
+        await waitFor(() => expect(instructions).toHaveFocus())
+      }
+
+      await dismiss()
+      await user.click(screen.getByRole('button', { name: 'Discard changes' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Saved skill updates')).toHaveTextContent('[]')
+      expect(mocks.update).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit skill' }))
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByLabelText('common:skillName')).toHaveValue(skill.name)
+      expect(screen.getByLabelText('common:skillName')).toBeDisabled()
+      expect(screen.getByLabelText('common:description')).toHaveValue(
+        skill.description
+      )
+      expect(screen.getByLabelText('common:instructions')).toHaveValue(skill.body)
+      expect(screen.getByLabelText('common:description')).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'common:save' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'common:save' })).toHaveAttribute(
+        'aria-busy',
+        'false'
+      )
+      expect(mocks.error).not.toHaveBeenCalled()
+    }
+  )
+
+  it('closes an unchanged editor without asking to discard changes', async () => {
+    const user = userEvent.setup()
     render(<SkillEditing />)
-    enterDraft()
-    expectDraft()
-
-    fireEvent.click(screen.getByRole('button', { name: 'common:cancel' }))
-
+    await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Saved skill updates')).toHaveTextContent('[]')
     expect(mocks.update).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Edit skill' }))
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByLabelText('common:skillName')).toHaveValue(skill.name)
-    expect(screen.getByLabelText('common:skillName')).toBeDisabled()
-    expect(screen.getByLabelText('common:description')).toHaveValue(
-      skill.description
-    )
-    expect(screen.getByLabelText('common:instructions')).toHaveValue(skill.body)
-    expect(screen.getByLabelText('common:description')).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'common:save' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'common:save' })).toHaveAttribute(
-      'aria-busy',
-      'false'
-    )
-    expect(mocks.error).not.toHaveBeenCalled()
   })
 })

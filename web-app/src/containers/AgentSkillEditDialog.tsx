@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useTranslation } from '@/i18n/react-i18next-compat'
+import { confirmAction } from '@/lib/confirm'
 import type {
   AgentSkillDetail,
   UpdateAgentSkillRequest,
@@ -38,6 +39,7 @@ export function AgentSkillEditDialog({
   const [instructions, setInstructions] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const pending = useRef(false)
+  const confirmingClose = useRef(false)
 
   useEffect(() => {
     if (!open || !skill) return
@@ -45,6 +47,29 @@ export function AgentSkillEditDialog({
     setInstructions(skill.body)
     setSubmitting(false)
   }, [open, skill])
+
+  const requestClose = async () => {
+    if (pending.current || confirmingClose.current) return
+    if (
+      skill &&
+      (description !== skill.description || instructions !== skill.body)
+    ) {
+      confirmingClose.current = true
+      try {
+        const discard = await confirmAction({
+          title: 'Discard unsaved skill changes?',
+          message: `Your changes to "${skill.name}" have not been saved. Discard them to close the editor.`,
+          confirmLabel: 'Discard changes',
+          cancelLabel: 'Keep editing',
+          destructive: true,
+        })
+        if (!discard) return
+      } finally {
+        confirmingClose.current = false
+      }
+    }
+    onOpenChange(false)
+  }
 
   const submit = async () => {
     if (!skill || pending.current) return
@@ -69,7 +94,7 @@ export function AgentSkillEditDialog({
     <Dialog
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!pending.current) onOpenChange(nextOpen)
+        if (!nextOpen) void requestClose()
       }}
     >
       <DialogContent
@@ -127,7 +152,7 @@ export function AgentSkillEditDialog({
           <Button
             variant="ghost"
             disabled={submitting}
-            onClick={() => onOpenChange(false)}
+            onClick={() => void requestClose()}
           >
             {t('common:cancel')}
           </Button>

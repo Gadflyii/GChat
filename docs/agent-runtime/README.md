@@ -22,6 +22,20 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Unsaved skill instructions — October 18
+
+A private native Linux pass found that Escape silently discarded edited skill
+instructions. Reopening the editor restored the saved body and lost the new
+sentence. The close button and Cancel used the same unguarded dismissal path.
+Baseline observations are retained in
+`/ai/gchat/out/gchat-skill-edit-unsaved-changes-20261018/baseline.json`.
+
+Closing an edited skill now asks whether to discard the unsaved changes.
+**Keep editing** is the default keyboard action and preserves both fields;
+**Discard changes** closes without saving. An unchanged editor closes directly,
+and a successful Save still closes after the update completes. Saving retains
+the existing single-submit and dismissal guards.
+
 ## Limit settings in narrow editor panels — October 18
 
 A native Linux pass at 1,024 × 740 also found composition settings extending
