@@ -41,8 +41,11 @@ and sole exited container `c7-models-delete-overlap-recovery-20261018-candidate`
 were retired at **22:32:57Z**, removing **28,880,904,192 allocated fixture
 bytes** after that direct review. The inactive dependency donor and protected
 inputs remain. Only the result JSON and short summary remain locally in
-`out/c7-models-delete-overlap-recovery-20261018/`; no resource is held. Next:
-return to Codex 8 before mailing merge-ready.
+`out/c7-models-delete-overlap-recovery-20261018/`; no resource is held.
+Codex 8 reviewed `b3d27c2c4504f9d5f5a9d7b76d487f23ee1ba74e` and returned
+**clean**, including acknowledged B deletion before A read followed by B re-add,
+selection and A omission. Integration P2 closure awaits the coordinator merge.
+Next: mail merge-ready and continue the owned Models queue.
 These checks qualify the source correction and Linux gate; they make no
 installed-app or native Windows acceptance claim.
 
