@@ -293,6 +293,8 @@ describe('host-scoped Models', () => {
     expect(document.body).not.toHaveTextContent(/CUDA_VISIBLE_DEVICES|\bTP\b|VRAM|Smol/)
   })
   it.each(['SHA256 mismatch', 'not a GInfer version-3 container'])('discards unusable saved bytes instead of retrying them: %s', async (error) => {
+    const usableRelease = { ...release, qualified_sm: ['8.6'], min_vram_mib_per_gpu: 8192 }
+    mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [usableRelease] }]
     spyConfirm().mockReturnValueOnce(true)
     let discarded = false
     let fresh = false
@@ -301,7 +303,7 @@ describe('host-scoped Models', () => {
         expect(args).toEqual({ id: 'job', operation: 'discard' })
         discarded = true
       }
-      const job = { id: fresh ? 'new-job' : 'job', release, status: fresh ? 'queued' : 'failed', received: fresh ? 0 : 4096, bytes_per_second: 0, error: fresh ? null : error, path: null }
+      const job = { id: fresh ? 'new-job' : 'job', release: usableRelease, status: fresh ? 'queued' : 'failed', received: fresh ? 0 : 4096, bytes_per_second: 0, error: fresh ? null : error, path: null }
       if (action === 'local_model_download') {
         fresh = true
         return { ...job, id: 'new-job', status: 'queued', received: 0, error: null }
@@ -318,7 +320,7 @@ describe('host-scoped Models', () => {
     expect(await screen.findByText('No downloads on this computer yet. Choose Recommended to find a model.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
     fireEvent.click(screen.getByRole('button', { name: 'Download to this computer' }))
-    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_download', { host_id: 'local', body: release }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_download', { host_id: 'local', body: usableRelease }))
     expect(await screen.findByText('Waiting to download')).toBeInTheDocument()
     expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0')
     expect(mocks.command.mock.calls.some(call => call[0] === 'local_model_download_action' && call[1]?.operation === 'resume')).toBe(false)
