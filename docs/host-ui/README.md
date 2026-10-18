@@ -660,8 +660,7 @@ refresh will reuse the accepted Linux AppDir runtime closure without changing
 Ron's installation or publishing packages; release performance is not claimed.
 No model, hardware profile or GPU workload has run during the walk.
 
-Five reproduced defects have tested source fixes; four are merged and the
-Downloads status fix is merge-ready:
+Five reproduced defects have tested, merged source fixes:
 
 - `GUI-SETUP-RUNTIME-INSTALL-PROGRESS`: Welcome's false connection failure after
   30 seconds and Hosts' unexplained disabled Refresh now follow native resource
@@ -765,16 +764,20 @@ them as fresh execution. The updater 404 remains its existing separate row.
 Downloads Manage is fixed in `f928613b1`, merged through `d4b0b9c8c`. Focused48,
 lint, ONE verify, changed-source build and private native history/theme/layout
 checks pass. See `out/c3-downloads-manage-tab-20261018/{result.json,native-result.json,summary.md}`.
-`GUI-DOWNLOADS-POPOVER-STATUS` is merge-ready at `b9726e6e5` (tested code
-`4e635c35a`). It replaces Downloading with Downloads and shows the paused
+`GUI-DOWNLOADS-POPOVER-STATUS` at `b9726e6e5` (tested code
+`4e635c35a`) merged through `3bbea776c`. It replaces Downloading with Downloads and shows the paused
 transfer's status. Focused56/lint/ONE verify (3319 app,121 extension,1220 native),
 build and native Light1500×1000/Dark1024×740 acceptance pass. The accessible
 status is associated with its model and no horizontal overflow occurs. No
 Resume/Delete, real transfer, model or GPU action ran. Evidence:
 `out/c3-downloads-popover-status-20261018/{result.json,native-result.json,summary.md}`.
 
-After the status source fix merges, pin current main for a private release AppDir
-refresh and finish the installed-build walk at the requested sizes/themes.
+Current main is pinned once at `d0a8d06bf0592b4b2d522c7e3385f08375558124`
+for a private release AppDir refresh. Finish the installed-build walk at the
+requested sizes/themes, including General autostart, private CLI installation,
+relocation/reset and Open Containing Folder. Acceptance remains actual native
+control behavior and readable wording/layout; conditional prerequisites above
+remain explicit. No later main changes are silently included in this build.
 The accepted `ed68c7443` Linux release predates current GUI changes; its
 GIO/Gbot/four-family Engine closure is a read-only donor, not current-main
 evidence. Reuse approved `e2282c336` Engine payloads and existing release commands;
@@ -787,7 +790,7 @@ Owner: Codex 3. Source `/ai/gchat-worktrees/c3-first-user-setup-20261018`, branc
 `fix/c3-first-user-setup-20261018`; original baseline `201f46712`. The status
 acceptance app/private Host/Xvfb stopped at 04:10Z; processes and mounts were
 verified absent and GUI CPU8–15 booking2957 returned. The stopped downloads-home
-and status-candidate remain through merge. Manage's merged candidate copy and
+and status-candidate can retire after the merged status packet is retained. Manage's merged candidate copy and
 raw passing logs were removed after C4's donor copy completed; concise results
 and screenshots remain. The inspector forward is retained for the next private
 release session. No model/profile/GPU job ran in this walk.
@@ -797,8 +800,9 @@ The owned S1 root
 `gchat`, `native-target`, `cargo-home`, `yarn-cache`, resources and launch profiles.
 Shared source/build stage is now exclusively handed to the release refresh
 helper. Its release cache and `current-main-appdir` are private copies of the
-accepted read-only ed68/e228 donor; source overlay and build wait for the merged
-status/current-main pin. Normal Cargo release settings, exact approved23 catalogs
+accepted read-only ed68/e228 donor; source overlay/build are authorized at the
+pinned main revision above. All 35 dependency manifests must match before reuse.
+Normal Cargo release settings, exact approved23 catalogs
 /175 profile metadata entries and all four Engine images remain; this does not
 qualify a model or profile. Keep `tools` because C4's Xvfb:196 still executes it.
 C4 has copied the earlier candidate/resources into its own fixture. The external
@@ -806,6 +810,12 @@ dependency donor at `tmp-claude-gchat-finish-20261017/tool-source` remains owned
 by Claude and untouched. Release command/dependency/copy receipts are in
 `out/c3-current-main-release-20261018/`.
 
+
+`GUI-DOWNLOADS-TRANSFER-COUNT-WORDING` was also reproduced as “1 transfers”
+in the retained paused screenshots. Separate source-only branch
+`fix/c3-download-count-wording-20261018` at `72c76c51a` says “1 download” /
+“2 downloads”; tests/lint/ONE verify/build/native wait until the release helper
+returns the shared stage. It is not part of the pinned main build yet.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
