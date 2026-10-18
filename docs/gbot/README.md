@@ -1,5 +1,36 @@
 # Gbot design
 
+## Retry a saved Gbot service lookup — Gchat 2
+
+`GBOT-SETUP-SERVICE-READ-RETRY`, based on main `78078ddae`, adds an explicit
+read-only retry when setup cannot load the saved service. Previously This PC
+appeared selected while Continue stayed disabled, with no named recovery.
+The error now explains the failed read and offers Retry loading saved service;
+technical Details start closed. Loading feedback and a synchronous pending guard
+prevent duplicate reads. The bot name survives repeated failures.
+
+A recovered paired service still needs its existing control-approval check.
+Choosing a service explicitly clears obsolete read feedback, and late lookup
+results or failures cannot replace that choice. Retry never selects a service,
+saves a bot or starts a computer; Continue retains explicit service selection.
+This change is source/rendered UI scope with no service or native behavior change.
+
+Validation: all four original-production regressions failed; fixed wizard/service
+focus passed 53 cases. Lint had zero errors and five existing warnings. ONE
+`make verify`, 18 October 18:35:38–18:38:00 UTC, stopped at the unrelated
+first-run folder-hydration fixture (3,754 passed, one failed, six skipped).
+Gchat 3’s already merged `fc5a0b026` correction was applied only to the retained
+export. Its exact case passed; the failed coverage stage continued once because
+the original failure emitted no report, followed by unreached checks. Final
+stages passed 3,755 app tests (six skipped), 127 extension tests, 1,316 Rust
+tests (28 ignored, 23 summaries) and six coverage floors, ending 18:49:13 UTC.
+No full verification or previously passing stage was repeated. Both 3,459-file
+raw-byte/mode manifests matched after testing; tracked timestamps were refreshed
+before testing. Product and test source remain unchanged by this receipt.
+CPU80–87 bookings3493/3498 returned. Evidence:
+`out/gchat2-setup-service-read-retry-20261018/result.json` and adjacent raw logs.
+Native acceptance remains separate.
+
 ## Cloud computer action recovery across progress checks — Gchat 2
 
 `GBOT-CLOUD-COMPUTER-ACTION-ERROR-PERSISTENCE`, based on main `21bfcb946`,

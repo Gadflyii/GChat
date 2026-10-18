@@ -765,6 +765,196 @@ it.each(['success', 'failure'])(
   }
 )
 
+it('retries a failed saved-service read without selecting or saving a service', async () => {
+  let finish!: (target: ServiceTarget) => void
+  let fail!: (cause: Error) => void
+  vi.mocked(getGbotServiceTarget)
+    .mockRejectedValueOnce(new Error('Saved target unavailable'))
+    .mockImplementationOnce(
+      () =>
+        new Promise<ServiceTarget>((_, reject) => {
+          fail = reject
+        })
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<ServiceTarget>((resolve) => {
+          finish = resolve
+        })
+    )
+  const save = vi.fn()
+  render(<GbotSetup save={save} localReady={vi.fn()} cancel={vi.fn()} />)
+  fireEvent.change(screen.getByLabelText('Bot name'), {
+    target: { value: 'Writer' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Could not read your saved Gbot service.')
+  expect(alert).toHaveTextContent(
+    'Retry loading the saved service, or choose a service below.'
+  )
+  expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  const details = alert.querySelector('details')!
+  expect(details).not.toHaveAttribute('open')
+  fireEvent.click(screen.getByText('Details', { selector: 'summary' }))
+  expect(details).toHaveAttribute('open')
+  expect(alert).toHaveTextContent('Saved target unavailable')
+  expect(getGbotServiceTarget).toHaveBeenCalledTimes(1)
+
+  const retry = screen.getByRole('button', { name: 'Retry loading saved service' })
+  act(() => {
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+  })
+  expect(getGbotServiceTarget).toHaveBeenCalledTimes(2)
+  expect(
+    screen.getByRole('button', { name: 'Loading saved service…' })
+  ).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Loading your saved Gbot service…'
+  )
+  expect(selectGbotService).not.toHaveBeenCalled()
+  await act(async () => fail(new Error('Still unavailable')))
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Could not read your saved Gbot service.'
+  )
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Retry loading saved service' })
+  )
+  expect(getGbotServiceTarget).toHaveBeenCalledTimes(3)
+  await act(async () => finish({ kind: 'local' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Retry loading saved service' })
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  expect(selectGbotService).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await screen.findByText('Step 3 · Computer')
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+  expect(screen.getByLabelText('Bot name')).toHaveValue('Writer')
+  expect(selectGbotService).toHaveBeenCalledExactlyOnceWith({ kind: 'local' })
+  expect(save).not.toHaveBeenCalled()
+})
+
+it('checks approval for a paired service restored by a saved-service retry', async () => {
+  hostStore.hosts = [
+    {
+      host_id: 'service-host',
+      name: 'Office bot server',
+      base_url: 'https://office.test',
+      certificate_sha256: 'office-certificate',
+      client_id: 'office-client',
+    },
+  ]
+  let approve!: (grant: {
+    status: 'approved'
+    service_configured: boolean
+  }) => void
+  vi.mocked(gbotControlGrant).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        approve = resolve
+      })
+  )
+  vi.mocked(getGbotServiceTarget)
+    .mockRejectedValueOnce(new Error('Saved target unavailable'))
+    .mockResolvedValueOnce({ kind: 'paired_host', host_id: 'service-host' })
+  render(<GbotSetup save={vi.fn()} localReady={vi.fn()} cancel={vi.fn()} />)
+  fireEvent.change(screen.getByLabelText('Bot name'), {
+    target: { value: 'Writer' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Retry loading saved service' })
+  )
+  await waitFor(() =>
+    expect(gbotControlGrant).toHaveBeenCalledWith('service-host', 'status')
+  )
+  expect(
+    screen.getByRole('button', { name: 'Paired service computer' })
+  ).toHaveTextContent('Office bot server')
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  expect(selectGbotService).not.toHaveBeenCalled()
+  await act(async () =>
+    approve({ status: 'approved', service_configured: true })
+  )
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await screen.findByText('Step 3 · Computer')
+  expect(selectGbotService).toHaveBeenCalledExactlyOnceWith({
+    kind: 'paired_host',
+    host_id: 'service-host',
+  })
+})
+
+it.each(['result', 'failure'] as const)(
+  'ignores a saved-service retry %s after an explicit service choice',
+  async (outcome) => {
+    const user = userEvent.setup()
+    hostStore.hosts = [
+      {
+        host_id: 'service-host',
+        name: 'Office bot server',
+        base_url: 'https://office.test',
+        certificate_sha256: 'office-certificate',
+        client_id: 'office-client',
+      },
+    ]
+    let finish!: (target: ServiceTarget) => void
+    let fail!: (cause: Error) => void
+    vi.mocked(getGbotServiceTarget)
+      .mockRejectedValueOnce(new Error('Saved target unavailable'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<ServiceTarget>((resolve, reject) => {
+            finish = resolve
+            fail = reject
+          })
+      )
+    render(<GbotSetup save={vi.fn()} localReady={vi.fn()} cancel={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('Bot name'), {
+      target: { value: 'Writer' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Retry loading saved service' })
+    )
+    fireEvent.click(
+      screen.getByLabelText('Another PC on the home or office network (LAN)')
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Paired service computer' })
+    )
+    await user.click(
+      screen.getByRole('menuitemradio', { name: 'Office bot server' })
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await screen.findByText('Step 3 · Computer')
+    await act(async () => {
+      if (outcome === 'result') finish({ kind: 'local' })
+      else fail(new Error('Late saved target failure'))
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(
+      screen.getByRole('button', { name: 'Paired service computer' })
+    ).toHaveTextContent('Office bot server')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+    expect(selectGbotService).toHaveBeenCalledExactlyOnceWith({
+      kind: 'paired_host',
+      host_id: 'service-host',
+    })
+    expect(getGbotServiceTarget).toHaveBeenCalledTimes(2)
+  }
+)
+
 it.each(['late result', 'late failure', 'result after selection'])(
   'preserves an explicit service choice after the saved-service lookup (%s)',
   async (outcome) => {
