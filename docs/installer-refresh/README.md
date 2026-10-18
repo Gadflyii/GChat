@@ -2,7 +2,7 @@
 
 ## Windows consumer launch profiles — Gchat 3, October 18
 
-`WINDOWS-CONSUMER-LAUNCH-PROFILES` is in preparation. Qualify Qwen 27B
+`WINDOWS-CONSUMER-LAUNCH-PROFILES` is in native qualification. Qualify Qwen 27B
 2-bit mix `483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`
 and Muse 30B 2-bit mix
 `9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c`
@@ -37,9 +37,8 @@ at their immutable donor paths; no model copy is needed. Copy and metadata
 checks passed at **19:05:03Z**: 378 files / 1,945,578,902 bytes match the donor.
 The copy receipt is `out/windows-consumer-launch-profiles-20261018/local5090-package-copy.json`.
 Codex 4's package/hash/catalog acceptance and unsigned delivery returned
-**19:08:49Z PASS** (reported at 19:14Z). Codex 7's queued two-minute Gbot
-incremental rebuild takes the next returned boundary; native model timing
-starts only after its actual return and a fresh schedule check.
+**19:08:49Z PASS** (reported at 19:14Z). Codex 7's queued Gbot rebuild and relay returned **19:17Z**; the native model
+booking follows that returned boundary.
 
 Native hardware is confirmed as RON-9950X3D2 / RTX 5090,
 GPU UUID `GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e`, physical RAM
@@ -50,7 +49,16 @@ Fresh native admission must still exceed the 17,131,606,528-byte emergency
 floor before launch. All eight bound standard operations pass native
 PowerShell 5.1 parsing; the owned bootstrap, private packaged Host,
 all three runtime maps, model and six same-card Linux reference files are
-staged. No Host or model operation has run.
+staged. The private guarded Host started **19:18:11Z** and its runtime inventory
+validated all three images. Artifact import and artifact-scoped profile preparation
+passed, then the selected SM120a Engine reported Ready. C1, C4 and C8 match all **52 raw same-card Linux token arrays / 26,000 IDs**,
+each directly reviewed before advancing. The standard gate completed normally
+at **19:28:37Z**: instance and Host Stop exited zero, the native Job is empty,
+621 GPU samples retain a minimum **472,907,776 bytes** free (above 300 MiB),
+and both lifecycle and telemetry qualification pass. Booking1492 is canceled. The original receipt counted
+OrderedDictionary fields instead of its `count` entry; direct raw comparison
+corrected only that accounting, preserving the original summary. The adapted
+operation now indexes the entry explicitly before C4/C8; no request is repeated.
 Codex 5 returned both laptop booking408 and Ada booking776 at 18:48Z.
 Ada's C1 gate and the laptop's corrected quotes, Qwen Download and paired
 naturals remain queued; fresh per-host clearance is required before native work.
@@ -75,8 +83,10 @@ quiet return. The current Linux authority is
 
 Arch approved a **short natural** of 60 seconds at C1 and 60 seconds at C4;
 it is not the 600-second-per-phase soak. Use the existing attached natural
-driver, merged as `3632a24ac`, and an optional native identity-JSONL input. The packaged Host proves
-runtime dispatch and the standard requests. The supplemental direct native
+driver and native identity-JSONL input. The initial attempt used merged
+`3632a24ac`; its native-Windows swap-scope correction must be accepted before
+the authorized continuation. The packaged Host proves runtime dispatch and the
+standard requests. The supplemental direct native
 Engine natural run records request identity and tokens with the same admitted
 settings, under the retained private Job guard. The existing
 `--exit-on-stdin-close` route supplies normal direct Engine shutdown: hold its
@@ -92,16 +102,67 @@ The coordinator checked the existing API receipts and normal stdin-close route;
 effective standard commands are bound to the private package and saved controls,
 with parser results in `local5090-qwen-command-preparation/prepared-bindings.json`.
 
-Next unresolved action: take the returned boundary after Codex 7, book the
-prepared standard gate, verify fresh native hardware/RAM and execute the
-existing private Host/Job operations. Policy ancestry and
-local5090 hardware are verified. No qualification launch or model copy has
-started. Codex 6 granted read-only use after 1489 of the immutable
-Muse artifact at
-`E:\ai\tmp-c6-muse-int-batch-invariance-20261018\artifacts\muse_glimmer_30b_smol_df2.ginfer`
-(13,838,508,544 bytes; exact package hash above). Codex 5 has additional
-Ada C1 and laptop corrected-quote/Qwen first-use work queued after the current
-naturals, so fresh per-host clearance is required after packaging returns.
+Codex 7's owned cleanup returned **19:29:48Z**. The separate direct-native
+Qwen short natural is prepared at the Linux starting bound **131,072 / C8**,
+using the existing owned Windows profile (SHA256 `7a53f33dfe112cc518082d63a844c9f59df9558cc4d3d63e860617941d8826b1`).
+The removed temporary driver checkout is recovered byte-for-byte from accepted
+commit `3632a24ac`, with only its three imported helper files, under the owned
+`qualification/natural/accepted-driver` directory. The exact saved Linux request
+matches the retained Codex4 source (`ab0372652ae07f581e2b2b456d9bebf9633e6089a3c332d66b94711ffd4cf56f`).
+Fresh native preflight at **19:34:21Z** confirms the expected host/GPU/RAM,
+97,096,773,632 bytes available, no native Engine/Host, unused private port19663,
+and both bound receipts parse with zero PowerShell5.1 errors. Booking1493
+ran the short natural at131072/C8 from **19:35:00Z to19:35:41Z** and is canceled.
+The attempt is **INCOMPLETE**, not a qualified profile: the accepted attached
+driver aborted after system-wide WSL `pswpin` increased238668→238669
+(`pswpout` unchanged792579). One C1 request completed; all879 generated IDs
+match the same-card Linux request exactly. The next request was canceled when
+the driver closed its HTTP socket; C4 never started. The bootstrap retained
+stdin through Ready and driver return, then closed EOF normally: Engine exit0,
+empty owned Job. The outer guard reports FAIL because the driver scope was not
+completed, while native telemetry passes:43 GPU samples, minimum467664896bytes
+free (above314572800), last native available RAM93530398720bytes (above the
+17131606528-byte floor), no invalid sample or cleanup error.
+
+The failure is in the attached driver's unconditional WSL system-swap gate;
+it does not establish paging by the native Windows Engine. At **19:38:43Z**,
+Arch approved WSL `pswpin` as diagnostic for a native Windows Engine; native
+process RAM/commit, GPU free memory and Engine health remain acceptance gates.
+Arch authorized **one corrected 60-second C1 plus 60-second C4 run**, after the
+harness fix is accepted. Driver correction `dfc8480e3` passed 19 focused regressions and Python3.11
+compilation, and Bubbs accepted it in `eb43d27fa`. The corrected fixture is
+prepared separately under owned `qualification/natural-corrected`, with the
+accepted driver/helper closure and explicit
+`GINFER_NATURAL_ATTACH_PLATFORM=native-windows`. Booking1494 ran the one
+corrected natural from **19:48Z to19:51:11Z** and is canceled. Both60-second
+phases completed:11 C1 requests and12 C4 requests, **23 arrays /24,360 IDs**,
+all exactly equal to the same-card Linux controls by phase/lane/64-bit seed
+and every logged request field except the local request ID. Complete identity
+capture and repeated-seed comparison both pass. The native Engine admitted
+effective context131072/C8, automatic KV, fixedDF7 and300MiB reserve.
+Native Engine/driver exits0, normal stdin EOF and empty Job pass;157 valid GPU
+samples have minimum373293056bytes free, above314572800. Last native available
+RAM85760954368bytes exceeds the17131606528-byte floor. WSL pswpin rose7 pages
+and pswpout remained unchanged; these are recorded diagnostics under Arch's
+accepted native-Windows scope. Do not repeat either retained natural attempt.
+
+The concise attempt result is
+`out/windows-consumer-launch-profiles-20261018/local5090-qwen-natural-attempt-result.json`;
+raw driver, native request-ID/token capture and lifecycle receipts remain in
+the owned E: `qualification/natural` directory. Standard lifecycle evidence is
+`local5090-qwen-standard-guard-result.json`, with terminal launch accounting in
+`local5090-native-launch.json`, under the same local evidence root. The standard
+52-array/26,000-ID PASS is retained and must not be repeated. Corrected natural
+evidence is `local5090-qwen-natural-corrected-result.json`; its raw capture and
+native lifecycle remain under the separate E: `qualification/natural-corrected`.
+**RTX5090 Qwen gates pass; Arch signing and catalog mirror remain pending.**
+Muse and Ada/laptop gates remain pending. The next action is Arch's decision on
+Qwen131072/C8 while preparing Muse's independent standard fixture. C5's laptop
+Qwen app Download began19:39Z, followed by paired Ada/laptop naturals; neither
+target may receive new native work before its direct returned boundary.
+The immutable Muse donor stays retained at
+`E:\ai\tmp-c6-muse-int-batch-invariance-20261018\artifacts\muse_glimmer_30b_smol_df2.ginfer`.
+Fresh per-host clearance is required for Ada/laptop.
 Native installs on Ada/laptop are authorized; this PC uses
 an owned private folder and never Ron's installed app. No signing, publishing,
 Windows settings, elevation, Engine changes or new runner is authorized.
