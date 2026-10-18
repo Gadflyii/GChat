@@ -117,18 +117,26 @@ pub async fn factory_reset<R: Runtime>(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let autostart_preference = get_app_configurations(app_handle.clone()).autostart_preference;
+    let data_folder = get_jan_data_folder_path(app_handle.clone());
+    if data_folder.exists() && !is_safe_to_delete(&data_folder) {
+        log::error!(
+            "Refusing factory reset: path is too close to filesystem root: {}",
+            data_folder.display()
+        );
+        return Ok(());
+    }
 
-    // close window (not available on mobile platforms)
+    // Keep the windows alive until restart: closing the last one exits the app
+    // before asynchronous shutdown and data deletion can finish.
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
         let windows = app_handle.webview_windows();
         for (label, window) in windows.iter() {
-            window.close().unwrap_or_else(|_| {
-                log::warn!("Failed to close window: {label:?}");
+            window.hide().unwrap_or_else(|_| {
+                log::warn!("Failed to hide window: {label:?}");
             });
         }
     }
-    let data_folder = get_jan_data_folder_path(app_handle.clone());
     log::info!("Factory reset, removing data folder: {data_folder:?}");
 
     let _ = stop_mcp_servers_with_context(&app_handle, &state, ShutdownContext::FactoryReset).await;
@@ -150,14 +158,6 @@ pub async fn factory_reset<R: Runtime>(
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
     if data_folder.exists() {
-        if !is_safe_to_delete(&data_folder) {
-            log::error!(
-                "Refusing factory reset: path is too close to filesystem root: {}",
-                data_folder.display()
-            );
-            return Ok(());
-        }
-
         // Preserve the downloaded ginfer-serve binary across factory reset so
         // the user doesn't have to re-download it.
         let bin_dir = data_folder.join("ginfer").join("bin");

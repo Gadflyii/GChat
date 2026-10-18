@@ -179,6 +179,58 @@ tree `/ai/gchat-worktrees/c3-hardware-profile-guidance-evidence-20261017`,
 branch `docs/c3-hardware-profile-guidance-evidence-20261017`, retained for merge.
 The cited evidence remains with its existing owners; there is no new live job
 or disposable output. Next action: coordinator merge of this closure record.
+
+## Factory-reset native lifecycle — C3, October 18
+
+Current C3 row: `GUI-RESET-CONFIRMATION-KEYBOARD-20261017`, the oldest owned
+GUI row. Source `c2ae7a5df` is merged and present in retained Linux release
+`ed68c7443` / Engine `e2282c336`. Its eight focused cases and full source gate
+remain valid. Native XTest input on S1 confirmed Cancel autofocus, Enter on
+Cancel, Escape, keyboard Close, trigger-focus restoration and explicit Reset
+focus. Dismissal preserved both localStorage and a disposable data-file sentinel.
+
+The single explicit reset at 01:06:12Z failed: native `factory_reset` closed
+the last window before awaiting MCP shutdown; the application exited before
+deleting the sentinel or restarting. The command logs reset intent once, followed
+by window destruction and process shutdown. MCP shutdown has an unconditional
+200 ms await. Pinned Tauri exits when the final window is destroyed unless exit
+is prevented. Base `18603aeb7` retains that path. This is a reset lifecycle defect,
+not a keyboard double activation. The command now hides and retains windows
+until reset reaches its intentional restart. Ordinary close/quit stays unchanged.
+The unsafe-path check now runs before hiding or shutdown.
+
+The candidate's real native regression passed at 01:16:58Z. Enter on Cancel
+preserved both sentinels and returned focus to Reset. Reopening again focused
+Cancel; Tab explicitly selected **Delete data and reset**. One Enter invoked
+native reset once, deleted the disposable file and restarted the application
+(PID 1240049 to 1256243) at Welcome. The localStorage sentinel and reset-pending
+marker were absent. The log also confirms Engine-binary preservation/restoration.
+The production frontend and custom-protocol debug native binary were built
+offline from `18603aeb7` plus this fix. Eight focused keyboard cases, Rust check
+and Clippy pass. The single `make verify` passed frontend/extension checks and
+six coverage floors, then stopped after 722 native passes at the fleet
+coordinator test's UDP route discovery (`NetworkUnreachable`, line 887).
+The build container's `--network=none` cannot provide the non-loopback route
+that fixture requires. The exact failed case passed on Docker's isolated
+bridge, followed by the six unreached Rust crates once, with the same offline
+inputs and no published ports. Together the original run and bounded continuation
+completed 1,208 unique Rust passes, 27 ignored. The original gate failure remains
+recorded; there was no second full gate run. Tauri's mock runtime does not implement
+close/hide lifetime, so the native regression supplies the lifecycle evidence.
+This is Linux AppDir acceptance, not Windows or release-wide qualification. No model, profile or inference ran.
+
+Inventory: `/ai/gchat-worktrees/c3-reset-keyboard-installed-20261018`, branch
+`fix/c3-factory-reset-lifecycle-20261018`, baseline `18603aeb7`, is retained
+for review. Private processes stopped after acceptance. Both owned S1 roots
+`/media/ron/SSD_RAID/ai/tmp-c3-reset-keyboard-installed-20261018` and
+`/media/ron/SSD_RAID/ai/tmp-c3-reset-lifecycle-build-20261018` are removed,
+including the 28 GiB build copy and its two exited containers. CPUs0–7
+returned01:24Z. Gchat3's retained AppDir donor was read-only. Only the result
+JSON and short summary remain in
+`out/c3-reset-keyboard-installed-20261018/{result.json,summary.md}`.
+Next: coordinator merge of this native fix. Project-save installed retry
+acceptance remains a separate owned row.
+
 ## Project storage failures reach the save dialog — C3
 
 The installed acceptance for `GUI-PROJECT-SAVE-ASYNC-RESULT-20261017`
