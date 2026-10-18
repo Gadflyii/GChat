@@ -1,5 +1,34 @@
 # GInfer host UI
 
+## Benchmark plain intro — C7, October 18
+
+`GUI-BENCHMARK-PLAIN-INTRO` passes its remaining Linux native wording leaf.
+A fresh private release session reached Benchmark by native sidebar click and
+wheel scrolling. At 1200×800 the intro, Cold PP, Warm PP / request, C1–C8,
+TG definitions and synthetic best-case caveat are readable together without
+clipping. [Native screenshot](../../out/c7-benchmark-plain-intro-20261018/benchmark.png)
+and [result](../../out/c7-benchmark-plain-intro-20261018/result.json) retain the
+capture, source match and limits.
+
+Original fix `a7a4cc588` merged as `00b451755`. Retained native release
+`ed68c7443` has the same intro, definitions, caveat and visibility classes as
+branch base `85bf776ce`; its later saved-result selector differences are
+excluded. The original **12 focused PASS** and later ONE `make verify` at
+`71abf1708` (**3,409 app, 127 extension, 1,267 native / 28 ignored**,
+lint/types/coverage pass) are retained. The entire Benchmark route/test is
+unchanged between that full gate and this branch base. This documentation-only
+closure uses `git diff --check`; no repeated build or test gate.
+
+Owner C7; branch `test/c7-benchmark-plain-intro-native-20261018`, worktree
+`/ai/gchat-worktrees/c7-benchmark-plain-intro-native-20261018`. Independent
+AppDir/HOME/XDG/runtime700, D-Bus/keyring and Xvfb on S1 were stopped by owned
+PIDs; CPU88–95 returned08:31Z and booking3160 canceled. The disposable root
+`/media/ron/SSD_RAID/ai/tmp-c7-benchmark-plain-intro-20261018` was removed;
+only small evidence remains and the donor was unchanged. Windows, model load,
+benchmark execution, scoring, performance and later selector/restart controls
+are outside this intro leaf. The older scripted-navigation screenshot is
+supporting history only.
+
 ## Advanced launch-field labels recovery — C3, October 18
 
 `GUI-LAUNCH-FIELD-LABELS` passes its remaining Linux native leaf using the
