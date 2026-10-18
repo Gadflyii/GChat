@@ -2,45 +2,62 @@
 
 ## Installed selected-artifact preparation — Gchat 3, October 18
 
-`GCHAT-PREPARE-SELECTED-ARTIFACT` is active on
-`fix/gchat3-prepare-selected-artifact-20261018`, based on `bd10e0e66`.
-The installed `gchat-cli prepare-hardware` currently installs resources and
-requests all-format Ensure. It must also accept a selected local artifact and
-its startup TP/speculation intent, letting Host validate the actual payload and
-run artifact-scoped Ensure without starting a model. Explicit all-format
-preparation remains available. The existing
-[selected-artifact decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md)
-governs validation and native acceptance; callers cannot supply trusted artifact
-identities or bypass native validation.
+`GCHAT-PREPARE-SELECTED-ARTIFACT` is **merge-ready** on
+`fix/gchat3-prepare-selected-artifact-20261018`, implementation `600343062`,
+based on `bd10e0e66`. Installed `gchat-cli prepare-hardware` now accepts a
+selected local artifact and its startup TP/speculation intent. Host validates
+the payload, derives its directory identity and runs artifact-scoped Ensure
+without starting a model. Explicit all-format preparation remains available.
+The [selected-artifact decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md)
+governs validation; callers cannot supply trusted artifact identities. Arch
+signed the optional selected-payload request and asynchronous job at 07:36Z.
+An identical active Ensure is idempotent; another busy scope or resident model
+prevents replacement. C4's artifact Ensure → durable `storage_review` → startup
+sequence is preserved.
 
-Acceptance is the real installed CLI request reaching a validated Host
-artifact-scoped native command, with ordered GPUs and matching TP/speculation,
-plus rejected missing/invalid artifacts and preserved all-format behavior.
-Use focused regressions and one `make verify`; no Engine change or GPU
-qualification is claimed. C4 owns `first_run.rs`, `launcher.rs`, Host `main.rs`
-and `model_storage.rs`; preserve artifact Ensure followed by durable
-`storage_review` before startup.
+Focused CLI tests passed 3/3 and Host resource tests passed 26, with five existing
+ignores. Affected checks and Clippy passed. The **single `make verify` stopped**
+at a copied RC catalog containing superseded Qwen context bounds. Before that
+failure, frontend 3,476, extension 127, desktop 762, adapter 21 and Host 275 tests
+passed, along with lint, typecheck and quality gates. The approved continuation
+corrected only the four admitted catalog names/context bounds, preserving all
+174 identities and the other 170 profiles. The exact failed assertion then
+passed; untouched manager, Gbot, hardware and utils suites passed 4, 124, 16 and
+48 tests, respectively, and both debug binaries built. Frozen source remained
+unchanged; no passing suite or `make verify` was repeated. Future copied inputs
+must match current admitted values and catalog identities before gates start.
 
-Arch signed the optional selected-payload request and asynchronous Host job at
-07:36Z. Implementation is in progress in the CLI/setup adapter and Host request
-validation. Host derives the directory identity and any existing verified
-package identity; an identical active Ensure is idempotent, while another busy
-scope or resident model prevents replacement. A stale retained seed must still
-pass fresh native selected-artifact acceptance.
+The real installed CLI/Host acceptance passed at 08:11:43Z in a private S1
+session. An explicitly labeled recording Engine received one artifact request
+with ordered GPUs, TP2, draft TP1, DFlash and four draft tokens. Host derived
+the canonical directory identity, retained four runtime registrations and
+started no model instance. Normal Cancel and identity-bound Host Stop passed.
+This establishes asynchronous forwarding and lifecycle behavior.
 
-Acceptance also requires one short physical Engine run that accepts the
-installed request's native arguments and writes an artifact-scoped profile;
-the recording fixture alone proves argument forwarding. Coordinate the next
-available GPU boundary, with no idle hold or Engine rebuild.
+Separate **physical Engine acceptance passed at 08:18:07Z** on the local RTX
+5090. The unmodified retained e228 SM120a Engine ran `profile-hardware` against
+the existing read-only Qwen NVFP4 payload with `--tp 1 --spec auto --json` and
+a fresh private profile. Artifact-scoped Ensure completed in 50.665 seconds:
+artifact/base complete, all-formats incomplete, no required CPU expert formats
+and no saved CPU expert rates. The saved artifact directory identity matched.
+The [consolidated result](../../out/prepare-selected-artifact-20261018/result.json)
+and [short summary](../../out/prepare-selected-artifact-20261018/summary.md)
+record the commands, original verification failure, bounded continuation and
+accepted scopes. No Engine change, model inference or GPU/Windows qualification
+is claimed.
 
 Owned inventory: source worktree
-`/ai/gchat-worktrees/gchat3-prepare-selected-artifact-20261018`; independent S1
-SSD fixture `/media/ron/SSD_RAID/ai/tmp-gchat3-prepare-selected-artifact-tests-20261018`.
-Independent dependency copying finished under booking 3135, CPUs120–127;
-returned 07:40Z. Source staging and gates wait for the frozen implementation.
-The inactive RC read-copy donor remains unchanged. C5 forecasts the next
-local5090 boundary around 08:10Z after priority work; no GPU is reserved.
-No installed user app is in use.
+`/ai/gchat-worktrees/gchat3-prepare-selected-artifact-20261018` is retained for
+Bubbs's merge. The S1 fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-prepare-selected-artifact-tests-20261018`
+and two terminal containers were removed at 08:17:52Z, releasing 47,530,681,024
+logical bytes. The private runtime/profile root
+`/mnt/e/gchat3-prepare-selected-artifact-20261018` was removed after review,
+releasing 450,941,063 logical bytes. Protected payload and inactive RC donors
+remain unchanged. All bookings returned; local5090 returned 08:18Z. Only the
+consolidated result and short summary remain as run evidence. Next action is
+Bubbs's merge; the lane continues unowned Hosts/first-run GUI work while RCs
+await Ron's Windows sign-in result.
 
 ## Linux missing-driver guidance — Codex 4, October 18
 
