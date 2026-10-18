@@ -6045,3 +6045,32 @@ were removed at 14:52:20 UTC (29,850,680,192 logical bytes); the protected RC
 donor and stable DEV service were untouched. Small input, generated-catalog
 and raw-log evidence remains in the output folder. Ready for reviewed merge;
 the next release refresh consumes the retained eleven-input packet.
+
+## Host name save and refresh results, October 18 (Codex 7)
+
+`GUI-HOST-NAME-SAVE-RESULT` preserves a successful Host rename when the
+following registry refresh fails. The accepted name remains visible and Save
+stays disabled for it, even with a stale snapshot. **Retry status** performs
+only the read. A rejected save retains the draft with persistent plain retry
+guidance and closed technical details. Save and status retry show pending
+feedback and block duplicate submissions.
+
+Both new failure regressions failed against the unchanged base. All eight
+candidate rendered tests passed. Exactly one `make verify` passed lint (zero
+errors, five existing unrelated warnings), TypeScript and quality/contract/asset
+guards, then stopped at an unrelated Agent Studio five-second typing timeout:
+3,659 app tests passed, one failed and six skipped. The unchanged failed case
+passed its targeted continuation. Only the existing coverage prerequisites
+(109 tests) and unexecuted extension (127 tests), six coverage floors and native
+stages continued. Native results: 1,309 passed, zero failed, 28 ignored across
+23 summaries. The original full-gate failure remains recorded; no timeout,
+unrelated source or full gate was changed or repeated.
+
+Candidate: `/ai/gchat-worktrees/c7-host-name-save-result-20261018`, branch
+`fix/c7-host-name-save-result-20261018`, base `fe0630a14`. Source/test bindings
+matched the executed copy after verification. S1 CPUs 104–111 returned
+15:47 UTC, booking 3369 canceled. The owned SSD fixture and three exited
+containers were removed (27,822,125,840 logical bytes); the dependency donor
+was preserved. Small evidence: `out/c7-host-name-save-result-20261018/`.
+No Host protocol, model, inference, native GUI rename or Windows qualification
+is changed or claimed. Next: reviewed merge, then continue the owned GUI queue.
