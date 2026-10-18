@@ -1108,7 +1108,8 @@ describe('AgentStudioPage', () => {
 
     await user.clear(cycles)
     expect(cycles).toHaveProperty('value', '')
-    await user.type(cycles, '04')
+    // userEvent canonicalizes leading zeroes on number inputs; native editing keeps them.
+    fireEvent.change(cycles, { target: { value: '04' } })
     expect(cycles).toHaveProperty('value', '04')
     fireEvent.blur(cycles)
     expect(cycles).toHaveProperty('value', '4')
@@ -1155,7 +1156,7 @@ describe('AgentStudioPage', () => {
         const parallel = screen.getByLabelText('Maximum parallel workers')
         await user.clear(parallel)
         expect(parallel).toHaveProperty('value', '')
-        await user.type(parallel, '02')
+        fireEvent.change(parallel, { target: { value: '02' } })
         expect(parallel).toHaveProperty('value', '02')
         fireEvent.blur(parallel)
         expect(parallel).toHaveProperty('value', '2')
@@ -1163,7 +1164,7 @@ describe('AgentStudioPage', () => {
       const steps = screen.getAllByLabelText('Maximum tool steps')[0]
       await user.clear(steps)
       expect(steps).toHaveProperty('value', '')
-      await user.type(steps, '09')
+      fireEvent.change(steps, { target: { value: '09' } })
       expect(steps).toHaveProperty('value', '09')
       expect(steps).toHaveFocus()
       fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
@@ -1184,7 +1185,7 @@ describe('AgentStudioPage', () => {
       if (kind === 'coordinator') {
         const parallel = screen.getByLabelText('Maximum parallel workers')
         await user.clear(parallel)
-        await user.type(parallel, '02')
+        fireEvent.change(parallel, { target: { value: '02' } })
         expect(parallel).toHaveProperty('value', '02')
         fireEvent.click(screen.getAllByTitle('Remove specialist')[1])
         expect(parallel).toHaveProperty('value', '1')
@@ -1200,7 +1201,7 @@ describe('AgentStudioPage', () => {
     const steps = screen.getByLabelText('Maximum tool steps')
 
     await user.clear(steps)
-    await user.type(steps, '012')
+    fireEvent.change(steps, { target: { value: '012' } })
     expect(steps).toHaveProperty('value', '012')
     // Selection replaces the draft even if its numeric value has not changed.
     fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
