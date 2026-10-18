@@ -1028,8 +1028,8 @@ struct Fixture {
     vault: Arc<MemoryVault>,
     guest: Arc<Guest>,
     handles: Arc<Mutex<Vec<server::Handle>>>,
-    accept: JoinHandle<()>,
-    echo_accept: JoinHandle<()>,
+    accept: Mutex<Option<JoinHandle<()>>>,
+    echo_accept: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Fixture {
@@ -1179,8 +1179,8 @@ impl Fixture {
             vault,
             guest,
             handles,
-            accept,
-            echo_accept,
+            accept: Mutex::new(Some(accept)),
+            echo_accept: Mutex::new(Some(echo_accept)),
         }
     }
 
@@ -1247,13 +1247,30 @@ impl Fixture {
         })
     }
 
-    async fn shutdown(&self) {
-        self.accept.abort();
-        self.echo_accept.abort();
-        // Await aborted listeners before snapshotting their child sessions/tasks.
-        while !self.accept.is_finished() || !self.echo_accept.is_finished() {
-            tokio::task::yield_now().await;
+    async fn stop_accepting(&self) {
+        let listeners = [
+            self.accept.lock().unwrap().take(),
+            self.echo_accept.lock().unwrap().take(),
+        ];
+        for task in listeners.iter().flatten() {
+            task.abort();
         }
+        // Joining proves our listeners closed, even if another fixture reuses their ports.
+        for task in listeners.into_iter().flatten() {
+            if let Err(error) = timeout(WAIT, task)
+                .await
+                .expect("owned fixture listener survived shutdown")
+            {
+                assert!(
+                    error.is_cancelled(),
+                    "owned fixture listener panicked: {error}"
+                );
+            }
+        }
+    }
+
+    async fn shutdown(&self) {
+        self.stop_accepting().await;
         let handles = self.handles.lock().unwrap().clone();
         for handle in handles {
             let _ = handle
@@ -1276,15 +1293,20 @@ impl Fixture {
                     .unwrap();
             }
         }
-        assert!(TcpStream::connect(self.address).await.is_err());
-        assert!(TcpStream::connect(self.echo_address).await.is_err());
     }
 }
 
 impl Drop for Fixture {
     fn drop(&mut self) {
-        self.accept.abort();
-        self.echo_accept.abort();
+        for task in [
+            self.accept.get_mut().unwrap().as_ref(),
+            self.echo_accept.get_mut().unwrap().as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            task.abort();
+        }
         for task in self.guest.tasks.lock().unwrap().iter() {
             task.abort();
         }
@@ -1308,6 +1330,34 @@ fn success(reply: GuestReply) -> GuestResult {
         GuestOutcome::Success { result } => result,
         GuestOutcome::Error { error } => panic!("guest error: {error:?}"),
     }
+}
+
+#[tokio::test]
+async fn fixture_shutdown_preserves_replacement_listeners_on_reused_ports() {
+    timeout(WAIT, async {
+        let fixture = Fixture::new().await;
+        fixture.stop_accepting().await;
+        // Rebind both exact addresses before completing shutdown, without scheduling a race.
+        let replacements = [
+            TcpListener::bind(fixture.address).await.unwrap(),
+            TcpListener::bind(fixture.echo_address).await.unwrap(),
+        ];
+
+        fixture.shutdown().await;
+
+        for listener in replacements {
+            let mut client = TcpStream::connect(listener.local_addr().unwrap())
+                .await
+                .unwrap();
+            let (mut accepted, _) = listener.accept().await.unwrap();
+            client.write_all(b"replacement listener").await.unwrap();
+            let mut received = [0; 20];
+            accepted.read_exact(&mut received).await.unwrap();
+            assert_eq!(&received, b"replacement listener");
+        }
+    })
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
