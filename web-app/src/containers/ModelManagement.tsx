@@ -49,6 +49,7 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
 }
 
 const managementTabs = ['Installed', 'Recommended', 'Downloads'] as const
+export type ModelManagementTab = (typeof managementTabs)[number]
 
 const NO_SETTINGS = ' has no saved startup settings yet. Open GInfer Hosts and choose settings for it, then load it again.'
 const capabilityLabels = (capabilities: string[] = []) => capabilities.flatMap(capability => {
@@ -76,7 +77,11 @@ function cancelLocalLoad(load: PendingLocalLoad): Promise<unknown> {
   return engineCommand('local_model_load_cancel', { operation_id: load.operationId })
 }
 
-export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }) {
+export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }: {
+  initialQuery?: string
+  tab: ModelManagementTab
+  onTabChange: (tab: ModelManagementTab) => void
+}) {
   const service = useServiceHub()
   const hosts = useEngineHosts(s => s.hosts)
   const snapshots = useEngineHosts(s => s.snapshots)
@@ -92,7 +97,6 @@ export function ModelManagement({ initialQuery = '' }: { initialQuery?: string }
   const catalogError = useModelCatalogStore(s => s.error)
   const refreshCatalog = useModelCatalogStore(s => s.refresh)
   const [destination, setDestination] = useState('local')
-  const [tab, setTab] = useState<'Installed' | 'Recommended' | 'Downloads'>('Installed')
   const [query, setQuery] = useState(initialQuery)
   const [showUnavailable, setShowUnavailable] = useState(false)
   const localDownloads = useLocalModelDownloads(s => s.jobs)
