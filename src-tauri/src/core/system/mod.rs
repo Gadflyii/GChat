@@ -1,3 +1,4 @@
+pub mod autostart;
 pub mod commands;
 pub mod code_update;
 pub mod hermes_update;

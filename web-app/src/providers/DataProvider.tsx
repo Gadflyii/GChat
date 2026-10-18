@@ -1,7 +1,3 @@
-import {
-  enable as enableAutostart,
-  isEnabled as isAutostartEnabled,
-} from '@tauri-apps/plugin-autostart'
 import { invoke } from '@tauri-apps/api/core'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import { localStorageKey } from '@/constants/localStorage'
@@ -42,7 +38,11 @@ import {
 import { hydrateActiveModelsForRunningServer } from '@/utils/activeModelsSync'
 import { ensureLocalApiServerRunning } from '@/utils/ensureLocalApiServerRunning'
 import { ensureRemoteProviderReady } from '@/utils/ensureRemoteProviderReady'
-import { reconcileLaunchAtStartup } from '@/lib/launchAtStartup'
+import {
+  getLaunchAtStartup,
+  reconcileLaunchAtStartup,
+  setLaunchAtStartupState,
+} from '@/lib/launchAtStartup'
 import { getLastUsedModel } from '@/utils/getModelToStart'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import { setGbotStartupEnabled } from '@/services/gbot'
@@ -125,8 +125,8 @@ export function DataProvider() {
           const hadLegacyAutostart = await invoke<boolean>(
             'migrate_macos_autostart_launchagent'
           )
-          if (hadLegacyAutostart && !(await isAutostartEnabled())) {
-            await enableAutostart()
+          if (hadLegacyAutostart && !(await getLaunchAtStartup())) {
+            await setLaunchAtStartupState(true)
           }
           localStorage.setItem(
             localStorageKey.autostartAppleScriptMigrated,

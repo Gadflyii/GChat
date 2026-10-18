@@ -37,17 +37,21 @@ pub fn run() {
           println!("a new app instance was opened with {argv:?} and the deep link event was already triggered");
           // when defining deep link schemes at runtime, you must also check `argv` here
         }));
-        // Launch-at-startup (ATO-96). Registered after single-instance, as the
-        // autostart plugin requires. AppleScript mode on macOS registers a real
-        // Login Item (visible in System Settings, started by loginwindow on
+        // Linux owns its XDG autostart entry in core::system::autostart.
+        // Other desktops retain the plugin after single-instance as required.
+        // AppleScript mode on macOS registers a real Login Item (visible in
+        // System Settings, started by loginwindow on
         // reboot) instead of a launchd LaunchAgent plist that doesn't show under
         // "Open at Login" and can point at a stale binary path. Trade-off: a
         // one-time automation-permission prompt. No launch args: hidden/tray
         // start is out of scope.
-        builder = builder.plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::AppleScript,
-            None,
-        ));
+        #[cfg(not(target_os = "linux"))]
+        {
+            builder = builder.plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::AppleScript,
+                None,
+            ));
+        }
 
         builder = builder.plugin(
             tauri_plugin_window_state::Builder::default()
@@ -142,6 +146,8 @@ pub fn run() {
         core::extensions::commands::install_extensions,
         core::extensions::commands::get_active_extensions,
         // System commands
+        core::system::autostart::is_launch_at_startup_enabled,
+        core::system::autostart::set_launch_at_startup_enabled,
         core::system::commands::relaunch,
         core::system::commands::open_app_directory,
         core::system::commands::open_file_explorer,

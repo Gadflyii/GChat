@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  within,
+} from '@testing-library/react'
 import { Route as GeneralRoute } from '../general'
 import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
@@ -63,6 +70,12 @@ vi.mock('@/containers/LanguageSwitcher', () => ({
 const mockSetPreloadModelOnStartup = vi.hoisted(() => vi.fn())
 const mockSetHuggingfaceToken = vi.hoisted(() => vi.fn())
 const mockNavigate = vi.hoisted(() => vi.fn())
+const startupNative = vi.hoisted(() => ({
+  invoke: vi.fn(),
+  setPreference: vi.fn(),
+}))
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: startupNative.invoke }))
 
 vi.mock('@/hooks/useGeneralSetting', () => ({
   useGeneralSetting: () => ({
@@ -102,10 +115,12 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 vi.mock('@/components/ui/switch', () => ({
   Switch: ({
     checked,
+    disabled,
     onCheckedChange,
     'aria-label': label,
   }: {
     checked: boolean
+    disabled?: boolean
     onCheckedChange: (checked: boolean) => void
     'aria-label'?: string
   }) => (
@@ -113,6 +128,7 @@ vi.mock('@/components/ui/switch', () => ({
       data-testid="switch"
       type="checkbox"
       checked={checked}
+      disabled={disabled}
       aria-label={label}
       onChange={(e) => onCheckedChange(e.target.checked)}
     />
@@ -290,6 +306,7 @@ describe('General Settings Route', () => {
         factoryReset: mockFactoryReset,
         getGchatDataFolder: mockGetDataFolder,
         relocateGchatDataFolder: mockRelocateDataFolder,
+        setAutostartPreference: startupNative.setPreference,
       } as ReturnType<ServiceHub['app']>,
       models: {
         stopAllModels: mockStopAllModels,
@@ -316,6 +333,89 @@ describe('General Settings Route', () => {
     mockGetDataFolder.mockResolvedValue('/test/data/folder')
     mockFactoryReset.mockResolvedValue(undefined)
     mockOpenDirectory.mockResolvedValue('/test/new-data')
+    startupNative.setPreference.mockResolvedValue(undefined)
+    let startupEnabled = false
+    startupNative.invoke.mockImplementation(async (command, args) => {
+      if (command === 'is_launch_at_startup_enabled') return startupEnabled
+      if (command === 'set_launch_at_startup_enabled') {
+        startupEnabled = args.enabled
+        return
+      }
+      if (command === 'check_jan_cli_installed') {
+        return { installed: false, path: null }
+      }
+    })
+  })
+
+  it('reads, enables and disables launch at startup through the shared native owner', async () => {
+    vi.stubGlobal('IS_TAURI', true)
+    const Component = GeneralRoute.component as React.ComponentType
+    await act(async () => {
+      render(<Component />)
+    })
+    const card = screen
+      .getByText('settings:general.launchAtStartup')
+      .closest('[data-testid="card-item"]') as HTMLElement
+    const toggle = within(card).getByRole('checkbox')
+    await waitFor(() => expect(toggle).toBeEnabled())
+    expect(toggle).not.toBeChecked()
+
+    fireEvent.click(toggle)
+    await waitFor(() => expect(toggle).toBeChecked())
+    expect(startupNative.invoke).toHaveBeenCalledWith(
+      'set_launch_at_startup_enabled',
+      { enabled: true }
+    )
+    expect(startupNative.setPreference).toHaveBeenLastCalledWith('enabled')
+
+    fireEvent.click(toggle)
+    await waitFor(() => expect(toggle).not.toBeChecked())
+    expect(startupNative.invoke).toHaveBeenCalledWith(
+      'set_launch_at_startup_enabled',
+      { enabled: false }
+    )
+    expect(startupNative.setPreference).toHaveBeenLastCalledWith('disabled')
+  })
+
+  it('shows a registration error and restores the actual native startup state', async () => {
+    vi.stubGlobal('IS_TAURI', true)
+    startupNative.invoke.mockImplementation(async (command) => {
+      if (command === 'is_launch_at_startup_enabled') return true
+      if (command === 'set_launch_at_startup_enabled') {
+        throw new Error('Could not remove startup entry')
+      }
+      if (command === 'check_jan_cli_installed') {
+        return { installed: false, path: null }
+      }
+    })
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const Component = GeneralRoute.component as React.ComponentType
+      await act(async () => {
+        render(<Component />)
+      })
+      const card = screen
+        .getByText('settings:general.launchAtStartup')
+        .closest('[data-testid="card-item"]') as HTMLElement
+      const toggle = within(card).getByRole('checkbox')
+      await waitFor(() => expect(toggle).toBeChecked())
+
+      fireEvent.click(toggle)
+      await waitFor(() =>
+        expect(toast.error).toHaveBeenCalledWith(
+          'settings:general.launchAtStartupError'
+        )
+      )
+      expect(toggle).toBeChecked()
+      expect(startupNative.setPreference).not.toHaveBeenCalled()
+      expect(
+        startupNative.invoke.mock.calls.filter(
+          ([command]) => command === 'is_launch_at_startup_enabled'
+        )
+      ).toHaveLength(2)
+    } finally {
+      errorLog.mockRestore()
+    }
   })
 
   it('should render the general settings page', async () => {

@@ -1,5 +1,56 @@
 # GInfer host UI
 
+## Linux Launch at startup XDG path — October 18
+
+`GUI-LINUX-AUTOSTART-XDG-PATH` has a source candidate; verification and native
+acceptance are pending. The installed Linux release `d0a8d06bf` launched through
+its normal AppRun with a private HOME, `XDG_CONFIG_HOME=$HOME/config`, and no
+`$HOME/.config`. Enabling **Settings → General → Launch at startup** failed at
+04:50:19Z with `No such file or directory (os error 2)`. The saved console
+observation is
+`out/c3-current-main-release-20261018/autostart-console.json`. The cached
+`auto-launch 0.5.0` implementation ignores XDG config and calls nonrecursive
+`create_dir` for `HOME/.config/autostart`, establishing the missing-parent cause.
+
+The candidate owns Linux's `autostart/GChat.desktop` beneath Tauri's resolved
+configuration directory and recursively creates its parents. Enable records
+the AppImage, extracted AppDir's AppRun, or ordinary executable as one quoted
+Exec argument. Read and disable use that same entry; failures identify the
+affected directory or file. Settings and startup reconciliation share the
+native commands, read back the actual state, and save the preference only after
+success. Windows keeps the existing plugin registry owner. The existing opt-in
+policy remains in force. See the
+[ownership decision](../decisions/2026-10-18-own-linux-xdg-autostart-registration.md).
+
+Acceptance: in a disposable private installed Linux session with the reported
+HOME/XDG layout, enable must create only the selected XDG startup entry, show
+enabled after reopening General, and record the packaged launch target.
+Disable must remove only GChat's entry and show disabled after reopening.
+Filesystem rejection must report failure and restore
+actual state without persisting success. No login/reboot, Windows runtime,
+fresh installer, GPU or model qualification is claimed by this source change.
+
+Five native regressions cover fresh missing parents, a supplied XDG config
+root, filesystem failures, packaged/ordinary launch targets, and literal Exec
+escaping. Shared-service tests cover command routing, readback and failure
+without saving success; rendered General tests exercise enable/disable and
+failed-toggle recovery. Planned focused checks, followed by the coordinator's
+lint, Rust check/Clippy, ONE `make verify`, candidate build and native acceptance:
+
+```bash
+yarn workspace @gchat/web-app test src/lib/__tests__/launchAtStartup.test.ts src/routes/settings/__tests__/general.test.tsx src/providers/__tests__/DataProvider.test.tsx
+cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli linux_autostart -- --test-threads=1
+```
+
+Inventory: C3 source-only worktree
+`/ai/gchat-worktrees/c3-linux-autostart-xdg-20261018`, branch
+`fix/c3-linux-autostart-xdg-20261018`, allocated main
+`f83df0e9c4e5da87a71cc5a234fec96f90ce050e`. No dependency changes, remote
+stage writes, app processes, tests or builds have run for this candidate. The
+coordinator owns installed-session evidence and shared S1 scheduling; retained
+release donors and profiles are unchanged. Next: coordinator review and booked
+verification before replacing the private native candidate.
+
 ## Scheduled tasks brain setup guidance — October 18
 
 `GBOT-SCHEDULE-BRAIN-SETUP-GUIDANCE`: the disabled schedule form previously
