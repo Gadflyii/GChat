@@ -4,11 +4,10 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_ginfer::cleanup_ginfer_processes;
 
 use crate::core::app::commands::{
-    default_data_folder_path, get_app_configurations, get_jan_data_folder_path,
-    update_app_configuration,
+    default_data_folder_path, get_configuration_file_path, get_jan_data_folder_path,
+    read_configured_data_folder,
 };
 use crate::core::app::constants::{JAN_DATA_FILES, JAN_DATA_SUBDIRS};
-use crate::core::app::models::AppConfiguration;
 use crate::core::mcp::helpers::{stop_mcp_servers_with_context, ShutdownContext};
 use crate::core::state::AppState;
 
@@ -116,39 +115,60 @@ pub async fn factory_reset<R: Runtime>(
     app_handle: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let autostart_preference = get_app_configurations(app_handle.clone()).autostart_preference;
-    let data_folder = get_jan_data_folder_path(app_handle.clone());
-    if data_folder.exists() && !is_safe_to_delete(&data_folder) {
-        log::error!(
-            "Refusing factory reset: path is too close to filesystem root: {}",
-            data_folder.display()
-        );
-        return Ok(());
-    }
+    let configuration_file = get_configuration_file_path(app_handle.clone());
+    let default_folder = PathBuf::from(default_data_folder_path(app_handle.clone()));
+    reset_configured_app_data(&app_handle, &state, &configuration_file, &default_folder).await?;
 
-    reset_app_data(&app_handle, &state, &data_folder).await?;
-
-    // Reset the configuration
-    let default_config = AppConfiguration {
-        data_folder: default_data_folder_path(app_handle.clone()),
-        autostart_preference,
-    };
-    let _ = update_app_configuration(app_handle.clone(), default_config);
-
+    // Keep the installation's selected location and startup preference. A move
+    // retains its old copy, so selecting the default here can resurrect data.
     restart_app(&app_handle)
 }
 
-/// Drain Agents and stop the configured Host before deleting their data.
+async fn reset_configured_app_data<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    state: &State<'_, AppState>,
+    configuration_file: &Path,
+    default_folder: &Path,
+) -> Result<(), String> {
+    reset_app_data_with(app_handle, state, || {
+        let folder = read_configured_data_folder(configuration_file, default_folder).map_err(
+            |error| format!("GChat reset could not select its data folder: {error}. Your data has not been deleted. Repair the settings file, then try again."),
+        )?;
+        if !folder.is_absolute() || !is_safe_to_delete(&folder) {
+            return Err(format!(
+                "GChat reset refused the unsafe data folder {}. Your data has not been deleted. Select an absolute App Data folder away from the filesystem root, then try again.",
+                folder.display()
+            ));
+        }
+        Ok(folder)
+    })
+    .await
+}
+
+#[cfg(test)]
 pub(crate) async fn reset_app_data<R: Runtime>(
     app_handle: &AppHandle<R>,
     state: &State<'_, AppState>,
     data_folder: &Path,
 ) -> Result<(), String> {
+    reset_app_data_with(app_handle, state, || Ok(data_folder.to_path_buf())).await
+}
+
+/// Drain Agents, select the current root under the relocation fence, then stop
+/// its Host before deleting data. Retain both fences through the deletion.
+async fn reset_app_data_with<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    state: &State<'_, AppState>,
+    select_data_folder: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<(), String> {
     crate::core::agent::commands::shutdown(app_handle)
         .await
         .map_err(|error| format!("GChat reset could not finish: {error}. Try resetting again after the Agent runs stop."))?;
 
-    let _access = crate::core::engine_hosts::data_folder_access().write().await;
+    let _access = crate::core::engine_hosts::data_folder_access()
+        .write()
+        .await;
+    let data_folder = select_data_folder()?;
     let client = crate::core::engine_hosts::reset_client(app_handle);
     let _host = client
         .prepare_local_reset(&data_folder.join("ginfer/host"))
@@ -209,7 +229,7 @@ pub(crate) async fn reset_app_data<R: Runtime>(
             false
         };
 
-        remove_jan_data_contents(data_folder);
+        remove_jan_data_contents(&data_folder);
 
         if bin_preserved {
             let ginfer_dir = data_folder.join("ginfer");
@@ -4978,6 +4998,207 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+    struct ResetWithoutHostCredentials;
+
+    impl ginfer_host::client::CredentialStore for ResetWithoutHostCredentials {
+        fn get(&self, _: uuid::Uuid) -> ginfer_host::client::CredentialFuture<'_, String> {
+            panic!("resetting a folder without a Host must not read credentials");
+        }
+
+        fn set<'a>(
+            &'a self,
+            _: uuid::Uuid,
+            _: &'a str,
+        ) -> ginfer_host::client::CredentialFuture<'a, ()> {
+            panic!("resetting a folder without a Host must not write credentials");
+        }
+
+        fn delete(&self, _: uuid::Uuid) -> ginfer_host::client::CredentialFuture<'_, ()> {
+            panic!("resetting a folder without a Host must not delete credentials");
+        }
+    }
+
+    fn reset_test_app(data_folder: &Path) -> tauri::App<tauri::test::MockRuntime> {
+        let client = std::sync::Arc::new(ginfer_host::client::Client::new(
+            None,
+            std::sync::Arc::new(ResetWithoutHostCredentials),
+        ));
+        tauri::test::mock_builder()
+            .manage(AppState::default())
+            .manage(client)
+            .manage(crate::test_support::TestDataRoot(data_folder.to_path_buf()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn factory_reset_keeps_relocated_selection_and_old_default_data() {
+        let root = tempfile::tempdir().unwrap();
+        let default_folder = root.path().join("original-data");
+        let selected = root.path().join("relocated-data");
+        let old_chat = default_folder.join("threads/retained-chat.json");
+        let current_chat = selected.join("threads/current-chat.json");
+        let current_model = selected.join("ginfer/models/current-model.ginfer");
+        fs::create_dir_all(old_chat.parent().unwrap()).unwrap();
+        fs::create_dir_all(current_chat.parent().unwrap()).unwrap();
+        fs::create_dir_all(current_model.parent().unwrap()).unwrap();
+        fs::write(&old_chat, b"old copy retained by relocation").unwrap();
+        fs::write(&current_chat, b"selected chat to reset").unwrap();
+        fs::write(&current_model, b"selected model to reset").unwrap();
+        let configuration_file = root.path().join("settings.json");
+        let configuration =
+            serde_json::to_vec_pretty(&crate::core::app::models::AppConfiguration {
+                data_folder: selected.to_string_lossy().into_owned(),
+                autostart_preference: crate::core::app::models::AutostartPreference::Disabled,
+            })
+            .unwrap();
+        fs::write(&configuration_file, &configuration).unwrap();
+        let app = reset_test_app(&selected);
+
+        reset_configured_app_data(
+            app.handle(),
+            &app.state::<AppState>(),
+            &configuration_file,
+            &default_folder,
+        )
+        .await
+        .unwrap();
+
+        assert!(!selected.join("threads").exists());
+        assert!(!current_model.exists());
+        assert_eq!(
+            fs::read(&old_chat).unwrap(),
+            b"old copy retained by relocation"
+        );
+        assert_eq!(fs::read(&configuration_file).unwrap(), configuration);
+        // This is also the reader used by the desktop/CLI folder resolver:
+        // restarting must keep selecting the cleared folder, never the old copy.
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &default_folder).unwrap(),
+            selected
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_without_saved_settings_clears_the_default_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let default_folder = root.path().join("default-data");
+        let chat = default_folder.join("threads/current-chat.json");
+        fs::create_dir_all(chat.parent().unwrap()).unwrap();
+        fs::write(&chat, b"default chat to reset").unwrap();
+        let configuration_file = root.path().join("no-settings-yet/settings.json");
+        let app = reset_test_app(&default_folder);
+
+        reset_configured_app_data(
+            app.handle(),
+            &app.state::<AppState>(),
+            &configuration_file,
+            &default_folder,
+        )
+        .await
+        .unwrap();
+
+        assert!(!default_folder.join("threads").exists());
+        assert!(!configuration_file.exists());
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &default_folder).unwrap(),
+            default_folder
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_reads_selection_after_the_relocation_fence() {
+        let root = tempfile::tempdir().unwrap();
+        let original = root.path().join("original-data");
+        let selected = root.path().join("relocated-data");
+        for folder in [&original, &selected] {
+            fs::create_dir_all(folder.join("threads")).unwrap();
+            fs::write(folder.join("threads/chat.json"), b"chat").unwrap();
+        }
+        let configuration_file = root.path().join("settings.json");
+        let write_selection = |folder: &Path| {
+            fs::write(
+                &configuration_file,
+                serde_json::to_vec(&serde_json::json!({ "data_folder": folder })).unwrap(),
+            )
+            .unwrap();
+        };
+        write_selection(&original);
+        let app = reset_test_app(&selected);
+        let state = app.state::<AppState>();
+        let relocation = crate::core::engine_hosts::data_folder_access()
+            .write()
+            .await;
+        let reset = reset_configured_app_data(app.handle(), &state, &configuration_file, &original);
+        tokio::pin!(reset);
+        std::future::poll_fn(|context| {
+            assert!(std::future::Future::poll(reset.as_mut(), context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+
+        // A move commits its new selection before releasing this same fence.
+        write_selection(&selected);
+        drop(relocation);
+        reset.await.unwrap();
+
+        assert_eq!(
+            fs::read(original.join("threads/chat.json")).unwrap(),
+            b"chat"
+        );
+        assert!(!selected.join("threads").exists());
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &original).unwrap(),
+            selected
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_does_not_fall_back_from_invalid_saved_settings() {
+        for configuration_kind in ["malformed", "unreadable", "relative"] {
+            let root = tempfile::tempdir().unwrap();
+            let default_folder = root.path().join("default-data");
+            let selected = root.path().join("relocated-data");
+            let old_chat = default_folder.join("threads/retained-chat.json");
+            let current_chat = selected.join("threads/current-chat.json");
+            fs::create_dir_all(old_chat.parent().unwrap()).unwrap();
+            fs::create_dir_all(current_chat.parent().unwrap()).unwrap();
+            fs::write(&old_chat, b"retained default").unwrap();
+            fs::write(&current_chat, b"retained selection").unwrap();
+            let configuration_file = root.path().join("settings.json");
+            match configuration_kind {
+                "malformed" => fs::write(&configuration_file, b"{malformed").unwrap(),
+                "unreadable" => fs::create_dir(&configuration_file).unwrap(),
+                "relative" => {
+                    fs::write(&configuration_file, br#"{"data_folder":"./data"}"#).unwrap();
+                }
+                _ => unreachable!(),
+            }
+            let original_configuration = fs::read(&configuration_file).ok();
+            let app = reset_test_app(&selected);
+
+            let error = reset_configured_app_data(
+                app.handle(),
+                &app.state::<AppState>(),
+                &configuration_file,
+                &default_folder,
+            )
+            .await
+            .expect_err("an unknown or unsafe selection must not reset the fallback");
+
+            assert!(error.contains("Your data has not been deleted"), "{error}");
+            assert_eq!(fs::read(&old_chat).unwrap(), b"retained default");
+            assert_eq!(fs::read(&current_chat).unwrap(), b"retained selection");
+            assert_eq!(fs::read(&configuration_file).ok(), original_configuration);
+            assert_eq!(
+                configuration_file.is_dir(),
+                configuration_kind == "unreadable"
+            );
+            assert!(!default_folder.join("ginfer").exists());
+            assert!(!selected.join("ginfer").exists());
+        }
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn reveal_item_in_dir_returns_error_without_panicking_on_runtime_worker() {

@@ -22,6 +22,66 @@ FRESH/OLD remain OFF/original XML/custody Gchat2. Windows not built (dev phase).
 
 Result: `out/gchat2-task-action-inline-errors-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-task-action-inline-errors-20261018`.
+## Reset preserves relocated App Data selection — C3, October 18
+
+`GUI-RESET-RELOCATED-DATA-RESURRECTION`: the installed release `d0a8d06bf`
+retained its old data copy during native relocation around 05:00Z. A subsequent
+factory reset cleared the selected `relocated-data` folder but rewrote its
+configuration to select the retained default folder, exposing old data after
+restart. The coordinator owns that native evidence in the ongoing
+`out/c3-current-main-release-20261018/` walkthrough packet; no new native run is
+claimed here.
+
+The source candidate preserves installation configuration, including App Data
+location and startup preference. It reads the authoritative selection under the
+existing relocation write fence, then uses the unchanged Agent/Host/MCP reset
+lifecycle and deletion list. No settings file means the normal default folder;
+malformed, unreadable or unsafe saved settings return an actionable error before
+Host shutdown, window hiding or deletion. Ordinary desktop/CLI fallback behavior
+is unchanged. See the [ownership decision](../decisions/2026-10-18-preserve-selected-data-folder-during-reset.md).
+
+Acceptance: reset removes selected threads/models, preserves the old default
+sentinel and saved configuration, and subsequent resolution still selects the
+cleared folder. Four added native reset regressions cover that case, missing
+settings, invalid settings without fallback deletion, and a relocation commit
+while reset waits for the write fence. Existing Agent cancellation/timeout and
+Host teardown regressions remain intact. All nine focused reset cases passed (one existing live-GPU ignore), as did
+eight folder resolver cases, scoped library check/Clippy and lint (zero errors,
+five existing warnings). ONE `make verify` passed at05:50:45Z: 3,382 app tests
+(six skipped), 127 extension tests, all six coverage floors and 1,251 native
+tests (28 ignored). No failure or continuation occurred. Vite/default-desktop
+debug build passed at05:52:26Z. The candidate ELF, private pre-install, resource
+link and all45 source bindings were checked. Native Reset/confirmation/restart passed05:55Z on the private selected sibling. The selected log sentinel was removed, the retained default sentinel survived and installation configuration bytes stayed identical. General reported the selected sibling after restart; Dark wide/narrow selected-folder and wide confirmation screenshots were reviewed. The old invalid Desktop locator bytes and missing runtimes stayed unchanged. See `out/c3-reset-relocated-data-20261018/native-result.json`. No new GPU/model/profile work,
+deletion categories, unselected-path cleanup or cross-device Engine-binary
+preservation changes are in scope.
+
+Source self-check: `git diff --check`, scoped Rust parse/format checks and new
+decision-link target checks pass. The focused command was `cargo test
+--manifest-path src-tauri/Cargo.toml --lib --no-default-features --features
+test-tauri,cli factory_reset_ -- --test-threads=1`; the real-GPU case keeps its
+existing ignored status. Existing app-folder resolver cases also passed.
+
+Source inventory: owner C3, local worktree
+`/ai/gchat-worktrees/c3-reset-relocated-data-20261018`, branch
+`fix/c3-reset-relocated-data-20261018`, base `072655126`. The private S1 root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` reuses inactive source,
+dependencies and debug target after C4 completed its read-copy at 05:41Z.
+Booking3051 CPUs80–87 returned05:53Z after the container and disposable local/
+remote source archives were removed. The socket1 shared build ran at nice10.
+Packet `out/c3-reset-relocated-data-20261018/` retains commands, source bindings
+and results. Retain the worktree for gates and review; the installed baseline
+remains owned by the broad walkthrough. Current main `e0a67a528` is merged
+normally before gates. The adjacent
+native test insertion conflict retains all four reset tests and main's folder
+reveal worker regression; the decision index retains both sets of entries.
+All35 dependency manifests matched the retained cache. The tested export is
+`reset-relocated-candidate/bin/gchat` (SHA256
+`70e9aef690f23040ea45b5f3f6cd2f5db40efb993ff683bd6c95f5c2a669c131`),
+with a private pre-install copy and linkage to retained runnable resources.
+Native app/session/display stopped and booking3039 returned05:56Z. The source and native acceptance are merge-ready; the exported binary is retained until merge.
+Shared source/cache is handed serially to the Host-locator gate; the installed
+AppDir/home, reset/autostart/folder/badge candidates, runnable resources and
+tools remain protected. No GPU/model run is needed.
 
 ## Gbot permission decision failure recovery — October 18
 

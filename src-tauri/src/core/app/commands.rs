@@ -41,11 +41,35 @@ fn build_default_data_folder(data_dir: &Path, app_name: &str) -> PathBuf {
 }
 
 fn resolve_data_folder_from_config(config_file: &Path, default_folder: &Path) -> PathBuf {
-    fs::read_to_string(config_file)
-        .ok()
-        .and_then(|content| serde_json::from_str::<AppConfiguration>(&content).ok())
-        .map(|config| PathBuf::from(config.data_folder))
-        .unwrap_or_else(|| default_folder.to_path_buf())
+    read_configured_data_folder(config_file, default_folder)
+        .unwrap_or_else(|_| default_folder.to_path_buf())
+}
+
+/// Destructive operations must distinguish a new installation from unreadable
+/// saved settings instead of silently selecting a different data folder.
+pub(crate) fn read_configured_data_folder(
+    config_file: &Path,
+    default_folder: &Path,
+) -> Result<PathBuf, String> {
+    let content = match fs::read_to_string(config_file) {
+        Ok(content) => content,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(default_folder.to_path_buf());
+        }
+        Err(error) => {
+            return Err(format!(
+                "Could not read GChat settings at {}: {error}",
+                config_file.display()
+            ));
+        }
+    };
+    let configuration: AppConfiguration = serde_json::from_str(&content).map_err(|error| {
+        format!(
+            "Could not parse GChat settings at {}: {error}",
+            config_file.display()
+        )
+    })?;
+    Ok(PathBuf::from(configuration.data_folder))
 }
 
 /// Read the desktop's selected data folder without starting the application.
