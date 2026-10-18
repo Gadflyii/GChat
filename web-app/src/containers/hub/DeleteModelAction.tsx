@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { IconTrash } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -46,9 +46,12 @@ export function DeleteModelAction({
 
   const [open, setOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const deletingRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleDelete = useCallback(async () => {
+    if (deletingRef.current) return
+    deletingRef.current = true
     setDeleting(true)
     setError(null)
     try {
@@ -67,16 +70,20 @@ export function DeleteModelAction({
       setError(error instanceof Error ? error.message : String(error))
       toast.error(message, { id: `delete-model-${modelId}` })
     } finally {
+      deletingRef.current = false
       setDeleting(false)
     }
   }, [externalReference, label, modelId, onDeleted, provider, serviceHub, t])
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (!deletingRef.current) setOpen(nextOpen)
+    }}>
       <Button
         type="button"
         variant="ghost"
         size="icon-sm"
+        disabled={deleting}
         onClick={() => { setError(null); setOpen(true) }}
         title={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
         aria-label={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
@@ -84,7 +91,7 @@ export function DeleteModelAction({
       >
         <IconTrash size={16} />
       </Button>
-      <DialogContent>
+      <DialogContent showCloseButton={!deleting} aria-busy={deleting}>
         <DialogHeader>
           <DialogTitle>
             {externalReference ? `Remove ${label ?? modelId} from Models?` : t('common:deleteModel.title', { modelId: label ?? modelId })}
@@ -101,15 +108,15 @@ export function DeleteModelAction({
           <Button
             variant="ghost"
             size="sm"
+            autoFocus
             disabled={deleting}
-            onClick={() => setOpen(false)}
+            onClick={() => { if (!deletingRef.current) setOpen(false) }}
           >
             {t('common:deleteModel.cancel')}
           </Button>
           <Button
             variant="destructive"
             size="sm"
-            autoFocus
             disabled={deleting}
             onClick={handleDelete}
           >

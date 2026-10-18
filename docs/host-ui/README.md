@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Model deletion confirmation — verified, Codex 7, October 18
+
+`GUI-MODEL-DELETE-CONFIRMATION` gives Cancel initial keyboard focus so Enter
+cancels without deleting. While removal is pending, the confirmation remains
+visible: Escape and outside interaction cannot dismiss it, Close is hidden and
+Cancel is disabled. A synchronous guard blocks duplicate activation before
+React renders the disabled controls. Rejection retains inline recovery and
+closed technical details for an explicit retry; success closes the dialog.
+Existing managed-file deletion and external-file removal semantics are unchanged.
+
+The three new regressions fail on unchanged base `a4cd2835a`; all nine focused
+candidate tests pass. Exactly one `make verify` passed at **16:02:51Z**:
+**3,682 app tests / 6 skipped, 127 extension tests, all six coverage floors,
+1,309 native tests / 0 failed / 28 ignored** across 23 native summaries.
+Lint reports zero errors and five existing unrelated warnings. Source and all
+eleven frozen catalog metadata inputs match the tested candidate. This is
+rendered frontend evidence; installed-desktop, Windows and GPU qualification
+remain separate.
+
+Branch `fix/c7-model-delete-confirmation-20261018` is in
+`/ai/gchat-worktrees/c7-model-delete-confirmation-20261018`.
+S1 CPU104–111 returned **16:03Z**, booking3381 canceled. The owned
+`/media/ron/SSD_RAID/ai/tmp-c7-model-delete-confirmation-20261018` fixture
+(**27.82 GB logical bytes**) and two exited containers were removed after result
+review; the retained RC dependency donor was untouched. Small evidence:
+`out/c7-model-delete-confirmation-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch, then continue the owned queue.
+
 ## Passphrase-vault Lock feedback — verified, Gchat 3, October 18
 
 `GUI-SECURE-STORAGE-LOCK-FEEDBACK` names the pending Lock and hides the
