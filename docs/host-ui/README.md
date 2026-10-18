@@ -26,12 +26,15 @@ publishing a new Host snapshot, so the read also refreshes that local snapshot
 before merging ready aliases. A matching file path does not prove that an alias
 belongs to the stopped session, so other aliases await that read. Until those reads succeed the affected row says
 Checking status or Status unavailable instead of trusting a stale Running label.
-The rendered regressions are preserved with this candidate. The higher-priority
-deletion revision correction passed its source gate and is with Codex 8 as
-`b3d27c2c4`; any review finding takes priority. Source-only integration of this
-next owned row now resumes. No Stop fixture or gate has launched and no resource
-is held. Next: integrate current main, freeze the Stop source/tests, then run
-the focused Models suite, lint and its single gate after deletion QC returns.
+The seven rendered regressions are preserved with this candidate. Current main
+and the reviewed deletion revision branch `05ee9a160` are integrated; Codex 8
+returned clean on that priority correction, which was mailed merge-ready.
+The component self-check confirms each Stop route removes only its confirmed ID
+before either read, preserves unrelated active entries, and uses the synchronous
+pending guard for repeat clicks. No Stop fixture or gate has launched and no
+resource is held. Next: freeze this integrated source and run the focused Models
+suite, lint and exactly one `make verify` in an independent S1 SSD fixture.
+
 ## Models overlapping deletion recovery — C7, October 18
 
 `GUI-MODELS-DELETE-REFRESH-RECOVERY` replaces the rejected recovery designs
