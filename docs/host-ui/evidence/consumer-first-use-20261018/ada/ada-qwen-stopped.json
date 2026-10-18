@@ -1,0 +1,20 @@
+{
+  "checked_utc": "2026-10-18T16:12:07.571148+00:00",
+  "instances": [
+    {
+      "instance_id": "1ee7a7be-a54d-489f-8c7e-ddff27d50716",
+      "session_id": "b92faee0-2e12-4709-99ba-0b231bf38b20",
+      "status": "stopped",
+      "active_requests": 0,
+      "last_error": null
+    }
+  ],
+  "api_state": {
+    "running": false,
+    "host": "127.0.0.1",
+    "port": 1337,
+    "prefix": "/v1",
+    "requires_api_key": true,
+    "pid": 0
+  }
+}

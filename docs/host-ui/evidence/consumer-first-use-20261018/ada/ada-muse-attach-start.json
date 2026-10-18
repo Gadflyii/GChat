@@ -1,0 +1,30 @@
+{
+  "started_utc": "2026-10-18T16:48:28.126706+00:00",
+  "pid": 50760,
+  "argv": [
+    "/home/ron/.local/bin/python3.11",
+    "/home/ron/tmp-c5-consumer-first-use-20261018/controls/natural.py",
+    "/home/ron/tmp-c5-consumer-first-use-20261018/evidence/ada-muse-natural",
+    "--attach"
+  ],
+  "base_url": "http://127.0.0.1:1337/v1",
+  "model": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+  "deadline": "2026-10-18T17:16:00Z",
+  "request_keys": [
+    "model",
+    "messages"
+  ],
+  "message_chars": 28116,
+  "phases": [
+    {
+      "clients": 1,
+      "seconds": 600
+    },
+    {
+      "clients": 4,
+      "seconds": 600
+    }
+  ],
+  "helper_imports": "PASS",
+  "api_key_configured": true
+}

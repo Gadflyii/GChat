@@ -5910,3 +5910,152 @@ prep log and both exited containers were retired at 13:39 UTC, removing
 The retained generated JSON was reconstructed after cleanup from the eight
 frozen inputs and matches the original staged SHA-256 exactly. Source,
 private DEV publication and the Linux RC input handoff are complete.
+
+### Consumer profiles — first use on RTX 4090 and laptop
+
+Codex 5 is checking development GChat from main `770f3c03d` on RTX 4090 and
+RTX 3080 Ti Laptop. The ordinary flow is catalog Download, Automatic selection
+and Load for Qwen 27B 2-bit mix `483343c2` and Muse 30B 2-bit mix `9d4ca1b2`,
+followed by 600 seconds each at client C1 and C4 through GChat's API. Acceptance
+records selected profile ID and Ready time, zero serving HTTP 4xx/5xx and no
+new swap activity or app/Engine swap. Bubbs waived per-seed IDs; the exact
+profiles already have Engine identity evidence. No Host diagnostic route is
+added. Fixes are limited to GChat selection or catalog defects; Engine failures
+go to Bubbs.
+
+Current state: Ada Qwen passed and returned at 16:07 UTC after normal app API
+and model Stop. Its selected profile is
+`rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened`.
+C1 ran 600.867 seconds/86 waves and C4 ran 608.817 seconds/29 waves. All 202
+requests returned HTTP200, request errors were zero, system swap counters stayed
+zero and app VmSwap was zero. The driver completed at 16:04:02 UTC. Evidence is
+[the request guard](evidence/consumer-first-use-20261018/ada/ada-qwen-natural-guard.json)
+and [normal Stop](evidence/consumer-first-use-20261018/ada/ada-qwen-stopped.json); full responses and telemetry remain in the owned
+Ada fixture. C6's bounded drafter Op returned at 16:14 UTC. The ordinary
+Muse Download started at 16:16 UTC after verifying no compute process and
+66.6 GB free native Linux space, and completed before the 16:47 UTC check.
+Native Load with Automatic started at 16:47:47 UTC; Engine Ready was
+16:47:54 UTC (6.614 seconds), and the Host snapshot confirmed Ready at
+16:48:07 UTC. The effective settings are 131072 context/C8, INT8 KV,
+fixed seven-token DFlash2, automatic arena, 300 MiB headroom and Vision off.
+Its derived catalog source is
+`rtx4090-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated`;
+the instance qualification ID is null after Automatic replaces the explicit
+catalog arena. The normal app API advertised the exact Muse package and the
+unchanged 600-second C1/C4 attach started at 16:48:28 UTC. C1 completed at
+16:58:30 UTC after 602.107 seconds/146 waves, all HTTP200 with no request errors
+or new swap activity; app, Host and Engine VmSwap remained zero. C4 completed
+at 17:08:35 UTC after 605.083 seconds/86 waves. All 490 serving requests across
+both phases returned HTTP200 with zero errors; system swap counters remained
+zero and app, Host and Engine VmSwap were zero at the terminal check. Normal
+model and API Stop completed through the app controls at 17:10 UTC, both Host
+instances report stopped with no last error, and the Engine process exited.
+Booking767 was canceled and Ada returned at 17:10 UTC. The GPU guard was held
+before download completion through model Stop; the request deadline was
+17:16 UTC. Small terminal evidence was relayed at 17:23 UTC:
+[request guard](evidence/consumer-first-use-20261018/ada/ada-muse-natural-guard.json),
+[selected settings](evidence/consumer-first-use-20261018/ada/ada-muse-installed.json)
+and [normal Stop](evidence/consumer-first-use-20261018/ada/ada-muse-stopped.json).
+Laptop has an isolated idle app and configured private API key, with its API server stopped
+and no managed Download, Load or inference requested. Its Download waits for
+the resize worker's normal return. Before requests, the two laptop natural request files were corrected from target-family names to the exact package IDs advertised by the app; the maintained 28,116-character prompt and uncapped output remain unchanged.
+
+Bubbs added parallel requalification after GInfer `c09b5315b`: resize the Ada
+and laptop Qwen/Muse bounds and retry laptop Muse C8, with admitted bounds,
+standard C1/C4/C8, natural, exact IDs and Arch sign. The GInfer authority is
+`docs/consumer-launch-profiles/README.md` in the worker's separate branch.
+Arch's 15:08 UTC hold required explicit admission to match that startup's own
+final Automatic arena. Arch signed the correction at 15:48 UTC; Bubbs merged
+`72153af01` and cleared resize at 15:49 UTC. The accepted SM86/SM89 builds are
+retained on S1. Laptop Muse 8192/C8 and Qwen 75776/C8 have Arch's numeric sign;
+their standard C1/C4/C8 runs passed exact IDs and no swap. Laptop Muse natural
+reached Ready at 16:36 UTC but failed before requests because a maintained
+Python helper was missing. Normal native exit and the failed evidence were
+retained. The target Python then passed the complete helper import preflight;
+the unchanged retry reached Ready at 16:37:44 UTC and completed at 16:57:49 UTC.
+Its C1/C4 phases ran 604.187/600.770 seconds, all 250 requests returned HTTP200,
+identity matched and native/lifecycle/health exits were zero with no new swap.
+Qwen natural reached Ready at 17:00:15 UTC in 27.063 seconds and completed at
+17:20:35 UTC. C1/C4 ran 601.217/618.294 seconds with 23/15 waves; all 83
+requests returned HTTP200, exact-ID comparisons matched, all lifecycle exits
+were zero and no new swap was recorded. Laptop returned at 17:22 UTC and
+booking405 was canceled. Ada first-use returned at 17:10 UTC and was handed
+to the resize worker. Frozen SM89/helpers, isolated Flash ELFs and small raw
+evidence transfers finished by 17:24 UTC. Ada sizing and standard checks run
+before laptop's ordinary Muse Download; matching app/native natural checks
+then run on separate hosts after Download finishes, followed by the same
+sequence for Qwen. The Windows RC owner was notified of the complete transfer
+return before its quiet native build.
+No overlapping model loads, timing or bulk relays are allowed.
+Existing signed catalog entries and the eb777 bundle remain the first-use
+inputs until replacement bounds are signed and coordinated with Gchat 3.
+
+The frozen private catalog is
+`http://192.168.1.109:18761/catalog.json`, accepted at 14:31:45 UTC with nine
+packages and 122 profiles, SHA-256
+`19a1d986fc6ec1510ea78b9d340e006ff8179a16f8e6b0acc69c8e4af6154309`.
+Its 11 inputs and binding are in
+`/ai/gchat/out/consumer-muse-profiles-20261018/catalog-input` and
+`catalog-binding.json`. The complete runtime set uses clean GInfer
+`eb777ab9570fad1c8301635617f0923f2b820424` across SM80/86/89/120a. S1 app/Host
+and runtime builds passed; maintained runtime staging and AppDir assembly passed
+at 15:03 UTC. Earlier e2282/b26ec5b8f runtimes do not satisfy the Muse gate.
+Initial orchestration stopped before compilation on a stale relative receipt
+path and then lost SSH quoting. The corrected path assertion, identifier-only
+substitution and parsed command newlines produced the successful build.
+
+The existing natural driver gained the authorized opt-in `--attach` mode in
+GInfer `bab1814fd`, merged as `a0a795e8c`. Python 3.11 compilation and focused
+success/HTTP503 lifecycle tests passed, including attached GPU telemetry. It
+leaves app load and Stop ownership with GChat, uses uncapped responses, and
+measures new system swap activity separately from previously allocated swap.
+Laptop began with 1,816 KiB allocated swap; this alone is not new activity.
+
+The selected profile comes from the existing authenticated Host snapshot.
+Ada Qwen reports
+`rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened`, with
+131072 context, C8, INT8 KV and fixed seven-token DFlash2. Its managed Download
+started at 15:16:17 UTC and verified successfully. Download refresh emits
+`onModelImported`; `DataProvider` selects the first usable model and calls
+`switchToModel(isAutoStart: true)`. This ordinary path started the model at
+15:39:51 UTC without another Load click. Engine Ready was 15:40:07 UTC after
+15.6172 seconds; the app and Host snapshot confirmed Ready at 15:40:20 UTC.
+No user-click-to-Ready latency is claimed. This start preceded GPU-flock
+acquisition, though booking764 covered the interval and no foreign compute was
+observed. Subsequent downloads must acquire the GPU guard before completion.
+The normal Integrations control started the API at 15:43 UTC. It advertises
+the package hash as the local model ID. Attach started at 15:43:52 UTC with
+600-second phases, a 16:08 UTC request deadline and a 3 GiB memory floor.
+The startup updater's absent GitHub `latest.json` returned HTTP404 before the
+serving interval; it is outside the model-serving acceptance.
+
+Automatic ranks context before concurrency. Frozen Muse candidates are Ada
+`rtx4090-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated` and laptop
+`rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated`.
+Laptop C4 therefore means four app clients queueing through the selected C1
+Engine. Automatic overrides explicit catalog arenas with automatic sizing;
+those instances may report a null qualification ID. Retain effective options
+and the uniquely matching catalog candidate, labelling its source ID as derived.
+A null qualification ID alone does not establish a selection defect.
+Application Ready, Engine startup duration and API readiness are separate facts.
+
+Owned inventory:
+
+| Host | Path and purpose | Status / retention |
+| --- | --- | --- |
+| local5090 | `/ai/gchat-worktrees/c5-consumer-first-use-20261018`, branch `test/c5-consumer-first-use-20261018` | Documentation/evidence integration; no local model or build |
+| S1 | `/media/ron/SSD_RAID/ai/tmp-c5-consumer-first-use-20261018` | Accepted app/Host/runtime builds and 4.65 GB AppDir donor; retain through first-use |
+| Ada | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated AppDir/tools/controls, private HOME/run/tmp, managed Qwen and Muse; Qwen and Muse app natural PASS, both models/API stopped; retain small evidence and fixture through integration |
+| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated idle app/API settings, no managed download; retain for first-use |
+| Ada | `/tmp/c5x/xkbcomp` | Owned compiler symlink for private Xvfb; remove with fixture |
+
+Both targets use private mode-700 runtime directories, private HOME/XDG,
+D-Bus, unlocked keyring and Xvfb, with WAYLAND_DISPLAY unset. The portable
+Xvfb copy uses the owned keyboard-compiler prefix because Ada has no system
+`xkbcomp`; the original tool is unchanged. Native controlled text inputs use
+paced typing: zero-delay typing dropped characters in the laptop API key field;
+replacement at 20 ms per character verified its full length. Secrets remain
+only in the private target fixtures. Native disk checks resolved Ada's earlier
+space blocker and both deployments passed; free space is checked before each
+Download. Protected model inputs, raw profiler evidence and immutable profile
+donors outside these app roots are excluded from cleanup.

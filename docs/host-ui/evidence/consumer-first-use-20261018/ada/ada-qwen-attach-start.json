@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-18T15:43:52.651506+00:00",
+  "pid": 41694,
+  "argv": [
+    "/home/ron/.local/bin/python3.11",
+    "/home/ron/tmp-c5-consumer-first-use-20261018/controls/natural.py",
+    "/home/ron/tmp-c5-consumer-first-use-20261018/evidence/ada-qwen-natural",
+    "--attach"
+  ],
+  "endpoint": "http://127.0.0.1:1337/v1",
+  "end_utc": "2026-10-18T16:08:00Z",
+  "profile_id": "rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened",
+  "app_ready_observed_at": "2026-10-18T15:40:20.496535Z",
+  "engine_ready_log_at": "2026-10-18T15:40:07.209Z",
+  "engine_load_seconds": 15.6172,
+  "user_load_start": "not captured; no explicit Load click in this interval"
+}
