@@ -76,7 +76,9 @@ describe('Chat history search keyboard selection', () => {
     const input = await focusedSearchInput()
 
     await user.type(input, 'a')
-    expect(useThreads.getState().getFilteredThreads('a')).toHaveLength(2)
+    expect(
+      useThreads.getState().getFilteredThreads('a').map(({ id }) => id)
+    ).toEqual(['atlas', 'shared'])
     await user.keyboard('{ArrowDown}')
     expect(screen.getByRole('button', { name: /Arrival view$/ })).toHaveClass(
       'bg-secondary/50'
@@ -86,10 +88,12 @@ describe('Chat history search keyboard selection', () => {
     await user.keyboard('{Control>}a{/Control}v')
 
     expect(input).toHaveValue('v')
-    expect(useThreads.getState().getFilteredThreads('v')).toHaveLength(2)
-    const firstResult = screen.getByRole('button', { name: /View$/ })
+    expect(
+      useThreads.getState().getFilteredThreads('v').map(({ id }) => id)
+    ).toEqual(['shared', 'view'])
+    const firstResult = screen.getByRole('button', { name: /Arrival view$/ })
     expect(firstResult).toHaveClass('bg-secondary/50')
-    expect(screen.getByRole('button', { name: /Arrival view$/ })).not.toHaveClass(
+    expect(screen.getByRole('button', { name: /View$/ })).not.toHaveClass(
       'bg-secondary/50'
     )
     const scrollContexts = scrollIntoView.mock.contexts
@@ -99,7 +103,7 @@ describe('Chat history search keyboard selection', () => {
 
     expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
       to: '/threads/$threadId',
-      params: { threadId: 'view' },
+      params: { threadId: 'shared' },
     })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
@@ -138,21 +142,23 @@ describe('Chat history search keyboard selection', () => {
 
     await user.click(screen.getByRole('button', { name: 'Open history search' }))
     expect(await focusedSearchInput()).toHaveValue('')
-    expect(screen.getByRole('button', { name: /View$/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Arrival view$/ })).toBeInTheDocument()
     await user.keyboard('{ArrowDown}{Enter}')
     expect(mocks.navigate).toHaveBeenNthCalledWith(2, {
       to: '/threads/$threadId',
-      params: { threadId: 'view' },
+      params: { threadId: 'shared' },
     })
     expect(
       JSON.parse(localStorage.getItem(localStorageKey.recentSearches)!)
-    ).toEqual(['view'])
+    ).toEqual(['shared'])
 
     await user.click(screen.getByRole('button', { name: 'Open history search' }))
     await focusedSearchInput()
     await user.click(screen.getByRole('button', { name: 'common:clearRecent' }))
 
-    expect(screen.queryByRole('button', { name: /View$/ })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Arrival view$/ })
+    ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'common:newChat' })).toBeInTheDocument()
     expect(localStorage.getItem(localStorageKey.recentSearches)).toBeNull()
     expect(useThreads.getState().threads).toBe(savedThreads)
