@@ -78,16 +78,19 @@ pub fn build_window(
         .path()
         .app_cache_dir()?
         .join(super::artifact::ARTIFACT_CACHE_DIRECTORY);
-    // No application document loads before both native guards are installed.
-    let mut bootstrap_config = config.clone();
-    bootstrap_config.url = tauri::WebviewUrl::External(Url::parse("about:blank").unwrap());
+    // Keep the initial application origin: Tauri binds asset-protocol CORS
+    // headers to it. Wry installs on_navigation before its first URL load;
+    // deny that load until both native guards are installed.
+    let ready = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let navigation_ready = ready.clone();
     let navigation_origin = origin.clone();
     let opener = app.clone();
-    let window = WebviewWindowBuilder::from_config(app, &bootstrap_config)?
+    let window = WebviewWindowBuilder::from_config(app, config)?
         .on_navigation(move |url| {
             // WebKit's callback includes subframes. Its response policy below
             // distinguishes them before allowing a document to commit.
-            navigation_allowed(&navigation_origin, url, !cfg!(target_os = "linux"))
+            navigation_ready.load(std::sync::atomic::Ordering::Acquire)
+                && navigation_allowed(&navigation_origin, url, !cfg!(target_os = "linux"))
         })
         .on_new_window(move |url, _| {
             if matches!(url.scheme(), "https" | "http" | "mailto" | "tel") {
@@ -112,6 +115,7 @@ pub fn build_window(
         let _ = window.destroy();
         return Err(std::io::Error::other(error).into());
     }
+    ready.store(true, std::sync::atomic::Ordering::Release);
     window.navigate(initial_url)?;
     Ok(window)
 }
