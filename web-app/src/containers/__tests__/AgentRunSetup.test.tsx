@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
         hostName: 'This computer',
         concurrency: 4,
         vision: true,
+        maxContext: 32768,
       },
       {
         id: 'lan-instance',
@@ -39,6 +40,7 @@ const mocks = vi.hoisted(() => ({
         hostName: 'Server 2',
         concurrency: 2,
         vision: true,
+        maxContext: 16384,
       },
     ],
     usage: {},
@@ -129,6 +131,194 @@ async function submitWithSavedDefaults() {
 }
 
 describe('Agent Studio run setup', () => {
+  it('keeps minimum context empty while editing and submits numeric assignments before blur', async () => {
+    const user = userEvent.setup()
+    const saved = {
+      ...definition,
+      roleAssignments: {
+        executor: {
+          target: { kind: 'current' as const },
+          vision: false,
+          minimumContext: 0,
+        },
+        evaluator: {
+          target: { kind: 'current' as const },
+          vision: false,
+          minimumContext: 8192,
+        },
+      },
+    }
+    mocks.save.mockResolvedValueOnce(undefined)
+    render(
+      <AgentRunSetup
+        definition={saved}
+        initialTask="Review the workspace"
+        onClose={vi.fn()}
+        onRun={vi.fn()}
+      />
+    )
+    const [executor, evaluator] = screen.getAllByRole('spinbutton', {
+      name: 'Minimum context',
+    })
+    const run = screen.getByRole('button', { name: 'Run', exact: true })
+    await waitFor(() => expect(run).toBeEnabled())
+
+    fireEvent.change(executor, { target: { value: '65536' } })
+    expect(run).toBeDisabled()
+    await user.clear(executor)
+    expect(executor).toHaveProperty('value', '')
+    expect(run).toBeEnabled()
+    await user.type(executor, '32768')
+    expect(executor).toHaveProperty('value', '32768')
+    expect(executor).toHaveFocus()
+    expect(evaluator).toHaveValue(8192)
+    expect(run).toBeEnabled()
+
+    // Submit without moving focus, so blur cannot supply the numeric value.
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Save these role assignments as defaults',
+      })
+    )
+    fireEvent.click(run)
+    expect(executor).toHaveFocus()
+    await waitFor(() => expect(mocks.start).toHaveBeenCalledOnce())
+    const expectedAssignments = {
+      executor: { ...saved.roleAssignments.executor, minimumContext: 32768 },
+      evaluator: saved.roleAssignments.evaluator,
+    }
+    expect(mocks.save).toHaveBeenCalledExactlyOnceWith({
+      ...saved,
+      roleAssignments: expectedAssignments,
+    })
+    expect(mocks.start.mock.calls[0][1].role_assignments).toEqual(
+      expectedAssignments
+    )
+    expect(saved.roleAssignments.executor.minimumContext).toBe(0)
+  })
+
+  it('normalizes minimum context on blur without mixing role drafts', async () => {
+    const user = userEvent.setup()
+    render(
+      <AgentRunSetup definition={definition} onClose={vi.fn()} onRun={vi.fn()} />
+    )
+    const [executor, evaluator] = screen.getAllByRole('spinbutton', {
+      name: 'Minimum context',
+    })
+
+    await user.clear(executor)
+    expect(executor).toHaveProperty('value', '')
+    // userEvent canonicalizes number-input leading zeroes; native editing retains them.
+    fireEvent.change(executor, { target: { value: '032768' } })
+    expect(executor).toHaveProperty('value', '032768')
+    expect(evaluator).toHaveValue(0)
+    await user.tab()
+    expect(executor).toHaveProperty('value', '32768')
+
+    await user.clear(evaluator)
+    expect(evaluator).toHaveProperty('value', '')
+    fireEvent.change(evaluator, { target: { value: '08192' } })
+    expect(evaluator).toHaveProperty('value', '08192')
+    expect(executor).toHaveProperty('value', '32768')
+    fireEvent.blur(evaluator)
+    expect(evaluator).toHaveProperty('value', '8192')
+    await user.clear(executor)
+    expect(executor).toHaveProperty('value', '')
+    fireEvent.blur(executor)
+    expect(executor).toHaveProperty('value', '0')
+    expect(evaluator).toHaveProperty('value', '8192')
+  })
+
+  it('keeps invalid minimum context limits blocked without clamping on blur', async () => {
+    const user = userEvent.setup()
+    render(
+      <AgentRunSetup
+        definition={definition}
+        initialTask="Review the workspace"
+        onClose={vi.fn()}
+        onRun={vi.fn()}
+      />
+    )
+    const context = screen.getAllByRole('spinbutton', {
+      name: 'Minimum context',
+    })[0]
+    const run = screen.getByRole('button', { name: 'Run', exact: true })
+    await waitFor(() => expect(run).toBeEnabled())
+
+    for (const value of ['-1', '0.5', '16777217']) {
+      fireEvent.change(context, { target: { value } })
+      expect(screen.getByText('Enter a valid minimum context size.')).toBeVisible()
+      expect(run).toBeDisabled()
+      fireEvent.blur(context)
+      expect(context).toHaveProperty('value', value)
+      expect(run).toBeDisabled()
+      fireEvent.click(run)
+      expect(mocks.start).not.toHaveBeenCalled()
+      expect(mocks.save).not.toHaveBeenCalled()
+
+      await user.clear(context)
+      expect(context).toHaveProperty('value', '')
+      expect(run).toBeEnabled()
+      fireEvent.blur(context)
+      expect(context).toHaveProperty('value', '0')
+    }
+  })
+
+  it('discards cancelled minimum context drafts when setup is reopened', async () => {
+    const user = userEvent.setup()
+    const saved = {
+      ...definition,
+      roleAssignments: {
+        executor: {
+          target: { kind: 'current' as const },
+          vision: false,
+          minimumContext: 8192,
+        },
+        evaluator: {
+          target: { kind: 'current' as const },
+          vision: false,
+          minimumContext: 16384,
+        },
+      },
+    }
+    const onClose = vi.fn()
+    const { unmount } = render(
+      <AgentRunSetup definition={saved} onClose={onClose} onRun={vi.fn()} />
+    )
+    const context = screen.getAllByRole('spinbutton', {
+      name: 'Minimum context',
+    })[0]
+    await user.clear(context)
+    fireEvent.change(context, { target: { value: '032768' } })
+    expect(context).toHaveProperty('value', '032768')
+    fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: 'Save these role assignments as defaults',
+      })
+    )
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(mocks.save).not.toHaveBeenCalled()
+    expect(mocks.start).not.toHaveBeenCalled()
+    unmount()
+
+    render(
+      <AgentRunSetup definition={saved} onClose={vi.fn()} onRun={vi.fn()} />
+    )
+    const [executor, evaluator] = screen.getAllByRole('spinbutton', {
+      name: 'Minimum context',
+    })
+    expect(executor).toHaveProperty('value', '8192')
+    expect(evaluator).toHaveProperty('value', '16384')
+    expect(
+      screen.getByRole('checkbox', {
+        name: 'Save these role assignments as defaults',
+      })
+    ).not.toBeChecked()
+    expect(saved.roleAssignments.executor.minimumContext).toBe(8192)
+    expect(saved.roleAssignments.evaluator.minimumContext).toBe(16384)
+  })
+
   it('does not start after Cancel while saving role defaults', async () => {
     const save = deferredSave()
     mocks.save.mockReturnValueOnce(save.promise)

@@ -23,6 +23,41 @@ import type { AgentDefinition, AgentRoleAssignment } from '@/types/agent'
 
 const selectClass =
   'w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground'
+
+function MinimumContextInput({
+  value,
+  onValueChange,
+}: {
+  value: number
+  onValueChange: (value: number) => void
+}) {
+  const [draftValue, setDraftValue] = useState<{
+    text: string
+    numeric: number
+  } | null>(null)
+
+  useEffect(() => {
+    setDraftValue((current) => (current?.numeric === value ? current : null))
+  }, [value])
+
+  return (
+    <Input
+      className="w-28"
+      type="number"
+      min={0}
+      // Preserve an empty edit while readiness still receives a numeric value.
+      value={draftValue?.numeric === value ? draftValue.text : String(value)}
+      onChange={(event) => {
+        const text = event.target.value
+        const numeric = Number(text)
+        setDraftValue({ text, numeric })
+        onValueChange(numeric)
+      }}
+      onBlur={() => setDraftValue(null)}
+    />
+  )
+}
+
 export function AgentRunSetup({
   definition,
   onClose,
@@ -251,14 +286,11 @@ export function AgentRunSetup({
                   </label>
                   <label className="flex items-center gap-2">
                     Minimum context
-                    <Input
-                      className="w-28"
-                      type="number"
-                      min={0}
+                    <MinimumContextInput
                       value={assignment.minimumContext}
-                      onChange={(e) =>
+                      onValueChange={(minimumContext) =>
                         change(role.id, {
-                          minimumContext: Number(e.target.value),
+                          minimumContext,
                         })
                       }
                     />
