@@ -391,6 +391,12 @@ function AgentStudioPage() {
   const [view, setView] = useState<StudioView>(search.view ?? 'definitions')
   const [draft, setDraftState] = useState<AgentDefinition | null>(null)
   const outputBudgetInput = useRef<HTMLInputElement>(null)
+  const draftNameInput = useRef<HTMLInputElement>(null)
+  const [templateFocusRequest, setTemplateFocusRequest] = useState(0)
+
+  useEffect(() => {
+    if (templateFocusRequest > 0) draftNameInput.current?.focus()
+  }, [templateFocusRequest])
   // The editable identifier does not determine which saved record this draft owns.
   const [draftSavedId, setDraftSavedId] = useState<string | null>(null)
   const draftBaseline = useRef<string | null>(null)
@@ -572,6 +578,7 @@ function AgentStudioPage() {
     replaceDraft(() => {
       setDraft(copy, null)
       selectView('definitions')
+      setTemplateFocusRequest((request) => request + 1)
     })
   }
 
@@ -809,6 +816,7 @@ function AgentStudioPage() {
               <DefinitionEditor
                 key={draftSavedId === null ? 'unsaved' : `saved:${draftSavedId}`}
                 draft={draft}
+                nameRef={draftNameInput}
                 outputBudgetRef={outputBudgetInput}
                 modelInstances={modelInstances}
                 skills={skills
@@ -915,12 +923,14 @@ function AgentStudioPage() {
 
 function DefinitionEditor({
   draft,
+  nameRef,
   outputBudgetRef,
   skills,
   modelInstances,
   onChange,
 }: {
   draft: AgentDefinition
+  nameRef: React.Ref<HTMLInputElement>
   outputBudgetRef: React.Ref<HTMLInputElement>
   skills: string[]
   modelInstances: AgentModelInstance[]
@@ -939,6 +949,7 @@ function DefinitionEditor({
         <div className="mt-2 grid gap-4 md:grid-cols-[1fr_0.8fr]">
           <Field label="Name">
             <Input
+              ref={nameRef}
               aria-label="Name"
               value={draft.name}
               onChange={(event) => common({ name: event.target.value })}
