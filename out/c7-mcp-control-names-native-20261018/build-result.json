@@ -1,0 +1,230 @@
+{
+  "source": "cf670bced700183738370658f591a5704be56579",
+  "tree": "f26ce1dd684c300db2f6937ee8e1acc6e2c2080c",
+  "host": "AIS-2-8592-L01",
+  "root": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018",
+  "booking": {
+    "line": 3116,
+    "cpus": "88-95",
+    "end_utc": "2026-10-18T07:19Z"
+  },
+  "donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app",
+  "package_donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage",
+  "status": "BUILD_PASS_NATIVE_ACCEPTANCE_PENDING",
+  "stages": {
+    "build": {
+      "start": "2026-10-18T07:05:37.590102+00:00",
+      "end": "2026-10-18T07:07:51.350801+00:00",
+      "exit": 0,
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/build.log"
+    },
+    "tauri-assets": {
+      "exit": 0,
+      "start": "2026-10-18T07:05:44Z",
+      "end": "2026-10-18T07:05:44Z"
+    },
+    "frontend-build": {
+      "exit": 0,
+      "start": "2026-10-18T07:05:44Z",
+      "end": "2026-10-18T07:06:29Z"
+    },
+    "native-app": {
+      "exit": 0,
+      "start": "2026-10-18T07:06:54Z",
+      "end": "2026-10-18T07:07:51Z"
+    },
+    "extensions-assets": {
+      "exit": 0,
+      "start": "2026-10-18T07:05:40Z",
+      "end": "2026-10-18T07:05:44Z"
+    },
+    "core-assets": {
+      "exit": 0,
+      "start": "2026-10-18T07:05:37Z",
+      "end": "2026-10-18T07:05:40Z"
+    },
+    "native-host": {
+      "exit": 0,
+      "start": "2026-10-18T07:06:29Z",
+      "end": "2026-10-18T07:06:54Z"
+    }
+  },
+  "tests_rerun": false,
+  "donor_mutated": false,
+  "started_utc": "2026-10-18T07:05:12.368425+00:00",
+  "dependency_input_comparison": [
+    {
+      "path": ".probe/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": ".yarnrc.yml",
+      "same": true
+    },
+    {
+      "path": "core/package.json",
+      "same": true
+    },
+    {
+      "path": "docs/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/assistant-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/conversational-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/download-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/ginfer-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/rag-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/vector-db-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/yarn.lock",
+      "same": true
+    },
+    {
+      "path": "package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/Cargo.lock",
+      "same": true
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "same": false
+    },
+    {
+      "path": "src-tauri/gbot-service/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/ginfer-host/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/ginfer-manager/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-ginfer/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-hardware/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-hardware/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-rag/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-rag/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-vector-db/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-vector-db/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/yarn.lock",
+      "same": true
+    },
+    {
+      "path": "src-tauri/utils/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/vendor/cua-media/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/vendor/cua-media/crates/cua-proto/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/vendor/cua-media/crates/cua-spacesd-client/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/vendor/tray-icon/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "web-app/package.json",
+      "same": true
+    },
+    {
+      "path": "yarn.lock",
+      "same": true
+    }
+  ],
+  "source_mtime_policy": "all exact tracked files normalized after cache copy to force source-sensitive Cargo rebuild",
+  "binaries": {
+    "gchat": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/donor-appdir/usr/bin/gchat",
+      "sha256": "99adaa62b8af1937c29c510cf06f2c46fc4401bb4ba99b914ab9627a8d4ab4a8",
+      "bytes": 256545752,
+      "ldd": "PASS with private AppDir library closure"
+    },
+    "ginfer-host": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/donor-appdir/usr/lib/GChat/resources/bin/ginfer-host",
+      "sha256": "617e84282139756964bdba3af47ebda76bc54ee7a82cfae1221fde4213b591c9",
+      "bytes": 56673520,
+      "ldd": "PASS with private AppDir library closure"
+    }
+  },
+  "appdir": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/donor-appdir",
+  "resources": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/donor-appdir/usr/lib/GChat/resources",
+  "completed_utc": "2026-10-18T07:07:54.327559+00:00",
+  "dependency_input_difference": "Only src-tauri/Cargo.toml differs from donor: current source adds tokio test-util under dev-dependencies; all lockfiles and other dependency manifests match. No installation was run.",
+  "guard": "flock -s /tmp/ginfer-s1-socket1-compile.lock only; taskset -c 88-95, nice -n 10, Cargo jobs 8; no native lock per schedule socket-1 rule",
+  "verification_reuse": "Coordinator confirmed MCP route/tests/dialog/English copy unchanged from 71abf1708 (ONE make verify); no tests or verify repeated.",
+  "process_terminal": {
+    "flock_pid": 3867023,
+    "pid_absent": true,
+    "docker_container": "gchat-c7-mcp-control-names-native-20261018",
+    "container_absent": true,
+    "donor_read_copy_released": true,
+    "booking_retained_for_parent_native": false,
+    "booking_canceled": true,
+    "scratch_retirement_owner": "Coordinator; no further build access or donor hold",
+    "coordinator_native_terminal_confirmed": true,
+    "booking_canceled_utc": "2026-10-18T07:14Z"
+  }
+}

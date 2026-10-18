@@ -4230,3 +4230,37 @@ at 07:00 UTC. The owned S1 source/build/AppDir/HOME/tools root
 `/media/ron/SSD_RAID/ai/tmp-c7-switch-focus-native-20261018` was retired,
 removing 41.42 GB. The shared development catalog is retained. Next: coordinator
 integration and canonical Linux leaf closure.
+
+## MCP control names — C7 native acceptance
+
+`GUI-MCP-CONTROL-NAMES` passes native Linux acceptance on source `cf670bced`,
+including merged fix `ee5c2a4db`. Two private connection rows expose distinct
+server-specific names for Advanced, Edit, Remove and Use controls. Native
+Shift+Tab reaches the controls; Enter opens the matching Advanced, Edit and
+Remove dialogs. Space enables the focused connection switch and preserves its
+focus. A real disposable stdio MCP child completes its handshake and reports no
+tools; its green connected indicator exposes `role="img"` and the accessible
+name `MCP server connected`. The Remove dialog initially focuses Cancel and
+Escape cancels without deleting the connection.
+
+All input used native XTest in a private S1 Xvfb desktop; the inspector only
+read DOM/ARIA state. Initial fixture preparation needed Python `-I` to ignore
+the AppDir's Python environment. A migration-added default Exa connection was
+removed before acceptance; it initialized during preparation but no tools were
+called. Acceptance used only the private local fixture, with no account,
+model, GPU or shared development catalog dependency.
+
+The MCP route, tests, dialog and English copy are unchanged from `71abf1708`,
+whose ONE `make verify` passed. This evidence-only branch passes
+`git diff --check`. Windows and spoken screen-reader output remain outside this
+Linux control/semantics leaf.
+
+Candidate: `/ai/gchat-worktrees/c7-mcp-control-names-native-20261018`, branch
+`test/c7-mcp-control-names-native-20261018`. The small packet is
+[`out/c7-mcp-control-names-native-20261018/`](../../out/c7-mcp-control-names-native-20261018/),
+with five screenshots, native observations and build receipts. The private app,
+Host, D-Bus, keyring, Xvfb and inspector session are stopped; CPUs were returned
+at 07:15 UTC. The owned S1 source/build/AppDir/HOME/tools root
+`/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018` is retired.
+The shared development catalog remains live. Next: coordinator integration and
+canonical Linux leaf closure.
