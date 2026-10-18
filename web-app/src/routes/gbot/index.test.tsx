@@ -1529,11 +1529,13 @@ it.each(['incomplete', 'unavailable', 'service-unavailable'])(
       ],
     })
     const call = mocks.call.getMockImplementation()!
-    const updates = new Map<string, () => void>()
+    const updates = new Map<string, Set<() => void>>()
     mocks.listen.mockImplementation(
       async (event: string, callback: () => void) => {
-        updates.set(event, callback)
-        return () => updates.delete(event)
+        const callbacks = updates.get(event) || new Set()
+        callbacks.add(callback)
+        updates.set(event, callbacks)
+        return () => callbacks.delete(callback)
       }
     )
     let record: KvmSetupRecord = {
@@ -1589,7 +1591,9 @@ it.each(['incomplete', 'unavailable', 'service-unavailable'])(
         resolveStatus = resolve
       })
     const before = statusReads
-    await act(async () => updates.get('gbot-task-update')!())
+    await act(async () =>
+      updates.get('gbot-task-update')!.forEach((callback) => callback())
+    )
     await waitFor(() => expect(statusReads).toBeGreaterThan(before))
     expect(canvas).toBeVisible()
     expect(screen.queryByText('Setup incomplete')).not.toBeInTheDocument()
@@ -1609,7 +1613,9 @@ it.each(['incomplete', 'unavailable', 'service-unavailable'])(
       return [record]
     }
     failState = failure === 'service-unavailable'
-    await act(async () => updates.get('gbot-setup-update')!())
+    await act(async () =>
+      updates.get('gbot-setup-update')!.forEach((callback) => callback())
+    )
     await screen.findByText('Setup incomplete')
     expect(canvas).not.toBeInTheDocument()
     expect(
