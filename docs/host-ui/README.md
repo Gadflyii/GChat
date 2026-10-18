@@ -1,5 +1,35 @@
 # GInfer host UI
 
+## Paused first-run download feedback — C3, October 18
+
+`GUI-FIRST-RUN-PAUSED-ERROR` is fixed. A deliberately paused Host download
+carries an informational diagnostic; Welcome previously rendered it as a red
+failure directing users to absent Try again/Choose a different model buttons.
+Failure panels now require failed status. Paused downloads keep their progress
+and Resume downloads. Genuine failure, retry and model reselection remain
+covered by the focused file.
+
+The native baseline is retained in
+`out/c3-first-run-download-status-20261018/native/paused.png`. The new rendered
+paused-to-resumed regression fails against unchanged source, then passes with
+`f119c04a9`, preserving all 297,664,406 downloaded bytes. Focused: **33 PASS**.
+ONE `make verify` completed with **3,506 app / 6 skipped, 127 extension,
+1,276 native / 28 ignored**; lint (five existing warnings), types, quality,
+contracts/assets and six critical coverage floors pass. The original gate
+stopped on stale external launch catalogs (92,832 versus admitted 82,944).
+Only four owned inputs were refreshed from merged GInfer `5825c2e39`; the
+failed assertion and unrun native targets then passed, with passed stages
+retained. No second full gate. Results, original failure and continuation logs:
+[`out/c3-first-run-paused-error-20261018/result.json`](../../out/c3-first-run-paused-error-20261018/result.json).
+
+Owner C3; branch `fix/c3-first-run-paused-error-20261018`, worktree
+`/ai/gchat-worktrees/c3-first-run-paused-error-20261018`. Four stopped containers
+and the independent S1 SSD cache/build root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-run-paused-error-20261018` are removed;
+CPU80–87 returned 08:15Z. Inactive Gchat 3 donor unchanged. Only small evidence
+remains. No Host/Engine source, Chat/Agents, selected-artifact, Windows,
+new native GUI launch or GPU work. Source and regression are merge-ready.
+
 ## MCP dialog row buttons — C7, October 18
 
 `GUI-MCP-DIALOG-ROW-BUTTONS`: command-option reorder handles are native named
@@ -55,13 +85,13 @@ complete-download integrity, hardware profile, model load or GPU claim is made.
 
 The paused card also showed misleading failure guidance pointing at absent
 buttons. That separate defect is recorded as `GUI-FIRST-RUN-PAUSED-ERROR` and
-is the next source fix. Owner C3; branch
+is fixed above. Owner C3; branch
 `fix/c3-first-run-download-status-20261018`, worktree
 `/ai/gchat-worktrees/c3-first-run-download-status-20261018`. Private app, Host and
 helpers stopped, the 297 MB partial and own S1 root
 `/media/ron/SSD_RAID/ai/tmp-c3-first-run-download-status-20261018` were removed,
 and CPUs returned 08:01Z. Donors/shared catalog remain untouched. Only small
-evidence and source remain. Check: `git diff --check`; next merge this closure.
+evidence and source remain. Check: `git diff --check`; merged main `0b98adfc5`.
 
 ## Secure-storage Check-first recovery — C3, October 18
 

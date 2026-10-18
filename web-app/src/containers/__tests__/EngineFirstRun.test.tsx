@@ -93,6 +93,39 @@ it('uses chosen storage, retries the shared catalog and resumes saved downloads'
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'resume' })
 })
 
+it('keeps a paused download informational and resumes its retained progress', async () => {
+  const received = 297664406
+  let saved = flow('downloads', {
+    hardware_profile: { status: 'idle' },
+    selected_downloads: [{ id: 'download', release, status: 'paused', received, bytes_per_second: 0,
+      error: 'Download paused; partial bytes are retained.' }],
+  })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'resume') saved = flow('downloads', {
+      ...saved, selected_downloads: [{ id: 'download', release, status: 'downloading', received,
+        bytes_per_second: 1024 ** 2, error: null }],
+    })
+    return Promise.resolve(saved)
+  })
+  render(<EngineFirstRun />)
+  expect(await screen.findByText(/Muse · Paused; resume to continue/)).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.queryByText(/This model download could not finish/)).not.toBeInTheDocument()
+  expect(screen.queryByText('Muse download error details')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Choose a different model' })).not.toBeInTheDocument()
+  expect(screen.getByRole('progressbar', { name: 'Muse download' })).toHaveAttribute('value', String(received))
+  const resume = screen.getByRole('button', { name: 'Resume downloads' })
+  expect(resume).toBeEnabled()
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+  fireEvent.click(resume)
+  expect(await screen.findByText(/Muse · Downloading model/)).toBeInTheDocument()
+  expect(screen.getByRole('progressbar', { name: 'Muse download' })).toHaveAttribute('value', String(received))
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([
+    ['first_run', { host_id: 'local', action: 'resume' }],
+  ])
+})
+
 it('observes verified downloads before selected profiling and retains its retry across reopening', async () => {
   const installed = { id: 'download', release, status: 'installed', received: release.bytes, bytes_per_second: 0 }
   let saved = flow('downloads', {
