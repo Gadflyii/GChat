@@ -1,5 +1,33 @@
 # Gbot design
 
+## Fresh readiness when rechecking service approval — Gchat 2
+
+`GBOT-SERVICE-APPROVAL-RECHECK-READINESS`, based on main `e97f30aa0`,
+clears previously confirmed readiness while Check approval asks the service
+computer for current approval. A failed check keeps Continue unavailable and
+reports that approval could not be confirmed. Previously, both readiness and
+the approved message survived a failed recheck.
+
+The selected computer and Check approval retry remain; retry reads status
+without submitting another control request. Only a fresh approved and configured
+response restores readiness. Revoked or unconfigured responses keep it cleared.
+Opening Details and refreshing the computer list cannot restore readiness.
+Rendered regressions cover failure, explicit retry, duplicate clicks and both
+non-ready responses. This is source/rendered UI scope with no service or native
+approval contract change.
+
+
+Validation: all three original-production regressions failed; fixed service/setup
+focus passed 52 cases. Lint had zero errors and five existing warnings. ONE
+`make verify`, 18 October 18:56:30–19:02:33 UTC, passed 3,772 app tests (six
+skipped), 127 extension tests, 1,316 Rust tests (28 ignored, 23 summaries),
+six coverage floors and lint/typecheck/guards. All 3,460 tracked raw source
+bytes and modes matched before and after testing, with tracked timestamps
+refreshed beforehand. Product and test source are unchanged by this receipt.
+CPU80–87 booking3502 returned19:03Z; private cache retired19:04Z.
+Evidence: `out/gchat2-service-approval-recheck-readiness-20261018/result.json`
+and adjacent raw logs. Native acceptance remains separate.
+
 ## Fresh billing consent after cloud computer deletion — Gchat 2
 
 `GBOT-CLOUD-RECREATION-BILLING-CONSENT`, based on main `78078ddae`,
