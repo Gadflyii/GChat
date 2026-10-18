@@ -53,6 +53,24 @@ pub fn accepted() -> Vec<GuestAsset> {
     accepted_for(cfg!(target_os = "windows"))
 }
 
+/// Shared desktop contract for both a new VM and a dedicated existing computer.
+pub(crate) fn desktop_config(browser: &str) -> std::io::Result<serde_json::Value> {
+    let mut config: serde_json::Value =
+        serde_json::from_str(include_str!("../guest/cloud-init.json"))?;
+    let packages = config["packages"]
+        .as_array_mut()
+        .ok_or_else(|| std::io::Error::other("guest package list is invalid"))?;
+    packages.extend([browser.into(), "mousepad".into()]);
+    config["write_files"]
+        .as_array_mut()
+        .ok_or_else(|| std::io::Error::other("guest file list is invalid"))?
+        .push(serde_json::json!({
+            "path": "/usr/local/bin/gbot-operation", "owner": "root:root", "permissions": "0755",
+            "content": include_str!("../guest/operation.sh")
+        }));
+    Ok(config)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -77,22 +95,4 @@ mod tests {
             assert_eq!(linux[index].digest, windows[index].digest);
         }
     }
-}
-
-/// Shared desktop contract for both a new VM and a dedicated existing computer.
-pub(crate) fn desktop_config(browser: &str) -> std::io::Result<serde_json::Value> {
-    let mut config: serde_json::Value =
-        serde_json::from_str(include_str!("../guest/cloud-init.json"))?;
-    let packages = config["packages"]
-        .as_array_mut()
-        .ok_or_else(|| std::io::Error::other("guest package list is invalid"))?;
-    packages.extend([browser.into(), "mousepad".into()]);
-    config["write_files"]
-        .as_array_mut()
-        .ok_or_else(|| std::io::Error::other("guest file list is invalid"))?
-        .push(serde_json::json!({
-            "path": "/usr/local/bin/gbot-operation", "owner": "root:root", "permissions": "0755",
-            "content": include_str!("../guest/operation.sh")
-        }));
-    Ok(config)
 }
