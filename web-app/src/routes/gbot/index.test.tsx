@@ -2595,39 +2595,68 @@ it.each([false, true])(
   }
 )
 
-it('resets task drafts only after explicit service selection succeeds', async () => {
-  readyTaskBots()
-  mocks.selectService
-    .mockRejectedValueOnce(new Error('Service selection failed'))
-    .mockResolvedValueOnce(undefined)
-  render(<Page />)
-  await screen.findByRole('heading', { name: 'Writer' })
-  fireEvent.change(screen.getByLabelText('Bot task'), {
-    target: { value: 'Writer draft' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
-  fireEvent.change(screen.getByLabelText('Bot task'), {
-    target: { value: 'Researcher draft' },
-  })
-  fireEvent.click(screen.getByRole('button', { name: 'Service computer' }))
-  fireEvent.click(screen.getByRole('button', { name: 'Use this service' }))
-  await screen.findByText('Error: Service selection failed')
-  expect(screen.getByLabelText('Bot task')).toHaveValue('Researcher draft')
-  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
-  expect(screen.getByLabelText('Bot task')).toHaveValue('Writer draft')
-  fireEvent.click(screen.getByRole('button', { name: 'Use this service' }))
-  await waitFor(() =>
+it.each([
+  ['Error', new Error('Service selection failed')],
+  ['native string', 'gbot_service_select: saved service unavailable'],
+] as const)(
+  'offers service-change recovery for %s while preserving both task drafts until explicit selection succeeds',
+  async (_kind, cause) => {
+    readyTaskBots()
+    mocks.selectService
+      .mockRejectedValueOnce(cause)
+      .mockResolvedValueOnce(undefined)
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Writer draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Researcher draft' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Service computer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Use this service' }))
+    const selector = screen.getByRole('region', { name: 'Choose service computer' })
+    const alert = await within(selector).findByRole('alert')
     expect(
-      screen.queryByRole('button', { name: 'Use this service' })
-    ).not.toBeInTheDocument()
-  )
-  await screen.findByRole('heading', { name: 'Writer' })
-  expect(screen.getByLabelText('Bot task')).toHaveValue('')
-  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
-  expect(screen.getByLabelText('Bot task')).toHaveValue('')
-  expect(mocks.selectService).toHaveBeenCalledTimes(2)
-  expect(mocks.selectService).toHaveBeenLastCalledWith({ kind: 'local' })
-})
+      within(alert).getByText(
+        'Could not confirm the service computer change. Review your choice, then choose Use this service to try again.'
+      )
+    ).toBeVisible()
+    const diagnostic = within(alert).getByText(String(cause))
+    const details = diagnostic.closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(diagnostic).not.toBeVisible()
+    expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Use this service' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Cancel service change' })).toBeEnabled()
+    expect(mocks.selectService).toHaveBeenCalledExactlyOnceWith({ kind: 'local' })
+    const readsBeforeDisclosure = mocks.call.mock.calls.length
+    fireEvent.click(within(alert).getByText('Details', { selector: 'summary' }))
+    expect(diagnostic).toBeVisible()
+    fireEvent.click(within(alert).getByText('Details', { selector: 'summary' }))
+    expect(diagnostic).not.toBeVisible()
+    expect(mocks.call).toHaveBeenCalledTimes(readsBeforeDisclosure)
+    expect(mocks.selectService).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('heading', { name: 'Researcher' })).toBeVisible()
+    expect(screen.getByLabelText('Bot task')).toHaveValue('Researcher draft')
+    fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+    expect(screen.getByLabelText('Bot task')).toHaveValue('Writer draft')
+    fireEvent.click(screen.getByRole('button', { name: 'Use this service' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Use this service' })
+      ).not.toBeInTheDocument()
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'Writer' })
+    expect(screen.getByLabelText('Bot task')).toHaveValue('')
+    fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+    expect(screen.getByLabelText('Bot task')).toHaveValue('')
+    expect(mocks.selectService).toHaveBeenCalledTimes(2)
+    expect(mocks.selectService).toHaveBeenLastCalledWith({ kind: 'local' })
+  }
+)
 
 it.each(['success', 'failure'] as const)(
   'keeps the selected service fixed during a pending change (%s)',
@@ -2669,7 +2698,12 @@ it.each(['success', 'failure'] as const)(
       else finish()
     })
     if (outcome === 'failure') {
-      expect(screen.getByText('Error: Service selection failed')).toBeVisible()
+      expect(
+        screen.getByText(
+          'Could not confirm the service computer change. Review your choice, then choose Use this service to try again.'
+        )
+      ).toBeVisible()
+      expect(screen.getByText('Error: Service selection failed')).not.toBeVisible()
       expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
       expect(otherComputer).toBeEnabled()
       expect(choose).toBeEnabled()

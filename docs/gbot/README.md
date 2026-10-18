@@ -1085,6 +1085,31 @@ XML and Gchat 2 custody; inert responses do not qualify live tasks or native
 Windows.
 
 
+## Recovering a service-computer change — Gchat 2
+
+`GBOT-SERVICE-CHANGE-ERROR-GUIDANCE`, based on main `9aeec47dc`, names the
+existing Use this service retry after an unconfirmed service-computer change.
+Previously, this selector displayed only the raw technical error. The alert
+now asks the user to review the choice and retry; full diagnostics stay in
+initially closed Details.
+
+The selected service choice and both bots' task drafts remain available after
+a rejected request. Details does not send a service request. Only successful
+explicit selection clears the task drafts, as before. Existing same-tick and
+pending-selection guards remain covered. Rendered journeys exercise Error and
+native-string failures, disclosure and same-choice retry. This is source and
+rendered scope; no native service, VM or account acceptance is claimed.
+
+Validation: both new journeys failed against original production; fixed focus
+passed 131 tests (110 route and 21 schedules). Lint passed with zero errors
+and five existing warnings. ONE `make verify` (2026-10-18 21:29:04–21:35:22 UTC)
+passed 3,830 app tests (six skipped), 130 extension tests, 1,319 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards.
+All 3,479 tracked raw bytes and modes matched locally and remotely after the
+gates, with fresh tracked timestamps beforehand. Only this validation receipt
+was added afterward. Booking3577 returned21:35Z. Evidence:
+`/ai/gchat/out/gchat2-service-change-error-guidance-20261018/SUMMARY.md`.
+
 ## Recovering a failed bot-list read — Gchat 2
 
 `GBOT-BOT-LIST-ERROR-GUIDANCE`, based on main `e93d19e77`, names Refresh

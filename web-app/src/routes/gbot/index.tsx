@@ -779,9 +779,16 @@ function GbotPage() {
             <ServiceSetup target={serviceDraft} change={changeServiceDraft} />
           </fieldset>
           {serviceError && (
-            <p role="alert" className="text-sm text-destructive">
-              {serviceError}
-            </p>
+            <div role="alert" className="space-y-2 text-sm text-destructive">
+              <p>
+                Could not confirm the service computer change. Review your
+                choice, then choose Use this service to try again.
+              </p>
+              <details className="text-muted-foreground">
+                <summary>Details</summary>
+                <p className="whitespace-pre-wrap break-words">{serviceError}</p>
+              </details>
+            </div>
           )}
           <div className="flex gap-2">
             <Button
