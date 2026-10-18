@@ -20,21 +20,34 @@ read-only failed then successful retry, per-computer isolation, repeated-click
 guard and true rejection behavior, focused tests, lint and exactly one
 `make verify`. Reuse the accepted first-run design above/below without
 retesting first-run or changing the download backend, registration, model
-load/Stop, Engine or native Windows behavior. No fixture or booking exists.
+load/Stop, Engine or native Windows behavior.
 Download status reads now target the selected paired computer's snapshot and
 publish it through the existing Host store; a fleet refresh can swallow a
 per-computer read failure or return before another refresh finishes, so it
 cannot establish this recovery. Local status retains its existing download
 store read. An accepted request with unavailable status also suppresses the
 empty-list claim and totals until the fresh read succeeds.
-Rendered regressions are ready for all four local requests, selected paired
-computer reads, failed/successful recovery, stale empty-list suppression,
-closed diagnostics and repeated clicks. The coordinator reviewed the source
-and effective gate: focused Models tests, lint and one `make verify`, using
-an independent S1 SSD copy of the inactive RC dependency donor, the existing
-offline build image and unchanged protected catalog inputs. CPU88–95 will
-be checked and booked at the actual preparation start. No gate has run.
-Next: freeze this source and execute that gate once.
+Frozen source `9ee296e5f` passed all **59 focused Models tests** and lint
+(zero errors, five existing unrelated warnings). Exactly one `make verify`
+passed at **20:24:13Z**: **3,803 app tests / six skipped, 127 extension tests,
+65 Node contract tests and 1,318 native tests / 28 ignored** across 23 native
+summaries, all six critical coverage floors, typecheck and quality guards.
+The coordinator directly reviewed raw results, terminal state, source bytes
+against the frozen worktree and unchanged before/after source, 35 dependency
+and eleven catalog / 48 profile bindings. These checks cover the rendered
+local/paired recovery behavior and Linux source gate; no installed-app,
+native Windows, model or Engine qualification is claimed.
+
+Independent S1 SSD preparation and the gate used booking3536 on CPU88–95,
+with the inactive RC dependency donor and existing offline build image.
+CPU88–95 returned **20:26Z** and booking3536 was canceled. The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-c7-models-download-action-refresh-20261018`
+and its sole exited candidate container were retired at **20:28:33Z**, removing
+**28,879,536,128 accounted fixture bytes** after direct review. The inactive
+donor and protected inputs remain unchanged. Small evidence:
+`out/c7-models-download-action-refresh-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the Models
+queue.
 
 ## Models accepted registration and refresh recovery — verified, C7, October 18
 
