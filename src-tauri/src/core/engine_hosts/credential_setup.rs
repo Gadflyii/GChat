@@ -1,5 +1,5 @@
 //! Desktop-only prerequisite checks. Never installs software without an explicit request.
-use jan_utils::credential_store::{Reference, Zeroizing};
+use jan_utils::credential_store::{Error, Reference, Status, Zeroizing};
 use serde_json::{json, Value};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::Mutex;
@@ -59,20 +59,24 @@ fn installer() -> Option<(&'static str, &'static [&'static str])> {
     std::path::Path::new(plan.0).exists().then_some(plan)
 }
 
+fn apply_verification(status: &mut Status, result: Result<(), Error>) {
+    status.ready = result.is_ok();
+    status.state = match result {
+        Ok(()) => "ready",
+        Err(Error::Locked) => "locked",
+        Err(_) => "unavailable",
+    }
+    .into();
+    status.error = result.err().map(|error| error.to_string());
+}
+
 pub async fn status(check: bool) -> Value {
     let result = checked(move || {
         let store = super::initialize_credentials()?;
         let verified = check.then(|| store.require_ready());
         let mut status = store.status();
         if let Some(result) = verified {
-            status.ready = result.is_ok();
-            status.state = if result.is_ok() {
-                "ready"
-            } else {
-                "unavailable"
-            }
-            .into();
-            status.error = result.err().map(|error| error.to_string());
+            apply_verification(&mut status, result);
         }
         serde_json::to_value(status).map_err(|e| e.to_string())
     })
@@ -254,6 +258,53 @@ pub async fn install(confirmed: bool) -> Result<Value, String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use jan_utils::credential_store::Tier;
+
+    #[test]
+    fn checked_locked_vault_remains_unlockable_after_an_uncertain_result() {
+        // The previous operation could not confirm its outcome; an explicit
+        // Check again now knows the selected passphrase vault is locked.
+        let mut status = Status {
+            ready: false,
+            tier: Some(Tier::Passphrase),
+            state: "unavailable".into(),
+            can_create: false,
+            error: Some(Error::Unavailable.to_string()),
+            migrating: false,
+        };
+        apply_verification(&mut status, Err(Error::Locked));
+        let value = serde_json::to_value(status).unwrap();
+        assert_eq!(value["state"], "locked");
+        assert_eq!(value["tier"], "passphrase");
+        assert_eq!(value["ready"], false);
+        assert_eq!(value["can_create"], false);
+        assert_eq!(value["error"], Error::Locked.to_string());
+    }
+
+    #[test]
+    fn checked_status_does_not_mistake_an_unavailable_store_for_a_locked_vault() {
+        let mut status = Status {
+            ready: false,
+            tier: Some(Tier::Passphrase),
+            state: "locked".into(),
+            can_create: false,
+            error: Some(Error::Locked.to_string()),
+            migrating: false,
+        };
+        apply_verification(&mut status, Err(Error::Unavailable));
+        let value = serde_json::to_value(&status).unwrap();
+        assert_eq!(value["state"], "unavailable");
+        assert_eq!(value["ready"], false);
+        assert_eq!(value["error"], Error::Unavailable.to_string());
+
+        apply_verification(&mut status, Ok(()));
+        let value = serde_json::to_value(status).unwrap();
+        assert_eq!(value["state"], "ready");
+        assert_eq!(value["ready"], true);
+        assert_eq!(value["error"], Value::Null);
+    }
+
     #[tokio::test]
     async fn installation_requires_explicit_approval() {
         assert!(super::install(false)

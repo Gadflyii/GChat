@@ -725,9 +725,13 @@ describe('Passphrase vault error guidance', () => {
   })
 
   it.each(['unavailable status', 'failed status read'])(
-    'requires a read-only Check after an unknown Unlock outcome from %s',
+    'requires a read-only Check before an explicit Unlock retry after an unknown outcome from %s',
     async (outcome) => {
       const nativeError = 'Gbot did not confirm that its vault was unlocked'
+      let resolveCheck!: (value: typeof locked) => void
+      const checkResult = new Promise<typeof locked>((resolve) => {
+        resolveCheck = resolve
+      })
       command
         .mockResolvedValueOnce(locked)
         .mockRejectedValueOnce(new Error(nativeError))
@@ -738,7 +742,7 @@ describe('Passphrase vault error guidance', () => {
           error: 'The vault is busy finishing an earlier request',
         })
       else command.mockRejectedValueOnce(new Error('The status read timed out'))
-      command.mockResolvedValueOnce(locked)
+      command.mockReturnValueOnce(checkResult).mockResolvedValueOnce(unlocked)
       const ready = vi.fn()
       render(<CredentialSetup onReady={ready} />)
       fireEvent.click(await screen.findByRole('button', { name: 'Unlock vault' }))
@@ -767,17 +771,59 @@ describe('Passphrase vault error guidance', () => {
       expect(ready).not.toHaveBeenCalledWith(true)
       expect(command).toHaveBeenCalledTimes(3)
 
-      fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+      const checkButton = screen.getByRole('button', { name: 'Check again' })
+      fireEvent.click(checkButton)
+      expect(checkButton).toBeDisabled()
+      expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Unlock vault' })
+      ).not.toBeInTheDocument()
+      expect(ready).toHaveBeenLastCalledWith(false)
+      expect(command).toHaveBeenCalledTimes(4)
+      expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
+      expect(
+        command.mock.calls.filter(([action]) => action === 'credential_unlock')
+      ).toHaveLength(1)
+      fireEvent.click(checkButton)
+      expect(command).toHaveBeenCalledTimes(4)
+
+      await act(async () => {
+        resolveCheck(locked)
+      })
       expect(
         await screen.findByRole('button', { name: 'Unlock vault' })
       ).toBeEnabled()
       expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+      expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+        'autocomplete',
+        'current-password'
+      )
+      expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
       expect(command).toHaveBeenCalledTimes(4)
       expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
       expect(
         command.mock.calls.filter(([action]) => action === 'credential_unlock')
       ).toHaveLength(1)
       expect(ready).not.toHaveBeenCalledWith(true)
+
+      fireEvent.change(screen.getByLabelText('Passphrase'), {
+        target: { value: 'retry passphrase' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+
+      expect(
+        await screen.findByRole('button', { name: 'Lock vault' })
+      ).toBeEnabled()
+      expect(command).toHaveBeenCalledTimes(5)
+      expect(
+        command.mock.calls.filter(([action]) => action === 'credential_unlock')
+      ).toEqual([
+        ['credential_unlock', { passphrase: 'existing passphrase' }],
+        ['credential_unlock', { passphrase: 'retry passphrase' }],
+      ])
+      expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+      expect(screen.queryByText('Vault error details')).not.toBeInTheDocument()
+      expect(ready).toHaveBeenLastCalledWith(true)
     }
   )
 
