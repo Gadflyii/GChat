@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { localStorageKey } from '@/constants/localStorage'
-import { useTheme } from './useTheme'
+import { DEFAULT_APP_THEME, useTheme } from './useTheme'
 
 export type FontSize = '14px' | '15px' | '16px' | '18px' | '20px'
 
@@ -34,7 +34,7 @@ interface InterfaceSettingsState {
   accentColor: AccentColorValue
   setFontSize: (size: FontSize) => void
   setAccentColor: (color: AccentColorValue) => void
-  resetInterface: () => void
+  resetInterface: () => Promise<void>
 }
 
 type InterfaceSettingsPersistedSlice = Omit<
@@ -69,7 +69,8 @@ export const useInterfaceSettings = create<InterfaceSettingsState>()(
       const defaultState = createDefaultInterfaceValues()
       return {
         ...defaultState,
-        resetInterface: () => {
+        resetInterface: async () => {
+          await useTheme.getState().setTheme(DEFAULT_APP_THEME)
           const { isDark } = useTheme.getState()
 
           // Reset font size

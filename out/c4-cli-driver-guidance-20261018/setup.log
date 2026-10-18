@@ -1,0 +1,78 @@
+test_declared_driver_libraries_allow_normal_host_handoff (test_ginfer_linux_setup.LinuxSetup.test_declared_driver_libraries_allow_normal_host_handoff) ... ok
+test_install_reuses_storage_and_rejects_corruption_and_overwrite (test_ginfer_linux_setup.LinuxSetup.test_install_reuses_storage_and_rejects_corruption_and_overwrite) ... ok
+test_missing_driver_cli_preserves_installation_and_existing_registration (test_ginfer_linux_setup.LinuxSetup.test_missing_driver_cli_preserves_installation_and_existing_registration) ... ok
+test_preview_and_corrupt_payload_do_not_load_driver_libraries (test_ginfer_linux_setup.LinuxSetup.test_preview_and_corrupt_payload_do_not_load_driver_libraries) ... ok
+
+----------------------------------------------------------------------
+Ran 4 tests in 0.038s
+
+OK
+Runtime: /tmp/tmpl6asc97a/install
+Models and host state: /tmp/tmpl6asc97a/provider
+Launcher: /tmp/tmpl6asc97a/links/ginfer
+Hardware preparation: running (owned by the shared Host).
+Choose GPU group in GChat or GInfer Manager. No calibration was started.
+Continue setup: /tmp/tmpl6asc97a/install/bin/ginfer-host first-run --interactive
+Noninteractive installation does not prompt. GChat and Manager resume the same setup.
+Installed. Launch: /tmp/tmpl6asc97a/links/ginfer
+Add /tmp/tmpl6asc97a/links to your shell PATH to use the bare ginfer command.
+Runtime: /tmp/tmpclrvd84p/install
+Models and host state: /tmp/tmpclrvd84p/provider
+Launcher: /tmp/tmpclrvd84p/links/ginfer
+Preview only. Repeat with --install. No services or models will be started.
+Runtime: /tmp/tmpclrvd84p/install
+Models and host state: /tmp/tmpclrvd84p/provider
+Launcher: /tmp/tmpclrvd84p/links/ginfer
+Hardware preparation: running (owned by the shared Host).
+Choose GPU group in GChat or GInfer Manager. No calibration was started.
+Continue setup: /tmp/tmpclrvd84p/install/bin/ginfer-host first-run --interactive
+Noninteractive installation does not prompt. GChat and Manager resume the same setup.
+Installed. Launch: /tmp/tmpclrvd84p/links/ginfer
+Add /tmp/tmpclrvd84p/links to your shell PATH to use the bare ginfer command.
+Runtime: /tmp/tmpclrvd84p/second
+Reusing host: /tmp/tmpclrvd84p/config/ginfer/local-host.json
+Launcher: /tmp/tmpclrvd84p/second-links/ginfer
+Hardware preparation: running (owned by the shared Host).
+Choose GPU group in GChat or GInfer Manager. No calibration was started.
+Continue setup: /tmp/tmpclrvd84p/second/bin/ginfer-host first-run --interactive
+Noninteractive installation does not prompt. GChat and Manager resume the same setup.
+Installed. Launch: /tmp/tmpclrvd84p/second-links/ginfer
+Add /tmp/tmpclrvd84p/second-links to your shell PATH to use the bare ginfer command.
+Runtime: /tmp/tmpclrvd84p/resumed
+Reusing host: /tmp/tmpclrvd84p/config/ginfer/local-host.json
+Launcher: /tmp/tmpclrvd84p/resumed-links/ginfer
+Hardware preparation: running (owned by the shared Host).
+Choose GPU group in GChat or GInfer Manager. No calibration was started.
+Continue setup: /tmp/tmpclrvd84p/resumed/bin/ginfer-host first-run --interactive
+Noninteractive installation does not prompt. GChat and Manager resume the same setup.
+Installed. Launch: /tmp/tmpclrvd84p/resumed-links/ginfer
+Add /tmp/tmpclrvd84p/resumed-links to your shell PATH to use the bare ginfer command.
+Runtime: /tmp/tmpclrvd84p/completed
+Reusing host: /tmp/tmpclrvd84p/config/ginfer/local-host.json
+Launcher: /tmp/tmpclrvd84p/completed-links/ginfer
+Hardware preparation: running (owned by the shared Host).
+Choose GPU group in GChat or GInfer Manager. No calibration was started.
+Continue setup: /tmp/tmpclrvd84p/completed/bin/ginfer-host first-run --interactive
+Noninteractive installation does not prompt. GChat and Manager resume the same setup.
+Installed. Launch: /tmp/tmpclrvd84p/completed-links/ginfer
+Add /tmp/tmpclrvd84p/completed-links to your shell PATH to use the bare ginfer command.
+Runtime: /tmp/tmpclrvd84p/interactive
+Reusing host: /tmp/tmpclrvd84p/config/ginfer/local-host.json
+Launcher: /tmp/tmpclrvd84p/interactive-links/ginfer
+Hardware preparation: running (owned by the shared Host).
+Choose GPU group in GChat or GInfer Manager. No calibration was started.
+Installed. Launch: /tmp/tmpclrvd84p/interactive-links/ginfer
+Add /tmp/tmpclrvd84p/interactive-links to your shell PATH to use the bare ginfer command.
+Runtime: /tmp/tmpclrvd84p/handoff-failed
+Reusing host: /tmp/tmpclrvd84p/config/ginfer/local-host.json
+Launcher: /tmp/tmpclrvd84p/failed-links/ginfer
+Runtime: /tmp/tmp5p0g8k3p/install
+Reusing host: /tmp/tmp5p0g8k3p/config/ginfer/local-host.json
+Launcher: /tmp/tmp5p0g8k3p/links/ginfer
+Runtime: /tmp/tmp5p0g8k3p/install
+Reusing host: /tmp/tmp5p0g8k3p/config/ginfer/local-host.json
+Launcher: /tmp/tmp5p0g8k3p/links/ginfer
+Runtime: /tmp/tmp37zqfn8o/install
+Models and host state: /tmp/tmp37zqfn8o/provider
+Launcher: /tmp/tmp37zqfn8o/links/ginfer
+Preview only. Repeat with --install. No services or models will be started.

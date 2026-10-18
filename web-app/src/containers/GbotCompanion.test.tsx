@@ -135,6 +135,139 @@ async function mount() {
   return view
 }
 
+it.each(['tasks', 'tasks/approvals'] as const)(
+  'recovers a failed %s read without losing the draft or sending task actions',
+  async (failedPath) => {
+    const prompt = 'Read my saved notes'
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [{ role: 'user', content: prompt }],
+        help_requests: [],
+      },
+    ]
+    const approvals = [
+      {
+        id: 'atlas-permission',
+        task_id: 'atlas-task',
+        request: { operation: { kind: 'desktop_input' } },
+      },
+    ]
+    let rejectRetry!: (cause: Error) => void
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(failedPath === 'tasks' ? tasks : approvals)
+      .mockRejectedValueOnce(new Error('Task status unavailable'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<unknown>((_, reject) => {
+            rejectRetry = reject
+          })
+      )
+      .mockResolvedValue(failedPath === 'tasks' ? tasks : approvals)
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) => {
+      if (path === failedPath) return read()
+      if (path === 'tasks/approvals') return Promise.resolve(approvals)
+      return fallback(path, body)
+    })
+    await mount()
+    const conversation = screen.getByRole('region', { name: 'Bot conversation' })
+    expect(within(conversation).getByText(prompt)).toBeVisible()
+    expect(
+      within(conversation).getByRole('article', { name: 'Bot permission request' })
+    ).toBeVisible()
+    const draft = screen.getByRole('textbox', { name: 'Message bot' })
+    fireEvent.change(draft, { target: { value: 'Keep this draft' } })
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+
+    await act(async () => events.get('gbot-task-update')?.())
+    const retry = await within(conversation).findByRole('button', {
+      name: 'Retry loading tasks',
+    })
+    const alert = within(conversation).getByRole('alert')
+    expect(alert).toHaveTextContent(
+      'Could not load tasks and approval requests. Try again.'
+    )
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      within(alert).getByText('Error: Task status unavailable')
+    ).not.toBeVisible()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+    expect(within(conversation).queryByText(prompt)).not.toBeInTheDocument()
+    expect(
+      within(conversation).queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Connect this bot and save its model/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Give Atlas a task/)).not.toBeInTheDocument()
+
+    mocks.call.mockClear()
+    act(() => {
+      fireEvent.click(retry)
+      fireEvent.click(retry)
+    })
+    expect(
+      within(conversation).getByRole('button', { name: 'Loading tasks…' })
+    ).toBeDisabled()
+    await waitFor(() => expect(rejectRetry).toBeTypeOf('function'))
+    expect(mocks.call.mock.calls.map(([path]) => path)).toEqual([
+      'state',
+      'tasks',
+      'tasks/approvals',
+    ])
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+
+    await act(async () => rejectRetry(new Error('Task status still unavailable')))
+    expect(within(conversation).getByRole('alert')).toHaveTextContent(
+      'Could not load tasks and approval requests. Try again.'
+    )
+    expect(
+      within(conversation).getByText('Error: Task status still unavailable')
+    ).not.toBeVisible()
+    expect(
+      within(conversation).getByRole('button', { name: 'Retry loading tasks' })
+    ).toBeEnabled()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+    expect(
+      screen.queryByText(/Connect this bot and save its model/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Give Atlas a task/)).not.toBeInTheDocument()
+
+    fireEvent.click(
+      within(conversation).getByRole('button', { name: 'Retry loading tasks' })
+    )
+    expect(await within(conversation).findByText(prompt)).toBeVisible()
+    expect(
+      within(conversation).getByRole('article', { name: 'Bot permission request' })
+    ).toBeVisible()
+    expect(within(conversation).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      within(conversation).queryByRole('button', {
+        name: /Retry loading tasks|Loading tasks…/,
+      })
+    ).not.toBeInTheDocument()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+    expect(mocks.call.mock.calls.map(([path]) => path)).toEqual([
+      'state',
+      'tasks',
+      'tasks/approvals',
+      'state',
+      'tasks',
+      'tasks/approvals',
+    ])
+  }
+)
+
 it('shows the saved interruption cause beside Resume and clears it after completion', async () => {
   const reason = 'model returned no answer; resume the task to try again'
   tasks = [
@@ -169,6 +302,236 @@ it('shows the saved interruption cause beside Resume and clears it after complet
   expect(within(card).getByRole('button', { name: 'Resume task' })).toBeEnabled()
   expect(screen.queryByText(reason)).not.toBeInTheDocument()
 })
+
+it.each([
+  ['Send reply', 'Sending reply…', 'Documents', 'Your reply: Documents'],
+  ['Decline', 'Declining request…', null, 'Request declined'],
+] as const)(
+  'keeps a failed human-help %s inline through refresh and retries the same response',
+  async (action, progress, response, outcome) => {
+    const request = {
+      id: 'atlas-help',
+      question: 'Which folder?',
+      status: 'pending' as const,
+      response: null,
+    }
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [],
+        help_requests: [request],
+      },
+    ]
+    let fail!: (cause: Error) => void
+    let finish!: () => void
+    const reply = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) =>
+      path === 'tasks/help' ? reply(body) : fallback(path, body)
+    )
+    await mount()
+    const card = (await screen.findByText(request.question)).closest('article')!
+    const input = within(card).getByLabelText('Your reply')
+    fireEvent.change(input, { target: { value: 'Documents' } })
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    const body = {
+      id: 'atlas-task',
+      request_id: 'atlas-help',
+      response,
+    }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(body)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    expect(input).toBeDisabled()
+    await act(async () => fail(new Error('Help reply unavailable')))
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      'Help reply unavailable'
+    )
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(input).toHaveValue('Documents')
+    expect(input).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Send reply' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Decline' })).toBeEnabled()
+    expect(within(card).queryByText(outcome)).not.toBeInTheDocument()
+
+    const refreshes = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks')
+    ).toHaveLength(refreshes + 1)
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      'Help reply unavailable'
+    )
+    expect(input).toHaveValue('Documents')
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(reply.mock.calls).toEqual([[body], [body]])
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    tasks = [
+      {
+        ...tasks[0],
+        state: 'interrupted',
+        help_requests: [
+          {
+            ...request,
+            status: response === null ? 'declined' : 'completed',
+            response,
+          },
+        ],
+      },
+    ]
+    await act(async () => finish())
+    expect(await within(card).findByText(outcome)).toBeVisible()
+    expect(within(card).queryByLabelText('Your reply')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/approval',
+      expect.anything()
+    )
+  }
+)
+
+it.each([
+  [
+    'Allow',
+    true,
+    'Allowing this action…',
+    'Could not allow this action. Try again.',
+  ],
+  [
+    'Deny',
+    false,
+    'Denying this action…',
+    'Could not deny this action. Try again.',
+  ],
+] as const)(
+  'keeps a failed permission %s inline through refresh and retries it in the companion',
+  async (action, allow, progress, message) => {
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [],
+        help_requests: [],
+      },
+    ]
+    let approvals = [
+      {
+        id: 'atlas-permission',
+        task_id: 'atlas-task',
+        request: { operation: { kind: 'read', path: '/home/bot/notes.txt' } },
+      },
+    ]
+    let fail!: (cause: Error) => void
+    let finish!: () => void
+    const reply = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) => {
+      if (path === 'tasks/approvals') return Promise.resolve(approvals)
+      if (path === 'tasks/approval') return reply(body)
+      return fallback(path, body)
+    })
+    await mount()
+    const card = screen.getByRole('article', { name: 'Bot permission request' })
+    const submit = within(card).getByRole('button', { name: action, exact: true })
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const payload = { id: 'atlas-permission', allow }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    expect(card).toHaveAttribute('aria-busy', 'true')
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+
+    await act(async () => fail(new Error('Permission decision unavailable')))
+    const alert = await within(card).findByRole('alert')
+    expect(within(alert).getByText(message)).toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      within(alert).getByText('Permission decision unavailable')
+    ).not.toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(within(card).getByText('/home/bot/notes.txt')).toBeVisible()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(card).toHaveAttribute('aria-busy', 'false')
+    expect(within(card).getByRole('button', { name: 'Allow' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Deny' })).toBeEnabled()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks')
+    ).toHaveLength(reads + 1)
+    expect(
+      within(within(card).getByRole('alert')).getByText(message)
+    ).toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(reply).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(reply.mock.calls).toEqual([[payload], [payload]])
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    approvals = []
+    await act(async () => finish())
+    await waitFor(() => expect(card).not.toBeInTheDocument())
+    expect(
+      screen.queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    ).toEqual([
+      ['tasks/approval', payload],
+      ['tasks/approval', payload],
+    ])
+  }
+)
 
 it('sends a permission decision for the selected bot and shows its pending state', async () => {
   tasks = [

@@ -868,7 +868,8 @@ function DefinitionEditor({
             <Input
               value={draft.id}
               placeholder="created-from-name"
-              onChange={(event) => common({ id: slug(event.target.value) })}
+              onChange={(event) => common({ id: slug(event.target.value, true) })}
+              onBlur={(event) => common({ id: slug(event.target.value) })}
             />
           </Field>
         </div>

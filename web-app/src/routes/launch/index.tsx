@@ -800,6 +800,7 @@ function LaunchPage() {
           await invoke('open_agent_terminal', {
             agentId: agent.id,
             command,
+            customPath: customPaths[agent.id] || null,
             proxy: buildProxyPayload(),
           })
         } catch (termErr) {
@@ -827,6 +828,7 @@ function LaunchPage() {
       detect,
       installAgent,
       configureAgent,
+      customPaths,
       t,
       setBusy,
       setSpinning,

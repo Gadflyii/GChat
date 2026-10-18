@@ -1,6 +1,8 @@
 # Engineering Decisions (ADR)
 
 - **2026-10-18** — [Preserve the selected App Data folder during reset](2026-10-18-preserve-selected-data-folder-during-reset.md)
+- **2026-10-18** — [Own custom GInfer startup in Hosts](2026-10-18-own-custom-ginfer-startup-in-hosts.md)
+- **2026-10-18** — [Install managed OpenCode in the GChat data folder](2026-10-18-install-managed-opencode-in-the-gchat-data-folder.md)
 
 - **2026-10-18** — [Report typed Gbot startup failures](2026-10-18-report-typed-gbot-startup-failures.md)
 

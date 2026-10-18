@@ -1,0 +1,7 @@
+    Finished `test` profile [unoptimized] target(s) in 0.36s
+     Running unittests src/lib.rs (/work/native-target/debug/deps/ginfer_host-fa1d18fd2bd8b08e)
+
+running 1 test
+test first_run::tests::verified_download_choices_precede_selected_profiling_and_survive_restart ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 265 filtered out; finished in 0.26s

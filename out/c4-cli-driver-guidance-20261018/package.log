@@ -1,0 +1,15 @@
+test_archive_contains_only_binary_installer_guide_and_license (test_ginfer_host_package.HostPackage.test_archive_contains_only_binary_installer_guide_and_license) ... ok
+test_catalogs_keep_values_and_reject_cross_platform_or_duplicate_profiles (test_ginfer_host_package.HostPackage.test_catalogs_keep_values_and_reject_cross_platform_or_duplicate_profiles) ... ok
+test_linux_bundle_keeps_manifest_docs_and_rejects_other_paths (test_ginfer_host_package.HostPackage.test_linux_bundle_keeps_manifest_docs_and_rejects_other_paths) ... ok
+test_windows_bundle_verifies_runtime_and_excludes_unlisted_files (test_ginfer_host_package.HostPackage.test_windows_bundle_verifies_runtime_and_excludes_unlisted_files) ... ok
+test_current_runtime_docs_are_verified_and_staged (test_ginfer_host_package.LinuxRuntimeSet.test_current_runtime_docs_are_verified_and_staged) ... ok
+test_complete_same_commit_set_passes_in_any_order (test_ginfer_host_package.WindowsReleaseInputs.test_complete_same_commit_set_passes_in_any_order) ... skipped 'PowerShell required for Windows release input validation'
+test_every_payload_size_and_hash_is_checked (test_ginfer_host_package.WindowsReleaseInputs.test_every_payload_size_and_hash_is_checked) ... skipped 'PowerShell required for Windows release input validation'
+test_exact_architecture_set_is_required (test_ginfer_host_package.WindowsReleaseInputs.test_exact_architecture_set_is_required) ... skipped 'PowerShell required for Windows release input validation'
+test_platform_and_clean_same_commit_are_required (test_ginfer_host_package.WindowsReleaseInputs.test_platform_and_clean_same_commit_are_required) ... skipped 'PowerShell required for Windows release input validation'
+test_required_executables_and_closed_payload_are_checked (test_ginfer_host_package.WindowsReleaseInputs.test_required_executables_and_closed_payload_are_checked) ... skipped 'PowerShell required for Windows release input validation'
+
+----------------------------------------------------------------------
+Ran 10 tests in 0.093s
+
+OK (skipped=5)

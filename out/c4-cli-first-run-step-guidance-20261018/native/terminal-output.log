@@ -1,0 +1,18 @@
+Script started on 2026-10-18 00:06:54-05:00 [COMMAND="/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/step-guidance-native-pty/bin/ginfer-host first-run --interactive" TERM="dumb" TTY="/dev/pts/1" COLUMNS="80" LINES="24"]
+
+Set up local GInfer — progress is shared with GChat and GInfer Manager.
+You can quit at any step. Profiling and downloads continue on the Host.
+
+Choose 1, 2 or 4 matching GPUs. Next, choose storage and models. Profiling starts after the selected models are downloaded and verified.
+  1. NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · GPU-5268c64e-5bc4-4be1-ed12-e731c3de56cf
+  2. NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c
+Select: GPU numbers separated by spaces (q to leave): 2
+
+Choose model storage. Recommended: /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/step-guidance-native-pty/data/ginfer/models
+Absolute model folder (Enter = recommended, q to leave):
+
+Choose models to download:
+No compatible published models are available. Check the runtime, selected GPU group and model catalog, then refresh.
+Model numbers (Enter = recommended, r = refresh catalog, m = move existing, q = leave): q
+
+Script done on 2026-10-18 00:07:08-05:00 [COMMAND_EXIT_CODE="0"]

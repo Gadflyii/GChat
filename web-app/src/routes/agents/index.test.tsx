@@ -725,6 +725,42 @@ describe('AgentStudioPage', () => {
     expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith('review-assistant-3')
   })
 
+  it.each(['new', 'existing'] as const)(
+    'keeps a hyphenated identifier while typing a %s draft and normalizes it on blur', async (source) => {
+      const user = userEvent.setup()
+      definitionState.value.save.mockImplementation(async (definition) => definition)
+      await renderSavedAgents()
+      const savedDefinitions = structuredClone(definitionState.value.definitions)
+      if (source === 'new') {
+        await user.click(screen.getByTitle('New agent'))
+        await screen.findByDisplayValue(editableDraft.name)
+      }
+
+      const identifier = screen.getByLabelText('Identifier')
+      await user.clear(identifier)
+      await user.type(identifier, 'keyboard-helper')
+      expect(identifier).toHaveValue('keyboard-helper')
+      expect(identifier).toHaveFocus()
+      expect(screen.getByLabelText('Identifier')).toBe(identifier)
+
+      await user.type(identifier, '-')
+      expect(identifier).toHaveValue('keyboard-helper-')
+      expect(identifier).toHaveFocus()
+      await user.tab()
+      expect(identifier).toHaveValue('keyboard-helper')
+      expect(identifier).not.toHaveFocus()
+      await user.click(screen.getByRole('button', { name: 'Save definition' }))
+
+      await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith({
+        ...(source === 'new' ? editableDraft : firstAgent),
+        id: 'keyboard-helper',
+      }))
+      expect(screen.getByLabelText('Identifier')).toHaveValue('keyboard-helper')
+      expect(definitionState.value.definitions).toEqual(savedDefinitions)
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    }
+  )
+
   it.each(['new', 'template'] as const)(
     'rejects a saved identifier in a %s draft and discards without deleting the saved agent', async (source) => {
       listAgentTemplates.mockResolvedValue([{

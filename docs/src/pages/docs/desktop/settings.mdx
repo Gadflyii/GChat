@@ -30,45 +30,31 @@ To access the **Settings**, click <Settings width={16} height={16} style={{displ
 
 ## Model Management
 
-Manage your installed AI models in **Settings** > **Model Providers**:
+Open **Models** to download, import, load, stop or remove local models.
+Use **Installed** to see packages already on this computer. **Load** starts a
+model with a tested GInfer Host profile for the selected GPUs. **Stop** ends its
+running instance.
 
-### Import Models
-- **From Hugging Face:**
-  - Enter a model's Hugging Face ID (e.g., `org/model_name_or_id`) in the Hub's search bar.
-  - **Note:** Some models require a Hugging Face Access Token. Enter your token in **Settings > Model Providers > Hugging Face Access Token**.
-- **From Local Files:**
-  - Click **Import Model** and select your GGUF files.
+To import a local package, click **Add local model** in Models and choose its
+`.ginfer` package folder. For downloads that require access, save your Hugging
+Face token in **Settings > General**.
 
-### Remove Models
+## GInfer Settings
 
-- Click the trash icon next to the **Start** button and then click **Delete**.
+**Settings > Model Providers > GInfer** contains application preferences:
 
-### Start Models
+- **Model folder** controls where GChat looks for local packages.
+- **Engine program** selects the engine executable for future starts.
+- **Model startup time limit** controls how long GChat waits for a model.
+- **Unload other models automatically** controls whether a new load stops other models.
 
-1. Open a new chat and select the model you want to start.
-2. Click the **Start** button on the **Settings > Model Providers**
+Saving these preferences does not restart a running model. Use **Open Models**
+for ordinary model actions, or **Open GInfer Hosts** to change custom startup
+settings and manage saved hardware profiles. GInfer Hosts owns context size,
+Vision, speculation, memory, concurrency and other instance startup options.
 
-### Hugging Face Access Token
-To download models from Hugging Face that require authentication, for example, like the llama models from meta:
-1. Get your token from [Hugging Face Tokens](https://huggingface.co/docs/hub/en/security-tokens)
-2. Enter it in **Settings > General > Others > HuggingFace Token**.
-
-## Model Settings (Gear Icon)
-
-![Model Settings](./_assets/model-settings-gear.png)
-
-Click the gear icon next to a model to configure advanced settings:
-- **Context Size**: Maximum prompt context length
-- **GPU Layers**: Number of model layers to offload to GPU. If you have an NVIDIA GPU and notice that your model won't fully load in it, you can reduce this value to load smaller parts of the model and try again.
-- **Temperature**: Controls randomness (higher = more random)
-- **Top K**: Limits token selection to K most likely next tokens (smaller K = more focused responses)
-- **Top P**: Limits token selection to tokens comprising P probability mass (smaller P = more focused responses)
-- **Min P**: Sets a minimum threshold for words the model can select (higher values filter out less likely words)
-- **Repeat Last N**: Determines how many recent words the model checks to avoid repetition
-- **Repeat Penalty**: Controls how strongly the model avoids repeating phrases (higher values reduce repetition)
-- **Presence Penalty**: Discourages reusing words that already appeared in the text (helps with variety)
-
-_See [Model Parameters](/docs/desktop/model-parameters) for a more detailed explanation._
+Chat generation options such as temperature and Top P remain available in chat.
+See [Model Parameters](/docs/desktop/model-parameters) for those options.
 
 
 ## Hardware

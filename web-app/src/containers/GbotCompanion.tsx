@@ -190,12 +190,16 @@ export default function GbotCompanion() {
     wasVisible.current = visible
   }, [visible, workspaceId])
 
-  const perform = async (action: () => Promise<unknown>) => {
+  const perform = async (
+    action: () => Promise<unknown>,
+    propagateError = false
+  ) => {
     if (busy) return
     setBusy(true)
     try {
       await action()
     } catch (cause) {
+      if (propagateError) throw cause
       toast.error(String(cause))
     } finally {
       await useGbotCompanion.getState().refresh()
@@ -379,7 +383,7 @@ export default function GbotCompanion() {
             className="min-h-0 flex-1 overflow-y-auto p-4"
           >
             <div className="mx-auto max-w-3xl space-y-4">
-              {!history.length && (
+              {!history.length && !state.executorError && (
                 <p className="text-sm text-muted-foreground">
                   Give {bot.name} a task, or ask a question about its work.
                 </p>
@@ -390,8 +394,9 @@ export default function GbotCompanion() {
                   approval={approval}
                   busy={busy}
                   reply={(allow) =>
-                    perform(() =>
-                      gbot('tasks/approval', { id: approval.id, allow })
+                    perform(
+                      () => gbot('tasks/approval', { id: approval.id, allow }),
+                      true
                     )
                   }
                 />
@@ -452,12 +457,14 @@ export default function GbotCompanion() {
                       request={request}
                       busy={busy}
                       reply={(response) =>
-                        perform(() =>
-                          gbot('tasks/help', {
-                            id: task.id,
-                            request_id: request.id,
-                            response,
-                          })
+                        perform(
+                          () =>
+                            gbot('tasks/help', {
+                              id: task.id,
+                              request_id: request.id,
+                              response,
+                            }),
+                          true
                         )
                       }
                     />
@@ -465,11 +472,30 @@ export default function GbotCompanion() {
                 </article>
               ))}
               {state.executorError && (
-                <p role="status" className="text-sm text-muted-foreground">
-                  {state.executorError}
-                </p>
+                <div role="alert" className="space-y-2 text-sm">
+                  <p>Could not load tasks and approval requests. Try again.</p>
+                  <details className="text-muted-foreground">
+                    <summary className="cursor-pointer">Details</summary>
+                    <p className="break-words">{state.executorError}</p>
+                  </details>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={state.loading}
+                    onClick={() => {
+                      const current = useGbotCompanion.getState()
+                      if (!current.loading) void current.refresh()
+                    }}
+                  >
+                    {state.loading ? 'Loading tasks…' : 'Retry loading tasks'}
+                  </Button>
+                </div>
               )}
-              {!ready && !preparing && !loading && !connectionError && (
+              {!ready &&
+                !preparing &&
+                !loading &&
+                !connectionError &&
+                !state.executorError && (
                 <p className="text-sm text-muted-foreground">
                   {setupBlocked
                     ? 'Finish this bot’s computer setup in Gbot settings to run tasks.'

@@ -190,7 +190,7 @@ pub async fn first_run(control: &LocalControl) -> Result<(), String> {
             Some("gpu") => {
                 let snapshot = control.snapshot().await?;
                 let gpus: Vec<_> = snapshot["gpus"].as_array().into_iter().flatten().collect();
-                println!("\nChoose 1, 2 or 4 matching GPUs. Profiling starts after selection.");
+                println!("\nChoose 1, 2 or 4 matching GPUs. Next, choose storage and models. Profiling starts after the selected models are downloaded and verified.");
                 for (index, gpu) in gpus.iter().enumerate() {
                     println!(
                         "  {}. {} · {} MiB · {}",
@@ -225,7 +225,7 @@ pub async fn first_run(control: &LocalControl) -> Result<(), String> {
                     "\nHardware profiling: {}",
                     profile["status"].as_str().unwrap_or("unknown")
                 );
-                println!("Recent full installs took 22–73 minutes. The Host keeps working when you close this menu.");
+                println!("Profiling the selected models before startup. Profiling continues if you close this menu.");
                 if let Some(error) = profile["error"].as_str() {
                     println!("{error}");
                 }

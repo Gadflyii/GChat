@@ -49,6 +49,7 @@ import { useLaunchSettings } from '@/stores/launch-settings-store'
 import type {
   OpenCodeProvisionPhase,
   OpenCodeReadiness,
+  OpenCodeUpdateResult,
 } from '@/types/terminal'
 
 type CodeTerminalHostProps = {
@@ -303,8 +304,9 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
 
   const [updateRequested, setUpdateRequested] = useState(false)
   const [updatePhase, setUpdatePhase] = useState<string>()
-  const [updateResult, setUpdateResult] = useState<{ logPath: string }>()
+  const [updateResult, setUpdateResult] = useState<OpenCodeUpdateResult>()
   const [updateError, setUpdateError] = useState<string>()
+  const [managedCopyRequested, setManagedCopyRequested] = useState(false)
   const updateMode = Boolean(updatePhase || updateResult || updateError)
 
   const startSession = useCallback(async () => {
@@ -410,7 +412,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
     terminalRef.current?.focus()
   }, [generationRef, setError, statusRef, terminalRef, terminalId])
 
-  const restart = useCallback(async (update = false) => {
+  const restart = useCallback(async (update = false, useManagedCopy = false) => {
     if (!codeCanStart()) return
     setBusy(true)
     setError(undefined)
@@ -418,6 +420,7 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
       setUpdateRequested(false)
       setUpdateError(undefined)
       setUpdateResult(undefined)
+      setManagedCopyRequested(useManagedCopy)
       setUpdatePhase('Stopping Code')
     }
     try {
@@ -436,7 +439,18 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
       if (!codeCanStart()) return
       bootstrappedRef.current = true
       if (update) {
-        setUpdateResult(await updateCode(customOpenCodePath || undefined, setUpdatePhase))
+        const result = await updateCode(
+          customOpenCodePath || undefined,
+          setUpdatePhase,
+          useManagedCopy,
+          currentInstallerProxy()
+        )
+        if (!codeCanStart()) return
+        if (useManagedCopy && result.kind === 'updated') {
+          useLaunchSettings.getState().setCustomPath('opencode', '')
+          setReadinessRefresh(value => value + 1)
+        }
+        setUpdateResult(result)
       } else {
         await startSession()
       }
@@ -613,11 +627,17 @@ function CodeWorkspaceTerminal({ visible, workspace, terminalId, selectedThreadI
           <div className="absolute inset-0 z-20 flex items-center justify-center bg-background p-6">
             <div className="w-full max-w-md rounded-xl border bg-card p-6 text-center shadow-sm" role="status" aria-live="polite">
               {updatePhase && <IconLoader2 className="mx-auto mb-4 size-7 animate-spin text-primary" />}
-              <h1 className="font-semibold">{updatePhase ? 'Updating Code' : updateError ? 'Update needs attention' : 'Update Successful'}</h1>
+              <h1 className="font-semibold">{updatePhase ? 'Updating Code' : updateError ? 'Update needs attention' : updateResult?.kind === 'external' ? 'Update your OpenCode installation' : 'Update Successful'}</h1>
               {(updatePhase || updateError) && <p className="mt-2 text-sm text-muted-foreground">{updatePhase || updateError}</p>}
               {updatePhase && <p className="mt-2 text-xs text-muted-foreground">Keep GChat open until the update finishes.</p>}
+              {updateResult?.kind === 'external' && <div className="mt-3 text-sm">
+                <p className="text-muted-foreground">This copy was installed outside GChat. Run this command in your terminal to update it:</p>
+                <pre className="mt-3 overflow-x-auto rounded-md bg-muted p-3 text-left text-xs"><code>{updateResult.command}</code></pre>
+                <p className="mt-3 text-muted-foreground">Or let GChat install and update a separate copy in its data folder.</p>
+                <Button className="mt-3" disabled={busy || disabling || !enabled} onClick={() => void restart(true, true)}>Use managed copy</Button>
+              </div>}
               {updateResult && <Button className="mt-4" disabled={busy || disabling || !enabled} onClick={() => void restart()}>Open Code</Button>}
-              {updateError && <Button className="mt-4" size="sm" disabled={busy || disabling || !enabled} onClick={() => void restart(true)}>Retry update</Button>}
+              {updateError && <Button className="mt-4" size="sm" disabled={busy || disabling || !enabled} onClick={() => void restart(true, managedCopyRequested)}>Retry update</Button>}
             </div>
           </div>
         )}

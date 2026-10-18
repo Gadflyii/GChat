@@ -49,6 +49,48 @@ or GPU; CPUs were returned at 04:55Z. Evidence is in
 debug desktop interaction; Windows was not built (dev phase), and installer
 behavior was not checked.
 
+## Archive OpenCode provisioning — C7, October 18
+
+`GUI-FIRST-USER-OPENCODE-PROVISIONING` is implemented on
+`fix/c7-opencode-private-prefix-20261018`, source `13125b2ab` from main
+`d31e328d6`. Clean archive startup previously ran a global npm installation and
+failed with EACCES creating `/usr/local/lib/node_modules`. C3's original npm
+receipt and donor remain read-only. A private native baseline reproduced the
+same failure using a denied global prefix inside disposable app data.
+
+OpenCode now installs with `--global=false`, a prefix at
+`<selected-data>/code/opencode/runtime` and cache at
+`<selected-data>/code/opencode/npm-cache`. One resolver chooses custom, managed,
+then native executables for readiness, embedded/external launch, CLI and offline
+session deletion. Existing sessions retain their executable. Managed updates
+use the same prefix; external updates show the installation's own command and
+offer explicit **Use managed copy**. Missing or broken Node/npm asks the user to
+install Node.js LTS. GChat does not install system tools for OpenCode. Arch
+[signed this design](../decisions/2026-10-18-install-managed-opencode-in-the-gchat-data-folder.md)
+at 04:58:46Z.
+
+Frozen source passed 39 focused frontend and 32 focused Rust tests, Rust check
+and strict Clippy. The single `make verify` passed at 05:24:32Z: 3,367 app,
+121 extension and 1,241 Rust tests passed, with six app skips and 28 Rust
+ignores; lint, types, quality guards and coverage floors passed. Frontend and
+desktop builds passed. CLI-only check/Clippy explicitly select the library and
+`gchat-cli`; the desktop builds separately with normal features.
+
+The clean native Linux replay automatically installed real OpenCode 1.19.3
+inside its private data folder while OpenCode was absent from the launch PATH.
+The Code page recognized the installed program and asked for a model to be
+selected. The denied global prefix stayed empty. Screenshots and concise
+receipts are in the [same-branch evidence](../../out/c7-opencode-private-prefix-20261018/result.json).
+This qualifies the Linux debug archive-style provisioning path. Model-backed
+Code sessions, installer packaging and Windows are outside this acceptance;
+no model or GPU was used and no installed user profile was touched.
+
+C7 retains this source worktree and concise evidence. All private fixture
+processes stopped and CPUs were returned at 05:31Z. The 25-GiB S1 build, cache
+and profile root `/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018`
+was removed at 05:33Z after checking for live users and mounts. C3's fixture and
+the retained ed68 resource donor remain unchanged.
+
 ## First-use duplicate agent names — October 17
 
 An isolated native Linux pass of main `9e75fc31e` reproduced silent replacement:
@@ -75,6 +117,36 @@ Evidence:
 `/ai/gchat/out/gchat1-chat-agents-pass-20261017/` (launch receipt, duplicate-name
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
+
+## Typing an agent identifier — October 18
+
+An isolated native Linux Studio pass reproduced the main **Identifier** field
+dropping a hyphen during ordinary typing: `keyboard-helper` became
+`keyboardhelper`, in both an existing draft and a new agent. Focus remained in
+the field. The affected editor is byte-identical from retained native source
+`edcd74e49` through main `25459ffc2`.
+
+The field now retains a trailing separator while editing and normalizes it on
+blur, matching the role identifier controls. Native baseline DOM captures and
+the viewed screenshot are in
+`/ai/gchat/out/gchat-agent-identifier-keyboard-20261018/`.
+The focused Studio suite passed 65 tests; the sole `make verify`, frontend
+build and native build passed on frozen source `6e6286019`. The first native
+build linked a stale Host dependency and stopped on missing imports. A bounded
+native-only recovery refreshed two staged source timestamps; all 3,151 frozen
+source hashes remained unchanged, and the rebuilt Host resolved both imports.
+
+The corrected native replay retained `keyboard-helper` and focus in both new
+and existing drafts, kept a trailing `-` while editing, and normalized it on
+Tab. Save and reselect preserved the identifier. All ten prior definitions were
+unchanged; only the private `IdentifierKeyboardProbe` fixture was added.
+Candidate SHA256 is
+`651c447194dcefdb12bd601c7fecbc7c37ec34465072f3807762151b54e8543c`.
+Both passes used a private HOME/XDG profile, authenticated Xvfb, D-Bus and an
+unlocked test keyring, with no model or GPU request. The corrected screenshot
+was viewed and CPUs were returned at 05:08Z. This qualifies the Linux debug
+editor interaction; installer behavior was not checked.
+Windows: not built (dev phase).
 
 ## Skill slash-menu keyboard visibility — October 18
 

@@ -346,6 +346,17 @@ pub fn open_file_explorer(path: String) -> Result<(), String> {
     open_file_explorer_with(Path::new(&path), |command| command.status())
 }
 
+/// The Linux opener uses blocking zbus, which must not enter its runtime from
+/// the Tokio worker that executes an async Tauri command.
+#[tauri::command]
+pub async fn reveal_item_in_dir(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri_plugin_opener::reveal_item_in_dir(path).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Folder reveal task failed: {error}"))?
+}
+
 /// Deliver a desktop notification from the blocking pool.
 ///
 /// On Linux, do not use the notification plugin: its builder `show()` is
@@ -726,50 +737,87 @@ fn remove_legacy_cli_binary(dir: &std::path::Path) {
     }
 }
 
-/// Check if the `gchat-cli` binary is accessible on PATH.
-#[tauri::command]
-pub async fn check_jan_cli_installed() -> CliInstallStatus {
-    let which_cmd = if cfg!(windows) { "where" } else { "which" };
-    let mut cmd = std::process::Command::new(which_cmd);
-    cmd.arg(CLI_COMMAND_NAME);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
-
-    match tokio::task::spawn_blocking(move || cmd.output()).await {
-        Ok(Ok(out)) if out.status.success() => {
-            let raw = String::from_utf8_lossy(&out.stdout);
-            #[cfg(windows)]
-            let path = {
-                // `where` returns one path per line; pick the first that isn't a
-                // dev-build artifact (i.e. skip paths containing \target\)
-                raw.lines()
-                    .map(str::trim)
-                    .find(|p| !p.is_empty() && !p.to_ascii_lowercase().contains("\\target\\"))
-                    .map(str::to_string)
-                    // fall back to the raw first line if every path looks like a build dir
-                    .or_else(|| {
-                        raw.lines()
-                            .map(str::trim)
-                            .find(|p| !p.is_empty())
-                            .map(str::to_string)
-                    })
+fn cli_install_status_on_path(
+    path: Option<&std::ffi::OsStr>,
+    bundled_directories: &[PathBuf],
+) -> CliInstallStatus {
+    let bundled_directories: Vec<_> = bundled_directories
+        .iter()
+        .filter_map(|directory| fs::canonicalize(directory).ok())
+        .collect();
+    let binary_name = if cfg!(windows) {
+        "gchat-cli.exe"
+    } else {
+        CLI_COMMAND_NAME
+    };
+    let path = path.and_then(|path| {
+        std::env::split_paths(path).find_map(|directory| {
+            let directory = if directory.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                directory
             };
-            #[cfg(not(windows))]
-            let path = Some(raw.trim().to_string());
-            CliInstallStatus {
-                installed: path.is_some(),
-                path,
+            let directory = fs::canonicalize(directory).ok()?;
+            if bundled_directories
+                .iter()
+                .any(|bundled| directory.starts_with(bundled))
+            {
+                return None;
             }
-        }
-        _ => CliInstallStatus {
-            installed: false,
-            path: None,
-        },
+
+            // Resolve directory aliases, not the executable itself: an external
+            // PATH entry may legitimately install a symlink to the bundled CLI.
+            let candidate = directory.join(binary_name);
+            if !candidate.is_file() {
+                return None;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::ffi::OsStrExt;
+                let candidate_c = std::ffi::CString::new(candidate.as_os_str().as_bytes()).ok()?;
+                // SAFETY: candidate_c is a live, NUL-terminated pathname.
+                if unsafe { nix::libc::access(candidate_c.as_ptr(), nix::libc::X_OK) } != 0 {
+                    return None;
+                }
+            }
+            let path = candidate.to_string_lossy().into_owned();
+            #[cfg(windows)]
+            let path = strip_verbatim_prefix(&path);
+            Some(path)
+        })
+    });
+    CliInstallStatus {
+        installed: path.is_some(),
+        path,
     }
+}
+
+/// Check for a terminal installation, excluding the app's private bundled CLI.
+#[tauri::command]
+pub async fn check_jan_cli_installed<R: Runtime>(app_handle: AppHandle<R>) -> CliInstallStatus {
+    // AppRun prepends its private directories to PATH in both a mounted
+    // AppImage and an extracted AppDir. A DEB's system /usr/bin stays eligible.
+    #[cfg(target_os = "linux")]
+    let appdir = app_handle.env().appdir.map(PathBuf::from);
+    #[cfg(not(target_os = "linux"))]
+    let appdir: Option<PathBuf> = None;
+    let bundled_directories: Vec<_> = app_handle
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|directory| directory.join("resources/bin"))
+        .into_iter()
+        .chain(appdir)
+        .collect();
+    let path = std::env::var_os("PATH");
+    tokio::task::spawn_blocking(move || {
+        cli_install_status_on_path(path.as_deref(), &bundled_directories)
+    })
+    .await
+    .unwrap_or(CliInstallStatus {
+        installed: false,
+        path: None,
+    })
 }
 
 fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::path::Path) -> Result<(), String> {
@@ -1817,7 +1865,8 @@ fn strip_gchat_managed_block(content: &str) -> String {
 
 /// Installer spec for an agent: (program, args, prerequisite_binary, docs_url).
 /// Verified against each vendor's official install path:
-///   - Claude Code / Codex / OpenCode / OpenClaw ship as global npm packages.
+///   - Claude Code / Codex / OpenClaw ship as global npm packages.
+///   - OpenCode uses the separate app-owned local npm runtime.
 ///   - Hermes is a Python project installed via its official shell / PowerShell
 ///     bootstrap script (NOT npm).
 fn agent_install_spec(
@@ -1861,10 +1910,6 @@ fn agent_install_spec(
         "codex" => {
             let (p, a) = npm("@openai/codex");
             Ok((p, a, "npm", "https://github.com/openai/codex"))
-        }
-        "opencode" => {
-            let (p, a) = npm("opencode-ai");
-            Ok((p, a, "npm", "https://opencode.ai"))
         }
         "cline" => {
             let (p, a) = npm("cline");
@@ -2310,7 +2355,7 @@ fn proxy_url_with_auth(url: &str, username: Option<&str>, password: Option<&str>
 ///
 /// Best-effort: `uv`/`curl` honor `ALL_PROXY`/SOCKS; npm and PowerShell
 /// `Invoke-RestMethod` largely ignore SOCKS env (handled by clearer messaging).
-fn apply_proxy_env(cmd: &mut std::process::Command, proxy: &ProxyEnv) {
+pub(crate) fn apply_proxy_env(cmd: &mut std::process::Command, proxy: &ProxyEnv) {
     let url = proxy.url.trim();
     if url.is_empty() {
         return;
@@ -2450,6 +2495,29 @@ async fn detect_via_wsl(bin: &str) -> bool {
     )
 }
 
+/// Probe agent availability. OpenCode uses its selected data root and the
+/// shared custom > managed > native resolver, without treating WSL as native.
+/// Other integrations retain their external-agent lookup below.
+#[tauri::command]
+pub async fn detect_agent_installed<R: Runtime>(
+    app: AppHandle<R>,
+    bin: String,
+    custom_path: Option<String>,
+) -> AgentDetection {
+    if bin == "opencode" {
+        let data = get_jan_data_folder_path(app);
+        let found = tokio::task::spawn_blocking(move || {
+            super::opencode_runtime::resolve(&data, custom_path.as_deref())
+        })
+        .await;
+        return AgentDetection {
+            installed: matches!(found, Ok(Ok(Some(_)))),
+            via_wsl: false,
+        };
+    }
+    detect_external_agent_installed(bin, custom_path).await
+}
+
 /// Probe whether an external CLI agent is reachable.
 ///
 /// Resolution order:
@@ -2459,8 +2527,10 @@ async fn detect_via_wsl(bin: &str) -> bool {
 /// 2. native PATH lookup (`which` / `where`).
 /// 3. (Windows only) a WSL fallback so agents installed inside a WSL
 ///    distribution are detected instead of showing as missing.
-#[tauri::command]
-pub async fn detect_agent_installed(bin: String, custom_path: Option<String>) -> AgentDetection {
+pub async fn detect_external_agent_installed(
+    bin: String,
+    custom_path: Option<String>,
+) -> AgentDetection {
     if let Some(path) = custom_path
         .as_deref()
         .map(str::trim)
@@ -2513,7 +2583,7 @@ async fn try_bootstrap_npm_via_winget<R: Runtime>(
 ) -> bool {
     // winget itself (App Installer) must be present; it ships on Win10 1809+
     // mainline but not on LTSC / Server / stripped images.
-    let winget = detect_agent_installed("winget".to_string(), None).await;
+    let winget = detect_external_agent_installed("winget".to_string(), None).await;
     if !native_agent_available(&winget) {
         let _ = app_handle.emit(
             event,
@@ -2585,7 +2655,7 @@ async fn try_bootstrap_npm_via_winget<R: Runtime>(
     // winget adds the Node install dir to PATH; `detect_agent_installed`
     // re-reads the registry PATH at runtime, so native npm is found without a
     // restart. A WSL-only npm does not satisfy a native Windows install.
-    let npm = detect_agent_installed("npm".to_string(), None).await;
+    let npm = detect_external_agent_installed("npm".to_string(), None).await;
     native_agent_available(&npm)
 }
 
@@ -2606,6 +2676,23 @@ pub async fn install_agent<R: Runtime>(
     agent_id: String,
     proxy: Option<ProxyEnv>,
 ) -> Result<(), String> {
+    if agent_id == "opencode" {
+        let data = get_jan_data_folder_path(app_handle.clone());
+        return tokio::task::spawn_blocking(move || {
+            super::opencode_runtime::install_managed(
+                &data,
+                None,
+                proxy.as_ref(),
+                "gchat-install.log",
+                |line| {
+                    let _ = app_handle.emit("agent_install_log:opencode", line.to_owned());
+                },
+            )
+            .map(|_| ())
+        })
+        .await
+        .map_err(|error| format!("Code setup stopped: {error}"))?;
+    }
     let (program, args, prereq, docs) = agent_install_spec(&agent_id)?;
 
     let event = format!("agent_install_log:{}", agent_id);
@@ -2614,7 +2701,7 @@ pub async fn install_agent<R: Runtime>(
     // so a Node/npm installed after the app launched (or present in the registry
     // but not the GUI's snapshotted PATH) is found without an app restart. A
     // prerequisite found only inside WSL cannot run a native installer.
-    let prerequisite = detect_agent_installed(prereq.to_string(), None).await;
+    let prerequisite = detect_external_agent_installed(prereq.to_string(), None).await;
     if !native_agent_available(&prerequisite) {
         // For npm-based agents on Windows, try to auto-install Node.js (which
         // bundles npm) via winget before giving up, so the Launch flow works on
@@ -4616,16 +4703,23 @@ pub fn open_agent_terminal<R: Runtime>(
     app: AppHandle<R>,
     agent_id: String,
     command: String,
+    custom_path: Option<String>,
     proxy: Option<ProxyEnv>,
 ) -> Result<(), String> {
     let command = command.trim().to_string();
     if command.is_empty() {
         return Err("Empty terminal command".to_string());
     }
-    let environment = if agent_id == "opencode" {
-        agent_terminal_environment(&agent_id, &get_jan_data_folder_path(app))
+    let (command, environment) = if agent_id == "opencode" {
+        let data = get_jan_data_folder_path(app);
+        let resolved = super::opencode_runtime::resolve(&data, custom_path.as_deref())?
+            .ok_or("Code is not installed. Set it up in GChat, then try again.")?;
+        (
+            super::opencode_runtime::shell_invocation(&resolved.executable, &[]),
+            agent_terminal_environment(&agent_id, &data),
+        )
     } else {
-        Vec::new()
+        (command, Vec::new())
     };
     #[cfg(unix)]
     let command = agent_terminal_payload(&command, &environment)?;
@@ -4663,6 +4757,23 @@ pub fn open_agent_terminal<R: Runtime>(
 
     #[cfg(target_os = "windows")]
     {
+        if agent_id == "opencode" {
+            use std::os::windows::process::CommandExt;
+            // Bypass cmd.exe so metacharacters in a user-selected path remain
+            // literal PowerShell arguments in the new interactive console.
+            let mut cmd = std::process::Command::new("powershell.exe");
+            cmd.args(["-NoProfile", "-NoExit", "-Command", &command])
+                .envs(environment)
+                .creation_flags(0x00000010); // CREATE_NEW_CONSOLE
+            apply_login_path(&mut cmd);
+            apply_runtime_path(&mut cmd);
+            if let Some(ref proxy) = proxy {
+                apply_proxy_env(&mut cmd, proxy);
+            }
+            cmd.spawn()
+                .map_err(|error| format!("Could not open the Code terminal: {error}"))?;
+            return Ok(());
+        }
         // `start "" cmd /K <cmd>` opens a fresh console that stays open so the
         // interactive agent keeps running. The empty "" is the window title arg.
         // The new console inherits this command's environment, so the proxy env
@@ -5088,6 +5199,54 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reveal_item_in_dir_returns_error_without_panicking_on_runtime_worker() {
+        const FIXTURE: &str = "GCHAT_FOLDER_REVEAL_PRIVATE_BUS";
+        if std::env::var_os(FIXTURE).is_none() {
+            // Never ask the test runner's desktop to reveal a folder. A child
+            // gets an unreachable private bus without changing process-global
+            // environment used by other tests.
+            let root = tempfile::tempdir().unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "core::system::commands::tests::reveal_item_in_dir_returns_error_without_panicking_on_runtime_worker",
+                    "--nocapture",
+                ])
+                .env(FIXTURE, "1")
+                .env(
+                    "DBUS_SESSION_BUS_ADDRESS",
+                    format!("unix:path={}/missing-bus", root.path().display()),
+                )
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains("test result: ok. 1 passed;")
+            );
+            return;
+        }
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result = tokio::spawn(super::reveal_item_in_dir("private log folder".into()))
+                .await
+                .expect("folder reveal must not panic on a runtime worker");
+            let error = result.expect_err("an unavailable file manager must report an error");
+            assert!(!error.starts_with("Folder reveal task failed:"), "{error}");
+        });
+    }
+
     fn folder_opener_exit_status(code: i32) -> std::process::ExitStatus {
         #[cfg(unix)]
         {
@@ -5323,6 +5482,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn opencode_detection_uses_the_selected_managed_root_and_keeps_custom_authoritative() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("selected Code data");
+        let managed = super::super::opencode_runtime::managed_executable(&data);
+        std::fs::create_dir_all(managed.parent().unwrap()).unwrap();
+        std::fs::write(&managed, "managed Code").unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(crate::test_support::TestDataRoot(data));
+        let found = super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+        assert!(found.installed);
+        assert!(!found.via_wsl);
+        for invalid in [root.path().join("missing Code"), PathBuf::from("relative Code")] {
+            let found = super::detect_agent_installed(
+                app.handle().clone(), "opencode".into(), Some(invalid.to_string_lossy().into_owned()),
+            ).await;
+            assert!(!found.installed);
+            assert!(!found.via_wsl);
+        }
+        assert_eq!(std::fs::read_to_string(managed).unwrap(), "managed Code");
+    }
+
+    #[tokio::test]
     async fn desktop_and_cli_opencode_configuration_use_selected_data_root() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -5462,6 +5643,118 @@ mod tests {
         assert_eq!(bare, serde_json::json!({ "name": "m", "temperature": false }));
     }
     use super::*;
+
+    fn cli_install_detection_binary(directory: &Path) -> PathBuf {
+        fs::create_dir_all(directory).unwrap();
+        let name = if cfg!(windows) {
+            "gchat-cli.exe"
+        } else {
+            CLI_COMMAND_NAME
+        };
+        let path = directory.join(name);
+        fs::write(&path, b"fixture CLI; never executed").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn cli_install_detection_does_not_count_the_app_bundle() {
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let resource_bin = appdir.join("usr/lib/GChat/resources/bin");
+        cli_install_detection_binary(&app_bin);
+        cli_install_detection_binary(&resource_bin);
+        let path = std::env::join_paths([&app_bin, &resource_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+
+        // Windows/DEB/dev resource binaries are private even without APPDIR.
+        let path = std::env::join_paths([&resource_bin]).unwrap();
+        let status = cli_install_status_on_path(Some(&path), &[resource_bin]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+    }
+
+    #[test]
+    fn cli_install_detection_finds_terminal_install_after_app_run_path() {
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let terminal_bin = root.path().join("user/bin");
+        let later_bin = root.path().join("other/bin");
+        cli_install_detection_binary(&app_bin);
+        let expected = cli_install_detection_binary(&terminal_bin);
+        cli_install_detection_binary(&later_bin);
+        let path = std::env::join_paths([&app_bin, &terminal_bin, &later_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(expected.to_string_lossy().into_owned()));
+    }
+
+    #[test]
+    fn cli_install_detection_keeps_system_install_without_appdir() {
+        let root = tempfile::tempdir().unwrap();
+        let system_bin = root.path().join("usr/bin");
+        let resource_bin = root.path().join("usr/lib/GChat/resources/bin");
+        let expected = cli_install_detection_binary(&system_bin);
+        cli_install_detection_binary(&resource_bin);
+        let path = std::env::join_paths([&resource_bin, &system_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[resource_bin]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(expected.to_string_lossy().into_owned()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cli_install_detection_distinguishes_bundle_alias_from_installed_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let bundled = cli_install_detection_binary(&app_bin);
+        let alias = root.path().join("bundle-bin-alias");
+        symlink(&app_bin, &alias).unwrap();
+        let terminal_bin = root.path().join("user/bin");
+        fs::create_dir_all(&terminal_bin).unwrap();
+        let installed = terminal_bin.join(CLI_COMMAND_NAME);
+        symlink(&bundled, &installed).unwrap();
+        let path = std::env::join_paths([&alias, &terminal_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(installed.to_string_lossy().into_owned()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cli_install_detection_requires_an_executable_file_on_path() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let non_executable_bin = root.path().join("non-executable");
+        let non_executable = cli_install_detection_binary(&non_executable_bin);
+        fs::set_permissions(&non_executable, fs::Permissions::from_mode(0o644)).unwrap();
+        let directory_bin = root.path().join("directory");
+        fs::create_dir_all(directory_bin.join(CLI_COMMAND_NAME)).unwrap();
+        let missing_bin = root.path().join("missing");
+        let path =
+            std::env::join_paths([&non_executable_bin, &directory_bin, &missing_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+        assert!(!cli_install_status_on_path(None, &[]).installed);
+    }
 
     #[test]
     fn installed_desktop_launcher_targets_provider_host_and_can_be_updated() {

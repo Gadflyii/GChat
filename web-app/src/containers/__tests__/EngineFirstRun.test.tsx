@@ -650,7 +650,7 @@ it('shows background disk-full failures and clears the alert after a successful 
   })
   render(<EngineFirstRun />)
   expect(await screen.findByRole('alert')).toHaveTextContent('The disk is full. Free some space, then try again.')
-  expect(screen.getByLabelText('Model download folder')).toHaveValue('/models')
+  await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/models'))
   fireEvent.click(screen.getByRole('button', { name: 'Retry setup' }))
   await waitFor(() => expect(screen.queryByText(/Setup could not continue/)).not.toBeInTheDocument())
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'resume' })

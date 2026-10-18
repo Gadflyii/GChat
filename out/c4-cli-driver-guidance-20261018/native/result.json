@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "terminal_utc": "2026-10-18T04:59:56.988811+00:00",
+  "archive_sha256": "a0e9c930493b969b2c4e06da74f3de7ff94f5a7615fd1b092166709eaa2212a4",
+  "setup_source_commit": "4b14e7a68",
+  "driver_free": {
+    "setup_exit": 1,
+    "actionable_repair_guidance": true,
+    "installation_targets_absent": {
+      "install": true,
+      "provider": true,
+      "links": true,
+      "config/ginfer/local-host.json": true
+    }
+  },
+  "driver_present": {
+    "setup_exit": 0,
+    "hardware_preparation": "idle",
+    "launcher_created": true,
+    "private_host_registered": true,
+    "host_and_keyring_terminal": true
+  },
+  "extra_check_excluded": {
+    "first_run_exit": 1,
+    "wrapper_exit": 1,
+    "reason": "Parent unnecessarily invoked first-run on the frozen older36c278f285 Host after setup already passed. It hit the retained standalone runtime-set defect fixed separately by mergeda82f8c1e0. This is not first-run acceptance; the failed wrapper and original case receipt are retained. No install or test was repeated."
+  },
+  "scope": "Linux setup prewrite driver dependency check only; physical host driver unchanged; no GPU selection/model/calibration; normal install used matching olderHost rather than combining untested runtime_set requirements",
+  "booking": 3006,
+  "returned_utc": "2026-10-18T04:59Z"
+}

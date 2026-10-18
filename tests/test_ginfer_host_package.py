@@ -203,6 +203,8 @@ class HostPackage(unittest.TestCase):
             result = package.package(Path('/usr/bin/true'), 'linux-x86_64', root / 'out', runtime)
             with tarfile.open(result) as archive:
                 members = {m.name.split('/', 1)[1]: m for m in archive.getmembers()}
+                self.assertEqual(archive.extractfile(members['setup.py']).read(),
+                                 SCRIPT.with_name('setup-ginfer-linux.py').read_bytes())
                 for name in docs:
                     member = members[f'runtime/{name}']
                     self.assertEqual(archive.extractfile(member).read(), (runtime / name).read_bytes())

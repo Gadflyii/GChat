@@ -1,0 +1,80 @@
+{
+  "stages": {
+    "order": {
+      "exit": 0,
+      "start": "2026-10-18T04:58:21Z",
+      "end": "2026-10-18T04:58:41Z"
+    },
+    "artifact": {
+      "exit": 0,
+      "start": "2026-10-18T04:58:41Z",
+      "end": "2026-10-18T04:58:42Z"
+    },
+    "check": {
+      "exit": 0,
+      "start": "2026-10-18T04:58:42Z",
+      "end": "2026-10-18T04:58:48Z"
+    },
+    "clippy": {
+      "exit": 0,
+      "start": "2026-10-18T04:58:48Z",
+      "end": "2026-10-18T04:59:00Z"
+    },
+    "verify": {
+      "exit": 0,
+      "start": "2026-10-18T04:59:00Z",
+      "end": "2026-10-18T05:03:36Z"
+    },
+    "release": {
+      "exit": 0,
+      "start": "2026-10-18T05:03:36Z",
+      "end": "2026-10-18T05:05:04Z"
+    }
+  },
+  "make_verify_invocations": 1,
+  "vitest": {
+    "root_passed": 3357,
+    "root_skipped": 6,
+    "extension_passed": 121
+  },
+  "critical_coverage_files": 6,
+  "lint_errors": 0,
+  "lint_warnings": 5,
+  "rust": {
+    "passed": 1228,
+    "failed": 0,
+    "ignored": 28
+  },
+  "summaries": [
+    "\u2716 5 problems (0 errors, 5 warnings)",
+    " Test Files  338 passed | 1 skipped (339)",
+    "      Tests  3357 passed | 6 skipped (3363)",
+    " Test Files  5 passed (5)",
+    "      Tests  121 passed (121)",
+    "Coverage floor passed (6 critical files).",
+    "test result: ok. 730 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 30.71s",
+    "test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.54s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 253 passed; 0 failed; 13 ignored; 0 measured; 0 filtered out; finished in 15.31s",
+    "test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.73s",
+    "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.39s",
+    "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.68s",
+    "test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s",
+    "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 103 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.69s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s",
+    "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.16s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.63s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+  ],
+  "ldd_missing": false
+}
