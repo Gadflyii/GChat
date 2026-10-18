@@ -178,6 +178,9 @@ it('shows a stopped scheduler outside the collapsed panel and prevents creating 
   render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('Scheduling has stopped: Journal failure')
+  expect(alert).toHaveTextContent(
+    'Restart the Gbot service on the computer where it runs before scheduled tasks can run again.'
+  )
   expect(alert.closest('details')).toBeNull()
   fireEvent.click(screen.getByText('Scheduled tasks'))
   fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
