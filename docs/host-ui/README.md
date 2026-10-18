@@ -43,18 +43,24 @@ yarn workspace @gchat/web-app test src/lib/__tests__/launchAtStartup.test.ts src
 cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli linux_autostart -- --test-threads=1
 ```
 
-Inventory: C3 source-only worktree
+Inventory: C3 worktree
 `/ai/gchat-worktrees/c3-linux-autostart-xdg-20261018`, branch
-`fix/c3-linux-autostart-xdg-20261018`, allocated main
-`f83df0e9c4e5da87a71cc5a234fec96f90ce050e`. Current main `4ead3f88f` is merged normally before gates; the sole merge
-conflict retained both decision-index entries. No dependency changes, app
-processes, tests or builds have run for this candidate. CLI export is immutable
-and its build slot returned. Next: verify retained dependency manifests, then
-book free S1 CPUs80–87 with socket1 shared lock and nice10 for the focused
-checks above, library check/Clippy, lint, ONE `make verify`, Vite and default
-desktop build into separate `autostart-candidate`. Parent owns native installed
-acceptance; preserve AppDir/home, CLI/Interface/folder/badge candidates, tools
-and runnable assets. Packet: `out/c3-linux-autostart-xdg-20261018/`.
+`fix/c3-linux-autostart-xdg-20261018`. Current main `4ead3f88f` was merged
+normally before gates. The first focused run retained 48 passes and two failures:
+the existing General fixture replaced JSDOM's real Window with an object spread,
+which drops its non-enumerable `document`; the new asynchronous startup checks
+therefore had no default container. The fixture now assigns only the mocked
+`core` property onto the real Window. Product code and assertions are unchanged.
+Original log: `out/c3-linux-autostart-xdg-20261018/focused-frontend-first-failure.log`.
+
+Next: run the affected General file only, then the unrun native focused cases,
+library check/Clippy, lint, ONE `make verify`, Vite and default desktop build into
+separate `autostart-candidate`. The passed service and DataProvider cases are
+reused. S1 CPUs80–87 are booked under3036 through05:49Z, socket1 shared lock,
+nice10; dependency manifests and source bindings matched before staging.
+Parent owns native installed acceptance. Preserve AppDir/home, CLI/Interface/
+folder/badge candidates, tools and runnable assets. Packet:
+`out/c3-linux-autostart-xdg-20261018/`.
 ## Gbot companion task-load retry — October 18
 
 `GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously

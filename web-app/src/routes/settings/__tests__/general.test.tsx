@@ -275,15 +275,14 @@ global.VERSION = '1.0.0'
 global.IS_MACOS = false
 global.IS_WINDOWS = true
 global.AUTO_UPDATER_DISABLED = false
-global.window = {
-  ...global.window,
+Object.assign(global.window, {
   core: {
     api: {
       relaunch: vi.fn(),
       getConnectedServers: vi.fn().mockResolvedValue([]),
     },
   },
-}
+})
 
 // Mock navigator clipboard
 Object.assign(navigator, {
