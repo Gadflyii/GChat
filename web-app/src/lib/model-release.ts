@@ -83,21 +83,21 @@ const downloadStatusLabels = new Map<string, string>([
 export const downloadStatusLabel = (status: string) => downloadStatusLabels.get(status) ?? 'Download status unavailable'
 
 /** Keep diagnostic details separate from the explanation and recovery action. */
-export function downloadFailureMessage(error: string | null): string {
+export function downloadFailureRecovery(error: string | null): { message: string; retry: boolean } {
   const message = error ?? ''
   if (/not enough (?:free )?(?:disk )?space|insufficient (?:disk )?space|no space left|disk (?:is )?full|os error (?:28|112)\b/i.test(message)) {
-    return 'There isn’t enough space in the model folder. Free some disk space, then resume the download.'
+    return { message: 'There isn’t enough space in the model folder. Free some disk space, then choose Retry download.', retry: true }
   }
-  if (/checksum|sha-?256/i.test(message)) {
-    return 'The downloaded file is damaged or incomplete. Remove this incomplete download, then download the model again.'
+  if (/checksum|sha-?256|not a GInfer version-3 container/i.test(message)) {
+    return { message: 'The downloaded file is damaged or isn’t a GInfer model. Choose Delete partial download, then download the model again from Recommended.', retry: false }
   }
   if (/\bhttp(?:\/[\d.]+)?(?:\s+(?:status|error))?\s*:?\s*[45]\d\d\b|download server returned [45]\d\d\b|\bstatus(?: code)?\s*:?\s*[45]\d\d\b/i.test(message)) {
-    return 'The download site couldn’t provide this model. Refresh the model list or try again later.'
+    return { message: 'The download site couldn’t provide this model. Open Recommended and choose Refresh recommendations, or try again later.', retry: true }
   }
   if (/network|connect|dns|timed? out|timeout|did not respond|stalled|error sending request|error decoding response body|request or response body|download ended before the declared size/i.test(message)) {
-    return 'The download was interrupted. Check your internet connection, then resume the download.'
+    return { message: 'The download was interrupted. Check your internet connection, then choose Retry download.', retry: true }
   }
-  return 'The download couldn’t finish. Try resuming it, or open the details below for more information.'
+  return { message: 'The download couldn’t finish. Choose Retry download, or open Technical details for more information.', retry: true }
 }
 
 /** Hardware measurement and speed tuning write temporary files next to the models. */

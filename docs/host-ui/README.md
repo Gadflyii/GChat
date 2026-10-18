@@ -18,8 +18,15 @@ Retry download button. A damaged file instructs Remove without naming
 Delete partial download. These saved-state native fixtures establish wording,
 not actual corruption, disk exhaustion or transfer correctness.
 
-Next: correct guidance to the visible controls, verify the rendered recovery
-path, then focused tests and ONE make verify. C7 owns the separate small-size
+The three new rendered guidance cases fail against unchanged source. Host
+`resume` requeues the same job and preserves partial bytes: a full corrupt
+partial skips HTTP and fails verification again. Checksum and invalid-format
+cards therefore offer Delete partial download without the ineffective Retry.
+Network/full-disk/unknown failures retain Retry and name it in their guidance;
+paused jobs retain Resume. Rendered regressions exercise both Retry to queued
+and Delete followed by a fresh download.
+
+Next: focused helper and rendered tests, then ONE make verify. C7 owns the separate small-size
 leaf; no shared fixture, catalog or Chat/Agents source is touched. C3 will
 use an independent S1 SSD dependency copy under
 `/media/ron/SSD_RAID/ai/tmp-c3-failed-download-wording-20261018`; donor is the

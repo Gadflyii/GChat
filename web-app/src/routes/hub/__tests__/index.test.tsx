@@ -292,14 +292,29 @@ describe('host-scoped Models', () => {
     expect(screen.getByText(/only recommended once it has been tested on your graphics card/)).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent(/CUDA_VISIBLE_DEVICES|\bTP\b|VRAM|Smol/)
   })
-  it('explains a failed download and offers a retry that matches it', async () => {
-    mocks.command.mockImplementation(async action => action === 'local_model_downloads'
-      ? [{ id: 'job', release, status: 'failed', received: 4096, bytes_per_second: 0, error: 'SHA256 mismatch', path: null }] : [])
+  it.each(['SHA256 mismatch', 'not a GInfer version-3 container'])('discards unusable saved bytes instead of retrying them: %s', async (error) => {
+    spyConfirm().mockReturnValueOnce(true)
+    let discarded = false
+    mocks.command.mockImplementation(async (action, args) => {
+      if (action === 'local_model_download_action') {
+        expect(args).toEqual({ id: 'job', operation: 'discard' })
+        discarded = true
+      }
+      return action === 'local_model_downloads' && !discarded
+        ? [{ id: 'job', release, status: 'failed', received: 4096, bytes_per_second: 0, error, path: null }] : []
+    })
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('The downloaded file is damaged or incomplete. Remove this incomplete download, then download the model again.')
-    expect(screen.getByRole('button', { name: 'Retry download' })).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('The downloaded file is damaged or isn’t a GInfer model. Choose Delete partial download, then download the model again from Recommended.')
+    expect(screen.queryByRole('button', { name: 'Retry download' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Resume download' })).not.toBeInTheDocument()
+    expect(screen.getByText(error)).not.toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete partial download' }))
+    expect(await screen.findByText('No downloads on this computer yet. Choose Recommended to find a model.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download to this computer' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_download', { host_id: 'local', body: release }))
+    expect(mocks.command.mock.calls.some(call => call[0] === 'local_model_download_action' && call[1]?.operation === 'resume')).toBe(false)
   })
   it.each([
     ['connection reset by peer', 'The download was interrupted. Check your internet connection, then choose Retry download.'],
@@ -308,7 +323,7 @@ describe('host-scoped Models', () => {
   ])('names and exercises the retry control for a failed download: %s', async (error, guidance) => {
     let status = 'failed'
     mocks.command.mockImplementation(async (action, args) => {
-      if (action === 'local_model_download_control') {
+      if (action === 'local_model_download_action') {
         expect(args).toEqual({ id: 'job', operation: 'resume' })
         status = 'queued'
       }
@@ -326,7 +341,7 @@ describe('host-scoped Models', () => {
     expect(await screen.findByText('Waiting to download')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pause download' })).toBeInTheDocument()
-    expect(mocks.command).toHaveBeenCalledWith('local_model_download_control', { id: 'job', operation: 'resume' })
+    expect(mocks.command).toHaveBeenCalledWith('local_model_download_action', { id: 'job', operation: 'resume' })
   })
   it('says it is checking, not that there are no downloads, until the Host has answered', async () => {
     useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
@@ -641,7 +656,7 @@ describe('host-scoped Models', () => {
     if (action) expect(screen.getByRole('button', { name: action })).toBeEnabled()
     else expect(screen.queryByRole('button', { name: /Pause download|Resume download|Retry download|Show in Installed/ })).not.toBeInTheDocument()
     if (status === 'failed') {
-      expect(screen.getByRole('alert')).toHaveTextContent('Check your internet connection, then resume the download.')
+      expect(screen.getByRole('alert')).toHaveTextContent('Check your internet connection, then choose Retry download.')
       expect(screen.getByText('connection reset by peer')).not.toBeVisible()
     }
   })
