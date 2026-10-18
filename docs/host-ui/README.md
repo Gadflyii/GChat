@@ -1,5 +1,29 @@
 # GInfer host UI
 
+## Gbot permission decision failure recovery — October 18
+
+`GBOT-APPROVAL-INLINE-ERRORS`: failed **Allow** and **Deny** requests previously
+produced only a short raw-error toast, leaving the permission card without
+persistent recovery guidance. The card now explains which decision failed,
+keeps the error beside the original request and offers the same decision for
+an explicit retry. Technical details stay closed until requested. Settings and
+the companion pass failures to this card while retaining their normal refresh.
+Pending decisions still prevent duplicate or opposite submissions.
+
+Baseline `4ead3f88f`; all four rendered Allow/Deny regressions fail on the
+missing alert. The fixed focused run passes 123 tests in three files. ONE
+`make verify` passed on S1 CPUs40–47, 05:26:40–05:34:20Z: lint, typecheck,
+quality guards, 3,379 app tests (six skipped), 127 extension tests, all six
+coverage floors and 1,229 Rust tests (28 ignored). Private offline caches,
+socket0 shared lock, nice10/max8 jobs; source, test and documentation hashes
+matched before and after the gate. The private remote tree was removed and
+booking3033 canceled; CPUs returned05:35Z. No approval policy or backend
+behavior changed. No VM, native Windows, model or live permission was exercised.
+FRESH/OLD remain OFF/original XML/custody Gchat2. Windows not built (dev phase).
+
+Result: `out/gchat2-approval-inline-errors-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-approval-inline-errors-20261018`.
+
 ## Gbot companion task-load retry — October 18
 
 `GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously

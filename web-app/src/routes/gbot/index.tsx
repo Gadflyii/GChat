@@ -1042,8 +1042,9 @@ function GbotPage() {
                         approval={approval}
                         busy={busy}
                         reply={(allow) =>
-                          perform(() =>
-                            gbot('tasks/approval', { id: approval.id, allow })
+                          perform(
+                            () => gbot('tasks/approval', { id: approval.id, allow }),
+                            true
                           )
                         }
                       />

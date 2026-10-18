@@ -1778,6 +1778,138 @@ it.each(['success', 'failure'] as const)(
   }
 )
 
+it.each([
+  [
+    'Allow',
+    true,
+    'Allowing this action…',
+    'Could not allow this action. Try again.',
+  ],
+  [
+    'Deny',
+    false,
+    'Denying this action…',
+    'Could not deny this action. Try again.',
+  ],
+] as const)(
+  'keeps a failed permission %s inline through refresh and retries it in settings',
+  async (action, allow, progress, message) => {
+    const [identity] = readyTaskBots()
+    const call = mocks.call.getMockImplementation()!
+    const task = {
+      id: 'writer-task',
+      identity,
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [],
+    }
+    let approvals = [
+      {
+        id: 'writer-permission',
+        task_id: task.id,
+        request: { operation: { kind: 'read', path: '/home/bot/notes.txt' } },
+      },
+    ]
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let fail!: (cause: string) => void
+    let finish!: () => void
+    const reply = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'tasks') return [task]
+        if (path === 'tasks/approvals') return approvals
+        if (path === 'tasks/approval') return reply(body)
+        return call(path, body)
+      }
+    )
+    render(<Page />)
+    const card = await screen.findByRole('article', {
+      name: 'Bot permission request',
+    })
+    const submit = within(card).getByRole('button', { name: action, exact: true })
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const payload = { id: 'writer-permission', allow }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    expect(card).toHaveAttribute('aria-busy', 'true')
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+
+    await act(async () => fail('Permission decision unavailable'))
+    const alert = await within(card).findByRole('alert')
+    expect(within(alert).getByText(message)).toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      within(alert).getByText('Permission decision unavailable')
+    ).not.toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(within(card).getByText('/home/bot/notes.txt')).toBeVisible()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(card).toHaveAttribute('aria-busy', 'false')
+    expect(within(card).getByRole('button', { name: 'Allow' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Deny' })).toBeEnabled()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+      ).toBeGreaterThan(reads)
+    )
+    expect(
+      within(within(card).getByRole('alert')).getByText(message)
+    ).toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(reply).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(reply.mock.calls).toEqual([[payload], [payload]])
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    approvals = []
+    await act(async () => finish())
+    await waitFor(() => expect(card).not.toBeInTheDocument())
+    expect(
+      screen.queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    ).toEqual([
+      ['tasks/approval', payload],
+      ['tasks/approval', payload],
+    ])
+  }
+)
+
 it.each(['Send reply', 'Decline'])(
   'keeps a failed human-help %s visible and retryable in settings',
   async (action) => {
