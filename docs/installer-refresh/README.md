@@ -1021,8 +1021,13 @@ source `c26257593` shares serving's request-budget callback; focused tests and
 all three corrected no-load checks pass. At21:14Z the laptop reported a
 conservative67584 bound and typed rejection for81920; Ada remained140288.
 The build/physical packet is GInfer `a8a1bf8d1`,
-`docs/fn-graph-probe-startup/README.md`. Arch direction for a single corrected
-laptop liveC8 witness remains pending. No RC target installer, desktop or model
+`docs/fn-graph-probe-startup/README.md`. The directed laptop67584/C8 live
+witness rejected before Ready21:23:18Z (native1, no requests/swap); C5 retained
+its full packet in `febe380cc`. Ada was not launched. Arch21:32Z holds both
+targets until the corrected bound. GInfer diagnostic25a62767c exposes the final
+Host requirement/capacity after probe retirement without changing budgets;
+its retained SM86 build is active, with diagnostic proof direction pending.
+Physical equality and final Arch sign remain pending. No RC target installer, desktop or model
 has launched. Both native walk commands remain prepared under the retained
 Job guards; install/walk/chat follow correction acceptance and the current
 target handoff. Gchat3's separate packaged-resource copies returned21:08:55Z;
