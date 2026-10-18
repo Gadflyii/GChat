@@ -22,6 +22,35 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Shared confirmation keyboard return — October 18
+
+Private native Agent Studio on main `0f604653e` reproduced focus loss after
+opening a draft-discard confirmation from a library row with Enter and
+dismissing it with Escape: focus fell to the body, and the next Tab jumped to
+Downloads. The dialog source matched main; the private desktop used the
+preceding source-compatible `84a0027b3` build. Normal shutdown kept saved
+definitions and history byte-identical. Baseline receipts and the viewed
+screenshot are in `/ai/gchat/out/gchat-confirm-dialog-focus-20261018/`.
+
+Shared confirmations now retain their opening control at request time and
+restore focus on dismissal or confirmation when it is still connected.
+Replacing an open request keeps the original opener; an exiting dialog does
+not take focus from a newer request. Cancel remains the initial keyboard
+default. No confirmation action or decision is changed.
+
+Validation: 92 focused tests and workspace lint PASS; one `make verify`
+PASS (3,557 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux desktop builds PASS on `8b5e2cd0c`.
+Rebuilt private native acceptance PASS: Escape, default Cancel and explicit
+discard return to the opening library row; the next Tab moves to the adjacent
+library row. Cancel also returns to the opening New agent and Use template
+buttons while retaining the draft. The candidate screenshot was viewed.
+Normal shutdown at 11:33Z kept saved definitions and history byte-identical;
+CPU booking 3260 was returned. Receipts:
+`/ai/gchat/out/gchat-confirm-dialog-focus-20261018/`.
+This qualifies the Linux keyboard scope; no save, delete, run, inference or
+Windows acceptance was performed.
+
 ## Unsaved Agent Studio draft replacement — October 18
 
 An isolated native pass on main `de74862d6` reproduced silent loss of edits
