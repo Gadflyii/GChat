@@ -22,6 +22,22 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Agent Studio composition reselection — October 18
+
+A private native pass reproduced silent loss of edited Goal Loop success
+criteria when clicking the already selected **Goal Loop** composition tile.
+The `22b69002b` desktop's Agent Studio source matched main `ec58a89b8`.
+The unsaved draft was closed normally; saved definitions and run history stayed
+byte-identical. Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1212/`.
+
+Selecting the current composition now keeps the draft intact. Selecting a
+different composition still initializes that type's settings. The focused
+regressions cover keyboard reselection of edited Goal Loop criteria and limits,
+and saved team/workflow roles, model overrides and workflow dependencies.
+Next: focused tests, lint, one `make verify`, rebuild and isolated Linux native
+acceptance. No model run or inference is needed for this editor check.
+
 ## Saved Agent Studio deletion — October 18
 
 An isolated native pass reproduced immediate permanent removal of a saved
