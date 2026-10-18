@@ -1,5 +1,68 @@
 # GInfer host UI
 
+## Connected Gbot desktop, approvals and history — Gchat 2
+
+`GBOT-DESKTOP-TASKS-APPROVALS-WALK`, October 17–18, 2026: the previously
+unreached connected-bot screens were exercised in the lane's FRESH and OLD
+Linux VM fixtures, one running at a time. Each native app used its own HOME,
+runtime directory, dbus session and unlocked keyring on the fixture's display.
+The baseline production frontend/native app was built from main `9e75fc31e`;
+the corrected candidate is based on main `c0a1b5a95`.
+
+Both fixtures streamed the real 1920×1080 bot desktop in view-only and human
+control modes. Hand back restored bot control. FRESH also passed the native
+keyboard escape shortcut. Both completed a real, individually approved
+`list_windows` task, refused a denied action without a guest effect, resumed
+to another approval, and cancelled that pending action with Stop. OLD retained
+history across disconnect/reconnect; switching its selected bot isolated the
+history. FRESH retained its pre-existing completed task and document.
+
+Five findings have separate fix branches:
+
+| Finding | Corrected behavior | Branch |
+| --- | --- | --- |
+| Missing LAN tools referred to an administrator command that was not displayed. | Explains the dedicated Debian 13 prerequisite, installation consent, Prepare tools and subsequent Check tools; a missing install marker receives the same guidance. | `fix/gbot-lan-tools-install-guidance-20261017` |
+| Settings task history had no speaker names. | Labels user-role messages **You** and assistant messages with the selected bot's name. | `fix/gbot-task-history-speakers-20261017` |
+| Refresh and task/control updates closed the open desktop viewer. | Retains the last successful setup while refreshing; confirmed setup failure, incompleteness or service changes still close the viewer. | `fix/gbot-desktop-refresh-continuity-20261017` |
+| A reasoning-only model reply with empty answer text became Completed. | Preserves the raw reply and leaves the task Interrupted, available to resume. | `fix/gbot-empty-model-reply-20261017` |
+| Take over changed an already Cancelled task to Paused. | Skips terminal saved records while retaining the active actor's normal takeover and replanning path. | `fix/gbot-preserve-terminal-task-pause-20261018` |
+
+The inference run used Qwen3.8 27B **2-bit mix**, package SHA-256
+`ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`,
+149,069 context tokens and the unchanged normal sampler/output settings.
+The retained Engine payload was `d96742554`; this is Gbot desktop acceptance,
+not a new Engine, installer or Windows qualification. Desktop audio and LAN
+installation were not run. The negative LAN tool check used a disposable
+connection to the fixture itself; Prepare tools was not authorized or invoked.
+Message names follow stored roles: the existing task format also stores internal
+resume observations as user-role content and cannot distinguish their author.
+
+Combined source `a0358f591` passes all 69 focused UI cases, the empty-answer,
+terminal-history and active-actor regressions, Rust check/Clippy and one full
+`make verify` (1,203 native tests passed, 27 ignored; frontend gates and all six
+critical coverage floors passed). All 3,099 tracked source blobs and modes were
+verified before and after the S1 build/test copy. The LAN guidance branch also
+has its own focused/check/Clippy/full-gate pass; initial environment and test
+fixture failures remain identified in its result rather than hidden.
+
+The production native candidate from `a0358f591` passed the patched walkthrough
+in both fixtures (app SHA-256
+`c13c04b52d000c796ea9a729278cacd1f0e6aaeb52391520599e84a09c3a1c79`).
+Both retained the streaming canvas through Refresh and displayed the corrected
+speaker names. OLD also retained that canvas through Take over and Hand back;
+a newly cancelled task in its current session remained byte-identical. That
+regression task used the supported API with an unavailable loopback model
+endpoint, made no guest calls and was cancelled before the native control check.
+FRESH displayed the corrected missing-tools guidance after a successful SSH
+check; installation consent remained unchecked and Prepare tools disabled.
+
+The scratch LAN bot/key were removed, original brain assignments restored,
+and the original completed-task file and 17-byte document verified unchanged.
+Both fixtures were returned off with their original VM definitions; private
+app copies and owned build outputs were removed. The retained result and short
+summary are `out/gbot-desktop-tasks-approvals-walk-20261017/result.json` and
+`out/gbot-desktop-tasks-approvals-walk-20261017/SUMMARY.md`.
+
 ## Hardware-profile novice guidance — C3, closed October 17
 
 `GCHAT-HARDWARE-PROFILE-NOVICE-GUIDANCE-20261017` is closed for the
