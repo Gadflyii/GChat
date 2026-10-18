@@ -1,5 +1,6 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useRef } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useAppState } from '@/hooks/useAppState'
@@ -113,12 +114,13 @@ describe('DeleteModelAction', () => {
     await user.keyboard('{Enter}')
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'common:deleteModel.delete' })).toHaveFocus()
     expect(deleteModel).not.toHaveBeenCalled()
     expect(getProviders).not.toHaveBeenCalled()
     expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['Qwen3-4B-Q4_K_M'])
   })
 
-  it('keeps the confirmation open during deletion and permits an explicit retry after rejection', async () => {
+  it('announces pending deletion and permits an explicit retry after rejection', async () => {
     const first = deferred()
     const retry = deferred()
     const onDeleted = vi.fn()
@@ -129,17 +131,11 @@ describe('DeleteModelAction', () => {
     const dialog = screen.getByRole('dialog')
     await user.click(confirm)
 
-    expect(dialog).toHaveAttribute('aria-busy', 'true')
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Deleting model… You can close this dialog while the request finishes.')
     expect(confirm).toBeDisabled()
     expect(confirm).toHaveTextContent('Deleting model…')
-    expect(trigger).toBeDisabled()
-    expect(within(dialog).getByRole('button', { name: 'common:deleteModel.cancel' })).toBeDisabled()
-    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
-    await user.keyboard('{Enter}{Escape}')
-    fireEvent.pointerDown(document.querySelector('[data-slot="dialog-overlay"]')!, {
-      button: 0,
-      ctrlKey: false,
-    })
+    expect(trigger).toBeEnabled()
+    expect(within(dialog).getAllByRole('button', { name: 'Close' })).toHaveLength(2)
     expect(dialog).toBeInTheDocument()
     expect(deleteModel).toHaveBeenCalledExactlyOnceWith('Qwen3-4B-Q4_K_M', 'ginfer')
     expect(onDeleted).not.toHaveBeenCalled()
@@ -168,7 +164,7 @@ describe('DeleteModelAction', () => {
     expect(deleteModel).toHaveBeenCalledTimes(2)
     expect(deleteModel).toHaveBeenLastCalledWith('Qwen3-4B-Q4_K_M', 'ginfer')
     expect(dialog).toBeInTheDocument()
-    expect(dialog).toHaveAttribute('aria-busy', 'true')
+    expect(within(dialog).getByRole('status')).toHaveTextContent('Deleting model…')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     await act(async () => {
       retry.resolve()
@@ -180,6 +176,50 @@ describe('DeleteModelAction', () => {
     expect(getProviders).toHaveBeenCalledOnce()
     expect(deleteModel).toHaveBeenCalledTimes(2)
     expect(toastSuccess).toHaveBeenCalledWith('Model deleted', expect.any(Object))
+  })
+
+  it('allows Escape while deletion is pending, returns focus and prevents a second request after reopening', async () => {
+    const deletion = deferred()
+    deleteModel.mockReturnValue(deletion.promise)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="ginfer" />)
+    const { user, confirm } = await openConfirm()
+    await user.click(confirm)
+    await user.tab()
+    expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const trigger = screen.getByRole('button', { name: 'common:deleteModel.delete' })
+    expect(trigger).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByRole('button', { name: 'Deleting model…' })).toBeDisabled()
+    expect(deleteModel).toHaveBeenCalledOnce()
+    await user.keyboard('{Escape}')
+    await act(async () => { deletion.resolve(); await deletion.promise })
+    expect(deleteModel).toHaveBeenCalledOnce()
+    expect(getProviders).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('returns keyboard focus to the page when accepted deletion removes the trigger row', async () => {
+    function ModelList() {
+      const models = useModelProvider(state => state.providers[0]?.models ?? [])
+      const returnFocusRef = useRef<HTMLButtonElement>(null)
+      return <><button ref={returnFocusRef}>Refresh installed models</button>{models.map(model =>
+        <DeleteModelAction key={model.id} modelId={model.id} provider="ginfer" returnFocusRef={returnFocusRef} />)}</>
+    }
+    render(<ModelList />)
+    const user = userEvent.setup()
+    await user.tab()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'common:deleteModel.delete' })).toHaveFocus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'common:deleteModel.cancel' })).toHaveFocus())
+    await user.tab()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh installed models' })).toHaveFocus())
+    expect(deleteModel).toHaveBeenCalledOnce()
   })
 
   it('guards same-turn duplicate deletion and closes only after the request succeeds', async () => {

@@ -1,5 +1,27 @@
 # GInfer host UI
 
+## Models delete dialog keyboard access — C7, October 18
+
+Active finding `GUI-MODELS-DELETE-DIALOG-KEYBOARD`, source-only candidate
+`fix/c7-models-a11y-20261018`, based on Hardware candidate `37345d00c`.
+A pending delete used to disable every dismissal and suppress Escape. The
+confirmation now keeps Close and Escape available while its accepted request
+continues; reopening cannot submit another request. Cancel remains the initial
+focus before acceptance. Radix owns the trigger, and focus returns to that
+trigger or an explicit stable page control when deletion removes its row.
+Models returns to Refresh installed models; the catalog action returns to its
+replacement Download button. Pending status is announced without marking its
+live region busy.
+
+Acceptance: rendered keyboard Cancel/Escape and pending dismissal/reopen,
+same-turn duplicate protection, rejection/retry, accepted row removal and focus
+return; affected focused tests, lint, exactly one `make verify`, and private
+Linux native Light/Dark dialog/focus screenshots in this branch. No model load,
+backend change, Windows acceptance, new harness or dependency is in scope.
+Source implementation and regressions are ready for the focused gate; root
+owns this worktree and its source. No resource is reserved. Native preparation
+must reuse the existing private-app workflow and retained valid fixture inputs.
+
 ## Models, Downloads and Hardware accessibility — C7, October 18
 
 Bubbs assigned a source-only accessibility pass at 23:12Z. The outcome is named
