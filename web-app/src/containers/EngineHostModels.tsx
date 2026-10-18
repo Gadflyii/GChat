@@ -170,7 +170,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       setConnectionResult(true)
       await refreshHostList()
     } catch (e) {
-      const message = 'Could not connect to this computer. Check that it is on and reachable, then try Connect again.'
+      const message = 'Connection did not finish. Choose Connect to try again. If asked, unlock secure storage on this computer so GChat can use the saved sign-in. If you still cannot connect, check that the other computer is on and reachable.'
       setActionError({ message, details: String(e) })
       toast.error(message)
     } finally { connectPending.current = false; setBusy(false) }

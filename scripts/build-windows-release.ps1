@@ -5,7 +5,8 @@
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 `
-#     -GinferRuntimeArchives 'C:\path\sm86.zip;C:\path\sm89.zip;C:\path\sm120a.zip'
+#     -GinferRuntimeArchives 'C:\path\sm86.zip;C:\path\sm89.zip;C:\path\sm120a.zip' `
+#     -GbotCuaRuntime 'C:\path\gbot-cua-windows-x64'
 #   - or -
 #   make build-windows-release
 # Add -PreparedEnvironment to use existing tools without workstation setup.
@@ -21,6 +22,8 @@ param(
     [string]$GinferSourceCommit,
     # Explicit qualified catalog paths, separated by semicolons on Windows.
     [string]$GinferProfileCatalogs = $env:GINFER_PROFILE_CATALOGS,
+    # Accepted, already packaged Windows Cua runtime directory; never installed here.
+    [string]$GbotCuaRuntime,
     [switch]$ValidateInputsOnly,
     # Require existing tools; never bootstrap or change workstation settings.
     [switch]$PreparedEnvironment
@@ -57,8 +60,9 @@ $GinferProfileCatalogs = $catalogPaths -join ';'
 $env:GINFER_PROFILE_CATALOGS = $GinferProfileCatalogs
 Write-Host "  Selected $($profileIds.Count) Windows profiles from $($catalogPaths.Count) catalogs."
 
-# Inspect producer-final ZIPs before installing prerequisites, copying source or
-# writing resources. ValidateInputsOnly exercises this same complete input gate.
+# Inspect producer-final ZIPs and the accepted Cua bundle before installing
+# prerequisites, copying source or writing resources. ValidateInputsOnly uses
+# this same complete input gate.
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 function Read-GinferRuntimeArchive {
     param([string]$Path)
@@ -114,6 +118,68 @@ function Read-GinferRuntimeArchive {
     } finally { $archive.Dispose() }
 }
 
+function Read-GbotCuaRuntime {
+    param([string]$Path)
+    $root = Get-Item -LiteralPath $Path -Force
+    if (-not $root.PSIsContainer -or ($root.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "Gbot Cua runtime must be a staged directory, not a link: $Path"
+    }
+    $manifestPath = Join-Path $Path 'runtime.json'
+    $manifestFile = Get-Item -LiteralPath $manifestPath -Force
+    if ($manifestFile.PSIsContainer -or ($manifestFile.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        throw "Gbot Cua runtime requires a regular runtime.json: $Path"
+    }
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    if ($manifest.schema -cne 'gbot-cua-runtime-v1' -or $manifest.platform -cne 'windows-x64' -or
+        $manifest.python_version -cne '3.12.3' -or
+        $manifest.sdk_revision -cne '0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc' -or
+        $manifest.agent_revision -cne '896c68871da6f3a659c58f341781a977ada20459' -or
+        $manifest.package_count -ne 62) {
+        throw "Gbot Cua runtime must be the accepted Windows x64 CPython 3.12.3, 62-package closure: $Path"
+    }
+    $listed = @{}
+    $noticeCount = 0
+    foreach ($file in @($manifest.files)) {
+        $name = [string]$file.path
+        $segments = @($name -split '/')
+        if (-not $name -or $name -match '[\\<>:"|?*\x00-\x1f]' -or
+            @($segments | Where-Object { -not $_ -or $_ -match '[. ]$' }).Count -or
+            $segments[0] -ieq 'assets' -or $name -ieq 'runtime.json' -or $listed.ContainsKey($name)) {
+            throw "Invalid or duplicate Gbot Cua runtime file path: $name"
+        }
+        if (($file.bytes -isnot [int] -and $file.bytes -isnot [long]) -or $file.bytes -lt 0 -or
+            $file.sha256 -notmatch '^[0-9a-f]{64}$') {
+            throw "Invalid Gbot Cua runtime file metadata: $name"
+        }
+        # Inspect each declared component without following directory links out
+        # of the accepted bundle. Guest assets have a separate pinned inventory.
+        $member = $Path
+        foreach ($segment in $segments) {
+            $member = Join-Path $member $segment
+            $item = Get-Item -LiteralPath $member -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Gbot Cua runtime file must not traverse a link: $name"
+            }
+        }
+        if ($item.PSIsContainer -or $item.Length -ne $file.bytes) {
+            throw "Gbot Cua runtime file size mismatch: $name"
+        }
+        $actual = (Get-FileHash -LiteralPath $member -Algorithm SHA256).Hash
+        if ($actual -ine $file.sha256) { throw "Gbot Cua runtime file hash mismatch: $name" }
+        $listed[$name] = $true
+        if ($name.StartsWith('licenses/', [StringComparison]::OrdinalIgnoreCase) -and $file.bytes -gt 0) {
+            $noticeCount++
+        }
+    }
+    foreach ($required in @('python/python.exe', 'python/python312.dll', 'python/python312.zip', 'python/python312._pth',
+            'python/Lib/site-packages/cua_agent/loops/ginfer.py', 'context-preparer.ts',
+            'smart-context.ts', 'requirements.lock', 'closure-inventory.json')) {
+        if (-not $listed.ContainsKey($required)) { throw "Gbot Cua runtime is missing $required" }
+    }
+    if (-not $noticeCount) { throw 'Gbot Cua runtime is missing manifest-covered license notices.' }
+    return $manifest
+}
+
 $runtimePaths = @($GinferRuntimeArchives -split ';' | Where-Object { $_ } | ForEach-Object {
     (Resolve-Path -LiteralPath $_ -ErrorAction Stop).ProviderPath
 })
@@ -134,6 +200,17 @@ foreach ($runtimePath in $runtimePaths) {
 }
 $GinferRuntimeArchives = $runtimePaths -join ';'
 Write-Host "  Verified SM86, SM89 and SM120a runtimes from clean Engine $runtimeCommit."
+if (-not $GbotCuaRuntime) { throw 'Pass -GbotCuaRuntime with the accepted staged Windows Cua runtime directory.' }
+$GbotCuaRuntime = (Resolve-Path -LiteralPath $GbotCuaRuntime -ErrorAction Stop).ProviderPath
+$gbotResourceDir = Join-Path $projectRoot 'src-tauri/resources/gbot'
+$gbotResourcePath = [IO.Path]::GetFullPath($gbotResourceDir)
+$gbotInputPath = [IO.Path]::GetFullPath($GbotCuaRuntime)
+if ($gbotInputPath.Equals($gbotResourcePath, [StringComparison]::OrdinalIgnoreCase) -or
+    $gbotInputPath.StartsWith($gbotResourcePath + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'Select a staged Gbot Cua runtime outside the release resources/gbot destination.'
+}
+$gbotManifest = Read-GbotCuaRuntime $GbotCuaRuntime
+Write-Host "  Verified Windows Cua runtime: CPython 3.12.3, 62 packages, $(@($gbotManifest.files).Count) files."
 if ($ValidateInputsOnly) { exit 0 }
 . (Join-Path $PSScriptRoot 'import-gbench-signing.ps1')
 Import-GbenchSigning
@@ -216,7 +293,8 @@ if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
     if ($PreparedEnvironment) { $revisionArguments += '-PreparedEnvironment' }
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $nativeScript `
         -NativeMirror -SourceRoot $projectRoot `
-        -GinferRuntimeArchives $GinferRuntimeArchives -GinferProfileCatalogs $GinferProfileCatalogs @revisionArguments
+        -GinferRuntimeArchives $GinferRuntimeArchives -GinferProfileCatalogs $GinferProfileCatalogs `
+        -GbotCuaRuntime $GbotCuaRuntime @revisionArguments
     exit $LASTEXITCODE
 }
 
@@ -477,6 +555,23 @@ if ($pyExe) {
 Write-Step 'Copying assets for Tauri'
 yarn copy:assets:tauri
 if ($LASTEXITCODE -ne 0) { Write-Host 'copy:assets:tauri failed' -ForegroundColor Red; exit 1 }
+
+# ── Accepted Windows Cua runtime ──────────────────────────────
+Write-Step 'Staging bundled Gbot Cua runtime'
+# Recheck after prerequisites and native mirroring; copy only manifest-covered
+# runtime files. The independently staged guest assets remain untouched.
+$gbotManifest = Read-GbotCuaRuntime $GbotCuaRuntime
+New-Item -ItemType Directory -Path $gbotResourceDir -Force | Out-Null
+Get-ChildItem -LiteralPath $gbotResourceDir -Force | Where-Object { $_.Name -ine 'assets' } |
+    Remove-Item -Recurse -Force
+foreach ($file in @($gbotManifest.files)) {
+    $destination = Join-Path $gbotResourceDir $file.path
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $GbotCuaRuntime $file.path) -Destination $destination -Force
+}
+Copy-Item -LiteralPath (Join-Path $GbotCuaRuntime 'runtime.json') -Destination (Join-Path $gbotResourceDir 'runtime.json') -Force
+$null = Read-GbotCuaRuntime $gbotResourceDir
+Write-Host "  Staged $(@($gbotManifest.files).Count) verified Windows Cua runtime files."
 
 # ── Build CLI (release) ───────────────────────────────────────
 Write-Step 'Build gchat-cli (release)'

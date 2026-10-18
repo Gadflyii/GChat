@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import GbotConnectors from './GbotConnectors'
@@ -66,38 +67,48 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-it('offers an accessible setup step and retries an initial account-list failure without linking accounts', async () => {
-  const retry = deferred<BotConnectors>()
-  request
-    .mockRejectedValueOnce(new Error('Service unavailable'))
-    .mockReturnValueOnce(retry.promise)
-  mount()
+it.each([
+  ['Error', new Error('Service unavailable')],
+  ['native string', 'Service unavailable'],
+])(
+  'offers an accessible setup step and retries an initial account-list failure without linking accounts (%s)',
+  async (_kind, cause) => {
+    const retry = deferred<BotConnectors>()
+    request.mockRejectedValueOnce(cause).mockReturnValueOnce(retry.promise)
+    mount()
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Could not refresh linked accounts. Try Refresh accounts again.'
-  )
-  const refresh = screen.getByRole('button', { name: 'Refresh accounts' })
-  expect(refresh).toHaveAccessibleDescription(
-    /open Settings → Workspace connections, then refresh this list/
-  )
-  expect(
-    screen.queryByRole('button', { name: 'Save linked accounts' })
-  ).not.toBeInTheDocument()
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      'Could not refresh linked accounts. Your selections are unchanged. Choose Refresh accounts to try again.'
+    )
+    const details = within(alert).getByText('Details').closest('details')
+    expect(details).not.toHaveAttribute('open')
+    expect(within(alert).getByText('Service unavailable')).not.toBeVisible()
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(within(alert).getByText('Service unavailable')).toBeVisible()
+    const refresh = screen.getByRole('button', { name: 'Refresh accounts' })
+    expect(refresh).toHaveAccessibleDescription(
+      /open Settings → Workspace connections, then refresh this list/
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Save linked accounts' })
+    ).not.toBeInTheDocument()
 
-  fireEvent.click(refresh)
-  expect(screen.getByRole('status')).toHaveTextContent('Loading accounts…')
-  expect(refresh).toBeDisabled()
-  await act(async () => retry.resolve(connectors()))
+    fireEvent.click(refresh)
+    expect(screen.getByRole('status')).toHaveTextContent('Loading accounts…')
+    expect(refresh).toBeDisabled()
+    await act(async () => retry.resolve(connectors()))
 
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(screen.getByRole('status')).toHaveTextContent('Accounts refreshed.')
-  expect(screen.getByRole('checkbox', { name: /Personal Google/ })).not.toBeChecked()
-  expect(screen.getByRole('checkbox', { name: /Work Microsoft/ })).not.toBeChecked()
-  expect(request.mock.calls).toEqual([
-    ['connectors/get', { workspace_id: 'bot-one' }],
-    ['connectors/get', { workspace_id: 'bot-one' }],
-  ])
-})
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Accounts refreshed.')
+    expect(screen.getByRole('checkbox', { name: /Personal Google/ })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: /Work Microsoft/ })).not.toBeChecked()
+    expect(request.mock.calls).toEqual([
+      ['connectors/get', { workspace_id: 'bot-one' }],
+      ['connectors/get', { workspace_id: 'bot-one' }],
+    ])
+  }
+)
 
 it('explains an empty list and refreshes newly connected account metadata without selecting it', async () => {
   request
@@ -151,33 +162,46 @@ it('reports a successful explicit save and serializes saves with account refresh
   expect(refresh).toBeEnabled()
 })
 
-it('keeps a failed save draft and lets the user retry the same explicit selection', async () => {
-  request
-    .mockResolvedValueOnce(connectors())
-    .mockRejectedValueOnce(new Error('Service disconnected'))
-    .mockResolvedValueOnce(connectors(['personal']))
-  mount()
-  fireEvent.click(
-    await screen.findByRole('checkbox', { name: /Personal Google/ })
-  )
-  fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+it.each([
+  ['Error', new Error('Service disconnected')],
+  ['native string', 'Service disconnected'],
+])(
+  'keeps a failed save draft and lets the user retry the same explicit selection (%s)',
+  async (_kind, cause) => {
+    request
+      .mockResolvedValueOnce(connectors())
+      .mockRejectedValueOnce(cause)
+      .mockResolvedValueOnce(connectors(['personal']))
+    mount()
+    fireEvent.click(
+      await screen.findByRole('checkbox', { name: /Personal Google/ })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
 
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Could not save linked accounts. Your selections are kept. Error: Service disconnected'
-  )
-  expect(screen.getByRole('checkbox', { name: /Personal Google/ })).toBeChecked()
-  expect(screen.queryByText('Linked accounts saved.')).not.toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      'Could not confirm whether linked accounts were saved. Your selections are kept. Choose Save linked accounts to try again.'
+    )
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(within(alert).getByText('Service disconnected')).not.toBeVisible()
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(within(alert).getByText('Service disconnected')).toBeVisible()
+    expect(screen.getByRole('checkbox', { name: /Personal Google/ })).toBeChecked()
+    expect(screen.queryByText('Linked accounts saved.')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
 
-  await waitFor(() =>
-    expect(screen.getByRole('status')).toHaveTextContent('Linked accounts saved.')
-  )
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(request.mock.calls.slice(1)).toEqual([
-    ['connectors/save', { workspace_id: 'bot-one', account_ids: ['personal'] }],
-    ['connectors/save', { workspace_id: 'bot-one', account_ids: ['personal'] }],
-  ])
-})
+    await waitFor(() =>
+      expect(screen.getByRole('status')).toHaveTextContent('Linked accounts saved.')
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(request.mock.calls.slice(1)).toEqual([
+      ['connectors/save', { workspace_id: 'bot-one', account_ids: ['personal'] }],
+      ['connectors/save', { workspace_id: 'bot-one', account_ids: ['personal'] }],
+    ])
+  }
+)
 
 it('keeps failed Save feedback through a successful refresh until an explicit Save retry', async () => {
   const refreshed = deferred<BotConnectors>()
@@ -193,7 +217,7 @@ it('keeps failed Save feedback through a successful refresh until an explicit Sa
   )
   fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
   const failure =
-    'Could not save linked accounts. Your selections are kept. Error: Save service unavailable'
+    'Could not confirm whether linked accounts were saved. Your selections are kept. Choose Save linked accounts to try again.'
   expect(await screen.findByRole('alert')).toHaveTextContent(failure)
 
   fireEvent.click(screen.getByRole('button', { name: 'Refresh accounts' }))
@@ -237,14 +261,21 @@ it('keeps failed Save feedback separate from a failed refresh and its read-only 
   )
   fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
   const failure =
-    'Could not save linked accounts. Your selections are kept. Error: Save service unavailable'
+    'Could not confirm whether linked accounts were saved. Your selections are kept. Choose Save linked accounts to try again.'
   expect(await screen.findByRole('alert')).toHaveTextContent(failure)
 
   fireEvent.click(screen.getByRole('button', { name: 'Refresh accounts' }))
   await screen.findByText(
-    'Could not refresh linked accounts. Try Refresh accounts again. Error: Account list unavailable'
+    'Could not refresh linked accounts. Your selections are unchanged. Choose Refresh accounts to try again.'
   )
   expect(screen.getAllByRole('alert')).toHaveLength(2)
+  for (const alert of screen.getAllByRole('alert')) {
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+  }
+  expect(screen.getByText('Save service unavailable')).not.toBeVisible()
+  expect(screen.getByText('Account list unavailable')).not.toBeVisible()
   expect(screen.getByText(failure)).toBeVisible()
   expect(screen.getByRole('checkbox', { name: /Personal Google/ })).toBeChecked()
 

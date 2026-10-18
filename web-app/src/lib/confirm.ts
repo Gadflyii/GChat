@@ -8,6 +8,8 @@ export type ConfirmOptions = {
   cancelLabel?: string
   /** Style the confirm button as destructive. */
   destructive?: boolean
+  /** Stable opener when the initiating menu item will be removed. */
+  returnFocus?: HTMLElement | null
 }
 
 type Pending = ConfirmOptions & {
@@ -25,11 +27,13 @@ export const useConfirmStore = create<{ pending: Pending | null }>(() => ({ pend
 export function confirmAction(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
     const previous = useConfirmStore.getState().pending
-    const returnFocus = previous
-      ? previous.returnFocus
-      : typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null
+    const returnFocus = options.returnFocus ?? (
+      previous
+        ? previous.returnFocus
+        : typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null
+    )
     previous?.resolve(false)
     useConfirmStore.setState({ pending: { ...options, resolve, returnFocus } })
   })

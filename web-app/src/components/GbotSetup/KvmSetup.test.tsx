@@ -328,9 +328,18 @@ it('shows a pending recheck once and clears earlier readiness when it fails', as
   expect(checks).toBe(2)
   expect(call.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
   rejectCheck(new Error('The Gbot service is unavailable.'))
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'The Gbot service is unavailable.'
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Could not check this computer’s setup.')
+  expect(alert).toHaveTextContent(
+    'Check the connection to the service computer, then choose Check prerequisites again.'
   )
+  const details = alert.querySelector('details')!
+  expect(details).not.toHaveAttribute('open')
+  const requests = call.mock.calls.length
+  fireEvent.click(screen.getByText('Details', { selector: 'summary' }))
+  expect(details).toHaveAttribute('open')
+  expect(alert).toHaveTextContent('The Gbot service is unavailable.')
+  expect(call).toHaveBeenCalledTimes(requests)
   expect(create).toBeDisabled()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   fireEvent.click(
@@ -342,15 +351,25 @@ it('shows a pending recheck once and clears earlier readiness when it fails', as
 })
 
 it('does not retain a successful preflight when refreshing saved setups fails', async () => {
+  let fail = true
   call.mockImplementation((path) =>
     path.endsWith('preflight')
       ? Promise.resolve({ ready: true, issues: [] })
-      : Promise.reject(new Error('Saved setups could not be read.'))
+      : fail
+        ? Promise.reject(new Error('Saved setups could not be read.'))
+        : Promise.resolve([])
   )
   render(<KvmSetup name="Writer" connected={vi.fn()} />)
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Saved setups could not be read.'
-  )
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Could not check this computer’s setup.')
+  expect(alert).toHaveTextContent('Check prerequisites again')
+  const details = alert.querySelector('details')!
+  expect(details).not.toHaveAttribute('open')
+  const requests = call.mock.calls.length
+  fireEvent.click(screen.getByText('Details', { selector: 'summary' }))
+  expect(details).toHaveAttribute('open')
+  expect(alert).toHaveTextContent('Saved setups could not be read.')
+  expect(call).toHaveBeenCalledTimes(requests)
   expect(
     screen.getByRole('button', { name: 'Create Writer’s computer' })
   ).toBeDisabled()
@@ -358,6 +377,58 @@ it('does not retain a successful preflight when refreshing saved setups fails', 
     screen.getByRole('button', { name: 'Check prerequisites again' })
   ).toBeEnabled()
   expect(call.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+  fail = false
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Check prerequisites again' })
+  )
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Create Writer’s computer' })
+    ).toBeEnabled()
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(call.mock.calls.some(([path]) => path.endsWith('/start'))).toBe(false)
+})
+
+it('keeps a saved computer reviewable after an event read fails and permits explicit recovery', async () => {
+  const saved = { id: 'writer-id', name: 'Writer', stage: 'ready', issue: null }
+  let fail = false
+  call.mockImplementation(async (path) => {
+    if (path.endsWith('preflight')) return { ready: true, issues: [] }
+    if (fail) throw new Error('Progress service disconnected.')
+    return [saved]
+  })
+  const connected = vi.fn()
+  render(<KvmSetup name="Other bot" initialId={saved.id} connected={connected} />)
+  const use = await screen.findByRole('button', { name: 'Use this computer' })
+  await waitFor(() => expect(use).toBeEnabled())
+  fail = true
+  await act(async () => events.update?.())
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Could not check this computer’s setup.')
+  expect(alert).toHaveTextContent('Check prerequisites again')
+  expect(screen.getByText('Writer · Computer ready')).toBeInTheDocument()
+  const details = alert.querySelector('details')!
+  expect(details).not.toHaveAttribute('open')
+  const requests = call.mock.calls.length
+  fireEvent.click(screen.getByText('Details', { selector: 'summary' }))
+  expect(details).toHaveAttribute('open')
+  expect(alert).toHaveTextContent('Progress service disconnected.')
+  expect(call).toHaveBeenCalledTimes(requests)
+  expect(connected).not.toHaveBeenCalled()
+  fail = false
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Check prerequisites again' })
+  )
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  await waitFor(() => expect(use).toBeEnabled())
+  expect(screen.getByText('Writer · Computer ready')).toBeInTheDocument()
+  expect(
+    call.mock.calls.every(([path]) =>
+      ['setup/local-vm/preflight', 'setup/local-vm/status'].includes(path)
+    )
+  ).toBe(true)
+  expect(connected).not.toHaveBeenCalled()
 })
 
 function deferred<T>() {

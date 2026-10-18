@@ -21,6 +21,7 @@ pub enum StartupFailure {
     InvalidCredentials,
     ConflictingCredentials,
     MissingCredentials,
+    BotUnavailable,
 }
 
 impl StartupFailure {
@@ -32,6 +33,7 @@ impl StartupFailure {
             Self::InvalidCredentials => 203,
             Self::ConflictingCredentials => 204,
             Self::MissingCredentials => 205,
+            Self::BotUnavailable => 206,
         }
     }
 
@@ -42,6 +44,7 @@ impl StartupFailure {
             Some(203) => Self::InvalidCredentials,
             Some(204) => Self::ConflictingCredentials,
             Some(205) => Self::MissingCredentials,
+            Some(206) => Self::BotUnavailable,
             _ => Self::Other,
         }
     }
@@ -54,6 +57,7 @@ impl StartupFailure {
             Self::InvalidCredentials => "Account connections could not start because saved credentials could not be read. Choose Check secure storage in GChat to check the selected store.",
             Self::ConflictingCredentials => "Account connections could not start because secure storage changed. Choose Check secure storage in GChat, then connect again.",
             Self::MissingCredentials => "Account connections could not start because a saved credential is missing. Reconnect the affected account in Workspace connections.",
+            Self::BotUnavailable => "Bot unavailable: its bundled runtime is missing or damaged. Reinstall GChat to restore Bot tasks. Chat is still available.",
         }
     }
 }
@@ -479,6 +483,10 @@ mod tests {
             (
                 205,
                 "Account connections could not start because a saved credential is missing.",
+            ),
+            (
+                206,
+                "Bot unavailable: its bundled runtime is missing or damaged.",
             ),
         ] {
             let child = tokio::process::Command::new("/bin/sh")

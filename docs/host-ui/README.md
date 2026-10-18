@@ -1,5 +1,95 @@
 # GInfer host UI
 
+## Models accepted download requests — C7, October 18
+
+`GUI-MODELS-DOWNLOAD-ACTION-REFRESH` corrects the observed Models path where
+Start download, Pause, Resume or Delete partial download succeeds, then the
+following inventory read rejects inside the shared action catch. The UI says
+the request failed and enables stale mutation controls. Preserve the accepted
+request separately from its unread status, keep diagnostics in closed
+Technical details and disable conflicting download requests for that computer
+until **Refresh downloads** reads fresh status. Recovery must not replay the
+mutation. An actual rejected request remains retryable. Do not claim a final
+paused/deleted state before a fresh snapshot supplies it.
+
+Owned branch `fix/c7-models-download-action-refresh-20261018`, matching
+`/ai/gchat-worktrees/` tree, base `d9103a3b4`. Parent owns the component and
+subject; the test worker owns rendered regressions and its independent S1 SSD
+fixture. Acceptance: local and paired-computer accepted/read-failure recovery,
+read-only failed then successful retry, per-computer isolation, repeated-click
+guard and true rejection behavior, focused tests, lint and exactly one
+`make verify`. Reuse the accepted first-run design above/below without
+retesting first-run or changing the download backend, registration, model
+load/Stop, Engine or native Windows behavior.
+Download status reads now target the selected paired computer's snapshot and
+publish it through the existing Host store; a fleet refresh can swallow a
+per-computer read failure or return before another refresh finishes, so it
+cannot establish this recovery. Local status retains its existing download
+store read. An accepted request with unavailable status also suppresses the
+empty-list claim and totals until the fresh read succeeds.
+Frozen source `9ee296e5f` passed all **59 focused Models tests** and lint
+(zero errors, five existing unrelated warnings). Exactly one `make verify`
+passed at **20:24:13Z**: **3,803 app tests / six skipped, 127 extension tests,
+65 Node contract tests and 1,318 native tests / 28 ignored** across 23 native
+summaries, all six critical coverage floors, typecheck and quality guards.
+The coordinator directly reviewed raw results, terminal state, source bytes
+against the frozen worktree and unchanged before/after source, 35 dependency
+and eleven catalog / 48 profile bindings. These checks cover the rendered
+local/paired recovery behavior and Linux source gate; no installed-app,
+native Windows, model or Engine qualification is claimed.
+
+Independent S1 SSD preparation and the gate used booking3536 on CPU88–95,
+with the inactive RC dependency donor and existing offline build image.
+CPU88–95 returned **20:26Z** and booking3536 was canceled. The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-c7-models-download-action-refresh-20261018`
+and its sole exited candidate container were retired at **20:28:33Z**, removing
+**28,879,536,128 accounted fixture bytes** after direct review. The inactive
+donor and protected inputs remain unchanged. Small evidence:
+`out/c7-models-download-action-refresh-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the Models
+queue.
+
+## Models accepted registration and refresh recovery — verified, C7, October 18
+
+`GUI-MODELS-REGISTRATION-REFRESH-RECOVERY` fixes an observed source path in
+`ModelManagement.tsx`: `local_model_register` can succeed before provider or
+Host inventory refresh rejects, but the shared catch says the model could not
+be added and recommends choosing a different file. The accepted operation
+must remain accepted. Show that the model was added, retain the read failure
+in closed Technical details, and let **Refresh installed models** reread the
+provider/Host inventories without repeating registration, adoption or load.
+An unsuccessful reread retains that recovery path; a successful reread clears
+it. Actual chooser/registration rejection keeps its existing retry guidance.
+
+Owned source: branch `fix/c7-model-registration-refresh-recovery-20261018`,
+matching `/ai/gchat-worktrees/` tree, base `9314546cd`. Parent owns the component
+and this subject; the test worker owns the rendered Models regressions and
+independent S1 SSD verification fixture. Acceptance: both post-registration
+read failures, failed then successful read-only recovery, existing repeated
+click guards, focused tests and exactly one `make verify`. No Engine change,
+model run, installed-app or native Windows qualification is claimed. Source
+is frozen at `c183987e3`: accepted registration now retains a read-only refresh
+retry through either inventory failure. The rendered regressions cover failed
+then successful recovery and duplicate-click protection. The independent S1
+fixture is `/media/ron/SSD_RAID/ai/tmp-c7-model-registration-refresh-recovery-20261018`,
+using an inactive RC dependency donor. Booking3526 used CPU88–95 for
+preparation and verification, with no GPU. The gate began at 19:46:45Z.
+All **53 focused Models tests passed**;
+lint passed with zero errors and five existing unrelated warnings. Exactly one
+`make verify` passed at **19:55:20Z**: **3,792 app tests / six skipped,
+127 extension tests and 1,318 native tests / 28 ignored** across 23 native
+summaries, plus all six critical coverage floors, typecheck and quality guards.
+The coordinator directly reviewed raw terminal results, zero exits, exited
+container state, source bytes against the worktree and unchanged before/after
+source, dependency and catalog bindings. CPU88–95 returned **19:56:23Z** and
+booking3526 was canceled. The owned S1 fixture and sole exited candidate
+container were retired at **19:59:55Z**, removing **27,821,528,481 logical
+bytes**. The inactive RC dependency donor and protected inputs remain unchanged.
+Small evidence: `out/c7-model-registration-refresh-recovery-20261018/test-result.json`
+and `test-summary.md`. A staging argument error stopped before extraction or
+tests; correcting `taskset -c 88-95` prevented recurrence without repeating a gate.
+Next: merge the verified branch and continue the owned Models queue.
+
 ## First-run cleared choices — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-CLEARED-CHOICE-REMOUNT` follows Bubbs's approved unset/empty
@@ -34,6 +124,42 @@ fixture and two exited containers were retired at **19:05:58Z**, removing
 Small evidence is retained in
 `out/first-run-cleared-choice-remount-20261018/test-result.json` and
 `test-summary.md`. Next: merge the verified branch and continue the owned GUI queue.
+## Saved-Host Connect recovery — verified, Gchat 3, October 18
+
+`GUI-HOST-CONNECT-CANCEL-GUIDANCE` corrects the network-only advice observed
+when a user cancels the secure-storage unlock during explicit Connect.
+The retained installed Linux observation is
+`out/c3-keyring-crash-relaunch-20261018/result.json`; its saved connection
+survived cancellation and connected after an explicit retry and unlock.
+
+Owner branch `fix/gchat3-host-connect-cancel-guidance-20261018`, base
+`e97f30aa0`, starts after the reserve controls merged and their owner released
+`EngineHostModels.tsx` and its rendered tests. Give conditional unlock and
+network recovery advice without guessing the failure cause from diagnostic
+strings. Preserve the saved Host, closed diagnostic details, single-submit
+protection and explicit retry; do not add credential reads or automatic retry.
+Acceptance is the affected rendered rejection/retry behavior and one
+`make verify` on an independent S1 fixture. Native observation is reused;
+this change makes no new installed-app or Windows qualification claim.
+Frozen source `348117bc1` passed all **86 focused EngineHostModels tests**
+and lint (zero errors, five existing unrelated warnings). Exactly one
+`make verify` passed at **19:20:13Z**: **3,770 app tests / 6 skipped,
+127 extension tests, 1,316 native tests / 28 ignored**, all six critical
+coverage floors, typecheck and quality guards. The coordinator directly
+reviewed terminal raw output and matching source bytes/modes, 35 dependency
+inputs and eleven catalogs / 48 profiles before and after execution.
+
+S1 CPU88–95 returned **19:21:26Z**, booking3512 canceled. After review, the
+owned independent SSD fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-connect-cancel-guidance-tests-20261018`
+and its sole exited candidate container were retired at **19:25:08Z**,
+removing **29,846,760,042 logical bytes**. The inactive RC donor and protected
+catalog inputs remain unchanged. Small results are retained at
+`out/host-connect-cancel-guidance-20261018/test-result.json` and
+`test-summary.md`. These checks establish rendered rejection/retry behavior
+and the Linux source gate; the retained native observation is reused, with
+no new installed-app or Windows qualification claim. Next: merge the verified
+branch and continue the owned GUI queue.
 
 ## First-run action recovery — verified, Gchat 3, October 18
 

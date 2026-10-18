@@ -21,6 +21,69 @@ also passes visible failure after abrupt Host death during inference, followed
 by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
+The [installed Unix PTY check](remaining-acceptance.md#current-unix-pty-window-geometry-correction)
+also passes whole-window pixel reporting, a one-pixel resize at an unchanged
+grid, and ordinary Code model-menu mouse selection on native Linux.
+
+## Try in chat skill catalog failures — October 18
+
+A private Linux native walk found that **Try in chat** silently lost the chosen
+skill when the new composer's skill-catalog read failed. Typing a task enabled
+Send without a skill chip, error or recovery guidance. The failure was induced
+only by temporarily removing read access to the disposable private skill
+directory; permissions were restored and no message was submitted. Baseline:
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1927/baseline.json`.
+
+The route now records the chosen skill before catalog resolution. The existing
+draft-skill safeguards hold Send and Enter while loading or unresolved. A failed
+read offers **Retry** or an explicit **Send without skill**; retry restores the
+original choice, and explicit opt-out clears the previous active skill. Later
+user choices and a successfully cleared draft retain the existing behavior.
+
+Native Linux acceptance of frozen source `91db9b295` passed at 1,024 × 740.
+The real catalog-read failure displayed the error and recovery controls. Send
+and Enter preserved **Build a weekly planning agent.** without starting a chat.
+Restoring directory access and choosing **Retry** restored `/agent-builder`
+with the same draft. A second failure followed by **Send without skill** cleared
+the selection, preserved the draft and reached the ordinary **Select a model**
+guidance. No model was selected or inference performed. Permissions were
+restored, the draft cleared through the UI and the app closed normally; protected
+agent, run, chat and skill files remained byte-identical.
+
+Focused tests (89), lint, one `make verify` (3,794 app, 127 extension and 1,318
+Rust tests), frontend and native builds passed. Six app tests were skipped and
+28 Rust tests ignored. Deferred/rejected catalog recovery and explicit opt-out
+dispatch are covered by the focused tests. Receipts and screenshots:
+`/ai/gchat/out/gchat-chat-try-skill-catalog-error-20261018/`.
+
+## Saved-run deletion confirmation — October 18
+
+A private native Linux pass found that choosing **Delete** from a saved run’s
+Actions menu immediately removed the run and showed **Run deleted**, without
+confirmation. The same backend operation also prunes that run’s saved files.
+The original private history was restored after normal app close. Baseline:
+`/ai/gchat/out/gchat-run-delete-confirmation-20261018/baseline.json`.
+
+Deleting a saved run now asks for confirmation, naming the run and its start
+time and explaining that its history and run files will be removed permanently.
+**Cancel** is the default keyboard action. Cancel, Enter on that default and
+Escape preserve the record and return focus to its Actions button. Explicit
+**Delete run** keeps the existing per-run in-flight guard, failure/retry feedback,
+independent deletion completion and stale-refresh protection.
+
+Native Linux acceptance of frozen source `f1bd00509` passed at 1,024 × 740.
+Enter on the default Cancel, Escape and explicit Cancel each preserved all
+three records and returned focus to General Agent’s Actions button. Explicit
+**Delete run** removed only General Agent while preserving the selected recovery
+run; returning to Runs retained the two remaining records, and the saved
+history file contained those same two IDs after normal Close. The private
+history was then restored, with protected definitions, chat and skill files
+unchanged. No model or inference was used.
+
+Focused Agents/confirmation tests (126), lint, one `make verify` (3,788 app,
+127 extension and 1,317 Rust tests), frontend and native builds passed. Six app
+tests were skipped and 28 Rust tests ignored. Receipts and screenshots:
+`/ai/gchat/out/gchat-run-delete-confirmation-20261018/`.
 
 ## Unsaved skill instructions — October 18
 
