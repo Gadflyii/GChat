@@ -67,14 +67,29 @@ missing-driver/GPU installation. The passive CUDA-order command rejects a set
 `CUDA_VISIBLE_DEVICES` mask by contract (exit 2); that is not missing-GPU
 qualification. No profile measurement, model load or Engine inference ran.
 
-Next: repair explicit single-image versus desktop-runtime-set ownership in the
-GChat Host configuration/setup boundary on its own fix branch, then repeat the
-installed first-run acceptance path with a freshly isolated installation.
-Do not fabricate a four-image runtime set or change GInfer's delegating CLI to
-mask the error. The Python executable wording is a separate observed installer
-documentation issue. GPU selection, calibration, storage/model setup and a
-successful novice launch remain unaccepted. No source fix or verification rerun
-was performed in this evidence branch.
+The Python command correction is merged as `36c0147db`; the separate launcher
+source branch `fix/c4-standalone-launcher-20261018` is completing its accepted
+runtime-ownership fix and fresh archive replay. Do not fabricate a four-image
+runtime set or change GInfer's delegating CLI to mask the original failure.
+GPU selection, calibration, storage/model setup and a successful novice launch
+remain unaccepted in this evidence branch.
+
+The remaining isolated Engine error checks finished at **04:39:56Z**, using the
+same installed, unchanged `e2282c336` runtime and a real registered TP1 artifact.
+With process-local `CUDA_VISIBLE_DEVICES` empty, the ordinary inference command
+returned 1 with `cudaGetDeviceCount: cudaErrorNoDevice: no CUDA-capable device is
+detected`, before model materialization or device allocations. This checks
+no visible GPU, not a physically removed device. In the existing pinned runc
+container with no NVIDIA device/driver injection, the same installed runtime
+returned 127 at ELF loading: `libnvidia-ml.so.1` was unavailable. This is a real
+missing driver-library environment, with the physical host driver untouched;
+it exposes an unhelpful raw loader error without NVIDIA setup guidance. Record
+that separately as `CLI-INSTALL-MISSING-DRIVER-GUIDANCE`. No CUDA calibration,
+model load, source change or verification rerun occurred. The private keyring
+and D-Bus session stopped normally, the container exited, and CPU booking 2987
+was canceled at **04:40Z**. Commands, scope and outcomes are retained in
+`out/c4-cli-first-run-20261018/novice/error-cases/error-result.json`. Native
+insufficient-space admission remains unaccepted; no disk was filled.
 
 Codex 4 owns branch `test/c4-cli-first-run-20261018` and worktree
 `/ai/gchat-worktrees/c4-cli-first-run-20261018`. Concise local receipts are in
