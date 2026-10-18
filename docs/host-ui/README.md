@@ -1,5 +1,36 @@
 # GInfer host UI
 
+## Downloads button — Gchat 2 native acceptance, October 18
+
+`GUI-DOWNLOADS-BUTTON-LABEL` passes the remaining Linux native check in the
+OLD VM. With the sidebar expanded and collapsed, the icon has the accessible
+name and native hover tooltip **Downloads**. Real Tab/Shift+Tab input shows its
+focus ring; Enter and Space open the idle download popover. Escape closes it
+and retains focus on the trigger without changing the page. WebKit inspection
+observed state and screenshots; recorded keyboard events were trusted.
+
+The retained release `ed68c7443` contains source fix `fe6f156d9` (merged in
+`c48538a27`). The component, placements, shared controls, translation and download
+stores are unchanged through main `301ca645a`. Its recorded focused case and
+the original combined `make verify` passed; this evidence-only update uses
+`git diff --check` and repeats no source gate. Result and short summary:
+`out/gchat2-downloads-button-native-20261018/{result.json,SUMMARY.md}`.
+
+This acceptance covers the English, Dark-theme idle button on Linux. Actual
+screen-reader speech, Windows and active Host-managed transfers remain outside
+this check; the latter belongs to `GUI-DOWNLOADS-POPOVER-MANAGED`. No download,
+model setup or account action was performed. A desktop color-device
+authentication prompt received no input. One observation assertion initially
+compared the popover's line break literally; whitespace normalization confirmed
+the expected visible text without changing the app.
+
+Worktree `/ai/gchat-worktrees/gchat2-downloads-button-native-20261018`, branch
+`test/gchat2-downloads-button-native-20261018`, baseline `301ca645a`, retains this
+documentation only. The private guest AppDir, HOME, runtime and session processes
+are removed. OLD is OFF with its original XML; FRESH was untouched. The owned
+S1 scratch and relay are removed, booking canceled: returned02:06Z. The retained
+read-only donor remains with Gchat 3; only result JSON and short summary remain.
+
 ## Models plain wording — C7 retained native scopes, October 18
 
 `GUI-MODELS-PLAIN-WORDING` source `d913fe639` is merged. Its remaining native
