@@ -1,5 +1,38 @@
 # GInfer host UI
 
+## Check-again locked-vault recovery — verified, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-LOCKED-RECOVERY` fixes Codex 8's P2 after passphrase
+guidance merged as `d53b88432`. Explicit Check again now preserves a typed
+`Locked` result instead of reporting the vault as unavailable. An uncertain
+Unlock outcome can therefore recover the empty Unlock form. A new passphrase
+and explicit retry are still required; checking never replays the mutation.
+Readiness remains false while locked, error details remain available, and
+passive status reads are unchanged.
+
+The behavior-preserving old-mapping test seam reproduced the serialized-state
+failure (`unavailable`, expected `locked`). The frozen candidate passed **22
+rendered credential tests, three native credential tests**, Rust check and
+clippy, and lint with zero errors and five existing unrelated warnings.
+Exactly one `make verify` exited 0 at **16:43:56Z**: **3,703 app tests / 6
+skipped, 127 extension tests, all six critical coverage floors and 1,311 native
+tests / 0 failed / 28 ignored** across 23 native summaries. Typecheck and quality
+guards passed. The coordinator reviewed the actual failing and passing logs,
+terminal state, matching source bytes and executable modes, and all eleven
+frozen catalog input bindings. These tests use mocked credential providers;
+live keyring and installed-desktop acceptance remain separate.
+
+Candidate: `/ai/gchat-worktrees/gchat3-secure-storage-locked-recovery-20261018`,
+branch `fix/gchat3-secure-storage-locked-recovery-20261018`, base `d53b88432`.
+S1 CPU112–119 returned **16:44Z**, booking3414 canceled. Small evidence:
+`out/secure-storage-locked-recovery-20261018/test-result.json` and
+`test-summary.md`. P2 scratch is retired after review; the independent S1 cache
+at `/media/ron/SSD_RAID/ai/tmp-gchat3-secure-storage-install-error-guidance-tests-20261018`
+remains idle for the deferred installer-guidance candidate. That dirty candidate
+is preserved in `/ai/gchat-worktrees/gchat3-secure-storage-install-error-guidance-20261018`;
+its tests have not launched. The retained RC dependency donor is untouched.
+Next: Codex 8 review and merge-ready handoff, then resume installer guidance.
+
 ## Model deletion confirmation — verified, Codex 7, October 18
 
 `GUI-MODEL-DELETE-CONFIRMATION` gives Cancel initial keyboard focus so Enter
@@ -60,8 +93,8 @@ containers were removed after confirming no readers, releasing
 **28,064,308,537 logical bytes**. Their absence was verified; the inactive RC
 dependency donor was untouched. Only reviewed
 `out/secure-storage-passphrase-error-guidance-20261018/test-result.json` and
-`test-summary.md` remain. Next: send this branch for merge and continue the GUI
-queue without repeating accepted verification.
+`test-summary.md` remain. Source `ca17dc7cb` is merged as `d53b88432`; the
+Check-again P2 above is the current follow-up. Accepted verification is not repeated.
 
 ## Passphrase-vault Lock feedback — verified, Gchat 3, October 18
 

@@ -1,5 +1,30 @@
 # Gbot design
 
+## Keep confirmed schedule changes after a failed reload — Gchat 2
+
+`GBOT-SCHEDULE-ACTION-RESULT`, based on main `739d5da2f`, displays the saved
+schedule returned by Create, Enable or Disable before reloading the list.
+Previously, a failed reload left the old enabled state and its opposite action
+on screen, or hid the newly created schedule after clearing its prompt.
+
+The confirmed result now stays visible when list reading fails. Retry loading
+schedules reads the list without repeating the write; a successful read can
+replace the confirmed result with newer service state. Pending controls remain
+guarded through the follow-up read. Older in-flight reads cannot overwrite the
+saved result, and existing drafts survive read failures and retries. This is
+source/rendered UI scope and uses the existing service response contract.
+
+All three new cases failed on unchanged production. The fixed schedule suite
+passed all 20 cases; lint passed with zero errors and five existing warnings.
+ONE `make verify`, 18 October 16:35:38–16:41:33 UTC, passed 3,710 app tests
+(six skipped), 127 extension tests, 1,309 Rust tests (28 ignored, 23 summaries),
+six coverage floors and lint/typecheck/guards. All 3,459 tracked raw source bytes
+and modes matched before and after the gate; tracked timestamps were refreshed
+before checks. This receipt was added afterward with product and test source
+unchanged. CPU120–127 booking3410 returned 16:42Z. Evidence:
+`out/gchat2-schedule-action-result-20261018/result.json` and adjacent raw logs.
+No retry or whole-gate repeat.
+
 ## Brain setup error recovery — Gchat 2
 
 `GBOT-BRAIN-ERROR-GUIDANCE`, based on main `8de8e5f3d`, gives failed
