@@ -10,6 +10,7 @@ import {
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { continuationTask } from '@/lib/agent-continuation'
+import { confirmAction } from '@/lib/confirm'
 import { AgentRunSetup } from '@/containers/AgentRunSetup'
 import { AgentWorkerPools } from '@/containers/AgentWorkerPools'
 import { AgentLiveRuns } from '@/containers/AgentLiveRuns'
@@ -391,12 +392,16 @@ function AgentStudioPage() {
   const [draft, setDraftState] = useState<AgentDefinition | null>(null)
   // The editable identifier does not determine which saved record this draft owns.
   const [draftSavedId, setDraftSavedId] = useState<string | null>(null)
+  const draftBaseline = useRef<string | null>(null)
   const draftRevision = useRef(0)
   const mutatingDraft = useRef(false)
   const setDraft = useCallback(
     (next: AgentDefinition | null, savedId?: string | null) => {
       ++draftRevision.current
       setDraftState(next)
+      if (!next || savedId !== undefined) {
+        draftBaseline.current = next ? JSON.stringify(next) : null
+      }
       if (!next) setDraftSavedId(null)
       else if (savedId !== undefined) setDraftSavedId(savedId)
     },
@@ -495,27 +500,49 @@ function AgentStudioPage() {
     })
   }
 
-  const createAgent = async () => {
-    if (mutatingDraft.current) return
-    mutatingDraft.current = true
-    const revision = draftRevision.current
-    setCreating(true)
-    try {
-      const created = await createDraft()
-      if (revision !== draftRevision.current) return
-      setDraft(created, null)
-      selectView('definitions')
-    } catch (reason) {
-      toast.error(String(reason))
-    } finally {
-      mutatingDraft.current = false
-      setCreating(false)
+  const replaceDraft = (replace: () => void) => {
+    if (!draft || JSON.stringify(draft) === draftBaseline.current) {
+      replace()
+      return
     }
+    const revision = draftRevision.current
+    void confirmAction({
+      title: 'Discard unsaved agent changes?',
+      message: `Your changes to "${draft.name || 'Untitled Agent'}" have not been saved. Discard them to open another agent draft.`,
+      confirmLabel: 'Discard changes',
+      destructive: true,
+    }).then((accepted) => {
+      if (accepted && revision === draftRevision.current) replace()
+    })
+  }
+
+  const createAgent = () => {
+    if (mutatingDraft.current) return
+    replaceDraft(async () => {
+      if (mutatingDraft.current) return
+      mutatingDraft.current = true
+      const revision = draftRevision.current
+      setCreating(true)
+      try {
+        const created = await createDraft()
+        if (revision !== draftRevision.current) return
+        setDraft(created, null)
+        selectView('definitions')
+      } catch (reason) {
+        toast.error(String(reason))
+      } finally {
+        mutatingDraft.current = false
+        setCreating(false)
+      }
+    })
   }
 
   const edit = (definition: AgentDefinition) => {
-    setDraft(cloneDefinition(definition), definition.id)
-    selectView('definitions')
+    if (definition.id === draftSavedId) return
+    replaceDraft(() => {
+      setDraft(cloneDefinition(definition), definition.id)
+      selectView('definitions')
+    })
   }
 
   const startFrom = (definition: AgentDefinition) => {
@@ -523,8 +550,10 @@ function AgentStudioPage() {
     copy.builtIn = false
     copy.id = ''
     copy.name = `${copy.name} Copy`
-    setDraft(copy, null)
-    selectView('definitions')
+    replaceDraft(() => {
+      setDraft(copy, null)
+      selectView('definitions')
+    })
   }
 
   const saveDraft = async (

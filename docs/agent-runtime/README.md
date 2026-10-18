@@ -22,6 +22,37 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Unsaved Agent Studio draft replacement — October 18
+
+An isolated native pass on main `de74862d6` reproduced silent loss of edits
+when selecting another library agent, for both a template copy and a saved
+agent. No run was started; saved definitions and run history stayed
+byte-identical after normal shutdown. Baseline receipts and the viewed
+screenshot are in `/ai/gchat/out/gchat-chat-agents-pass-20261018-1102/`.
+
+Replacing an edited draft from the library, **New agent**, or **Use template**
+now asks **Discard unsaved agent changes?**. Cancel is the keyboard default;
+Cancel and Escape keep the draft. **Discard changes** explicitly opens the
+requested replacement without saving or deleting a definition. Selecting the
+current library row keeps its edits. A successful save resets the comparison
+baseline even before the saved library refreshes. A stale confirmation cannot
+replace newer edits. Switching Studio tabs preserves the draft without a prompt;
+leaving Studio or closing the application is outside this change.
+
+Validation: 99 focused tests and workspace lint PASS; one `make verify`
+PASS (3,551 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux desktop builds PASS on `84a0027b3`.
+Rebuilt private native acceptance PASS for saved, new and template drafts:
+Cancel has initial keyboard focus, Enter and Escape retain edits, and explicit
+discard opens the requested library agent, new draft or template. Selecting
+the current library row and switching Studio tabs retain edits; an untouched
+draft can be replaced without a prompt. The candidate screenshot was viewed.
+Normal shutdown at 11:21Z left saved definitions and history byte-identical;
+CPU booking 3254 was returned. Receipts:
+`/ai/gchat/out/gchat-agent-draft-discard-confirmation-20261018/`.
+This qualifies the Linux draft-replacement scope; no save, delete, run,
+inference or Windows acceptance was performed.
+
 ## Run setup dialog keyboard focus — October 18
 
 A private Linux native pass on `8f21ab584` reproduced focus loss when

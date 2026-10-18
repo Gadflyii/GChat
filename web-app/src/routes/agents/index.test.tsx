@@ -7,6 +7,8 @@ import type { AgentDefinition, AgentRunRecord, AgentTemplate } from '@/types/age
 import type { AgentSkill } from '@/services/agent/skills'
 import { Route } from './index'
 import GbotCompanion from '@/containers/GbotCompanion'
+import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
+import { settleConfirm } from '@/lib/confirm'
 import { useGbotPage } from '@/stores/gbot-page-store'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -198,6 +200,7 @@ describe('AgentStudioPage', () => {
   })
 
   afterEach(() => {
+    act(() => settleConfirm(false))
     vi.mocked(toast.error).mockRestore()
   })
 
@@ -206,6 +209,117 @@ describe('AgentStudioPage', () => {
     render(<AgentStudioPage />)
     await screen.findByDisplayValue(firstAgent.name)
   }
+
+  it.each(['library', 'new', 'template'] as const)(
+    'confirms replacing saved-agent edits from %s and keeps Cancel as the keyboard default', async (destination) => {
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template', name: 'Review template', description: '',
+        definition: firstAgent,
+      }])
+      render(<ConfirmDialogHost />)
+      await renderSavedAgents()
+      const user = userEvent.setup()
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My unsaved agent' } })
+      fireEvent.change(screen.getByLabelText('Agent role and operating instructions'), {
+        target: { value: 'Keep these instructions.' },
+      })
+      if (destination === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      }
+      const trigger = () => destination === 'library'
+        ? screen.getByRole('button', { name: /Research assistant/ })
+        : destination === 'new' ? screen.getByTitle('New agent')
+          : screen.getByRole('button', { name: 'Use template' })
+
+      await user.click(trigger())
+      let dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      expect(dialog).toHaveTextContent('My unsaved agent')
+      await user.keyboard('{Enter}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(definitionState.value.createDraft).not.toHaveBeenCalled()
+
+      await user.click(trigger())
+      dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      await user.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      if (destination === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Agents & flows', exact: true }))
+      }
+      expect(screen.getByLabelText('Name')).toHaveValue('My unsaved agent')
+      expect(screen.getByLabelText('Agent role and operating instructions')).toHaveValue('Keep these instructions.')
+      if (destination === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+      }
+
+      await user.click(trigger())
+      dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+      await screen.findByDisplayValue(destination === 'library' ? secondAgent.name
+        : destination === 'new' ? editableDraft.name : `${firstAgent.name} Copy`)
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['new', 'template'] as const)('preserves edits to an unsaved %s draft until discard is confirmed', async (source) => {
+    listAgentTemplates.mockResolvedValue([{
+      id: 'review-template', name: 'Review template', description: '', definition: firstAgent,
+    }])
+    render(<ConfirmDialogHost />)
+    await renderSavedAgents()
+    const user = userEvent.setup()
+    if (source === 'new') {
+      await user.click(screen.getByTitle('New agent'))
+      await screen.findByDisplayValue(editableDraft.name)
+    } else {
+      await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+      await user.click(await screen.findByRole('button', { name: 'Use template' }))
+      await screen.findByDisplayValue(`${firstAgent.name} Copy`)
+    }
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep my draft' } })
+    const other = screen.getByRole('button', { name: /Research assistant/ })
+    await user.click(other)
+    let dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Keep my draft')
+    await user.click(other)
+    dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    await screen.findByDisplayValue(secondAgent.name)
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+  })
+
+  it('keeps edits when the selected library row is clicked and clears the warning after a successful save', async () => {
+    definitionState.value.save.mockImplementation(async (value: AgentDefinition) => value)
+    render(<ConfirmDialogHost />)
+    await renderSavedAgents()
+    const user = userEvent.setup()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Saved new name' } })
+    await user.click(screen.getByRole('button', { name: /Review assistant/ }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Saved new name')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: /Research assistant/ }))
+    expect(screen.getByLabelText('Name')).toHaveValue(secondAgent.name)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith({ ...firstAgent, name: 'Saved new name' })
+  })
+
+  it('does not apply a stale discard decision to newer draft edits', async () => {
+    render(<ConfirmDialogHost />)
+    await renderSavedAgents()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'First edit' } })
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Newer edit' } })
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Newer edit')
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+  })
 
   async function renderThreeStageWorkflow() {
     const role = {
@@ -1374,7 +1488,7 @@ describe('AgentStudioPage', () => {
 
   it('resets temporary numeric text when selecting another saved agent with the same limit', async () => {
     definitionState.value.definitions = [firstAgent, { ...secondAgent, maxSteps: 12 }]
-    render(<AgentStudioPage />)
+    render(<><AgentStudioPage /><ConfirmDialogHost /></>)
     await screen.findByDisplayValue(firstAgent.name)
     const user = userEvent.setup()
     const steps = screen.getByLabelText('Maximum tool steps')
@@ -1382,8 +1496,9 @@ describe('AgentStudioPage', () => {
     await user.clear(steps)
     fireEvent.change(steps, { target: { value: '012' } })
     expect(steps).toHaveProperty('value', '012')
-    // Selection replaces the draft even if its numeric value has not changed.
+    // Confirm replacement even if the two drafts have the same numeric value.
     fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }))
     expect(screen.getByLabelText('Maximum tool steps')).toHaveProperty('value', '12')
     fireEvent.click(screen.getByRole('button', { name: /Review assistant/ }))
     expect(screen.getByLabelText('Maximum tool steps')).toHaveProperty('value', '25')
@@ -1691,7 +1806,7 @@ describe('AgentStudioPage', () => {
       edges: [{ from: 'research', to: 'deliver' }],
     }
     definitionState.value.definitions = [workflow, otherWorkflow]
-    render(<AgentStudioPage />)
+    render(<><AgentStudioPage /><ConfirmDialogHost /></>)
     await screen.findByDisplayValue(workflow.name)
 
     const dependencies = screen.getAllByLabelText('Depends on stage IDs')[2]
@@ -1709,6 +1824,7 @@ describe('AgentStudioPage', () => {
       .toEqual(['', 'review-stage'])
 
     fireEvent.click(screen.getByRole('button', { name: /Second dependency workflow/ }))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Discard changes' }))
     expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
       .toEqual(['', '', 'research'])
     fireEvent.click(screen.getByRole('button', { name: /First dependency workflow/ }))
