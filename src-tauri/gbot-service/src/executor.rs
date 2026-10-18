@@ -53,7 +53,9 @@ impl std::fmt::Display for ExecutorError {
             Self::State(e) => e.fmt(f),
             Self::Io(e) => e.fmt(f),
             Self::InvalidMessage => f.write_str("invalid Cua task message"),
-            Self::EmptyReply => f.write_str("model returned no answer; resume the task to try again"),
+            Self::EmptyReply => {
+                f.write_str("model returned no answer; resume the task to try again")
+            }
             Self::AwaitingHuman => f.write_str("waiting for your reply"),
             Self::NeedsReview => {
                 f.write_str("task has an unresolved effect; review before resuming")
@@ -1595,13 +1597,15 @@ mod tests {
         ] {
             let dir = tempfile::tempdir().unwrap();
             let (mut task, runtime) = fixture(dir.path()).await;
-            task.record.messages =
-                vec![json!({"role":"user","content":"Report the result"})];
+            task.record.messages = vec![json!({"role":"user","content":"Report the result"})];
             task.record.tools.clear();
             let raw = json!({"choices":[{"message":{"role":"assistant","content":content,
                 "reasoning_content":"Private reasoning alone is not an answer"}}]});
-            let script = format!("read start; printf '%s\\n' '{}'; read reply; printf '%s\\n' '{}'; read reply",
-                json!({"method":"model","payload":raw}), json!({"method":"done","payload":{}}));
+            let script = format!(
+                "read start; printf '%s\\n' '{}'; read reply; printf '%s\\n' '{}'; read reply",
+                json!({"method":"model","payload":raw}),
+                json!({"method":"done","payload":{}})
+            );
             let processes = ExecutorProcesses {
                 python: ProcessSpec {
                     program: "sh".into(),
@@ -1622,10 +1626,8 @@ mod tests {
             let result = task
                 .run(&runtime, &Deny, &assignment, &processes, receiver)
                 .await;
-            let empty = content.is_null()
-                || content
-                    .as_str()
-                    .is_some_and(|text| text.trim().is_empty());
+            let empty =
+                content.is_null() || content.as_str().is_some_and(|text| text.trim().is_empty());
             if empty {
                 assert!(matches!(result, Err(ExecutorError::EmptyReply)));
             } else {
