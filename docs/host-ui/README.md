@@ -1,5 +1,53 @@
 # GInfer host UI
 
+## Host model controls and host-list read feedback — Gchat 3, October 18
+
+`GUI-HOST-MODEL-CONTROL-RESULT-20261018`: the shared action handler discarded
+successful lifecycle snapshots, caught subsequent host-list read failures as
+command failures, and stopped multi-copy launches after an accepted copy when
+only the read failed. Accepted command feedback now stays separate from
+list-read recovery. Start/Stop/Restart/Save-and-restart return snapshots;
+new-copy and saved-profile launches return acceptance receipts and must never
+be published as snapshots. Acceptance means a request was accepted, not Ready.
+
+Acceptance: baseline rendered regression; publish lifecycle snapshots before
+reading; accepted model-control feedback survives failed reads; read-only retry
+never repeats a command; new-copy batches continue after read failure; genuine
+rejection remains actionable and pending actions cannot duplicate. Run focused
+rendered tests, lint and ONE `make verify`. No native, live protocol, GPU,
+Engine, installed GUI or Windows qualification. Native behavior is unchanged.
+
+Owner `/ai/gchat-worktrees/gchat3-host-model-control-result-20261018`, branch
+`fix/gchat3-host-model-control-result-20261018`, base `dc1ba5028`.
+Disposable S1 fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-model-control-tests-20261018`
+used independent copies of the inactive RC caches on verified `AIS-2-8592-L01`.
+All 35 dependency inputs match the retained recipe. CPUs120–127, the shared
+socket1 compile lock, nice10/max8 jobs and no GPU devices were used. Retain only
+`out/host-model-control-result-20261018/test-result.json` and adjacent summary
+after coordinator raw review and cleanup. The six rendered regressions cover Start, Stop, Restart, actual
+Save-and-restart confirmation, two-copy launch receipts and rejected Start with
+explicit retry. All six regressions fail on the exact baseline: four lifecycle
+cases lack snapshot publication, the second copy never launches after the first
+read fails, and the accepted retry lacks feedback. The 42 existing cases were
+skipped in that baseline screen. All 48 fixed focused cases and lint pass
+(zero errors, five existing warnings). The one full gate stopped at coverage:
+3,404 passed, one route test failed, six skipped, with three uncaught errors.
+Existing engines route lifecycle mocks returned incomplete snapshots; immediate
+publication exposed the invalid fixture at HostCard models.find. Native lifecycle
+responses are complete snapshots. Corrected only those route mocks, then ran
+the focused route file/lint, failed coverage stage and remaining Rust stage;
+the full gate was not restarted. All 25 route tests, lint, 3,405 app tests
+(six skipped), 127 extension tests, all six floors and 1,258 Rust tests
+(28 ignored) pass. Earlier gate stages, including typecheck and quality checks,
+passed. Frozen source/test hashes match before and after verification. The
+coordinator reviewed the raw results, including the original failure. S1 CPUs
+returned06:20Z and booking3077 was canceled. The owned 42.33GB S1 fixture,
+three terminal containers and 286MB disposable local archive/raw files were
+removed after review; only the concise result and summary remain. Ready for
+reviewed merge. The inactive RC source/node/cargo/debug donor was separately
+granted to C7 for independent read-copy and is retained unchanged.
+
 ## Gbot task-control failure recovery — October 18
 
 `GBOT-TASK-ACTION-INLINE-ERRORS`: rejected **Stop** and **Resume** requests
@@ -116,7 +164,7 @@ returned 05:54Z. The owned SSD fixture (42.33 GB), two exited containers and
 285 MB local source archive were removed by 05:56Z. The RC donor is untouched;
 only `out/host-scan-refresh-result-20261018/test-result.json` and adjacent
 `test-summary.md` remain. Current main has no intervening changes to either
-owned source/test file. Status: MERGE READY; next unresolved action is Bubbs’s merge.
+owned source/test file. Status: CLOSED scoped source row; source c2bd37df0 merged as dc1ba5028, ancestry verified.
 
 ## Gbot permission decision failure recovery — October 18
 
