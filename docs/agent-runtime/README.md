@@ -22,6 +22,17 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Chat dialog keyboard focus — October 18
+
+The private Linux native chat-history pass reproduced focus loss after Rename
+Cancel/Escape and Delete Cancel/Escape. Focus landed on the document body and
+Tab left the chat controls. A cancelled title draft reopened with the original
+title; Delete initially focused Cancel. No rename or deletion was submitted,
+and all 17 saved data files remained byte-identical after shutdown. The affected
+ThreadList and dialog source is unchanged from native `d7de423c2` through main
+`9ec7cd1e6`. Baseline receipts are in
+`/ai/gchat/out/gchat-thread-dialog-cancel-20261018/`.
+
 ## Project dialog keyboard focus — October 18
 
 A private native Linux pass found that cancelling project Edit or Delete left

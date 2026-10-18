@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, type RefObject } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import {
@@ -25,6 +25,7 @@ interface DeleteThreadDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   withoutTrigger?: boolean
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export function DeleteThreadDialog({
@@ -35,6 +36,7 @@ export function DeleteThreadDialog({
   open,
   onOpenChange,
   withoutTrigger,
+  returnFocusRef,
 }: DeleteThreadDialogProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -106,6 +108,12 @@ export function DeleteThreadDialog({
       <DialogContent
         aria-busy={deleting}
         showCloseButton={!deleting}
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef?.current?.isConnected) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
         onOpenAutoFocus={(e) => {
           e.preventDefault()
           cancelButtonRef.current?.focus()
