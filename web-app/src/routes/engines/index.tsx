@@ -11,6 +11,7 @@ import { route } from '@/constants/routes'
 import { engineCommand } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useEngineDiscovery } from '@/stores/engine-discovery-store'
+import { useBundledResources } from '@/hooks/useBundledResources'
 import { HostCard } from '@/containers/EngineHostModels'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -20,6 +21,8 @@ function EnginesPage() {
   const [credentialReady, setCredentialReady] = useState(false)
   const { hosts, nearby, snapshots, errors, refreshing, discoveryError, refresh } = useEngineHosts()
   const { enabled, ignored, setEnabled, ignore, restore } = useEngineDiscovery()
+  const resources = useBundledResources()
+  const resourcesReady = resources.ready === true && !resources.error
   const local = hosts.find(host => host.local)
   const sharing = local ? snapshots[local.host_id]?.lan_sharing : undefined
   const [sharingBusy, setSharingBusy] = useState(false)
@@ -50,9 +53,12 @@ function EnginesPage() {
     catch (e) { toast.error(String(e)) } finally { setBusy(null) }
   }
   return <div className="flex h-svh min-h-0 flex-col overflow-hidden">
-    <HeaderPage><div className="flex w-full items-center justify-between pr-4"><h1>GInfer Hosts</h1><Button size="sm" variant="outline" disabled={refreshing} onClick={() => void refresh().catch((e) => toast.error(String(e)))}><IconRefresh size={16} className={refreshing ? 'animate-spin' : undefined} />Refresh</Button></div></HeaderPage>
+    <HeaderPage><div className="flex w-full items-center justify-between pr-4"><h1>GInfer Hosts</h1><Button size="sm" variant="outline" disabled={refreshing || !resourcesReady} aria-describedby={!resourcesReady ? 'host-runtime-preparation' : undefined} onClick={() => void refresh().catch((e) => toast.error(String(e)))}><IconRefresh size={16} className={refreshing ? 'animate-spin' : undefined} />Refresh</Button></div></HeaderPage>
     <main className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
       <p className="text-muted-foreground">Manage local serving and GInfer hosts on your network. Your computer does not need a local GPU to use remote hosts.</p>
+      {!resourcesReady && (resources.error
+        ? <div id="host-runtime-preparation" role="alert" className="space-y-2 text-sm text-destructive"><p>Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat.</p><details><summary className="cursor-pointer">GInfer preparation error details</summary><p className="whitespace-pre-wrap break-all">{resources.error}</p></details></div>
+        : <p id="host-runtime-preparation" role="status" className="text-sm">Preparing GInfer to run models on this computer… GChat is installing and checking its bundled files. This may take a few minutes. The local Host will appear when it is ready; Refresh is waiting for preparation to finish.</p>)}
       <div className="flex flex-wrap items-center gap-6">
       <div className="flex items-center gap-2"><Switch id="discover-hosts" checked={enabled} onCheckedChange={setEnabled} /><label htmlFor="discover-hosts">Discover nearby GInfer hosts</label></div>
         <div className="flex items-center gap-2"><Switch id="share-host" checked={sharing?.enabled ?? false} disabled={!sharing?.managed || sharingBusy || !!(local && errors[local.host_id])} onCheckedChange={(checked) => void share(checked)} /><label htmlFor="share-host">Share this host</label></div>

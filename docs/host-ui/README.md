@@ -34,7 +34,12 @@ Hardware1500×1000 and Monitor1000×1000/800×650. No horizontal overflow.
 Live GPU statistics remain unavailable in this fixture; no GPU work was run.
 Windows, installers and release builds remain unqualified. Result and summary:
 `out/c3-hardware-card-identity-20261018/{result.json,summary.md}`.
-Next action: commit and send this tested candidate for merge.
+The requested merge of main `394ba2f1f` preserves all first-run cases, including
+action-error persistence, preparation readiness and expandable error details.
+The focused `EngineFirstRun.test.tsx` passes all31 cases after resolution;
+the file matches main. No full verify was repeated for this merge. Receipt:
+`out/c3-hardware-card-identity-20261018/merge-focused-result.json`.
+Next action: push the resolved merge and return it for integration.
 
 Owner/source `/ai/gchat-worktrees/c3-hardware-card-identity-20261018`, branch
 `fix/c3-hardware-card-identity-20261018`, base `832fddb85`. Reuse the owned
@@ -43,6 +48,137 @@ and private dependency cache; preserve baseline and preparation binaries.
 The tested binary is retained at `hardware-candidate/bin/gchat`. No new GPU
 booking or model process is needed. Build copies retire when this walk and its
 native candidates finish; result JSON and short summary remain.
+## Secure-storage Check feedback — Gchat 3 native acceptance, October 18
+
+`GCHAT-SECURE-STORAGE-SETUP-FEEDBACK-20261017` passes its remaining Linux
+native visible-feedback leaf. Ordinary **Check secure storage** on Welcome and
+Hosts showed **Secure storage is ready.** as a status with the explanatory
+success panel. Welcome stayed ready through native scrolling and settling;
+Hosts remained ready for 86 seconds. Three accepted screenshots were visually
+inspected. Native pointer/wheel input drove the app; WebKit only observed state.
+
+Retained packaged release `ed68c7443` is bound to allocated main `4b3a70853`:
+the explicit check handler, ready panel, Hosts route and native credential paths
+are unchanged. Current main changes the unchecked hint wording and Welcome card
+order; those changes are outside this retained visual evidence. Persistence
+means while the component is mounted: navigating to Hosts creates an unchecked
+card until another explicit Check. No readiness-across-restart claim is made.
+
+C3's native Check success at 02:33:48Z on `201f46712` is reused; his 03:04:19Z
+handoff lacked a success screenshot and left this visual leaf to Gchat 3. His
+fixture was untouched. Passive launch/status does not probe or unlock storage;
+that claim reuses the accepted installed locked-keyring evidence in
+[agent-runtime acceptance](../agent-runtime/remaining-acceptance.md#installed-linux-locked-keyring-launch-and-explicit-connect--october-17)
+and the [explicit-storage decision](../decisions/2026-10-16-open-secure-storage-only-for-explicit-connections.md),
+without repeating that campaign. This leaf covers English, Dark-theme packaged
+Linux with a private unlocked keyring. Windows and passphrase-vault feedback
+remain unqualified. No account/host connection was attempted; nearby C7
+Pair/Ignore controls were untouched. Startup's existing updater returned 404;
+no whole-app offline claim is made.
+
+Worktree `/ai/gchat-worktrees/gchat3-secure-storage-feedback-native-20261018`,
+branch `test/gchat3-secure-storage-feedback-native-20261018`, retains documentation
+only. Result, summary and three screenshots are retained in canonical GChat
+`out/secure-storage-feedback-native-20261018` and the ignored worktree `out/`.
+The private S1 container, HOME/cache/keyring, D-Bus/display and relay are removed;
+no owned processes remain and 3,451,232,455 bytes were reclaimed. CPUs 80–87
+booking line2901 was canceled at 03:07:29Z; no GPU/model/build was used. The
+read-only donor under
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+remains untouched. The documentation-only gate is `git diff --check`.
+
+## Google setup credential save/import — Gchat 3 native acceptance, October 18
+
+`GCHAT-GOOGLE-WORKSPACE-SETUP-WIZARD-20261017` passes its remaining Linux
+native registration-save/import leaf. In the retained packaged app, native JSON
+file selection and manual client ID/secret **Save** each reached **Step 6 of 6 —
+Google setup is saved**, explicitly stating that the account was not connected.
+**Choose services** returned to Workspace connections; selecting Gmail enabled
+**Connect Google Workspace** with Read only selected and no connected accounts.
+Connect was untouched. Returning to the manual form showed an empty secret field.
+
+After stopping and relaunching the private app/container with the same profile
+and keyring, explicitly reconnecting the local account service restored the saved
+card and **Review Google setup** opened the guide. Public registration metadata
+was mode 0600, recorded a saved secret and zero accounts, and contained no secret
+material. Successful native configuration acknowledges the vault write; this
+check does not independently read back the secret or establish credential validity.
+
+Retained release `ed68c7443` is bound to allocated main `832fddb85`: the wizard,
+import/Save service and native account/vault persistence paths are unchanged.
+The route difference formats outer startup errors and does not affect this leaf.
+C3's `201f46712` guide steps 1–5/manual-disabled-Save walkthrough is reused
+(`out/c3-first-user-setup-20261018/google-manual-narrow.png`); his fixture was
+untouched. Pointer/keyboard and GTK file selection were native; WebKit only
+observed state. Four accepted screenshots were visually inspected. Results and
+short summary: `out/google-setup-native-20261018/{result.json,SUMMARY.md}`.
+
+This covers English, Dark-theme packaged Linux. Real Google consent, OAuth
+callback, connected-account/token persistence, service access and Windows remain
+unqualified. The first-run **Check secure storage** action belongs to its separate
+row. Startup's existing updater request returned 404; no whole-app offline claim
+is made. An initial file-picker driver command/path mistake was corrected using
+separate native type/key calls and the actual private HOME path; no source changed.
+
+Worktree `/ai/gchat-worktrees/gchat3-google-setup-native-20261018`, branch
+`test/gchat3-google-setup-native-20261018`, retains documentation only. The S1
+private container, HOME/cache/keyring, DBus/display and relay are removed; no
+private processes remain and 3,425,223,923 bytes were reclaimed. CPUs 80–87 booking
+was canceled at 03:00Z; no GPU/model was used. The read-only release donor under
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+remains untouched. Only concise result/summary and four screenshots are retained
+in the canonical GChat `out/` receipt folder and ignored worktree `out/`. The
+documentation-only gate is `git diff --check`; no source test gate was repeated.
+## Runtime preparation on first launch — C3, October 18
+
+`GUI-SETUP-RUNTIME-INSTALL-PROGRESS`: during the fresh native `201f46712` walk,
+Welcome reported that GInfer could not connect after 30 s while bundled runtime
+verification was still running. Models correctly showed preparation. Hosts
+had an empty list and disabled Refresh without an explanation. The private Host
+connected after resource preparation completed. Debug hashing duration is not
+release performance evidence.
+
+The fix uses the existing retained `useBundledResources` state on Welcome and
+Hosts. Preparation stays visible until completion; only then does the local
+Host connection grace begin. An installation failure explains restart/reinstall
+and keeps technical details closed. Existing setup action errors remain intact.
+Hosts explains why Refresh is waiting.
+
+Acceptance: regressions cover preparation beyond 30 s, transition to ready and
+its connection grace, installation failure and Host Refresh explanation; focused
+checks plus one `make verify`, then an actual changed-source private native
+pending-to-ready check. No GPU/model workload, Engine numerical change or release
+speed claim. Focused suites and lint pass: 48 affected cases plus three retained resource-state
+cases. The ONE `make verify` passed 3,276 frontend and 121 extension cases and six
+critical coverage groups, then failed an existing Fleet lib test with
+`NetworkUnreachable`: the offline container had `--network=none`. Its failure is
+retained. All seven original native commands then passed with container routing
+and dependency access still offline (1,216 passed, 28 ignored); the full verify
+was not repeated. The changed debug custom-protocol candidate built successfully.
+A fresh private native launch at 02:55:02Z retained preparation past 30 s on
+Welcome and Hosts; Refresh is disabled with its explanation associated by
+`aria-describedby`. At 02:58:35Z preparation cleared and its private Host connected; Welcome
+then showed graphics-card setup with no false error. This passes the changed-source
+Linux native check (English/Dark); installation-error rendering is covered by tests. The
+independent fresh walk continues in `c3-first-user-setup-20261018`.
+
+Merged `origin/main` at `b56d94faa` without rebasing after the conflict with
+Gchat 2’s setup-error persistence test (`ae9c3bed2`). The resolution keeps the
+runtime-preparation cases and the actionable alert plus expanded diagnostics
+through status polls. All31 focused first-run cases pass; neither affected
+product source file changed during this merge, so native acceptance is retained.
+
+Owner/source `/ai/gchat-worktrees/c3-setup-runtime-progress-20261018`, branch
+`fix/c3-setup-runtime-progress-20261018`, base `4ce2a2615`. S1 private root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains baseline native201
+at `runnable/bin/gchat`; the changed candidate is at `candidate/bin/gchat`.
+The fresh candidate profile is `runtime-progress-home`, with private display80
+and its own loopback Host7443 (baseline display79/Host17733). The desktop rewrote the seeded17734 locator and launched PID1945362 with all
+paths under the private profile. Existing private offline
+dependencies and pinned image are reused. CPU64–71,
+shared socket1 compile lock and nice10; no GPU held. Retain this root until the
+fresh walk, hardware candidate and merge review finish, then remove owned private copies and
+retain only result JSON and short summary. Read-only donor remains Claude's.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
@@ -1806,3 +1942,42 @@ checking, quality checks, 3,221 app tests, 121 extension tests, 1,212 Rust tests
 floors (six app tests skipped, 28 Rust tests ignored). Changed source/test hashes matched locally and on S1
 before and after the gate. These are rendered React tests with mocked service responses; there is no new
 native VM or Windows acceptance claim.
+
+## Removing the last disconnected bot account, October 18 (Gchat 2)
+
+`GBOT-LINKED-ACCOUNTS-UNLINK-LAST-DISCONNECTED`: clearing the last disconnected account checkbox disabled
+Save linked accounts before the change could be saved. The bot kept its old saved account reference. Save now
+remains available while saved references need removal, including an empty selection. After a successful save,
+the existing empty-account explanation and disabled Save state return.
+
+The rendered regression follows the checkbox through saving an empty account list and receiving the saved
+response. On baseline `08e49496d`, removal failed at the disabled Save button while the empty-account control
+passed. The fix passes all 12 account tests.
+
+One `make verify` passed lint, type checking and quality checks, then stopped on a stale setup regression
+after an independent wording change. That existing test now uses Stop setup and checks the plain error plus
+expandable details through polling and retry; all 28 setup tests pass. Only the failed coverage and remaining
+Rust stages were continued: 3,272 app tests, 121 extension tests, 1,216 Rust tests and all six coverage floors
+pass (six app skips, 28 Rust ignores). The first failure remains recorded; no second full gate was run.
+Changed source/test hashes matched locally and on S1 before and after the continuation. Private build data
+was removed and CPUs returned at 02:54 UTC. These are mocked-service React checks, with no new native VM,
+Windows or live sign-in acceptance claim.
+
+## Stopping unfinished bot tasks, October 18 (Gchat 2)
+
+`GBOT-TASK-HISTORY-STOP-PAUSED-INTERRUPTED`: ready, paused and interrupted tasks offered only Resume. If
+the model was unavailable or a person held control, that button was disabled and the user could not stop the
+task. The shared history control now offers Stop alongside Resume for those states. Stop uses the existing
+service cancellation operation; Resume retains its readiness checks. Both buttons lock during either request,
+including same-tick clicks, and a failed action remains available for an explicit retry.
+
+On main baseline `b56d94faa`, five rendered cases failed because Stop was absent; ten controls passed.
+All 15 focused cases pass with the fix, covering cancellation without model/control readiness, pending feedback
+through a task-state change, duplicate requests, retries and terminal states. Settings' surrounding setup
+restriction is unchanged. Backend cancellation still retains task history and marks unresolved effects for
+review. These are rendered React tests with inert task callbacks; there is no new native VM or Windows claim.
+
+One `make verify` passed: lint, type checking, quality checks, 3,281 app tests, 121 extension tests, 1,216 Rust
+tests and all six coverage floors (six app skips, 28 Rust ignores). Changed source/test hashes matched locally
+and on S1 before and after verification. Private build data was removed and CPUs returned at 03:07 UTC.
+Commands and results: `/ai/gchat/out/gchat2-stop-paused-tasks-20261018/result.json`.

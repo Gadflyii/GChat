@@ -4,11 +4,12 @@ import { EngineFirstRun } from '../EngineFirstRun'
 import { EngineHardwareProfile } from '../EngineHardwareProfile'
 import type { EngineHardwareProfile as HardwareProfileStatus } from '@/services/engines'
 
-const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), state: {} as Record<string, unknown> }))
+const mocks = vi.hoisted(() => ({ command: vi.fn(), refresh: vi.fn(), state: {} as Record<string, unknown>, resources: { ready: true as boolean | null, error: '' } }))
 vi.mock('@/services/engines', async importOriginal => ({
   ...await importOriginal<typeof import('@/services/engines')>(), engineCommand: mocks.command,
 }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (state: unknown) => unknown) => selector(mocks.state) }))
+vi.mock('@/hooks/useBundledResources', () => ({ useBundledResources: () => mocks.resources }))
 const release = { name: 'Muse', identity: { model_id: 'muse', weights_id: 'q4' }, url: `https://huggingface.co/test/muse/resolve/${'c'.repeat(40)}/muse.ginfer`,
   sha256: 'a'.repeat(64), bytes: 1024 ** 3, tp: 1, qualified_sm: ['8.6'], min_vram_mib_per_gpu: 16384, capabilities: [], launch_profiles: [{ id: 'c1' }] }
 const profile = { download_id: 'download', model_id: 'muse', gpu_uuids: ['GPU-one'], concurrency: 4, max_context: 32768, kv_arena_bytes: null, instance_count: 1, quote: null, error: null }
@@ -23,6 +24,7 @@ const manualControls = (status: HardwareProfileStatus['status'], action = vi.fn(
 beforeEach(() => {
   mocks.command.mockReset()
   mocks.refresh.mockReset().mockResolvedValue(undefined)
+  mocks.resources = { ready: true, error: '' }
   mocks.state = { hosts: [{ host_id: 'local', local: true }], snapshots: { local: { gpus: [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768, compute_capability: '12.0' }] } }, errors: {}, refresh: mocks.refresh }
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
@@ -316,6 +318,40 @@ it('surfaces unsupported and unavailable hosts with an actionable state', async 
   } finally { vi.useRealTimers() }
 })
 
+it.each([null, false])('keeps preparing beyond the connection grace while installation readiness is %s', async ready => {
+  mocks.state = { ...mocks.state, hosts: [] }
+  mocks.resources = { ready, error: '' }
+  vi.useFakeTimers()
+  try {
+    const view = render(<EngineFirstRun />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(180_000) })
+    expect(screen.getByRole('status')).toHaveTextContent('GChat is installing and checking its bundled files.')
+    expect(screen.queryByText(/could not connect on this computer/)).not.toBeInTheDocument()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+
+    mocks.resources = { ready: true, error: '' }
+    view.rerender(<EngineFirstRun />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
+    expect(screen.getByRole('status')).toHaveTextContent('Starting GInfer on this computer…')
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000) })
+    expect(screen.getByRole('status')).toHaveTextContent('GInfer could not connect on this computer.')
+  } finally { vi.useRealTimers() }
+})
+
+it('explains a retained installation failure without reporting a failed Host connection', () => {
+  mocks.state = { ...mocks.state, hosts: [] }
+  mocks.resources = { ready: null, error: 'runtime file hash mismatch: bin/ginfer' }
+  render(<EngineFirstRun />)
+  expect(screen.getByRole('alert')).toHaveTextContent('Restart GChat to try again. If this keeps happening, reinstall GChat.')
+  expect(screen.queryByText(/could not connect on this computer/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Starting GInfer on this computer/)).not.toBeInTheDocument()
+  expect(screen.getByText('runtime file hash mismatch: bin/ginfer')).not.toBeVisible()
+  fireEvent.click(screen.getByText('GInfer preparation error details'))
+  expect(screen.getByText('runtime file hash mismatch: bin/ginfer')).toBeVisible()
+  expect(mocks.refresh).not.toHaveBeenCalled()
+})
+
 it('honors setup already completed in Manager without starting new work', async () => {
   const onComplete = vi.fn()
   mocks.command.mockResolvedValue(flow('complete'))
@@ -448,7 +484,7 @@ it('shows a failed Cancel and keeps its retry available while disabling offline 
   expect(screen.getByRole('button', { name: 'Stop setup' })).toBeDisabled()
 })
 
-it('keeps a rejected Cancel visible through status polls until the user retries', async () => {
+it('keeps a rejected stop request visible through status polls until the user retries', async () => {
   vi.useFakeTimers()
   try {
     const saved = flow('profiling', { hardware_profile: hardwareStatus('running') })
@@ -460,17 +496,22 @@ it('keeps a rejected Cancel visible through status polls until the user retries'
     })
     await act(async () => { render(<EngineFirstRun />) })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop setup' })) })
-    expect(screen.getByRole('alert')).toHaveTextContent('Host could not stop profiling')
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    expect(screen.getByText('Error: Host could not stop profiling')).not.toBeVisible()
+    fireEvent.click(screen.getByText('Connection error details'))
+    expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
 
     await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
     expect(mocks.command.mock.calls.filter(([operation]) => operation === 'first_run')).toHaveLength(3)
-    expect(screen.getByRole('alert')).toHaveTextContent('Host could not stop profiling')
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Stop setup' })).toBeEnabled()
     expect(attempts).toBe(1)
 
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop setup' })) })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByText('Stopping graphics-card setup…')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Stopping setup…' })).toBeDisabled()
     expect(attempts).toBe(2)
   } finally { vi.useRealTimers() }
 })

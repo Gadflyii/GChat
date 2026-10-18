@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   error: '',
   local: false,
+  hasHost: true,
+  refreshing: false,
+  resources: { ready: true as boolean | null, error: '' },
   nearby: [] as NearbyHost[],
   instances: [] as EngineInstance[],
 }))
@@ -42,23 +45,26 @@ vi.mock('@/stores/engine-discovery-store', () => ({
     restore: vi.fn(),
   }),
 }))
+vi.mock('@/hooks/useBundledResources', () => ({
+  useBundledResources: () => mocks.resources,
+}))
 vi.mock('@/stores/engine-hosts-store', () => ({
   useEngineHosts: (
     selector?: (state: { refresh: typeof mocks.refresh }) => unknown
   ) => {
     const state = {
-      hosts: [
+      hosts: mocks.hasHost ? [
         {
           host_id: 'host',
           name: 'Lab host',
           base_url: 'https://host:7443',
           local: mocks.local,
         },
-      ],
+      ] : [],
       nearby: mocks.nearby,
       errors: mocks.error ? { host: mocks.error } : {},
       refresh: mocks.refresh,
-      refreshing: false,
+      refreshing: mocks.refreshing,
       discoveryError: null,
       snapshots: {
         host: {
@@ -107,6 +113,9 @@ function renderExpandedPage() {
 beforeEach(() => {
   mocks.error = ''
   mocks.local = false
+  mocks.hasHost = true
+  mocks.refreshing = false
+  mocks.resources = { ready: true, error: '' }
   mocks.nearby = []
   mocks.instances = []
   mocks.command
@@ -131,6 +140,39 @@ afterEach(() => {
 })
 
 describe('Engines host intake and launch controls', () => {
+  it('explains the empty Host list and disabled Refresh while bundled files are being prepared', async () => {
+    mocks.hasHost = false
+    mocks.refreshing = true
+    mocks.resources = { ready: false, error: '' }
+    const view = render(<Page />)
+    const refresh = screen.getByRole('button', { name: 'Refresh' })
+    expect(refresh).toBeDisabled()
+    expect(refresh).toHaveAccessibleDescription(/Refresh is waiting for preparation to finish/)
+    const preparation = screen.getByText(/GChat is installing and checking its bundled files\./)
+    expect(preparation).toHaveAttribute('role', 'status')
+    expect(preparation).toHaveTextContent('The local Host will appear when it is ready')
+    await screen.findByText('Secure storage is ready.')
+
+    mocks.resources = { ready: true, error: '' }
+    mocks.refreshing = false
+    view.rerender(<Page />)
+    expect(screen.queryByText(/GChat is installing and checking/)).not.toBeInTheDocument()
+    expect(refresh).toBeEnabled()
+    expect(refresh).not.toHaveAttribute('aria-describedby')
+  })
+
+  it('shows an actionable preparation failure with closed diagnostics', async () => {
+    mocks.hasHost = false
+    mocks.resources = { ready: null, error: 'runtime file hash mismatch: bin/ginfer' }
+    render(<Page />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Restart GChat to try again. If this keeps happening, reinstall GChat.')
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeDisabled()
+    expect(screen.getByText('runtime file hash mismatch: bin/ginfer')).not.toBeVisible()
+    fireEvent.click(screen.getByText('GInfer preparation error details'))
+    expect(screen.getByText('runtime file hash mismatch: bin/ginfer')).toBeVisible()
+    await screen.findByText('Secure storage is ready.')
+  })
+
   it('keeps launch and details independently collapsed without hiding host controls', async () => {
     render(<Page />)
     const launch = screen.getByText('Start a model with saved settings', {
