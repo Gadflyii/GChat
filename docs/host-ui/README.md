@@ -3865,6 +3865,19 @@ or **Saving skill…** until the request finishes. Wait for the dialog to close
 before using the saved skill. If saving fails, your entries stay in the dialog
 and the button becomes available so you can try again.
 
+Linux acceptance (`GUI-AGENT-SKILL-EDIT-TARGET-NATIVE-20261018`): with
+`lifecycle-probe` selected, opening a disposable skill’s **Skill actions → Edit
+skill** showed the disposable skill’s name, description and instructions. Save
+persisted its changed description and preserved its instructions. Reselecting
+`lifecycle-probe` showed its original instructions. The disposable skill was
+then uninstalled; all 17 saved records, 45 original `SKILL.md` files and two
+workspace inputs stayed byte unchanged, with the original skill inventory
+restored. Retained build `8f7d18f6f` matches the relevant source at `42d039f6e`;
+resources returned at 09:05Z. Evidence:
+[`out/gchat-agent-skill-edit-target-native-20261018/`](../../out/gchat-agent-skill-edit-target-native-20261018/).
+The source fix retains its 25 focused cases and ONE `make verify` PASS. Pending
+races retain source qualification; Windows was not exercised.
+
 ## Removing a custom skill
 
 In **Agent Studio → Skills**, open **Skill actions → Uninstall**. The
