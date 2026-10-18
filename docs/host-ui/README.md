@@ -3806,6 +3806,27 @@ or **Saving skill…** until the request finishes. Wait for the dialog to close
 before using the saved skill. If saving fails, your entries stay in the dialog
 and the button becomes available so you can try again.
 
+## Removing a custom skill
+
+In **Agent Studio → Skills**, open **Skill actions → Uninstall**. The
+confirmation names the skill and initially focuses Cancel. Choose **Delete**
+to remove it. If deletion fails, the dialog keeps the error and allows a retry.
+
+Linux acceptance (`GUI-AGENT-SKILL-DELETE-NATIVE-20261018`): deleting a newly
+created disposable skill from its owned read-only directory returned a real
+permission error inside **Delete skill**. The skill and its instructions stayed
+present; Cancel and Delete recovered with `aria-busy=false`. Restoring the
+original directory permission and pressing Space on Delete in that same dialog
+removed the disposable skill and closed the dialog. Its old detail was replaced
+by the ordinary first-skill fallback. All 17 saved records, 45 original
+`SKILL.md` files and two workspace inputs stayed unchanged; the disposable
+directory was absent. Retained build `8f7d18f6f` matches the relevant source at
+`7070d5856`; resources returned at 08:47Z. Evidence:
+[`out/gchat-agent-skill-delete-native-20261018/`](../../out/gchat-agent-skill-delete-native-20261018/).
+The source fix retains its 19 focused tests and ONE `make verify` PASS. Pending
+races and dismissal guards retain source-only qualification; Windows was not
+exercised.
+
 ## Importing a skill
 
 In **Agent Studio → Skills**, choose **Create new → Upload a skill**, then
