@@ -64,7 +64,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     }
   }, [editing, settingsOpen])
   const [editingSession, setEditingSession] = useState<string | null>(null)
-  const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false })
+  const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false, flash_host_ram_headroom_gib: null, expert_lfu: true })
   const selected = snapshot?.models.find((m) => m.id === modelId)
   const configuration = { ...options, model_id: modelId, gpu_uuids: gpus, max_context: context, concurrency }
   const profile = snapshot?.hardware_profile
@@ -82,6 +82,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     setStartupQuote(null)
   }, [quoteKey])
   const currentQuote = startupQuote?.key === quoteKey ? startupQuote : null
+  const flashHeadroom = options.flash_host_ram_headroom_gib ?? null
+  const invalidFlashHeadroom = flashHeadroom !== null && (!Number.isSafeInteger(flashHeadroom) || flashHeadroom < 0)
   const invalidNumbers = !Number.isSafeInteger(context) || context < 1 ||
     !Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 8 ||
     (!editing && (!Number.isInteger(instanceCount) || instanceCount < 1 || instanceCount > 4294967295)) ||
@@ -89,7 +91,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       .some((value) => !Number.isSafeInteger(value) || value < 0) ||
     (options.host_kv_cache_bytes !== null && (!Number.isSafeInteger(options.host_kv_cache_bytes) || options.host_kv_cache_bytes < 0)) ||
     (options.kv_arena_bytes !== null && (!Number.isSafeInteger(options.kv_arena_bytes) || options.kv_arena_bytes < 1))
-  const launchError = invalidNumbers ? 'Use whole numbers. Conversation length and model copies must be at least 1. Requests at once must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
+  const launchError = invalidFlashHeadroom ? 'Flash computer-memory headroom must be a whole number of GiB, at least 0, or left blank to use GInfer’s default.'
+    : invalidNumbers ? 'Use whole numbers. Conversation length and model copies must be at least 1. Requests at once must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
     : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
       ? 'This model cannot use NVFP4 conversation memory. Choose INT8 or BF16, or add a model prepared for NVFP4 memory.' : null
   const act = async (action: keyof typeof modelActionMessages | 'hardware_profile' | 'gbot_grant', args: Record<string, unknown> = {}) => {
@@ -263,6 +266,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             setOptions({ vision: profile.vision, structured_outputs: profile.structured_outputs ?? true, spec: profile.spec, draft_tokens: profile.draft_tokens, draft_tp: profile.draft_tp,
               kv_dtype: profile.kv_dtype, kv_arena_bytes: profile.kv_arena_bytes, host_kv_cache_bytes: profile.host_kv_cache_bytes ?? null,
               kv_arena_headroom_bytes: profile.kv_arena_headroom_bytes,
+              flash_host_ram_headroom_gib: profile.flash_host_ram_headroom_gib ?? null, expert_lfu: profile.expert_lfu ?? true,
               prefill_chunk: profile.prefill_chunk, no_cuda_graph: profile.no_cuda_graph })
           }}>Edit settings</Button>}
           <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={async () => {
@@ -311,6 +315,11 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           <label className="text-sm">Graphics-card conversation memory (bytes)<Input type="number" min={1} max={Number.MAX_SAFE_INTEGER} value={options.kv_arena_bytes ?? ''} onChange={(e) => setOptions({ ...options, kv_arena_bytes: e.target.value ? Number(e.target.value) : null })} /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Turn off CUDA Graphs</label>
         </div>
+        <label className="block text-sm">Computer memory headroom for Flash (GiB)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} step={1} value={flashHeadroom ?? ''} onChange={(e) => setOptions({ ...options, flash_host_ram_headroom_gib: e.target.value === '' ? null : Number(e.target.value) })} /></label>
+        <p className="text-sm text-muted-foreground">For Flash models, choose how much computer memory to leave free, measured in GiB. Leave blank to use GInfer’s default (4 GiB). This is separate from conversation memory.</p>
+        {flashHeadroom === 0 && <p className="text-sm text-amber-700 dark:text-amber-400">0 removes the extra computer-memory reserve for Flash. Other apps may have less memory available.</p>}
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.expert_lfu ?? true} onChange={(e) => setOptions({ ...options, expert_lfu: e.target.checked })} />Update the Flash expert cache</label>
+        <p className="text-sm text-muted-foreground">Experts are parts of a Flash model. This periodically updates which experts are kept in graphics-card memory based on how often they are used (LFU). Turning this off stops those updates; it does not clear the cache or change where uncached experts are loaded from.</p>
       </details>
       {!editing && <>
         <p className="text-sm text-muted-foreground">Checking settings does not start a model or set aside memory. When starting several copies, automatic sizing divides the available graphics-card conversation memory equally. Available memory is checked again when each model starts.</p>

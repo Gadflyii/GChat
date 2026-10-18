@@ -1,5 +1,43 @@
 # GInfer host UI
 
+## Host residency controls — C3, October 18
+
+`GCHAT-HOST-RESIDENCY-CONTROLS`: the shared Host launch contract does not expose
+Engine RAM-headroom and expert-LFU flags. Owner C3, branch
+`fix/c3-host-residency-controls-20261018`, base `58d6c958e`, worktree
+`/ai/gchat-worktrees/c3-host-residency-controls-20261018`.
+
+Deliver typed settings through the normal Linux/Windows Host API and custom
+model launch/editor: optional whole-GiB `flash_host_ram_headroom_gib` (blank/null
+inherits Engine; zero explicitly reserves no floor) and boolean `expert_lfu`
+(default true, Engine on/off argument). Reject non-integer/negative API values;
+forward represented GiB unchanged so the Engine owns limits and admission.
+Persist settings, preserve them on edit/restart, and forward them during normal
+Host launch. Acceptance: rendered launch/editor/validation regression, native
+API validation and saved-profile normal-launch argument regression; focused
+checks and ONE `make verify`. No Engine code, GPU inference/performance claim,
+new profiling or release packaging. Arch signed the shared contract October 18
+at 07:16Z: these controls belong only to custom GInfer Hosts settings, tested
+profiles retain their own values, and zero headroom needs a plain warning.
+
+Current Engine authority `origin/dev/next@8c3911145`, `include/ginfer/types.h`
+and `src/product/flash_next_residency_options.h`, confirms a flat 4GiB default,
+explicit zero for no floor, and LFU on. An initial recovery note mistook an older
+AUTO design for current behavior; this is corrected before implementation.
+Do not change the Engine defaults or enforce a different admission policy here.
+Independent read-only dependency copies completed on S1
+`AIS-2-8592-L01`, under
+`/media/ron/SSD_RAID/ai/tmp-c3-host-residency-controls-20261018`, from Gchat 3's
+inactive RC donor `tmp-gchat3-linux-rc-refresh-20261017/app`. Preparation booking
+3122 returned 07:19Z after copying dependencies; no GPU or app session.
+Native forwarding, desktop/Fleet custom controls and saved-launch regressions are
+source-complete. The next gate uses CPUs80–87, nice10 and the socket1 shared
+compile lock: desktop and Fleet rendered tests, typed-options and authenticated
+API/child-launch regressions, cargo check/clippy and ONE `make verify`. Keep only
+small results under `out/c3-host-residency-controls-20261018`; retire the private
+SSD build/cache after gate completion. Next: freeze source and run that gate
+in the private offline S1 root.
+
 ## Recovered W8 chat-send closures — C3, October 18
 
 `GUI-CHAT-STALE-LOAD-ERROR-SEND-20261017` and

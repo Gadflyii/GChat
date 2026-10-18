@@ -123,6 +123,65 @@ it('checks imported artifact settings without a catalog or download and uses the
   }))
 })
 
+it.each([
+  { name: 'Engine default with LFU on', input: '', headroom: null, lfu: true },
+  { name: 'explicit zero with LFU off', input: '0', headroom: 0, lfu: false },
+  { name: 'chosen headroom with LFU on', input: '8', headroom: 8, lfu: true },
+])('uses $name for both the custom startup check and launch', async ({ input, headroom, lfu }) => {
+  vi.mocked(engineCommand).mockResolvedValue(importedQuote)
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  await selectImportedModel()
+  fireEvent.click(screen.getByText('Advanced model settings'))
+  const memory = screen.getByLabelText('Computer memory headroom for Flash (GiB)')
+  const cache = screen.getByRole('checkbox', { name: 'Update the Flash expert cache' })
+  expect(memory).toHaveDisplayValue('')
+  expect(cache).toBeChecked()
+  expect(screen.getByText(/Leave blank to use GInfer’s default \(4 GiB\)/)).toBeVisible()
+  expect(screen.getByText(/Turning this off stops those updates; it does not clear the cache/)).toBeVisible()
+  // Clearing an entered value restores inheritance rather than sending zero.
+  fireEvent.change(memory, { target: { value: '12' } })
+  fireEvent.change(memory, { target: { value: input } })
+  if (!lfu) fireEvent.click(cache)
+  const warning = screen.queryByText(/0 removes the extra computer-memory reserve for Flash/)
+  if (headroom === 0) expect(warning).toBeVisible()
+  else expect(warning).not.toBeInTheDocument()
+  const body = expect.objectContaining({
+    model_id: 'imported-model', gpu_uuids: ['GPU-one'],
+    flash_host_ram_headroom_gib: headroom, expert_lfu: lfu,
+  })
+  const check = screen.getByRole('button', { name: 'Check model settings' })
+  fireEvent.click(check)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('quote', { host_id: 'host', body })
+  expect(await screen.findByText(/Model file checked:/)).toBeVisible()
+  await waitFor(() => expect(check).toBeEnabled())
+  const launch = screen.getByRole('button', { name: 'Start model with these settings' })
+  fireEvent.click(launch)
+  await waitFor(() => expect(launch).toBeEnabled())
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'launch', { host_id: 'host', body })
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+})
+
+it.each(['-1', '1.5', '9007199254740992'])('rejects invalid Flash headroom %s before checking or launching', async (input) => {
+  render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
+  await selectImportedModel()
+  fireEvent.click(screen.getByText('Advanced model settings'))
+  const memory = screen.getByLabelText('Computer memory headroom for Flash (GiB)')
+  fireEvent.change(memory, { target: { value: input } })
+  expect(screen.getByRole('alert')).toHaveTextContent('Flash computer-memory headroom must be a whole number of GiB, at least 0, or left blank')
+  const check = screen.getByRole('button', { name: 'Check model settings' })
+  const launch = screen.getByRole('button', { name: 'Start model with these settings' })
+  expect(check).toBeDisabled()
+  expect(launch).toBeDisabled()
+  fireEvent.click(check)
+  fireEvent.click(launch)
+  expect(engineCommand).not.toHaveBeenCalled()
+  fireEvent.change(memory, { target: { value: '0' } })
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(check).toBeEnabled()
+  expect(launch).toBeEnabled()
+})
+
 it('does not show a number error before a model is chosen, then reports an emptied context', async () => {
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   fireEvent.click(screen.getByText('Model and memory settings'))
@@ -243,15 +302,19 @@ it.each(['success', 'rejection'] as const)('keeps a completed startup-check %s t
 it.each([
   ['Conversation length (tokens)', '32768'], ['Requests at once', '4'], ['Model copies', '2'],
   ['Reply speedup', 'auto'], ['Conversation memory format', 'int8'],
+  ['Computer memory headroom for Flash (GiB)', '0'], ['Update the Flash expert cache', 'off'],
 ])('discards a pending startup check when %s changes', async (label, value) => {
   let finishQuote!: (quote: EngineStartupQuote) => void
   vi.mocked(engineCommand).mockReturnValueOnce(new Promise<EngineStartupQuote>(resolve => { finishQuote = resolve }))
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
+  if (label === 'Computer memory headroom for Flash (GiB)' || label === 'Update the Flash expert cache') fireEvent.click(screen.getByText('Advanced model settings'))
   if (label === 'Reply speedup' || label === 'Conversation memory format') {
     await userEvent.click(screen.getByLabelText(label))
     await userEvent.click(screen.getByRole('menuitemradio', { name: label === 'Reply speedup' ? 'Automatic' : 'INT8' }))
+  } else if (label === 'Update the Flash expert cache') {
+    fireEvent.click(screen.getByRole('checkbox', { name: label }))
   } else fireEvent.change(screen.getByLabelText(label), { target: { value } })
   finishQuote(importedQuote)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Check model settings' })).toBeEnabled())
@@ -815,6 +878,44 @@ const savedModelProfile = {
   vision: true, structured_outputs: true, spec: 'none' as const, draft_tokens: 0, draft_tp: 0,
   kv_dtype: 'auto' as const, kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false,
 }
+
+it.each([
+  { name: 'omitted settings', options: {}, headroom: null, lfu: true },
+  { name: 'explicit zero and LFU off', options: { flash_host_ram_headroom_gib: 0, expert_lfu: false }, headroom: 0, lfu: false },
+  { name: 'chosen headroom and LFU on', options: { flash_host_ram_headroom_gib: 8, expert_lfu: true }, headroom: 8, lfu: true },
+])('preserves $name when editing and reloading a saved model', async ({ options, headroom, lfu }) => {
+  const profile = { ...savedModelProfile, ...options }
+  const snapshot: EngineSnapshot = { ...importedModelSnapshot, instances: [{
+    instance_id: 'saved', session_id: 'session', display_name: 'Saved model', upstream_model_id: 'imported-model', status: 'ready',
+    configuration: profile, profile,
+  }] }
+  vi.mocked(engineCommand).mockResolvedValue(snapshot)
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  render(<HostCard host={localHost} snapshot={snapshot} />)
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+  fireEvent.click(screen.getByText('Advanced model settings'))
+  const memory = screen.getByLabelText('Computer memory headroom for Flash (GiB)')
+  expect(memory).toHaveValue(headroom)
+  expect(screen.getByRole('checkbox', { name: 'Update the Flash expert cache' })).toHaveProperty('checked', lfu)
+  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+  const save = screen.getByRole('button', { name: 'Save and restart model' })
+  fireEvent.change(memory, { target: { value: '0.5' } })
+  expect(save).toBeDisabled()
+  fireEvent.click(save)
+  expect(engineCommand).not.toHaveBeenCalled()
+  fireEvent.change(memory, { target: { value: headroom === null ? '' : String(headroom) } })
+  expect(save).toBeEnabled()
+  fireEvent.click(save)
+  expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?' })
+  expect(engineCommand).not.toHaveBeenCalled()
+  await act(async () => settleConfirm(true))
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining({ max_context: 32768, flash_host_ram_headroom_gib: headroom, expert_lfu: lfu }),
+    expected_session_id: 'session',
+  } })
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Save and restart model' })).not.toBeInTheDocument())
+})
 
 it.each([
   { action: 'start', label: 'Start model', initialStatus: 'stopped', acceptedStatus: 'starting', result: 'Model start requested.' },
