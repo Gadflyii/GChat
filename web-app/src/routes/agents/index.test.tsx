@@ -1062,6 +1062,79 @@ describe('AgentStudioPage', () => {
     ])
   })
 
+  it.each([
+    ['Workflow', 'Stage ID', 'Add stage', 'Remove stage', 'nodes'],
+    ['Coordinator Team', 'Specialist ID', 'Add specialist', 'Remove specialist', 'workers'],
+  ] as const)('keeps %s role IDs focused while typing and after removing a role', async (composition, label, add, remove, collection) => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(composition) }))
+
+    const identifier = screen.getByLabelText(label)
+    identifier.focus()
+    for (let length = 1; length <= 'risk-reviewer'.length; length++) {
+      const value = 'risk-reviewer'.slice(0, length)
+      fireEvent.change(identifier, { target: { value } })
+      expect(screen.getByLabelText(label)).toBe(identifier)
+      expect(identifier).toHaveFocus()
+      expect(identifier).toHaveValue(value)
+    }
+    fireEvent.change(identifier, { target: { value: 'risk-reviewer-' } })
+    expect(identifier).toHaveValue('risk-reviewer-')
+    fireEvent.blur(identifier)
+    expect(identifier).toHaveValue('risk-reviewer')
+
+    fireEvent.click(screen.getByRole('button', { name: add }))
+    fireEvent.change(screen.getAllByLabelText(label)[1], { target: { value: 'final-review' } })
+    fireEvent.change(screen.getAllByLabelText('Display name')[1], { target: { value: 'Final Review' } })
+    fireEvent.click(screen.getAllByTitle(remove)[0])
+    const remaining = screen.getByLabelText(label)
+    expect(remaining).toHaveValue('final-review')
+    expect(screen.getByLabelText('Display name')).toHaveValue('Final Review')
+    remaining.focus()
+    fireEvent.change(remaining, { target: { value: 'final-reviewer' } })
+    expect(remaining).toHaveFocus()
+    fireEvent.blur(remaining)
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        [collection]: [expect.objectContaining({ id: 'final-reviewer', name: 'Final Review' })],
+      })
+    ))
+  })
+
+  it('keeps workflow dependencies connected while typing a stage ID', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add stage' }))
+    fireEvent.change(screen.getAllByLabelText('Depends on stage IDs')[1], {
+      target: { value: 'deliver' },
+    })
+
+    const identifier = screen.getAllByLabelText('Stage ID')[0]
+    identifier.focus()
+    for (let length = 1; length <= 'review-stage'.length; length++) {
+      const value = 'review-stage'.slice(0, length)
+      fireEvent.change(identifier, { target: { value } })
+      expect(identifier).toHaveFocus()
+      expect(screen.getAllByLabelText('Depends on stage IDs')[1]).toHaveValue(value)
+    }
+    fireEvent.change(identifier, { target: { value: 'review-stage-' } })
+    fireEvent.blur(identifier)
+    expect(screen.getAllByLabelText('Depends on stage IDs')[1]).toHaveValue('review-stage')
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({ edges: [{ from: 'review-stage', to: 'stage-2' }] })
+    ))
+  })
+
   it('routes a swarm worker and synthesizer independently', async () => {
     definitionState.value.createDraft.mockResolvedValue({
       ...editableDraft,
