@@ -3820,762 +3820,762 @@ Error revealing item in directory in Tauri: No private file manager is available
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
-File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
 -------------------|---------|----------|---------|---------|-------------------
-All files          |    67.3 |     85.2 |   68.66 |    67.3 |                   
- gchat             |       0 |        0 |       0 |       0 |                   
-  ...st.config.mts |       0 |        0 |       0 |       0 | 1-27              
- gchat/core        |       0 |        0 |       0 |       0 |                   
-  ...wn.config.mjs |       0 |        0 |       0 |       0 | 1-19              
-  ...st.config.mts |       0 |        0 |       0 |       0 | 1-22              
- gchat/core/src    |       0 |      100 |     100 |       0 |                   
-  index.ts         |       0 |      100 |     100 |       0 | 5-11              
- ...re/src/@global |       0 |        0 |       0 |       0 |                   
-  index.d.ts       |       0 |        0 |       0 |       0 |                   
- ...re/src/browser |   87.37 |    82.45 |   73.68 |   87.37 |                   
-  core.ts          |   82.35 |      100 |   36.36 |   82.35 | 68,79,88          
-  events.ts        |     100 |      100 |     100 |     100 |                   
-  extension.ts     |   87.59 |    72.22 |      80 |   87.59 | ...61-162,204-206 
-  fs.ts            |     100 |      100 |    92.3 |     100 |                   
-  index.ts         |       0 |      100 |     100 |       0 | 5-35              
- ...ser/extensions |    91.3 |      100 |   66.66 |    91.3 |                   
-  assistant.ts     |     100 |      100 |     100 |     100 |                   
-  ...ersational.ts |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  inference.ts     |     100 |      100 |     100 |     100 |                   
-  mcp.ts           |     100 |      100 |     100 |     100 |                   
-  rag.ts           |   71.42 |      100 |       0 |   71.42 | 25-26             
-  vector-db.ts     |   66.66 |      100 |       0 |   66.66 | 49-50             
- ...nsions/engines |   93.82 |      100 |   72.22 |   93.82 |                   
-  AIEngine.ts      |     100 |      100 |     100 |     100 |                   
-  EngineManager.ts |     100 |      100 |     100 |     100 |                   
-  ...lOAIEngine.ts |    87.5 |      100 |      50 |    87.5 | 33,40             
-  OAIEngine.ts     |   86.95 |      100 |      50 |   86.95 | 37,61-62          
-  ...eOAIEngine.ts |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
- ...browser/models |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  manager.ts       |     100 |      100 |     100 |     100 |                   
-  utils.ts         |     100 |      100 |     100 |     100 |                   
- .../core/src/test |   83.33 |        0 |     100 |   83.33 |                   
-  setup.ts         |   83.33 |        0 |     100 |   83.33 | 5-6               
- ...core/src/types |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
- .../src/types/api |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
- ...ypes/assistant |     100 |      100 |     100 |     100 |                   
-  ...tantEntity.ts |       0 |        0 |       0 |       0 |                   
-  ...stantEvent.ts |     100 |      100 |     100 |     100 |                   
-  ...tInterface.ts |       0 |        0 |       0 |       0 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
- ...c/types/config |     100 |      100 |     100 |     100 |                   
-  ...nfigEntity.ts |       0 |        0 |       0 |       0 |                   
-  ...onfigEvent.ts |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
- ...c/types/engine |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
- ...src/types/file |       0 |        0 |       0 |       0 |                   
-  index.ts         |       0 |        0 |       0 |       0 |                   
- ...types/hardware |       0 |        0 |       0 |       0 |                   
-  index.ts         |       0 |        0 |       0 |       0 |                   
- ...ypes/inference |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  ...enceEntity.ts |     100 |      100 |     100 |     100 |                   
-  ...renceEvent.ts |     100 |      100 |     100 |     100 |                   
-  ...eInterface.ts |       0 |        0 |       0 |       0 |                   
- .../src/types/mcp |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  mcpEntity.ts     |       0 |        0 |       0 |       0 |                   
-  mcpInterface.ts  |       0 |        0 |       0 |       0 |                   
- .../types/message |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  messageEntity.ts |     100 |      100 |     100 |     100 |                   
-  messageEvent.ts  |     100 |      100 |     100 |     100 |                   
-  ...eInterface.ts |       0 |        0 |       0 |       0 |                   
-  ...equestType.ts |     100 |      100 |     100 |     100 |                   
- .../miscellaneous |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  ...sourceInfo.ts |     100 |      100 |     100 |     100 |                   
- ...rc/types/model |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  modelEntity.ts   |       0 |        0 |       0 |       0 |                   
-  modelEvent.ts    |     100 |      100 |     100 |     100 |                   
-  modelImport.ts   |       0 |        0 |       0 |       0 |                   
-  ...lInterface.ts |       0 |        0 |       0 |       0 |                   
-  modelSource.ts   |       0 |        0 |       0 |       0 |                   
- .../types/setting |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  ...gComponent.ts |     100 |      100 |     100 |     100 |                   
- ...c/types/thread |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  threadEntity.ts  |       0 |        0 |       0 |       0 |                   
-  ...dInterface.ts |       0 |        0 |       0 |       0 |                   
- gchat/scripts     |       0 |        0 |       0 |       0 |                   
-  ...abilities.mjs |       0 |        0 |       0 |       0 | 1-62              
-  ...w-profile.mjs |       0 |        0 |       0 |       0 | 1-73              
-  ...age-floor.mjs |       0 |        0 |       0 |       0 | 1-141             
-  ...t-quality.mjs |       0 |        0 |       0 |       0 | 1-244             
-  download-bin.mjs |       0 |        0 |       0 |       0 | 1-406             
-  ...g-i18n-key.js |       0 |        0 |       0 |       0 | 1-345             
-  ...anslations.js |       0 |        0 |       0 |       0 | 1-268             
-  ...ri-assets.mjs |       0 |        0 |       0 |       0 | 1-24              
- gchat/web-app     |       0 |        0 |       0 |       0 |                   
-  eslint.config.js |       0 |        0 |       0 |       0 | 1-28              
-  vite.config.ts   |       0 |        0 |       0 |       0 | 1-150             
-  ...st.config.mts |       0 |        0 |       0 |       0 | 1-42              
- ...eb-app/scripts |   24.67 |       80 |   66.66 |   24.67 |                   
-  ...d-catalog.mjs |       0 |        0 |       0 |       0 | 1-128             
-  ...mar-assets.ts |     100 |    88.88 |     100 |     100 | 20                
- gchat/web-app/src |   21.02 |    77.77 |   45.45 |   21.02 |                   
-  i18n.ts          |     100 |      100 |     100 |     100 |                   
-  main.tsx         |   64.22 |    71.42 |   33.33 |   64.22 | ...21,157-158,177 
-  routeTree.gen.ts |       0 |      100 |     100 |       0 | 11-737            
-  vite-env.d.ts    |       0 |        0 |       0 |       0 |                   
- ...src/components |   62.51 |    94.46 |   83.01 |   62.51 |                   
-  GbotAvatars.tsx  |     100 |      100 |     100 |     100 |                   
-  ...onnectors.tsx |   99.48 |    92.85 |     100 |   99.48 | 167               
-  ...HumanHelp.tsx |    98.8 |    97.14 |     100 |    98.8 | 95                
-  GbotLanBot.tsx   |     100 |    94.73 |   83.33 |     100 | 35                
-  ...Schedules.tsx |   91.82 |    93.15 |     100 |   91.82 | ...97-210,235-239 
-  ...skActions.tsx |     100 |      100 |     100 |     100 |                   
-  ...kApproval.tsx |     100 |      100 |     100 |     100 |                   
-  ...erruption.tsx |     100 |      100 |     100 |     100 |                   
-  ...horAvatar.tsx |       0 |        0 |       0 |       0 | 1-65              
-  ...odeEditor.tsx |     100 |      100 |     100 |     100 |                   
-  ...ifiedText.tsx |       0 |        0 |       0 |       0 | 1-69              
-  LogViewer.tsx    |       0 |        0 |       0 |       0 | 1-114             
-  MCPLogViewer.tsx |       0 |        0 |       0 |       0 | 1-132             
-  MermaidError.tsx |   11.76 |      100 |       0 |   11.76 | 14-30             
-  ...urceBadge.tsx |      50 |      100 |       0 |      50 | 44-67,71-95       
-  ...tProgress.tsx |     100 |      100 |     100 |     100 |                   
-  ...ModelChip.tsx |       0 |      100 |     100 |       0 | 2-45              
-  TokenCounter.tsx |       0 |        0 |       0 |       0 | 1-231             
- ...nts/GbotAvatar |     100 |      100 |     100 |     100 |                   
-  index.tsx        |     100 |      100 |     100 |     100 |                   
- ...botDesktopView |   91.21 |    94.87 |   91.66 |   91.21 |                   
-  index.tsx        |   91.21 |    94.87 |   91.66 |   91.21 | 91-100,157-159    
- ...ents/GbotSetup |   98.99 |    95.88 |   92.17 |   98.99 |                   
-  BrainSetup.tsx   |   96.96 |    96.66 |   93.33 |   96.96 | 60-64,170-174     
-  ...dComputer.tsx |   98.93 |    94.73 |     100 |   98.93 | 153-156           
-  CloudCosts.tsx   |   96.46 |    95.53 |   70.58 |   96.46 | ...18-221,234-236 
-  CloudSetup.tsx   |     100 |      100 |     100 |     100 |                   
-  KvmSetup.tsx     |     100 |    95.23 |     100 |     100 | ...28,198,214,266 
-  LanSetup.tsx     |     100 |    98.26 |     100 |     100 | 89,172            
-  LanTools.tsx     |     100 |    97.43 |     100 |     100 | 46                
-  M365Setup.tsx    |   99.39 |    91.05 |     100 |   99.39 | 279,294,423       
-  ServiceSetup.tsx |   99.46 |    98.71 |   83.33 |   99.46 | 175               
-  index.tsx        |     100 |    98.22 |   77.77 |     100 | 123,147,360       
- ...ts/ai-elements |    44.2 |    96.77 |   42.85 |    44.2 |                   
-  ...-activity.tsx |     100 |      100 |     100 |     100 |                   
-  code-block.tsx   |    60.9 |    94.44 |      60 |    60.9 | ...26-128,144-183 
-  conversation.tsx |   28.04 |      100 |       0 |   28.04 | ...5,64-89,95-121 
-  reasoning.tsx    |   18.04 |      100 |       0 |   18.04 | ...37-166,177-191 
-  ...indicator.tsx |     100 |      100 |     100 |     100 |                   
-  shimmer.tsx      |   11.11 |      100 |       0 |   11.11 | 20-64             
- ...elements/tools |   66.74 |       50 |      75 |   66.74 |                   
-  ...-renderer.tsx |   92.59 |    33.33 |     100 |   92.59 | 26,30             
-  tool.tsx         |   64.98 |    51.02 |   66.66 |   64.98 | ...78-579,588-590 
- ...ools/renderers |      58 |    46.66 |   55.55 |      58 |                   
-  ...-renderer.tsx |     100 |      100 |      50 |     100 |                   
-  ...-renderer.tsx |    5.55 |      100 |       0 |    5.55 | 9-16,19-72        
-  ...-renderer.tsx |   89.13 |    42.85 |     100 |   89.13 | 14-15,26-28       
-  website-icon.tsx |      80 |    42.85 |   66.66 |      80 | 18-19,33-38       
- .../animated-icon |   22.58 |    95.45 |   61.11 |   22.58 |                   
-  blocks.tsx       |   81.53 |      100 |       0 |   81.53 | 40-45,51-56       
-  bot.tsx          |       0 |      100 |     100 |       0 | 3-120             
-  file-text.tsx    |   83.49 |    83.33 |     100 |   83.49 | 57-62,72-77,83-88 
-  folder-open.tsx  |       0 |      100 |     100 |       0 | 2-96              
-  folder-plus.tsx  |   74.69 |      100 |       0 |   74.69 | 22-30,48-53,59-64 
-  folders.tsx      |       0 |      100 |     100 |       0 | 3-120             
-  ...tical-end.tsx |       0 |      100 |     100 |       0 | 2-113             
-  list-todo.tsx    |       0 |      100 |     100 |       0 | 2-127             
-  ...rcle-more.tsx |       0 |      100 |     100 |       0 | 4-123             
-  ...ge-circle.tsx |   84.61 |      100 |       0 |   84.61 | 59-64,70-75       
-  plug.tsx         |       0 |      100 |     100 |       0 | 4-109             
-  search.tsx       |       0 |      100 |     100 |       0 | 3-92              
-  settings.tsx     |       0 |      100 |     100 |       0 | 3-90              
-  sparkles.tsx     |       0 |      100 |     100 |       0 | 2-105             
- ...s/left-sidebar |   74.07 |    78.08 |   45.71 |   74.07 |                   
-  NavChats.tsx     |       0 |        0 |       0 |       0 | 1-91              
-  NavMain.tsx      |   92.03 |    75.86 |   23.07 |   92.03 | ...42,245,256-258 
-  NavProjects.tsx  |   87.03 |    64.51 |   45.45 |   87.03 | ...96-300,303-304 
-  ...ckActions.tsx |   87.93 |    81.37 |     100 |   87.93 | ...05-207,214-215 
-  ...nKindIcon.tsx |     100 |      100 |     100 |     100 |                   
-  ...StatusDot.tsx |   18.18 |      100 |       0 |   18.18 | 8-17              
-  index.tsx        |       0 |        0 |       0 |       0 | 1-113             
- .../components/ui |   57.98 |    88.62 |   74.28 |   57.98 |                   
-  avatar.tsx       |       0 |        0 |       0 |       0 | 1-46              
-  button-group.tsx |   51.51 |      100 |   33.33 |   51.51 | 40-76             
-  button.tsx       |     100 |      100 |     100 |     100 |                   
-  card.tsx         |       0 |        0 |       0 |       0 | 1-77              
-  ...ce-select.tsx |     100 |    91.42 |     100 |     100 | 34,42,74          
-  collapsible.tsx  |     100 |      100 |     100 |     100 |                   
-  dialog.tsx       |   97.47 |    91.66 |     100 |   97.47 | 112-114           
-  drawer.tsx       |   40.59 |      100 |      40 |   40.59 | 24-44,73-120      
-  ...down-menu.tsx |     100 |      100 |     100 |     100 |                   
-  dropdrawer.tsx   |   28.18 |    77.77 |   27.77 |   28.18 | ...12-665,690-960 
-  hover-card.tsx   |     100 |      100 |     100 |     100 |                   
-  input.tsx        |     100 |      100 |     100 |     100 |                   
-  kbd.tsx          |     100 |      100 |     100 |     100 |                   
-  label.tsx        |     100 |      100 |     100 |     100 |                   
-  ...by-context.ts |     100 |      100 |     100 |     100 |                   
-  popover.tsx      |   57.81 |      100 |   57.14 |   57.81 | 46-77             
-  progress.tsx     |     100 |      100 |     100 |     100 |                   
-  radio-group.tsx  |     100 |      100 |     100 |     100 |                   
-  separator.tsx    |      10 |      100 |       0 |      10 | 6-24              
-  settings.tsx     |       0 |      100 |     100 |       0 | 3-90              
-  sheet.tsx        |     100 |      100 |     100 |     100 |                   
-  sidebar.tsx      |   52.15 |     62.5 |     100 |   52.15 | ...73-687,697-725 
-  skeleton.tsx     |     100 |      100 |     100 |     100 |                   
-  slider.tsx       |     100 |      100 |     100 |     100 |                   
-  sonner.tsx       |     100 |      100 |     100 |     100 |                   
-  switch.tsx       |     100 |      100 |     100 |     100 |                   
-  textarea.tsx     |     100 |      100 |     100 |     100 |                   
-  tooltip.tsx      |     100 |      100 |     100 |     100 |                   
- .../src/constants |   68.31 |       80 |      75 |   68.31 |                   
-  ...uggestions.ts |     100 |      100 |     100 |     100 |                   
-  chat.ts          |     100 |      100 |     100 |     100 |                   
-  integrations.ts  |       0 |      100 |     100 |       0 | 51-331            
-  localStorage.ts  |     100 |      100 |     100 |     100 |                   
-  models.ts        |     100 |      100 |     100 |     100 |                   
-  providers.ts     |     100 |      100 |     100 |     100 |                   
-  ...dModelChip.ts |       0 |      100 |     100 |       0 | 10-23             
-  routes.ts        |     100 |      100 |     100 |     100 |                   
-  staff-picks.ts   |     100 |      100 |     100 |     100 |                   
-  threadScroll.ts  |       0 |        0 |       0 |       0 | 1-32              
-  windows.ts       |     100 |      100 |     100 |     100 |                   
- ...src/containers |   72.17 |     84.6 |    72.8 |   72.17 |                   
-  ...lorPicker.tsx |       0 |        0 |       0 |       0 | 1-32              
-  ...derButton.tsx |     100 |    91.66 |     100 |     100 | 23                
-  ...tLiveRuns.tsx |   92.78 |    81.17 |    87.5 |   92.78 | ...13-315,329-331 
-  ...tRunSetup.tsx |   88.96 |    81.57 |   76.92 |   88.96 | ...12,260-262,282 
-  ...ateDialog.tsx |     100 |      100 |     100 |     100 |                   
-  ...ditDialog.tsx |     100 |      100 |     100 |     100 |                   
-  ...SlashMenu.tsx |     100 |      100 |     100 |     100 |                   
-  ...oadDialog.tsx |   91.42 |    84.61 |   53.84 |   91.42 | ...35-137,140-142 
-  ...dioHeader.tsx |     100 |      100 |     100 |     100 |                   
-  ...ggestions.tsx |     100 |      100 |     100 |     100 |                   
-  ...rkerPools.tsx |   90.59 |    80.23 |   73.33 |   90.59 | ...87,293,297,317 
-  ...paceFiles.tsx |   94.91 |       90 |   61.53 |   94.91 | ...40,346-351,522 
-  ...aceLayout.tsx |   97.87 |    90.47 |     100 |   97.87 | 139-142,178       
-  ...cePreview.tsx |    91.5 |    91.37 |    87.5 |    91.5 | ...46,151-153,212 
-  ...aceSelect.tsx |     100 |    88.88 |     100 |     100 | 24,62             
-  ApiKeyInput.tsx  |       0 |        0 |       0 |       0 | 1-97              
-  ...efixInput.tsx |       0 |        0 |       0 |       0 | 1-42              
-  ...rBoundary.tsx |     100 |      100 |     100 |     100 |                   
-  ...factPanel.tsx |   92.39 |    92.85 |    62.5 |   92.39 | ...91,211-213,218 
-  ...hmentChip.tsx |   73.97 |    54.83 |      60 |   73.97 | ...56-158,174-176 
-  AudioPlayer.tsx  |    3.38 |      100 |       0 |    3.38 | 23-29,39-274      
-  AvatarEmoji.tsx  |     100 |      100 |     100 |     100 |                   
-  ...aderboard.tsx |   91.75 |    55.81 |   72.72 |   91.75 | 19-26             
-  ...rSettings.tsx |     100 |    95.06 |   83.33 |     100 | 42,52,66,102      
-  Capabilities.tsx |     100 |      100 |     100 |     100 |                   
-  Card.tsx         |     100 |       75 |     100 |     100 | 34,44-45,67       
-  ChatInput.tsx    |    67.2 |    74.64 |   54.38 |    67.2 | ...3015,3028-3043 
-  ...idgePanel.tsx |   90.09 |    67.21 |    92.3 |   90.09 | ...76-179,229,239 
-  ...minalHost.tsx |   90.01 |     85.4 |      60 |   90.01 | ...78-684,712-715 
-  ...zeControl.tsx |   99.02 |    86.11 |     100 |   99.02 | 49-50             
-  ...odeSelect.tsx |    98.5 |       40 |   66.66 |    98.5 | 46                
-  CopyButton.tsx   |     100 |      100 |     100 |     100 |                   
-  ...tialSetup.tsx |   97.76 |       99 |     100 |   97.76 | 41-46             
-  ...oadButton.tsx |       0 |        0 |       0 |       0 | 1-253             
-  ...anegement.tsx |   52.03 |    81.81 |      60 |   52.03 | ...36-656,698-775 
-  ...lProvider.tsx |   79.29 |    79.13 |      50 |   79.29 | ...33-636,639-642 
-  ...Available.tsx |       0 |        0 |       0 |       0 | 1-273             
-  ...ovisioner.tsx |   94.11 |    54.54 |     100 |   94.11 | 19-21,70,83       
-  ...Discovery.tsx |     100 |    84.21 |     100 |     100 | 15,18,29          
-  ...eFirstRun.tsx |     100 |    93.33 |    92.3 |     100 | ...01-203,210-211 
-  ...otControl.tsx |     100 |      100 |     100 |     100 |                   
-  ...reProfile.tsx |     100 |    97.56 |   88.88 |     100 | 20,85             
-  ...ostModels.tsx |   98.62 |    90.69 |    77.5 |   98.62 | 255,279,356-358   
-  ...eHostName.tsx |     100 |       90 |     100 |     100 | 12,25             
-  ...stSharing.tsx |     100 |      100 |     100 |     100 |                   
-  ...eSettings.tsx |     100 |      100 |     100 |     100 |                   
-  EngineIntake.tsx |     100 |    91.66 |     100 |     100 | 33                
-  ...ilePicker.tsx |     100 |    97.68 |   88.88 |     100 | 82,94,124         
-  ...delAction.tsx |       0 |        0 |       0 |       0 | 1-27              
-  ...eSwitcher.tsx |       0 |        0 |       0 |       0 | 1-75              
-  ...Companion.tsx |   97.13 |    95.68 |   72.72 |   97.13 | ...04,733,736,850 
-  GlobalError.tsx  |     100 |      100 |     100 |     100 |                   
-  HeaderPage.tsx   |       0 |        0 |       0 |       0 | 1-71              
-  ...minalHost.tsx |   87.26 |     67.6 |   58.33 |   87.26 | ...57,460,463-471 
-  HtmlArtifact.tsx |   95.68 |    92.25 |     100 |   95.68 | ...67-169,274-281 
-  ...ageEditor.tsx |     100 |       95 |     100 |     100 | 50                
-  ...eSwitcher.tsx |       0 |        0 |       0 |       0 | 1-66              
-  ...rverPanel.tsx |       0 |        0 |       0 |       0 | 1-442             
-  ...oolLoader.tsx |    6.25 |      100 |       0 |    6.25 | 15-71             
-  ...ryContext.tsx |       0 |        0 |       0 |       0 | 1-45              
-  ...ryLibrary.tsx |   91.22 |    86.36 |   57.14 |   91.22 | ...13-319,326-329 
-  MessageItem.tsx  |   65.26 |    66.94 |   42.85 |   65.26 | ...44-745,754-758 
-  ...lCombobox.tsx |   89.87 |    80.43 |   78.94 |   89.87 | ...42-344,382-383 
-  ...oadAction.tsx |       0 |        0 |       0 |       0 | 1-239             
-  ...HoverCard.tsx |       0 |        0 |       0 |       0 | 1-204             
-  ...ErrorBody.tsx |     100 |      100 |     100 |     100 |                   
-  ...rrorToast.tsx |     100 |      100 |     100 |     100 |                   
-  ModelLogo.tsx    |   70.37 |    61.53 |      50 |   70.37 | 62-77             
-  ...anagement.tsx |   95.84 |    84.87 |   62.85 |   95.84 | ...82-285,288-291 
-  ModelSetting.tsx |      97 |    66.66 |     100 |      97 | 76-77,97,100,109  
-  ...nControls.tsx |     100 |    94.44 |     100 |     100 | 29,40             
-  ...rsSection.tsx |     6.6 |      100 |       0 |     6.6 | 22-47,50-137      
-  ...rmMetaKey.tsx |     100 |    66.66 |     100 |     100 | 10                
-  PortInput.tsx    |       0 |        0 |       0 |       0 | 1-39              
-  ProjectFiles.tsx |       0 |        0 |       0 |       0 | 1-563             
-  ...dingModel.tsx |     100 |      100 |     100 |     100 |                   
-  ...ersAvatar.tsx |   39.62 |       50 |     100 |   39.62 | 34-68             
-  ...eoutInput.tsx |       0 |        0 |       0 |       0 | 1-39              
-  ...ingToggle.tsx |     100 |      100 |     100 |     100 |                   
-  ...berMemory.tsx |   93.47 |    72.72 |   66.66 |   93.47 | 47-48,57,84-86    
-  ...rMarkdown.tsx |   78.78 |    81.03 |   71.42 |   78.78 | ...45-257,262,273 
-  ...erPopover.tsx |    9.15 |      100 |       0 |    9.15 | 38-208            
-  ...tSwitcher.tsx |       0 |        0 |       0 |       0 | 1-52              
-  SettingsMenu.tsx |   76.76 |    89.47 |      50 |   76.76 | ...81-194,201-237 
-  SetupScreen.tsx  |     100 |      100 |     100 |     100 |                   
-  StatusLabel.tsx  |     100 |      100 |     100 |     100 |                   
-  ...oActivity.tsx |   97.14 |    63.15 |     100 |   97.14 | 26,64             
-  ...eSwitcher.tsx |       0 |        0 |       0 |       0 | 1-82              
-  ThreadList.tsx   |   80.59 |    76.81 |   42.85 |   80.59 | ...84-304,311,316 
-  ...Indicator.tsx |   76.78 |       25 |     100 |   76.78 | ...66,71,84-87,90 
-  ...ostsInput.tsx |       0 |        0 |       0 |       0 | 1-53              
-  ...acePicker.tsx |   97.05 |     96.1 |    92.3 |   97.05 | ...80,111,193-195 
-  ...SkillSlash.ts |     100 |    90.47 |     100 |     100 | 45,53             
- ...ners/chatInput |   52.06 |       92 |   36.36 |   52.06 |                   
-  audioFromPath.ts |    8.23 |      100 |       0 |    8.23 | ...0,53-65,76-110 
-  ...oppedPaths.ts |     100 |    84.61 |     100 |     100 | 112,129           
-  imageFromPath.ts |    9.52 |      100 |       0 |    9.52 | 7-19,22-34,46-80  
-  ...riDragDrop.ts |    70.9 |      100 |     100 |    70.9 | 52-67             
- ...ainers/dialogs |   59.74 |    86.03 |    68.5 |   59.74 |                   
-  ...derDialog.tsx |    6.93 |      100 |       0 |    6.93 | 38-261            
-  ...Assistant.tsx |   90.33 |    92.98 |   76.92 |   90.33 | ...,75-76,221-236 
-  ...CliDialog.tsx |       0 |        0 |       0 |       0 | 1-179             
-  ...MCPServer.tsx |   90.78 |     79.5 |   56.41 |   90.78 | ...49,657,689,697 
-  AddModel.tsx     |       0 |        0 |       0 |       0 | 1-153             
-  ...ectDialog.tsx |   95.67 |    96.61 |   91.66 |   95.67 | 189-193,223-227   
-  ...derDialog.tsx |    71.6 |      100 |   28.57 |    71.6 | ...49,52-56,64-66 
-  ...valDialog.tsx |   94.47 |    86.15 |     100 |   94.47 | ...31,68-69,87-90 
-  ...essDialog.tsx |       0 |        0 |       0 |       0 | 1-119             
-  AppUpdater.tsx   |       0 |        0 |       0 |       0 | 1-91              
-  ...ionDialog.tsx |       0 |        0 |       0 |       0 | 1-73              
-  ...rLocation.tsx |     100 |      100 |     100 |     100 |                   
-  ...ialogHost.tsx |     100 |      100 |     100 |     100 |                   
-  ...adsDialog.tsx |   98.21 |       95 |   88.88 |   98.21 | 91-92             
-  ...ectDialog.tsx |   98.14 |    94.73 |   88.88 |   98.14 | 88-89             
-  ...antDialog.tsx |   97.64 |    93.75 |    87.5 |   97.64 | 67-68             
-  ...erConfirm.tsx |   97.77 |    94.11 |   85.71 |   97.77 | 72-73             
-  ...ageDialog.tsx |   97.82 |    93.33 |   85.71 |   97.82 | 77-78             
-  DeleteModel.tsx  |   98.49 |     87.5 |    87.5 |   98.49 | 123-124           
-  ...ectDialog.tsx |   96.61 |    88.88 |    87.5 |   96.61 | 61,101-102,108    
-  ...eProvider.tsx |       0 |        0 |       0 |       0 | 1-109             
-  ...eadDialog.tsx |   92.59 |    81.48 |      80 |   92.59 | ...01-106,125-126 
-  ...MCPserver.tsx |    90.8 |    66.66 |      50 |    90.8 | ...59,70,81-82,88 
-  EditModel.tsx    |   73.14 |    68.75 |   27.27 |   73.14 | ...49,266,282-285 
-  ...setDialog.tsx |     100 |      100 |     100 |     100 |                   
-  ...ionDialog.tsx |       0 |        0 |       0 |       0 | 1-128             
-  ImageModal.tsx   |       0 |        0 |       0 |       0 | 1-40              
-  ...ataDialog.tsx |   13.55 |      100 |       0 |   13.55 | 26-81             
-  ...extDialog.tsx |       0 |        0 |       0 |       0 | 1-78              
-  ...eadDialog.tsx |   94.48 |    87.09 |    87.5 |   94.48 | 53-54,113-118     
-  SearchDialog.tsx |      85 |    86.88 |   66.66 |      85 | ...43-251,307-333 
-  ...figDialog.tsx |       0 |        0 |       0 |       0 | 1-875             
-  ...NewDialog.tsx |       0 |        0 |       0 |       0 | 1-89              
-  index.ts         |     100 |      100 |     100 |     100 |                   
- ...trollerSetting |   62.24 |    76.27 |   66.66 |   62.24 |                   
-  ...oxControl.tsx |     100 |      100 |     100 |     100 |                   
-  ...wnControl.tsx |   97.91 |       50 |      50 |   97.91 | 60                
-  InputControl.tsx |   99.17 |       80 |     100 |   99.17 | 53                
-  ...erControl.tsx |    4.87 |      100 |       0 |    4.87 | 19-104            
-  ...eaControl.tsx |   17.39 |      100 |       0 |   17.39 | 14-34             
-  index.tsx        |   52.94 |    72.72 |   42.85 |   52.94 | 70-107            
- ...containers/hub |   92.43 |       80 |   86.66 |   92.43 |                   
-  ...delAction.tsx |   98.85 |    86.66 |   66.66 |   98.85 | 65                
-  ...onsSelect.tsx |     100 |    78.78 |     100 |     100 | 78,88-98,110      
-  FitBadge.tsx     |       0 |        0 |       0 |       0 | 1-43              
-  ...tailPanel.tsx |   91.59 |    77.61 |     100 |   91.59 | ...32,164,227-237 
-  ModelListRow.tsx |     100 |    85.71 |     100 |     100 | 32-33             
- ...ainers/loaders |       0 |        0 |       0 |       0 |                   
-  ModelLoader.tsx  |       0 |        0 |       0 |       0 | 1-8               
- ...-app/src/hooks |   71.02 |    85.77 |    74.2 |   71.02 |                   
-  use-chat.ts      |       0 |        0 |       0 |       0 | 1-205             
-  use-mobile.ts    |    87.5 |      100 |      50 |    87.5 | 12-13             
-  ...bar-resize.ts |     0.7 |      100 |       0 |     0.7 | 100-119,127-485   
-  use-sidebar.ts   |   77.77 |       50 |     100 |   77.77 | 22-23             
-  ...efinitions.ts |   85.93 |    94.11 |     100 |   85.93 | 54-57,67-69,73-74 
-  useAgentRun.ts   |   82.97 |    81.42 |   84.61 |   82.97 | ...91-404,423-439 
-  ...gentSkills.ts |   96.59 |    77.77 |     100 |   96.59 | 66-69,72          
-  useAppState.ts   |   76.66 |     90.9 |      75 |   76.66 | ...85-188,190-193 
-  useAppUpdater.ts |    95.6 |    82.97 |     100 |    95.6 | ...61-163,231-233 
-  useAssistant.ts  |   83.58 |    88.33 |   76.47 |   83.58 | ...30-231,233-246 
-  ...tionPrompt.ts |   42.42 |      100 |       0 |   42.42 | 32-42,44-47,49-52 
-  ...ttachments.ts |   95.07 |    91.11 |   46.15 |   95.07 | ...29-131,170,176 
-  ...dResources.ts |   97.43 |      100 |     100 |   97.43 | 40                
-  ...ttachments.ts |   79.54 |       75 |     100 |   79.54 | 49-58             
-  ...eCodeModel.ts |       0 |        0 |       0 |       0 | 1-109             
-  ...ntextUsage.ts |     100 |      100 |     100 |     100 |                   
-  ...tionPolicy.ts |   99.57 |    85.91 |     100 |   99.57 | 176               
-  ...nloadStore.ts |   61.79 |      100 |      50 |   61.79 | ...56-161,164-171 
-  ...edTerminal.ts |   90.56 |       84 |     100 |   90.56 | ...61,288,302-303 
-  ...oriteModel.ts |      55 |      100 |      40 |      55 | 19-27,36-37,40-46 
-  ...rExtension.ts |       0 |        0 |       0 |       0 | 1-212             
-  ...ralSetting.ts |   86.36 |    95.23 |      60 |   86.36 | ...00-104,106-108 
-  useHardware.ts   |     100 |      100 |     100 |     100 |                   
-  ...rdwareTier.ts |     100 |       90 |     100 |     100 | 42                
-  ...AgentModel.ts |       0 |        0 |       0 |       0 | 1-18              
-  useHotkeys.ts    |     100 |      100 |     100 |     100 |                   
-  ...ialMessage.ts |     100 |      100 |     100 |     100 |                   
-  ...ceSettings.ts |   81.37 |    93.75 |   85.71 |   81.37 | 63,114-138        
-  ...eenVersion.ts |       0 |        0 |       0 |       0 | 1-22              
-  useLeftPanel.ts  |   77.77 |      100 |      40 |   77.77 | 27-32             
-  ...lApiServer.ts |     100 |    95.65 |     100 |     100 | 77                
-  useMCPServers.ts |      87 |      100 |   91.66 |      87 | 91-108            
-  useMediaQuery.ts |   76.38 |    82.35 |   45.45 |   76.38 | ...03-104,108-109 
-  useMessages.ts   |      76 |    88.88 |   66.66 |      76 | 57,61-80,94-95    
-  ...xtApproval.ts |     100 |      100 |     100 |     100 |                   
-  useModelLoad.ts  |     100 |      100 |      50 |     100 |                   
-  ...elProvider.ts |   71.67 |    74.52 |   81.81 |   71.67 | ...38-408,412-423 
-  ...delSources.ts |      96 |       80 |     100 |      96 | 76-77             
-  ...elReminder.ts |     100 |      100 |     100 |     100 |                   
-  ...serMessage.ts |    64.7 |      100 |      50 |    64.7 | 31-36             
-  ...jectDialog.ts |       0 |        0 |       0 |       0 | 1-11              
-  usePrompt.ts     |     100 |      100 |     100 |     100 |                   
-  ...iderModels.ts |    88.4 |       80 |     100 |    88.4 | 66-69,77-80       
-  ...roxyConfig.ts |     100 |      100 |     100 |     100 |                   
-  ...ndedModels.ts |   96.39 |    84.37 |     100 |   96.39 | 22-24,138         
-  ...archDialog.ts |       0 |        0 |       0 |       0 | 1-11              
-  useServiceHub.ts |      76 |       75 |      80 |      76 | 22-23,36-37,54-55 
-  ...pCompleted.ts |    82.6 |       80 |      50 |    82.6 | 19-22             
-  useStaffPicks.ts |   97.89 |    94.11 |     100 |   97.89 | 19,118            
-  ...dioCatalog.ts |     100 |    93.33 |     100 |     100 | 41,57             
-  useTheme.ts      |   97.67 |     92.3 |     100 |   97.67 | 48                
-  ...Management.ts |      37 |      100 |      20 |      37 | ...07-108,111-113 
-  ...ifications.ts |      80 |      100 |   33.33 |      80 | 16-17,23-24       
-  useThreads.ts    |   73.87 |    78.82 |      76 |   73.87 | ...82,407-429,450 
-  ...okensCount.ts |   85.65 |    71.11 |     100 |   85.65 | ...17-220,249-255 
-  ...lAvailable.ts |   72.22 |    96.55 |   71.42 |   72.22 | ...27-128,162-178 
-  useTools.ts      |   83.56 |     77.5 |     100 |   83.56 | ...42,144-145,150 
-  ...StatusSync.ts |       0 |        0 |       0 |       0 | 1-188             
-  useWhatsNew.ts   |       0 |        0 |       0 |       0 | 1-154             
- ...b-app/src/i18n |   85.98 |     95.9 |   20.88 |   85.98 |                   
-  ...onContext.tsx |   35.29 |      100 |       0 |   35.29 | 7-18              
-  context.ts       |     100 |      100 |     100 |     100 |                   
-  hooks.ts         |     100 |      100 |     100 |     100 |                   
-  index.ts         |       0 |      100 |     100 |       0 | 2-5               
-  ...ext-compat.ts |     100 |       80 |     100 |     100 | 18                
-  setup.ts         |   91.89 |    96.49 |   19.17 |   91.89 | ...24-125,144-145 
- ...eb-app/src/lib |    77.5 |    81.83 |   81.21 |    77.5 |                   
-  ...ntinuation.ts |     100 |      100 |     100 |     100 |                   
-  ...file-links.ts |   96.85 |       86 |     100 |   96.85 | 91-92,106-107     
-  agent-metrics.ts |   97.36 |    92.85 |     100 |   97.36 | 21                
-  agent-outcome.ts |      96 |     90.9 |     100 |      96 | 22                
-  agent-path.ts    |     100 |    85.71 |     100 |     100 | 17                
-  ...-preflight.ts |   89.34 |    90.16 |     100 |   89.34 | 32-35,62-66,73-76 
-  ...un-message.ts |   92.98 |    92.85 |     100 |   92.98 | ...17,126-136,167 
-  ...-selection.ts |     100 |      100 |     100 |     100 |                   
-  ai-model.ts      |       0 |        0 |       0 |       0 | 1-126             
-  ...Processing.ts |   67.89 |    67.07 |     100 |   67.89 | ...96-298,300-310 
-  chat-warning.ts  |   98.73 |    81.25 |     100 |   98.73 | 65                
-  cloud-gallery.ts |   21.42 |      100 |       0 |   21.42 | 8-18              
-  ...ckDownload.ts |   54.54 |      100 |       0 |   54.54 | ...90-215,224-254 
-  ...ighlighter.ts |       0 |        0 |       0 |       0 | 1-21              
-  codeTerminal.ts  |   97.36 |     92.3 |     100 |   97.36 | 72-73             
-  completion.ts    |   72.44 |       60 |      50 |   72.44 | ...08-109,134-157 
-  confirm.ts       |     100 |      100 |     100 |     100 |                   
-  ...on-command.ts |   90.47 |     92.3 |     100 |   90.47 | 29-30             
-  ...rt-helpers.ts |     100 |    84.84 |     100 |     100 | 12,52,113-117,135 
-  ...-transport.ts |   84.52 |    76.82 |   70.83 |   84.52 | ...89-795,825-826 
-  ...ncellation.ts |   29.41 |      100 |       0 |   29.41 | 6-7,10-19,22-23   
-  ...ost-labels.ts |   96.29 |    95.31 |     100 |   96.29 | 14-15             
-  ...capability.ts |   98.75 |    91.57 |     100 |   98.75 | 43-44             
-  ...tool-calls.ts |   76.92 |       80 |      75 |   76.92 | ...00-103,123-131 
-  extension.ts     |   46.32 |      100 |   58.82 |   46.32 | ...27-236,245-249 
-  fileMetadata.ts  |   91.66 |    56.52 |     100 |   91.66 | ...,97-98,101-102 
-  freshInstall.ts  |   91.48 |    80.76 |     100 |   91.48 | 41-42,67-68       
-  ...nstallBoot.ts |     100 |      100 |     100 |     100 |                   
-  ...ngs-labels.ts |     100 |      100 |     100 |     100 |                   
-  gpuFallback.ts   |   85.71 |       75 |     100 |   85.71 | 39-41             
-  haptic.ts        |       0 |      100 |     100 |       0 | 3-138             
-  hardware-tier.ts |     100 |    92.85 |     100 |     100 | 39                
-  html-progress.ts |   76.92 |    44.44 |     100 |   76.92 | 15-17,19-21       
-  hub-installed.ts |     100 |    90.24 |     100 |     100 | 38,54,62,151      
-  ...eDownscale.ts |    5.71 |      100 |       0 |    5.71 | ...3,16-21,45-115 
-  ...on-context.ts |     100 |       80 |     100 |     100 | 17,20-21          
-  ...ence-fetch.ts |   91.48 |    88.23 |   83.33 |   91.48 | 42-45             
-  ...onTemplate.ts |     100 |       50 |     100 |     100 | 15                
-  ...hAtStartup.ts |   94.87 |    92.85 |     100 |   94.87 | 31-32             
-  ...ownPlugins.ts |   68.42 |    85.71 |      40 |   68.42 | 18-20,38-46       
-  memory.ts        |     100 |    85.71 |     100 |     100 | 35,41             
-  ...utton-refs.ts |    7.69 |      100 |       0 |    7.69 | 8-19              
-  message-edit.ts  |     100 |      100 |     100 |     100 |                   
-  messages.ts      |   65.57 |    54.92 |   85.71 |   65.57 | ...60-369,391-398 
-  model-card.ts    |   76.36 |     86.9 |      80 |   76.36 | ...44-182,258-259 
-  ...l-deletion.ts |     100 |      100 |     100 |     100 |                   
-  model-factory.ts |   49.71 |    67.24 |   52.38 |   49.71 | ...30,756-779,804 
-  model-logo.ts    |     100 |      100 |     100 |     100 |                   
-  model-release.ts |     100 |      100 |     100 |     100 |                   
-  ...rorMessage.ts |   33.33 |    33.33 |     100 |   33.33 | 10-15             
-  models.ts        |   93.22 |     84.7 |   89.47 |   93.22 | ...40-241,271-272 
-  notifications.ts |    37.5 |       50 |      50 |    37.5 | 11-30,45-58       
-  onboarding.ts    |     100 |    89.47 |     100 |     100 | 22,59             
-  ...serMessage.ts |   73.33 |    66.66 |     100 |   73.33 | 43-50             
-  predefined.ts    |     100 |      100 |     100 |     100 |                   
-  ...inedParams.ts |   98.48 |    83.33 |     100 |   98.48 | 189-190           
-  ...er-api-key.ts |   94.73 |     87.5 |     100 |   94.73 | 68-69             
-  providerOrder.ts |     100 |      100 |     100 |     100 |                   
-  ...irToolCall.ts |   90.47 |    88.88 |     100 |   90.47 | 48-49             
-  ...lingParams.ts |   91.48 |    82.05 |     100 |   91.48 | ...05-107,117-118 
-  service.ts       |   45.45 |    66.66 |      20 |   45.45 | ...57-116,121-126 
-  sessions.ts      |     100 |      100 |     100 |     100 |                   
-  ...ar-history.ts |     100 |      100 |     100 |     100 |                   
-  smart-context.ts |   85.74 |    75.92 |     100 |   85.74 | ...08-912,944-945 
-  tauriEvent.ts    |     100 |      100 |     100 |     100 |                   
-  ...ramPreview.ts |     100 |    94.82 |     100 |     100 | 129,131,148       
-  ...sultImages.ts |   69.62 |    71.42 |      80 |   69.62 | ...,54-88,127-129 
-  ttft-timing.ts   |   52.08 |     23.8 |   55.55 |   52.08 | ...49-166,170-173 
-  utils.ts         |   87.59 |    77.98 |   88.23 |   87.59 | ...44-246,295-304 
-  version.ts       |       0 |        0 |       0 |       0 | 1-5               
-  ...eview-kind.ts |     100 |      100 |     100 |     100 |                   
- ...c/lib/platform |   61.81 |    66.66 |    37.5 |   61.81 |                   
-  ...formGuard.tsx |   10.71 |      100 |       0 |   10.71 | 14-43             
-  const.ts         |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  types.ts         |     100 |      100 |     100 |     100 |                   
-  utils.ts         |   46.87 |       60 |   42.85 |   46.87 | ...13,30-33,36-44 
- .../lib/shortcuts |     100 |      100 |     100 |     100 |                   
-  const.ts         |     100 |      100 |     100 |     100 |                   
-  index.ts         |     100 |      100 |     100 |     100 |                   
-  types.ts         |     100 |      100 |     100 |     100 |                   
- .../src/lib/tools |   85.71 |    90.16 |     100 |   85.71 |                   
-  display-name.ts  |     100 |      100 |     100 |     100 |                   
-  ...race-parts.ts |   83.94 |     90.9 |     100 |   83.94 | 57-81,92,94       
-  registry.ts      |     100 |       50 |     100 |     100 | 24                
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ols/presenters |   80.96 |    82.71 |   72.72 |   80.96 |                   
-  generic.ts       |   99.14 |    88.67 |     100 |   99.14 | 241,246           
-  web-fetch-exa.ts |    1.51 |      100 |       0 |    1.51 | 12-52,58-88       
-  ...search-exa.ts |   94.44 |    71.42 |     100 |   94.44 | 39,47-48,76       
- .../src/providers |   49.32 |    71.17 |   47.36 |   49.32 |                   
-  DataProvider.tsx |   67.52 |    72.04 |      70 |   67.52 | ...22-523,559-560 
-  ...nProvider.tsx |       0 |        0 |       0 |       0 | 1-62              
-  ...ntHandler.tsx |       0 |        0 |       0 |       0 | 1-100             
-  ...eProvider.tsx |       0 |        0 |       0 |       0 | 1-32              
-  ...Shortcuts.tsx |       0 |        0 |       0 |       0 | 1-68              
-  ...bProvider.tsx |       0 |        0 |       0 |       0 | 1-26              
-  ...eProvider.tsx |   86.44 |      100 |   66.66 |   86.44 | 47-50,60-62,70    
-  ...rProvider.tsx |       0 |        0 |       0 |       0 | 1-31              
- ...app/src/routes |   27.56 |       50 |   33.33 |   27.56 |                   
-  __root.tsx       |       0 |        0 |       0 |       0 | 1-175             
-  code.tsx         |       0 |        0 |       0 |       0 | 1-22              
-  hermes.tsx       |       0 |        0 |       0 |       0 | 1-7               
-  index.tsx        |       0 |      100 |     100 |       0 | 2-154             
-  logs.tsx         |       0 |        0 |       0 |       0 | 1-111             
-  ...m-monitor.tsx |    92.5 |       80 |     100 |    92.5 | 26-34,169-171     
- .../routes/agents |   96.06 |    90.45 |    82.2 |   96.06 |                   
-  index.tsx        |   96.06 |    90.45 |    82.2 |   96.06 | ...2391,2525-2527 
- ...utes/benchmark |   96.11 |     85.2 |   61.53 |   96.11 |                   
-  index.tsx        |   96.11 |     85.2 |   61.53 |   96.11 | ...40,452-458,608 
- ...routes/engines |     100 |    97.08 |   91.66 |     100 |                   
-  index.tsx        |     100 |    97.08 |   91.66 |     100 | 76,111,122        
- ...rc/routes/gbot |   93.72 |    93.73 |    82.5 |   93.72 |                   
-  index.tsx        |   93.72 |    93.73 |    82.5 |   93.72 | ...1142,1192-1200 
- ...src/routes/hub |     100 |     82.6 |     100 |     100 |                   
-  $modelId.tsx     |     100 |       75 |     100 |     100 | 19-20             
-  index.tsx        |     100 |    86.66 |     100 |     100 | 10-11             
- .../routes/launch |       0 |        0 |       0 |       0 |                   
-  index.tsx        |       0 |        0 |       0 |       0 | 1-1211            
- ...cal-api-server |       0 |        0 |       0 |       0 |                   
-  logs.tsx         |       0 |        0 |       0 |       0 | 1-119             
- .../routes/memory |       0 |        0 |       0 |       0 |                   
-  index.tsx        |       0 |        0 |       0 |       0 | 1-20              
- ...routes/project |    71.7 |    66.66 |   57.14 |    71.7 |                   
-  $projectId.tsx   |    71.7 |    66.66 |   57.14 |    71.7 | ...48-176,199-208 
- ...outes/settings |   73.11 |    80.73 |   64.08 |   73.11 |                   
-  assistant.tsx    |     100 |      100 |     100 |     100 |                   
-  attachments.tsx  |   93.89 |    76.82 |   71.42 |   93.89 | ...55,262,270,284 
-  claude-code.tsx  |       0 |        0 |       0 |       0 | 1-566             
-  extensions.tsx   |    91.3 |       75 |   33.33 |    91.3 | 67-71,75          
-  general.tsx      |   82.64 |    63.09 |      65 |   82.64 | ...98-702,704-715 
-  hardware.tsx     |   87.03 |    70.58 |   33.33 |   87.03 | ...-87,90-104,310 
-  hermes-agent.tsx |   38.56 |     40.9 |   21.42 |   38.56 | ...21,629,638-693 
-  https-proxy.tsx  |     100 |      100 |     100 |     100 |                   
-  interface.tsx    |     100 |      100 |     100 |     100 |                   
-  ...pi-server.tsx |       0 |        0 |       0 |       0 | 1-41              
-  mcp-servers.tsx  |   66.99 |    72.88 |   20.83 |   66.99 | ...97-603,606,660 
-  privacy.tsx      |     100 |      100 |     100 |     100 |                   
-  shortcuts.tsx    |    93.6 |    33.33 |     100 |    93.6 | ...59,61-62,64-65 
-  ...nnections.tsx |   98.34 |    92.33 |   87.23 |   98.34 | ...1365,1384-1392 
- ...ings/providers |   50.29 |    63.76 |   36.84 |   50.29 |                   
-  ...viderName.tsx |   50.55 |    62.29 |   33.33 |   50.55 | ...01-806,836-847 
-  index.tsx        |   49.55 |       75 |     100 |   49.55 | ...70-172,203-253 
- .../routes/skills |   97.51 |    92.59 |   96.66 |   97.51 |                   
-  index.tsx        |   97.51 |    92.59 |   96.66 |   97.51 | ...37-342,399-400 
- ...routes/threads |       0 |        0 |       0 |       0 |                   
-  $threadId.tsx    |       0 |        0 |       0 |       0 | 1-1315            
- ...p/src/services |   78.57 |    78.95 |   77.63 |   78.57 |                   
-  engines.ts       |     100 |      100 |     100 |     100 |                   
-  gbot.ts          |   52.72 |    81.81 |      30 |   52.72 | ...31-232,236-246 
-  index.ts         |   80.24 |    84.21 |      96 |   80.24 | ...18-221,262-264 
-  ...g-registry.ts |      60 |    78.82 |   56.75 |      60 | ...02,605,634-704 
-  model-search.ts  |   74.23 |    59.01 |   84.21 |   74.23 | ...59-382,389-391 
-  ...r-registry.ts |   91.46 |    72.85 |     100 |   91.46 | ...79-180,184,300 
-  ...s-registry.ts |   92.93 |    78.21 |     100 |   92.93 | ...43,247,372,376 
-  ...s-registry.ts |   93.47 |     83.6 |     100 |   93.47 | ...78,282,392,396 
-  ...connectors.ts |    80.9 |    97.36 |   46.15 |    80.9 | ...69-175,178-186 
- ...services/agent |   52.05 |    80.95 |   35.89 |   52.05 |                   
-  definitions.ts   |   58.82 |      100 |      40 |   58.82 | ...42,45-46,49-50 
-  ...ode-bridge.ts |      40 |      100 |       0 |      40 | 39-40,43-44,47-48 
-  skills.ts        |    77.5 |      100 |   77.77 |    77.5 | 64-67,70-74       
-  studio.ts        |   64.91 |    55.55 |   66.66 |   64.91 | 34,53-65,67-71,83 
-  tauri.ts         |    28.2 |      100 |    7.14 |    28.2 | ...03-109,112-113 
- ...c/services/app |    73.8 |    78.26 |   47.61 |    73.8 |                   
-  default.ts       |   30.76 |      100 |       0 |   30.76 | ...47,50-52,55-56 
-  tauri.ts         |    93.1 |    77.27 |      90 |    93.1 | 42,56-58,104-105  
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ces/assistants |     100 |      100 |     100 |     100 |                   
-  default.ts       |     100 |      100 |     100 |     100 |                   
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ices/benchmark |   96.27 |    93.96 |   94.11 |   96.27 |                   
-  leaderboard.ts   |   99.46 |    93.78 |     100 |   99.46 | 193               
-  tauri.ts         |      75 |      100 |      75 |      75 | 184-190           
- ...s/capabilities |   80.64 |      100 |   57.14 |   80.64 |                   
-  default.ts       |   45.45 |      100 |       0 |   45.45 | 9-10,13-14,17-18  
-  tauri.ts         |     100 |      100 |     100 |     100 |                   
-  types.ts         |       0 |        0 |       0 |       0 |                   
- .../services/core |    50.4 |    81.25 |   56.25 |    50.4 |                   
-  default.ts       |      36 |      100 |       0 |      36 | ...30,33-36,39-40 
-  mobile.ts        |       0 |      100 |     100 |       0 | 9-69              
-  tauri.ts         |   88.52 |    78.57 |     100 |   88.52 | 24-26,43-45,70    
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...vices/deeplink |   56.14 |       80 |   33.33 |   56.14 |                   
-  default.ts       |      40 |      100 |       0 |      40 | 9-13,16-17        
-  parse.ts         |   84.61 |    77.77 |     100 |   84.61 | 19-20,35-36       
-  tauri.ts         |   28.57 |      100 |       0 |   28.57 | 10-16,19-26       
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ervices/dialog |   22.72 |      100 |      20 |   22.72 |                   
-  default.ts       |      40 |      100 |       0 |      40 | 9-11,14-16        
-  tauri.ts         |   17.64 |      100 |       0 |   17.64 | 11-31,34-40       
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ervices/events |    74.6 |    71.42 |      80 |    74.6 |                   
-  EventEmitter.ts  |   87.09 |    77.77 |     100 |   87.09 | 24-25,38-39       
-  default.ts       |      40 |      100 |       0 |      40 | 9-11,14-18        
-  tauri.ts         |   72.72 |       50 |     100 |   72.72 | 16-18,31-33       
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...vices/hardware |   68.96 |      100 |   44.44 |   68.96 |                   
-  default.ts       |   46.15 |      100 |       0 |   46.15 | ...13-14,17-19,23 
-  tauri.ts         |    87.5 |      100 |      75 |    87.5 | 24-25             
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...c/services/mcp |   69.93 |    91.89 |   53.33 |   69.93 |                   
-  default.ts       |    28.3 |      100 |       0 |    28.3 | ...77,80-82,85-86 
-  tauri.ts         |   94.44 |    91.66 |   93.75 |   94.44 | 37-38,47,118-119  
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...vices/messages |   65.11 |    82.35 |      80 |   65.11 |                   
-  default.ts       |   65.11 |    81.25 |      75 |   65.11 | ...33,45-55,60-61 
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ervices/models |   57.52 |    83.67 |      75 |   57.52 |                   
-  default.ts       |   57.52 |     83.5 |   74.07 |   57.52 | ...38-549,553-699 
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ervices/opener |      50 |      100 |   28.57 |      50 |                   
-  default.ts       |   45.45 |      100 |       0 |   45.45 | 9-10,13-14,17-19  
-  tauri.ts         |   51.72 |      100 |   33.33 |   51.72 | 11-17,20-26       
-  types.ts         |       0 |        0 |       0 |       0 |                   
- .../services/path |   79.71 |      100 |   54.54 |   79.71 |                   
-  default.ts       |   33.33 |      100 |       0 |   33.33 | ...20,23-25,28-30 
-  tauri.ts         |     100 |      100 |     100 |     100 |                   
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...vices/projects |   95.31 |       90 |     100 |   95.31 |                   
-  default.ts       |   95.31 |    89.47 |     100 |   95.31 | 19-21             
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ices/providers |      32 |    30.76 |      25 |      32 |                   
-  default.ts       |      40 |      100 |       0 |      40 | ...15,18-20,23-24 
-  tauri.ts         |   31.61 |       25 |   28.57 |   31.61 | ...73-379,382-405 
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...c/services/rag |   11.26 |      100 |      20 |   11.26 |                   
-  default.ts       |   11.26 |      100 |       0 |   11.26 | ...61,64-75,78-89 
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...vices/terminal |   59.92 |       75 |      55 |   59.92 |                   
-  code-sessions.ts |       0 |        0 |       0 |       0 | 1-26              
-  tauri.ts         |   63.05 |    76.74 |   57.89 |   63.05 | ...46-249,267-270 
- ...services/theme |   20.83 |      100 |      20 |   20.83 |                   
-  default.ts       |   30.76 |      100 |       0 |   30.76 | 9-11,14-20        
-  tauri.ts         |   17.14 |      100 |       0 |   17.14 | 12-39,42-47       
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...rvices/threads |   95.27 |     86.2 |     100 |   95.27 |                   
-  default.ts       |   95.27 |    85.96 |     100 |   95.27 | ...33-134,174-175 
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...rvices/updater |   14.51 |      100 |   11.11 |   14.51 |                   
-  default.ts       |   41.66 |      100 |       0 |   41.66 | 9-10,14,17-21     
-  tauri.ts         |    11.6 |      100 |       0 |    11.6 | ...29-139,142-163 
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...rvices/uploads |   18.18 |      100 |      25 |   18.18 |                   
-  default.ts       |   18.18 |      100 |       0 |   18.18 | 9-13,16-31,34-49  
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...ervices/window |   59.72 |    53.84 |   33.33 |   59.72 |                   
-  default.ts       |   29.62 |      100 |       0 |   29.62 | ...28-30,34,38,42 
-  tauri.ts         |   64.02 |       52 |   41.17 |   64.02 | ...96,202-204,207 
-  types.ts         |       0 |        0 |       0 |       0 |                   
- ...app/src/stores |   82.35 |    88.43 |   84.03 |   82.35 |                   
-  ...fact-store.ts |     100 |      100 |     100 |     100 |                   
-  ...mark-store.ts |      80 |    81.81 |   85.71 |      80 | 23-29,39          
-  ...sion-store.ts |   80.97 |    75.34 |    87.5 |   80.97 | ...39-340,345-346 
-  ...inal-store.ts |     100 |      100 |   83.33 |     100 |                   
-  ...very-store.ts |     100 |      100 |     100 |     100 |                   
-  ...osts-store.ts |   96.84 |     90.9 |   83.33 |   96.84 | 65-67             
-  ...nion-store.ts |   99.51 |    94.05 |     100 |   99.51 | 93                
-  ...page-store.ts |   96.96 |    93.65 |     100 |   96.96 | 73-74,146-147     
-  ...gent-store.ts |    87.5 |    55.55 |      50 |    87.5 | 14-15,44-46       
-  ...ings-store.ts |   96.15 |    83.33 |     100 |   96.15 | 33                
-  launch-store.ts  |       0 |      100 |     100 |       0 | 16-64             
-  ...oads-store.ts |     100 |      100 |     100 |     100 |                   
-  ...text-store.ts |   42.85 |      100 |       0 |   42.85 | 10-17             
-  ...alog-store.ts |   72.22 |       75 |      40 |   72.22 | ...95,102-106,117 
-  ...ridge-runs.ts |     100 |      100 |     100 |     100 |                   
-  ...stry-store.ts |   75.34 |    85.71 |      50 |   75.34 | ...06,125-129,140 
-  ...stry-store.ts |       0 |      100 |     100 |       0 | 16-177            
-  ...icks-store.ts |   90.76 |     61.9 |     100 |   90.76 | 78,98-99,122-124  
-  ...-run-store.ts |   95.34 |    92.15 |     100 |   95.34 | 134-139           
-  ...read-store.ts |   48.14 |       75 |      25 |   48.14 | 14-16,18-25,31-33 
-  ...view-store.ts |    97.5 |    90.32 |     100 |    97.5 | 57-58             
- ...b-app/src/test |     100 |      100 |     100 |     100 |                   
-  confirm.ts       |     100 |      100 |     100 |     100 |                   
-  service-hub.ts   |     100 |      100 |     100 |     100 |                   
-  setup.ts         |     100 |      100 |     100 |     100 |                   
- ...-app/src/types |   84.21 |      100 |   92.85 |   84.21 |                   
-  agent.ts         |       0 |        0 |       0 |       0 |                   
-  app.d.ts         |       0 |        0 |       0 |       0 |                   
-  appearance.d.ts  |       0 |        0 |       0 |       0 |                   
-  attachment.ts    |   71.42 |      100 |   66.66 |   71.42 | 64-69             
-  completion.ts    |       0 |        0 |       0 |       0 |                   
-  events.ts        |     100 |      100 |     100 |     100 |                   
-  global.d.ts      |       0 |        0 |       0 |       0 |                   
-  haptic.d.ts      |       0 |        0 |       0 |       0 |                   
-  message.d.ts     |       0 |        0 |       0 |       0 |                   
-  ...roviders.d.ts |       0 |        0 |       0 |       0 |                   
-  models.ts        |     100 |      100 |     100 |     100 |                   
-  ...renderer.d.ts |       0 |        0 |       0 |       0 |                   
-  terminal.ts      |       0 |        0 |       0 |       0 |                   
-  threads.d.ts     |       0 |        0 |       0 |       0 |                   
- ...-app/src/utils |   77.63 |    77.28 |   90.41 |   77.63 |                   
-  ...ModelsSync.ts |   93.75 |    73.33 |     100 |   93.75 | 93,95-96          
-  ...undImports.ts |   71.42 |      100 |      50 |   71.42 | 5-6               
-  blurSupport.ts   |       0 |      100 |     100 |       0 | 12-65             
-  ...verRunning.ts |     100 |    85.29 |     100 |     100 | 16,43,52-55,78    
-  ...lForServer.ts |   52.63 |    27.27 |      50 |   52.63 | ...04-109,112-113 
-  ...viderReady.ts |   80.48 |    76.92 |     100 |   80.48 | 26-29,33-36       
-  error.ts         |   91.48 |    86.02 |      80 |   91.48 | ...87,89-90,98-99 
-  formatDate.ts    |     100 |      100 |     100 |     100 |                   
-  ...delToStart.ts |   94.54 |    90.47 |     100 |   94.54 | 17-19             
-  highlight.ts     |     100 |      100 |     100 |     100 |                   
-  ...lHostModel.ts |   94.91 |     77.5 |     100 |   94.91 | 52-54             
-  number.ts        |     100 |      100 |     100 |     100 |                   
-  path.ts          |   33.33 |       50 |     100 |   33.33 | 16-27             
-  reasoning.ts     |    38.7 |    66.66 |   33.33 |    38.7 | 7-14,32-39,45-51  
-  ...teProvider.ts |   64.51 |       50 |      80 |   64.51 | ...2,79-80,94-104 
-  ...LocalModel.ts |   90.47 |     62.5 |     100 |   90.47 | 19-20             
-  switchModel.ts   |   75.41 |    72.18 |   96.42 |   75.41 | ...18-825,831-838 
- ...ndor/cua-media |   26.36 |    80.58 |      30 |   26.36 |                   
-  audio.ts         |    1.93 |      100 |       0 |    1.93 | 42-56,83-293      
-  audioWorklet.js  |       0 |        0 |       0 |       0 | 1-100             
-  h264.ts          |    4.34 |      100 |       0 |    4.34 | 17-39             
-  mediaSession.ts  |   36.68 |    81.66 |   28.57 |   36.68 | ...91-792,795-806 
-  mediaWire.ts     |   32.71 |    80.48 |   34.78 |   32.71 | ...91-339,450-460 
-  ...cs-audio.d.ts |       0 |        0 |       0 |       0 |                   
+All files          |    67.3 |     85.2 |   68.66 |    67.3 |
+ gchat             |       0 |        0 |       0 |       0 |
+  ...st.config.mts |       0 |        0 |       0 |       0 | 1-27
+ gchat/core        |       0 |        0 |       0 |       0 |
+  ...wn.config.mjs |       0 |        0 |       0 |       0 | 1-19
+  ...st.config.mts |       0 |        0 |       0 |       0 | 1-22
+ gchat/core/src    |       0 |      100 |     100 |       0 |
+  index.ts         |       0 |      100 |     100 |       0 | 5-11
+ ...re/src/@global |       0 |        0 |       0 |       0 |
+  index.d.ts       |       0 |        0 |       0 |       0 |
+ ...re/src/browser |   87.37 |    82.45 |   73.68 |   87.37 |
+  core.ts          |   82.35 |      100 |   36.36 |   82.35 | 68,79,88
+  events.ts        |     100 |      100 |     100 |     100 |
+  extension.ts     |   87.59 |    72.22 |      80 |   87.59 | ...61-162,204-206
+  fs.ts            |     100 |      100 |    92.3 |     100 |
+  index.ts         |       0 |      100 |     100 |       0 | 5-35
+ ...ser/extensions |    91.3 |      100 |   66.66 |    91.3 |
+  assistant.ts     |     100 |      100 |     100 |     100 |
+  ...ersational.ts |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  inference.ts     |     100 |      100 |     100 |     100 |
+  mcp.ts           |     100 |      100 |     100 |     100 |
+  rag.ts           |   71.42 |      100 |       0 |   71.42 | 25-26
+  vector-db.ts     |   66.66 |      100 |       0 |   66.66 | 49-50
+ ...nsions/engines |   93.82 |      100 |   72.22 |   93.82 |
+  AIEngine.ts      |     100 |      100 |     100 |     100 |
+  EngineManager.ts |     100 |      100 |     100 |     100 |
+  ...lOAIEngine.ts |    87.5 |      100 |      50 |    87.5 | 33,40
+  OAIEngine.ts     |   86.95 |      100 |      50 |   86.95 | 37,61-62
+  ...eOAIEngine.ts |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+ ...browser/models |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  manager.ts       |     100 |      100 |     100 |     100 |
+  utils.ts         |     100 |      100 |     100 |     100 |
+ .../core/src/test |   83.33 |        0 |     100 |   83.33 |
+  setup.ts         |   83.33 |        0 |     100 |   83.33 | 5-6
+ ...core/src/types |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+ .../src/types/api |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+ ...ypes/assistant |     100 |      100 |     100 |     100 |
+  ...tantEntity.ts |       0 |        0 |       0 |       0 |
+  ...stantEvent.ts |     100 |      100 |     100 |     100 |
+  ...tInterface.ts |       0 |        0 |       0 |       0 |
+  index.ts         |     100 |      100 |     100 |     100 |
+ ...c/types/config |     100 |      100 |     100 |     100 |
+  ...nfigEntity.ts |       0 |        0 |       0 |       0 |
+  ...onfigEvent.ts |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+ ...c/types/engine |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+ ...src/types/file |       0 |        0 |       0 |       0 |
+  index.ts         |       0 |        0 |       0 |       0 |
+ ...types/hardware |       0 |        0 |       0 |       0 |
+  index.ts         |       0 |        0 |       0 |       0 |
+ ...ypes/inference |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  ...enceEntity.ts |     100 |      100 |     100 |     100 |
+  ...renceEvent.ts |     100 |      100 |     100 |     100 |
+  ...eInterface.ts |       0 |        0 |       0 |       0 |
+ .../src/types/mcp |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  mcpEntity.ts     |       0 |        0 |       0 |       0 |
+  mcpInterface.ts  |       0 |        0 |       0 |       0 |
+ .../types/message |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  messageEntity.ts |     100 |      100 |     100 |     100 |
+  messageEvent.ts  |     100 |      100 |     100 |     100 |
+  ...eInterface.ts |       0 |        0 |       0 |       0 |
+  ...equestType.ts |     100 |      100 |     100 |     100 |
+ .../miscellaneous |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  ...sourceInfo.ts |     100 |      100 |     100 |     100 |
+ ...rc/types/model |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  modelEntity.ts   |       0 |        0 |       0 |       0 |
+  modelEvent.ts    |     100 |      100 |     100 |     100 |
+  modelImport.ts   |       0 |        0 |       0 |       0 |
+  ...lInterface.ts |       0 |        0 |       0 |       0 |
+  modelSource.ts   |       0 |        0 |       0 |       0 |
+ .../types/setting |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  ...gComponent.ts |     100 |      100 |     100 |     100 |
+ ...c/types/thread |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  threadEntity.ts  |       0 |        0 |       0 |       0 |
+  ...dInterface.ts |       0 |        0 |       0 |       0 |
+ gchat/scripts     |       0 |        0 |       0 |       0 |
+  ...abilities.mjs |       0 |        0 |       0 |       0 | 1-62
+  ...w-profile.mjs |       0 |        0 |       0 |       0 | 1-73
+  ...age-floor.mjs |       0 |        0 |       0 |       0 | 1-141
+  ...t-quality.mjs |       0 |        0 |       0 |       0 | 1-244
+  download-bin.mjs |       0 |        0 |       0 |       0 | 1-406
+  ...g-i18n-key.js |       0 |        0 |       0 |       0 | 1-345
+  ...anslations.js |       0 |        0 |       0 |       0 | 1-268
+  ...ri-assets.mjs |       0 |        0 |       0 |       0 | 1-24
+ gchat/web-app     |       0 |        0 |       0 |       0 |
+  eslint.config.js |       0 |        0 |       0 |       0 | 1-28
+  vite.config.ts   |       0 |        0 |       0 |       0 | 1-150
+  ...st.config.mts |       0 |        0 |       0 |       0 | 1-42
+ ...eb-app/scripts |   24.67 |       80 |   66.66 |   24.67 |
+  ...d-catalog.mjs |       0 |        0 |       0 |       0 | 1-128
+  ...mar-assets.ts |     100 |    88.88 |     100 |     100 | 20
+ gchat/web-app/src |   21.02 |    77.77 |   45.45 |   21.02 |
+  i18n.ts          |     100 |      100 |     100 |     100 |
+  main.tsx         |   64.22 |    71.42 |   33.33 |   64.22 | ...21,157-158,177
+  routeTree.gen.ts |       0 |      100 |     100 |       0 | 11-737
+  vite-env.d.ts    |       0 |        0 |       0 |       0 |
+ ...src/components |   62.51 |    94.46 |   83.01 |   62.51 |
+  GbotAvatars.tsx  |     100 |      100 |     100 |     100 |
+  ...onnectors.tsx |   99.48 |    92.85 |     100 |   99.48 | 167
+  ...HumanHelp.tsx |    98.8 |    97.14 |     100 |    98.8 | 95
+  GbotLanBot.tsx   |     100 |    94.73 |   83.33 |     100 | 35
+  ...Schedules.tsx |   91.82 |    93.15 |     100 |   91.82 | ...97-210,235-239
+  ...skActions.tsx |     100 |      100 |     100 |     100 |
+  ...kApproval.tsx |     100 |      100 |     100 |     100 |
+  ...erruption.tsx |     100 |      100 |     100 |     100 |
+  ...horAvatar.tsx |       0 |        0 |       0 |       0 | 1-65
+  ...odeEditor.tsx |     100 |      100 |     100 |     100 |
+  ...ifiedText.tsx |       0 |        0 |       0 |       0 | 1-69
+  LogViewer.tsx    |       0 |        0 |       0 |       0 | 1-114
+  MCPLogViewer.tsx |       0 |        0 |       0 |       0 | 1-132
+  MermaidError.tsx |   11.76 |      100 |       0 |   11.76 | 14-30
+  ...urceBadge.tsx |      50 |      100 |       0 |      50 | 44-67,71-95
+  ...tProgress.tsx |     100 |      100 |     100 |     100 |
+  ...ModelChip.tsx |       0 |      100 |     100 |       0 | 2-45
+  TokenCounter.tsx |       0 |        0 |       0 |       0 | 1-231
+ ...nts/GbotAvatar |     100 |      100 |     100 |     100 |
+  index.tsx        |     100 |      100 |     100 |     100 |
+ ...botDesktopView |   91.21 |    94.87 |   91.66 |   91.21 |
+  index.tsx        |   91.21 |    94.87 |   91.66 |   91.21 | 91-100,157-159
+ ...ents/GbotSetup |   98.99 |    95.88 |   92.17 |   98.99 |
+  BrainSetup.tsx   |   96.96 |    96.66 |   93.33 |   96.96 | 60-64,170-174
+  ...dComputer.tsx |   98.93 |    94.73 |     100 |   98.93 | 153-156
+  CloudCosts.tsx   |   96.46 |    95.53 |   70.58 |   96.46 | ...18-221,234-236
+  CloudSetup.tsx   |     100 |      100 |     100 |     100 |
+  KvmSetup.tsx     |     100 |    95.23 |     100 |     100 | ...28,198,214,266
+  LanSetup.tsx     |     100 |    98.26 |     100 |     100 | 89,172
+  LanTools.tsx     |     100 |    97.43 |     100 |     100 | 46
+  M365Setup.tsx    |   99.39 |    91.05 |     100 |   99.39 | 279,294,423
+  ServiceSetup.tsx |   99.46 |    98.71 |   83.33 |   99.46 | 175
+  index.tsx        |     100 |    98.22 |   77.77 |     100 | 123,147,360
+ ...ts/ai-elements |    44.2 |    96.77 |   42.85 |    44.2 |
+  ...-activity.tsx |     100 |      100 |     100 |     100 |
+  code-block.tsx   |    60.9 |    94.44 |      60 |    60.9 | ...26-128,144-183
+  conversation.tsx |   28.04 |      100 |       0 |   28.04 | ...5,64-89,95-121
+  reasoning.tsx    |   18.04 |      100 |       0 |   18.04 | ...37-166,177-191
+  ...indicator.tsx |     100 |      100 |     100 |     100 |
+  shimmer.tsx      |   11.11 |      100 |       0 |   11.11 | 20-64
+ ...elements/tools |   66.74 |       50 |      75 |   66.74 |
+  ...-renderer.tsx |   92.59 |    33.33 |     100 |   92.59 | 26,30
+  tool.tsx         |   64.98 |    51.02 |   66.66 |   64.98 | ...78-579,588-590
+ ...ools/renderers |      58 |    46.66 |   55.55 |      58 |
+  ...-renderer.tsx |     100 |      100 |      50 |     100 |
+  ...-renderer.tsx |    5.55 |      100 |       0 |    5.55 | 9-16,19-72
+  ...-renderer.tsx |   89.13 |    42.85 |     100 |   89.13 | 14-15,26-28
+  website-icon.tsx |      80 |    42.85 |   66.66 |      80 | 18-19,33-38
+ .../animated-icon |   22.58 |    95.45 |   61.11 |   22.58 |
+  blocks.tsx       |   81.53 |      100 |       0 |   81.53 | 40-45,51-56
+  bot.tsx          |       0 |      100 |     100 |       0 | 3-120
+  file-text.tsx    |   83.49 |    83.33 |     100 |   83.49 | 57-62,72-77,83-88
+  folder-open.tsx  |       0 |      100 |     100 |       0 | 2-96
+  folder-plus.tsx  |   74.69 |      100 |       0 |   74.69 | 22-30,48-53,59-64
+  folders.tsx      |       0 |      100 |     100 |       0 | 3-120
+  ...tical-end.tsx |       0 |      100 |     100 |       0 | 2-113
+  list-todo.tsx    |       0 |      100 |     100 |       0 | 2-127
+  ...rcle-more.tsx |       0 |      100 |     100 |       0 | 4-123
+  ...ge-circle.tsx |   84.61 |      100 |       0 |   84.61 | 59-64,70-75
+  plug.tsx         |       0 |      100 |     100 |       0 | 4-109
+  search.tsx       |       0 |      100 |     100 |       0 | 3-92
+  settings.tsx     |       0 |      100 |     100 |       0 | 3-90
+  sparkles.tsx     |       0 |      100 |     100 |       0 | 2-105
+ ...s/left-sidebar |   74.07 |    78.08 |   45.71 |   74.07 |
+  NavChats.tsx     |       0 |        0 |       0 |       0 | 1-91
+  NavMain.tsx      |   92.03 |    75.86 |   23.07 |   92.03 | ...42,245,256-258
+  NavProjects.tsx  |   87.03 |    64.51 |   45.45 |   87.03 | ...96-300,303-304
+  ...ckActions.tsx |   87.93 |    81.37 |     100 |   87.93 | ...05-207,214-215
+  ...nKindIcon.tsx |     100 |      100 |     100 |     100 |
+  ...StatusDot.tsx |   18.18 |      100 |       0 |   18.18 | 8-17
+  index.tsx        |       0 |        0 |       0 |       0 | 1-113
+ .../components/ui |   57.98 |    88.62 |   74.28 |   57.98 |
+  avatar.tsx       |       0 |        0 |       0 |       0 | 1-46
+  button-group.tsx |   51.51 |      100 |   33.33 |   51.51 | 40-76
+  button.tsx       |     100 |      100 |     100 |     100 |
+  card.tsx         |       0 |        0 |       0 |       0 | 1-77
+  ...ce-select.tsx |     100 |    91.42 |     100 |     100 | 34,42,74
+  collapsible.tsx  |     100 |      100 |     100 |     100 |
+  dialog.tsx       |   97.47 |    91.66 |     100 |   97.47 | 112-114
+  drawer.tsx       |   40.59 |      100 |      40 |   40.59 | 24-44,73-120
+  ...down-menu.tsx |     100 |      100 |     100 |     100 |
+  dropdrawer.tsx   |   28.18 |    77.77 |   27.77 |   28.18 | ...12-665,690-960
+  hover-card.tsx   |     100 |      100 |     100 |     100 |
+  input.tsx        |     100 |      100 |     100 |     100 |
+  kbd.tsx          |     100 |      100 |     100 |     100 |
+  label.tsx        |     100 |      100 |     100 |     100 |
+  ...by-context.ts |     100 |      100 |     100 |     100 |
+  popover.tsx      |   57.81 |      100 |   57.14 |   57.81 | 46-77
+  progress.tsx     |     100 |      100 |     100 |     100 |
+  radio-group.tsx  |     100 |      100 |     100 |     100 |
+  separator.tsx    |      10 |      100 |       0 |      10 | 6-24
+  settings.tsx     |       0 |      100 |     100 |       0 | 3-90
+  sheet.tsx        |     100 |      100 |     100 |     100 |
+  sidebar.tsx      |   52.15 |     62.5 |     100 |   52.15 | ...73-687,697-725
+  skeleton.tsx     |     100 |      100 |     100 |     100 |
+  slider.tsx       |     100 |      100 |     100 |     100 |
+  sonner.tsx       |     100 |      100 |     100 |     100 |
+  switch.tsx       |     100 |      100 |     100 |     100 |
+  textarea.tsx     |     100 |      100 |     100 |     100 |
+  tooltip.tsx      |     100 |      100 |     100 |     100 |
+ .../src/constants |   68.31 |       80 |      75 |   68.31 |
+  ...uggestions.ts |     100 |      100 |     100 |     100 |
+  chat.ts          |     100 |      100 |     100 |     100 |
+  integrations.ts  |       0 |      100 |     100 |       0 | 51-331
+  localStorage.ts  |     100 |      100 |     100 |     100 |
+  models.ts        |     100 |      100 |     100 |     100 |
+  providers.ts     |     100 |      100 |     100 |     100 |
+  ...dModelChip.ts |       0 |      100 |     100 |       0 | 10-23
+  routes.ts        |     100 |      100 |     100 |     100 |
+  staff-picks.ts   |     100 |      100 |     100 |     100 |
+  threadScroll.ts  |       0 |        0 |       0 |       0 | 1-32
+  windows.ts       |     100 |      100 |     100 |     100 |
+ ...src/containers |   72.17 |     84.6 |    72.8 |   72.17 |
+  ...lorPicker.tsx |       0 |        0 |       0 |       0 | 1-32
+  ...derButton.tsx |     100 |    91.66 |     100 |     100 | 23
+  ...tLiveRuns.tsx |   92.78 |    81.17 |    87.5 |   92.78 | ...13-315,329-331
+  ...tRunSetup.tsx |   88.96 |    81.57 |   76.92 |   88.96 | ...12,260-262,282
+  ...ateDialog.tsx |     100 |      100 |     100 |     100 |
+  ...ditDialog.tsx |     100 |      100 |     100 |     100 |
+  ...SlashMenu.tsx |     100 |      100 |     100 |     100 |
+  ...oadDialog.tsx |   91.42 |    84.61 |   53.84 |   91.42 | ...35-137,140-142
+  ...dioHeader.tsx |     100 |      100 |     100 |     100 |
+  ...ggestions.tsx |     100 |      100 |     100 |     100 |
+  ...rkerPools.tsx |   90.59 |    80.23 |   73.33 |   90.59 | ...87,293,297,317
+  ...paceFiles.tsx |   94.91 |       90 |   61.53 |   94.91 | ...40,346-351,522
+  ...aceLayout.tsx |   97.87 |    90.47 |     100 |   97.87 | 139-142,178
+  ...cePreview.tsx |    91.5 |    91.37 |    87.5 |    91.5 | ...46,151-153,212
+  ...aceSelect.tsx |     100 |    88.88 |     100 |     100 | 24,62
+  ApiKeyInput.tsx  |       0 |        0 |       0 |       0 | 1-97
+  ...efixInput.tsx |       0 |        0 |       0 |       0 | 1-42
+  ...rBoundary.tsx |     100 |      100 |     100 |     100 |
+  ...factPanel.tsx |   92.39 |    92.85 |    62.5 |   92.39 | ...91,211-213,218
+  ...hmentChip.tsx |   73.97 |    54.83 |      60 |   73.97 | ...56-158,174-176
+  AudioPlayer.tsx  |    3.38 |      100 |       0 |    3.38 | 23-29,39-274
+  AvatarEmoji.tsx  |     100 |      100 |     100 |     100 |
+  ...aderboard.tsx |   91.75 |    55.81 |   72.72 |   91.75 | 19-26
+  ...rSettings.tsx |     100 |    95.06 |   83.33 |     100 | 42,52,66,102
+  Capabilities.tsx |     100 |      100 |     100 |     100 |
+  Card.tsx         |     100 |       75 |     100 |     100 | 34,44-45,67
+  ChatInput.tsx    |    67.2 |    74.64 |   54.38 |    67.2 | ...3015,3028-3043
+  ...idgePanel.tsx |   90.09 |    67.21 |    92.3 |   90.09 | ...76-179,229,239
+  ...minalHost.tsx |   90.01 |     85.4 |      60 |   90.01 | ...78-684,712-715
+  ...zeControl.tsx |   99.02 |    86.11 |     100 |   99.02 | 49-50
+  ...odeSelect.tsx |    98.5 |       40 |   66.66 |    98.5 | 46
+  CopyButton.tsx   |     100 |      100 |     100 |     100 |
+  ...tialSetup.tsx |   97.76 |       99 |     100 |   97.76 | 41-46
+  ...oadButton.tsx |       0 |        0 |       0 |       0 | 1-253
+  ...anegement.tsx |   52.03 |    81.81 |      60 |   52.03 | ...36-656,698-775
+  ...lProvider.tsx |   79.29 |    79.13 |      50 |   79.29 | ...33-636,639-642
+  ...Available.tsx |       0 |        0 |       0 |       0 | 1-273
+  ...ovisioner.tsx |   94.11 |    54.54 |     100 |   94.11 | 19-21,70,83
+  ...Discovery.tsx |     100 |    84.21 |     100 |     100 | 15,18,29
+  ...eFirstRun.tsx |     100 |    93.33 |    92.3 |     100 | ...01-203,210-211
+  ...otControl.tsx |     100 |      100 |     100 |     100 |
+  ...reProfile.tsx |     100 |    97.56 |   88.88 |     100 | 20,85
+  ...ostModels.tsx |   98.62 |    90.69 |    77.5 |   98.62 | 255,279,356-358
+  ...eHostName.tsx |     100 |       90 |     100 |     100 | 12,25
+  ...stSharing.tsx |     100 |      100 |     100 |     100 |
+  ...eSettings.tsx |     100 |      100 |     100 |     100 |
+  EngineIntake.tsx |     100 |    91.66 |     100 |     100 | 33
+  ...ilePicker.tsx |     100 |    97.68 |   88.88 |     100 | 82,94,124
+  ...delAction.tsx |       0 |        0 |       0 |       0 | 1-27
+  ...eSwitcher.tsx |       0 |        0 |       0 |       0 | 1-75
+  ...Companion.tsx |   97.13 |    95.68 |   72.72 |   97.13 | ...04,733,736,850
+  GlobalError.tsx  |     100 |      100 |     100 |     100 |
+  HeaderPage.tsx   |       0 |        0 |       0 |       0 | 1-71
+  ...minalHost.tsx |   87.26 |     67.6 |   58.33 |   87.26 | ...57,460,463-471
+  HtmlArtifact.tsx |   95.68 |    92.25 |     100 |   95.68 | ...67-169,274-281
+  ...ageEditor.tsx |     100 |       95 |     100 |     100 | 50
+  ...eSwitcher.tsx |       0 |        0 |       0 |       0 | 1-66
+  ...rverPanel.tsx |       0 |        0 |       0 |       0 | 1-442
+  ...oolLoader.tsx |    6.25 |      100 |       0 |    6.25 | 15-71
+  ...ryContext.tsx |       0 |        0 |       0 |       0 | 1-45
+  ...ryLibrary.tsx |   91.22 |    86.36 |   57.14 |   91.22 | ...13-319,326-329
+  MessageItem.tsx  |   65.26 |    66.94 |   42.85 |   65.26 | ...44-745,754-758
+  ...lCombobox.tsx |   89.87 |    80.43 |   78.94 |   89.87 | ...42-344,382-383
+  ...oadAction.tsx |       0 |        0 |       0 |       0 | 1-239
+  ...HoverCard.tsx |       0 |        0 |       0 |       0 | 1-204
+  ...ErrorBody.tsx |     100 |      100 |     100 |     100 |
+  ...rrorToast.tsx |     100 |      100 |     100 |     100 |
+  ModelLogo.tsx    |   70.37 |    61.53 |      50 |   70.37 | 62-77
+  ...anagement.tsx |   95.84 |    84.87 |   62.85 |   95.84 | ...82-285,288-291
+  ModelSetting.tsx |      97 |    66.66 |     100 |      97 | 76-77,97,100,109
+  ...nControls.tsx |     100 |    94.44 |     100 |     100 | 29,40
+  ...rsSection.tsx |     6.6 |      100 |       0 |     6.6 | 22-47,50-137
+  ...rmMetaKey.tsx |     100 |    66.66 |     100 |     100 | 10
+  PortInput.tsx    |       0 |        0 |       0 |       0 | 1-39
+  ProjectFiles.tsx |       0 |        0 |       0 |       0 | 1-563
+  ...dingModel.tsx |     100 |      100 |     100 |     100 |
+  ...ersAvatar.tsx |   39.62 |       50 |     100 |   39.62 | 34-68
+  ...eoutInput.tsx |       0 |        0 |       0 |       0 | 1-39
+  ...ingToggle.tsx |     100 |      100 |     100 |     100 |
+  ...berMemory.tsx |   93.47 |    72.72 |   66.66 |   93.47 | 47-48,57,84-86
+  ...rMarkdown.tsx |   78.78 |    81.03 |   71.42 |   78.78 | ...45-257,262,273
+  ...erPopover.tsx |    9.15 |      100 |       0 |    9.15 | 38-208
+  ...tSwitcher.tsx |       0 |        0 |       0 |       0 | 1-52
+  SettingsMenu.tsx |   76.76 |    89.47 |      50 |   76.76 | ...81-194,201-237
+  SetupScreen.tsx  |     100 |      100 |     100 |     100 |
+  StatusLabel.tsx  |     100 |      100 |     100 |     100 |
+  ...oActivity.tsx |   97.14 |    63.15 |     100 |   97.14 | 26,64
+  ...eSwitcher.tsx |       0 |        0 |       0 |       0 | 1-82
+  ThreadList.tsx   |   80.59 |    76.81 |   42.85 |   80.59 | ...84-304,311,316
+  ...Indicator.tsx |   76.78 |       25 |     100 |   76.78 | ...66,71,84-87,90
+  ...ostsInput.tsx |       0 |        0 |       0 |       0 | 1-53
+  ...acePicker.tsx |   97.05 |     96.1 |    92.3 |   97.05 | ...80,111,193-195
+  ...SkillSlash.ts |     100 |    90.47 |     100 |     100 | 45,53
+ ...ners/chatInput |   52.06 |       92 |   36.36 |   52.06 |
+  audioFromPath.ts |    8.23 |      100 |       0 |    8.23 | ...0,53-65,76-110
+  ...oppedPaths.ts |     100 |    84.61 |     100 |     100 | 112,129
+  imageFromPath.ts |    9.52 |      100 |       0 |    9.52 | 7-19,22-34,46-80
+  ...riDragDrop.ts |    70.9 |      100 |     100 |    70.9 | 52-67
+ ...ainers/dialogs |   59.74 |    86.03 |    68.5 |   59.74 |
+  ...derDialog.tsx |    6.93 |      100 |       0 |    6.93 | 38-261
+  ...Assistant.tsx |   90.33 |    92.98 |   76.92 |   90.33 | ...,75-76,221-236
+  ...CliDialog.tsx |       0 |        0 |       0 |       0 | 1-179
+  ...MCPServer.tsx |   90.78 |     79.5 |   56.41 |   90.78 | ...49,657,689,697
+  AddModel.tsx     |       0 |        0 |       0 |       0 | 1-153
+  ...ectDialog.tsx |   95.67 |    96.61 |   91.66 |   95.67 | 189-193,223-227
+  ...derDialog.tsx |    71.6 |      100 |   28.57 |    71.6 | ...49,52-56,64-66
+  ...valDialog.tsx |   94.47 |    86.15 |     100 |   94.47 | ...31,68-69,87-90
+  ...essDialog.tsx |       0 |        0 |       0 |       0 | 1-119
+  AppUpdater.tsx   |       0 |        0 |       0 |       0 | 1-91
+  ...ionDialog.tsx |       0 |        0 |       0 |       0 | 1-73
+  ...rLocation.tsx |     100 |      100 |     100 |     100 |
+  ...ialogHost.tsx |     100 |      100 |     100 |     100 |
+  ...adsDialog.tsx |   98.21 |       95 |   88.88 |   98.21 | 91-92
+  ...ectDialog.tsx |   98.14 |    94.73 |   88.88 |   98.14 | 88-89
+  ...antDialog.tsx |   97.64 |    93.75 |    87.5 |   97.64 | 67-68
+  ...erConfirm.tsx |   97.77 |    94.11 |   85.71 |   97.77 | 72-73
+  ...ageDialog.tsx |   97.82 |    93.33 |   85.71 |   97.82 | 77-78
+  DeleteModel.tsx  |   98.49 |     87.5 |    87.5 |   98.49 | 123-124
+  ...ectDialog.tsx |   96.61 |    88.88 |    87.5 |   96.61 | 61,101-102,108
+  ...eProvider.tsx |       0 |        0 |       0 |       0 | 1-109
+  ...eadDialog.tsx |   92.59 |    81.48 |      80 |   92.59 | ...01-106,125-126
+  ...MCPserver.tsx |    90.8 |    66.66 |      50 |    90.8 | ...59,70,81-82,88
+  EditModel.tsx    |   73.14 |    68.75 |   27.27 |   73.14 | ...49,266,282-285
+  ...setDialog.tsx |     100 |      100 |     100 |     100 |
+  ...ionDialog.tsx |       0 |        0 |       0 |       0 | 1-128
+  ImageModal.tsx   |       0 |        0 |       0 |       0 | 1-40
+  ...ataDialog.tsx |   13.55 |      100 |       0 |   13.55 | 26-81
+  ...extDialog.tsx |       0 |        0 |       0 |       0 | 1-78
+  ...eadDialog.tsx |   94.48 |    87.09 |    87.5 |   94.48 | 53-54,113-118
+  SearchDialog.tsx |      85 |    86.88 |   66.66 |      85 | ...43-251,307-333
+  ...figDialog.tsx |       0 |        0 |       0 |       0 | 1-875
+  ...NewDialog.tsx |       0 |        0 |       0 |       0 | 1-89
+  index.ts         |     100 |      100 |     100 |     100 |
+ ...trollerSetting |   62.24 |    76.27 |   66.66 |   62.24 |
+  ...oxControl.tsx |     100 |      100 |     100 |     100 |
+  ...wnControl.tsx |   97.91 |       50 |      50 |   97.91 | 60
+  InputControl.tsx |   99.17 |       80 |     100 |   99.17 | 53
+  ...erControl.tsx |    4.87 |      100 |       0 |    4.87 | 19-104
+  ...eaControl.tsx |   17.39 |      100 |       0 |   17.39 | 14-34
+  index.tsx        |   52.94 |    72.72 |   42.85 |   52.94 | 70-107
+ ...containers/hub |   92.43 |       80 |   86.66 |   92.43 |
+  ...delAction.tsx |   98.85 |    86.66 |   66.66 |   98.85 | 65
+  ...onsSelect.tsx |     100 |    78.78 |     100 |     100 | 78,88-98,110
+  FitBadge.tsx     |       0 |        0 |       0 |       0 | 1-43
+  ...tailPanel.tsx |   91.59 |    77.61 |     100 |   91.59 | ...32,164,227-237
+  ModelListRow.tsx |     100 |    85.71 |     100 |     100 | 32-33
+ ...ainers/loaders |       0 |        0 |       0 |       0 |
+  ModelLoader.tsx  |       0 |        0 |       0 |       0 | 1-8
+ ...-app/src/hooks |   71.02 |    85.77 |    74.2 |   71.02 |
+  use-chat.ts      |       0 |        0 |       0 |       0 | 1-205
+  use-mobile.ts    |    87.5 |      100 |      50 |    87.5 | 12-13
+  ...bar-resize.ts |     0.7 |      100 |       0 |     0.7 | 100-119,127-485
+  use-sidebar.ts   |   77.77 |       50 |     100 |   77.77 | 22-23
+  ...efinitions.ts |   85.93 |    94.11 |     100 |   85.93 | 54-57,67-69,73-74
+  useAgentRun.ts   |   82.97 |    81.42 |   84.61 |   82.97 | ...91-404,423-439
+  ...gentSkills.ts |   96.59 |    77.77 |     100 |   96.59 | 66-69,72
+  useAppState.ts   |   76.66 |     90.9 |      75 |   76.66 | ...85-188,190-193
+  useAppUpdater.ts |    95.6 |    82.97 |     100 |    95.6 | ...61-163,231-233
+  useAssistant.ts  |   83.58 |    88.33 |   76.47 |   83.58 | ...30-231,233-246
+  ...tionPrompt.ts |   42.42 |      100 |       0 |   42.42 | 32-42,44-47,49-52
+  ...ttachments.ts |   95.07 |    91.11 |   46.15 |   95.07 | ...29-131,170,176
+  ...dResources.ts |   97.43 |      100 |     100 |   97.43 | 40
+  ...ttachments.ts |   79.54 |       75 |     100 |   79.54 | 49-58
+  ...eCodeModel.ts |       0 |        0 |       0 |       0 | 1-109
+  ...ntextUsage.ts |     100 |      100 |     100 |     100 |
+  ...tionPolicy.ts |   99.57 |    85.91 |     100 |   99.57 | 176
+  ...nloadStore.ts |   61.79 |      100 |      50 |   61.79 | ...56-161,164-171
+  ...edTerminal.ts |   90.56 |       84 |     100 |   90.56 | ...61,288,302-303
+  ...oriteModel.ts |      55 |      100 |      40 |      55 | 19-27,36-37,40-46
+  ...rExtension.ts |       0 |        0 |       0 |       0 | 1-212
+  ...ralSetting.ts |   86.36 |    95.23 |      60 |   86.36 | ...00-104,106-108
+  useHardware.ts   |     100 |      100 |     100 |     100 |
+  ...rdwareTier.ts |     100 |       90 |     100 |     100 | 42
+  ...AgentModel.ts |       0 |        0 |       0 |       0 | 1-18
+  useHotkeys.ts    |     100 |      100 |     100 |     100 |
+  ...ialMessage.ts |     100 |      100 |     100 |     100 |
+  ...ceSettings.ts |   81.37 |    93.75 |   85.71 |   81.37 | 63,114-138
+  ...eenVersion.ts |       0 |        0 |       0 |       0 | 1-22
+  useLeftPanel.ts  |   77.77 |      100 |      40 |   77.77 | 27-32
+  ...lApiServer.ts |     100 |    95.65 |     100 |     100 | 77
+  useMCPServers.ts |      87 |      100 |   91.66 |      87 | 91-108
+  useMediaQuery.ts |   76.38 |    82.35 |   45.45 |   76.38 | ...03-104,108-109
+  useMessages.ts   |      76 |    88.88 |   66.66 |      76 | 57,61-80,94-95
+  ...xtApproval.ts |     100 |      100 |     100 |     100 |
+  useModelLoad.ts  |     100 |      100 |      50 |     100 |
+  ...elProvider.ts |   71.67 |    74.52 |   81.81 |   71.67 | ...38-408,412-423
+  ...delSources.ts |      96 |       80 |     100 |      96 | 76-77
+  ...elReminder.ts |     100 |      100 |     100 |     100 |
+  ...serMessage.ts |    64.7 |      100 |      50 |    64.7 | 31-36
+  ...jectDialog.ts |       0 |        0 |       0 |       0 | 1-11
+  usePrompt.ts     |     100 |      100 |     100 |     100 |
+  ...iderModels.ts |    88.4 |       80 |     100 |    88.4 | 66-69,77-80
+  ...roxyConfig.ts |     100 |      100 |     100 |     100 |
+  ...ndedModels.ts |   96.39 |    84.37 |     100 |   96.39 | 22-24,138
+  ...archDialog.ts |       0 |        0 |       0 |       0 | 1-11
+  useServiceHub.ts |      76 |       75 |      80 |      76 | 22-23,36-37,54-55
+  ...pCompleted.ts |    82.6 |       80 |      50 |    82.6 | 19-22
+  useStaffPicks.ts |   97.89 |    94.11 |     100 |   97.89 | 19,118
+  ...dioCatalog.ts |     100 |    93.33 |     100 |     100 | 41,57
+  useTheme.ts      |   97.67 |     92.3 |     100 |   97.67 | 48
+  ...Management.ts |      37 |      100 |      20 |      37 | ...07-108,111-113
+  ...ifications.ts |      80 |      100 |   33.33 |      80 | 16-17,23-24
+  useThreads.ts    |   73.87 |    78.82 |      76 |   73.87 | ...82,407-429,450
+  ...okensCount.ts |   85.65 |    71.11 |     100 |   85.65 | ...17-220,249-255
+  ...lAvailable.ts |   72.22 |    96.55 |   71.42 |   72.22 | ...27-128,162-178
+  useTools.ts      |   83.56 |     77.5 |     100 |   83.56 | ...42,144-145,150
+  ...StatusSync.ts |       0 |        0 |       0 |       0 | 1-188
+  useWhatsNew.ts   |       0 |        0 |       0 |       0 | 1-154
+ ...b-app/src/i18n |   85.98 |     95.9 |   20.88 |   85.98 |
+  ...onContext.tsx |   35.29 |      100 |       0 |   35.29 | 7-18
+  context.ts       |     100 |      100 |     100 |     100 |
+  hooks.ts         |     100 |      100 |     100 |     100 |
+  index.ts         |       0 |      100 |     100 |       0 | 2-5
+  ...ext-compat.ts |     100 |       80 |     100 |     100 | 18
+  setup.ts         |   91.89 |    96.49 |   19.17 |   91.89 | ...24-125,144-145
+ ...eb-app/src/lib |    77.5 |    81.83 |   81.21 |    77.5 |
+  ...ntinuation.ts |     100 |      100 |     100 |     100 |
+  ...file-links.ts |   96.85 |       86 |     100 |   96.85 | 91-92,106-107
+  agent-metrics.ts |   97.36 |    92.85 |     100 |   97.36 | 21
+  agent-outcome.ts |      96 |     90.9 |     100 |      96 | 22
+  agent-path.ts    |     100 |    85.71 |     100 |     100 | 17
+  ...-preflight.ts |   89.34 |    90.16 |     100 |   89.34 | 32-35,62-66,73-76
+  ...un-message.ts |   92.98 |    92.85 |     100 |   92.98 | ...17,126-136,167
+  ...-selection.ts |     100 |      100 |     100 |     100 |
+  ai-model.ts      |       0 |        0 |       0 |       0 | 1-126
+  ...Processing.ts |   67.89 |    67.07 |     100 |   67.89 | ...96-298,300-310
+  chat-warning.ts  |   98.73 |    81.25 |     100 |   98.73 | 65
+  cloud-gallery.ts |   21.42 |      100 |       0 |   21.42 | 8-18
+  ...ckDownload.ts |   54.54 |      100 |       0 |   54.54 | ...90-215,224-254
+  ...ighlighter.ts |       0 |        0 |       0 |       0 | 1-21
+  codeTerminal.ts  |   97.36 |     92.3 |     100 |   97.36 | 72-73
+  completion.ts    |   72.44 |       60 |      50 |   72.44 | ...08-109,134-157
+  confirm.ts       |     100 |      100 |     100 |     100 |
+  ...on-command.ts |   90.47 |     92.3 |     100 |   90.47 | 29-30
+  ...rt-helpers.ts |     100 |    84.84 |     100 |     100 | 12,52,113-117,135
+  ...-transport.ts |   84.52 |    76.82 |   70.83 |   84.52 | ...89-795,825-826
+  ...ncellation.ts |   29.41 |      100 |       0 |   29.41 | 6-7,10-19,22-23
+  ...ost-labels.ts |   96.29 |    95.31 |     100 |   96.29 | 14-15
+  ...capability.ts |   98.75 |    91.57 |     100 |   98.75 | 43-44
+  ...tool-calls.ts |   76.92 |       80 |      75 |   76.92 | ...00-103,123-131
+  extension.ts     |   46.32 |      100 |   58.82 |   46.32 | ...27-236,245-249
+  fileMetadata.ts  |   91.66 |    56.52 |     100 |   91.66 | ...,97-98,101-102
+  freshInstall.ts  |   91.48 |    80.76 |     100 |   91.48 | 41-42,67-68
+  ...nstallBoot.ts |     100 |      100 |     100 |     100 |
+  ...ngs-labels.ts |     100 |      100 |     100 |     100 |
+  gpuFallback.ts   |   85.71 |       75 |     100 |   85.71 | 39-41
+  haptic.ts        |       0 |      100 |     100 |       0 | 3-138
+  hardware-tier.ts |     100 |    92.85 |     100 |     100 | 39
+  html-progress.ts |   76.92 |    44.44 |     100 |   76.92 | 15-17,19-21
+  hub-installed.ts |     100 |    90.24 |     100 |     100 | 38,54,62,151
+  ...eDownscale.ts |    5.71 |      100 |       0 |    5.71 | ...3,16-21,45-115
+  ...on-context.ts |     100 |       80 |     100 |     100 | 17,20-21
+  ...ence-fetch.ts |   91.48 |    88.23 |   83.33 |   91.48 | 42-45
+  ...onTemplate.ts |     100 |       50 |     100 |     100 | 15
+  ...hAtStartup.ts |   94.87 |    92.85 |     100 |   94.87 | 31-32
+  ...ownPlugins.ts |   68.42 |    85.71 |      40 |   68.42 | 18-20,38-46
+  memory.ts        |     100 |    85.71 |     100 |     100 | 35,41
+  ...utton-refs.ts |    7.69 |      100 |       0 |    7.69 | 8-19
+  message-edit.ts  |     100 |      100 |     100 |     100 |
+  messages.ts      |   65.57 |    54.92 |   85.71 |   65.57 | ...60-369,391-398
+  model-card.ts    |   76.36 |     86.9 |      80 |   76.36 | ...44-182,258-259
+  ...l-deletion.ts |     100 |      100 |     100 |     100 |
+  model-factory.ts |   49.71 |    67.24 |   52.38 |   49.71 | ...30,756-779,804
+  model-logo.ts    |     100 |      100 |     100 |     100 |
+  model-release.ts |     100 |      100 |     100 |     100 |
+  ...rorMessage.ts |   33.33 |    33.33 |     100 |   33.33 | 10-15
+  models.ts        |   93.22 |     84.7 |   89.47 |   93.22 | ...40-241,271-272
+  notifications.ts |    37.5 |       50 |      50 |    37.5 | 11-30,45-58
+  onboarding.ts    |     100 |    89.47 |     100 |     100 | 22,59
+  ...serMessage.ts |   73.33 |    66.66 |     100 |   73.33 | 43-50
+  predefined.ts    |     100 |      100 |     100 |     100 |
+  ...inedParams.ts |   98.48 |    83.33 |     100 |   98.48 | 189-190
+  ...er-api-key.ts |   94.73 |     87.5 |     100 |   94.73 | 68-69
+  providerOrder.ts |     100 |      100 |     100 |     100 |
+  ...irToolCall.ts |   90.47 |    88.88 |     100 |   90.47 | 48-49
+  ...lingParams.ts |   91.48 |    82.05 |     100 |   91.48 | ...05-107,117-118
+  service.ts       |   45.45 |    66.66 |      20 |   45.45 | ...57-116,121-126
+  sessions.ts      |     100 |      100 |     100 |     100 |
+  ...ar-history.ts |     100 |      100 |     100 |     100 |
+  smart-context.ts |   85.74 |    75.92 |     100 |   85.74 | ...08-912,944-945
+  tauriEvent.ts    |     100 |      100 |     100 |     100 |
+  ...ramPreview.ts |     100 |    94.82 |     100 |     100 | 129,131,148
+  ...sultImages.ts |   69.62 |    71.42 |      80 |   69.62 | ...,54-88,127-129
+  ttft-timing.ts   |   52.08 |     23.8 |   55.55 |   52.08 | ...49-166,170-173
+  utils.ts         |   87.59 |    77.98 |   88.23 |   87.59 | ...44-246,295-304
+  version.ts       |       0 |        0 |       0 |       0 | 1-5
+  ...eview-kind.ts |     100 |      100 |     100 |     100 |
+ ...c/lib/platform |   61.81 |    66.66 |    37.5 |   61.81 |
+  ...formGuard.tsx |   10.71 |      100 |       0 |   10.71 | 14-43
+  const.ts         |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  types.ts         |     100 |      100 |     100 |     100 |
+  utils.ts         |   46.87 |       60 |   42.85 |   46.87 | ...13,30-33,36-44
+ .../lib/shortcuts |     100 |      100 |     100 |     100 |
+  const.ts         |     100 |      100 |     100 |     100 |
+  index.ts         |     100 |      100 |     100 |     100 |
+  types.ts         |     100 |      100 |     100 |     100 |
+ .../src/lib/tools |   85.71 |    90.16 |     100 |   85.71 |
+  display-name.ts  |     100 |      100 |     100 |     100 |
+  ...race-parts.ts |   83.94 |     90.9 |     100 |   83.94 | 57-81,92,94
+  registry.ts      |     100 |       50 |     100 |     100 | 24
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ols/presenters |   80.96 |    82.71 |   72.72 |   80.96 |
+  generic.ts       |   99.14 |    88.67 |     100 |   99.14 | 241,246
+  web-fetch-exa.ts |    1.51 |      100 |       0 |    1.51 | 12-52,58-88
+  ...search-exa.ts |   94.44 |    71.42 |     100 |   94.44 | 39,47-48,76
+ .../src/providers |   49.32 |    71.17 |   47.36 |   49.32 |
+  DataProvider.tsx |   67.52 |    72.04 |      70 |   67.52 | ...22-523,559-560
+  ...nProvider.tsx |       0 |        0 |       0 |       0 | 1-62
+  ...ntHandler.tsx |       0 |        0 |       0 |       0 | 1-100
+  ...eProvider.tsx |       0 |        0 |       0 |       0 | 1-32
+  ...Shortcuts.tsx |       0 |        0 |       0 |       0 | 1-68
+  ...bProvider.tsx |       0 |        0 |       0 |       0 | 1-26
+  ...eProvider.tsx |   86.44 |      100 |   66.66 |   86.44 | 47-50,60-62,70
+  ...rProvider.tsx |       0 |        0 |       0 |       0 | 1-31
+ ...app/src/routes |   27.56 |       50 |   33.33 |   27.56 |
+  __root.tsx       |       0 |        0 |       0 |       0 | 1-175
+  code.tsx         |       0 |        0 |       0 |       0 | 1-22
+  hermes.tsx       |       0 |        0 |       0 |       0 | 1-7
+  index.tsx        |       0 |      100 |     100 |       0 | 2-154
+  logs.tsx         |       0 |        0 |       0 |       0 | 1-111
+  ...m-monitor.tsx |    92.5 |       80 |     100 |    92.5 | 26-34,169-171
+ .../routes/agents |   96.06 |    90.45 |    82.2 |   96.06 |
+  index.tsx        |   96.06 |    90.45 |    82.2 |   96.06 | ...2391,2525-2527
+ ...utes/benchmark |   96.11 |     85.2 |   61.53 |   96.11 |
+  index.tsx        |   96.11 |     85.2 |   61.53 |   96.11 | ...40,452-458,608
+ ...routes/engines |     100 |    97.08 |   91.66 |     100 |
+  index.tsx        |     100 |    97.08 |   91.66 |     100 | 76,111,122
+ ...rc/routes/gbot |   93.72 |    93.73 |    82.5 |   93.72 |
+  index.tsx        |   93.72 |    93.73 |    82.5 |   93.72 | ...1142,1192-1200
+ ...src/routes/hub |     100 |     82.6 |     100 |     100 |
+  $modelId.tsx     |     100 |       75 |     100 |     100 | 19-20
+  index.tsx        |     100 |    86.66 |     100 |     100 | 10-11
+ .../routes/launch |       0 |        0 |       0 |       0 |
+  index.tsx        |       0 |        0 |       0 |       0 | 1-1211
+ ...cal-api-server |       0 |        0 |       0 |       0 |
+  logs.tsx         |       0 |        0 |       0 |       0 | 1-119
+ .../routes/memory |       0 |        0 |       0 |       0 |
+  index.tsx        |       0 |        0 |       0 |       0 | 1-20
+ ...routes/project |    71.7 |    66.66 |   57.14 |    71.7 |
+  $projectId.tsx   |    71.7 |    66.66 |   57.14 |    71.7 | ...48-176,199-208
+ ...outes/settings |   73.11 |    80.73 |   64.08 |   73.11 |
+  assistant.tsx    |     100 |      100 |     100 |     100 |
+  attachments.tsx  |   93.89 |    76.82 |   71.42 |   93.89 | ...55,262,270,284
+  claude-code.tsx  |       0 |        0 |       0 |       0 | 1-566
+  extensions.tsx   |    91.3 |       75 |   33.33 |    91.3 | 67-71,75
+  general.tsx      |   82.64 |    63.09 |      65 |   82.64 | ...98-702,704-715
+  hardware.tsx     |   87.03 |    70.58 |   33.33 |   87.03 | ...-87,90-104,310
+  hermes-agent.tsx |   38.56 |     40.9 |   21.42 |   38.56 | ...21,629,638-693
+  https-proxy.tsx  |     100 |      100 |     100 |     100 |
+  interface.tsx    |     100 |      100 |     100 |     100 |
+  ...pi-server.tsx |       0 |        0 |       0 |       0 | 1-41
+  mcp-servers.tsx  |   66.99 |    72.88 |   20.83 |   66.99 | ...97-603,606,660
+  privacy.tsx      |     100 |      100 |     100 |     100 |
+  shortcuts.tsx    |    93.6 |    33.33 |     100 |    93.6 | ...59,61-62,64-65
+  ...nnections.tsx |   98.34 |    92.33 |   87.23 |   98.34 | ...1365,1384-1392
+ ...ings/providers |   50.29 |    63.76 |   36.84 |   50.29 |
+  ...viderName.tsx |   50.55 |    62.29 |   33.33 |   50.55 | ...01-806,836-847
+  index.tsx        |   49.55 |       75 |     100 |   49.55 | ...70-172,203-253
+ .../routes/skills |   97.51 |    92.59 |   96.66 |   97.51 |
+  index.tsx        |   97.51 |    92.59 |   96.66 |   97.51 | ...37-342,399-400
+ ...routes/threads |       0 |        0 |       0 |       0 |
+  $threadId.tsx    |       0 |        0 |       0 |       0 | 1-1315
+ ...p/src/services |   78.57 |    78.95 |   77.63 |   78.57 |
+  engines.ts       |     100 |      100 |     100 |     100 |
+  gbot.ts          |   52.72 |    81.81 |      30 |   52.72 | ...31-232,236-246
+  index.ts         |   80.24 |    84.21 |      96 |   80.24 | ...18-221,262-264
+  ...g-registry.ts |      60 |    78.82 |   56.75 |      60 | ...02,605,634-704
+  model-search.ts  |   74.23 |    59.01 |   84.21 |   74.23 | ...59-382,389-391
+  ...r-registry.ts |   91.46 |    72.85 |     100 |   91.46 | ...79-180,184,300
+  ...s-registry.ts |   92.93 |    78.21 |     100 |   92.93 | ...43,247,372,376
+  ...s-registry.ts |   93.47 |     83.6 |     100 |   93.47 | ...78,282,392,396
+  ...connectors.ts |    80.9 |    97.36 |   46.15 |    80.9 | ...69-175,178-186
+ ...services/agent |   52.05 |    80.95 |   35.89 |   52.05 |
+  definitions.ts   |   58.82 |      100 |      40 |   58.82 | ...42,45-46,49-50
+  ...ode-bridge.ts |      40 |      100 |       0 |      40 | 39-40,43-44,47-48
+  skills.ts        |    77.5 |      100 |   77.77 |    77.5 | 64-67,70-74
+  studio.ts        |   64.91 |    55.55 |   66.66 |   64.91 | 34,53-65,67-71,83
+  tauri.ts         |    28.2 |      100 |    7.14 |    28.2 | ...03-109,112-113
+ ...c/services/app |    73.8 |    78.26 |   47.61 |    73.8 |
+  default.ts       |   30.76 |      100 |       0 |   30.76 | ...47,50-52,55-56
+  tauri.ts         |    93.1 |    77.27 |      90 |    93.1 | 42,56-58,104-105
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ces/assistants |     100 |      100 |     100 |     100 |
+  default.ts       |     100 |      100 |     100 |     100 |
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ices/benchmark |   96.27 |    93.96 |   94.11 |   96.27 |
+  leaderboard.ts   |   99.46 |    93.78 |     100 |   99.46 | 193
+  tauri.ts         |      75 |      100 |      75 |      75 | 184-190
+ ...s/capabilities |   80.64 |      100 |   57.14 |   80.64 |
+  default.ts       |   45.45 |      100 |       0 |   45.45 | 9-10,13-14,17-18
+  tauri.ts         |     100 |      100 |     100 |     100 |
+  types.ts         |       0 |        0 |       0 |       0 |
+ .../services/core |    50.4 |    81.25 |   56.25 |    50.4 |
+  default.ts       |      36 |      100 |       0 |      36 | ...30,33-36,39-40
+  mobile.ts        |       0 |      100 |     100 |       0 | 9-69
+  tauri.ts         |   88.52 |    78.57 |     100 |   88.52 | 24-26,43-45,70
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...vices/deeplink |   56.14 |       80 |   33.33 |   56.14 |
+  default.ts       |      40 |      100 |       0 |      40 | 9-13,16-17
+  parse.ts         |   84.61 |    77.77 |     100 |   84.61 | 19-20,35-36
+  tauri.ts         |   28.57 |      100 |       0 |   28.57 | 10-16,19-26
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ervices/dialog |   22.72 |      100 |      20 |   22.72 |
+  default.ts       |      40 |      100 |       0 |      40 | 9-11,14-16
+  tauri.ts         |   17.64 |      100 |       0 |   17.64 | 11-31,34-40
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ervices/events |    74.6 |    71.42 |      80 |    74.6 |
+  EventEmitter.ts  |   87.09 |    77.77 |     100 |   87.09 | 24-25,38-39
+  default.ts       |      40 |      100 |       0 |      40 | 9-11,14-18
+  tauri.ts         |   72.72 |       50 |     100 |   72.72 | 16-18,31-33
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...vices/hardware |   68.96 |      100 |   44.44 |   68.96 |
+  default.ts       |   46.15 |      100 |       0 |   46.15 | ...13-14,17-19,23
+  tauri.ts         |    87.5 |      100 |      75 |    87.5 | 24-25
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...c/services/mcp |   69.93 |    91.89 |   53.33 |   69.93 |
+  default.ts       |    28.3 |      100 |       0 |    28.3 | ...77,80-82,85-86
+  tauri.ts         |   94.44 |    91.66 |   93.75 |   94.44 | 37-38,47,118-119
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...vices/messages |   65.11 |    82.35 |      80 |   65.11 |
+  default.ts       |   65.11 |    81.25 |      75 |   65.11 | ...33,45-55,60-61
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ervices/models |   57.52 |    83.67 |      75 |   57.52 |
+  default.ts       |   57.52 |     83.5 |   74.07 |   57.52 | ...38-549,553-699
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ervices/opener |      50 |      100 |   28.57 |      50 |
+  default.ts       |   45.45 |      100 |       0 |   45.45 | 9-10,13-14,17-19
+  tauri.ts         |   51.72 |      100 |   33.33 |   51.72 | 11-17,20-26
+  types.ts         |       0 |        0 |       0 |       0 |
+ .../services/path |   79.71 |      100 |   54.54 |   79.71 |
+  default.ts       |   33.33 |      100 |       0 |   33.33 | ...20,23-25,28-30
+  tauri.ts         |     100 |      100 |     100 |     100 |
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...vices/projects |   95.31 |       90 |     100 |   95.31 |
+  default.ts       |   95.31 |    89.47 |     100 |   95.31 | 19-21
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ices/providers |      32 |    30.76 |      25 |      32 |
+  default.ts       |      40 |      100 |       0 |      40 | ...15,18-20,23-24
+  tauri.ts         |   31.61 |       25 |   28.57 |   31.61 | ...73-379,382-405
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...c/services/rag |   11.26 |      100 |      20 |   11.26 |
+  default.ts       |   11.26 |      100 |       0 |   11.26 | ...61,64-75,78-89
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...vices/terminal |   59.92 |       75 |      55 |   59.92 |
+  code-sessions.ts |       0 |        0 |       0 |       0 | 1-26
+  tauri.ts         |   63.05 |    76.74 |   57.89 |   63.05 | ...46-249,267-270
+ ...services/theme |   20.83 |      100 |      20 |   20.83 |
+  default.ts       |   30.76 |      100 |       0 |   30.76 | 9-11,14-20
+  tauri.ts         |   17.14 |      100 |       0 |   17.14 | 12-39,42-47
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...rvices/threads |   95.27 |     86.2 |     100 |   95.27 |
+  default.ts       |   95.27 |    85.96 |     100 |   95.27 | ...33-134,174-175
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...rvices/updater |   14.51 |      100 |   11.11 |   14.51 |
+  default.ts       |   41.66 |      100 |       0 |   41.66 | 9-10,14,17-21
+  tauri.ts         |    11.6 |      100 |       0 |    11.6 | ...29-139,142-163
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...rvices/uploads |   18.18 |      100 |      25 |   18.18 |
+  default.ts       |   18.18 |      100 |       0 |   18.18 | 9-13,16-31,34-49
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...ervices/window |   59.72 |    53.84 |   33.33 |   59.72 |
+  default.ts       |   29.62 |      100 |       0 |   29.62 | ...28-30,34,38,42
+  tauri.ts         |   64.02 |       52 |   41.17 |   64.02 | ...96,202-204,207
+  types.ts         |       0 |        0 |       0 |       0 |
+ ...app/src/stores |   82.35 |    88.43 |   84.03 |   82.35 |
+  ...fact-store.ts |     100 |      100 |     100 |     100 |
+  ...mark-store.ts |      80 |    81.81 |   85.71 |      80 | 23-29,39
+  ...sion-store.ts |   80.97 |    75.34 |    87.5 |   80.97 | ...39-340,345-346
+  ...inal-store.ts |     100 |      100 |   83.33 |     100 |
+  ...very-store.ts |     100 |      100 |     100 |     100 |
+  ...osts-store.ts |   96.84 |     90.9 |   83.33 |   96.84 | 65-67
+  ...nion-store.ts |   99.51 |    94.05 |     100 |   99.51 | 93
+  ...page-store.ts |   96.96 |    93.65 |     100 |   96.96 | 73-74,146-147
+  ...gent-store.ts |    87.5 |    55.55 |      50 |    87.5 | 14-15,44-46
+  ...ings-store.ts |   96.15 |    83.33 |     100 |   96.15 | 33
+  launch-store.ts  |       0 |      100 |     100 |       0 | 16-64
+  ...oads-store.ts |     100 |      100 |     100 |     100 |
+  ...text-store.ts |   42.85 |      100 |       0 |   42.85 | 10-17
+  ...alog-store.ts |   72.22 |       75 |      40 |   72.22 | ...95,102-106,117
+  ...ridge-runs.ts |     100 |      100 |     100 |     100 |
+  ...stry-store.ts |   75.34 |    85.71 |      50 |   75.34 | ...06,125-129,140
+  ...stry-store.ts |       0 |      100 |     100 |       0 | 16-177
+  ...icks-store.ts |   90.76 |     61.9 |     100 |   90.76 | 78,98-99,122-124
+  ...-run-store.ts |   95.34 |    92.15 |     100 |   95.34 | 134-139
+  ...read-store.ts |   48.14 |       75 |      25 |   48.14 | 14-16,18-25,31-33
+  ...view-store.ts |    97.5 |    90.32 |     100 |    97.5 | 57-58
+ ...b-app/src/test |     100 |      100 |     100 |     100 |
+  confirm.ts       |     100 |      100 |     100 |     100 |
+  service-hub.ts   |     100 |      100 |     100 |     100 |
+  setup.ts         |     100 |      100 |     100 |     100 |
+ ...-app/src/types |   84.21 |      100 |   92.85 |   84.21 |
+  agent.ts         |       0 |        0 |       0 |       0 |
+  app.d.ts         |       0 |        0 |       0 |       0 |
+  appearance.d.ts  |       0 |        0 |       0 |       0 |
+  attachment.ts    |   71.42 |      100 |   66.66 |   71.42 | 64-69
+  completion.ts    |       0 |        0 |       0 |       0 |
+  events.ts        |     100 |      100 |     100 |     100 |
+  global.d.ts      |       0 |        0 |       0 |       0 |
+  haptic.d.ts      |       0 |        0 |       0 |       0 |
+  message.d.ts     |       0 |        0 |       0 |       0 |
+  ...roviders.d.ts |       0 |        0 |       0 |       0 |
+  models.ts        |     100 |      100 |     100 |     100 |
+  ...renderer.d.ts |       0 |        0 |       0 |       0 |
+  terminal.ts      |       0 |        0 |       0 |       0 |
+  threads.d.ts     |       0 |        0 |       0 |       0 |
+ ...-app/src/utils |   77.63 |    77.28 |   90.41 |   77.63 |
+  ...ModelsSync.ts |   93.75 |    73.33 |     100 |   93.75 | 93,95-96
+  ...undImports.ts |   71.42 |      100 |      50 |   71.42 | 5-6
+  blurSupport.ts   |       0 |      100 |     100 |       0 | 12-65
+  ...verRunning.ts |     100 |    85.29 |     100 |     100 | 16,43,52-55,78
+  ...lForServer.ts |   52.63 |    27.27 |      50 |   52.63 | ...04-109,112-113
+  ...viderReady.ts |   80.48 |    76.92 |     100 |   80.48 | 26-29,33-36
+  error.ts         |   91.48 |    86.02 |      80 |   91.48 | ...87,89-90,98-99
+  formatDate.ts    |     100 |      100 |     100 |     100 |
+  ...delToStart.ts |   94.54 |    90.47 |     100 |   94.54 | 17-19
+  highlight.ts     |     100 |      100 |     100 |     100 |
+  ...lHostModel.ts |   94.91 |     77.5 |     100 |   94.91 | 52-54
+  number.ts        |     100 |      100 |     100 |     100 |
+  path.ts          |   33.33 |       50 |     100 |   33.33 | 16-27
+  reasoning.ts     |    38.7 |    66.66 |   33.33 |    38.7 | 7-14,32-39,45-51
+  ...teProvider.ts |   64.51 |       50 |      80 |   64.51 | ...2,79-80,94-104
+  ...LocalModel.ts |   90.47 |     62.5 |     100 |   90.47 | 19-20
+  switchModel.ts   |   75.41 |    72.18 |   96.42 |   75.41 | ...18-825,831-838
+ ...ndor/cua-media |   26.36 |    80.58 |      30 |   26.36 |
+  audio.ts         |    1.93 |      100 |       0 |    1.93 | 42-56,83-293
+  audioWorklet.js  |       0 |        0 |       0 |       0 | 1-100
+  h264.ts          |    4.34 |      100 |       0 |    4.34 | 17-39
+  mediaSession.ts  |   36.68 |    81.66 |   28.57 |   36.68 | ...91-792,795-806
+  mediaWire.ts     |   32.71 |    80.48 |   34.78 |   32.71 | ...91-339,450-460
+  ...cs-audio.d.ts |       0 |        0 |       0 |       0 |
 -------------------|---------|----------|---------|---------|-------------------
 yarn --cwd extensions workspaces foreach -A \
 	--include '@gchat/ginfer-extension' \
@@ -4600,16 +4600,16 @@ Download cancelled for model: custom
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
-File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   65.63 |    78.65 |   64.28 |   65.63 |                   
- env.d.ts          |       0 |        0 |       0 |       0 |                   
- hardware.ts       |   80.43 |    94.44 |      50 |   80.43 | 85-93             
- index.ts          |   61.42 |    72.56 |   61.29 |   61.42 | ...62-763,766-767 
- model-profile.ts  |     100 |      100 |     100 |     100 |                   
- ...on-metadata.ts |     100 |       70 |     100 |     100 | 11-13,23          
- type.d.ts         |       0 |        0 |       0 |       0 |                   
- util.ts           |   26.47 |      100 |   33.33 |   26.47 | 4-29              
+All files          |   65.63 |    78.65 |   64.28 |   65.63 |
+ env.d.ts          |       0 |        0 |       0 |       0 |
+ hardware.ts       |   80.43 |    94.44 |      50 |   80.43 | 85-93
+ index.ts          |   61.42 |    72.56 |   61.29 |   61.42 | ...62-763,766-767
+ model-profile.ts  |     100 |      100 |     100 |     100 |
+ ...on-metadata.ts |     100 |       70 |     100 |     100 | 11-13,23
+ type.d.ts         |       0 |        0 |       0 |       0 |
+ util.ts           |   26.47 |      100 |   33.33 |   26.47 | 4-29
 -------------------|---------|----------|---------|---------|-------------------
 Done in 1s 748ms
 node scripts/check-coverage-floor.mjs
@@ -6631,4 +6631,3 @@ test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 0 tests
 
 test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-

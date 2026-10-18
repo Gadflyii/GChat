@@ -26,7 +26,7 @@
   class="text-sm text-muted-foreground"
 >
   0 MiB
-   of unfinished downloads · 
+   of unfinished downloads ·
   0 MiB
    of downloaded models. Only one model downloads at a time on each computer.
 </p> instead[39m
@@ -76,7 +76,7 @@ Error: [2mexpect([22m[31melement[39m[2m).not.toBeInTheDocument()[22m
   class="text-sm text-muted-foreground"
 >
   0 MiB
-   of unfinished downloads · 
+   of unfinished downloads ·
   0 MiB
    of downloaded models. Only one model downloads at a time on each computer.
 </p> instead[39m
@@ -104,7 +104,7 @@ Error: [2mexpect([22m[31melement[39m[2m).not.toBeInTheDocument()[22m
     327|     expect(screen.queryByText('No downloads on this computer yet. Choo…
        |                                                                                                              ^
     328|     expect(screen.queryByText(/of unfinished downloads/)).not.toBeInTh…
-    329| 
+    329|
 
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
 
@@ -113,4 +113,3 @@ Error: [2mexpect([22m[31melement[39m[2m).not.toBeInTheDocument()[22m
       Tests  2 failed | 45 skipped (47)
    Start at  08:34:37
    Duration  2.53s (transform 336ms, setup 211ms, collect 1.57s, tests 180ms, environment 331ms, prepare 70ms)
-
