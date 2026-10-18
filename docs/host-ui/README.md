@@ -4034,6 +4034,20 @@ The source fix retains its four focused cases and corrected ONE `make verify`
 PASS. Pending dismissal and duplicate races retain source-test qualification;
 Windows was not exercised.
 
+Linux acceptance (`GUI-AGENT-SKILL-EDIT-RECOVERY-NATIVE-20261018`): a real
+permission error kept the Edit dialog open with its changed description and
+instructions intact, and re-enabled Save. Restoring the disposable skill
+directory's original permission and retrying in that same dialog saved both
+fields; reopening Edit confirmed their exact values. The disposable skill was
+then uninstalled; all 17 saved records, 45 original `SKILL.md` files, two
+workspace inputs and disabled-state bytes and modes stayed unchanged. Retained
+build `8f7d18f6f` matches the bounded Edit source at `1a64ac2e9`; resources
+returned at 09:26Z. Evidence:
+[`out/gchat-agent-skill-edit-recovery-native-20261018/`](../../out/gchat-agent-skill-edit-recovery-native-20261018/).
+Source `172bf8b2c` retains its four focused cases and ONE `make verify` PASS.
+Pending dismissal and duplicate races retain source-test qualification;
+Windows was not exercised.
+
 ## Removing a custom skill
 
 In **Agent Studio → Skills**, open **Skill actions → Uninstall**. The
