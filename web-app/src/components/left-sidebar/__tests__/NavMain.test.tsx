@@ -4,6 +4,7 @@ import { useLocation } from '@tanstack/react-router'
 import { NavMain } from '../NavMain'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useAgentRun } from '@/hooks/useAgentRun'
+import { usePrompt } from '@/hooks/usePrompt'
 import { TEMPORARY_CHAT_ID } from '@/constants/chat'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
@@ -117,6 +118,7 @@ describe('NavMain', () => {
     useGbotCompanion.getState().reset()
     useConversationPolicy.getState().clearAll()
     useAgentRun.getState().clearAll()
+    usePrompt.setState(usePrompt.getInitialState())
     useLocalModelDownloads.setState({ jobs: [], error: null })
     useEngineHosts.setState({ hosts: [localHost], snapshots: {}, errors: {} })
     actions.navigate.mockReset()
@@ -184,6 +186,21 @@ describe('NavMain', () => {
     await waitFor(() => expect(actions.navigate).toHaveBeenCalledWith({ to: '/', search: {} }))
     expect(useConversationPolicy.getState().activeSkills[TEMPORARY_CHAT_ID]).toBeUndefined()
     expect(actions.resetAgentSession).not.toHaveBeenCalled()
+  })
+
+  it('starts an empty New Chat without deleting the saved conversation draft', async () => {
+    usePrompt.getState().setPrompt('Old home draft')
+    usePrompt.getState().setActiveThread('saved-conversation')
+    usePrompt.getState().setPrompt('Keep this reply')
+    render(<NavMain />)
+
+    fireEvent.click(screen.getByText('common:newChat'))
+    await waitFor(() => expect(actions.navigate).toHaveBeenCalledWith({ to: '/', search: {} }))
+    expect(usePrompt.getState().prompt).toBe('Keep this reply')
+    act(() => usePrompt.getState().setActiveThread(TEMPORARY_CHAT_ID))
+    expect(usePrompt.getState().prompt).toBe('')
+    act(() => usePrompt.getState().setActiveThread('saved-conversation'))
+    expect(usePrompt.getState().prompt).toBe('Keep this reply')
   })
 
   it('highlights the benchmark route', () => {

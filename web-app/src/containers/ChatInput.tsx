@@ -245,6 +245,9 @@ const ChatInput = memo(function ChatInput({
 
   const conversationKey = initialMessage ? TEMPORARY_CHAT_ID : (currentThreadId ?? TEMPORARY_CHAT_ID)
   useLayoutEffect(() => {
+    usePrompt.getState().setActiveThread(conversationKey)
+  }, [conversationKey])
+  useLayoutEffect(() => {
     composerLifetimeRef.current = {}
     return () => {
       composerLifetimeRef.current = {}
