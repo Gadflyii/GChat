@@ -1,6 +1,6 @@
 # GInfer host UI
 
-## Saved-Host Connect recovery — active, Gchat 3, October 18
+## Saved-Host Connect recovery — verified, Gchat 3, October 18
 
 `GUI-HOST-CONNECT-CANCEL-GUIDANCE` corrects the network-only advice observed
 when a user cancels the secure-storage unlock during explicit Connect.
@@ -17,8 +17,25 @@ protection and explicit retry; do not add credential reads or automatic retry.
 Acceptance is the affected rendered rejection/retry behavior and one
 `make verify` on an independent S1 fixture. Native observation is reused;
 this change makes no new installed-app or Windows qualification claim.
-Next: freeze the wording and regression, then run the existing gates after
-the cleared-choice fixture returns.
+Frozen source `348117bc1` passed all **86 focused EngineHostModels tests**
+and lint (zero errors, five existing unrelated warnings). Exactly one
+`make verify` passed at **19:20:13Z**: **3,770 app tests / 6 skipped,
+127 extension tests, 1,316 native tests / 28 ignored**, all six critical
+coverage floors, typecheck and quality guards. The coordinator directly
+reviewed terminal raw output and matching source bytes/modes, 35 dependency
+inputs and eleven catalogs / 48 profiles before and after execution.
+
+S1 CPU88–95 returned **19:21:26Z**, booking3512 canceled. After review, the
+owned independent SSD fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-connect-cancel-guidance-tests-20261018`
+and its sole exited candidate container were retired at **19:25:08Z**,
+removing **29,846,760,042 logical bytes**. The inactive RC donor and protected
+catalog inputs remain unchanged. Small results are retained at
+`out/host-connect-cancel-guidance-20261018/test-result.json` and
+`test-summary.md`. These checks establish rendered rejection/retry behavior
+and the Linux source gate; the retained native observation is reused, with
+no new installed-app or Windows qualification claim. Next: merge the verified
+branch and continue the owned GUI queue.
 
 ## First-run action recovery — verified, Gchat 3, October 18
 
