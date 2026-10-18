@@ -211,7 +211,7 @@ pub async fn load(
             binary: host_binary,
             engine,
             engine_runtimes: {
-                #[cfg(target_os = "linux")]
+                #[cfg(any(target_os = "linux", target_os = "windows"))]
                 {
                     ginfer_host::local_host::desktop_runtimes(
                         directory
@@ -219,7 +219,7 @@ pub async fn load(
                             .ok_or("GChat host has no provider directory")?,
                     )?
                 }
-                #[cfg(not(target_os = "linux"))]
+                #[cfg(not(any(target_os = "linux", target_os = "windows")))]
                 {
                     Default::default()
                 }

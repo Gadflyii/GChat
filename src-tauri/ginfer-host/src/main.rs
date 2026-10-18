@@ -85,7 +85,7 @@ struct PrepareHardware {
     host_url: String,
     #[arg(long, default_value = "nvidia-smi")]
     nvidia_smi: PathBuf,
-    /// Use the installed GChat four-image Linux runtime set (single-image installs omit this).
+    /// Use the installed GChat runtime set for this platform (single-image installs omit this).
     #[arg(long)]
     runtime_set: bool,
     /// Exact ordered deployment GPU UUID grant (repeat for TP2/TP4).
@@ -223,7 +223,7 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
         .trim_matches(['[', ']'])
         .parse()
         .map_err(|_| "local Host origin must use a loopback IP address")?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     let engine_runtimes = if args.runtime_set {
         ginfer_host::local_host::desktop_runtimes(
             provider
@@ -233,7 +233,7 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
     } else {
         Default::default()
     };
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     let engine_runtimes = Default::default();
     let local = ginfer_host::local_host::LocalHost {
         binary: std::env::current_exe().map_err(|e| e.to_string())?,

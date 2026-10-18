@@ -301,7 +301,7 @@ fn installed_desktop_host(
     _resource_directory: &std::path::Path,
 ) -> Result<ginfer_host::local_host::LocalHost, String> {
     let local = desktop_host_paths(data_folder, _resource_directory)?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     let local = { let mut local = local; local.engine_runtimes = ginfer_host::local_host::desktop_runtimes(&data_folder.join("ginfer"))?; local };
     Ok(local)
 }
@@ -312,9 +312,9 @@ fn relocation_desktop_host(data_folder: &std::path::Path, resources: &std::path:
     -> Result<ginfer_host::local_host::LocalHost, String>
 {
     let local = desktop_host_paths(data_folder, resources)?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     let local = { let mut local = local;
-        if data_folder.join("ginfer/linux/runtime-set.json").try_exists().map_err(|e| e.to_string())? {
+        if data_folder.join("ginfer").join(if cfg!(windows) { "windows" } else { "linux" }).join("runtime-set.json").try_exists().map_err(|e| e.to_string())? {
             local.engine_runtimes = ginfer_host::local_host::desktop_runtimes(&data_folder.join("ginfer"))?;
         }
         local
@@ -338,12 +338,10 @@ fn desktop_host_paths(data_folder: &std::path::Path, _resource_directory: &std::
         });
     #[cfg(target_os = "linux")]
     let engine = provider.join("linux/sm120a/bin/ginfer-serve");
-    #[cfg(not(target_os = "linux"))]
-    let engine = provider.join("bin").join(if cfg!(windows) {
-        "ginfer-serve.exe"
-    } else {
-        "ginfer-serve"
-    });
+    #[cfg(target_os = "windows")]
+    let engine = provider.join("windows/sm120a/bin/ginfer-serve.exe");
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    let engine = provider.join("bin/ginfer-serve");
     Ok(ginfer_host::local_host::LocalHost {
         binary,
         engine,

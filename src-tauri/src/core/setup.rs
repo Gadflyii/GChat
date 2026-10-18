@@ -24,9 +24,15 @@ use super::{
 };
 
 #[cfg(target_os = "windows")]
-const GINFER_RUNTIME_RESOURCE_DIR: &str = "resources/ginfer";
+const GINFER_RUNTIME_RESOURCE_DIR: &str = "resources/ginfer/windows";
 #[cfg(any(target_os = "windows", test))]
 const GINFER_RUNTIME_MANIFEST: &str = "runtime-manifest.json";
+#[cfg(any(target_os = "windows", test))]
+const WINDOWS_RUNTIME_ARCHITECTURES: [(&str, &str, &str); 3] = [
+    ("8.6", "sm86", "sm_86"),
+    ("8.9", "sm89", "sm_89"),
+    ("12.0", "sm120a", "sm_120a"),
+];
 #[cfg(target_os = "linux")]
 mod gbot_assets;
 
@@ -298,7 +304,7 @@ pub async fn prepare_installed_hardware_from_resources(
     let destination = data_folder.clone();
     tokio::task::spawn_blocking(move || {
         #[cfg(target_os = "windows")]
-        install_bundled_ginfer_from(&resources.join(GINFER_RUNTIME_RESOURCE_DIR), &destination)?;
+        install_windows_runtimes_from(&resources.join(GINFER_RUNTIME_RESOURCE_DIR), &destination)?;
         #[cfg(target_os = "linux")]
         install_linux_resources_from(&resources, &destination)?;
         Ok::<(), std::io::Error>(())
@@ -359,12 +365,17 @@ fn copy_directory(source: &Path, destination: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(any(target_os = "windows", test))]
-fn verify_windows_runtime(root: &Path) -> std::io::Result<()> {
+fn verify_windows_runtime(root: &Path, revision: &str, architecture: &str) -> std::io::Result<()> {
     use std::io::{Error, ErrorKind};
     let invalid = |message: String| Error::new(ErrorKind::InvalidData, message);
     let manifest: serde_json::Value = serde_json::from_slice(&fs::read(root.join(GINFER_RUNTIME_MANIFEST))?)
         .map_err(|e| invalid(format!("invalid Windows runtime manifest: {e}")))?;
-    if manifest["schema"] != "ginfer-windows-runtime-v1" || manifest["platform"] != "windows-x64" {
+    if manifest["schema"] != "ginfer-windows-runtime-v1"
+        || manifest["platform"] != "windows-x64"
+        || manifest["source_commit"] != revision
+        || manifest["source_dirty"] != false
+        || manifest["cuda_architecture"] != architecture
+    {
         return Err(invalid("invalid Windows GInfer runtime manifest".into()));
     }
     let entries = manifest["files"].as_array().ok_or_else(|| invalid("runtime file inventory is missing".into()))?;
@@ -399,82 +410,59 @@ fn verify_windows_runtime(root: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(any(target_os = "windows", test))]
-fn install_bundled_ginfer_from(source: &Path, data_folder: &Path) -> std::io::Result<bool> {
-    let source_manifest_path = source.join(GINFER_RUNTIME_MANIFEST);
-    let source_manifest = fs::read(&source_manifest_path)?;
-    let source_server = source.join("bin").join("ginfer-serve.exe");
-    if !source_server.is_file() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!(
-                "bundled GInfer server is missing: {}",
-                source_server.display()
-            ),
-        ));
+fn windows_runtime_set(root: &Path) -> std::io::Result<()> {
+    use std::io::{Error, ErrorKind};
+    let invalid = |message: String| Error::new(ErrorKind::InvalidData, message);
+    let set: serde_json::Value = serde_json::from_slice(&fs::read(root.join("runtime-set.json"))?)
+        .map_err(|e| invalid(format!("invalid Windows runtime set JSON: {e}")))?;
+    if set["schema"] != "ginfer-windows-runtime-set-v1" || set["platform"] != "windows-x64" {
+        return Err(invalid("invalid Windows GInfer runtime set".into()));
     }
+    let revision = set["source_commit"].as_str()
+        .filter(|s| s.len() == 40 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        .ok_or_else(|| invalid("runtime set requires an exact Engine source commit".into()))?;
+    let declared = set["runtimes"].as_object().ok_or_else(|| invalid("runtime map is missing".into()))?;
+    if declared.len() != WINDOWS_RUNTIME_ARCHITECTURES.len() {
+        return Err(invalid("runtime set must contain exactly three architectures".into()));
+    }
+    for (capability, directory, architecture) in WINDOWS_RUNTIME_ARCHITECTURES {
+        if declared.get(capability).and_then(|v| v.as_str()) != Some(directory) {
+            return Err(invalid(format!("runtime set has an invalid {capability} assignment")));
+        }
+        verify_windows_runtime(&root.join(directory), revision, architecture)?;
+    }
+    Ok(())
+}
 
-    let destination = data_folder.join("ginfer");
-    let destination_manifest_path = destination.join(GINFER_RUNTIME_MANIFEST);
-    let destination_server = destination.join("bin").join("ginfer-serve.exe");
-    if destination_server.is_file()
-        && destination.join("bin/ginfer.exe").is_file()
-        && fs::read(&destination_manifest_path).ok().as_deref() == Some(source_manifest.as_slice())
+#[cfg(any(target_os = "windows", test))]
+fn install_windows_runtimes_from(source: &Path, data_folder: &Path) -> std::io::Result<bool> {
+    windows_runtime_set(source)?;
+    let provider = data_folder.join("ginfer");
+    let destination = provider.join("windows");
+    if fs::read(source.join("runtime-set.json")).ok()
+        == fs::read(destination.join("runtime-set.json")).ok()
+        && windows_runtime_set(&destination).is_ok()
     {
         return Ok(false);
     }
-
-    verify_windows_runtime(source)?;
-
-    fs::create_dir_all(&destination)?;
-    let staging = destination.join(".runtime-installing");
-    let previous_bin = destination.join(".runtime-bin-previous");
+    fs::create_dir_all(&provider)?;
+    let staging = provider.join(".windows-installing");
+    let previous = provider.join(".windows-previous");
     remove_directory_if_present(&staging)?;
-    remove_directory_if_present(&previous_bin)?;
+    remove_directory_if_present(&previous)?;
     copy_directory(source, &staging)?;
-    verify_windows_runtime(&staging)?;
-
-    let staged_bin = staging.join("bin");
-    if !staged_bin.join("ginfer-serve.exe").is_file() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "staged GInfer runtime does not contain bin/ginfer-serve.exe",
-        ));
+    windows_runtime_set(&staging)?;
+    let had_previous = destination.exists();
+    if had_previous {
+        fs::rename(&destination, &previous)?;
     }
-
-    let destination_bin = destination.join("bin");
-    let had_previous_bin = destination_bin.exists();
-    if had_previous_bin {
-        fs::rename(&destination_bin, &previous_bin)?;
-    }
-    if let Err(error) = fs::rename(&staged_bin, &destination_bin) {
-        if had_previous_bin {
-            let _ = fs::rename(&previous_bin, &destination_bin);
+    if let Err(error) = fs::rename(&staging, &destination) {
+        if had_previous {
+            let _ = fs::rename(&previous, &destination);
         }
         return Err(error);
     }
-
-    let staged_licenses = staging.join("licenses");
-    let destination_licenses = destination.join("licenses");
-    if staged_licenses.exists() {
-        remove_directory_if_present(&destination_licenses)?;
-        fs::rename(staged_licenses, destination_licenses)?;
-    }
-    for file_name in ["LICENSE", "README.md"] {
-        let staged_file = staging.join(file_name);
-        if staged_file.is_file() {
-            fs::copy(staged_file, destination.join(file_name))?;
-        }
-    }
-
-    let manifest_next = destination.join(".runtime-manifest.next");
-    fs::write(&manifest_next, source_manifest)?;
-    if destination_manifest_path.exists() {
-        fs::remove_file(&destination_manifest_path)?;
-    }
-    fs::rename(manifest_next, destination_manifest_path)?;
-
-    remove_directory_if_present(&staging)?;
-    remove_directory_if_present(&previous_bin)?;
+    remove_directory_if_present(&previous)?;
     Ok(true)
 }
 
@@ -489,14 +477,14 @@ pub(crate) fn start_bundled_ginfer_windows<R: Runtime>(
             let source = installer_app.path().resource_dir().map_err(|e| e.to_string())?
                 .join(GINFER_RUNTIME_RESOURCE_DIR);
             let data_folder = get_jan_data_folder_path(installer_app);
-            install_bundled_ginfer_from(&source, &data_folder).map_err(|e| e.to_string())
+            install_windows_runtimes_from(&source, &data_folder).map_err(|e| e.to_string())
         }).await;
         let _ = app.emit(BUNDLED_RESOURCES_UPDATE, ());
         match result {
             Ok(true) => {
-                log::info!("Installed the bundled GInfer Windows runtime");
+                log::info!("Installed the bundled GInfer Windows runtimes");
             }
-            Ok(false) => log::info!("Bundled GInfer Windows runtime is already current"),
+            Ok(false) => log::info!("Bundled GInfer Windows runtimes are already current"),
             Err(error) => log::error!("Bundled Windows resource installation failed: {error}"),
         }
     });
@@ -1152,7 +1140,7 @@ mod tests {
         let model = data.join("ginfer/models/qwen/model.ginfer");
         fs::create_dir_all(model.parent().unwrap()).unwrap();
         fs::write(&model, "model").unwrap();
-        write_runtime(&source, "runtime-v1", "server-v1");
+        write_windows_runtime_set(&source, "runtime-v1", "server-v1");
         let (resources, completion) = BundledResources::pending();
         assert_eq!(resources.ready(), Ok(false));
         let (started, started_rx) = tokio::sync::oneshot::channel();
@@ -1162,13 +1150,13 @@ mod tests {
         let installer = tokio::spawn(install_bundled_resources(completion, move || {
             started.send(()).unwrap();
             release_rx.blocking_recv().unwrap();
-            install_bundled_ginfer_from(&installer_source, &installer_data)
+            install_windows_runtimes_from(&installer_source, &installer_data)
                 .map_err(|error| error.to_string())
         }));
         started_rx.await.unwrap();
         assert_eq!(resources.ready(), Ok(false));
-        assert!(!data.join("ginfer/bin/ginfer-serve.exe").exists());
-        assert!(!data.join("ginfer/bin/ginfer.exe").exists());
+        assert!(!data.join("ginfer/windows/sm86/bin/ginfer-serve.exe").exists());
+        assert!(!data.join("ginfer/windows/sm86/bin/ginfer.exe").exists());
         let first = resources.clone();
         let mut waiter = tokio::spawn(async move { first.wait().await });
         tokio::select! {
@@ -1187,23 +1175,23 @@ mod tests {
         assert_eq!(resources.wait().await, Ok(()));
         assert_eq!(resources.ready(), Ok(true));
         assert_eq!(
-            fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
+            fs::read_to_string(data.join("ginfer/windows/sm86/bin/ginfer-serve.exe")).unwrap(),
             "server-v1"
         );
         assert_eq!(
-            fs::read_to_string(data.join("ginfer/bin/ginfer.exe")).unwrap(),
+            fs::read_to_string(data.join("ginfer/windows/sm86/bin/ginfer.exe")).unwrap(),
             "profiler-cli"
         );
         assert_eq!(
-            fs::read(data.join("ginfer").join(GINFER_RUNTIME_MANIFEST)).unwrap(),
-            fs::read(source.join(GINFER_RUNTIME_MANIFEST)).unwrap()
+            fs::read(data.join("ginfer/windows/runtime-set.json")).unwrap(),
+            fs::read(source.join("runtime-set.json")).unwrap()
         );
         assert_eq!(fs::read_to_string(&model).unwrap(), "model");
 
         let (resources, completion) = BundledResources::pending();
         assert_eq!(
             install_bundled_resources(completion, move || {
-                install_bundled_ginfer_from(&source, &data).map_err(|error| error.to_string())
+                install_windows_runtimes_from(&source, &data).map_err(|error| error.to_string())
             })
             .await,
             Ok(false)
@@ -1220,16 +1208,16 @@ mod tests {
         let model = data.join("ginfer/models/qwen/model.ginfer");
         fs::create_dir_all(model.parent().unwrap()).unwrap();
         fs::write(&model, "model").unwrap();
-        write_runtime(&source, "runtime-v1", "server-v1");
-        assert!(install_bundled_ginfer_from(&source, &data).unwrap());
-        let original_manifest = fs::read(data.join("ginfer").join(GINFER_RUNTIME_MANIFEST)).unwrap();
-        write_runtime(&source, "runtime-v2", "server-v2");
-        fs::write(source.join("bin/runtime.dll"), "bad").unwrap();
+        write_windows_runtime_set(&source, "runtime-v1", "server-v1");
+        assert!(install_windows_runtimes_from(&source, &data).unwrap());
+        let original_manifest = fs::read(data.join("ginfer/windows/runtime-set.json")).unwrap();
+        write_windows_runtime_set(&source, "runtime-v2", "server-v2");
+        fs::write(source.join("sm86/bin/runtime.dll"), "bad").unwrap();
         let (resources, completion) = BundledResources::pending();
         assert_eq!(resources.ready(), Ok(false));
         let installer_data = data.clone();
         let installer = tokio::spawn(install_bundled_resources(completion, move || {
-            install_bundled_ginfer_from(&source, &installer_data).map_err(|error| error.to_string())
+            install_windows_runtimes_from(&source, &installer_data).map_err(|error| error.to_string())
         }));
         let expected = "runtime file hash mismatch: bin/runtime.dll";
         assert_eq!(resources.wait().await.unwrap_err(), expected);
@@ -1238,11 +1226,11 @@ mod tests {
         assert_eq!(resources.wait().await.unwrap_err(), expected);
         assert_eq!(resources.ready().unwrap_err(), expected);
         assert_eq!(
-            fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
+            fs::read_to_string(data.join("ginfer/windows/sm86/bin/ginfer-serve.exe")).unwrap(),
             "server-v1"
         );
         assert_eq!(
-            fs::read(data.join("ginfer").join(GINFER_RUNTIME_MANIFEST)).unwrap(),
+            fs::read(data.join("ginfer/windows/runtime-set.json")).unwrap(),
             original_manifest
         );
         assert_eq!(fs::read_to_string(&model).unwrap(), "model");
@@ -1264,60 +1252,130 @@ mod tests {
         assert_eq!(resources.ready().unwrap_err(), error);
     }
 
-    fn write_runtime(root: &Path, manifest: &str, server: &str) {
-        fs::create_dir_all(root.join("bin")).unwrap();
-        fs::create_dir_all(root.join("licenses")).unwrap();
-        fs::write(root.join("bin/ginfer-serve.exe"), server).unwrap();
-        fs::write(root.join("bin/ginfer.exe"), "profiler-cli").unwrap();
-        fs::write(root.join("bin/runtime.dll"), "dll").unwrap();
-        fs::write(root.join("licenses/runtime.txt"), "license").unwrap();
-        fs::write(root.join("LICENSE"), "project license").unwrap();
-        fs::write(root.join("README.md"), "runtime readme").unwrap();
-        let paths = ["bin/ginfer.exe", "bin/ginfer-serve.exe", "bin/runtime.dll", "licenses/runtime.txt", "LICENSE", "README.md"];
-        let files: Vec<_> = paths.into_iter().map(|path| {
-            let bytes = fs::read(root.join(path)).unwrap();
-            serde_json::json!({"path":path,"bytes":bytes.len(),"sha256":format!("{:x}", Sha256::digest(&bytes))})
-        }).collect();
-        fs::write(root.join(GINFER_RUNTIME_MANIFEST), serde_json::to_vec(&serde_json::json!({
-            "schema":"ginfer-windows-runtime-v1", "platform":"windows-x64", "source_commit":manifest, "files":files
+    fn write_windows_runtime_set(root: &Path, revision: &str, server: &str) {
+        let revision = &format!("{:x}", Sha256::digest(revision.as_bytes()))[..40];
+        fs::create_dir_all(root).unwrap();
+        fs::write(root.join("runtime-set.json"), serde_json::to_vec(&serde_json::json!({
+            "schema":"ginfer-windows-runtime-set-v1", "platform":"windows-x64",
+            "source_commit":revision,
+            "runtimes":{"8.6":"sm86","8.9":"sm89","12.0":"sm120a"}
         })).unwrap()).unwrap();
+        for (_, directory, architecture) in WINDOWS_RUNTIME_ARCHITECTURES {
+            let image = root.join(directory);
+            fs::create_dir_all(image.join("bin")).unwrap();
+            fs::create_dir_all(image.join("licenses")).unwrap();
+            fs::write(image.join("bin/ginfer-serve.exe"), server).unwrap();
+            fs::write(image.join("bin/ginfer.exe"), "profiler-cli").unwrap();
+            fs::write(image.join("bin/runtime.dll"), "dll").unwrap();
+            fs::write(image.join("licenses/runtime.txt"), "license").unwrap();
+            fs::write(image.join("LICENSE"), "project license").unwrap();
+            fs::write(image.join("README.md"), "runtime readme").unwrap();
+            let paths = ["bin/ginfer.exe", "bin/ginfer-serve.exe", "bin/runtime.dll", "licenses/runtime.txt", "LICENSE", "README.md"];
+            let files: Vec<_> = paths.into_iter().map(|path| {
+                let bytes = fs::read(image.join(path)).unwrap();
+                serde_json::json!({"path":path,"bytes":bytes.len(),"sha256":format!("{:x}", Sha256::digest(&bytes))})
+            }).collect();
+            fs::write(image.join(GINFER_RUNTIME_MANIFEST), serde_json::to_vec(&serde_json::json!({
+                "schema":"ginfer-windows-runtime-v1", "platform":"windows-x64",
+                "source_commit":revision, "source_dirty":false,
+                "cuda_architecture":architecture, "files":files
+            })).unwrap()).unwrap();
+        }
     }
 
     #[test]
-    fn installs_and_updates_bundled_ginfer_without_touching_models() {
+    fn windows_runtime_install_keeps_all_architectures_and_user_data_across_upgrade() {
         let root = tempdir().unwrap();
         let source = root.path().join("source");
         let data = root.path().join("data");
-        let model = data.join("ginfer/models/qwen/model.ginfer");
-        fs::create_dir_all(model.parent().unwrap()).unwrap();
-        fs::write(&model, "model").unwrap();
-        fs::create_dir_all(data.join("ginfer/bin")).unwrap();
-        fs::write(data.join("ginfer/bin/ginfer-serve.exe"), "old").unwrap();
+        let retained_files = [
+            ("ginfer/models/qwen/model.ginfer", "model"),
+            ("ginfer/bin/ginfer-host.exe", "host"),
+            ("ginfer/host/host.json", "host configuration"),
+            ("ginfer/host/hardware-profiles/group.json", "accepted profile"),
+            ("ginfer/host/hardware-profile-job.json", "resumable job"),
+        ];
+        for (path, contents) in retained_files {
+            let path = data.join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, contents).unwrap();
+        }
 
-        write_runtime(&source, "runtime-v1", "server-v1");
-        assert!(install_bundled_ginfer_from(&source, &data).unwrap());
-        assert_eq!(
-            fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
-            "server-v1"
-        );
-        assert_eq!(fs::read_to_string(&model).unwrap(), "model");
-        assert!(!install_bundled_ginfer_from(&source, &data).unwrap());
-        fs::remove_file(data.join("ginfer/bin/ginfer.exe")).unwrap();
-        assert!(install_bundled_ginfer_from(&source, &data).unwrap());
-        assert_eq!(fs::read_to_string(data.join("ginfer/bin/ginfer.exe")).unwrap(), "profiler-cli");
+        write_windows_runtime_set(&source, "runtime-v1", "server-v1");
+        assert!(install_windows_runtimes_from(&source, &data).unwrap());
+        assert!(!install_windows_runtimes_from(&source, &data).unwrap());
+        for (_, directory, _) in WINDOWS_RUNTIME_ARCHITECTURES {
+            let installed = data.join("ginfer/windows").join(directory);
+            assert_eq!(fs::read_to_string(installed.join("bin/ginfer-serve.exe")).unwrap(), "server-v1");
+            assert_eq!(fs::read(installed.join(GINFER_RUNTIME_MANIFEST)).unwrap(), fs::read(source.join(directory).join(GINFER_RUNTIME_MANIFEST)).unwrap());
+        }
 
-        write_runtime(&source, "runtime-v2", "server-v2");
-        fs::write(source.join("bin/ginfer.exe"), "corrupted").unwrap();
-        assert!(install_bundled_ginfer_from(&source, &data).is_err());
-        assert_eq!(fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(), "server-v1");
-        assert_eq!(fs::read_to_string(&model).unwrap(), "model");
-        write_runtime(&source, "runtime-v2", "server-v2");
-        assert!(install_bundled_ginfer_from(&source, &data).unwrap());
-        assert_eq!(
-            fs::read_to_string(data.join("ginfer/bin/ginfer-serve.exe")).unwrap(),
-            "server-v2"
-        );
-        assert_eq!(fs::read_to_string(&model).unwrap(), "model");
+        // A matching set manifest must not hide missing or corrupted installed payloads.
+        fs::remove_file(data.join("ginfer/windows/sm86/bin/ginfer.exe")).unwrap();
+        assert!(install_windows_runtimes_from(&source, &data).unwrap());
+        assert_eq!(fs::read_to_string(data.join("ginfer/windows/sm86/bin/ginfer.exe")).unwrap(), "profiler-cli");
+        fs::write(data.join("ginfer/windows/sm89/bin/runtime.dll"), "bad").unwrap();
+        assert!(install_windows_runtimes_from(&source, &data).unwrap());
+        assert_eq!(fs::read_to_string(data.join("ginfer/windows/sm89/bin/runtime.dll")).unwrap(), "dll");
+
+        // Source integrity is also checked when its set manifest is unchanged.
+        fs::write(source.join("sm86/bin/runtime.dll"), "bad").unwrap();
+        assert!(install_windows_runtimes_from(&source, &data).is_err());
+        assert_eq!(fs::read_to_string(data.join("ginfer/windows/sm86/bin/runtime.dll")).unwrap(), "dll");
+
+        // Reject a corrupt bundle before changing any installed architecture.
+        write_windows_runtime_set(&source, "runtime-v2", "server-v2");
+        fs::write(source.join("sm120a/bin/ginfer.exe"), "corrupted").unwrap();
+        assert!(install_windows_runtimes_from(&source, &data).is_err());
+        for (_, directory, _) in WINDOWS_RUNTIME_ARCHITECTURES {
+            assert_eq!(fs::read_to_string(data.join("ginfer/windows").join(directory).join("bin/ginfer-serve.exe")).unwrap(), "server-v1");
+        }
+        write_windows_runtime_set(&source, "runtime-v2", "server-v2");
+        assert!(install_windows_runtimes_from(&source, &data).unwrap());
+        for (_, directory, _) in WINDOWS_RUNTIME_ARCHITECTURES {
+            assert_eq!(fs::read_to_string(data.join("ginfer/windows").join(directory).join("bin/ginfer-serve.exe")).unwrap(), "server-v2");
+        }
+        for (path, contents) in retained_files {
+            assert_eq!(fs::read_to_string(data.join(path)).unwrap(), contents);
+        }
+    }
+
+    #[test]
+    fn windows_runtime_set_rejects_wrong_architecture_revision_and_dirty_payloads() {
+        let root = tempdir().unwrap();
+        let source = root.path().join("source");
+        let data = root.path().join("data");
+        write_windows_runtime_set(&source, "runtime-v1", "server-v1");
+        assert!(install_windows_runtimes_from(&source, &data).unwrap());
+        for (field, value) in [
+            ("source_commit", serde_json::json!("another-revision")),
+            ("cuda_architecture", serde_json::json!("sm_120a")),
+            ("source_dirty", serde_json::json!(true)),
+        ] {
+            write_windows_runtime_set(&source, "runtime-v1", "server-v1");
+            let manifest_path = source.join("sm86").join(GINFER_RUNTIME_MANIFEST);
+            let mut manifest: serde_json::Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+            manifest[field] = value;
+            fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+            assert!(install_windows_runtimes_from(&source, &data).is_err());
+            assert_eq!(fs::read_to_string(data.join("ginfer/windows/sm86/bin/ginfer-serve.exe")).unwrap(), "server-v1");
+        }
+        write_windows_runtime_set(&source, "runtime-v1", "server-v1");
+        let set_path = source.join("runtime-set.json");
+        let mut set: serde_json::Value = serde_json::from_slice(&fs::read(&set_path).unwrap()).unwrap();
+        set["runtimes"]["8.6"] = serde_json::json!("sm120a");
+        fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        assert!(install_windows_runtimes_from(&source, &data).is_err());
+        write_windows_runtime_set(&source, "runtime-v1", "server-v1");
+        let mut set: serde_json::Value = serde_json::from_slice(&fs::read(&set_path).unwrap()).unwrap();
+        set["runtimes"]["8.0"] = serde_json::json!("sm80");
+        fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        assert!(install_windows_runtimes_from(&source, &data).is_err());
+        write_windows_runtime_set(&source, "runtime-v1", "server-v1");
+        let mut set: serde_json::Value = serde_json::from_slice(&fs::read(&set_path).unwrap()).unwrap();
+        set["source_commit"] = serde_json::json!("source-export");
+        fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
+        assert!(install_windows_runtimes_from(&source, &data).is_err());
     }
 
     #[test]

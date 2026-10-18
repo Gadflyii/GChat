@@ -5,29 +5,30 @@
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 `
-#     -GinferRuntimeArchive C:\path\to\ginfer-windows-x64-sm120a.zip
+#     -GinferRuntimeArchives 'C:\path\sm86.zip;C:\path\sm89.zip;C:\path\sm120a.zip'
 #   - or -
 #   make build-windows-release
+# Add -PreparedEnvironment to use existing tools without workstation setup.
 
 param(
     # Internal flags used when a build is relaunched from the native mirror.
     [switch]$NativeMirror,
     [string]$SourceRoot,
-    # Producer-final archive emitted by ginfer's packaging/windows/build.ps1.
-    [string]$GinferRuntimeArchive,
+    # Three producer-final archives, separated by semicolons: SM86, SM89, SM120a.
+    [string]$GinferRuntimeArchives,
     # Exact engine revision required for this release (when supplied).
     [ValidatePattern('^[0-9a-f]{40}$')]
     [string]$GinferSourceCommit,
     # Explicit qualified catalog paths, separated by semicolons on Windows.
     [string]$GinferProfileCatalogs = $env:GINFER_PROFILE_CATALOGS,
-    [switch]$ValidateInputsOnly
+    [switch]$ValidateInputsOnly,
+    # Require existing tools; never bootstrap or change workstation settings.
+    [switch]$PreparedEnvironment
 )
 
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = $PSScriptRoot | Split-Path
-. (Join-Path $PSScriptRoot 'import-gbench-signing.ps1')
-Import-GbenchSigning
 if (-not $GinferProfileCatalogs) {
     $catalogRoot = Join-Path (Split-Path -Parent $projectRoot) 'ginfer\config\launch-profiles'
     if (-not (Test-Path -LiteralPath $catalogRoot -PathType Container)) {
@@ -56,24 +57,86 @@ $GinferProfileCatalogs = $catalogPaths -join ';'
 $env:GINFER_PROFILE_CATALOGS = $GinferProfileCatalogs
 Write-Host "  Selected $($profileIds.Count) Windows profiles from $($catalogPaths.Count) catalogs."
 
-if (-not $GinferRuntimeArchive) {
-    $workspaceRoot = Split-Path -Parent $projectRoot
-    $runtimeCandidates = @(
-        (Join-Path $workspaceRoot 'ginfer-windows\out\windows\ginfer-windows-x64-sm120a.zip'),
-        (Join-Path $workspaceRoot 'ginfer\out\windows\ginfer-windows-x64-sm120a.zip')
-    )
-    $GinferRuntimeArchive = $runtimeCandidates |
-        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-        Select-Object -First 1
+# Inspect producer-final ZIPs before installing prerequisites, copying source or
+# writing resources. ValidateInputsOnly exercises this same complete input gate.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+function Read-GinferRuntimeArchive {
+    param([string]$Path)
+    $archive = [IO.Compression.ZipFile]::OpenRead($Path)
+    try {
+        $members = @{}
+        foreach ($entry in $archive.Entries) {
+            $name = $entry.FullName.Replace('\', '/')
+            if ($name.EndsWith('/')) { continue }
+            if ($members.ContainsKey($name)) { throw "Duplicate GInfer archive member: $name" }
+            $members[$name] = $entry
+        }
+        if (-not $members.ContainsKey('runtime-manifest.json')) {
+            throw "GInfer archive is missing runtime-manifest.json: $Path"
+        }
+        $reader = [IO.StreamReader]::new($members['runtime-manifest.json'].Open())
+        try { $manifest = $reader.ReadToEnd() | ConvertFrom-Json } finally { $reader.Dispose() }
+        if ($manifest.schema -ne 'ginfer-windows-runtime-v1' -or $manifest.platform -ne 'windows-x64' -or
+            $manifest.cuda_architecture -notin @('sm_86', 'sm_89', 'sm_120a')) {
+            throw "GInfer archive must be windows-x64 with exact SM86, SM89 or SM120a architecture: $Path"
+        }
+        if ($manifest.source_commit -cnotmatch '^[0-9a-f]{40}$' -or
+            $manifest.source_dirty -isnot [bool] -or $manifest.source_dirty) {
+            throw "GInfer archive must identify a clean exact Engine commit: $Path"
+        }
+        $listed = @{}
+        foreach ($file in $manifest.files) {
+            $name = [string]$file.path
+            if ($name -cnotmatch '\A[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?(?:/[A-Za-z0-9_-](?:[A-Za-z0-9_.-]*[A-Za-z0-9_-])?)*\z' -or
+                $name -eq 'runtime-manifest.json' -or $listed.ContainsKey($name)) {
+                throw "Unexpected or duplicate GInfer runtime member: $name"
+            }
+            if (-not $members.ContainsKey($name)) { throw "GInfer runtime file is missing: $name" }
+            if (($file.bytes -isnot [int] -and $file.bytes -isnot [long]) -or $file.bytes -lt 0 -or
+                $file.sha256 -cnotmatch '^[0-9a-fA-F]{64}$') {
+                throw "Invalid GInfer runtime integrity metadata: $name"
+            }
+            $entry = $members[$name]
+            if ($entry.Length -ne $file.bytes) { throw "GInfer runtime file size mismatch: $name" }
+            $stream = $entry.Open()
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+            finally { $stream.Dispose(); $sha.Dispose() }
+            if ($hash -ne $file.sha256) { throw "GInfer runtime hash mismatch: $name" }
+            $listed[$name] = $true
+        }
+        foreach ($required in @('bin/ginfer.exe', 'bin/ginfer-serve.exe')) {
+            if (-not $listed.ContainsKey($required)) { throw "GInfer runtime is missing $required" }
+        }
+        if ($listed.ContainsKey('bin/ginfer-host.exe')) { throw 'Engine runtime must not supply the GChat Host binary' }
+        if ($members.Count -ne $listed.Count + 1) { throw "GInfer archive contains unlisted payload files: $Path" }
+        return $manifest
+    } finally { $archive.Dispose() }
 }
-if (-not $GinferRuntimeArchive -or
-    -not (Test-Path -LiteralPath $GinferRuntimeArchive -PathType Leaf)) {
-    Write-Host '[FATAL] A GInfer Windows runtime archive is required.' -ForegroundColor Red
-    Write-Host 'Build GInfer first, then pass -GinferRuntimeArchive <ginfer-windows-x64-sm120a.zip>.' -ForegroundColor Yellow
-    exit 1
+
+$runtimePaths = @($GinferRuntimeArchives -split ';' | Where-Object { $_ } | ForEach-Object {
+    (Resolve-Path -LiteralPath $_ -ErrorAction Stop).ProviderPath
+})
+if ($runtimePaths.Count -ne 3) {
+    throw 'Pass -GinferRuntimeArchives with exactly three explicit SM86;SM89;SM120a archive paths separated by semicolons.'
 }
-$GinferRuntimeArchive = (Resolve-Path -LiteralPath $GinferRuntimeArchive).Path
+$runtimeInputs = @{}
+$runtimeCommit = $GinferSourceCommit
+foreach ($runtimePath in $runtimePaths) {
+    $manifest = Read-GinferRuntimeArchive $runtimePath
+    if (-not $runtimeCommit) { $runtimeCommit = $manifest.source_commit }
+    if ($manifest.source_commit -cne $runtimeCommit) {
+        throw "All GInfer archives must come from clean revision $runtimeCommit; found $($manifest.source_commit) in $runtimePath"
+    }
+    $directory = $manifest.cuda_architecture.Replace('sm_', 'sm')
+    if ($runtimeInputs.ContainsKey($directory)) { throw "Duplicate GInfer runtime architecture: $($manifest.cuda_architecture)" }
+    $runtimeInputs[$directory] = @{ Path = $runtimePath; Manifest = $manifest }
+}
+$GinferRuntimeArchives = $runtimePaths -join ';'
+Write-Host "  Verified SM86, SM89 and SM120a runtimes from clean Engine $runtimeCommit."
 if ($ValidateInputsOnly) { exit 0 }
+. (Join-Path $PSScriptRoot 'import-gbench-signing.ps1')
+Import-GbenchSigning
 
 if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
     $nativeBuildRoot = if ($env:GCHAT_WINDOWS_BUILD_ROOT) {
@@ -128,8 +191,15 @@ if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
         exit $robocopyExit
     }
 
-    $nativeRuntimeArchive = Join-Path $nativeBuildRoot 'ginfer-windows-x64-sm120a.zip'
-    Copy-Item -LiteralPath $GinferRuntimeArchive -Destination $nativeRuntimeArchive -Force
+    $nativeRuntimeRoot = Join-Path $nativeBuildRoot 'runtime-archives'
+    New-Item -ItemType Directory -Path $nativeRuntimeRoot -Force | Out-Null
+    $nativeRuntimePaths = @()
+    foreach ($directory in @('sm86', 'sm89', 'sm120a')) {
+        $nativeRuntimePath = Join-Path $nativeRuntimeRoot "ginfer-windows-x64-$directory.zip"
+        Copy-Item -LiteralPath $runtimeInputs[$directory].Path -Destination $nativeRuntimePath -Force
+        $nativeRuntimePaths += $nativeRuntimePath
+    }
+    $GinferRuntimeArchives = $nativeRuntimePaths -join ';'
     $nativeCatalogRoot = Join-Path $nativeBuildRoot 'profile-catalogs'
     New-Item -ItemType Directory -Path $nativeCatalogRoot -Force | Out-Null
     $nativeCatalogPaths = @()
@@ -142,10 +212,11 @@ if ((-not $NativeMirror) -and $projectRoot.StartsWith('\\')) {
 
     $nativeScript = Join-Path $nativeSourceRoot 'scripts\build-windows-release.ps1'
     $revisionArguments = @()
-    if ($GinferSourceCommit) { $revisionArguments = @('-GinferSourceCommit', $GinferSourceCommit) }
+    if ($GinferSourceCommit) { $revisionArguments += @('-GinferSourceCommit', $GinferSourceCommit) }
+    if ($PreparedEnvironment) { $revisionArguments += '-PreparedEnvironment' }
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $nativeScript `
         -NativeMirror -SourceRoot $projectRoot `
-        -GinferRuntimeArchive $nativeRuntimeArchive -GinferProfileCatalogs $GinferProfileCatalogs @revisionArguments
+        -GinferRuntimeArchives $GinferRuntimeArchives -GinferProfileCatalogs $GinferProfileCatalogs @revisionArguments
     exit $LASTEXITCODE
 }
 
@@ -177,94 +248,93 @@ function Assert-Cmd {
     }
 }
 
-# The release builder is the public one-command entry point. If the workstation
-# has not been prepared yet, run the existing setup first instead of requiring
-# the user to discover and execute a separate bootstrap command.
-Refresh-SessionPath
-$initialCargoPath = Join-Path $env:USERPROFILE '.cargo\bin'
-if ((Test-Path $initialCargoPath) -and ($env:Path -notlike "*$initialCargoPath*")) {
-    $env:Path = $initialCargoPath + ';' + $env:Path
-}
-if ((-not (Test-Cmd 'node')) -or (-not (Test-Cmd 'cargo'))) {
-    Write-Step 'Installing missing Windows build prerequisites'
-    & (Join-Path $projectRoot 'scripts\setup-windows.ps1')
+# A prepared workstation keeps its supplied PATH and tools. Bootstrap is only
+# needed when one of the required commands is absent.
+if ($PreparedEnvironment) {
+    foreach ($command in @('node', 'cargo', 'yarn')) {
+        Assert-Cmd $command '-PreparedEnvironment requires this tool on the supplied PATH.'
+    }
+} elseif ((-not (Test-Cmd 'node')) -or (-not (Test-Cmd 'cargo')) -or (-not (Test-Cmd 'yarn'))) {
     Refresh-SessionPath
-    if (Test-Path $initialCargoPath) {
+    $initialCargoPath = Join-Path $env:USERPROFILE '.cargo\bin'
+    if ((Test-Path $initialCargoPath) -and ($env:Path -notlike "*$initialCargoPath*")) {
         $env:Path = $initialCargoPath + ';' + $env:Path
     }
-}
-
-# ── Ensure nvm + Node.js are available ────────────────────────
-Write-Step 'Ensuring nvm + Node.js are available'
-Refresh-SessionPath
-
-if (-not $env:NVM_HOME) {
-    $nvmHome = [System.Environment]::GetEnvironmentVariable('NVM_HOME', 'User')
-    if (-not $nvmHome) {
-        $nvmHome = [System.Environment]::GetEnvironmentVariable('NVM_HOME', 'Machine')
-    }
-    if (-not $nvmHome) {
-        $nvmHome = Join-Path $env:APPDATA 'nvm'
-    }
-    $env:NVM_HOME = $nvmHome
-}
-
-if (-not $env:NVM_SYMLINK) {
-    $nvmSymlink = [System.Environment]::GetEnvironmentVariable('NVM_SYMLINK', 'User')
-    if (-not $nvmSymlink) {
-        $nvmSymlink = [System.Environment]::GetEnvironmentVariable('NVM_SYMLINK', 'Machine')
-    }
-    if (-not $nvmSymlink) {
-        $nvmSymlink = Join-Path $env:ProgramFiles 'nodejs'
-    }
-    $env:NVM_SYMLINK = $nvmSymlink
-}
-
-if ((Test-Path $env:NVM_HOME) -and ($env:Path -notlike "*$($env:NVM_HOME)*")) {
-    $env:Path = $env:NVM_HOME + ';' + $env:Path
-}
-if ($env:Path -notlike "*$($env:NVM_SYMLINK)*") {
-    $env:Path = $env:NVM_SYMLINK + ';' + $env:Path
-}
-
-if (-not (Test-Cmd 'node')) {
-    if (Test-Cmd 'nvm') {
-        Write-Host '  Node.js not found. Installing Node.js 20 via nvm...'
-        nvm install 20
-        nvm use 20
+    if ((-not (Test-Cmd 'node')) -or (-not (Test-Cmd 'cargo'))) {
+        Write-Step 'Installing missing Windows build prerequisites'
+        & (Join-Path $projectRoot 'scripts\setup-windows.ps1')
         Refresh-SessionPath
-        if ($env:Path -notlike "*$($env:NVM_SYMLINK)*") {
-            $env:Path = $env:NVM_SYMLINK + ';' + $env:Path
+        if (Test-Path $initialCargoPath) {
+            $env:Path = $initialCargoPath + ';' + $env:Path
         }
     }
-}
 
-# Setup yarn via corepack
-if (Test-Cmd 'node') {
-    $corepackBin = Join-Path $env:USERPROFILE '.corepack\bin'
-    if (-not (Test-Path $corepackBin)) {
-        New-Item -ItemType Directory -Path $corepackBin -Force | Out-Null
+    # ── Ensure nvm + Node.js are available ────────────────────────
+    Write-Step 'Ensuring nvm + Node.js are available'
+    Refresh-SessionPath
+
+    if (-not $env:NVM_HOME) {
+        $nvmHome = [System.Environment]::GetEnvironmentVariable('NVM_HOME', 'User')
+        if (-not $nvmHome) {
+            $nvmHome = [System.Environment]::GetEnvironmentVariable('NVM_HOME', 'Machine')
+        }
+        if (-not $nvmHome) {
+            $nvmHome = Join-Path $env:APPDATA 'nvm'
+        }
+        $env:NVM_HOME = $nvmHome
     }
 
-    $npmPrefix = ((npm prefix -g 2>&1) | Out-String).Trim()
-    $npmYarn = Join-Path $npmPrefix 'yarn.cmd'
-    if (Test-Path $npmYarn) {
-        Write-Host '  Removing conflicting npm-global yarn v1...'
-        npm uninstall -g yarn 2>&1 | Out-Null
+    if (-not $env:NVM_SYMLINK) {
+        $nvmSymlink = [System.Environment]::GetEnvironmentVariable('NVM_SYMLINK', 'User')
+        if (-not $nvmSymlink) {
+            $nvmSymlink = [System.Environment]::GetEnvironmentVariable('NVM_SYMLINK', 'Machine')
+        }
+        if (-not $nvmSymlink) {
+            $nvmSymlink = Join-Path $env:ProgramFiles 'nodejs'
+        }
+        $env:NVM_SYMLINK = $nvmSymlink
     }
 
-    Write-Host "  Enabling corepack (shim dir: $corepackBin)..."
-    corepack enable --install-directory $corepackBin
-    corepack prepare yarn@4.5.3 --activate
-
-    if ($env:Path -notlike "*$corepackBin*") {
-        $env:Path = $corepackBin + ';' + $env:Path
+    if ((Test-Path $env:NVM_HOME) -and ($env:Path -notlike "*$($env:NVM_HOME)*")) {
+        $env:Path = $env:NVM_HOME + ';' + $env:Path
     }
-}
+    if ($env:Path -notlike "*$($env:NVM_SYMLINK)*") {
+        $env:Path = $env:NVM_SYMLINK + ';' + $env:Path
+    }
 
-$cargoPath = Join-Path $env:USERPROFILE '.cargo\bin'
-if ((Test-Path $cargoPath) -and ($env:Path -notlike "*\.cargo\bin*")) {
-    $env:Path = $cargoPath + ';' + $env:Path
+    if (-not (Test-Cmd 'node')) {
+        if (Test-Cmd 'nvm') {
+            Write-Host '  Node.js not found. Installing Node.js 20 via nvm...'
+            nvm install 20
+            nvm use 20
+            Refresh-SessionPath
+            if ($env:Path -notlike "*$($env:NVM_SYMLINK)*") {
+                $env:Path = $env:NVM_SYMLINK + ';' + $env:Path
+            }
+        }
+    }
+
+    # Setup yarn via corepack
+    if ((Test-Cmd 'node') -and (-not (Test-Cmd 'yarn'))) {
+        $corepackBin = Join-Path $env:USERPROFILE '.corepack\bin'
+        if (-not (Test-Path $corepackBin)) {
+            New-Item -ItemType Directory -Path $corepackBin -Force | Out-Null
+        }
+
+        Write-Host "  Enabling corepack (shim dir: $corepackBin)..."
+        corepack enable --install-directory $corepackBin
+        corepack prepare yarn@4.5.3 --activate
+
+        if ($env:Path -notlike "*$corepackBin*") {
+            $env:Path = $corepackBin + ';' + $env:Path
+        }
+    }
+
+    $cargoPath = Join-Path $env:USERPROFILE '.cargo\bin'
+    if ((Test-Path $cargoPath) -and ($env:Path -notlike "*\.cargo\bin*")) {
+        $env:Path = $cargoPath + ';' + $env:Path
+    }
+
 }
 
 # ── Preflight checks ─────────────────────────────────────────
@@ -301,7 +371,7 @@ Write-Host '  yarn  OK'
 
 # ── Yarn install ──────────────────────────────────────────────
 Write-Step 'yarn install'
-yarn config set -H enableImmutableInstalls false 2>&1 | Out-Null
+$env:YARN_ENABLE_IMMUTABLE_INSTALLS = 'false'
 yarn install
 if ($LASTEXITCODE -ne 0) { Write-Host 'yarn install failed' -ForegroundColor Red; exit 1 }
 
@@ -355,62 +425,31 @@ $ginferResourceDir = Join-Path $projectRoot 'src-tauri\resources\ginfer'
 if (Test-Path -LiteralPath $ginferResourceDir) {
     Remove-Item -LiteralPath $ginferResourceDir -Recurse -Force
 }
-New-Item -ItemType Directory -Path $ginferResourceDir -Force | Out-Null
-Expand-Archive -LiteralPath $GinferRuntimeArchive -DestinationPath $ginferResourceDir -Force
-
-$ginferManifestPath = Join-Path $ginferResourceDir 'runtime-manifest.json'
-$ginferServerPath = Join-Path $ginferResourceDir 'bin\ginfer-serve.exe'
-if (-not (Test-Path -LiteralPath $ginferManifestPath -PathType Leaf) -or
-    -not (Test-Path -LiteralPath $ginferServerPath -PathType Leaf)) {
-    Write-Host '[FATAL] GInfer archive is missing runtime-manifest.json or bin\ginfer-serve.exe.' -ForegroundColor Red
-    exit 1
-}
-
-$ginferManifest = Get-Content -LiteralPath $ginferManifestPath -Raw | ConvertFrom-Json
-if ($GinferSourceCommit -and ($ginferManifest.source_commit -ne $GinferSourceCommit -or $ginferManifest.source_dirty -ne $false)) {
-    throw "GInfer archive must come from clean revision $GinferSourceCommit; found $($ginferManifest.source_commit), dirty=$($ginferManifest.source_dirty). Rebuild the engine archive."
-}
-if ($ginferManifest.schema -ne 'ginfer-windows-runtime-v1' -or
-    $ginferManifest.platform -ne 'windows-x64' -or
-    $ginferManifest.cuda_architecture -ne 'sm_120a') {
-    Write-Host '[FATAL] GInfer archive is not the required windows-x64/sm_120a runtime.' -ForegroundColor Red
-    exit 1
-}
-
-foreach ($file in $ginferManifest.files) {
-    $relativePath = [string]$file.path
-    if ([System.IO.Path]::IsPathRooted($relativePath) -or $relativePath.Contains('..')) {
-        Write-Host "[FATAL] Unsafe path in GInfer runtime manifest: $relativePath" -ForegroundColor Red
-        exit 1
+$windowsRuntimeDir = Join-Path $ginferResourceDir 'windows'
+New-Item -ItemType Directory -Path $windowsRuntimeDir -Force | Out-Null
+foreach ($directory in @('sm86', 'sm89', 'sm120a')) {
+    $inputArchive = $runtimeInputs[$directory]
+    # Recheck the actual archive being staged after prerequisites and source mirroring.
+    $manifest = Read-GinferRuntimeArchive $inputArchive.Path
+    if ($manifest.source_commit -cne $runtimeCommit -or
+        $manifest.cuda_architecture -cne "sm_$($directory.Substring(2))") {
+        throw "GInfer runtime input changed during the build: $directory"
     }
-    $runtimeFile = Join-Path $ginferResourceDir ($relativePath -replace '/', '\')
-    if (-not (Test-Path -LiteralPath $runtimeFile -PathType Leaf)) {
-        Write-Host "[FATAL] GInfer runtime file is missing: $relativePath" -ForegroundColor Red
-        exit 1
-    }
-    $runtimeItem = Get-Item -LiteralPath $runtimeFile
-    if ($runtimeItem.Length -ne [int64]$file.bytes) {
-        Write-Host "[FATAL] GInfer runtime file size mismatch: $relativePath" -ForegroundColor Red
-        exit 1
-    }
-    $actualHash = (Get-FileHash -LiteralPath $runtimeFile -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($actualHash -ne ([string]$file.sha256).ToLowerInvariant()) {
-        Write-Host "[FATAL] GInfer runtime hash mismatch: $relativePath" -ForegroundColor Red
-        exit 1
-    }
+    $destination = Join-Path $windowsRuntimeDir $directory
+    Expand-Archive -LiteralPath $inputArchive.Path -DestinationPath $destination -Force
+    $server = Join-Path $destination 'bin\ginfer-serve.exe'
+    & $server --help 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Bundled $directory ginfer-serve.exe failed its --help smoke test." }
+    Write-Host "  $directory : verified $(@($manifest.files).Count) files; CUDA $($manifest.cuda_toolkit)"
 }
-
-& $ginferServerPath --help 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host '[FATAL] Bundled ginfer-serve.exe failed its --help smoke test.' -ForegroundColor Red
-    exit 1
+$runtimeSet = [ordered]@{
+    schema = 'ginfer-windows-runtime-set-v1'
+    platform = 'windows-x64'
+    source_commit = $runtimeCommit
+    runtimes = [ordered]@{ '8.6' = 'sm86'; '8.9' = 'sm89'; '12.0' = 'sm120a' }
 }
-Write-Host "  Source commit: $($ginferManifest.source_commit)"
-Write-Host "  CUDA toolkit: $($ginferManifest.cuda_toolkit)"
-Write-Host "  Verified files: $($ginferManifest.files.Count)"
-if ($ginferManifest.source_dirty) {
-    Write-Host '  Warning: the bundled GInfer runtime was built from an uncommitted worktree.' -ForegroundColor Yellow
-}
+[IO.File]::WriteAllText((Join-Path $windowsRuntimeDir 'runtime-set.json'),
+    ($runtimeSet | ConvertTo-Json -Depth 4) + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
 
 # ── Build web app ─────────────────────────────────────────────
 Write-Step 'yarn build:web'

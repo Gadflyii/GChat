@@ -213,6 +213,7 @@ mod tests {
         input
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn setup_readiness_edits_use_the_foreground_input_contract() {
         let text = "Gbot desktop input readiness confirmed\n";
