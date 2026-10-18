@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 
 type TaskAction = 'cancel' | 'resume'
@@ -25,16 +25,24 @@ export default function GbotTaskActions({
   const [pending, setPending] = useState<TaskAction>()
   const submitting = useRef(false)
   const [error, setError] = useState<{ action: TaskAction; message: string }>()
-  const available: TaskAction[] = ['running', 'waiting_for_human'].includes(taskState)
-    ? ['cancel']
-    : ['ready', 'paused', 'interrupted'].includes(taskState)
-      ? ['cancel', 'resume']
-      : taskState === 'cancelled'
-        ? ['resume']
-        : []
-  const actions = pending && !available.includes(pending)
-    ? [...available, pending]
-    : available
+  const available = useMemo<TaskAction[]>(
+    () =>
+      ['running', 'waiting_for_human'].includes(taskState)
+        ? ['cancel']
+        : ['ready', 'paused', 'interrupted'].includes(taskState)
+          ? ['cancel', 'resume']
+          : taskState === 'cancelled'
+            ? ['resume']
+            : [],
+    [taskState]
+  )
+  useEffect(() => {
+    if (error && !available.includes(error.action)) setError(undefined)
+  }, [available, error])
+  const actions =
+    pending && !available.includes(pending)
+      ? [...available, pending]
+      : available
   if (!actions.length) return null
   const blocked = (action: TaskAction) =>
     busy || Boolean(pending) || (action === 'resume' && (!ready || !botHasControl))
