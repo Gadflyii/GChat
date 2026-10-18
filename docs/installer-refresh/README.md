@@ -27,9 +27,27 @@ base GChat `7bdc60bcf`. Reuse Codex 4's immutable Release Engine `6b85ecf77`
 and packaged Host after packaging booking 1489 returns. The archives are
 `E:\gchat4-windows-rc-250df804a-20261018\engine\source\out\windows\ginfer-windows-x64-sm{86,89,120a}.zip`;
 the unpacked donors are under the same root at `engine\stage-sm{86,89,120a}`.
-Read-copy permission starts after that booking's actual terminal. At 18:41Z
-the CLI had passed and the Host was compiling; continuation 1489 runs through
-19:19Z with an earlier actual return possible. No donor read-copy has started.
+Packaging booking1489 returned **18:54:25Z**, and the priority quote relay
+returned **18:58:39Z**. Read-copy permission is active. The final packaged Host
+is `E:\gchat4-windows-rc-250df804a-20261018\source\src-tauri\resources\bin\ginfer-host.exe`.
+The owned private copy is allocated at
+`E:\gchat3-windows-consumer-local5090-qwen-20261018\package\resources`,
+containing the Host, launch catalog and all three runtime stages. Models stay
+at their immutable donor paths; no model copy is needed. Copy and metadata
+checks passed at **19:05:03Z**: 378 files / 1,945,578,902 bytes match the donor.
+The copy receipt is `out/windows-consumer-launch-profiles-20261018/local5090-package-copy.json`.
+Codex 4's queued full package/hash/catalog acceptance and delivery takes the
+next boundary (revised forecast five to ten minutes); native model timing
+starts only after its actual return and a fresh schedule check.
+
+Native hardware is confirmed as RON-9950X3D2 / RTX 5090,
+GPU UUID `GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e`, physical RAM
+137,052,852,224 bytes. **Model admission is blocked**: the native available
+memory counter reported 7,589,867,520 bytes, then 4,483,530,752 bytes, below
+the required 17,131,606,528-byte floor. PowerShell PID45328 holds about 82 GB
+working set and its command identifies Codex 4's packaging observer; its owner
+has been notified. No process was stopped here. Recheck available RAM after
+that owner returns the boundary; never launch below the signed floor.
 Codex 5 returned both laptop booking408 and Ada booking776 at 18:48Z.
 Ada's C1 gate and the laptop's corrected quotes, Qwen Download and paired
 naturals remain queued; fresh per-host clearance is required before native work.
@@ -44,7 +62,7 @@ use the matching saved requests at context 8,181, DFlash fixed seven draft
 tokens, INT8 KV, Text, TP1 and 300 MiB headroom; read the exact per-entry
 command before execution. The retained 5090 Linux references admit 131,072 /
 C8 / INT8 / fixed seven draft tokens / 300 MiB: Qwen uses automatic arena on
-`aa1c48016`; Muse uses explicit 15,189,450,752 bytes and prefill 1,024 on
+`aa1c48016` with omitted/automatic prefill; Muse uses explicit 15,189,450,752 bytes and prefill 1,024 on
 `eb777ab95`. Those older runs establish same-card Linux controls, not
 qualification of `6b85ecf77`. Their requests, standard responses and natural
 identity JSONL are read-copy granted under
@@ -71,10 +89,11 @@ The coordinator checked the existing API receipts and normal stdin-close route;
 effective standard commands still need their final package path and settings
 checked against the saved controls before execution.
 
-Next unresolved action: bind the existing native Host/Job guard and same-card
-Linux controls to the Release runtime, verify policy ancestry and hardware,
-then book each available native test slot. No qualification launch or model
-copy has started. Codex 6 granted read-only use after 1489 of the immutable
+Next unresolved action: finish the existing Host/Job command bindings while
+Codex 4 validates packages and resolves the memory-heavy observer, then pass
+fresh native memory admission before booking a model slot. Policy ancestry and
+local5090 hardware are verified. No qualification launch or model copy has
+started. Codex 6 granted read-only use after 1489 of the immutable
 Muse artifact at
 `E:\ai\tmp-c6-muse-int-batch-invariance-20261018\artifacts\muse_glimmer_30b_smol_df2.ginfer`
 (13,838,508,544 bytes; exact package hash above). Codex 5 has additional
