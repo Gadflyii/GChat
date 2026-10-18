@@ -438,7 +438,8 @@ refresh will reuse the accepted Linux AppDir runtime closure without changing
 Ron's installation or publishing packages; release performance is not claimed.
 No model, hardware profile or GPU workload has run during the walk.
 
-Three reproduced defects now have tested, merged source fixes:
+Five reproduced defects have tested source fixes; four are merged and the
+Downloads status fix is merge-ready:
 
 - `GUI-SETUP-RUNTIME-INSTALL-PROGRESS`: Welcome's false connection failure after
   30 seconds and Hosts' unexplained disabled Refresh now follow native resource
@@ -490,7 +491,11 @@ keyring. Settings exercised computer-name Save, data-path Copy, reset-dialog
 Cancel by Enter, language list, empty-token Show/Hide, spellcheck/default-model
 toggles and Interface font sizes/themes. Small, Medium, Large, Extra Large and
 System/Light/Dark selections were readable; Medium was restored. Factory reset
-and OS startup/CLI installation were not invoked.
+and OS startup/CLI installation were not invoked. Settings → Open Logs passed
+at 04:03:57Z: its separate 800×600 Light app window displays wrapped, readable
+activity lines without horizontal overflow. This is an app window, so it does
+not require a file-manager handler. Screenshot:
+`out/c3-first-user-setup-20261018/open-logs-light.png`.
 
 Workspace connections connected its private account service and displayed the
 Google guide through import/manual registration. Google/Microsoft service
@@ -530,18 +535,23 @@ The final control/theme/window matrix is retained in
 requiring a published descriptor, installed model, owned account credentials,
 prepared/booked GPU group or configured Fleet coordinator were not invoked.
 General's OS autostart/CLI installation, destructive reset/relocation and
-file-manager links remain unexercised. Existing reset regression and engine-settings
+Open Containing Folder remain unexercised. The last requires a desktop folder
+handler in the private session; Open Logs is already exercised. Existing reset regression and engine-settings
 acceptance packets are retained under their own rows; this walk does not relabel
 them as fresh execution. The updater 404 remains its existing separate row.
 
 Downloads Manage is fixed in `f928613b1`, merged through `d4b0b9c8c`. Focused48,
 lint, ONE verify, changed-source build and private native history/theme/layout
 checks pass. See `out/c3-downloads-manage-tab-20261018/{result.json,native-result.json,summary.md}`.
-The next defect is `GUI-DOWNLOADS-POPOVER-STATUS`: a paused journal entry is
-presented as Downloading. Its source is prepared; focused/lint/ONE verify and
-changed-source native acceptance come next. No real transfer or model is needed.
+`GUI-DOWNLOADS-POPOVER-STATUS` is merge-ready at `b9726e6e5` (tested code
+`4e635c35a`). It replaces Downloading with Downloads and shows the paused
+transfer's status. Focused56/lint/ONE verify (3319 app,121 extension,1220 native),
+build and native Light1500×1000/Dark1024×740 acceptance pass. The accessible
+status is associated with its model and no horizontal overflow occurs. No
+Resume/Delete, real transfer, model or GPU action ran. Evidence:
+`out/c3-downloads-popover-status-20261018/{result.json,native-result.json,summary.md}`.
 
-After that source fix merges, pin current main for a private release AppDir
+After the status source fix merges, pin current main for a private release AppDir
 refresh and finish the installed-build walk at the requested sizes/themes.
 The accepted `ed68c7443` Linux release predates current GUI changes; its
 GIO/Gbot/four-family Engine closure is a read-only donor, not current-main
@@ -552,18 +562,27 @@ build or package publication is needed. Conditional model/account/Fleet actions
 retain their stated prerequisites. Support destination remains waiting on Ron.
 
 Owner: Codex 3. Source `/ai/gchat-worktrees/c3-first-user-setup-20261018`, branch
-`fix/c3-first-user-setup-20261018`; baseline `201f46712`. Private apps, Hosts and
-services stopped; returned03:30Z. Displays and inspector forwards stopped; no
-private mounts remain. Closed candidate binaries, source archives and private homes were removed
-after evidence retention. The S1 root
+`fix/c3-first-user-setup-20261018`; original baseline `201f46712`. The status
+acceptance app/private Host/Xvfb stopped at 04:10Z; processes and mounts were
+verified absent and GUI CPU8–15 booking2957 returned. The stopped downloads-home
+and status-candidate remain through merge. Manage's merged candidate copy and
+raw passing logs were removed after C4's donor copy completed; concise results
+and screenshots remain. The inspector forward is retained for the next private
+release session. No model/profile/GPU job ran in this walk.
+
+The owned S1 root
 `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains `runnable`,
-`gchat`, `native-target`, `cargo-home`, `yarn-cache`, resources and launch profiles
-as the active next-fix stage, now exclusively assigned to the paused-status
-gate/build. The stopped `downloads-home` is retained for that native check;
-`downloads-manage-candidate` remains read-only until C4 finishes donor copying.
-Manage apps/Host/display stopped and CPUs returned03:50Z; no GUI job remains. Dependency donor remains owned by
-Claude at `tmp-claude-gchat-finish-20261017/tool-source` and is untouched. No
-model/profile/GPU job ran in this walk.
+`gchat`, `native-target`, `cargo-home`, `yarn-cache`, resources and launch profiles.
+Shared source/build stage is now exclusively handed to the release refresh
+helper. Its release cache and `current-main-appdir` are private copies of the
+accepted read-only ed68/e228 donor; source overlay and build wait for the merged
+status/current-main pin. Normal Cargo release settings, exact approved23 catalogs
+/175 profile metadata entries and all four Engine images remain; this does not
+qualify a model or profile. Keep `tools` because C4's Xvfb:196 still executes it.
+C4 has copied the earlier candidate/resources into its own fixture. The external
+dependency donor at `tmp-claude-gchat-finish-20261017/tool-source` remains owned
+by Claude and untouched. Release command/dependency/copy receipts are in
+`out/c3-current-main-release-20261018/`.
 
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
