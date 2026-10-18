@@ -1,5 +1,52 @@
 # GInfer host UI
 
+## Model deletion confirmation — Gchat 3 native acceptance, October 18
+
+`GUI-MODEL-DELETE-RESULT-20261017` passes its remaining native Linux
+confirmation leaf. In Settings → GInfer → Models, the dialog initially focused
+Cancel. Ordinary Cancel closed it and preserved both inert fixture files,
+including their bytes and modification times. With the owned directory set to
+0500, an actual uid-1000 unlink failed with EACCES; native Delete showed
+“Permission denied (os error 13)”, retained the dialog, files and model row,
+and reenabled Delete. Restoring 0700 and retrying in that same dialog removed
+the fixture, closed the dialog, removed its row and showed the success toast.
+Four Dark-theme screenshots at 1200×800 app size were visually reviewed.
+
+Allocated main `7b17e06da`; source `625eceba0` merged `95b351d54`.
+The retained `ed68c7443` release AppDir has identical DeleteModel, shared deletion,
+model service, provider inventory and provider-store source. Main adds an
+external-registration branch; this `source: local` fixture has no managed
+journal and uses the unchanged direct-directory deletion route. Provider layout
+changes do not alter this dialog call. The accepted 11 focused cases and full
+source gates in `out/c4-model-delete-result-20261017/result.json` were reused,
+including their recorded command-environment correction; no gates were rerun.
+This observation qualifies the private native Linux confirmation workflow,
+not valid-model loading, external/managed registrations, pending/double-submit
+timing, Windows or a fresh installer. No product source change or real model,
+shared cache, account, Host pairing, GPU or inference action occurred.
+
+The initial synthetic manifest contained literal newline escapes and discovery
+rejected it; that setup is excluded. The owned manifest was corrected and
+ordinary Refresh installed models confirmed discovery before deletion. An early
+Cancel observation captured the closing animation and cannot prove closure.
+Only that missing observation was repeated with an identical inert fixture;
+the settled dialog-absent state, retained row and unchanged files establish
+Cancel. Future checks must parse the fixture and wait for settled dialog state.
+
+Canonical result, short summary, four screenshots, source binding, permission
+proof and state/cleanup receipts: `out/model-delete-native-20261018/{result.json,summary.md}`.
+Owner worktree `/ai/gchat-worktrees/gchat3-model-delete-native-20261018`, branch
+`test/gchat3-model-delete-native-20261018`. Verified S1 `AIS-2-8592-L01` used
+CPU 112–119, private HOME/runtime0700, D-Bus/unlocked keyring, Xvfb and a
+uid-1000 container; native pointer/keyboard drove controls and WebKit only
+observed. At 03:50Z the exact owned root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-model-delete-native-20261018` and all owned
+session processes, sockets and inspector forward were absent; 3.45 GB was
+released and booking 2938 canceled. The donor remains read-only at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`.
+Coordinator reviewed the evidence and docs diff; docs-only `git diff --check`
+passes. This acceptance is ready for branch integration.
+
 ## Conversation Rename keyboard — Gchat 3 native acceptance, October 18
 
 `GUI-THREAD-RENAME-KEYBOARD` passes its remaining native Linux leaf. Ordinary
