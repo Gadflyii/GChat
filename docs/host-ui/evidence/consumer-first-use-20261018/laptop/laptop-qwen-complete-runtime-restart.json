@@ -1,0 +1,10 @@
+{
+  "utc": "2026-10-18T22:49:34.018486+00:00",
+  "supervisor_pid": 263304,
+  "engine_source": "1209de84905028ba78291751df719b7d09fe38f8",
+  "host_source": "e001e9ea38b6fbdfeccefff08d01edf1fd07b4ed",
+  "cli_sha256": "5ceed9b56a76558ea01b46bdb1b7a5ba077000eca957eac47a4bba95e822ee7a",
+  "serve_sha256": "505ed0cc73d16c945ec54faa9ff5bdc4157e0921e70a6cb6ab4baa71969181f3",
+  "request_log_jsonl": "/home/ron/tmp-c5-consumer-first-use-20261018/evidence/laptop-qwen-corrected/requests.jsonl",
+  "status": "complete same-build sibling layout; fresh isolated Host/app starting, no model load"
+}
