@@ -1,5 +1,37 @@
 # GInfer host UI
 
+## Passphrase-vault Lock feedback — verified, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-LOCK-FEEDBACK` names the pending Lock and hides the
+ready/continue claims until the request and its follow-up status read finish.
+A rejected Lock shows plain recovery guidance with closed diagnostic details.
+Because native locking can succeed before another step fails, the guidance uses
+the fresh status: an unlocked vault offers Lock again; locked or unknown status
+offers Check again. Checking never replays Lock.
+
+The unchanged base reproduced all four pending, rejection, partial-success and
+failed-read regressions. An existing setup hook implicitly returned the command
+mock as teardown, causing two additional hook timeouts after failed assertions
+left deferred responses unresolved. Its braced callback now returns nothing;
+assertions and default timeouts are unchanged, and the valid baseline was not
+repeated. The frozen candidate passed all **15 credential tests**, lint with
+zero errors and five existing unrelated warnings, and exactly one `make verify`.
+That gate exited 0 at **15:43:38Z**: **3,657 app tests / 6 skipped,
+127 extension tests, all six critical coverage floors and 1,309 native tests /
+0 failed / 28 ignored** across 23 native summaries. Typecheck and quality guards
+passed. The coordinator reviewed the failing and passing logs, terminal state,
+and matching source and eleven catalog input bindings. This verifies rendered
+frontend behavior; installed-desktop and Windows acceptance remain separate.
+
+Candidate: `/ai/gchat-worktrees/gchat3-secure-storage-lock-feedback-20261018`,
+branch `fix/gchat3-secure-storage-lock-feedback-20261018`, base `fe0630a14`.
+S1 CPU112–119 returned **15:46Z**, booking3368 canceled. Scoped cleanup finished
+**15:49:30Z**: the owned SSD test cache, prep log and two exited containers were
+removed, releasing **29,845,885,776 logical bytes**. Their absence was confirmed;
+the inactive RC dependency donor was untouched. Small reviewed results are
+`out/secure-storage-lock-feedback-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the GUI queue.
+
 ## First-run accepted download actions — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-DOWNLOAD-ACTION-RESULT` preserves confirmation when the Host
