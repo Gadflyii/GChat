@@ -17,8 +17,8 @@ pub struct Progress {
     pub storage_accepted: bool,
     pub requested_storage: Option<PathBuf>,
     pub storage_error: Option<String>,
-    /// Fingerprint of the explicitly reviewed profile, selected files and root.
-    /// Persisting a choice does not authorize a different profile or placement.
+    /// Fingerprint of reviewed disk evidence, selected GPUs/files and root.
+    /// Refreshing unrelated GPU timings does not change the placement decision.
     pub reviewed_storage: Option<String>,
     pub releases: Vec<Release>,
     pub catalog_loaded: bool,
@@ -92,8 +92,9 @@ fn storage_review_key(
         Some(json!({"id":id,"sha256":job.release.sha256,"bytes":job.release.bytes,"path":job.path.as_ref()?}))
     }).collect();
     let selected = selected.filter(|selected| !selected.is_empty())?;
+    let storage_profile = json!({"schema_version":profile["schema_version"],"disks":profile["disks"]});
     let bytes = serde_json::to_vec(
-        &json!({"gpus":progress.gpu_uuids,"profile":profile,"root":root,"models":selected}),
+        &json!({"gpus":progress.gpu_uuids,"profile":storage_profile,"root":root,"models":selected}),
     )
     .ok()?;
     Some(hex::encode(Sha256::digest(bytes)))
@@ -2990,6 +2991,26 @@ mod tests {
         );
         assert_eq!(stage(&restored, true, false, &jobs), "storage_review");
         assert_eq!(stage(&restored, true, true, &jobs), "startup");
+        let mut refreshed = profile.clone();
+        for field in [
+            "warnings",
+            "gpus",
+            "sources",
+            "duplex_transfers",
+            "gpu_expert_rates",
+            "mapped_host_scatter_reads",
+        ] {
+            refreshed[field] = json!({"refreshed":true});
+        }
+        assert_eq!(
+            storage_review_key(&restored, &jobs, &refreshed, root),
+            restored.reviewed_storage
+        );
+        refreshed["disks"][0]["sequential_read"]["value"] = json!(200);
+        assert_ne!(
+            storage_review_key(&restored, &jobs, &refreshed, root),
+            restored.reviewed_storage
+        );
         assert_ne!(
             storage_review_key(
                 &progress,

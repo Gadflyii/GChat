@@ -35,9 +35,12 @@ title: "Own first-run setup and measured model storage in Host"
   need the existing mover's staging reserve. A missing rate does not prevent an
   explicit choice to retain installed files.
 - **Review policy:** Persist an explicit keep decision bound to the selected
-  package identities and paths, GPU group, accepted native profile and managed
-  root. Reopening a client or restarting Host preserves an unchanged review;
-  changing those inputs requires another review. Reject a stale review key.
+  package identities, sizes and paths, GPU group, accepted native disk-profile
+  section and managed root. Reopening a client or restarting Host preserves an
+  unchanged review. Fresh artifact Ensure may refresh unrelated GPU timings and
+  source metadata without invalidating Keep; a changed disk measurement, package
+  or root requires another review. Reject a stale review key. Arch signed this
+  storage-specific binding after the native restart reproduction on October18.
   Choosing a different managed folder saves the destination but neither moves
   installed files nor accepts their placement. Keep and move remain separate
   explicit actions shared by the CLI, Welcome and Manager.
