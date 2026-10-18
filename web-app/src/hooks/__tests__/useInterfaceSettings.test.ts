@@ -1,20 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useInterfaceSettings } from '../useInterfaceSettings'
+import { useTheme } from '../useTheme'
+import { seedServiceHub } from '@/test/service-hub'
+import type { ThemeService } from '@/services/theme/types'
+
+const setNativeTheme = vi.fn().mockResolvedValue(undefined)
 
 // Mock constants
 vi.mock('@/constants/localStorage', () => ({
   localStorageKey: {
     settingInterface: 'setting-appearance',
-  },
-}))
-
-vi.mock('../useTheme', () => ({
-  useTheme: {
-    getState: vi.fn(() => ({ isDark: false })),
-    setState: vi.fn(),
-    subscribe: vi.fn(),
-    destroy: vi.fn(),
+    theme: 'theme',
   },
 }))
 
@@ -38,6 +35,12 @@ Object.defineProperty(global, 'IS_WEB_APP', { value: false, writable: true })
 describe('useInterfaceSettings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    setNativeTheme.mockResolvedValue(undefined)
+    seedServiceHub({
+      theme: { setTheme: setNativeTheme } as unknown as ThemeService,
+    })
+    useTheme.setState({ activeTheme: 'dark', isDark: true })
+    useInterfaceSettings.setState({ fontSize: '16px', accentColor: 'primary' })
   })
 
   it('should initialize with default values', () => {
@@ -71,12 +74,12 @@ describe('useInterfaceSettings', () => {
       expect(result.current.accentColor).toBe('primary')
     })
 
-    it('should not update for invalid accent color', () => {
+    it('should not update for invalid accent color', async () => {
       const { result } = renderHook(() => useInterfaceSettings())
 
       // First reset to default state
-      act(() => {
-        result.current.resetInterface()
+      await act(async () => {
+        await result.current.resetInterface()
       })
 
       const currentColor = result.current.accentColor
@@ -90,8 +93,12 @@ describe('useInterfaceSettings', () => {
     })
   })
 
-  it('should reset interface settings to defaults', () => {
+  it('restores the default theme and font through the native theme service', async () => {
     const { result } = renderHook(() => useInterfaceSettings())
+
+    await act(async () => {
+      await useTheme.getState().setTheme('light')
+    })
 
     // Change some values first
     act(() => {
@@ -100,12 +107,28 @@ describe('useInterfaceSettings', () => {
     })
 
     // Reset
-    act(() => {
-      result.current.resetInterface()
+    await act(async () => {
+      await result.current.resetInterface()
     })
 
     expect(result.current.fontSize).toBe('16px')
     expect(result.current.accentColor).toBe('primary')
+    expect(useTheme.getState().activeTheme).toBe('dark')
+    expect(useTheme.getState().isDark).toBe(true)
+    expect(setNativeTheme).toHaveBeenLastCalledWith('dark')
+  })
+
+  it('preserves the chosen settings when resetting the native theme fails', async () => {
+    await useTheme.getState().setTheme('light')
+    useInterfaceSettings.getState().setFontSize('20px')
+    setNativeTheme.mockRejectedValueOnce(new Error('Window theme unavailable'))
+
+    await expect(
+      useInterfaceSettings.getState().resetInterface()
+    ).rejects.toThrow('Window theme unavailable')
+
+    expect(useTheme.getState().activeTheme).toBe('light')
+    expect(useInterfaceSettings.getState().fontSize).toBe('20px')
   })
 
   describe('Reset interface functionality', () => {
@@ -119,11 +142,11 @@ describe('useInterfaceSettings', () => {
       })
     })
 
-    it('should reset CSS variables when resetInterface is called', () => {
+    it('should reset CSS variables when resetInterface is called', async () => {
       const { result } = renderHook(() => useInterfaceSettings())
 
-      act(() => {
-        result.current.resetInterface()
+      await act(async () => {
+        await result.current.resetInterface()
       })
 
       expect(document.documentElement.style.setProperty).toHaveBeenCalledWith(

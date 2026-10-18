@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Interface reset restores the theme — C3, October 18
+
+`GUI-INTERFACE-RESET-KEEPS-THEME`: Settings → Interface promised to reset all
+interface settings, but its reset only restored font size and the accent preset.
+The independently persisted Light/System theme stayed selected. The candidate
+restores the existing Dark default through the shared theme service before
+resetting the font to Medium. It waits for completion, disables another reset
+while pending and shows failure feedback if the theme service rejects. The
+description names the defaults that Reset restores.
+
+Outcome and acceptance: ordinary Reset from Light with a larger text size
+restores Dark/Medium, reports success after completion, and preserves the
+chosen settings on a rejected theme operation. Existing hook and rendered-route
+tests cover those behaviors. Source self-check and `git diff --check` pass;
+tests, lint, ONE `make verify` and changed-build native acceptance have not run.
+Native baseline confirmation is also pending in the pinned current-main release
+walk. No passing native result is inferred from source inspection.
+
+Owner Codex 3; worktree
+`/ai/gchat-worktrees/c3-interface-reset-theme-20261018`, branch
+`fix/c3-interface-reset-theme-20261018`, base `d0a8d06bf`. No dependencies,
+native settings service, model/profile or GPU behavior change. No build or
+remote scratch is allocated for this row yet. The shared S1 source/build stage
+is exclusively held by the current-main release refresh; the download-count
+wording gate is next. After that handoff, run the focused Interface/theme cases,
+lint and one verify/build in that existing owned stage, then ordinary native
+input at narrow/wide sizes in Light/Dark. The source candidate is not merge-ready.
+
 ## Google client ID validation — Gchat 3 native acceptance, October 18
 
 `GUI-GOOGLE-CLIENT-ID-SHAPE` passes its remaining native Linux negative leaf.
