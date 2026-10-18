@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "source_commit": "d7de423c2a98393c156ce3ee0b8afb10ad61c963",
+  "candidate_sha256": "a3bbc783b4d9cbbc1a15eee83e234621430b696fc4b0d886124033f307ec06b1",
+  "native_cases": [
+    "sidebar-edit-cancel",
+    "sidebar-edit-escape",
+    "sidebar-delete-enter-cancels",
+    "sidebar-delete-escape",
+    "page-edit-cancel",
+    "page-edit-escape",
+    "page-delete-enter-cancels",
+    "page-delete-escape",
+    "direct-edit-cancel",
+    "direct-edit-escape"
+  ],
+  "project_storage_unchanged": true,
+  "saved_files_unchanged": 17,
+  "draft_discard_and_original_name_reopened": true,
+  "delete_initial_cancel_focus": true,
+  "viewed_screenshots": [
+    "sidebar-more-focus.png",
+    "direct-edit-focus.png"
+  ],
+  "platform": "isolated Linux native debug",
+  "gpu_used": false,
+  "model_used": false,
+  "windows": "not built (dev phase)",
+  "app_status": "STOPPED",
+  "returned_at": "2026-10-18T06:52:16.387251+00:00"
+}
