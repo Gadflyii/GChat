@@ -1,0 +1,26 @@
+{
+  "checked": "2026-10-18T06:39:48.068310+00:00",
+  "root": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018",
+  "root_bytes": 33059532800,
+  "directories": [
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/build-xdg-data",
+      "bytes": 28672
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/cargo-home",
+      "bytes": 2372452352
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/gchat",
+      "bytes": 6970257408
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/native-target",
+      "bytes": 23714021376
+    }
+  ],
+  "release_cache": "removed; retained logs and release-result.json",
+  "retention": "Parent owns remaining source/cache/AppDir/native profiles; no child writer remains.",
+  "booking3090": "canceled"
+}

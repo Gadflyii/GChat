@@ -1060,33 +1060,81 @@ profiles are offered; this fixture adds no model or hardware qualification.
 No package is copied, repacked or published. The public release-catalog gate
 and production download admission remain unchanged.
 
-Current work: restore the existing development-only private-catalog route on
-current main, extending its configured literal IPv4 origin from loopback to
+The development-only private-catalog route in `71abf1708` extends its
+configured literal IPv4 origin from loopback to
 RFC1918 LAN addresses. Frontend development mode and a debug Host must both be
 used. Catalog and `.ginfer` URLs use the same explicit origin, with no credentials,
 query or fragment; Host private requests use neither proxies nor redirects.
 Full size, hash, identity, launch-profile and hardware checks remain in force.
 The fixture must never be uploaded or configured in a release build.
 
-The intended shared URL is `http://192.168.1.109:18761/catalog.json` (not yet
-serving). Its durable S1 root is
+The shared URL is **`http://192.168.1.109:18761/catalog.json`**, live since
+06:18 UTC on October 18. Its durable S1 root is
 `/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1`, separate from disposable
-lane builds. Next: validate the generated metadata and development transport,
-start the read-only service, and mail the live URL. Then start a real transfer
-through native Models, observe its live status/progress in the sidebar popover,
-and pause/remove the partial transfer through native controls. Native screenshots,
-focused checks and ONE `make verify` belong in this same source branch. No model
-load, engine execution or GPU compute is needed.
+lane builds. It offers seven packages and 112 unchanged profiles: 107
+full-context-tested, four calculated-startup-smoke and one screened-startup;
+166 pending profiles are omitted. Packages are explicit symlinks into the NAS
+wave. The service binds only S1's LAN address, permits GET/HEAD on the catalog
+and selected package names, supports byte ranges, and limits each transfer to
+8 MiB/s. Directory/internal routes return 404 and writes are unsupported.
+Catalog and a 16-byte package range passed from both S1 and another LAN host.
+The catalog route also accepts the existing loader's numeric `t` cache-buster;
+other query keys and package queries return 404.
+Bubbs received the live URL for reuse by the other lanes.
+
+For a development frontend, set
+`VITE_MODEL_CATALOG_URL=http://192.168.1.109:18761/catalog.json` when building
+or starting Vite. A packaged development frontend also needs
+`NODE_ENV=development`; `vite build --mode development` alone does not make
+`import.meta.env.DEV` true. Use a debug `ginfer-host` and set
+`GINFER_MODEL_CATALOG_URL=http://192.168.1.109:18761/catalog.json` in its runtime
+environment. GChat's child Host inherits that environment. Both sides must use
+the same origin and include the transport change above. Keep each lane's HOME,
+XDG directories, D-Bus, keyring and model download directory private. Do not set
+these values in release build settings.
+
+C7 owns the shared service, intentionally retained for the other lanes. Its
+PID is recorded in `service.pid` under the durable root (PID 3708693 at acceptance);
+output is `service.log`. Restart only after confirming that process is gone:
+`nohup python3 /media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1/srv.py >service.log 2>&1 &`
+from the durable root, then record the new PID. Stop only that verified PID
+when the shared fixture is retired. Do not regenerate or replace the fixture
+during another lane's transfer. Definition and generation/service receipts are
+in `out/c7-managed-downloads-native-20261018/shared-fixture/`.
+
+Focused frontend checks (47), Host download checks (33), Host check and strict
+all-target Clippy passed. ONE `make verify` passed: 3,409 web/core tests,
+127 extension tests and 1,267 Rust tests (28 ignored). The development frontend,
+current extensions and debug desktop/Host builds passed. The release profile
+explicitly sets `debug-assertions = false`; no release profile override enables
+it. Arch accepted the development transport at 06:15 UTC, confirmed at 06:29.
+Both requested actual `--release` checks passed, one test each: the private
+catalog URL is rejected, and private package URLs are rejected even when a
+catalog argument is supplied. The latter test exists only without debug
+assertions, so its execution also confirms the effective release configuration.
+
+Native acceptance passed in an isolated Linux desktop session: Models started
+a real Muse Glimmer INT transfer from the shared NAS fixture, and the sidebar
+popover showed 107 MiB of progress. Native Pause retained 155,975,468 bytes;
+both Models and the popover showed Paused. Native Delete partial download
+showed its confirmation, then removed the partial file and Host journal entry;
+Models and the popover returned to their empty states. The package SHA-256 is
+`46b5d54ee64ccd278f2a1a4d2c6d5aa9fc9097e8db0c3d165179aee5f2cb5b66`.
+This checks partial-transfer UI behavior; no model load, completed-package
+validation or GPU inference was performed. Screenshots and concise receipts
+are in `out/c7-managed-downloads-native-20261018/native/`; verification and
+release receipts are beside them.
 
 Owner C7, branch `test/c7-managed-downloads-native-20261018`, worktree
 `/ai/gchat-worktrees/c7-managed-downloads-native-20261018`; current baseline is
-main `96172afb5`, normally merged as `dc67f5df7`. Parallel source work owns only
-`web-app/src/lib/model-release.{ts,test.ts}` and Host `model_downloads.rs`;
-fixture generation owns only the named durable S1 fixture root. C7 integrates
-and checks both. The private runtime donor is
-`/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir`
-(`d0a8d06bf`, 4.1 GB, no borrowed profile/cache). Its copy completed and C3
-custody was released at 06:07Z. No native app, transfer or GPU is live.
+main `96172afb5`, normally merged as `dc67f5df7`. The tested source is
+`71abf1708`. The native app, Host and private display/session processes stopped
+by verified PID; CPUs 88–95 returned 06:39Z. The disposable private HOME,
+4.1 GB AppDir and Xvfb closure were removed. Codex 4 completed an independent
+read-copy of the debug Host at 06:36Z, so it holds no donor. The shared service
+and NAS inputs remain available. After retaining the release receipts, the
+entire 33.06 GB build scratch was removed; CPUs 104–111 returned 06:39Z.
+No large binary or model is kept as evidence.
 
 
 ## Downloads popover transfer status — C3, October 18
