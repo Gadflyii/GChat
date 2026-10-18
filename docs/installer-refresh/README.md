@@ -2,35 +2,56 @@
 
 ## Native Windows fixed-volume qualification — Codex 7, October 18
 
-`GCHAT-WINDOWS-FASTEST-DISK-20261016` remains **BLOCKED on the native fixture**.
-Read-only native metadata at 11:04Z identifies C:, D: and E: on
-PhysicalDrive0, 3 and 4. No eligible mounted sibling-partition pair exists,
-so this host cannot meet the acceptance fixture of three volumes including
-two partitions on one physical drive. The existing helper regression covers
-sibling budgeting; it does not establish the missing physical acceptance.
-No partitions or Windows settings were changed.
+`GCHAT-WINDOWS-FASTEST-DISK-20261016` **passed the existing C:/D:/E:
+separate-drive scope** authorized by Bubbs at 11:12Z. One native Windows
+`profile-hardware --disk-only` command exited 0 in 24.653 seconds at 11:48Z
+on RON-9950X3D2. The accepted SM120a runtime `b76ce57a3` includes merged disk
+fix `c53921fbb`; no build, full calibration or model inference ran.
 
-The accepted SM120a runtime at
-`E:\gchat3-windows-multiarch-20261017\accepted\runtimes\ginfer-windows-x64-sm120a.zip`
-contains `b76ce57a3`, including merged disk fix `c53921fbb`. Its existing
-`profile-hardware --disk-only` route preserves CPU/GPU/NUMA calibration,
-measures eligible mounted volumes with Volume GUID/PhysicalDrive identity
-and usable paths, and bounds reads to 1 GiB per physical drive. Existing
-reader/refresh tests already passed. No model inference or full calibration
-is required for this gate.
+| Volume / physical drive | Sequential GB/s | Random 4 KiB MB/s | Direct reads |
+| --- | ---: | ---: | ---: |
+| C: / PhysicalDrive0, Samsung SSD 9100 PRO | 8.792 | 49.274 | 1 GiB |
+| D: / PhysicalDrive3, Samsung SSD 850 | 0.499 | 37.591 | 1 GiB |
+| E: / PhysicalDrive4, AMD-RAID Array 3 | 0.896 | 36.041 | 1 GiB |
 
-Bounded receipt recovery ended at 11:11Z: Gchat3 retired its private fixture;
-no inactive matching native base-profile copy was found in its retained
-receipts. Ron's active profile was not used. The next action needs a suitable
-native fixture and an inactive matching profile, then one disk-only run with
-the fastest volume outside model/cache. No booking, extraction, measurement,
-native child or disposable payload was created. Source/evidence worktree
-`/ai/gchat-worktrees/c7-windows-flash-20261018` is retained on
-`docs/c7-windows-fastest-disk-20261018`.
+All three retain distinct Volume GUIDs, usable parent paths and positive
+uncached sequential/random measurements. These are qualification observations,
+not a storage speed improvement claim. C: is fastest. The model resides on C:
+and the private profile cache on E:, so fastest-outside-model/cache behavior
+remains covered by the existing helper regression. No eligible mounted sibling
+partitions exist; Bubbs accepted that **fixture limit**. No partitions or Windows
+settings were changed, and physical sibling acceptance is not claimed.
+
+The inactive C6 profile was copied into an owned root. All CPU/GPU/NUMA
+measurement fields and non-disk sources are unchanged, including 11,520 CPU
+expert and 1,536 GPU expert rows. The existing writer recomputed seven derived
+CPU completeness summaries under the SIMD requirement policy; all remain
+complete. The donor remains byte-identical, and the model size and timestamps
+are unchanged. No new probe paths remain; a preexisting D: probe directory was
+left untouched. The [consolidated native result](windows-disk-qualification-20261018.json)
+records the command, checks, identities, measurements and fixture limits.
+
+C6 has no retained native Host test executable or
+`native_profile_storage_acceptance` receipt. This result qualifies the producer
+on the available fixture; it does not establish that separate native Host test.
+Existing reader/refresh and Host ranking tests are reused. No passing test was
+repeated for this evidence-only update.
+
+Local5090 **returned 11:48Z**; booking 1457 and both compile guards were released
+before Gchat2's installer build. The owned runtime extraction and full profile
+copies were removed. `E:\gchat7-windows-fastest-disk-20261018\evidence` retains
+only the 10.7 KB consolidated result, preserving its recorded parent path.
+Source/evidence worktree `/ai/gchat-worktrees/c7-windows-flash-20261018` remains
+on `docs/c7-windows-fastest-disk-20261018`. Shared runtime ZIP, donor profile and
+model are untouched. Next: merge this bounded result and continue the next
+owned Models/cross-OS row; no additional disk probe is scheduled.
 
 ## Native Windows Flash qualification — Codex 7, October 18
 
-`WINDOWS-FLASH-CPU-QUALIFICATION` remains **BLOCKED before launch**.
+`WINDOWS-FLASH-CPU-QUALIFICATION` is a **HARDWARE LIMIT before launch**,
+per Bubbs on October 18: no available Windows box has sufficient RAM.
+This PC leaves 8.7 GB after the retained estimate, below the floor; the
+4090 box has 48 GB total.
 After C6 returned local5090, fresh native admission at 10:56Z measured
 77,420,777,472 bytes available. The retained 64 GiB Flash planning estimate
 would leave 8,701,300,736 bytes, below the unchanged 17,131,606,528-byte
@@ -54,7 +75,8 @@ headroom. The existing benchmark enforces greedy sampling. C1 uses 2,048
 prompt tokens, 500 outputs, one warmup and one measured round. Report any
 mismatch without retry. This does not qualify SM86/SM89 or claim speed.
 
-The next action requires a native fixture with adequate available RAM.
+Further qualification requires a native fixture with adequate available RAM;
+do not retry on either available Windows box.
 The 64 GiB estimate is not a measured bound or admission guarantee. Keep
 the retained Job guard's lease, emergency backstop and complete runtime
 validation; replace its Qwen-specific preflight with this Flash estimate.

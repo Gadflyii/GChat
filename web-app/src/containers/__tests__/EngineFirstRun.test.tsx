@@ -29,6 +29,74 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
+it('keeps the accepted first-run request lifetime when an older status read finishes after Stop', async () => {
+  vi.useFakeTimers()
+  try {
+    let resolveStop!: (value: HardwareProfileStatus) => void
+    let resolvePoll!: (value: ReturnType<typeof flow>) => void
+    const stop = new Promise<HardwareProfileStatus>(resolve => { resolveStop = resolve })
+    const poll = new Promise<ReturnType<typeof flow>>(resolve => { resolvePoll = resolve })
+    const running = flow('profiling', { hardware_profile: hardwareStatus('running') })
+    mocks.command.mockImplementation(operation => operation === 'hardware_profile' ? stop :
+      mocks.command.mock.calls.filter(([name]) => name === 'first_run').length === 1 ? Promise.resolve(running) : poll)
+    await act(async () => { render(<EngineFirstRun />) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop setup' })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(mocks.command.mock.calls.filter(([name]) => name === 'first_run')).toHaveLength(2)
+    await act(async () => { resolveStop(hardwareStatus('cancelling')) })
+    expect(screen.getByText('Stopping graphics-card setup…')).toBeVisible()
+    await act(async () => { resolvePoll(running) })
+    expect(screen.getByText('Stopping graphics-card setup…')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Stopping setup…' })).toBeDisabled()
+  } finally { vi.useRealTimers() }
+})
+
+it('continues the first-run request lifetime after an invalidated completed poll', async () => {
+  vi.useFakeTimers()
+  try {
+    let resolvePoll!: (value: ReturnType<typeof flow>) => void
+    const poll = new Promise<ReturnType<typeof flow>>(resolve => { resolvePoll = resolve })
+    const onComplete = vi.fn()
+    let reads = 0
+    mocks.command.mockImplementation(operation => {
+      if (operation === 'hardware_profile') return Promise.resolve(hardwareStatus('cancelling'))
+      if (++reads === 1) return Promise.resolve(flow('profiling', { hardware_profile: hardwareStatus('running') }))
+      return reads === 2 ? poll : Promise.resolve(flow('complete'))
+    })
+    await act(async () => { render(<EngineFirstRun onComplete={onComplete} />) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop setup' })) })
+    await act(async () => { resolvePoll(flow('complete')) })
+    expect(onComplete).not.toHaveBeenCalled()
+    expect(screen.getByText('Stopping graphics-card setup…')).toBeVisible()
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(reads).toBe(3)
+    expect(onComplete).toHaveBeenCalledOnce()
+  } finally { vi.useRealTimers() }
+})
+
+it('starts a new first-run request lifetime when Welcome discovers a replacement local Host', async () => {
+  let resolveAction!: (value: ReturnType<typeof flow>) => void
+  const action = new Promise<ReturnType<typeof flow>>(resolve => { resolveAction = resolve })
+  mocks.command.mockImplementation((_operation, args) => args.action ? action : Promise.resolve(flow('storage', {
+    gpu_uuids: ['GPU-one'],
+    storage: { path: '/models', recommended_path: args.host_id === 'replacement' ? '/new-host-models' : '/fast', available_bytes: 1024 ** 4 },
+  })))
+  const view = render(<EngineFirstRun />)
+  fireEvent.change(await screen.findByLabelText('Model download folder'), { target: { value: '/former-host-draft' } })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use this folder' })) })
+  expect(screen.getByRole('button', { name: 'Use this folder' })).toBeDisabled()
+  mocks.state = { ...mocks.state, hosts: [{ host_id: 'replacement', local: true }], snapshots: { replacement: { gpus: [] } } }
+  await act(async () => { view.rerender(<EngineFirstRun />) })
+  await act(async () => { resolveAction(flow('models', { catalog_loaded: false })) })
+  expect(screen.getByLabelText('Model download folder')).toHaveValue('/new-host-models')
+  expect(screen.getByRole('button', { name: 'Use this folder' })).toBeEnabled()
+  expect(screen.queryByText('Loading published model catalog…')).not.toBeInTheDocument()
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([
+    ['first_run', { host_id: 'local', action: 'storage', path: '/former-host-draft' }],
+  ])
+})
+
 it('saves explicit GPU selection before choosing storage without starting profiling', async () => {
   mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('storage', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } }) : flow('gpu')))
   // Finish restoring the saved GPU group before simulating the user's edit.
@@ -259,6 +327,7 @@ it('saves a placement destination separately from an explicit managed move', asy
   })
   const view = render(<EngineFirstRun />)
   await screen.findByText('Review model locations')
+  await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/models'))
   fireEvent.click(screen.getByRole('button', { name: '/fast · 1024.0 GiB free' }))
   expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast')
   expect(screen.getByRole('button', { name: 'Keep these locations and continue' })).toBeDisabled()
