@@ -35,8 +35,20 @@ Selecting the current composition now keeps the draft intact. Selecting a
 different composition still initializes that type's settings. The focused
 regressions cover keyboard reselection of edited Goal Loop criteria and limits,
 and saved team/workflow roles, model overrides and workflow dependencies.
-Next: focused tests, lint, one `make verify`, rebuild and isolated Linux native
-acceptance. No model run or inference is needed for this editor check.
+
+Validation: 104 focused tests and workspace lint PASS; one `make verify`
+PASS (3,581 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `18dafd400`.
+Rebuilt private native acceptance PASS: Enter on Goal Loop preserves edited
+criteria, evaluator instructions and cycle limit; Space on Coordinator Team
+preserves two specialists and their parallel limit; clicking Workflow preserves
+both stages, an edited stage name and its dependency. Selecting another type
+still initializes its settings. The candidate screenshot was viewed. Normal
+close at 12:23:45Z kept original definitions and run history byte-identical;
+CPU booking 3277 was returned at 12:24Z. Receipts:
+`/ai/gchat/out/gchat-agent-composition-reselect-20261018/`.
+This qualifies private Linux source-native editing. No save, delete, run,
+inference or Windows acceptance was performed in the native session.
 
 ## Saved Agent Studio deletion — October 18
 
