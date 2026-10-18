@@ -1408,7 +1408,20 @@ it('updates actual tool activity from service events and stops input before hand
       state: 'running',
       messages: [{ role: 'user', content: 'Inspect project' }],
       help_requests: [],
-      calls: [{ call_id: 'read', name: 'read_file', reply: null }],
+      calls: [
+        { call_id: 'read', name: 'read_file', reply: null },
+        {
+          call_id: 'skipped',
+          name: 'delete_file',
+          reply: null,
+          not_executed: true,
+        },
+        { call_id: 'listed', name: 'list_files', reply: { files: ['notes.txt'] } },
+      ],
+      connector_calls: [
+        { call_id: 'send', name: 'send_email', reply: null },
+        { call_id: 'searched', name: 'search_mail', reply: { messages: [] } },
+      ],
     },
   ]
   await act(async () => events.get('gbot-task-update')?.())
@@ -1416,7 +1429,36 @@ it('updates actual tool activity from service events and stops input before hand
     name: 'Open Atlas · Working through steps',
   })
   fireEvent.click(screen.getByRole('button', { name: 'Agents', exact: true }))
-  expect(screen.getByText('read_file · awaiting result')).toBeInTheDocument()
+  const agents = within(screen.getByRole('region', { name: 'Bot agents' }))
+  expect(agents.getByText('read_file · awaiting result')).toBeVisible()
+  expect(agents.getByText('send_email · awaiting result')).toBeVisible()
+  expect(agents.getByText('delete_file · not executed')).toBeVisible()
+  expect(agents.getByText('list_files · result received')).toBeVisible()
+  expect(agents.getByText('search_mail · result received')).toBeVisible()
+
+  const requestsBeforeReview = mocks.call.mock.calls.length
+  tasks = [
+    {
+      ...tasks[0],
+      state: 'needs_review',
+      history: [{ state: 'needs_review', reason: 'executor restarted', at: 1 }],
+    },
+  ]
+  await act(async () => events.get('gbot-task-update')?.())
+  expect(await agents.findByText('read_file · result unknown')).toBeVisible()
+  expect(agents.getByText('send_email · result unknown')).toBeVisible()
+  expect(
+    agents.getByText(
+      'This task stopped because a tool’s result is uncertain. Check whether the action happened before starting another task.'
+    )
+  ).toBeVisible()
+  expect(agents.queryByText(/awaiting result/)).not.toBeInTheDocument()
+  expect(agents.getByText('delete_file · not executed')).toBeVisible()
+  expect(agents.getByText('list_files · result received')).toBeVisible()
+  expect(agents.getByText('search_mail · result received')).toBeVisible()
+  expect(
+    mocks.call.mock.calls.slice(requestsBeforeReview).map(([path]) => path)
+  ).toEqual(['state', 'tasks', 'tasks/approvals'])
   snapshot = {
     ...snapshot,
     controls: [
