@@ -5,6 +5,8 @@ import {
   memo,
   useState,
   useCallback,
+  useLayoutEffect,
+  useRef,
   type ComponentPropsWithoutRef,
 } from 'react'
 import type { UIMessage, ChatStatus } from 'ai'
@@ -126,6 +128,16 @@ export const MessageItem = memo(
     )?.contextCompaction
     // Keep edit state local; memoized non-last messages ignore lifted edit props.
     const [isEditing, setIsEditing] = useState(false)
+    const editButtonRef = useRef<HTMLButtonElement>(null)
+    const restoreEditFocusRef = useRef(false)
+
+    useLayoutEffect(() => {
+      if (!isEditing && restoreEditFocusRef.current) {
+        restoreEditFocusRef.current = false
+        const button = editButtonRef.current
+        if (button?.isConnected && !button.disabled) button.focus()
+      }
+    }, [isEditing])
 
     const handleRegenerate = useCallback(() => {
       onRegenerate?.(message.id)
@@ -139,7 +151,10 @@ export const MessageItem = memo(
       [onEdit, message.id]
     )
 
-    const handleEditCancel = useCallback(() => setIsEditing(false), [])
+    const handleEditCancel = useCallback(() => {
+      restoreEditFocusRef.current = true
+      setIsEditing(false)
+    }, [])
 
     const handleDelete = useCallback(() => {
       onDelete?.(message.id)
@@ -621,6 +636,7 @@ export const MessageItem = memo(
 
             {onEdit && status !== CHAT_STATUS.STREAMING && (
               <Button
+                ref={editButtonRef}
                 variant="ghost"
                 size="icon-xs"
                 role="button"
@@ -671,6 +687,7 @@ export const MessageItem = memo(
 
               {onEdit && !isStreaming && (
                 <Button
+                  ref={editButtonRef}
                   variant="ghost"
                   size="icon-xs"
                   role="button"

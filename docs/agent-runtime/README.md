@@ -22,6 +22,31 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Message edit cancellation keyboard focus — October 18
+
+A private native Chat pass reproduced focus moving to the page body after
+Escape or Cancel closed an inline message editor. The original text remained,
+but Space could not reopen the same message. The accepted `54cde40b7` desktop's
+message editor source matched main `585a85405`. Baseline DOM receipts and the
+viewed screenshot are in `/ai/gchat/out/gchat-chat-agents-pass-20261018-1240/`.
+
+Cancelling now returns focus to that message's Edit button after its action row
+returns. Escape, Cancel and Enter on unchanged text share this behavior. User
+and assistant messages retain their original text; saving still follows its
+existing callback and inference behavior.
+
+Validation: 22 focused tests and workspace lint PASS; one `make verify`
+PASS (3,598 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `cf9124a1e`. Rebuilt private
+native acceptance PASS: Escape, keyboard Cancel and unchanged Enter each return
+focus to the same assistant message's Edit button. Space and Enter reopen its
+original text. The candidate screenshot was viewed. Normal close at 13:00:11Z
+kept saved thread/messages, agent definitions and run history byte-identical;
+CPU booking 3289 returned 13:00Z. User-message behavior is covered in rendered
+regressions. No native send, save, inference, installed-package or Windows
+acceptance was performed. Candidate receipts:
+`/ai/gchat/out/gchat-chat-edit-cancel-focus-20261018/`.
+
 ## Attachment send completion after switching conversations — October 18
 
 Codex 8 found that switching from conversation A to B during an attachment
