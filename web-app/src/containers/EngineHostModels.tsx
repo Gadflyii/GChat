@@ -106,12 +106,12 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Computer not reachable' : snapshot ? 'Connected' : host.local ? 'Connecting' : 'Not connected'}</p></div>
       {!host.local && (error || !snapshot) && <Button variant="outline" disabled={busy} onClick={() => void act('connect')}>Connect</Button>}
       {active && snapshot && <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
-        <div className="min-w-0 flex-1">
-        {snapshot.instances.length > 1 ? <label className="min-w-0 text-xs font-medium">Model server
+        <div className="min-w-0 basis-64 flex-1">
+        {snapshot.instances.length > 1 ? <label className="block min-w-0 text-xs font-medium">Model server
         <ChoiceSelect aria-label={`${host.name} serving instance`} className="mt-1 w-full" value={active.instance_id} onValueChange={setActiveId}
           options={snapshot.instances.map(i => ({ value: i.instance_id, label: `${hostInstanceLabel(i, snapshot)} · ${instanceStatusLabels[i.status]}` }))} /></label> : <p className="text-sm">{hostInstanceLabel(active, snapshot)} · {instanceStatusLabels[active.status]}</p>}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" disabled={busy || profiling || !!error || !active.profile || !['stopped', 'failed'].includes(active.status)} onClick={() => void act('start', { instance_id: active.instance_id, body: {} })}>Start model</Button>
         <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(active.status)} onClick={() => void act('stop', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })}>Stop model</Button>
         <Button variant="outline" disabled={busy || profiling || !!error || active.status !== 'ready'} onClick={async () => {
