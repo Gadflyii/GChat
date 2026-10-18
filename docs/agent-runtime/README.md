@@ -22,6 +22,18 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Sampling assistant fallback wording — October 18
+
+An isolated native pass opened Sampling, selected the assistant menu's “None”
+option and still saw GChat selected. The resolver intentionally falls back to
+the default assistant when an explicit choice is cleared. The menu now says
+“Use default (name)” and names that fallback, including the first available
+assistant if the saved default is missing. “None” remains accurate when there
+are no assistants. Selection, thread persistence and sampling behavior keep
+their existing contract. Baseline DOM receipts and viewed screenshots are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1412/`; the affected source matched
+main `fe17d90f6`.
+
 ## Sampling control labels — October 18
 
 A private native Chat pass opened Sampling and found all seven numeric inputs
