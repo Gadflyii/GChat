@@ -1,0 +1,31 @@
+{
+  "source": "1062ba9f85653a25f7371d9ea03f807e3d48009b",
+  "donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app",
+  "root": "/media/ron/SSD_RAID/ai/tmp-c3-load-needs-profile-message-20261018",
+  "paths": [
+    "gchat/node_modules",
+    "gchat/web-app/node_modules",
+    "gchat/core/node_modules",
+    "gchat/extensions/node_modules",
+    "gchat/extensions/vector-db-extension/node_modules",
+    "gchat/extensions/assistant-extension/node_modules",
+    "gchat/extensions/conversational-extension/node_modules",
+    "gchat/extensions/download-extension/node_modules",
+    "gchat/extensions/ginfer-extension/node_modules",
+    "gchat/extensions/rag-extension/node_modules",
+    "gchat/.yarn",
+    "gchat/extensions/.yarn",
+    "gchat/core/dist",
+    "gchat/core/package.tgz",
+    "cargo-home",
+    "native-target/debug"
+  ],
+  "copy": "cp -a --reflink=auto",
+  "independent_copies": true,
+  "donor_mutated": false,
+  "core_input_files_compared": 103,
+  "core_differences": 0,
+  "dependency_manifest_files_compared": 35,
+  "dependency_difference": "src-tauri/Cargo.toml adds dev-dependency tokio test-util only; Cargo.lock unchanged",
+  "cpus": "96-103"
+}

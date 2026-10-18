@@ -414,13 +414,13 @@ describe('host-scoped Models', () => {
     expect(alert).not.toHaveTextContent('Saved inventory may be out of date')
     mocks.switchModel.mockResolvedValue(undefined)
   })
-  it('explains a model with no saved startup settings by name and links to GInfer Hosts', async () => {
+  it('directs a named model without automatic settings to start from GInfer Hosts', async () => {
     spyConfirm().mockReturnValueOnce(true)
     mocks.switchModel.mockRejectedValue(Object.assign(new Error('Failed to load 483343c2deadbeef: No qualified automatic profile is available for this model.'), { code: 'no_qualified_profile' }))
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Installed locally has no saved startup settings yet.')
+    expect(alert).toHaveTextContent('Installed locally has no tested settings for automatic loading. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.')
     expect(alert).not.toHaveTextContent('483343c2')
     expect(screen.getByRole('link', { name: 'Open GInfer Hosts' })).toHaveAttribute('href', '/engines/')
     mocks.switchModel.mockResolvedValue(undefined)

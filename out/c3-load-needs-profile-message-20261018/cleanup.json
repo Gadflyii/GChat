@@ -1,0 +1,19 @@
+{
+  "host": "AIS-2-8592-L01",
+  "root": "/media/ron/SSD_RAID/ai/tmp-c3-load-needs-profile-message-20261018",
+  "root_removed": true,
+  "logical_bytes_removed": 27797298983,
+  "containers_removed": [
+    "539d941962ac0ec2f1635ed9a7544b2eca4e3bc1d417cbda98462b1f9915fc70",
+    "b0c1970d37359663de94d8bd6fcc605ad40759648d1874eab1fec43a7de714ea"
+  ],
+  "process_refs_before_cleanup": [],
+  "active_container_mounts_before_cleanup": [],
+  "mountinfo_refs_before_cleanup": [],
+  "deletion_followed_symlinks": false,
+  "donor_untouched": true,
+  "finished_utc": "2026-10-18T09:53:13Z",
+  "booking": 3218,
+  "booking_cancelled": true,
+  "source_worktree_changes": "Only parent-owned docs/host-ui/README.md; no delegated source edits"
+}

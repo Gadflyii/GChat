@@ -1,0 +1,14 @@
+{
+  "source": "1062ba9f85653a25f7371d9ea03f807e3d48009b",
+  "tracked_files_compared": 3399,
+  "differences": [],
+  "tracked_mtimes_normalized_utc": "2026-10-18T09:40:38Z",
+  "reason": "Fresh archive source must be newer than copied incremental Cargo output",
+  "hashes": {
+    "web-app/src/routes/hub/__tests__/index.test.tsx": "481f61f1086b05bb66548c517f1d086fe29db89abd838043616cddf17e9adfd0",
+    "web-app/src/containers/ModelManagement.tsx": "b05e2e118d6d6630fd1155a07dd9ecb51e4f03367031fe15b8de1e2322d49fda",
+    "src-tauri/plugins/tauri-plugin-ginfer/src/managed.rs": "9ec61c21ef553040ae075831e3d9728494c213bbd140cb4d33a17e1d19e22433",
+    "src-tauri/Cargo.toml": "44ea3465bba6669f457e93759fc43dfe2efb4f228c607b209a8c99a07b2e1293",
+    "src-tauri/Cargo.lock": "bb8a872169a0e6cba698140ffa2755a84d06354012f2f09a4f33a41feb697061"
+  }
+}

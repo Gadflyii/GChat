@@ -1,5 +1,47 @@
 # GInfer host UI
 
+## Models without automatic settings — C3, October 18
+
+`GUI-LOAD-NEEDS-PROFILE-MESSAGE` is merge-ready. The original named-model
+correction `68cfa4204` (merged `7f549eef6`) is retained, but the subsequent
+startup-settings ownership change made its recovery advice obsolete. Models
+Load selects tested settings and deliberately rejects custom resident
+settings; choosing custom settings cannot make retrying that Load succeed.
+The native diagnostic also names the removed Custom server settings section.
+Gchat 3 reported this mismatch and retains separate ownership of the Host
+launch-validation diagnostic in `engine_host.rs`.
+
+The candidate directs both error surfaces to GInfer Hosts → Model and memory
+settings → Choose model settings → Check model settings → Start model with
+these settings. Acceptance: the Models alert retains the readable model name
+and Hosts link, and the real native automatic-load rejection gives this
+working manual-start route while preserving the existing custom resident.
+The focused rendered Models suite passes all 51 cases. The first native
+lifecycle run stopped before the changed rejection: the container set
+`CUDA_VISIBLE_DEVICES` to an empty string, which correctly removes the test's
+synthetic GPU from Host inventory. This was an execution-environment error.
+The retained recipe leaves that variable unset; Docker has no GPU devices.
+The corrected native continuation passes its one lifecycle case, including
+preservation of the existing custom resident. The 51 passing frontend cases
+were not repeated. ONE `make verify` passes: **3,523 app / 6 skipped,
+127 extension, 1,284 native / 28 ignored**, all six critical coverage floors,
+lint, types and quality guards. The initial environment failure and corrected
+continuation are retained. No startup/admission behavior changes.
+
+Owned worktree `/ai/gchat-worktrees/c3-load-needs-profile-message-20261018`,
+branch `fix/c3-load-needs-profile-message-20261018`, base `163025d3c`.
+Independent S1 cache/build root
+`/media/ron/SSD_RAID/ai/tmp-c3-load-needs-profile-message-20261018`
+was removed after the gate; CPU96–103 booking3218 canceled, returned09:53Z.
+Donor unchanged; only small evidence remains.
+No model/GPU work was used. Retained ed68 native visible wording establishes
+the original name/destination correction only; it does not qualify the new
+guidance. Fresh installed-GUI and Windows acceptance are not claimed.
+[Result](../../out/c3-load-needs-profile-message-20261018/result.json),
+[source binding](../../out/c3-load-needs-profile-message-20261018/source-binding.json)
+and [full gate](../../out/c3-load-needs-profile-message-20261018/verify-summary.json)
+retain the focused and full checks. Next: coordinator integration.
+
 ## MCP duplicate-name protection — C3, October 18
 
 `GUI-MCP-DUPLICATE-NAME` passes Linux native acceptance. Original fix

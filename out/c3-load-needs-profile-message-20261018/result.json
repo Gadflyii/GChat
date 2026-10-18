@@ -1,0 +1,188 @@
+{
+  "row": "GUI-LOAD-NEEDS-PROFILE-MESSAGE",
+  "status": "PASS",
+  "source": "1062ba9f85653a25f7371d9ea03f807e3d48009b",
+  "focused_frontend": {
+    "exit": 0,
+    "passed": 51,
+    "files": 1,
+    "log": "focused_frontend.log"
+  },
+  "focused_native_initial": {
+    "exit": 101,
+    "passed": 0,
+    "failed": 1,
+    "filtered": 20,
+    "test": "managed::tests::desktop_attaches_and_reuses_auto_kv_profiles_and_preserves_explicit_budgets",
+    "error": "GPU selection contains duplicates or unknown GPUs",
+    "location": "src-tauri/plugins/tauri-plugin-ginfer/src/managed.rs:917",
+    "log": "focused_native.log",
+    "cause": "Execution recipe explicitly set CUDA_VISIBLE_DEVICES to empty, so Host::open excludes synthetic GPU-test. Approved retained recipe instead unsets CUDA_VISIBLE_DEVICES; Docker mounts no GPU devices.",
+    "disposition": "Invalid fixture environment retained; parent-authorized failed filter rerun only. Full verify had not started."
+  },
+  "make_verify": {
+    "status": "PASS",
+    "exit": 0,
+    "full_verify_attempts": 1,
+    "lint": {
+      "errors": 0,
+      "warnings": 5
+    },
+    "typecheck": "PASS",
+    "test_quality_guard": "PASS (360 files scanned)",
+    "registry_contracts": {
+      "passed": 4
+    },
+    "manager_ui": {
+      "passed": 58
+    },
+    "tauri_assets": {
+      "passed": 1
+    },
+    "frontend": {
+      "passed": 3523,
+      "skipped": 6,
+      "files_passed": 342,
+      "files_skipped": 1
+    },
+    "extension": {
+      "passed": 127,
+      "files_passed": 5
+    },
+    "coverage": {
+      "critical_floor_files": 6,
+      "status": "PASS",
+      "overall_rows": [
+        "All files          |   67.33 |    85.25 |   68.77 |   67.33 |",
+        "All files          |   65.63 |    78.65 |   64.28 |   65.63 |"
+      ]
+    },
+    "native": {
+      "summaries": 23,
+      "passed": 1284,
+      "failed": 0,
+      "ignored": 28,
+      "scopes": [
+        {
+          "command": "cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli -- --test-threads=1",
+          "summaries": [
+            "test result: ok. 762 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 31.88s"
+          ],
+          "passed": 762,
+          "failed": 0,
+          "ignored": 8
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml",
+          "summaries": [
+            "test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ],
+          "passed": 21,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml",
+          "summaries": [
+            "test result: ok. 277 passed; 0 failed; 13 ignored; 0 measured; 0 filtered out; finished in 16.71s",
+            "test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.75s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.61s",
+            "test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ],
+          "passed": 309,
+          "failed": 0,
+          "ignored": 19
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/Cargo.toml -p ginfer-manager",
+          "summaries": [
+            "test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ],
+          "passed": 4,
+          "failed": 0,
+          "ignored": 1
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/Cargo.toml -p gbot-service",
+          "summaries": [
+            "test result: ok. 103 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.66s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s",
+            "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.55s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ],
+          "passed": 124,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/plugins/tauri-plugin-hardware/Cargo.toml",
+          "summaries": [
+            "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ],
+          "passed": 16,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/utils/Cargo.toml",
+          "summaries": [
+            "test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.63s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ],
+          "passed": 48,
+          "failed": 0,
+          "ignored": 0
+        }
+      ]
+    },
+    "summary": "verify-summary.json",
+    "started_utc": "2026-10-18T09:44:29Z",
+    "finished_utc": "2026-10-18T09:51:32Z",
+    "elapsed_seconds": 423,
+    "raw_log": "/ai/gchat/out/c3-load-needs-profile-message-20261018/verify.log"
+  },
+  "fixture": {
+    "host": "AIS-2-8592-L01",
+    "root": "/media/ron/SSD_RAID/ai/tmp-c3-load-needs-profile-message-20261018",
+    "cpus": "96-103",
+    "booking": 3218,
+    "container": "c3-load-needs-profile-message-20261018",
+    "container_status": "both exited and removed",
+    "oom_killed": false,
+    "continuation_container": "c3-load-needs-profile-message-20261018-continuation",
+    "container_metadata": "terminal-metadata.json",
+    "cleanup": "cleanup.json",
+    "booking_returned": true,
+    "root_removed": true
+  },
+  "next": "Parent integrates passing evidence and subject documentation; delegated verification and owned cleanup complete.",
+  "focused_native_corrected": {
+    "exit": 0,
+    "passed": 1,
+    "failed": 0,
+    "filtered": 20,
+    "log": "focused_native_corrected.log",
+    "correction": "unset CUDA_VISIBLE_DEVICES; Docker has no GPU devices",
+    "effective_environment": "effective-environment.json"
+  },
+  "finished_utc": "2026-10-18T09:51:32Z",
+  "evidence": {
+    "original_recipe": "command.json",
+    "corrected_recipe": "continuation-command.json",
+    "source_binding": "source-binding.json",
+    "preparation": "preparation.json",
+    "environment": "effective-environment.json",
+    "copied_evidence": "retained-evidence.json",
+    "terminal_metadata": "terminal-metadata.json",
+    "cleanup": "cleanup.json"
+  }
+}

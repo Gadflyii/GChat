@@ -1,0 +1,8 @@
+{
+  "CUDA_VISIBLE_DEVICES_present": false,
+  "NVIDIA_VISIBLE_DEVICES": "void",
+  "nvidia_devices": [],
+  "source_hashes_match": true,
+  "cargo_offline": "true",
+  "yarn_network": "0"
+}

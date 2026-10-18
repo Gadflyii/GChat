@@ -51,7 +51,7 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
 const managementTabs = ['Installed', 'Recommended', 'Downloads'] as const
 export type ModelManagementTab = (typeof managementTabs)[number]
 
-const NO_SETTINGS = ' has no saved startup settings yet. Open GInfer Hosts and choose settings for it, then load it again.'
+const NO_SETTINGS = ' has no tested settings for automatic loading. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.'
 const capabilityLabels = (capabilities: string[] = []) => capabilities.flatMap(capability => {
   switch (capability.toLowerCase()) {
     case 'text': return ['Text chat']
