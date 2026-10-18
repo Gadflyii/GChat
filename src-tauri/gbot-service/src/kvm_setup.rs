@@ -3164,7 +3164,11 @@ esac
 #[cfg(all(test, target_os = "windows"))]
 mod native_tests {
     use super::*;
-    use crate::vault::VaultFuture;
+    use crate::{
+        executor::{ExecutorProcesses, ProcessSpec},
+        tasks::TaskRunner,
+        vault::VaultFuture,
+    };
 
     #[derive(Default)]
     struct FixtureVault(Mutex<BTreeMap<Uuid, Vec<u8>>>);
@@ -3270,6 +3274,27 @@ mod native_tests {
         let vault = Arc::new(FixtureVault::default());
         let runtime = Arc::new(WorkspaceRuntime::new(service.clone(), vault.clone()));
         runtime.configure_kvm_setup(root.clone()).await.unwrap();
+        // Match service startup: saved-desktop renewal must inspect the loaded
+        // task/schedule state. This lifecycle-only acceptance never runs a model.
+        let disabled_executor = ProcessSpec {
+            program: root.join("no-model-executor-in-lifecycle-acceptance"),
+            args: vec![],
+        };
+        let tasks = Arc::new(
+            TaskRunner::new(
+                root.join("tasks"),
+                runtime.clone(),
+                ExecutorProcesses {
+                    python: disabled_executor.clone(),
+                    context: disabled_executor,
+                },
+            )
+            .await
+            .unwrap(),
+        );
+        runtime
+            .configure_task_runner(Arc::downgrade(&tasks))
+            .unwrap();
         let setup = runtime.kvm_setup().unwrap();
         let id = WorkspaceId::new();
         let credential_ref = VaultCredentialRef::new();
@@ -3320,7 +3345,7 @@ mod native_tests {
                 return Err(format!("Unexpected guest write reply: {written:?}"));
             }
             println!("{}", serde_json::json!({"event":"ready", "checks":["bootstrap", "pinned SSH", "worker", "command", "file", "desktop capture", "keyboard saved file", "view handshake", "sentinel write"]}));
-            let stopped = setup.stop(id).await.map_err(|error| error.to_string())?;
+            let stopped = tasks.stop_computer(setup.clone(), id).await.map_err(|error| error.to_string())?;
             if stopped.stage != SetupStage::Stopped || !directory.join("disk.vhdx").is_file() {
                 return Err("Graceful stop did not preserve the guest disk".into());
             }
@@ -3364,7 +3389,10 @@ mod native_tests {
         }
         // Always use the production owned-guest retirement path, including after
         // acceptance failure; errors retain its ownership record for safe retry.
-        let retired = setup.remove(id).await.map_err(|error| error.to_string());
+        let retired = tasks
+            .remove_computer(setup.clone(), id)
+            .await
+            .map_err(|error| error.to_string());
         let retirement = match retired {
             Ok(record) if record.stage == SetupStage::Removed => {
                 let registered =
@@ -3381,12 +3409,14 @@ mod native_tests {
             }
             other => Err(format!("Owned guest retirement failed: {other:?}")),
         };
+        let tasks_closed = tasks.close().await.map_err(|error| error.to_string());
         let closed = runtime.close().await.map_err(|error| error.to_string());
         println!(
             "{}",
-            serde_json::json!({"event":"result", "lifecycle":result, "retirement":retirement, "runtime_close":closed})
+            serde_json::json!({"event":"result", "lifecycle":result, "retirement":retirement, "tasks_close":tasks_closed, "runtime_close":closed})
         );
         assert_eq!(retirement, Ok(()));
+        assert_eq!(tasks_closed, Ok(()));
         assert_eq!(closed, Ok(()));
         assert_eq!(result, Ok(()));
     }
