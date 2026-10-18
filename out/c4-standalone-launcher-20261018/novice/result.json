@@ -64,5 +64,11 @@
     "terminal-timing.log",
     "first-run-status.json",
     "host-process-receipt.json"
-  ]
+  ],
+  "transcript_representation": {
+    "tracked_output": "Terminal display escapes/carriage returns removed and line-end whitespace trimmed; content otherwise retained.",
+    "raw_output_retained": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/terminal-output.log",
+    "raw_sha256": "dc713b3b6cc632dfc1e2d81271624a9ad59163bbfb972b5d27e001da3223b7e1",
+    "timing": "terminal-timing.log refers to retained raw output"
+  }
 }
