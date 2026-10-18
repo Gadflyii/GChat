@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
+import { toast } from 'sonner'
 import { afterEach, expect, it, vi } from 'vitest'
 import { HostCard } from '../EngineHostModels'
 import { engineCommand, type EngineSnapshot, type EngineStartupQuote } from '@/services/engines'
@@ -19,6 +20,7 @@ vi.mock('@/stores/engine-hosts-store', () => ({
   useEngineHosts: (selector: (state: { refresh: typeof refreshHosts; publishSnapshot: typeof publishSnapshot }) => unknown) =>
     selector({ refresh: refreshHosts, publishSnapshot }),
 }))
+vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
 vi.mock('../EngineProfilePicker', () => ({ EngineProfilePicker: () => null }))
 vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId, hardwareProfileControls }: { hostId: string; hardwareProfileControls?: ReactNode }) => <section aria-label={`First-run setup for ${hostId}`}>{hardwareProfileControls}</section> }))
 afterEach(() => { cleanup(); settleConfirm(false); vi.clearAllMocks(); publishSnapshot.mockReset() })
@@ -347,6 +349,136 @@ it('discards late quote results after settings change and reports a fresh Host r
   expect(details).toBeVisible()
   expect(engineCommand).toHaveBeenCalledTimes(2)
   expect(vi.mocked(engineCommand).mock.calls.every(([action]) => action === 'quote')).toBe(true)
+})
+
+it('keeps an accepted scan result through host-list refresh failure and read-only retries', async () => {
+  const inventoryMessage = 'Some model files could not be read. Check that the files are available, then refresh the model list.'
+  const initial: EngineSnapshot = { ...importedModelSnapshot, models: [], inventory_errors: [
+    { path: '/local/renamed.ginfer', error: 'Temporary file read failure' },
+  ] }
+  const accepted: EngineSnapshot = { ...importedModelSnapshot, revision: 2, inventory_errors: [] }
+  const refreshMessage = 'Could not refresh the host list. Choose Refresh host list to try again.'
+  let finishScan!: (snapshot: EngineSnapshot) => void
+  let rejectRefresh!: (reason: Error) => void
+  let rejectRetry!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset().mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishScan = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRetry = reject }))
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByText('Choose model settings'))
+  expect(screen.getByText(inventoryMessage)).toBeVisible()
+  const scan = screen.getByRole('button', { name: 'Refresh model list' })
+  expect(scan).toBeEnabled()
+  fireEvent.click(scan)
+  expect(scan).toBeDisabled()
+  fireEvent.click(scan)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('scan', { host_id: 'host' })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  await act(async () => finishScan(accepted))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  await act(async () => rejectRefresh(new Error('Host list unavailable')))
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(publishSnapshot.mock.invocationCallOrder[0]).toBeLessThan(refreshHosts.mock.invocationCallOrder[0])
+  expect(screen.getByRole('status')).toHaveTextContent('Model list refreshed.')
+  expect(screen.queryByText(inventoryMessage)).not.toBeInTheDocument()
+  expect(screen.queryByText('/local/renamed.ginfer: Temporary file read failure')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Refresh model list' })).not.toBeInTheDocument()
+  expect(screen.queryByText(/Could not refresh the model list/)).not.toBeInTheDocument()
+  expect(toast.error).not.toHaveBeenCalled()
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent(refreshMessage)
+  expect(within(feedback).getByText('Error: Host list unavailable')).not.toBeVisible()
+  expect(within(feedback).getByText('Host refresh error details').closest('details')).not.toHaveAttribute('open')
+  await userEvent.click(screen.getByLabelText('Installed model'))
+  expect(screen.getByRole('menuitemradio', { name: /Qwen 3.8 27B/ })).toBeVisible()
+  await userEvent.keyboard('{Escape}')
+
+  const refreshButton = within(feedback).getByRole('button', { name: 'Refresh host list' })
+  fireEvent.click(refreshButton)
+  expect(refreshButton).toBeDisabled()
+  fireEvent.click(refreshButton)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('scan', { host_id: 'host' })
+  await act(async () => rejectRetry(new Error('Host list still unavailable')))
+  expect(feedback).toHaveTextContent(refreshMessage)
+  expect(within(feedback).getByText('Error: Host list still unavailable')).not.toBeVisible()
+  expect(refreshButton).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Model list refreshed.')
+  expect(screen.queryByText(inventoryMessage)).not.toBeInTheDocument()
+  expect(toast.error).not.toHaveBeenCalled()
+
+  fireEvent.click(refreshButton)
+  await waitFor(() => expect(feedback).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Model list refreshed.')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(refreshHosts).toHaveBeenCalledTimes(3)
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('scan', { host_id: 'host' })
+  expect(toast.error).not.toHaveBeenCalled()
+})
+
+it('keeps a rejected scan result retryable without publishing or reading the host list', async () => {
+  const initial: EngineSnapshot = { ...importedModelSnapshot, models: [], inventory_errors: [
+    { path: '/local/renamed.ginfer', error: 'Temporary file read failure' },
+  ] }
+  const accepted: EngineSnapshot = { ...importedModelSnapshot, revision: 2, inventory_errors: [] }
+  const failureMessage = 'Could not refresh the model list. Check that the model files are available, then try again.'
+  let rejectScan!: (reason: Error) => void
+  let finishRetry!: (snapshot: EngineSnapshot) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((_resolve, reject) => { rejectScan = reject }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishRetry = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByText('Choose model settings'))
+  const scan = screen.getByRole('button', { name: 'Refresh model list' })
+  fireEvent.click(scan)
+  expect(scan).toBeDisabled()
+  fireEvent.click(scan)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('scan', { host_id: 'host' })
+  await act(async () => rejectScan(new Error('Model directory is unavailable')))
+  const feedback = screen.getByText(failureMessage).closest<HTMLElement>('[role="alert"]')!
+  expect(feedback).toBeVisible()
+  const diagnostic = within(feedback).getByText('Error: Model directory is unavailable')
+  expect(diagnostic).not.toBeVisible()
+  expect(diagnostic.closest('details')).not.toHaveAttribute('open')
+  fireEvent.click(within(feedback).getByText('Technical details'))
+  expect(diagnostic).toBeVisible()
+  expect(scan).toBeEnabled()
+  expect(screen.getByText(/Some model files could not be read/)).toBeVisible()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Model list refreshed.')).not.toBeInTheDocument()
+
+  fireEvent.click(scan)
+  expect(scan).toBeDisabled()
+  expect(screen.queryByText(failureMessage)).not.toBeInTheDocument()
+  fireEvent.click(scan)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'scan', { host_id: 'host' })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  await act(async () => finishRetry(accepted))
+  expect(await screen.findByRole('status')).toHaveTextContent('Model list refreshed.')
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(refreshHosts).toHaveBeenCalledOnce()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Refresh model list' })).not.toBeInTheDocument()
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
 })
 
 it('keeps a saved remote host passive until its Connect button is used', async () => {

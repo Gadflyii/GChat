@@ -1,5 +1,41 @@
 # GInfer host UI
 
+## Host model inventory scan feedback — Gchat 3, October 18
+
+`GUI-HOST-SCAN-REFRESH-RESULT-20261018`: Refresh model list now publishes the
+Host's returned inventory before reading the host list. A failed list read
+keeps **Model list refreshed.** and the updated model choices, with separate
+read-error feedback and a read-only **Refresh host list** retry. That retry
+never repeats the scan. A rejected scan keeps its recovery guidance, original
+inventory and explicit retry; pending input cannot duplicate either operation.
+The native scan route returns a snapshot and also cancels draft-width tuning,
+so retrying a list read must not invoke it again. No native behavior changed.
+
+Acceptance: rendered baseline reproduction; authoritative inventory publication
+before the read; persistent separate accepted/read outcomes; read-only retry,
+genuine scan rejection and pending protection; focused tests, lint and ONE
+`make verify`. Both new regressions fail on base `d4ec7abab` (40 skipped).
+The fixed focused file passes all 42 cases; lint has zero errors and five
+existing warnings. ONE verify passed 05:46:24–05:54:24Z: typecheck, quality and
+contract checks, 3,395 app tests (six skipped), 127 extension tests, all six
+coverage floors and 1,252 Rust tests (28 ignored, 23 summaries). The coordinator
+reviewed actual logs, independently summed native results and checked the
+matching post-gate component/test bindings. These checks establish rendered
+mocked-command behavior and the Linux source gate. No installed GUI, live
+scan, Engine, GPU, Windows or installer qualification is claimed.
+
+Owner `/ai/gchat-worktrees/gchat3-host-scan-refresh-result-20261018`, branch
+`fix/gchat3-host-scan-refresh-result-20261018`. The independent eight-CPU S1
+fixture `/media/ron/SSD_RAID/ai/tmp-gchat3-host-scan-refresh-tests-20261018`
+used the inactive RC donor read-only; all 35 dependency inputs matched the
+offline recipe. It ran on AIS-2-8592-L01 CPUs120–127 under the shared socket-1
+compile lock, nice10/max8 jobs, without GPU devices. Booking3054 canceled;
+returned 05:54Z. The owned SSD fixture (42.33 GB), two exited containers and
+285 MB local source archive were removed by 05:56Z. The RC donor is untouched;
+only `out/host-scan-refresh-result-20261018/test-result.json` and adjacent
+`test-summary.md` remain. Current main has no intervening changes to either
+owned source/test file. Status: MERGE READY; next unresolved action is Bubbs’s merge.
+
 ## Gbot permission decision failure recovery — October 18
 
 `GBOT-APPROVAL-INLINE-ERRORS`: failed **Allow** and **Deny** requests previously
@@ -225,7 +261,7 @@ matching post-gate source bindings. Current main has no intervening changes
 to either owned source/test file. Booking3035 is canceled; returned 05:37Z.
 The owned SSD fixture (42.33 GB), two exited containers and local source archive
 were removed by 05:39Z. The RC donor is untouched and only the concise result
-and summary remain. Status: MERGE READY; next unresolved action is Bubbs's merge.
+and summary remain. Status: CLOSED; source `1fee4844a` merged as `63e13d812`.
 These checks establish rendered mocked-command behavior and the Linux source
 gate; they do not establish native connection, installed GUI or Windows acceptance.
 
