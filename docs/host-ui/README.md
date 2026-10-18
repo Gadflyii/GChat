@@ -1,5 +1,25 @@
 # GInfer host UI
 
+## Saved-Host Connect recovery — active, Gchat 3, October 18
+
+`GUI-HOST-CONNECT-CANCEL-GUIDANCE` corrects the network-only advice observed
+when a user cancels the secure-storage unlock during explicit Connect.
+The retained installed Linux observation is
+`out/c3-keyring-crash-relaunch-20261018/result.json`; its saved connection
+survived cancellation and connected after an explicit retry and unlock.
+
+Owner branch `fix/gchat3-host-connect-cancel-guidance-20261018`, base
+`e97f30aa0`, starts after the reserve controls merged and their owner released
+`EngineHostModels.tsx` and its rendered tests. Give conditional unlock and
+network recovery advice without guessing the failure cause from diagnostic
+strings. Preserve the saved Host, closed diagnostic details, single-submit
+protection and explicit retry; do not add credential reads or automatic retry.
+Acceptance is the affected rendered rejection/retry behavior and one
+`make verify` on an independent S1 fixture. Native observation is reused;
+this change makes no new installed-app or Windows qualification claim.
+Next: freeze the wording and regression, then run the existing gates after
+the cleared-choice fixture returns.
+
 ## First-run action recovery — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-ACTION-ERROR-GUIDANCE` stops describing every rejected setup

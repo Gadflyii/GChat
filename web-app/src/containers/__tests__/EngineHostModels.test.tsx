@@ -724,14 +724,14 @@ it('keeps an accepted Connect result through host-list refresh failure and read-
   expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
   expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible()
   expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
-  expect(screen.queryByText(/Could not connect to this computer/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Connection did not finish/)).not.toBeInTheDocument()
   const feedback = screen.getByRole('alert')
   expect(feedback).toHaveTextContent(refreshMessage)
   const diagnostic = within(feedback).getByText('Error: Host list unavailable')
   expect(diagnostic).not.toBeVisible()
   expect(within(feedback).getByText('Host refresh error details').closest('details')).not.toHaveAttribute('open')
   expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
-  expect(screen.queryByText(/Could not connect to this computer/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Connection did not finish/)).not.toBeInTheDocument()
   const refreshButton = within(feedback).getByRole('button', { name: 'Refresh host list' })
   expect(refreshButton).toBeEnabled()
   fireEvent.click(refreshButton)
@@ -759,7 +759,7 @@ it('keeps an accepted Connect result through host-list refresh failure and read-
   expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
 })
 
-it('keeps a rejected Connect result retryable without publishing or reading the host list', async () => {
+it.each(['TLS credential unavailable: keyring locked', 'Connection timed out'])('keeps a rejected Connect result retryable with unlock and network guidance: %s', async (diagnostic) => {
   const host = { ...localHost, local: false, host_id: 'remote', name: 'Saved server' }
   const accepted: EngineSnapshot = {
     host_id: 'remote', display_name: 'Saved server', revision: 2, instances: [], gpus: [], models: [],
@@ -779,15 +779,17 @@ it('keeps a rejected Connect result retryable without publishing or reading the 
   expect(connect).toBeDisabled()
   fireEvent.click(connect)
   expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
-  await act(async () => rejectConnect('TLS credential unavailable: keyring locked'))
+  await act(async () => rejectConnect(diagnostic))
   const alert = await screen.findByRole('alert')
-  expect(alert).toHaveTextContent('Could not connect to this computer. Check that it is on and reachable, then try Connect again.')
-  const details = within(alert).getByText('TLS credential unavailable: keyring locked')
+  expect(alert).toHaveTextContent('Connection did not finish. Choose Connect to try again. If asked, unlock secure storage on this computer so GChat can use the saved sign-in. If you still cannot connect, check that the other computer is on and reachable.')
+  const details = within(alert).getByText(diagnostic)
   expect(details).not.toBeVisible()
   expect(details.closest('details')).not.toHaveAttribute('open')
   fireEvent.click(within(alert).getByText('Technical details'))
   expect(details).toBeVisible()
   expect(connect).toBeEnabled()
+  expect(screen.getByText(host.name)).toBeVisible()
+  expect(screen.queryByText(/Connected to Saved server/)).not.toBeInTheDocument()
   expect(publishSnapshot).not.toHaveBeenCalled()
   expect(refreshHosts).not.toHaveBeenCalled()
   expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
