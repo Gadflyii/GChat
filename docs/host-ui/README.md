@@ -1,6 +1,6 @@
 # GInfer host UI
 
-## First-run action recovery — in verification, Gchat 3, October 18
+## First-run action recovery — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-ACTION-ERROR-GUIDANCE` stops describing every rejected setup
 action as a connection failure. A rejected folder change or Stop request now
@@ -10,21 +10,32 @@ details**. Successful polls do not imply the action succeeded; edited choices
 and existing retry behavior are preserved. Connection-read and actionable
 disk-full maintenance guidance remain unchanged.
 
-Candidate: `fix/gchat3-first-run-action-error-guidance-20261018`, base
-`73fac6573`, in the matching `/ai/gchat-worktrees/` directory. Acceptance is
-the existing rendered stop/folder regressions, including status-only recovery
-without folder mutation replay, lint and one `make verify`. No native service,
-catalog, model or Windows behavior changes. The independent S1 dependency
-fixture retains its initial preparation name,
-`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-maintenance-guidance-tests-20261018`;
-it is disposable after result review, with the inactive RC donor protected.
-Small results go in `out/first-run-action-error-guidance-20261018/`.
-The initial focused run passed 52 cases and stopped on the existing replacement-
-Host test: it edited the folder before initial `/fast` hydration settled. The
-test now waits for that value before entering its draft, preserving the actual
-replacement-Host assertions. All action-error cases passed; lint and the full
-gate had not started. Next: rerun only that failed case, then lint and the
-single full gate on the corrected frozen source.
+Frozen source `fc5a0b026` on
+`fix/gchat3-first-run-action-error-guidance-20261018` passed the existing
+rendered Stop/folder regressions, including status-only recovery without
+folder mutation replay. The initial focused run passed 52 cases and stopped
+on the existing replacement-Host test: it edited the folder before initial
+`/fast` hydration settled. Waiting for that value before entering the draft
+corrected the fixture; the failed case then passed without repeating the 52
+passing cases or changing the replacement-Host assertions.
+
+Lint passed with zero errors and five existing unrelated warnings. Exactly
+one `make verify` passed at **18:14:39Z**: **3,735 app tests / 6 skipped,
+127 extension tests, 1,316 native tests / 28 ignored**, all six critical
+coverage floors, typecheck and quality guards. The coordinator reviewed the
+actual raw results, terminal state, matching source bytes/modes, dependencies
+and all eleven frozen catalog inputs. These are rendered regressions and a
+Linux source gate; installed desktop, live Host and Windows acceptance remain
+separate.
+
+Candidate base is `73fac6573`, in the matching `/ai/gchat-worktrees/`
+directory. S1 CPU80–87 returned **18:16Z**, booking3478 canceled. The independent
+`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-maintenance-guidance-tests-20261018`
+fixture and two exited containers were retired at **18:19:46Z** after direct
+review, removing **30,090,876,987 logical bytes**. The inactive RC donor and
+protected inputs remain untouched. Small evidence:
+`out/first-run-action-error-guidance-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the owned GUI queue.
 
 ## Locked-vault next action — verified, Gchat 3, October 18
 
