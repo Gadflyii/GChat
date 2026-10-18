@@ -69,10 +69,12 @@ receipts under `/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018`.
 Booking 2995 was canceled and CPUs112–119 **returned at 04:57:55Z**. Verification
 used nice10, eight Cargo jobs and the shared socket1 compile lock in pinned
 bridge image `sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14`.
-The owned root retains 24,664,739,840 allocated bytes at handoff, including
-private copied Rust/frontend caches now authorized for scoped cleanup after native
-acceptance. Donors, source, archive and concise receipts are preserved. No GPU
-or model inputs were copied.
+After native acceptance, the owned copied Rust/frontend caches were retired at
+05:01:42Z, freeing 23,416,999,936 allocated bytes. The root retains 2,980,278,272
+bytes for source, archive, extracted native copies and receipts until merge;
+[the cleanup receipt](../../out/c4-cli-driver-guidance-20261018/cleanup-inventory.json)
+records the exact scope. Donors and protected inputs are untouched. No GPU or
+model inputs were copied.
 
 ## Linux archive install command — Python 3.11 or newer, October 18
 
