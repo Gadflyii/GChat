@@ -717,50 +717,87 @@ fn remove_legacy_cli_binary(dir: &std::path::Path) {
     }
 }
 
-/// Check if the `gchat-cli` binary is accessible on PATH.
-#[tauri::command]
-pub async fn check_jan_cli_installed() -> CliInstallStatus {
-    let which_cmd = if cfg!(windows) { "where" } else { "which" };
-    let mut cmd = std::process::Command::new(which_cmd);
-    cmd.arg(CLI_COMMAND_NAME);
-
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
-
-    match tokio::task::spawn_blocking(move || cmd.output()).await {
-        Ok(Ok(out)) if out.status.success() => {
-            let raw = String::from_utf8_lossy(&out.stdout);
-            #[cfg(windows)]
-            let path = {
-                // `where` returns one path per line; pick the first that isn't a
-                // dev-build artifact (i.e. skip paths containing \target\)
-                raw.lines()
-                    .map(str::trim)
-                    .find(|p| !p.is_empty() && !p.to_ascii_lowercase().contains("\\target\\"))
-                    .map(str::to_string)
-                    // fall back to the raw first line if every path looks like a build dir
-                    .or_else(|| {
-                        raw.lines()
-                            .map(str::trim)
-                            .find(|p| !p.is_empty())
-                            .map(str::to_string)
-                    })
+fn cli_install_status_on_path(
+    path: Option<&std::ffi::OsStr>,
+    bundled_directories: &[PathBuf],
+) -> CliInstallStatus {
+    let bundled_directories: Vec<_> = bundled_directories
+        .iter()
+        .filter_map(|directory| fs::canonicalize(directory).ok())
+        .collect();
+    let binary_name = if cfg!(windows) {
+        "gchat-cli.exe"
+    } else {
+        CLI_COMMAND_NAME
+    };
+    let path = path.and_then(|path| {
+        std::env::split_paths(path).find_map(|directory| {
+            let directory = if directory.as_os_str().is_empty() {
+                PathBuf::from(".")
+            } else {
+                directory
             };
-            #[cfg(not(windows))]
-            let path = Some(raw.trim().to_string());
-            CliInstallStatus {
-                installed: path.is_some(),
-                path,
+            let directory = fs::canonicalize(directory).ok()?;
+            if bundled_directories
+                .iter()
+                .any(|bundled| directory.starts_with(bundled))
+            {
+                return None;
             }
-        }
-        _ => CliInstallStatus {
-            installed: false,
-            path: None,
-        },
+
+            // Resolve directory aliases, not the executable itself: an external
+            // PATH entry may legitimately install a symlink to the bundled CLI.
+            let candidate = directory.join(binary_name);
+            if !candidate.is_file() {
+                return None;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::ffi::OsStrExt;
+                let candidate_c = std::ffi::CString::new(candidate.as_os_str().as_bytes()).ok()?;
+                // SAFETY: candidate_c is a live, NUL-terminated pathname.
+                if unsafe { nix::libc::access(candidate_c.as_ptr(), nix::libc::X_OK) } != 0 {
+                    return None;
+                }
+            }
+            let path = candidate.to_string_lossy().into_owned();
+            #[cfg(windows)]
+            let path = strip_verbatim_prefix(&path);
+            Some(path)
+        })
+    });
+    CliInstallStatus {
+        installed: path.is_some(),
+        path,
     }
+}
+
+/// Check for a terminal installation, excluding the app's private bundled CLI.
+#[tauri::command]
+pub async fn check_jan_cli_installed<R: Runtime>(app_handle: AppHandle<R>) -> CliInstallStatus {
+    // AppRun prepends its private directories to PATH in both a mounted
+    // AppImage and an extracted AppDir. A DEB's system /usr/bin stays eligible.
+    #[cfg(target_os = "linux")]
+    let appdir = app_handle.env().appdir.map(PathBuf::from);
+    #[cfg(not(target_os = "linux"))]
+    let appdir: Option<PathBuf> = None;
+    let bundled_directories: Vec<_> = app_handle
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|directory| directory.join("resources/bin"))
+        .into_iter()
+        .chain(appdir)
+        .collect();
+    let path = std::env::var_os("PATH");
+    tokio::task::spawn_blocking(move || {
+        cli_install_status_on_path(path.as_deref(), &bundled_directories)
+    })
+    .await
+    .unwrap_or(CliInstallStatus {
+        installed: false,
+        path: None,
+    })
 }
 
 fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::path::Path) -> Result<(), String> {
@@ -5300,6 +5337,118 @@ mod tests {
         assert_eq!(bare, serde_json::json!({ "name": "m", "temperature": false }));
     }
     use super::*;
+
+    fn cli_install_detection_binary(directory: &Path) -> PathBuf {
+        fs::create_dir_all(directory).unwrap();
+        let name = if cfg!(windows) {
+            "gchat-cli.exe"
+        } else {
+            CLI_COMMAND_NAME
+        };
+        let path = directory.join(name);
+        fs::write(&path, b"fixture CLI; never executed").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        path
+    }
+
+    #[test]
+    fn cli_install_detection_does_not_count_the_app_bundle() {
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let resource_bin = appdir.join("usr/lib/GChat/resources/bin");
+        cli_install_detection_binary(&app_bin);
+        cli_install_detection_binary(&resource_bin);
+        let path = std::env::join_paths([&app_bin, &resource_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+
+        // Windows/DEB/dev resource binaries are private even without APPDIR.
+        let path = std::env::join_paths([&resource_bin]).unwrap();
+        let status = cli_install_status_on_path(Some(&path), &[resource_bin]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+    }
+
+    #[test]
+    fn cli_install_detection_finds_terminal_install_after_app_run_path() {
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let terminal_bin = root.path().join("user/bin");
+        let later_bin = root.path().join("other/bin");
+        cli_install_detection_binary(&app_bin);
+        let expected = cli_install_detection_binary(&terminal_bin);
+        cli_install_detection_binary(&later_bin);
+        let path = std::env::join_paths([&app_bin, &terminal_bin, &later_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(expected.to_string_lossy().into_owned()));
+    }
+
+    #[test]
+    fn cli_install_detection_keeps_system_install_without_appdir() {
+        let root = tempfile::tempdir().unwrap();
+        let system_bin = root.path().join("usr/bin");
+        let resource_bin = root.path().join("usr/lib/GChat/resources/bin");
+        let expected = cli_install_detection_binary(&system_bin);
+        cli_install_detection_binary(&resource_bin);
+        let path = std::env::join_paths([&resource_bin, &system_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[resource_bin]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(expected.to_string_lossy().into_owned()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cli_install_detection_distinguishes_bundle_alias_from_installed_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let root = tempfile::tempdir().unwrap();
+        let appdir = root.path().join("GChat.AppDir");
+        let app_bin = appdir.join("usr/bin");
+        let bundled = cli_install_detection_binary(&app_bin);
+        let alias = root.path().join("bundle-bin-alias");
+        symlink(&app_bin, &alias).unwrap();
+        let terminal_bin = root.path().join("user/bin");
+        fs::create_dir_all(&terminal_bin).unwrap();
+        let installed = terminal_bin.join(CLI_COMMAND_NAME);
+        symlink(&bundled, &installed).unwrap();
+        let path = std::env::join_paths([&alias, &terminal_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[appdir]);
+        assert!(status.installed);
+        assert_eq!(status.path, Some(installed.to_string_lossy().into_owned()));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cli_install_detection_requires_an_executable_file_on_path() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let non_executable_bin = root.path().join("non-executable");
+        let non_executable = cli_install_detection_binary(&non_executable_bin);
+        fs::set_permissions(&non_executable, fs::Permissions::from_mode(0o644)).unwrap();
+        let directory_bin = root.path().join("directory");
+        fs::create_dir_all(directory_bin.join(CLI_COMMAND_NAME)).unwrap();
+        let missing_bin = root.path().join("missing");
+        let path =
+            std::env::join_paths([&non_executable_bin, &directory_bin, &missing_bin]).unwrap();
+
+        let status = cli_install_status_on_path(Some(&path), &[]);
+        assert!(!status.installed);
+        assert_eq!(status.path, None);
+        assert!(!cli_install_status_on_path(None, &[]).installed);
+    }
 
     #[test]
     fn installed_desktop_launcher_targets_provider_host_and_can_be_updated() {
