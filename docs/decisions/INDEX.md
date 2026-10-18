@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-18** — [Reuse Ready graph receipts for dense models](2026-10-18-reuse-ready-graph-receipts-for-dense-models.md)
+
 - **2026-10-18** — [Forward Host residency controls](2026-10-18-forward-host-residency-controls.md)
 
 - **2026-10-18** — [Retire the deleted local Host registration after reset](2026-10-18-retire-deleted-local-host-registration-after-reset.md)

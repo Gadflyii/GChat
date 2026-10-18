@@ -92,7 +92,7 @@ pub struct Persistent {
     pub local_client_id: Option<Uuid>,
     pub models: BTreeMap<String, Uuid>,
     pub profiles: BTreeMap<Uuid, LaunchRequest>,
-    /// Successful Flash startup graph allowances, bound to producer and recipe.
+    /// Successful startup graph allowances, bound to producer and recipe.
     #[serde(default)]
     pub graph_receipts: BTreeMap<String, u64>,
     /// Exact payload receipts, including imported artifacts, survive Host restart.
@@ -1661,13 +1661,8 @@ impl Host {
             if !starting { break; }
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
-        let receipt_key = if launch.model_id.starts_with("qwen3.8-flash-next/") {
-            Some(self.processes.lock().await.graph_receipt_key(launch)?)
-        } else { None };
-        let graph_allowance = match receipt_key {
-            Some(key) => self.data.lock().await.graph_receipts.get(&key).copied(),
-            None => None,
-        };
+        let receipt_key = self.processes.lock().await.graph_receipt_key(launch)?;
+        let graph_allowance = self.data.lock().await.graph_receipts.get(&receipt_key).copied();
         let mut command = self.processes.lock().await.startup_quote_command(launch, graph_allowance)?;
         let output = tokio::time::timeout(Duration::from_secs(600), command.output()).await
             .map_err(|_| "Engine startup quote timed out")?
@@ -1680,10 +1675,10 @@ impl Host {
             .map_err(|error| format!("Engine startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
         let quote: crate::engine_host::StartupQuote = serde_json::from_value(value.clone())
             .map_err(|error| format!("Engine startup quote is unavailable or invalid; update the Engine runtime: {error}"))?;
-        // A first solo Flash start measures graph memory. Unknown graph cost
+        // A first solo start measures graph memory. Unknown graph cost
         // cannot authorize an explicit allocation; let the Engine size AUTO.
         quote.validate(launch)?;
-        let kv_arena_bytes = if launch.model_id.starts_with("qwen3.8-flash-next/") && remaining == 1 && !sharing
+        let kv_arena_bytes = if remaining == 1 && !sharing
             && launch.options.kv_arena_bytes.is_none() && quote.unknown_graph_allowance() {
             None
         } else {
@@ -3585,25 +3580,44 @@ mod target_launch_tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn flash_graph_receipts_require_ready_and_match_the_saved_startup_recipe() {
-        let (dir, host, mut request) = installed_flash("groupwise-int", false).await;
+        assert_startup_graph_receipt("qwen3.8-flash-next", "groupwise-int").await;
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn dense_graph_receipts_require_ready_and_match_the_saved_startup_recipe() {
+        for (model, weights) in [
+            ("qwen3.8-27b", "groupwise-int-dflash2-q4"),
+            ("muse-glimmer-30b", "groupwise-int-dflash-q4"),
+        ] {
+            assert_startup_graph_receipt(model, weights).await;
+        }
+    }
+
+    #[cfg(unix)]
+    async fn assert_startup_graph_receipt(model: &str, weights: &str) {
+        let (dir, host, mut request) = installed_target(model, weights, false).await;
         let engine = dir.path().join("engine");
         std::fs::write(&engine, r#"#!/usr/bin/env python3
 import http.server, json, pathlib, sys, time
 args = sys.argv[1:]
 def arg(name): return args[args.index(name)+1]
 root = pathlib.Path(__file__).parent
+model, weights = arg('--model-id').split('/', 1)
 if '--quote-only' in args:
     graph = int(arg('--graph-allowance-bytes')) if '--graph-allowance-bytes' in args else 0
     with (root/'quotes.jsonl').open('a') as out: out.write(json.dumps(args)+'\n')
-    print(json.dumps(dict(schema='ginfer-startup-quote-v1',model_id='qwen3.8-flash-next',weights_id='groupwise-int',
+    print(json.dumps(dict(schema='ginfer-startup-quote-v1',model_id=model,weights_id=weights,
         tensor_parallel_size=1,ranks=[dict(rank=0,free_bytes=65536,weights_bytes=8192,state_bytes=2048,
         graph_allowance_bytes=graph,graph_allowance_source='receipt' if graph else 'unknown',
         minimum_kv_arena_bytes=1024,kv_arena_alignment_bytes=256,headroom_bytes=1024,startup_peak_bytes=11264+graph)])))
     sys.exit(0)
-assert arg('--vram-budget-bytes') == '4096'
-sys.stderr.write('Flash startup phase=graph-capacity rank=0 admission_'); sys.stderr.flush(); time.sleep(.01)
-sys.stderr.write('graph_bytes=1200 topology=first\nFlash startup phase=graph-capacity rank=0 admission_graph_bytes=1000 topology=last\n')
+if model == 'qwen3.8-flash-next': assert arg('--vram-budget-bytes') == '4096'
+prefix = 'Flash' if model == 'qwen3.8-flash-next' else 'Dense'
+sys.stderr.write(prefix+' startup phase=graph-capacity rank=0 admission_'); sys.stderr.flush(); time.sleep(.01)
+sys.stderr.write('graph_bytes=1200 topology=first\n'+prefix+' startup phase=graph-capacity rank=0 admission_graph_bytes=1000 topology=last\n')
 sys.stderr.write('x'*20000+'\n'); sys.stderr.flush()
+if (root/'fail-before-ready').exists(): sys.exit(1)
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         body=json.dumps(dict(data=[dict(id=arg('--model-id'))])).encode()
@@ -3614,22 +3628,26 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o700)).unwrap();
         *host.processes.lock().await = HostProcesses::new(engine.clone(), BTreeSet::from(["GPU-test".into()]), Duration::from_secs(10)).unwrap();
+        host.processes.lock().await.configure_runtimes(BTreeMap::new(),
+            BTreeMap::from([("GPU-test".into(), "12.0".into())])).unwrap();
         request.max_context = 8192;
         request.concurrency = 4;
         request.options.kv_arena_bytes = Some(1024);
-        request.options.vram_budget_bytes = Some(4096);
+        request.options.vram_budget_bytes = (model == "qwen3.8-flash-next").then_some(4096);
         let mut preview = request.clone();
         preview.options.kv_arena_bytes = None;
         preview.options.vram_budget_bytes = None;
         let quote = host.quote(preview.clone(), 1).await.unwrap();
         assert!(quote["kv_arena_bytes"].is_null());
         assert_eq!(quote["instance_count"], 1);
-        assert_eq!(quote["model_identity"], serde_json::json!({"model_id":"qwen3.8-flash-next","weights_id":"groupwise-int"}));
+        assert_eq!(quote["model_identity"], serde_json::json!({"model_id":model,"weights_id":weights}));
         assert!(host.data.lock().await.profiles.is_empty());
         assert_eq!(host.processes.lock().await.instances().count(), 0);
-        let error = host.quote(preview.clone(), 2).await.unwrap_err();
-        assert!(error.contains("per-instance weight residency budget"), "{error}");
-        preview.options.vram_budget_bytes = Some(4096);
+        if model == "qwen3.8-flash-next" {
+            let error = host.quote(preview.clone(), 2).await.unwrap_err();
+            assert!(error.contains("per-instance weight residency budget"), "{error}");
+            preview.options.vram_budget_bytes = Some(4096);
+        }
         let error = host.quote(preview, 2).await.unwrap_err();
         assert!(error.contains("graph memory is unknown"), "{error}");
         let error = host.place(request.clone(), 2).await.unwrap_err();
@@ -3639,6 +3657,22 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let error = host.launch(request.clone()).await.unwrap_err();
         assert!(error.contains("graph memory is unknown"), "{error}");
         request.options.kv_arena_bytes = None;
+        // Even a complete graph line is not a receipt if startup never reaches Ready.
+        let failure = dir.path().join("fail-before-ready");
+        std::fs::write(&failure, b"fail").unwrap();
+        let failed = host.launch(request.clone()).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                host.refresh_processes().await.unwrap();
+                if host.processes.lock().await.instances().find(|instance| instance.instance_id == failed).unwrap().status
+                    == crate::engine_registry::InstanceStatus::Failed { break; }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.unwrap();
+        assert!(host.data.lock().await.graph_receipts.is_empty());
+        let error = host.quote(request.clone(), 2).await.unwrap_err();
+        assert!(error.contains("graph memory is unknown"), "{error}");
+        std::fs::remove_file(failure).unwrap();
         let id = host.launch(request.clone()).await.unwrap();
         assert!(host.data.lock().await.graph_receipts.is_empty());
         tokio::time::timeout(Duration::from_secs(5), async {
@@ -3660,10 +3694,19 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let quotes = std::fs::read_to_string(dir.path().join("quotes.jsonl")).unwrap();
         let args: Vec<String> = serde_json::from_str(quotes.lines().last().unwrap()).unwrap();
         assert!(args.windows(2).any(|pair| pair == ["--graph-allowance-bytes", "1200"]));
-        assert!(args.windows(2).any(|pair| pair == ["--vram-budget-bytes", "4096"]));
+        if model == "qwen3.8-flash-next" {
+            assert!(args.windows(2).any(|pair| pair == ["--vram-budget-bytes", "4096"]));
+        }
+        assert_eq!(reopened.quote(request.clone(), 2).await.unwrap()["quote"]["ranks"][0]["graph_allowance_source"], "receipt");
         request.concurrency = 3;
-        let error = reopened.place(request, 2).await.unwrap_err();
+        let error = reopened.place(request.clone(), 2).await.unwrap_err();
         reopened.processes.lock().await.shutdown().await.unwrap();
+        assert!(error.contains("graph memory is unknown"), "{error}");
+        request.concurrency = 4;
+        let mut runtime = std::fs::read(&engine).unwrap();
+        runtime.extend_from_slice(b"\n# changed runtime build\n");
+        std::fs::write(&engine, runtime).unwrap();
+        let error = reopened.quote(request, 2).await.unwrap_err();
         assert!(error.contains("graph memory is unknown"), "{error}");
     }
 

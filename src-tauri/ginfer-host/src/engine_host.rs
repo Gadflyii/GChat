@@ -220,7 +220,8 @@ impl GraphReceipt {
         for &byte in bytes {
             if byte == b'\n' {
                 let line = String::from_utf8_lossy(&self.partial);
-                if line.starts_with("Flash startup phase=graph-capacity ") {
+                if line.starts_with("Flash startup phase=graph-capacity ")
+                    || line.starts_with("Dense startup phase=graph-capacity ") {
                     let value = |key: &str| line.split_whitespace().find_map(|field| field.strip_prefix(key));
                     if let (Some(rank), Some(bytes)) = (value("rank=").and_then(|v| v.parse::<u32>().ok()),
                         value("admission_graph_bytes=").and_then(|v| v.parse::<u64>().ok())) {
@@ -618,7 +619,7 @@ impl StartupQuote {
             if rank.graph_allowance_source.as_deref() == Some("unknown")
                 || (launch.model_id.starts_with("qwen3.8-flash-next/")
                     && !matches!(rank.graph_allowance_source.as_deref(), Some("planner" | "receipt"))) {
-                return Err("Flash graph memory is unknown: start this package once by itself with the same GPU and settings, wait for Ready, then add instances using its saved startup receipt".into());
+                return Err("Engine graph memory is unknown: start this package once by itself with the same GPU and settings, wait for Ready, then add instances using its saved startup receipt".into());
             }
             let invalid = || "Engine startup quote has invalid or overflowing memory facts".to_owned();
             let non_kv = rank.weights_bytes.checked_add(rank.state_bytes)
@@ -645,6 +646,7 @@ impl StartupQuote {
 
 pub struct HostProcesses {
     executable: PathBuf,
+    request_log_jsonl: Option<PathBuf>,
     known_gpus: BTreeSet<String>,
     runtimes: BTreeMap<String, PathBuf>,
     gpu_architectures: BTreeMap<String, String>,
@@ -711,6 +713,7 @@ impl HostProcesses {
             .map_err(|e| e.to_string())?;
         Ok(Self {
             executable,
+            request_log_jsonl: None,
             known_gpus: gpu_uuids,
             runtimes: BTreeMap::new(),
             gpu_architectures: BTreeMap::new(),
@@ -720,6 +723,11 @@ impl HostProcesses {
             activity: Arc::new(tokio::sync::Notify::new()),
             hardware_profile: None,
         })
+    }
+
+    /// Process diagnostics are separate from model settings and graph topology.
+    pub fn configure_request_log_jsonl(&mut self, path: PathBuf) {
+        self.request_log_jsonl = Some(path);
     }
 
     pub fn configure_runtimes(
@@ -1042,7 +1050,11 @@ impl HostProcesses {
                 .duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?;
             Ok(serde_json::json!([path, metadata.len(), modified.as_secs(), modified.subsec_nanos()]))
         }).collect::<Result<Vec<_>, String>>()?;
-        Ok(hex::encode(Sha256::digest(serde_json::to_vec(&(recipe, stamps)).map_err(|e| e.to_string())?)))
+        let architectures: Vec<_> = launch.gpu_uuids.iter()
+            .map(|gpu| (gpu, self.gpu_architectures.get(gpu))).collect();
+        Ok(hex::encode(Sha256::digest(serde_json::to_vec(&(
+            recipe, stamps, architectures, std::env::consts::OS, std::env::consts::ARCH,
+        )).map_err(|e| e.to_string())?)))
     }
 
     pub(crate) fn ready_graph_receipts(&self) -> Vec<(String, u64)> {
@@ -1066,13 +1078,15 @@ impl HostProcesses {
     }
 
     fn spawn(&mut self, launch: EngineLaunch) -> Result<Uuid, String> {
-        let graph_receipt_key = launch.model_id.starts_with("qwen3.8-flash-next/")
-            .then(|| self.graph_receipt_key(&launch)).transpose()?;
+        let graph_receipt_key = Some(self.graph_receipt_key(&launch)?);
         let graph_receipt = Arc::new(Mutex::new(GraphReceipt::default()));
         let api_key = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
         let hardware_profile_path = self.hardware_profile.as_ref().map(|job| job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids).map(|configuration| configuration.profile_path)).transpose()?;
-        let mut child = self.command(&launch)?
-            .args(["--exit-on-stdin-close", "--api-key", &api_key])
+        let mut command = self.command(&launch)?;
+        if let Some(path) = &self.request_log_jsonl {
+            command.arg("--request-log-jsonl").arg(path);
+        }
+        let mut child = command.args(["--exit-on-stdin-close", "--api-key", &api_key])
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -1461,6 +1475,119 @@ mod tests {
             tp: 1, port: 40121, max_context: 4096, concurrency: 1,
             options: LaunchOptions::default(),
         }
+    }
+
+    #[test]
+    fn graph_receipt_keys_bind_settings_gpu_runtime_artifact_and_profile() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("ginfer-serve");
+        std::fs::write(&executable, b"runtime build one").unwrap();
+        std::fs::write(directory.path().join("ginfer"), b"profiling CLI").unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"artifact one").unwrap();
+        let mut processes = HostProcesses::new(executable.clone(),
+            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        processes.configure_runtimes(BTreeMap::new(),
+            BTreeMap::from([("GPU-fixture".into(), "12.0".into())])).unwrap();
+        let launch = fixture_launch(&artifact, Uuid::new_v4());
+        let key = processes.graph_receipt_key(&launch).unwrap();
+
+        let mut same_recipe = launch.clone();
+        same_recipe.instance_id = Uuid::new_v4();
+        same_recipe.port += 1;
+        same_recipe.options.kv_arena_bytes = Some(1024);
+        assert_eq!(processes.graph_receipt_key(&same_recipe).unwrap(), key,
+            "A new instance and its KV share reuse the same graph topology");
+        for changed in [
+            EngineLaunch { max_context: launch.max_context * 2, ..launch.clone() },
+            EngineLaunch { concurrency: 4, ..launch.clone() },
+            EngineLaunch { options: LaunchOptions { no_cuda_graph: true, ..launch.options.clone() }, ..launch.clone() },
+            EngineLaunch { options: LaunchOptions { draft_tokens: 7, ..launch.options.clone() }, ..launch.clone() },
+            EngineLaunch { gpu_uuids: vec!["GPU-replacement-SKU".into()], ..launch.clone() },
+        ] {
+            assert_ne!(processes.graph_receipt_key(&changed).unwrap(), key);
+        }
+        let mut group = launch.clone();
+        group.gpu_uuids.push("GPU-second".into());
+        let ordered = processes.graph_receipt_key(&group).unwrap();
+        group.gpu_uuids.reverse();
+        assert_ne!(processes.graph_receipt_key(&group).unwrap(), ordered);
+        processes.configure_runtimes(BTreeMap::new(),
+            BTreeMap::from([("GPU-fixture".into(), "8.9".into())])).unwrap();
+        assert_ne!(processes.graph_receipt_key(&launch).unwrap(), key);
+
+        let key = processes.graph_receipt_key(&launch).unwrap();
+        std::fs::write(&executable, b"runtime build two changed").unwrap();
+        assert_ne!(processes.graph_receipt_key(&launch).unwrap(), key);
+        let key = processes.graph_receipt_key(&launch).unwrap();
+        std::fs::write(&artifact, b"artifact two changed").unwrap();
+        assert_ne!(processes.graph_receipt_key(&launch).unwrap(), key);
+
+        let host_directory = directory.path().join("host");
+        let profile = crate::hardware_profile::group_profile_path(&host_directory, &launch.gpu_uuids);
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        std::fs::write(&profile, br#"{"schema_version":2}"#).unwrap();
+        processes.hardware_profile = Some(crate::hardware_profile::HardwareProfiles::open(
+            host_directory, Arc::new(std::sync::atomic::AtomicU64::new(0))).unwrap());
+        let key = processes.graph_receipt_key(&launch).unwrap();
+        std::fs::write(&profile, br#"{"schema_version":2,"measurements":"changed"}"#).unwrap();
+        assert_ne!(processes.graph_receipt_key(&launch).unwrap(), key);
+    }
+
+    #[tokio::test]
+    async fn request_log_jsonl_reaches_only_the_spawned_engine_without_changing_graph_receipts() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("ginfer-serve");
+        std::fs::write(&executable, r##"#!/bin/sh
+root=$(dirname "$0")
+quote=false
+log=
+printf '%s\n' "$@" > "$root/last-argv"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --quote-only) quote=true ;;
+    --request-log-jsonl) shift; log=$1 ;;
+  esac
+  shift
+done
+if [ "$quote" = true ]; then
+  [ -z "$log" ] || exit 21
+  printf '{"quote":true}\n'
+else
+  [ -n "$log" ] || exit 22
+  printf '{"event":"server_start"}\n' >> "$log"
+fi
+"##).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture artifact").unwrap();
+        let mut processes = HostProcesses::new(executable,
+            BTreeSet::from(["GPU-fixture".into()]), Duration::from_secs(10)).unwrap();
+        let launch = fixture_launch(&artifact, Uuid::new_v4());
+        let key = processes.graph_receipt_key(&launch).unwrap();
+        let log = directory.path().join("first startup requests.jsonl");
+        processes.configure_request_log_jsonl(log.clone());
+        assert_eq!(processes.graph_receipt_key(&launch).unwrap(), key);
+
+        let quote = processes.startup_quote_command(&launch, None).unwrap().output().await.unwrap();
+        assert!(quote.status.success());
+        assert_eq!(serde_json::from_slice::<serde_json::Value>(&quote.stdout).unwrap()["quote"], true);
+        assert!(!log.exists(), "A quote must not create the Engine request log");
+        assert!(!std::fs::read_to_string(directory.path().join("last-argv")).unwrap()
+            .lines().any(|arg| arg == "--request-log-jsonl"));
+
+        let id = launch.instance_id;
+        processes.launch(launch).unwrap();
+        let child = processes.instances.get_mut(&id).unwrap().child.as_mut().unwrap();
+        assert!(tokio::time::timeout(Duration::from_secs(2), child.wait()).await.unwrap().unwrap().success());
+        let recorded = std::fs::read_to_string(directory.path().join("last-argv")).unwrap();
+        let args: Vec<_> = recorded.lines().collect();
+        let index = args.iter().position(|arg| *arg == "--request-log-jsonl").unwrap();
+        assert_eq!(args[index + 1], log.to_str().unwrap());
+        assert_eq!(args.iter().filter(|arg| **arg == "--request-log-jsonl").count(), 1);
+        let event: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&log).unwrap()).unwrap();
+        assert_eq!(event["event"], "server_start");
+        processes.stop(id).await.unwrap();
     }
 
     #[test]
