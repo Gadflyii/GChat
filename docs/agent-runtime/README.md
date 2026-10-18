@@ -19,6 +19,33 @@ passes visible failure and explicit restart/new-run recovery. Automatic resume,
 abrupt Host failure, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## First-use duplicate agent names — October 17
+
+An isolated native Linux pass of main `9e75fc31e` reproduced silent replacement:
+creating two new agents named Travel Helper generated `travel-helper` for both,
+and saving the second replaced the first. New agents now receive an unused
+identifier (`travel-helper-2`, then the next available suffix). Generated IDs also
+avoid reserved `general` and use `agent` when the name has no ASCII slug. Saving
+an existing agent retains its identifier; a blank name requires correction.
+
+The pass used a private HOME/XDG profile, unlocked test keyring, authenticated
+Xvfb and D-Bus session on S1; it did not touch an installed user profile. The
+focused Agent Studio suite passed 39 tests. `make verify` passed lint, types,
+quality/coverage gates, all JavaScript tests, main Rust and Host suites, then
+failed the unrelated Gbot SSH fixture shutdown assertion at
+`tests/ssh_loopback.rs:1279`. That exact test passed its single retry; the skipped
+Gbot doc, hardware and utilities suites passed separately. The native candidate
+built successfully. Its native replay preserved both Travel Helper agents with
+distinct IDs and descriptions; renaming the second retained `travel-helper-2`.
+The baseline also completed a real chat, contextual follow-up and one-step saved
+agent Reply on a private Qwen3.8-27B NVFP4 artifact; completed run history
+reopened after app restart. Artifact staging was a retained-fixture copy, not
+an import/download qualification. GPU0 was stopped and returned at 23:56:52Z.
+Evidence:
+`/ai/gchat/out/gchat1-chat-agents-pass-20261017/` (launch receipt, duplicate-name
+screenshot and gate receipts). This is a debug desktop check, not installer or
+Windows qualification.
+
 ## Client tools and native request capability errors — release scope
 
 Inference-server hosted retrieval, `file_search`, `web_search` and MCP are
