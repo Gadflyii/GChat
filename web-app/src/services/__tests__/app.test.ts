@@ -5,6 +5,7 @@ import { APIs } from '@/lib/service'
 import { TauriCoreService } from '../core/tauri'
 import { TauriAppService } from '../app/tauri'
 import { seedServiceHub } from '@/test/service-hub'
+import { localStorageKey } from '@/constants/localStorage'
 
 const engineMocks = vi.hoisted(() => ({
   getLoadedModels: vi.fn().mockResolvedValue(['model1', 'model2']),
@@ -136,18 +137,56 @@ describe('TauriAppService', () => {
     })
   })
 
-  it('resets settings and removes obsolete backend preferences', async () => {
-    window.localStorage.setItem('llama_cpp_backend_type', 'cpu')
-    window.localStorage.setItem('discard-me', 'value')
-    ipcHandler.mockReturnValue(undefined)
+  it('defers preferences reset to the restarted app without unloading Agent dependencies', async () => {
+    window.localStorage.setItem(localStorageKey.settingGeneral, 'saved-settings')
+    ipcHandler.mockImplementation(() => {
+      expect(window.localStorage.getItem(localStorageKey.settingGeneral)).toBe(
+        'saved-settings'
+      )
+      expect(
+        window.localStorage.getItem(localStorageKey.factoryResetPending)
+      ).toBe('true')
+      expect(engineMocks.getLoadedModels).not.toHaveBeenCalled()
+      expect(engineMocks.unload).not.toHaveBeenCalled()
+    })
 
     await appService.factoryReset()
 
-    expect(engineMocks.unload).toHaveBeenCalledTimes(2)
-    expect(window.localStorage.getItem('llama_cpp_backend_type')).toBeNull()
-    expect(window.localStorage.getItem('discard-me')).toBeNull()
-    expect(ipcHandler).toHaveBeenCalledWith('factory_reset', {})
+    expect(window.localStorage.getItem(localStorageKey.settingGeneral)).toBe(
+      'saved-settings'
+    )
+    expect(window.localStorage.getItem(localStorageKey.factoryResetPending)).toBe(
+      'true'
+    )
+    expect(ipcHandler).toHaveBeenCalledExactlyOnceWith('factory_reset', {})
   })
+
+  it.each([null, 'false'])(
+    'preserves preferences and restores pending flag %s when native reset refuses',
+    async (previousResetPending) => {
+      const failure = 'Agent runs did not finish shutting down within 15 seconds'
+      window.localStorage.setItem(localStorageKey.settingGeneral, 'saved-settings')
+      if (previousResetPending !== null) {
+        window.localStorage.setItem(
+          localStorageKey.factoryResetPending,
+          previousResetPending
+        )
+      }
+      ipcHandler.mockRejectedValue(failure)
+
+      await expect(appService.factoryReset()).rejects.toBe(failure)
+
+      expect(window.localStorage.getItem(localStorageKey.settingGeneral)).toBe(
+        'saved-settings'
+      )
+      expect(
+        window.localStorage.getItem(localStorageKey.factoryResetPending)
+      ).toBe(previousResetPending)
+      expect(engineMocks.getLoadedModels).not.toHaveBeenCalled()
+      expect(engineMocks.unload).not.toHaveBeenCalled()
+      expect(ipcHandler).toHaveBeenCalledExactlyOnceWith('factory_reset', {})
+    }
+  )
 
   it('returns undefined when installer type invoke rejects', async () => {
     ipcHandler.mockRejectedValue(new Error('unavailable'))

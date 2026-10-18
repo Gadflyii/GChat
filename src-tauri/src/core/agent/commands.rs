@@ -188,7 +188,7 @@ impl Drop for AgentRunGuard {
 
 /// Fence admission and wait for all shared turns before model teardown. Unlike
 /// cancellation senders, completion remains pending through durable writes.
-pub async fn shutdown<R: Runtime>(app: &AppHandle<R>) {
+pub async fn shutdown<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let state = app.state::<AppState>();
     let pending = state.agent_runs.begin_shutdown();
     let joined = tokio::time::timeout(std::time::Duration::from_secs(15), async {
@@ -206,9 +206,8 @@ pub async fn shutdown<R: Runtime>(app: &AppHandle<R>) {
         }
     })
     .await;
-    if joined.is_err() {
-        log::warn!("Agent run shutdown exceeded the shared runtime exit grace period");
-    }
+    joined
+        .map_err(|_| "Agent run shutdown exceeded the shared runtime exit grace period".to_owned())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1508,6 +1507,238 @@ mod tests {
     use super::*;
     use crate::core::agent::test_support::TestWorkspace;
 
+    #[tokio::test(start_paused = true)]
+    async fn factory_reset_timeout_preserves_data_and_dependencies() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let models = data.join("models");
+        fs::create_dir_all(&models).unwrap();
+        let sentinel = models.join("reset-sentinel.txt");
+        fs::write(&sentinel, "MUST_SURVIVE_UNFINISHED_AGENT").unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::test_support::TestDataRoot(data.clone()));
+        let state = app.state::<AppState>();
+        state.mcp_active_servers.lock().await.insert(
+            "still-needed".into(),
+            serde_json::json!({"command":"fixture"}),
+        );
+        state
+            .mcp_start_generations
+            .lock()
+            .await
+            .insert("still-needed".into(), 7);
+        let cancellation = CancellationToken::new();
+        // An owned turn may still be completing a non-interruptible operation
+        // or durable write after cancellation. Keep its real completion guard.
+        let unfinished = state
+            .agent_runs
+            .register("unfinished-reset-run", cancellation.clone())
+            .unwrap();
+        let started = tokio::time::Instant::now();
+        let error = crate::core::system::commands::reset_app_data(app.handle(), &state, &data)
+            .await
+            .unwrap_err();
+        assert!(error.contains("Agent run shutdown exceeded"), "{error}");
+        assert!(error.contains("Try resetting again"), "{error}");
+        assert_eq!(started.elapsed(), std::time::Duration::from_secs(15));
+        assert!(cancellation.is_cancelled());
+        assert!(state.agent_runs.is_active("unfinished-reset-run"));
+        assert!(state.agent_runs.is_shutting_down());
+        assert_eq!(
+            fs::read_to_string(&sentinel).unwrap(),
+            "MUST_SURVIVE_UNFINISHED_AGENT"
+        );
+        assert_eq!(
+            state.mcp_active_servers.lock().await.get("still-needed"),
+            Some(&serde_json::json!({"command":"fixture"}))
+        );
+        assert_eq!(
+            state.mcp_start_generations.lock().await.get("still-needed"),
+            Some(&7)
+        );
+        let request: AgentTurnRequest = serde_json::from_value(serde_json::json!({
+            "run_id":Uuid::new_v4().to_string(),"session_id":Uuid::new_v4().to_string(),
+            "model_id":"unused","user_message":"must not start during failed reset"
+        }))
+        .unwrap();
+        assert!(
+            run_turn_with_sink(app.handle().clone(), request, Arc::new(|_| Ok(())))
+                .await
+                .unwrap_err()
+                .contains("shutting down")
+        );
+        assert!(!data.join("threads").exists());
+        drop(unfinished);
+        shutdown(app.handle()).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn factory_reset_drains_active_shell_before_deleting_data() {
+        use crate::core::agent::ginfer_client::GinferConnection;
+        use crate::core::agent::test_support::{ScriptedGinferServer, ScriptedResponse, TestFleet};
+        use crate::core::agent::types::ToolStatus;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+        use tauri_plugin_ginfer::state::{GinferSession, SessionInfo, SessionOwner};
+
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("data");
+        let models = data.join("models");
+        fs::create_dir_all(&models).unwrap();
+        let sentinel = models.join("reset-sentinel.txt");
+        fs::write(&sentinel, "PRESERVE_UNTIL_AGENT_DRAIN").unwrap();
+        let pid_file = root.path().join("active-shell.pid");
+        let release = root.path().join("release-shell");
+        let side_effect = root.path().join("must-not-run.txt");
+        // The shell has no descendants: killing its actual tool process must
+        // prevent both the external effect and recreation of reset data.
+        let server = ScriptedGinferServer::start(vec![ScriptedResponse::tool_call(
+            "os_shell_run",
+            serde_json::json!({
+                "cmd":"sh",
+                "args":["-c", concat!(
+                    "printf '%s' \"$$\" > \"$1\"; ",
+                    "while [ ! -e \"$2\" ]; do :; done; ",
+                    "mkdir -p \"$3\"; printf UNSAFE > \"$3/recreated.txt\"; ",
+                    "printf UNSAFE > \"$4\""
+                ), "reset-tool", pid_file, release, models, side_effect]
+            }),
+        )])
+        .await;
+        let GinferConnection::Local { port, .. } = server.client().target().connection else {
+            unreachable!()
+        };
+        let fleet = TestFleet::start().await;
+        let owner = SessionOwner {
+            control: Arc::new(
+                ginfer_host::launcher::LocalControl::open(
+                    &fleet.directory.path().join("host"),
+                    &fleet.origin,
+                )
+                .unwrap(),
+            ),
+            connection: ginfer_host::launcher::LocalConnection {
+                instance_id: Uuid::new_v4(),
+                session_id: Uuid::new_v4(),
+                model_id: "scripted-test-model".into(),
+                port: port.try_into().unwrap(),
+                api_key: String::new(),
+            },
+        };
+        let model = ginfer_host::engine_registry::InstanceRef {
+            host_id: owner.control.host_id(),
+            instance_id: owner.connection.instance_id,
+        }
+        .model_alias();
+        let info: SessionInfo = serde_json::from_value(serde_json::json!({
+            "pid":1,"port":port,"model_id":"scripted-test-model","model_path":"test.ginfer",
+            "is_embedding":false,"vision":false,"api_key":"","max_concurrency":1,"max_context":32768
+        }))
+        .unwrap();
+        let ginfer = GinferState::default();
+        ginfer.ginfer_process.lock().await.insert(
+            1,
+            GinferSession {
+                owner,
+                info,
+                endpoint: None,
+            },
+        );
+        let app = tauri::test::mock_builder()
+            .manage(ginfer)
+            .manage(fleet.client.clone())
+            .manage(crate::core::gbot::GbotState::stopped_for_test())
+            .manage(AppState::default())
+            .manage(crate::test_support::TestDataRoot(data.clone()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        let request: AgentTurnRequest = serde_json::from_value(serde_json::json!({
+            "run_id":Uuid::new_v4().to_string(),"session_id":Uuid::new_v4().to_string(),
+            "model_id":model,"user_message":"Run the cancellable shell fixture",
+            "working_dir":root.path(),"auto_approve":true
+        }))
+        .unwrap();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let observed_cancelled = cancelled.clone();
+        let observed_sentinel = sentinel.clone();
+        let observed_app = app.handle().clone();
+        let run = run_turn_with_sink(
+            app.handle().clone(),
+            request.clone(),
+            Arc::new(move |event| {
+                if let AgentEvent::ToolCallExecuted { result } = event {
+                    if result.call.tool == "os.shell.run" {
+                        assert_eq!(result.outcome.status, ToolStatus::Cancelled);
+                        assert!(observed_app
+                            .state::<AppState>()
+                            .agent_runs
+                            .is_shutting_down());
+                        assert_eq!(
+                            fs::read_to_string(&observed_sentinel).unwrap(),
+                            "PRESERVE_UNTIL_AGENT_DRAIN"
+                        );
+                        observed_cancelled.store(true, Ordering::SeqCst);
+                    }
+                }
+                Ok(())
+            }),
+        );
+        let reset = async {
+            let pid = loop {
+                if let Some(pid) = fs::read_to_string(&pid_file)
+                    .ok()
+                    .and_then(|value| value.parse::<i32>().ok())
+                {
+                    break pid;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            };
+            let state = app.state::<AppState>();
+            assert!(state.agent_runs.is_active(&request.run_id));
+            crate::core::system::commands::reset_app_data(app.handle(), &state, &data)
+                .await
+                .unwrap();
+            assert!(cancelled.load(Ordering::SeqCst));
+            assert!(state.agent_runs.inner.lock().unwrap().runs.is_empty());
+            assert!(state.tool_call_cancellations.lock().await.is_empty());
+            assert!(!models.exists());
+            assert!(!data.join("threads").exists());
+            fs::write(&release, "the cancelled shell must never continue").unwrap();
+            tokio::time::timeout(Duration::from_secs(1), async {
+                while nix::sys::signal::kill(nix::unistd::Pid::from_raw(pid), None).is_ok() {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .expect("cancelled native shell must exit rather than survive factory reset");
+            assert!(!side_effect.exists());
+            assert!(
+                !models.exists(),
+                "cancelled tool must not recreate reset data"
+            );
+            let mut late = request.clone();
+            late.run_id = Uuid::new_v4().to_string();
+            assert!(
+                run_turn_with_sink(app.handle().clone(), late, Arc::new(|_| Ok(())))
+                    .await
+                    .unwrap_err()
+                    .contains("shutting down")
+            );
+            assert!(
+                !data.join("threads").exists(),
+                "late admission must not recreate sessions"
+            );
+        };
+        let (result, ()) =
+            tokio::time::timeout(Duration::from_secs(5), async { tokio::join!(run, reset) })
+                .await
+                .expect("factory reset must cancel and drain an active native shell");
+        result.unwrap();
+        assert_eq!(server.requests().len(), 1);
+    }
+
     #[cfg(unix)]
     #[tokio::test]
     async fn shutdown_waits_for_direct_studio_durability_after_window_closes() {
@@ -1850,7 +2081,7 @@ mod tests {
             check_active.await;
             app.state::<AppState>().agent_runs.close_admission();
             closed.store(true, Ordering::SeqCst);
-            shutdown(app.handle()).await;
+            shutdown(app.handle()).await.unwrap();
 
             // Check before joining the caller: shutdown itself must wait for
             // the history and semantic session writes, not just cancellation.
@@ -1943,7 +2174,8 @@ mod tests {
         assert!(error.contains("missing-definition"), "{error}");
         tokio::time::timeout(std::time::Duration::from_secs(1), shutdown(app.handle()))
             .await
-            .expect("early preflight errors must not leave shutdown waiting for completion");
+            .expect("early preflight errors must not leave shutdown waiting for completion")
+            .unwrap();
         assert!(app
             .state::<AppState>()
             .agent_runs

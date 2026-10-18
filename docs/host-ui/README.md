@@ -25,6 +25,49 @@ and the 7.80GB private runtime root
 The read-only release donor was preserved. Only result JSON and short summary
 remain; no live job or booking remains. No model load, hardware Ensure, startup
 check, pairing, sharing, installer, Windows account or shared app data was used.
+## Factory reset drains active Agents — C3, October 18
+
+Bubbs's priority P2 on merged `9d0a61124`: hiding the last window avoids the
+ordinary close event, leaving shared Agent tools running during reset deletion.
+Fence new shared Agent turns, cancel existing turns and wait for their cleanup
+and durable writes before hiding windows, stopping dependencies or deleting data.
+A drain timeout must preserve the data and return an error. Keep the successful
+native reset lifecycle from `c681367eb`.
+
+Acceptance: an actual active Agent tool is cancelled and drained before the
+production reset data path deletes disposable data; admission remains closed;
+no late write recreates deleted content. Run focused lifecycle regressions,
+Rust check and Clippy, and one full `make verify`, then send Codex 8 the branch
+for the requested follow-up and mail Bubbs merge-ready. No model/GUI/release or
+profiling run is needed for this backend lifetime correction.
+
+Owner/source: C3, `/ai/gchat-worktrees/c3-reset-agent-drain-20261018`, branch
+`fix/c3-reset-agent-drain-20261018`, baseline `29c301aeb`. S1 private
+build root `/media/ron/SSD_RAID/ai/tmp-c3-reset-agent-drain-20261018`, offline
+read-only dependency donor `/media/ron/SSD_RAID/ai/tmp-claude-gchat-finish-20261017/tool-source`,
+pinned image `sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14`.
+S1 CPUs104–111 used 01:31–01:41Z for private dependency preparation and gates,
+under the shared socket-1 compile lock at nice10; no GPU allocation. The native
+reset now requires shared Agent shutdown success before hiding windows or
+tearing down dependencies. Frontend reset leaves engine shutdown to that ordered native path and
+preserves preferences when drain fails. The pending reset flag is consumed
+before store hydration on a successful restart, rather than clearing preferences
+while Agent cleanup is pending. All 15 focused Agent lifecycle tests pass,
+including the active native shell and paused-clock timeout regressions; Rust
+check and Clippy pass. All 56 focused frontend cases pass across reset service,
+settings, confirmation and early boot. The first frontend collection lacked
+the compiled core entry point; copied the unchanged donor's core build before
+continuing the uncollected suites. Future private frontend staging must include
+the core build as well as dependency directories. One full `make verify` passes:
+3,207 frontend, 121 extension and 1,210 Rust tests, zero failures, six frontend
+skips, 27 Rust ignores and all six critical coverage floors. This is Linux
+backend/component qualification; no installer rebuild or native Windows GUI run.
+The 25 GiB private S1 build and three stopped gate containers were removed;
+CPUs returned 01:41Z. Retain only the
+[result](../../out/c3-reset-agent-drain-20261018/result.json) and
+[summary](../../out/c3-reset-agent-drain-20261018/summary.md).
+Next: Codex 8 follow-up review and Bubbs's merge; continue the paused startup
+quote native acceptance separately.
 
 ## Confirmation replacement focus — October 18
 

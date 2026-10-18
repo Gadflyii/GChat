@@ -1,5 +1,5 @@
-// Dev-only fresh-install mode (`make dev-fresh`). MUST be the first import:
-// it wipes/restores localStorage before any zustand store module rehydrates.
+// Factory reset and dev-only fresh-install mode. MUST be the first import:
+// apply localStorage reset/restore before any zustand store module rehydrates.
 import './lib/freshInstallBoot'
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'

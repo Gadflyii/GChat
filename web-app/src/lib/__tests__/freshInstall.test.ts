@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { localStorageKey } from '@/constants/localStorage'
 
 import {
   restoreFreshInstallBackup,
@@ -7,6 +8,10 @@ import {
 
 const BACKUP_KEY = '__gchat_fresh_install_backup_v1__'
 const SESSION_MARKER = 'gchat_fresh_install_launch'
+
+vi.mock('@/lib/extension', () => ({
+  ExtensionManager: { getInstance: vi.fn() },
+}))
 
 beforeEach(() => {
   localStorage.clear()
@@ -106,6 +111,82 @@ describe('shipped builds (flag undefined)', () => {
     runFreshInstallReset()
 
     expect(localStorage.getItem('model-provider')).toBe('untouched')
+    expect(localStorage.getItem(BACKUP_KEY)).toBeNull()
+  })
+})
+
+describe('startup reset before persisted stores load', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    vi.stubGlobal('FRESH_INSTALL', false)
+  })
+
+  const savedSettings = JSON.stringify({
+    state: {
+      preloadModelOnStartup: true,
+      huggingfaceToken: 'saved-token',
+    },
+    version: 3,
+  })
+
+  it('clears confirmed reset preferences before hydration and consumes the flag once', async () => {
+    localStorage.setItem(localStorageKey.settingGeneral, savedSettings)
+    localStorage.setItem(localStorageKey.setupCompleted, 'true')
+    localStorage.setItem(localStorageKey.factoryResetPending, 'true')
+    localStorage.setItem(
+      BACKUP_KEY,
+      JSON.stringify({ [localStorageKey.settingGeneral]: savedSettings })
+    )
+
+    await import('@/lib/freshInstallBoot')
+    const { useGeneralSetting } = await import('@/hooks/useGeneralSetting')
+
+    expect(useGeneralSetting.getState().preloadModelOnStartup).toBe(false)
+    expect(useGeneralSetting.getState().huggingfaceToken).toBeUndefined()
+    expect(localStorage.getItem(localStorageKey.setupCompleted)).toBeNull()
+    expect(localStorage.getItem(localStorageKey.factoryResetPending)).toBeNull()
+    expect(localStorage.getItem(BACKUP_KEY)).toBeNull()
+
+    useGeneralSetting.getState().setPreloadModelOnStartup(true)
+    localStorage.setItem(localStorageKey.setupCompleted, 'true')
+    vi.resetModules()
+    await import('@/lib/freshInstallBoot')
+    const restarted = await import('@/hooks/useGeneralSetting')
+
+    expect(restarted.useGeneralSetting.getState().preloadModelOnStartup).toBe(true)
+    expect(localStorage.getItem(localStorageKey.setupCompleted)).toBe('true')
+  })
+
+  it('preserves saved preferences when no reset was requested', async () => {
+    localStorage.setItem(localStorageKey.settingGeneral, savedSettings)
+
+    await import('@/lib/freshInstallBoot')
+    const { useGeneralSetting } = await import('@/hooks/useGeneralSetting')
+
+    expect(useGeneralSetting.getState().preloadModelOnStartup).toBe(true)
+    expect(useGeneralSetting.getState().huggingfaceToken).toBe('saved-token')
+  })
+
+  it('discards the dev-fresh backup before reset so a normal launch cannot restore it', async () => {
+    vi.stubGlobal('FRESH_INSTALL', true)
+    localStorage.setItem(localStorageKey.factoryResetPending, 'true')
+    localStorage.setItem(
+      BACKUP_KEY,
+      JSON.stringify({ [localStorageKey.settingGeneral]: savedSettings })
+    )
+
+    await import('@/lib/freshInstallBoot')
+
+    expect(JSON.parse(localStorage.getItem(BACKUP_KEY) ?? '{}')).toEqual({})
+    expect(localStorage.getItem(localStorageKey.factoryResetPending)).toBeNull()
+
+    vi.stubGlobal('FRESH_INSTALL', false)
+    vi.resetModules()
+    await import('@/lib/freshInstallBoot')
+    const { useGeneralSetting } = await import('@/hooks/useGeneralSetting')
+
+    expect(useGeneralSetting.getState().preloadModelOnStartup).toBe(false)
+    expect(useGeneralSetting.getState().huggingfaceToken).toBeUndefined()
     expect(localStorage.getItem(BACKUP_KEY)).toBeNull()
   })
 })

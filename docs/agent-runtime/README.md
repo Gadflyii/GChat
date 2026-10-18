@@ -208,8 +208,15 @@ desktop layout; installer and Windows qualification remain separate.
 Normal app exit now tracks direct Studio turns alongside Chat and Code workers,
 closes admission and cancels active turns before model teardown. The shared
 shutdown waits up to 15 seconds for their run records, semantic sessions and
-pending-request cleanup. A closed Studio event channel during exit no longer
-changes a cancelled run into failed history.
+pending-request cleanup. Factory reset uses this same admission fence and drain
+before hiding windows, stopping model/MCP dependencies or deleting data. Unlike
+ordinary best-effort exit, a reset timeout returns an error and preserves data
+and dependencies; admission stays closed while unfinished cleanup drains. A
+closed Studio event channel during exit no longer changes a cancelled run into
+failed history.
+The active-shell and drain-timeout reset regressions and full gate pass;
+[reset verification](../host-ui/README.md#factory-reset-drains-active-agents--c3-october-18)
+records their scope and retained evidence.
 
 The existing mock-app, TestFleet and scripted-engine regression checks an
 active Studio turn through a completed file read, pending approval, window-channel
