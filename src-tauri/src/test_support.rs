@@ -110,7 +110,7 @@ mod capability_scope {
                 "join_path",
                 serde_json::json!({ "args": ["/tmp", "child"] }),
             ),
-            ("plugin:os|platform", serde_json::json!({})),
+            ("plugin:os|locale", serde_json::json!({})),
         ];
         for (command, args) in calls {
             let mut request = invoke_request(command, args.clone());
