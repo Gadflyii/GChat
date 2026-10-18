@@ -259,6 +259,7 @@ const ChatInput = memo(function ChatInput({
   const selectedAgentSkill = draftSkillName
     ? findAvailableAgentSkill(agentSkills, draftSkillName)
     : null
+  const isRestoringDraftSkill = Boolean(draftSkillName && agentSkillsLoading)
   const setDraftSkill = usePrompt((state) => state.setDraftSkill)
   const preselectedAgentSkillAppliedRef = useRef<string | null>(null)
   const [agentSkillSlashQuery, setAgentSkillSlashQuery] =
@@ -983,7 +984,11 @@ const ChatInput = memo(function ChatInput({
   }
 
   const handleSendMessage = async (draft: string) => {
-    if (!submissionReady || submittingMessageRef.current) return
+    if (
+      !submissionReady ||
+      submittingMessageRef.current ||
+      (!isCompactCommand(draft) && isRestoringDraftSkill)
+    ) return
     // A ref also blocks repeated Enter/click events before React renders.
     submittingMessageRef.current = true
     setIsSubmittingMessage(true)
@@ -2606,7 +2611,7 @@ const ChatInput = memo(function ChatInput({
                         !isSubmittingMessage &&
                         (isCompactCommand(prompt) || !isStreaming) &&
                         prompt.trim() &&
-                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady))
+                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady && !isRestoringDraftSkill))
                       ) {
                         handleSendMessage(prompt)
                       }
@@ -2974,17 +2979,20 @@ const ChatInput = memo(function ChatInput({
                       isSubmittingMessage ||
                       !prompt.trim() ||
                       (!isCompactCommand(prompt) &&
-                        (isAttachmentPipelineBusy || blockSendUntilModelReady))
+                        (isAttachmentPipelineBusy || blockSendUntilModelReady || isRestoringDraftSkill))
                     }
                     data-test-id="send-message-button"
                     aria-label={
-                      isSubmittingMessage ? 'Preparing message' : 'Send message'
+                      isSubmittingMessage ? 'Preparing message' :
+                        isRestoringDraftSkill && !isCompactCommand(prompt)
+                          ? 'Restoring selected skill'
+                          : 'Send message'
                     }
-                    aria-busy={isSubmittingMessage}
+                    aria-busy={isSubmittingMessage || (isRestoringDraftSkill && !isCompactCommand(prompt))}
                     onClick={() => handleSendMessage(prompt)}
                     className="rounded-full mr-1 mb-1"
                   >
-                    {isSubmittingMessage ? (
+                    {isSubmittingMessage || (isRestoringDraftSkill && !isCompactCommand(prompt)) ? (
                       <IconLoader2 className="animate-spin" />
                     ) : (
                       <ArrowRight className="text-primary-fg" />
