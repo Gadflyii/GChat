@@ -1,5 +1,23 @@
 # Gbot design
 
+## SSH loopback fixture teardown
+
+The disposable SSH fixture joins its aborted listener tasks within the existing
+five-second bound before disconnecting sessions and joining every owned child.
+A released ephemeral port can already belong to another parallel test, so its
+connectability cannot establish whether the original listener survived.
+
+The regression rebinds both released fixture addresses before completing
+shutdown, then exchanges bytes through both replacement listeners. Teardown
+must finish without probing or disturbing their new owners. Listener panics,
+listener timeouts and surviving child tasks still fail the test.
+
+Linux qualification on 2026-10-18, based on main `c0a1b5a95`: the original
+parallel suite failed once in 25 runs at the released-port probe. Restoring
+that probe makes the new regression fail deterministically. The fixed suite
+passes all 25 runs (425 cases); formatting, `cargo check`, strict Clippy and
+one full `make verify` pass. Result: `out/gchat-ssh-fixture-20261018/result.json`.
+
 ## Sleeping icon visual qualification — C7
 
 `GBOT-SLEEPING-ICON-PROPORTIONS-20261017`: the ordinary installed functional
