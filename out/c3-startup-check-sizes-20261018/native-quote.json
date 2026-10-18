@@ -1,0 +1,46 @@
+{
+  "text": "Model file checked: Qwen 3.8 27B — INT. 2 model copies. 27.5 GiB of graphics-card conversation memory per model copy. This check did not start a model.",
+  "values": [
+    {
+      "component": "as",
+      "state": {
+        "key": "[\"b12b74f6-084f-4ae0-b63d-b485e4da33ee\",\"https://127.0.0.1:17443\",\"0f302152b9e11430197b917333cac0026a22cae837ad0edd7e330e0f15b0c33a\",null,\"6cb6e732-586b-4422-a89c-c88526b275c8\",{\"artifact_set\":false,\"id\":\"ce407db1-89be-4f27-aef0-e2d416b47f73\",\"metadata\":{\"draft_tp\":1,\"identity\":{\"model_id\":\"qwen3.8-27b\",\"weights_id\":\"groupwise-int-dflash2-q4\"},\"nvfp4_kv_available\":true,\"object_count\":1193,\"size_bytes\":18424985856,\"tp_size\":1},\"path\":\"/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/qwen38_27b_int_df2.ginfer\"},[[\"GPU-5268c64e-5bc4-4be1-ed12-e731c3de56cf\",97887,\"12.0\"],[\"GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c\",97887,\"12.0\"]],[false,\"/media/ron/SSD_RAID/ai/tmp-c3-startup-check-sizes-20261018/home/data/GChat/data/ginfer/host/hardware-profiles/0349a0c8a4cf1a4009c02e9d15568279eaa3249315180f784f1c6e7c94041afb.json\",\"/media/ron/SSD_RAID/ai/tmp-c3-startup-check-sizes-20261018/home/data/GChat/data/ginfer/linux/sm120a/bin/ginfer\",[\"GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c\"],true,true,true,false],[],{\"vision\":true,\"structured_outputs\":true,\"spec\":\"none\",\"draft_tokens\":0,\"draft_tp\":0,\"kv_dtype\":\"auto\",\"kv_arena_bytes\":null,\"host_kv_cache_bytes\":null,\"prefill_chunk\":0,\"no_cuda_graph\":false,\"flash_host_ram_headroom_gib\":null,\"expert_lfu\":true,\"model_id\":\"ce407db1-89be-4f27-aef0-e2d416b47f73\",\"gpu_uuids\":[\"GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c\"],\"max_context\":262144,\"concurrency\":1},2,null]",
+        "result": {
+          "instance_count": 2,
+          "kv_arena_bytes": 29532118784,
+          "model_identity": {
+            "model_id": "qwen3.8-27b",
+            "weights_id": "groupwise-int-dflash2-q4"
+          },
+          "quote": {
+            "model_id": "qwen3.8-27b",
+            "planning_scope": "single-plan",
+            "ranks": [
+              {
+                "device_ordinal": 0,
+                "device_total_bytes": 102005407744,
+                "free_bytes": 101171527680,
+                "graph_allowance_bytes": 25165824,
+                "graph_allowance_source": "planner",
+                "headroom_bytes": 1073741824,
+                "kv_arena_alignment_bytes": 256,
+                "kv_bytes_per_token": 65536,
+                "kv_segment_bytes": 67108864,
+                "kv_segment_tokens": 1024,
+                "kv_token_granularity": 1,
+                "minimum_kv_arena_bytes": 67239936,
+                "rank": 0,
+                "startup_peak_bytes": 20047143168,
+                "state_bytes": 2565527296,
+                "weights_bytes": 17389210112
+              }
+            ],
+            "schema": "ginfer-startup-quote-v1",
+            "tensor_parallel_size": 1,
+            "weights_id": "groupwise-int-dflash2-q4"
+          }
+        }
+      }
+    }
+  ]
+}

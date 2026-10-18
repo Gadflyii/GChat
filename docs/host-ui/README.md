@@ -2,39 +2,52 @@
 
 ## Readable model-settings check — C3, October 18
 
-`GUI-STARTUP-CHECK-SIZES` is waiting on retained native input. The original readable-size/plural
-fix `d3aa2668c`, merged `b4bba8b23`, is delivered; later plain language uses
-“model copy/copies” and “graphics-card conversation memory”. Acceptance
-remaining: native Check model settings shows formatted memory and the proper
-copy count, without a raw byte count or `instance(s)`. Existing focused/full
-gates cover the formatter and result. Retained `ed68c7443` is a pre-fix
-baseline and cannot qualify this wording. C7 owns the adjacent completed
-profile-card row; this item does not rerun profiling or load a model.
+`GUI-STARTUP-CHECK-SIZES` passes its remaining Linux native leaf on October 18.
+The readable-size/plural fix `d3aa2668c` is delivered in merge `b4bba8b23`.
+An independently built native development desktop and Host at `66e766a43`
+used S1 GPU1 and the private dev catalog
+`http://192.168.1.109:18761/catalog.json`. Native **Check model settings** returned:
 
-The result sentence, `formatModelBytes` and imported-artifact quote regression
-are unchanged between retained desktop `11ce0355d`, tested source `1062ba9f8`
-and this branch. The existing ONE full gate passes all 69 Host-model cases
-and 48 model-release cases, including two-copy readable-memory output;
-no repeat gate is needed. The whole Host-card component has unrelated later
-changes, so compatibility is claimed only for this result and formatter.
-The retained pre-fix quote output is contrary evidence, not acceptance.
+> Model file checked: Qwen 3.8 27B — INT. 2 model copies. 27.5 GiB of graphics-card conversation memory per model copy. This check did not start a model.
 
-Owned worktree `/ai/gchat-worktrees/c3-startup-check-sizes-20261018`, branch
-`docs/c3-startup-check-sizes-20261018`, base `3de78b829`. Next: recover a
-post-fix native result or copy-safe real schema-2 hardware profile, matching
-S1 Engine and artifact receipt for a source-compatible retained desktop.
-The real quote-only route opens a GPU context and reads the profile but does
-not start a resident model; it does not regenerate missing profile data.
-Gchat 3 and C7 retain no qualifying profile output; C4 was asked at 10:06Z
-and has not replied. Bounded recovery found no post-fix native quote receipt.
-The missing input is a copy-safe S1 schema-2 profile with its matching
-Engine/artifact receipt. No new profiling or model run is authorized by this
-evidence leaf; native acceptance stays open while other GUI work proceeds.
-No retained no-GPU quote executable is available. The historical completed
-job JSON is a UI record, not Engine hardware-profile data.
-Independent runtime copies, if needed,
-belong under S1 `/media/ron/SSD_RAID/ai/tmp-c3-startup-check-sizes-20261018`
-and will be removed after capture. No resources or fixture allocated yet.
+The [reviewed screenshot](../../out/c3-startup-check-sizes-20261018/native-check-result.png)
+and [actual quote](../../out/c3-startup-check-sizes-20261018/native-quote.json)
+show formatted memory and the correct plural. The Host response contains
+29,532,118,784 conversation-memory bytes per copy. Native XTest selected only
+physical GPU1, two copies, the full default 262144-token context, one request,
+automatic memory, Vision and structured output enabled, speculation off.
+Read-only WebKit inspection captured the DOM and actual response; no injected
+action or second quote API call. Start model was never clicked; the final Host
+snapshot has zero instances.
+
+The exact registered Qwen TP1 input was read from the NAS without copying it.
+Catalog package SHA-256:
+`bcf29abd1598f5666c641da7c59ac28bd999aa98a8d6ba533ae7aa579abd06a7`.
+The real artifact-scoped schema-2 profile completed in 143.836 seconds with
+base/scope complete and no error. Other format grids were not required. The
+private Host received `GINFER_MODEL_CATALOG_URL`, and the dev frontend built
+with `NODE_ENV=development` and `VITE_MODEL_CATALOG_URL`. The desktop used its
+standard service-owner locator; its container had no GPU devices.
+
+Existing ONE full gate at `1062ba9f8` covers the 69 Host-model and 48
+model-release cases. Result wording and formatter are unchanged from retained
+`11ce0355d`; complete files contain unrelated changes. This evidence/docs-only
+branch reuses that gate and requires only `git diff --check`. Pre-fix `ed68c7443`
+is invalid for this acceptance. The first Docker GUI launch failed before app
+startup because an environment option preceded `run`; correcting option placement
+reused the same build and private display. No Windows, installer, quality or
+performance qualification is claimed.
+
+[Result and small receipts](../../out/c3-startup-check-sizes-20261018/result.json)
+belong to C3 worktree `/ai/gchat-worktrees/c3-startup-check-sizes-20261018`, branch
+`docs/c3-startup-check-sizes-20261018`, base `3de78b829`.
+The private app and Host are stopped; returned 11:08Z. Owned S1 root
+`/media/ron/SSD_RAID/ai/tmp-c3-startup-check-sizes-20261018` was removed;
+only small result/quote JSON, summary and screenshot remain. Read-only
+Gchat1/C7 tool/resource donors, the shared catalog service and released NAS
+artifact were left intact. GPU0's C2 job was excluded. Gchat 1 was coordinated
+by row ID; Chat/agents remain theirs. Other remaining W8 rows have live
+owners or Ron gates. Next: coordinator integration and row closure.
 
 ## Progress bars — C3, October 18
 
