@@ -30,6 +30,83 @@ are stopped; CPU88–95 returned07:49Z. The inactive40G SSD build/cache root
 07:51Z. Only small results, logs and four screenshots remain. Windows is
 unqualified. Source, regression tests and native evidence are merge-ready
 together on the named branch.
+## Secure-storage Check-first recovery — C3, October 18
+
+`GUI-SECURE-STORAGE-CHECK-FIRST` passes its remaining Linux installed leaf using
+the retained packaged acceptance in
+[`out/secure-storage-feedback-native-20261018/result.json`](../../out/secure-storage-feedback-native-20261018/result.json).
+The inspected `check-before.png` shows the initial storage card with primary
+**Check secure storage**, secondary **Skip for now**, and no setup button.
+Native pointer navigation then reached Hosts, where the newly mounted card was
+unchecked; an explicit Check reached **Secure storage is ready.** at 03:05:40Z
+and remained visible at 03:07:06Z in `hosts-check-settled.png`. The initial
+Hosts state is recorded in the packet, rather than a separate screenshot.
+
+Original source fix `9cc84a6b9` is an ancestor of both the tested release
+`ed68c7443` and current base `faa9c326b`. The same `CredentialSetup` is mounted
+by Hosts. Its Check-first condition, primary-button variant, explicit-check
+handler and ready panel are unchanged. Current component differences are the
+unchecked hint wording and clearing a vault message on Cancel; other Hosts
+controls have changed but its storage-card integration is unchanged. Neither
+difference changes this acceptance. The retained UI does not qualify the new
+hint wording or Welcome card order.
+
+The original 10 focused cases passed (Bubbs mailbox, October 17 17:26:47Z).
+The retained regression still covers `can_install: true`: no setup button
+while unchecked, then setup offered after an explicit unavailable result.
+Native keyring installation/admin approval was not exercised. The earlier
+`c48538a27` full gate predates this fix and is not its verification; the later
+passing full gate at `d16521c19`, containing the fix and current component,
+is retained in `out/c3-host-residency-controls-20261018/result.json`.
+No source or test changed; this documentation-only recovery uses
+`git diff --check` and repeats no gate or native session.
+
+Owner C3; branch `docs/c3-secure-storage-check-first-20261018`, worktree
+`/ai/gchat-worktrees/c3-secure-storage-check-first-20261018`, base `faa9c326b`.
+Gchat 1 and Gchat 3 were notified by row ID. No new compute, build, app session,
+dependency copy or disk allocation is required. The original private fixture
+was removed at 03:07Z and its CPUs returned; its donor was untouched. Windows,
+locked-keyring prompts, passphrase-vault setup and readiness across remount or
+restart remain outside this leaf. The accepted locked-keyring launch campaign
+is reused, not repeated. Next: merge this closure record and archive the row.
+
+## Host residency controls — C3, October 18
+
+`GCHAT-HOST-RESIDENCY-CONTROLS` is source-complete and passes its signed
+acceptance. The shared Host API and desktop/Fleet custom startup settings now
+expose optional `flash_host_ram_headroom_gib` and `expert_lfu` (default true).
+Blank/null inherits the Engine’s 4 GiB headroom. Explicit whole-GiB values are
+forwarded unchanged; the Engine owns limits and admission. Zero warns that no
+computer-memory floor is reserved. Edit, save and restart preserve zero/false.
+Tested profiles retain their own launch values. Engine code/defaults are unchanged.
+Arch signed this shared Linux/Windows contract at 07:16Z on October 18.
+
+Focused verification passed 61 desktop and 58 Fleet rendered cases, typed-option
+validation/forwarding and authenticated Host API persistence, restart, quote and
+normal child-launch argument regressions, Cargo check and Clippy. ONE `make verify`
+on `d16521c19` passed lint, types, quality guards, 3,469 app cases, 127 extension
+cases, 1,276 native cases (28 ignored) and all coverage floors. After a normal
+merge of main `bd10e0e66` including the separate hardware-feedback fix, all 86
+combined Host screen/store cases and `make typecheck` pass on `e549c330b`.
+An initially invalid root `yarn typecheck` command was corrected to the documented
+Make target; only that check continued. The full gate was not repeated.
+
+These checks use rendered UI/service mocks and the existing fake Engine child
+fixture. No installed GUI, Windows runtime, GPU inference, performance, new
+profiling or release packaging qualification is claimed. The current Engine
+`8c3911145` authority confirms the flat 4 GiB default, explicit zero and LFU on;
+an older AUTO design was rejected during recovery before implementation.
+Results and effective commands:
+[`out/c3-host-residency-controls-20261018/`](../../out/c3-host-residency-controls-20261018/).
+
+Owner C3; branch `fix/c3-host-residency-controls-20261018`, source `497840b01`,
+worktree `/ai/gchat-worktrees/c3-host-residency-controls-20261018`.
+S1 `AIS-2-8592-L01` used independent copies of Gchat 3's inactive RC dependencies,
+CPUs 80–87, nice10/max8 jobs and the socket1 shared lock; no GPU or app session.
+CPUs returned 07:36Z. Three stopped containers and the 31.51 GB private SSD root
+`/media/ron/SSD_RAID/ai/tmp-c3-host-residency-controls-20261018` were retired;
+the donor remains untouched. Only small evidence and the source worktree remain.
+Merged as `faa9c326b`; the canonical row is closed and archived.
 
 ## Recovered W8 chat-send closures — C3, October 18
 
@@ -106,10 +183,69 @@ The coordinator reviewed the terminal raw results and confirmed both frozen
 source hashes still match. CPUs returned06:38Z and booking3087 was canceled.
 Owned-fixture cleanup completed06:39Z: removed the 42.33 GB SSD fixture, two
 terminal containers and 286.09 MB of local disposable inputs/raw output.
-The read-only RC donor remains intact. The source fix is ready for merge review.
+The read-only RC donor remains intact. Fix `f6e609a2c` merged as `014df1845`.
 Use independent copies of the inactive RC donor; retain only
 `out/host-model-editor-save-result-20261018/test-result.json` and adjacent
 summary after cleanup. No installed or Windows acceptance is claimed.
+
+## Laptop context admission catalog prerequisite — Gchat 3, October 18
+
+Bubbs prioritized `LAPTOP-CONTEXT-ADMISSION` ahead of the hardware-feedback
+candidate. Land these four Arch-approved full-Text context bounds with or
+before GInfer Engine fix `18865fd1d` (accepted packet `dbf4674c4`):
+
+| Exact profile ID | Previous context | Admitted context |
+| --- | ---: | ---: |
+| `rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8` | 172032 | 161792 |
+| `rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8` | 149069 | 138240 |
+| `rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated` | 92832 | 82944 |
+| `rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated` | 69423 | 60416 |
+
+The four owning files are GInfer `config/launch-profiles/linux-rtx{3090,4090}-qwen38-groupwise-int-dflash2-q4{,-vision}.json`.
+Correct their displayed contexts too; retain IDs, package identity, arenas,
+options and historical evidence tiers. The numeric-risk report and signed
+disposition are on Codex 1's branch in `docs/laptop-natural-c4-soak/README.md`
+and `bench/reports/laptop-context-admission-20261018/gchat-numeric-risk.json`.
+This metadata repair adds no model/device/Vision qualification.
+
+The private catalog generator input mirrors all four entries. The selected
+live catalog contains only the two Text entries; its pending Vision entries
+remain omitted. C7 and C4 authorized a metadata-only atomic overlay during the
+active package GET: preserve the service PID, URLs, payload identity and exact
+263298-byte catalog size. Context values were overlaid at 07:13Z and display
+names at 07:18Z. A fresh coordinator GET returned 200 with the same 263298 bytes
+and the two corrected Text profiles. The service and package symlinks are
+unchanged. Original generation receipts remain historical evidence; separate
+value and name overlay receipts record the changed metadata.
+
+Acceptance: focused existing Host supplied-catalog validation with all four
+corrected source catalogs, exact mirror comparison, and ONE `make verify`.
+No native Engine code, installed GUI, GPU/model run or Windows qualification.
+Owner source trees are `/ai/gchat-worktrees/gchat3-context-profile-bounds-20261018`
+(base `cf670bced`) and `/ai/ginfer-worktrees/gchat3-context-profile-bounds-20261018`
+(base `8c3911145`), both on `fix/gchat3-context-profile-bounds-20261018`.
+Results live in `out/laptop-context-admission-20261018/`. The independent S1
+SSD fixture `/media/ron/SSD_RAID/ai/tmp-gchat3-context-profile-bounds-tests-20261018`
+uses the inactive RC donor without writes to it. All 35 dependency inputs and
+the six frozen source/catalog inputs match; all four owning catalogs equal
+their generator-input copies. The coordinator inspected the effective argv:
+existing Python packaging tests, the exact Host supplied-catalog test, then
+ONE `make verify`, retaining the explicit four-file `GINFER_PROFILE_CATALOGS`
+through every stage. The durable run started 07:19Z under booking 3123,
+S1 CPUs 120–127/socket1 shared compile lock, nice 10/max 8 jobs, no GPU.
+The exact supplied-catalog test passed (one executed, 280 filtered); the
+existing packaging suite passed five cases and skipped five Windows-only
+cases. ONE full gate passed lint (zero errors, five existing warnings),
+typecheck, quality checks, all six coverage floors, 3441 app/core tests (six
+skipped), 127 extension tests and 1275 native tests (28 ignored, 23 summaries).
+It exited 0 at 07:27Z without OOM; CPUs returned 07:28Z. The coordinator
+reviewed raw results, exit bytes and all six unchanged source/catalog hashes.
+The normal build staged all 38 profiles as an exact ordered merge of the four
+sources, including the four corrected bounds and names. Cleanup finished
+07:30Z: removed the 42.34 GB owned S1 fixture, its terminal container and
+288.87 MB of local disposable inputs/raw output. The inactive RC donor is
+untouched. Retain only the result JSON, short summary and two metadata-overlay
+receipts. Both branches are ready for handoff before the Engine source merge.
 
 ## Host model controls and host-list read feedback — Gchat 3, October 18
 
@@ -211,7 +347,7 @@ bundled-file preparation is not a release startup speed measurement. Its
 restart outlived the private DBus fixture, so the post-restart secure-storage
 card was unavailable; local attachment still succeeded without vault access.
 No GPU/model/profile or real account/remote enrollment was run. All private
-native processes stopped and CPUs64–71 returned07:01Z (build CPUs80–87
+native processes stopped and CPUs64–71 returned07:01Z (build CPUs 80–87
 returned06:47Z). Inactive independent source/build/cache copies under
 `/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018` were retired
 (31.82GB logical bytes). After merge, both literal owned S1 roots were retired
@@ -287,7 +423,7 @@ Source inventory: owner C3, local worktree
 `fix/c3-reset-relocated-data-20261018`, base `072655126`. The private S1 root
 `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` reuses inactive source,
 dependencies and debug target after C4 completed its read-copy at 05:41Z.
-Booking3051 CPUs80–87 returned05:53Z after the container and disposable local/
+Booking3051 CPUs 80–87 returned05:53Z after the container and disposable local/
 remote source archives were removed. The socket1 shared build ran at nice10.
 Packet `out/c3-reset-relocated-data-20261018/` retains commands, source bindings
 and results. Retain the worktree for gates and review; the installed baseline
@@ -303,6 +439,57 @@ Native app/session/display stopped and booking3039 returned05:56Z. The source an
 Shared source/cache is handed serially to the Host-locator gate; the installed
 AppDir/home, reset/autostart/folder/badge candidates, runnable resources and
 tools remain protected. No GPU/model run is needed.
+
+## Graphics-card setup command results — Gchat 3, October 18
+
+`GUI-HOST-HARDWARE-SETUP-RESULT-20261018`: HostCard discards the accepted
+status returned by Measure, Measure again, Continue and Stop setup. If the
+following host-list read fails, the controls retain their previous state and
+give no accepted-request feedback. Publish the typed hardware status onto the
+latest existing host snapshot, then report acceptance separately from read
+recovery. Acceptance does not establish completed measurements.
+
+Acceptance: reproduce the missing result on branch base `3399f6768`; rendered coverage
+for all four actions, pending protection, failed subsequent reads, read-only
+retry and genuine rejection/retry. Store coverage must preserve newer polled
+model/instance data, failed-read errors, full lifecycle publications and changed
+Host boots; later polling must replace the acknowledged status normally.
+Focused rendered/store tests, lint and ONE `make verify`. No native protocol,
+Engine, real setup/model, GPU, installed GUI or Windows qualification changes.
+
+Owner `/ai/gchat-worktrees/gchat3-host-model-editor-save-result-20261018`, reused
+only after its clean editor fix merged, now branch
+`fix/gchat3-host-hardware-setup-result-20261018`, based on `3399f6768` (the
+four affected source/test files match `014df1845`). Native inspection confirms
+hardware commands return `HardwareProfileStatus`, without snapshot revision or
+boot ID. The store distinguishes full lifecycle publication from a partial
+hardware update, preserving independent fields and connection errors. The independent S1 offline fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-hardware-tests-20261018` copied the
+inactive RC dependencies06:50–06:51Z on CPUs120–127; booking3105 returned06:52Z.
+Source was streamed directly to S1 after the local timed work returned. The
+first baseline screen found ambiguous setup/model GPU checkbox labels and
+queued mock responses leaking after early test failures. Scope selectors to
+the setup region and reset response queues between cases; that screen does
+not establish all regressions. The corrected baseline finished06:59Z with
+16 intended failures and 59 existing cases skipped: eight missing store
+publications and eight rendered accepted-result failures. The coordinator
+reviewed every failure and the exact baseline/test hashes; no selector or
+queued-response failure remains. Booking3112 returned06:59Z. Candidate focused
+tests, lint and ONE full gate launched07:04Z on verified S1 under booking3115,
+CPUs120–127 through07:18Z, socket1 shared compile lock, nice10/max8 jobs.
+Only the two production files were overlaid; all four frozen inputs and 35
+dependency bindings match. All 75 focused tests pass (17 store, 58 rendered);
+lint has zero errors and five existing warnings. ONE `make verify` passed
+typecheck, quality checks, 3443 app/core tests (six skipped), 127 extension
+tests, all six coverage floors and 1271 native tests (28 ignored). It exited 0
+at 07:12Z without OOM. The coordinator reviewed the terminal raw results,
+exit bytes and frozen source hashes. CPUs returned 07:13Z. Cleanup completed
+07:19Z: removed the 42.05 GB owned fixture and three terminal containers after
+checking no live jobs or readers; the inactive RC donor remains untouched.
+Retain only `out/host-hardware-setup-result-20261018/test-result.json` and its
+short summary. The priority context catalog prerequisite has been handed off
+as GInfer `5825c2e39` and GChat `2b6f00370`; this fix is ready for merge review.
+
 ## Host model inventory scan feedback — Gchat 3, October 18
 
 `GUI-HOST-SCAN-REFRESH-RESULT-20261018`: Refresh model list now publishes the
@@ -623,7 +810,7 @@ AppDir, directory aliases versus installed file symlinks, and missing or
 non-executable commands. Focused command:
 `cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli cli_install_detection -- --test-threads=1`.
 The five focused Rust regressions, library-scope Cargo check/Clippy and lint
-passed. ONE `make verify` passed on S1 CPUs80–87 (booking3025): 3,369 app tests
+passed. ONE `make verify` passed on S1 CPUs 80–87 (booking3025): 3,369 app tests
 (six skipped), 127 extension tests, all six coverage floors and 1,234 native
 tests (28 ignored). There was no gate failure or continuation. Vite and the
 default desktop debug build passed at 05:25:46Z. The exported source-native
@@ -3084,6 +3271,17 @@ Gchat3's shared GUI list.
 If a workspace image cannot be displayed, GChat shows an error instead of an
 empty preview. Check that the file is still available, then choose **Retry
 preview**. The same file stays selected while GChat tries again.
+
+Linux native acceptance on October 18 used an owned PNG made unreadable before
+its first preview. GChat showed the error, **Retry preview**, and the filename
+in **Details**. Restoring the original permissions and pressing Space on the
+focused retry button loaded that same image tab at 1200×800. This model-free
+pass used retained source `11ce` with the relevant paths identical to main
+`3b449da5f`; no model, GPU or Send was involved. All 17 saved records, 45 skills
+and both workspace files stayed unchanged; the temporary folder reference was
+removed through the GUI and the original image permissions restored. Evidence:
+`/ai/gchat/out/gchat-agent-image-preview-recovery-20261018/`.
+
 is being retired after the final native replay; concise evidence is retained.
 Provider labels remain C6-owned and provider keyboard navigation C7-owned; availability,
 sidebar and attachment labels retain their separate findings in Gchat3's list.

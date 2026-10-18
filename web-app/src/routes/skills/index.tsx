@@ -71,8 +71,11 @@ export function SkillsPage() {
   const [deletingSkill, setDeletingSkill] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const deleteCancelRef = useRef<HTMLButtonElement>(null)
+  const deleteReturnFocusRef = useRef<HTMLElement>(null)
   const [editingSkill, setEditingSkill] = useState<AgentSkillDetail | null>(null)
   const editRequest = useRef(0)
+  const editReturnFocusRef = useRef<HTMLElement>(null)
+  const createMenuRef = useRef<HTMLButtonElement>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const pendingSkillToggles = useRef(new Map<string, boolean>())
@@ -86,10 +89,11 @@ export function SkillsPage() {
     }
   }, [])
 
-  const edit = async (name: string) => {
+  const edit = async (name: string, opener: HTMLElement | null) => {
     const request = ++editRequest.current
     const detail = await select(name)
     if (request === editRequest.current && detail?.name === name) {
+      editReturnFocusRef.current = opener
       setEditingSkill(detail)
     }
   }
@@ -189,7 +193,7 @@ export function SkillsPage() {
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button size="sm">
+                  <Button ref={createMenuRef} size="sm">
                     {t('common:createNewSkill')}
                     <IconChevronDown />
                   </Button>
@@ -307,10 +311,11 @@ export function SkillsPage() {
                   downloading={downloadingSkill !== null}
                   onDownload={() => void download(skill.name)}
                   onTry={() => tryInChat(skill.name)}
-                  onEdit={() => void edit(skill.name)}
-                  onUninstall={() => {
+                  onEdit={(opener) => void edit(skill.name, opener)}
+                  onUninstall={(opener) => {
                     if (deletePending.current) return
                     editRequest.current += 1
+                    deleteReturnFocusRef.current = opener
                     setDeleteError(null)
                     setDeleteName(skill.name)
                   }}
@@ -350,8 +355,9 @@ export function SkillsPage() {
                     size="icon-sm"
                     variant="ghost"
                     aria-label={t('common:editSkill')}
-                    onClick={() => {
+                    onClick={(event) => {
                       editRequest.current += 1
+                      editReturnFocusRef.current = event.currentTarget
                       setEditingSkill(selected)
                     }}
                   >
@@ -379,6 +385,12 @@ export function SkillsPage() {
           onOpenAutoFocus={(event) => {
             event.preventDefault()
             deleteCancelRef.current?.focus()
+          }}
+          onCloseAutoFocus={(event) => {
+            if (deleteReturnFocusRef.current?.isConnected) {
+              event.preventDefault()
+              deleteReturnFocusRef.current.focus()
+            }
           }}
           onEscapeKeyDown={(event) => {
             if (deletePending.current) event.preventDefault()
@@ -427,17 +439,20 @@ export function SkillsPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreate={addCreated}
+        returnFocusRef={createMenuRef}
       />
       <AgentSkillUploadDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         onUpload={addImported}
+        returnFocusRef={createMenuRef}
       />
       <AgentSkillEditDialog
         skill={editingSkill}
         open={editingSkill !== null}
         onOpenChange={(open) => !open && setEditingSkill(null)}
         onUpdate={update}
+        returnFocusRef={editReturnFocusRef}
       />
     </div>
   )
@@ -458,8 +473,8 @@ type SkillActionsMenuProps = {
   downloading: boolean
   onDownload: () => void
   onTry: () => void
-  onEdit: () => void
-  onUninstall: () => void
+  onEdit: (opener: HTMLButtonElement | null) => void
+  onUninstall: (opener: HTMLButtonElement | null) => void
 }
 
 function SkillActionsMenu({
@@ -472,11 +487,13 @@ function SkillActionsMenu({
   onUninstall,
 }: SkillActionsMenuProps) {
   const { t } = useTranslation()
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
+          ref={triggerRef}
           size="icon-sm"
           variant="ghost"
           aria-label={t('common:skillActions')}
@@ -495,12 +512,15 @@ function SkillActionsMenu({
         </DropdownMenuItem>
         {!skill.reserved && (
           <>
-            <DropdownMenuItem onSelect={onEdit}>
+            <DropdownMenuItem onSelect={() => onEdit(triggerRef.current)}>
               <IconEdit />
               {t('common:editSkill')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem variant="destructive" onSelect={onUninstall}>
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => onUninstall(triggerRef.current)}
+            >
               <IconTrash />
               {t('common:uninstallSkill')}
             </DropdownMenuItem>

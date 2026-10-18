@@ -1,6 +1,8 @@
 # GInfer Server Manager
 
 Repository: GChat. Owner: GChat coordinator. Subject: `docs/ginfer-manager/`.
+The shared custom RAM-headroom/LFU controls, implementation and current gate are
+tracked in [Host UI](../host-ui/README.md#host-residency-controls--c3-october-18).
 Open defects and TODOs belong in the [master list](../open-work.md); this record
 retains Manager decisions, implementation and evidence. The fixed-pool startup
 issue is OI-066; remaining acceptance is OI-056 and OI-068 through OI-072.

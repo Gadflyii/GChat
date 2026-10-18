@@ -144,6 +144,14 @@ Multiple GPU groups have separate instance controls; additional servers require
 selecting another GPU group. Stopped instances retain their last settings, not
 every prior configuration.
 
+Custom startup settings in GInfer Hosts also control **Flash main-memory headroom**
+and **Expert LFU updates**. Blank headroom inherits the Engine's 4 GiB default;
+an explicit whole-GiB value is forwarded to the Engine for validation. Zero
+reserves no main-memory floor and shows a warning. LFU defaults on; turning it
+off stops periodic LFU admission updates while retaining the device cache and
+normal miss loading. The Host saves these settings for edit and restart. Tested
+profiles keep their own values rather than inheriting custom edits.
+
 On service startup, duplicate records from older builds are consolidated, keeping
 the lowest UUID per GPU group. Retired settings are backed up privately in
 `retired-instance-records.json` next to `host.json`; model files, catalogs and run
