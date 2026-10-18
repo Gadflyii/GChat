@@ -1,0 +1,10 @@
+core-assets exit=0
+baseline-focused exit=1
+BASELINE_EXPECTED_BEHAVIOR_FAILURES
+candidate-focused exit=0
+affected-lint exit=0
+extensions-assets exit=0
+tauri-assets exit=0
+frontend-build exit=0
+native-host exit=0
+native-app exit=0

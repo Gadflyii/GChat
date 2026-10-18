@@ -1,36 +1,39 @@
 # GInfer host UI
 
-## First-run button spacing — C3, October 18
+## Downloads initial inventory — C7, October 18
 
-`GUI-FIRST-RUN-BUTTON-GAP` passes its remaining Linux native leaf.
-Retained release DOM measures an **8 px gap** between **Save model choices**
-and **Refresh model catalog**, and between **Download selected models** and
-Refresh; both controls are 36 px high. Inspected dark 1500×1000 and light
-1024×800 screenshots show readable separate controls. The light narrow DOM
-reports no horizontal overflow.
+`GUI-DOWNLOADS-LOADING-STATE` is fixed on
+`test/c7-downloads-loading-native-20261018` from `6b7f42daf`.
+Before the first successful Host inventory, Models → Downloads now withholds
+byte totals and empty-list claims. Checking remains visible while waiting;
+an initial failure shows the existing readable error and Refresh downloads.
+After a successful refresh, the real inventory and totals appear.
 
-Original fix `c41c73606` merged as `5fd1bc289`. The `flex flex-wrap gap-2`
-wrapper, labels/actions and shared button styles are unchanged between native
-source `d0a8d06bf` and closure base `d74860fcf`. Existing rendered spacing and
-Refresh regression remains. Original **20 focused PASS** and the later full
-`d16521c19` gate are reused: **3,469 app / 6 skipped, 127 extension,
-1,276 native / 28 ignored**, six coverage floors PASS. This docs-only closure
-uses `git diff --check`; no repeated build, suite or native fixture.
+Both regressions fail against unchanged source and pass with the fix:
+**50 focused Models/store tests**, affected ESLint and the matching
+frontend/Host/desktop build pass. ONE `make verify` passes:
+**3,513 app / 6 skipped, 127 extension, 1,284 native / 28 ignored**, lint
+(five existing warnings), types, quality guards and six critical coverage floors.
+Native Linux screenshots cover [pending](../../out/c7-downloads-loading-20261018/pending.png),
+[first failure](../../out/c7-downloads-loading-20261018/failure.png) and
+[recovery](../../out/c7-downloads-loading-20261018/recovery.png).
+The failure fixture pauses only its own detached private Host; a native
+Refresh click followed by resuming that Host recovers the confirmed empty
+inventory. Background polling remains enabled, so this does not attribute
+recovery exclusively to the click; the focused regression proves that button path.
+[Result and limits](../../out/c7-downloads-loading-20261018/result.json).
 
-[Result and source comparison](../../out/c3-first-run-button-gap-20261018/result.json),
-[dark screenshot](../../out/c3-current-main-release-20261018/remainder-profile-dark-wide.png)
-and [light narrow screenshot](../../out/c3-current-main-release-20261018/remainder-advanced-light-narrow.png)
-retain the acceptance. Save geometry is in `remainder-host-setup-storage.json`;
-Download geometry is in `remainder-host-start-settings.json` in that same
-release packet. Model choices/download behavior, profiling, model startup,
-Windows and extremely narrow wrapping are outside this spacing leaf.
-
-Owner C3; branch `docs/c3-first-run-button-gap-20261018`, worktree
-`/ai/gchat-worktrees/c3-first-run-button-gap-20261018`. The prior native fixture
-is retired. No compute, build, fixture, donor hold or large artifact was
-allocated for this closure; only small JSON/Markdown evidence remains.
-Source fix and native acceptance are complete; next action is merging this
-record. Gchat 3 retains the independent model-choice reasons leaf.
+Owner C7; worktree `/ai/gchat-worktrees/c7-downloads-loading-native-20261018`.
+Independent AppDir/HOME/XDG/runtime700, D-Bus/keyring and Xvfb ran on S1
+CPU88–95 booking3164. Owned processes stopped by verified PIDs; the disposable root
+`/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018` was removed.
+CPU88–95 returned08:53Z and booking3164 canceled.
+Read-only donors remain unchanged. Windows, model transfers, payload integrity
+and inference are outside this inventory leaf. Main `a7ab6dc02` was merged without rebase, retaining its adjacent failed-download
+recovery fix. The combined code passes **54 focused tests and affected ESLint**;
+the inventory rendering matches the native-tested build. No second full gate
+or native rerun. The temporary merge-check SSD copy was removed, booking3182 canceled and CPUs
+returned08:56Z. Next: merge the source/evidence branch.
 
 ## Benchmark plain intro — C7, October 18
 

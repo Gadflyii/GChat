@@ -1,0 +1,14 @@
+{
+  "at": "2026-10-18T08:41:59.483933+00:00",
+  "host_pid": 286064,
+  "host_signal": "SIGSTOP exact owned idle Host; lock retained",
+  "old_app_pid": 254394,
+  "app_signal": "SIGTERM exact owned GChat; Linux Host remains",
+  "new_launcher_pid": 290056,
+  "same_private_data": true,
+  "scope": "first local_model_downloads cannot finish its authenticated Host connection preflight; no model/transfer",
+  "status": "INVALID_INTERRUPTION_ORDER",
+  "observed": "Stopped Host PID286064 disappeared after its parent GChat exited; no failure or recovery claim from this attempt",
+  "cause": "Linux orphaned stopped process group receives SIGHUP/SIGCONT; Host owns a separate process group",
+  "preventive_change": "Close GChat first, verify detached Host remains and is reparented, then SIGSTOP Host; reopen only afterward"
+}

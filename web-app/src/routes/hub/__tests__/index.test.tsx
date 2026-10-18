@@ -363,10 +363,27 @@ describe('host-scoped Models', () => {
     try {
       expect(screen.getByText('Checking for downloads…')).toBeInTheDocument()
       expect(screen.queryByText('No downloads on this computer yet. Choose Recommended to find a model.')).not.toBeInTheDocument()
+      expect(screen.queryByText(/of unfinished downloads/)).not.toBeInTheDocument()
     } finally {
       await act(async () => { answer([]) })
     }
     expect(await screen.findByText('No downloads on this computer yet. Choose Recommended to find a model.')).toBeInTheDocument()
+    expect(screen.getByText(/0 MiB of unfinished downloads · 0 MiB of downloaded models/)).toBeVisible()
+  })
+  it('keeps the first failed inventory unknown until Refresh downloads succeeds', async () => {
+    mocks.command.mockRejectedValue(new Error('Host is still starting'))
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    expect(await screen.findByText('Could not check your downloads. Open Downloads and choose Refresh downloads to try again.')).toBeVisible()
+    expect(screen.queryByText('Checking for downloads…')).not.toBeInTheDocument()
+    expect(screen.queryByText('No downloads on this computer yet. Choose Recommended to find a model.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/of unfinished downloads/)).not.toBeInTheDocument()
+
+    mocks.command.mockResolvedValue([])
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh downloads' }))
+    expect(await screen.findByText('No downloads on this computer yet. Choose Recommended to find a model.')).toBeVisible()
+    expect(screen.getByText(/0 MiB of unfinished downloads · 0 MiB of downloaded models/)).toBeVisible()
+    expect(screen.queryByText('Could not check your downloads. Open Downloads and choose Refresh downloads to try again.')).not.toBeInTheDocument()
   })
   it('moves between the model tabs with the arrow keys and keeps one tab stop', async () => {
     const user = userEvent.setup()
