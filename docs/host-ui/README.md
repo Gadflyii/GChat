@@ -1,5 +1,46 @@
 # GInfer host UI
 
+## Models accepted registration and refresh recovery — verified, C7, October 18
+
+`GUI-MODELS-REGISTRATION-REFRESH-RECOVERY` fixes an observed source path in
+`ModelManagement.tsx`: `local_model_register` can succeed before provider or
+Host inventory refresh rejects, but the shared catch says the model could not
+be added and recommends choosing a different file. The accepted operation
+must remain accepted. Show that the model was added, retain the read failure
+in closed Technical details, and let **Refresh installed models** reread the
+provider/Host inventories without repeating registration, adoption or load.
+An unsuccessful reread retains that recovery path; a successful reread clears
+it. Actual chooser/registration rejection keeps its existing retry guidance.
+
+Owned source: branch `fix/c7-model-registration-refresh-recovery-20261018`,
+matching `/ai/gchat-worktrees/` tree, base `9314546cd`. Parent owns the component
+and this subject; the test worker owns the rendered Models regressions and
+independent S1 SSD verification fixture. Acceptance: both post-registration
+read failures, failed then successful read-only recovery, existing repeated
+click guards, focused tests and exactly one `make verify`. No Engine change,
+model run, installed-app or native Windows qualification is claimed. Source
+is frozen at `c183987e3`: accepted registration now retains a read-only refresh
+retry through either inventory failure. The rendered regressions cover failed
+then successful recovery and duplicate-click protection. The independent S1
+fixture is `/media/ron/SSD_RAID/ai/tmp-c7-model-registration-refresh-recovery-20261018`,
+using an inactive RC dependency donor. Booking3526 used CPU88–95 for
+preparation and verification, with no GPU. The gate began at 19:46:45Z.
+All **53 focused Models tests passed**;
+lint passed with zero errors and five existing unrelated warnings. Exactly one
+`make verify` passed at **19:55:20Z**: **3,792 app tests / six skipped,
+127 extension tests and 1,318 native tests / 28 ignored** across 23 native
+summaries, plus all six critical coverage floors, typecheck and quality guards.
+The coordinator directly reviewed raw terminal results, zero exits, exited
+container state, source bytes against the worktree and unchanged before/after
+source, dependency and catalog bindings. CPU88–95 returned **19:56:23Z** and
+booking3526 was canceled. The owned S1 fixture and sole exited candidate
+container were retired at **19:59:55Z**, removing **27,821,528,481 logical
+bytes**. The inactive RC dependency donor and protected inputs remain unchanged.
+Small evidence: `out/c7-model-registration-refresh-recovery-20261018/test-result.json`
+and `test-summary.md`. A staging argument error stopped before extraction or
+tests; correcting `taskset -c 88-95` prevented recurrence without repeating a gate.
+Next: merge the verified branch and continue the owned Models queue.
+
 ## First-run cleared choices — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-CLEARED-CHOICE-REMOUNT` follows Bubbs's approved unset/empty

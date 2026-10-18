@@ -51,6 +51,7 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
 const managementTabs = ['Installed', 'Recommended', 'Downloads'] as const
 export type ModelManagementTab = (typeof managementTabs)[number]
 
+const REGISTERED_MODEL_REFRESH_FAILED = 'The model was added, but the model list could not be refreshed. Choose Refresh installed models to try again.'
 const NO_SETTINGS = ' has no tested settings for automatic loading. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.'
 const capabilityLabels = (capabilities: string[] = []) => capabilities.flatMap(capability => {
   switch (capability.toLowerCase()) {
@@ -107,6 +108,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const [errorSummary, setErrorSummary] = useState('Could not refresh the model list. Try refreshing it again.')
   const [busy, setBusy] = useState(false)
   const registrationPending = useRef(false)
+  const registrationNeedsRefresh = useRef(false)
   const [localRegistration, setLocalRegistration] = useState<'choosing' | 'registering' | null>(null)
   const mounted = useRef(true)
   const loadRef = useRef<PendingLocalLoad | null>(null)
@@ -207,11 +209,34 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
     useModelProvider.getState().setProviders(await service.providers().getProviders())
     if (report.rejected.length) throw new Error(report.rejected.map(r => `${r.filename}: ${r.reason}`).join('\n'))
   }
+  const refreshRegisteredModels = async () => {
+    const updated = await service.providers().getProviders()
+    if (!mounted.current) return
+    useModelProvider.getState().setProviders(updated)
+    await refreshHosts()
+    if (mounted.current) {
+      registrationNeedsRefresh.current = false
+      setError(null)
+    }
+  }
+  const retryRegisteredModelRefresh = async () => {
+    if (busy || registrationPending.current) return
+    registrationPending.current = true
+    setBusy(true)
+    try { await refreshRegisteredModels() }
+    catch (e) {
+      if (mounted.current) { setErrorSummary(REGISTERED_MODEL_REFRESH_FAILED); setError(errorMessage(e)) }
+    } finally {
+      registrationPending.current = false
+      if (mounted.current) setBusy(false)
+    }
+  }
   const addLocalModel = async () => {
     if (!local || busy || registrationPending.current) return
     registrationPending.current = true
     setBusy(true)
     setLocalRegistration('choosing')
+    let registered = false
     try {
       const path = await service.dialog().open({
         multiple: false,
@@ -224,10 +249,11 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       const configuredRoot = String(localProvider?.settings?.find(s => s.key === 'model_path')?.controller_props.value ?? '').trim()
       const modelsRoot = configuredRoot ? await joinPath([configuredRoot, 'models']) : undefined
       await engineCommand('local_model_register', { path, ...(modelsRoot === undefined ? {} : { modelsRoot }) })
-      useModelProvider.getState().setProviders(await service.providers().getProviders())
-      await refreshHosts()
+      registered = true
+      registrationNeedsRefresh.current = true
+      await refreshRegisteredModels()
     } catch (e) {
-      if (mounted.current) { setErrorSummary('Could not add this model. Choose a complete .ginfer file that GInfer supports, then try again.'); setError(errorMessage(e)) }
+      if (mounted.current) { setErrorSummary(registered ? REGISTERED_MODEL_REFRESH_FAILED : 'Could not add this model. Choose a complete .ginfer file that GInfer supports, then try again.'); setError(errorMessage(e)) }
     } finally {
       registrationPending.current = false
       if (mounted.current) { setLocalRegistration(null); setBusy(false) }
@@ -330,7 +356,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
           }}>{t}</Button>)}
       </div><div className="flex flex-wrap gap-2">
         {local && tab === 'Installed' && <Button disabled={busy} onClick={() => void addLocalModel()}>{localRegistration === 'choosing' ? 'Choose a model file…' : localRegistration === 'registering' ? 'Adding local model…' : 'Add local model'}</Button>}
-        <Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : tab === 'Downloads' ? (local ? refreshLocal : refreshHosts) : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : tab === 'Downloads' ? 'Refresh downloads' : 'Refresh installed models'}</Button>
+        <Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void (local && tab === 'Installed' && registrationNeedsRefresh.current ? retryRegisteredModelRefresh() : act(tab === 'Recommended' ? refreshCatalog : tab === 'Downloads' ? (local ? refreshLocal : refreshHosts) : rescan))}>{tab === 'Recommended' ? 'Refresh recommendations' : tab === 'Downloads' ? 'Refresh downloads' : 'Refresh installed models'}</Button>
       </div></div>
       {local && tab === 'Installed' && <p className="text-sm text-muted-foreground">Add an existing .ginfer file. The file stays in its current location.</p>}
       {error && (error.endsWith(NO_SETTINGS)
