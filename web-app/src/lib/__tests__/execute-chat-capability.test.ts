@@ -1,4 +1,4 @@
-import { chatCapabilityRuns } from '../agent-run-message'
+import { chatCapabilityRuns, projectChatRunActivity } from '../agent-run-message'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { chatWorkerRunKey, useAgentRun } from '@/hooks/useAgentRun'
@@ -9,7 +9,8 @@ import { executeChatCapability, conversationAttachments } from '../execute-chat-
 import type { CapabilitiesService } from '@/services/capabilities/types'
 import type { AgentEvent, AgentRunRecord } from '@/types/agent'
 import { newUserThreadContent } from '../completion'
-import { convertThreadMessageToUIMessage } from '../messages'
+import { convertThreadMessageToUIMessage, convertUIMessageToThreadMessage } from '../messages'
+import { buildTraceBlocks } from '../tools/message-trace-parts'
 import { createImageAttachment, createDocumentAttachment } from '@/types/attachment'
 import { Chat } from '@ai-sdk/react'
 import { CustomChatTransport } from '../custom-chat-transport'
@@ -280,6 +281,100 @@ describe('Chat capability execution', () => {
       step_count: 1,
     })
     expect(saved.parts[0].output.record.finalReply).toBe('First result')
+  })
+
+  it.each(['running', 'awaiting_approval'] as const)(
+    'restores an uncollected %s worker card from production saved Chat history without live state',
+    async (status) => {
+      const transport = new CustomChatTransport(undefined, 'parent')
+      useChatSessions.getState().ensureSession('parent', transport, () => new Chat({
+        id: 'parent', transport, messages: [{
+          id: 'parent-turn', role: 'user',
+          parts: [{ type: 'text', text: 'Start one worker without collecting it' }],
+        }],
+      }))
+      const execute = vi.fn<CapabilitiesService['execute']>(async (request, event) => {
+        event({ type: 'turn_started', run_id: request.run_id, session_id: 'worker-session' })
+        event({
+          type: 'orchestration_started', definition_id: 'general',
+          definition_name: 'General Agent', kind: 'standard',
+          default_model_instance_id: 'selected-model',
+        })
+        if (status === 'awaiting_approval') event({
+          type: 'approval_requested', run_id: request.run_id,
+          approval_id: 'shell-approval', tool: 'os.shell.run',
+          reason: 'tool is approval-gated', preview: {},
+          affected_resources: [], can_remember: true,
+        })
+        return { content: {
+          runId: request.run_id, sessionId: 'worker-session',
+          originSessionId: request.session_id, parentRunId: request.parent_run_id,
+          status: 'running',
+        } }
+      })
+      const service = seedServiceHub({
+        capabilities: { execute, cancel: vi.fn(), getCatalog: vi.fn() },
+      }).capabilities()
+      const input = { task: 'Read the fixture, then request shell approval' }
+      const result = await executeChatCapability({
+        service, threadId: 'parent', modelId: 'selected-model',
+        toolName: 'agent_spawn', arguments: input, signal: new AbortController().signal,
+      })
+      const runId = execute.mock.calls[0][0].run_id
+      const attribution = {
+        run_id: runId, origin_session_id: 'parent', parent_run_id: 'parent-turn', status,
+        definition: {
+          id: 'general', name: 'General Agent', kind: 'standard',
+          model_instance_id: 'selected-model',
+        },
+      }
+      expect(result.content).toMatchObject({
+        runId, sessionId: 'worker-session', originSessionId: 'parent',
+        parentRunId: 'parent-turn', status: 'running', agent_run: attribution,
+      })
+      const persisted = JSON.parse(JSON.stringify(convertUIMessageToThreadMessage({
+        id: 'spawned', role: 'assistant', parts: [{
+          type: 'tool-agent_spawn', toolCallId: 'spawn', state: 'output-available',
+          input, output: result.content,
+        }, { type: 'text', text: `Worker started: ${runId}` }],
+      }, 'parent')))
+      // No wait/monitor result or live worker survives a cold app restart.
+      useAgentRun.getState().clearAll()
+      useChatSessions.getState().clearSessions()
+      const restored = convertThreadMessageToUIMessage(persisted)
+      expect(chatCapabilityRuns(restored)).toEqual([expect.objectContaining(attribution)])
+      const projection = projectChatRunActivity([restored], useAgentRun.getState().runs)
+      const cards = buildTraceBlocks(restored, false, {
+        agentRuns: projection.byMessageId.get(restored.id),
+      }).flatMap((block) => block.kind === 'activity' && block.agentSummary ? [block.agentSummary] : [])
+      expect(cards).toEqual([expect.objectContaining(attribution)])
+      expect([...projection.runIds]).toEqual([runId])
+      expect(execute.mock.calls.map(([request]) => request.tool_name)).toEqual(['agent_spawn'])
+    }
+  )
+
+  it('does not create a saved worker card when spawn fails before registration', async () => {
+    const execute = vi.fn<CapabilitiesService['execute']>(async () => ({
+      content: { status: 'failed' }, error: 'No ready GInfer instance for worker task',
+    }))
+    const service = seedServiceHub({
+      capabilities: { execute, cancel: vi.fn(), getCatalog: vi.fn() },
+    }).capabilities()
+    const result = await executeChatCapability({
+      service, threadId: 'parent', toolName: 'agent_spawn',
+      arguments: { task: 'Cannot start' }, signal: new AbortController().signal,
+    })
+    const persisted = JSON.parse(JSON.stringify(convertUIMessageToThreadMessage({
+      id: 'failed-spawn', role: 'assistant', parts: [{
+        type: 'tool-agent_spawn', toolCallId: 'spawn', state: 'output-available',
+        input: { task: 'Cannot start' }, output: result.content,
+      }],
+    }, 'parent')))
+    useAgentRun.getState().clearAll()
+    const restored = convertThreadMessageToUIMessage(persisted)
+    expect(result.error).toBe('No ready GInfer instance for worker task')
+    expect(chatCapabilityRuns(restored)).toEqual([])
+    expect([...projectChatRunActivity([restored], {}).runIds]).toEqual([])
   })
 
   it('invokes an exact discovered capability through the original policy-aware executor', async () => {

@@ -438,7 +438,12 @@ export const MessageItem = memo(
       const stages = block.agentSummary?.stages ?? []
       const finishReason = block.agentSummary?.finish_reason
       const runError = block.agentSummary?.error
-      const incompleteReason = incompleteOutcomeMessage(finishReason)
+      const interrupted = agentStatus === 'incomplete' && !finishReason
+      const incompleteReason = incompleteOutcomeMessage(finishReason) ?? (
+        interrupted
+          ? 'Completion was not recorded. Inspect the saved work before continuing in a new run. Pending actions were not restored.'
+          : undefined
+      )
       const instanceMetrics = aggregateAgentMetrics(
         stages.map((stage) => ({
           modelInstanceId: stage.model_instance_id,
@@ -462,7 +467,7 @@ export const MessageItem = memo(
           <AgentActivity
             active={active}
             workingLabel={t('activity.working')}
-            durationLabel={t('activity.workedFor', {
+            durationLabel={interrupted ? 'Run interrupted' : t('activity.workedFor', {
               count: durationSeconds,
             })}
             hasDetails={toolCount > 0 || stages.length > 0 || Boolean(incompleteReason)}

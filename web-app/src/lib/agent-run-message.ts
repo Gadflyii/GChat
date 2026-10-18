@@ -195,14 +195,30 @@ export function chatCapabilityRuns(message: UIMessage): AgentRunSummary[] {
   for (const part of message.parts) {
     if (!('output' in part) || !part.output || typeof part.output !== 'object') continue
     const summary = (part.output as { agent_run?: AgentRunSummary }).agent_run
-    if (summary?.run_id) runs.set(summary.run_id, summary)
+    if (summary?.run_id) {
+      runs.set(summary.run_id, summary)
+    } else if (part.type === 'tool-agent_spawn' && part.state === 'output-available') {
+      // Earlier spawn responses saved the worker identity without a summary.
+      const output = part.output as Record<string, unknown>
+      if (typeof output.runId === 'string' && output.runId && !runs.has(output.runId) &&
+        typeof output.originSessionId === 'string' &&
+        typeof output.parentRunId === 'string' && output.status === 'running') {
+        runs.set(output.runId, {
+          run_id: output.runId,
+          origin_session_id: output.originSessionId,
+          parent_run_id: output.parentRunId,
+          status: 'running', stages: [], tools: [], loops: [],
+        })
+      }
+    }
   }
   return [...runs.values()]
 }
 
 export function projectChatRunActivity(
   messages: readonly UIMessage[],
-  workers: Readonly<Record<string, AgentRunState>>
+  workers: Readonly<Record<string, AgentRunState>>,
+  records: readonly AgentRunRecord[] = []
 ): { byMessageId: Map<string, AgentRunSummary[]>; runIds: Set<string> } {
   const runs = new Map<string, { messageId: string; summary: AgentRunSummary }>()
   const byMessageId = new Map<string, AgentRunSummary[]>()
@@ -211,6 +227,14 @@ export function projectChatRunActivity(
     for (const summary of chatCapabilityRuns(message)) {
       const previous = runs.get(summary.run_id)
       runs.set(summary.run_id, { messageId: previous?.messageId ?? message.id, summary })
+    }
+  }
+  for (const record of records) {
+    const saved = runs.get(record.runId)
+    if (saved && !isTerminalAgentRun(saved.summary.status)) {
+      // The runtime owns the outcome, including incomplete admissions left by
+      // an interrupted process. Never replay saved pending approvals or tools.
+      saved.summary = buildAgentRecordSummary(record)
     }
   }
   for (const worker of Object.values(workers)) {

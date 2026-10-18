@@ -139,7 +139,12 @@ export async function executeChatCapability({
                 ...(result.content as object),
                 agent_run: buildAgentRecordSummary(record),
               }
-            : result.content,
+            : spawning && completed && ownsRun()
+              ? {
+                  ...(result.content as object),
+                  agent_run: buildAgentRunSummary(run),
+                }
+              : result.content,
     }
   } finally {
     const run = useAgentRun.getState().getRun(stateKey)

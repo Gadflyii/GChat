@@ -1,9 +1,10 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessage } from 'ai'
-import type { AgentRunSummary } from '@/types/agent'
+import type { AgentRunRecord, AgentRunSummary } from '@/types/agent'
 import { MessageItem } from '../MessageItem'
 import { projectChatRunActivity } from '@/lib/agent-run-message'
+import { convertThreadMessageToUIMessage } from '@/lib/messages'
 import { seedServiceHub } from '@/test/service-hub'
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
@@ -163,6 +164,43 @@ describe('MessageItem agent outcome', () => {
 })
 
 describe('MessageItem restored worker activity', () => {
+  it('shows interruption for a saved uncollected spawn with no completed stage or finish reason', () => {
+    const message = convertThreadMessageToUIMessage(JSON.parse(JSON.stringify({
+      id: 'spawn-message', role: 'assistant',
+      content: [
+        {
+          type: 'tool_call', tool_name: 'agent_spawn', tool_call_id: 'spawn-call',
+          state: 'output-available', input: { task: 'Read the fixture' },
+          output: {
+            runId: 'worker', sessionId: 'worker-session', originSessionId: 'chat',
+            parentRunId: 'parent-turn', status: 'running',
+          },
+        },
+        { type: 'text', text: { value: 'Worker started: worker', annotations: [] } },
+      ],
+      metadata: { activityDurationMs: 384, finishReason: 'stop' },
+    })))
+    const record: AgentRunRecord = {
+      schemaVersion: 3, id: 'record', runId: 'worker', sessionId: 'worker-session',
+      originSessionId: 'chat', parentRunId: 'parent-turn', definitionId: 'general',
+      definitionName: 'General Agent', kind: 'standard', userMessage: 'Read the fixture',
+      status: 'incomplete', finishReason: '', startedAtMs: 1_000, finishedAtMs: 0,
+      totalSteps: 0, finalReply: 'Completion was not recorded.',
+      defaultModelInstanceId: 'selected-model', stages: [],
+    }
+    const projection = projectChatRunActivity([message], {}, [record])
+    render(<MessageItem message={message} agentRuns={projection.byMessageId.get(message.id)} onCancelAgentRun={vi.fn()} isFirstMessage isLastMessage status="ready" />)
+
+    expect(screen.getByText('Worker started: worker')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Run interrupted' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'activity.workedFor' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'activity.working' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop worker' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Run interrupted' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Run outcome' }))
+    expect(screen.getByText(/Completion was not recorded.*Pending actions were not restored/)).toBeInTheDocument()
+  })
+
   it('renders two saved workers and keeps live cancellation attached to the correct run', () => {
     const runs: AgentRunSummary[] = ['Document worker', 'Math worker'].map((name, index) => ({
       run_id: `worker-${index}`, status: index ? 'finished' : 'running',
