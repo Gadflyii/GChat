@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { ParametersSection } from '../ParametersSection'
 
@@ -72,6 +73,78 @@ describe('ParametersSection', () => {
     expect(secondInput).toHaveFocus()
     expect(firstInput).toHaveValue(0.2)
     expect(secondInput).toHaveValue(0.9)
+  })
+
+  it.each([
+    ['Frequency Penalty', 'frequency_penalty'],
+    ['Presence Penalty', 'presence_penalty'],
+  ])(
+    'types and immediately saves a negative %s after clearing',
+    async (name, key) => {
+      const user = userEvent.setup()
+      const onChange = vi.fn()
+      function Editor() {
+        const [parameters, setParameters] = useState<Record<string, unknown>>({
+          frequency_penalty: 0.7,
+          presence_penalty: 0.7,
+        })
+        return (
+          <ParametersSection
+            parameters={parameters}
+            paramKeys={['frequency_penalty', 'presence_penalty']}
+            onChange={(changedKey, value) => {
+              onChange(changedKey, value)
+              setParameters((current) => ({ ...current, [changedKey]: value }))
+            }}
+          />
+        )
+      }
+      render(<Editor />)
+      const input = screen.getByRole('spinbutton', { name })
+
+      await user.clear(input)
+      expect(input).toHaveValue(null)
+      expect(onChange).not.toHaveBeenCalled()
+      await user.type(input, '-0.5')
+      expect(input).toHaveFocus()
+      expect(input).toHaveValue(-0.5)
+      expect(onChange).toHaveBeenLastCalledWith(key, -0.5)
+      expect(screen.getByRole('slider', { name })).toHaveAttribute(
+        'aria-valuenow',
+        '-0.5'
+      )
+      const otherName =
+        name === 'Frequency Penalty' ? 'Presence Penalty' : 'Frequency Penalty'
+      expect(screen.getByRole('spinbutton', { name: otherName })).toHaveValue(0.7)
+      expect(onChange.mock.calls.every(([changedKey]) => changedKey === key)).toBe(
+        true
+      )
+      await user.tab()
+      expect(input).toHaveValue(-0.5)
+    }
+  )
+
+  it('restores unfinished numeric drafts on blur and follows external changes', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const { rerender } = render(
+      <ParametersSection parameters={{ frequency_penalty: 0.7 }} onChange={onChange} />
+    )
+    const input = screen.getByRole('spinbutton', { name: 'Frequency Penalty' })
+    await user.clear(input)
+    await user.type(input, '-')
+    expect(input).toHaveValue(null)
+    expect(onChange).not.toHaveBeenCalled()
+    await user.tab()
+    expect(input).toHaveValue(0.7)
+
+    await user.clear(input)
+    expect(input).toHaveValue(null)
+    rerender(
+      <ParametersSection parameters={{ frequency_penalty: -0.4 }} onChange={onChange} />
+    )
+    expect(input).toHaveValue(-0.4)
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('preserves numeric clamping, keyboard slider updates and Stream toggling', async () => {

@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
@@ -45,6 +45,52 @@ function clamp(value: number, min?: number, max?: number): number {
   if (typeof min === 'number') next = Math.max(min, next)
   if (typeof max === 'number') next = Math.min(max, next)
   return next
+}
+
+function ParameterNumberInput({
+  id,
+  value,
+  setting,
+  onChange,
+}: {
+  id: string
+  value: number
+  setting: ParamSetting
+  onChange: (value: number) => void
+}) {
+  const [draft, setDraft] = useState<{
+    text: string
+    numeric: number
+  } | null>(null)
+
+  useEffect(() => {
+    setDraft((current) => (current?.numeric === value ? current : null))
+  }, [value])
+
+  return (
+    <Input
+      id={id}
+      type="number"
+      value={draft?.numeric === value ? draft.text : String(value)}
+      min={setting.min}
+      max={setting.max}
+      step={setting.step ?? 'any'}
+      onChange={(event) => {
+        const text = event.target.value
+        const parsed = Number(text)
+        // An empty field or an unfinished minus sign must remain editable.
+        if (text === '' || Number.isNaN(parsed)) {
+          setDraft({ text, numeric: value })
+          return
+        }
+        const numeric = clamp(parsed, setting.min, setting.max)
+        setDraft({ text: numeric === parsed ? text : String(numeric), numeric })
+        onChange(numeric)
+      }}
+      onBlur={() => setDraft(null)}
+      className="h-6 w-14 rounded-md border-0 bg-transparent px-1 py-0 text-right text-xs! leading-6 text-muted-foreground/80 tabular-nums shadow-none focus-visible:ring-0 dark:bg-transparent"
+    />
+  )
 }
 
 export function ParametersSection({
@@ -112,19 +158,11 @@ export function ParametersSection({
                     >
                       {setting.title}
                     </label>
-                    <Input
+                    <ParameterNumberInput
                       id={inputId}
-                      type="number"
                       value={value}
-                      min={setting.min}
-                      max={setting.max}
-                      step={setting.step ?? 'any'}
-                      onChange={(e) => {
-                        const parsed = Number(e.target.value)
-                        if (Number.isNaN(parsed)) return
-                        onChange(key, clamp(parsed, setting.min, setting.max))
-                      }}
-                      className="h-6 w-14 rounded-md border-0 bg-transparent px-1 py-0 text-right text-xs! leading-6 text-muted-foreground/80 tabular-nums shadow-none focus-visible:ring-0 dark:bg-transparent"
+                      setting={setting}
+                      onChange={(numeric) => onChange(key, numeric)}
                     />
                   </div>
                   {setting.controllerType === 'slider' && (
