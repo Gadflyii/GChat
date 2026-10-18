@@ -21,8 +21,9 @@ with the ordinary Continue setup action. The recommendation rounds the reported
 shortfall upward to decimal GB at two decimal places rather than understating it.
 Arch's 23:11Z UI condition requires the plain instruction ‘Close apps to free at
 least X GB, then retry’; global and node facts use readable GB, while raw native
-byte amounts stay inside collapsed details. This final UI delta is awaiting its
-two affected regressions before check/clippy and the ONE `make verify`. Existing accepted profile
+byte amounts stay inside collapsed details. Source **50452bd8a** is frozen and
+pushed; its two affected UI regressions precede check/clippy and the ONE
+`make verify`. Existing accepted profile
 bytes are not replaced by the failed run. Focused regressions cover the failed
 native job/persist/resume path in both all-format and artifact scopes and both
 visible screens. All-format profiling now requests the existing JSON result so
@@ -50,12 +51,34 @@ this GPU group”; cancel/resume was not run. That replacement is removed. Keep
 shell-only fixtures. Docker has no GPU flags or device mounts, so physical GPU
 isolation does not require a visibility mask that filters the synthetic
 inventory. Production visibility behavior and command construction are unchanged;
-the launch assertion retains the useful rejection message. Inspect this complete
-setup before rerunning only those two failed cases, then inspect both outputs
-before the affected GB UI assertions, check/clippy and the still-unrun ONE
-`make verify`. Booking3626 returned23:07Z and is canceled; current booking3628
-owns72–79 through23:34Z. The small local command
-receipt is `out/profile-ram-message-20261018/validation-command.json`. Existing RC execution
+the launch assertion retains the useful rejection message. This complete
+setup was inspected before rerunning only those two failed cases. Both passed
+on **50452bd8a** at23:18:45Z: fingerprint1/1 (0.13s), cancel/resume1/1 (0.16s),
+pipeline exit0. Their retained outputs were inspected at23:23Z before proceeding
+to the affected GB UI assertions, check/clippy and the still-unrun ONE
+`make verify`. Bookings3626/3628 are canceled. The remaining sequence launched
+once at **23:25:00Z** under booking **3634**, CPUs72–79 through23:48Z, with
+the same private Docker image and shared socket-1 guard. At the23:30Z bounded
+check, both affected GB UI regressions passed (2/2,1.10s), Rust Host check passed
+(6.58s), and clippy with all targets passed (12.72s). The first `make verify`
+ran23:25:22Z–23:30:12Z and failed only two Host tests: the AllFormats HTTP
+fixture still expected three arguments instead of the intentional four-argument
+`profile-hardware --hardware-profile <output> --json` command; the supplied
+private laptop Muse catalog was the stale five-entry version, while the current
+source correctly expects the four signed lower-concurrency bounds. Frontend
+3869/extension130 tests, all six critical coverage floors, desktop Rust777 and
+plugin Rust21 passed; Host was284 passed,2 failed,13 ignored, so later Rust
+suites did not run. The failed log/exit remain retained, and booking3634 is
+canceled. The HTTP test now asserts the complete unscoped command. Replace only
+the private test catalog inputs with the eleven matching retained catalogs from
+GInfer candidate56174c35b; qualification values and production catalogs remain
+unchanged. Prevent recurrence by freezing catalog input hashes with the source
+command receipt instead of assuming a donor cache's inputs match current tests.
+The coordinator authorizes the two affected cases followed by one fresh
+`make verify`; previously passing UI/check/clippy are not repeated.
+The small local command
+receipts are `out/profile-ram-message-20261018/{validation,preserved-fixture,remaining}-command.json`.
+Existing RC execution
 remains parent-owned. Ada retry is **pending Ron via Bubbs**, per the23:01Z
 instruction. Arch withdrew the cache-reclaim suggestion at23:02Z; this task
 changes no cache, system or RAM-floor policy and performs no target action.
@@ -63,7 +86,7 @@ changes no cache, system or RAM-floor policy and performs no target action.
 Focused checks in the launched sequence:
 `yarn workspace @gchat/web-app test src/containers/__tests__/EngineHardwareProfile.test.tsx src/containers/__tests__/EngineFirstRun.test.tsx`
 and `cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml --lib hardware_profile::tests -- --nocapture`.
-The repository's applicable lint/typecheck/Rust checks remain pending.
+The final full-suite verification remains pending the scoped corrections above.
 
 Current priority (21:47Z): the driver-bound Host and ordinary actual-Start receipt marker are complete. The driver-key delta passed four focused regressions, check, clippy and standalone Host build at21:33:09Z; the marker continuation passed the same delta checks at21:44:19Z. Parent review confirms the raw Flash/Qwen/Muse sequence: unknown/0 before a matching Ready receipt, then receipt/1200 on the second actual Start. Retain the completed ONE make verify (frontend3751, extension127, six coverage floors, Rust1318) and request-log focused2/check/clippy/Host317/build. C1's ac53611e0 implements Arch21:36's total physical startup overhead minus weight/state ledger, with at most2MiB total rounding and separate cuda_graph_observed_bytes diagnostics. The first/second laptop53248 Automatic app gates remain held for its corrected Engine donor, six secondReady controls and residual clearance. GINFER_HOST_REQUEST_LOG_JSONL remains an absolute owned spawn-only control; no catalog graph field. Unknown or changed NVIDIA drivers prevent receipt reuse, and unknown drivers prevent saving; first solo Automatic remains available.
 
