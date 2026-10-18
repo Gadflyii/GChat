@@ -15,6 +15,68 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## Native Windows local-model startup quote — C7, October 18
+
+Remaining deliverable for `GCHAT-LOCAL-MODEL-STARTUP-QUOTE-20261016`:
+ordinary native Windows **Check model settings** for a registered local
+`.ginfer` model with no catalog/download dependency, showing verified artifact
+identity and the fresh memory result. Changing settings must invalidate that
+result; the check must not create an instance or save a profile. Source
+`e5c396727` and accepted Linux quote/Ready/normal Stop evidence are reused.
+No further Linux run or source test is planned.
+
+Bubbs confirmed at **19:34:50Z** that Ron authorizes the normal Windows profile
+on Ada4090 (`192.168.1.143`) and laptop (`192.168.1.153`). This corrects the
+previous isolated-user-account blocker. This PC's Windows install remains off
+limits. Codex 4 owns installation and the current RC first-use walkthrough;
+C7 coordinates the subsequent returned boundary and uses that same build.
+No independent installer, hidden API substitute or model copy is planned.
+
+Inventory: branch `test/c7-local-model-native-quote-20261018` in its matching
+`/ai/gchat-worktrees/` source tree; evidence-only preparation, no live job,
+booking or fixture. Target producer is C4's GChat `250df804a` / Engine
+`6b85ecf77`. At 19:38Z C4 confirmed installation and native walks have not started;
+C5 Download/natural has Ada/laptop priority. The quote acceptance can run
+inside C4's ordinary laptop walk before Start: capture the empty catalog,
+registered local card and quote identity/memory/no-start result; change one
+valid form field and observe invalidation, then restore/recheck. C4 confirmed
+that those assertions are folded into the pinned `250df804a` ordinary laptop
+preparation before its single Start, including the visible empty/unset download
+catalog and registered local model without a download dependency. Next: review
+C4's native UI quote/invalidation result and returned boundary against the
+remaining row acceptance; perform no duplicate launch or model run.
+The independent Models registration refresh-recovery row is verified and
+submitted as `1abc01fd1`; no native resource is reserved.
+
+## Native Windows collision notice — remaining GUI leaf, C7, October 18
+
+`GCHAT-CROSS-OS-HOST-PORT-COLLISION-20261016` retains its accepted native and
+cross-OS runtime results below. Only the installed desktop's configured-root
+connection and visible collision notice remain. The normal-profile permission
+above supersedes the October 17 isolated-account blocker; C4's actual target
+return and C5's priority still govern execution. No fixture or booking exists.
+
+Use C4's installed executable and current supported native UIA controls. After
+the current walk returns, read the configured App Data's
+`ginfer/host/host.json` `management_origin` and use **Stop model service and
+quit**. If its saved port is nonreserved, a private standalone genuine Host
+can occupy that port with a fresh absolute data root and nonexistent Engine
+path, without desktop-managed or discovery arguments. Ordinary GChat launch
+must connect its own configured root at a different port, show **Connected**
+and **This computer**, and visibly explain that GChat is using a different
+connection address. Expand Technical details to verify the occupied/selected
+ports and other Host left running. A normal Stop/reopen must preserve its own
+identity and selected connection while the foreign Host remains unchanged.
+No model run, profiling or repeated runtime matrix is needed.
+
+Do not use reserved ports 7443/7444 for the fixture. If the saved management
+port is 7443, selecting a nonreserved preferred address remains unresolved;
+changing only the shared discovery locator cannot select the desktop port.
+Reuse `out/c4-windows-rc-refresh-20261018/controls/native-uia-action-sequence.txt`
+and `out/windows-gate-20261016/native-gui-plan.md`, binding actions to the actual
+installed PID and start time. Next: review C4's returned installation/walk
+receipt and saved port before any target action.
+
 ## C7 native hardware-profile lifetime — October 18
 
 The remaining native Windows Cancel/Host-loss leaf of
@@ -173,16 +235,16 @@ codes explicitly. Detached Host children retain redirected output handles; the
 follow-up corrected its initial file-sharing error by reading with shared access
 before completing the checks. These were harness corrections, not product defects.
 
-Ordinary Windows desktop configured-root connection and visible collision notice
-remain a limitation. Known Folder settings, window state, MCP locks and vector
+At the October 17 runtime gate, ordinary Windows desktop configured-root
+connection and visible collision notice remained untested. Known Folder settings, window state, MCP locks and vector
 DB, plus current-user credentials, are not isolated by APPDATA/LOCALAPPDATA
 changes. The packaged desktop has no general private-root override. Bubbs
-confirmed at 23:42Z that GUI acceptance needs an isolated Windows user profile.
-Creating or changing a Windows account is Ron's decision; C7 must not do it.
-No GChat desktop or Manager was launched. The runtime work is complete; GUI
-acceptance awaits Ron's profile decision. C7's next action is its next owned row.
+confirmed at 23:42Z that GUI acceptance then needed an isolated Windows user
+profile. No GChat desktop or Manager was launched at that gate. The October 18
+normal-profile authorization and remaining model-free GUI plan above supersede
+that blocker; no Windows account change is needed or authorized.
 
-Current inventory: owned worktree
+Historical source: retired worktree
 `/ai/gchat-worktrees/c7-host-port-collision-20261017`, branch
 `test/c7-host-port-collision-20261017`; sanitized `result.json` and short summary
 only at `/ai/gchat/out/c7-host-port-collision-windows-20261017/`.
