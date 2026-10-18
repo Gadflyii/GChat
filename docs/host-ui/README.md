@@ -37,6 +37,49 @@ Owned worktree `/ai/gchat-worktrees/c7-profile-ready-notes-20261018`, branch
 its processes stopped by PID; CPU88–95 booking3229 canceled. No donor hold;
 only small JSON/PNG evidence remains. Next: coordinator integration and row
 closure.
+## Connected Host checkbox acceptance — C3, October 18
+
+`GUI-CHECKBOX-THEME` passes the remaining Linux Connected Host keyboard and
+naturally disabled-control leaves handed over by Gchat 2 at 10:11Z. No source
+fix is needed. Prior Models checkbox and Gbot radio acceptance stays credited
+to Gchat 2; signed-in Workspace and Windows remain open.
+
+An independent private desktop connected to a genuine idle Host with real S1
+NVIDIA inventory. In **Light and Dark, 1280×900**, Tab focuses the checked
+Follow a response format box and Space unchecks it. Both states retain the
+2px theme-colored focus ring with 2px offset. The checked fill/tick and
+unchecked border use the app palette: [Light checked](../../out/c3-checkbox-theme-20261018/light-checked.png),
+[Light unchecked](../../out/c3-checkbox-theme-20261018/light-unchecked.png),
+[Dark checked](../../out/c3-checkbox-theme-20261018/dark-checked.png),
+[Dark unchecked](../../out/c3-checkbox-theme-20261018/dark-unchecked.png).
+
+Stopping only that private Host naturally disables the hardware fieldset and
+saved-settings controls through ordinary offline polling. Checked and
+unchecked boxes keep their theme fill/borders at 0.5 opacity and show a
+not-allowed cursor. Pointer clicks cannot change their values, and Tab skips
+them: [Light](../../out/c3-checkbox-theme-20261018/light-disabled.png),
+[Dark unchecked](../../out/c3-checkbox-theme-20261018/dark-disabled.png),
+[Dark checked](../../out/c3-checkbox-theme-20261018/dark-disabled-checked.png).
+No DOM state injection, synthetic Host response, model load, Measure or
+account sign-in was used. The private service locator was explicitly seeded;
+this is not first-run discovery acceptance.
+
+The retained desktop is `11ce0355d`, Host runtime `e2282c336`. Checkbox CSS,
+EngineHardwareProfile and EngineProfilePicker are unchanged through current
+main `297895834`; the relevant custom-settings boxes are unchanged too.
+This qualifies those source-compatible controls, not a fresh current-package
+release gate. Evidence-only `git diff --check` passes; no repeat make verify
+is required. Heterogeneous-card exclusion, signed-in Workspace and Windows
+remain unqualified.
+
+[Result and small native receipts](../../out/c3-checkbox-theme-20261018/result.json)
+record the input, source binding and limits. Owned worktree
+`/ai/gchat-worktrees/c3-checkbox-theme-20261018`, branch
+`docs/c3-checkbox-theme-20261018`, base `297895834`. The independent S1
+runtime used CPU96–103 booking3233 with no GPU device grant. Its 9.1GiB
+runtime/copies are removed, donors preserved and booking canceled;
+returned10:25Z. Next: coordinator integration; Gchat 2 retains the remaining
+Workspace/Windows leaves.
 
 ## Progress bars — C3, October 18
 
