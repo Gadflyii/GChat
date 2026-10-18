@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Locked-vault next action — verified, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-LOCKED-STATE-GUIDANCE` gives a confirmed locked passphrase
+vault its actual state and next action. Before opening the form, it directs
+the user to choose Unlock vault; the open form then asks for the passphrase
+and explicit Unlock. Locked storage remains unready and passive status reads
+remain passive. Other unavailable providers retain their existing guidance.
+
+Frozen source `f1c224c5c` on
+`fix/gchat3-secure-storage-locked-guidance-20261018` passed **27 focused
+credential tests** and lint (zero errors, five existing unrelated warnings).
+Exactly one `make verify` passed at **17:41:43Z**: **3,722 app tests / 6
+skipped, 127 extension tests, 1,316 native tests / 28 ignored**, six critical
+coverage floors, typecheck and quality guards. Before/after source bindings
+match. This establishes rendered state transitions and the Linux source gate;
+live keyring, installed-app and Windows qualification remain separate.
+
+The first archive preflight stopped before tests because its two tracked
+`100644` files had mode `0664`. Normalizing those owned files to `0644` and
+using extraction umask `022` corrected staging without changing their bytes.
+No test stage or full gate was repeated. S1 CPU80–87 returned **17:43Z**,
+booking3454 canceled. The owned SSD fixture and two exited containers were
+retired at **17:46:18Z**, removing **28,309,240,082 logical bytes**. The
+protected RC donor is unchanged. Only
+[the result](../../out/secure-storage-locked-guidance-20261018/test-result.json)
+and [short summary](../../out/secure-storage-locked-guidance-20261018/test-summary.md)
+are retained. Next: merge this verified branch, then the next owned GUI row.
+
 ## Check-again locked-vault recovery — verified, Gchat 3, October 18
 
 `GUI-SECURE-STORAGE-LOCKED-RECOVERY` fixes Codex 8's P2 after passphrase
