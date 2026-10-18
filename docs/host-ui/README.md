@@ -14,9 +14,11 @@ downloads retain progress and Resume downloads. Genuine failure/retry/model
 reselection behavior must remain intact.
 
 Owner C3; branch `fix/c3-first-run-paused-error-20261018`, worktree
-`/ai/gchat-worktrees/c3-first-run-paused-error-20261018`. Next: reproduce the
-paused-to-resumed rendered regression against unchanged source, fix the
-condition, run the focused first-run file and ONE `make verify`. No Host,
+`/ai/gchat-worktrees/c3-first-run-paused-error-20261018`. The new
+paused-to-resumed rendered regression fails against unchanged source at the
+misleading red alert, matching the native observation. Failure-panel rendering
+now requires failed status. Next: run the focused first-run file and ONE
+`make verify`. No Host,
 Engine, Chat/Agents, selected-artifact, Windows or new native/GPU work.
 Own S1 SSD root is
 `/media/ron/SSD_RAID/ai/tmp-c3-first-run-paused-error-20261018`; use an independent
