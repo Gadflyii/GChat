@@ -1,5 +1,41 @@
 # GInfer host UI
 
+## Models accepted download requests — C7, October 18
+
+`GUI-MODELS-DOWNLOAD-ACTION-REFRESH` corrects the observed Models path where
+Start download, Pause, Resume or Delete partial download succeeds, then the
+following inventory read rejects inside the shared action catch. The UI says
+the request failed and enables stale mutation controls. Preserve the accepted
+request separately from its unread status, keep diagnostics in closed
+Technical details and disable conflicting download requests for that computer
+until **Refresh downloads** reads fresh status. Recovery must not replay the
+mutation. An actual rejected request remains retryable. Do not claim a final
+paused/deleted state before a fresh snapshot supplies it.
+
+Owned branch `fix/c7-models-download-action-refresh-20261018`, matching
+`/ai/gchat-worktrees/` tree, base `d9103a3b4`. Parent owns the component and
+subject; the test worker owns rendered regressions and its independent S1 SSD
+fixture. Acceptance: local and paired-computer accepted/read-failure recovery,
+read-only failed then successful retry, per-computer isolation, repeated-click
+guard and true rejection behavior, focused tests, lint and exactly one
+`make verify`. Reuse the accepted first-run design above/below without
+retesting first-run or changing the download backend, registration, model
+load/Stop, Engine or native Windows behavior. No fixture or booking exists.
+Download status reads now target the selected paired computer's snapshot and
+publish it through the existing Host store; a fleet refresh can swallow a
+per-computer read failure or return before another refresh finishes, so it
+cannot establish this recovery. Local status retains its existing download
+store read. An accepted request with unavailable status also suppresses the
+empty-list claim and totals until the fresh read succeeds.
+Rendered regressions are ready for all four local requests, selected paired
+computer reads, failed/successful recovery, stale empty-list suppression,
+closed diagnostics and repeated clicks. The coordinator reviewed the source
+and effective gate: focused Models tests, lint and one `make verify`, using
+an independent S1 SSD copy of the inactive RC dependency donor, the existing
+offline build image and unchanged protected catalog inputs. CPU88–95 will
+be checked and booked at the actual preparation start. No gate has run.
+Next: freeze this source and execute that gate once.
+
 ## Models accepted registration and refresh recovery — verified, C7, October 18
 
 `GUI-MODELS-REGISTRATION-REFRESH-RECOVERY` fixes an observed source path in
