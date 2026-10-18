@@ -1,6 +1,6 @@
 # GChat installer refresh
 
-## Standalone Linux CLI novice archive — first-run blocked October 18
+## Standalone Linux CLI novice archive — catalog publication boundary, October 18
 
 The current-source standalone archive is **assembled and integrity-checked** on
 S1 (`ron@192.168.1.109`, `AIS-2-8592-L01`):
@@ -71,8 +71,22 @@ The Python command correction is merged as `36c0147db`; the separate launcher
 source branch `fix/c4-standalone-launcher-20261018` is completing its accepted
 runtime-ownership fix and fresh archive replay. Do not fabricate a four-image
 runtime set or change GInfer's delegating CLI to mask the original failure.
-GPU selection, calibration, storage/model setup and a successful novice launch
-remain unaccepted in this evidence branch.
+The repaired launcher continuation is recorded in the owning source branch
+`fix/c4-standalone-launcher-20261018`: its fresh private archive installation
+reached GPU intent, storage selection, the actual empty catalog and the no-argument
+menu at 04:46:51Z. No hardware profile, calibration or model was started. Its
+recommended storage path is a fallback, not measured fastest-disk evidence.
+
+Arch confirmed at **04:45:01Z** that no public release catalog exists and its
+publication belongs to Ron-gated **W12**. Existing GChat/GInfer/ginfer-tools
+release tools have no writer for the application publication catalog; the
+ginfer-tools release-wave manifest has a different contract. No catalog or URL
+was invented or baked into a build. Download, model/profile recommendations,
+artifact profiling, measured fastest-disk selection and insufficient-space
+admission remain **waiting on W12 publication**. Acceptance of the launcher
+repair does not close these remaining novice-journey gates. The native GPU
+prompt also promises profiling immediately after selection although the actual
+next step is storage; record and fix that wording separately.
 
 The remaining isolated Engine error checks finished at **04:39:56Z**, using the
 same installed, unchanged `e2282c336` runtime and a real registered TP1 artifact.
