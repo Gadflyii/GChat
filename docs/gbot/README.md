@@ -1,5 +1,33 @@
 # Gbot design
 
+## Cloud computer action recovery across progress checks — Gchat 2
+
+`GBOT-CLOUD-COMPUTER-ACTION-ERROR-PERSISTENCE`, based on main `21bfcb946`,
+keeps failed cloud-computer action feedback visible during progress checks and
+after successful or failed checks that do not resolve the action. A failed
+progress check has its own guidance. Creation, identity, connection and deletion
+failures name the existing recovery control; technical Details start closed.
+
+Deletion feedback describes its unconfirmed outcome and possible continuing
+provider charges. Confirmed deletion clears obsolete warnings and consent;
+otherwise, deletion consent survives and retry remains explicit. Connection
+and identity warnings clear when the computer leaves its running state. The
+existing Check progress contract can reconcile pending creation or deletion;
+opening Details adds no request. Source/rendered scope only, with no service or
+provider contract change.
+
+Validation: all six selected regressions failed on unchanged production. The
+fixed CloudCosts/wizard focus passed 59 cases; lint had zero errors and five
+existing warnings. ONE `make verify`, 18 October 18:01:17–18:07:15 UTC,
+passed 3,743 app tests (six skipped), 127 extension tests, 1,316 Rust tests
+(28 ignored, 23 summaries), six coverage floors and lint/typecheck/guards.
+All 3,459 tracked raw source bytes and modes matched before and after the gate,
+with tracked timestamps refreshed beforehand. This receipt was added afterward
+with product and test source unchanged. CPU120–127 booking3476 returned
+18:08Z. Evidence: `out/gchat2-cloud-computer-action-error-persistence-20261018/result.json`
+and adjacent raw logs. No retry or whole-gate repeat; native acceptance remains
+separate.
+
 ## Cloud cost review error recovery — Gchat 2
 
 `GBOT-CLOUD-COST-ERROR-GUIDANCE`, based on main `3693f932e`, gives
