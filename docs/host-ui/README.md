@@ -1,5 +1,29 @@
 # GInfer host UI
 
+## Downloads accessibility — C7, October 18
+
+`GUI-DOWNLOADS-A11Y` is the Downloads follow-up on
+`fix/c7-downloads-a11y-20261018`, worktree
+`/ai/gchat-worktrees/c7-downloads-a11y-20261018`, based on `37345d00c`.
+Managed, legacy and app-update progress now have accessible names and numeric
+values; live regions announce state and ten-percent milestones without byte,
+speed or time-estimate chatter. Managed completion remains announced after its
+visible transfer disappears. The Models Downloads tab uses the same milestones.
+Legacy pause/resume/cancel and managed navigation name the affected model.
+
+A keyboard-opened Downloads popover takes focus in logical order, has a named
+Close control, returns focus on dismissal and stays open during interaction.
+Automatic background notification never steals focus; its timer yields to user
+interaction. If a focused transfer disappears, focus moves to the remaining
+Close control. A later automatic reopen cannot reuse an earlier disconnected
+control. Existing rendered regressions cover these transitions and milestones.
+
+Acceptance is focused tests, lint and exactly one `make verify`, followed by
+private Linux native Light/Dark keyboard-focus screenshots in this branch.
+No model download or load, backend change, new test harness or native Windows
+qualification is required. Next: freeze, isolated S1 gate and native screenshots.
+The first Hardware/shared Progress candidate remains a separate merge.
+
 ## Models, Downloads and Hardware accessibility — C7, October 18
 
 Bubbs assigned a source-only accessibility pass at 23:12Z. The outcome is named
