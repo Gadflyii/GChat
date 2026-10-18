@@ -2504,6 +2504,75 @@ Method note: release Host and frontend accept only commit-pinned Hugging Face pa
 steps used the release profile with debug assertions, a development frontend and the private loopback catalog
 (`c6a23a4d4`); the pure release build stops at 'No model downloads are available for these graphics cards'.
 
+## C4 first-run journey native acceptance — October 18
+
+Owner: Codex 4. All eight orphaned journey source fixes are merged. This single
+**evidence branch** recovers their outstanding native acceptance; it does not
+repeat merged implementations or their passing source gates. The eight rows are
+WELCOME-BELOW-FOLD, FAILED-DOWNLOAD-STUCK, MODEL-NOT-SELECTED,
+LOAD-WITHOUT-PROFILE, NO-RECOMMENDATION-CONTRADICTS, JARGON, DISK-SPACE-CRASH,
+and POST-STOP-GPU-BUSY, all prefixed `GUI-JOURNEY-`.
+
+Acceptance: exercise the changed controls in one isolated Linux native session,
+retain observed results and limitations, and close only demonstrated rows on
+GInfer `docs/open-work`. Current unresolved question: which merged fixes still
+have an observable native gap? The maintenance-time ENOSPC error is known to be
+log-only and must not be represented as fixed by the earlier warning change.
+
+Source: `origin/main@e6b28e8d4`; the retained C3 native donor is `be69f9190`
+plus Downloads source `f928613b1`. The journey components, release predicate,
+selection store and first-run Host source compare identically. Its successful
+focused/full source gate is retained in
+`out/c3-downloads-manage-tab-20261018/result.json` (one make verify, frontend
+3304 and native 1220 passing). Evidence-only changes need `git diff --check`.
+
+Observed so far: at 1200×800 the local setup card precedes Secure storage;
+choosing the second physical PRO advances and scrolls storage controls into
+view. The private SSD folder is accepted and saved. With the published catalog
+empty, Welcome explains that downloads are optional and links the installed-model
+route. Models agrees that no tested recommendation exists; showing unavailable
+packages leaves all four Download buttons disabled. These native observations
+support the welcome, wording and recommendation leaves. A privately seeded failed
+transfer displayed Try again and Choose a different model; the latter cleared the
+saved transfer and selection and returned to model choice. Adding a metadata-only
+`.ginfer` through the native file picker and selecting Load displayed the model's
+missing-startup-settings explanation and Open GInfer Hosts action, before any
+Engine startup. The real Qwen instance then reached Ready after native
+artifact-scoped Ensure. Chat retained the earlier fixture choice; removing that
+disposable inventory entry cleared the choice and the sole ready Qwen was
+selected automatically, without opening the picker. Models showed Running with
+Load disabled and Stop enabled. Native Models Stop returned it to Installed;
+Hosts showed Stopped and the graphics-card speed-tuning explanation while the
+real native calibration child was running. Calibration completed; the optional
+remaining-formats profiler was stopped through Stop setup. GPU1 returned at
+04:16 UTC. Shared C7 Models acceptance is retained in
+`out/c4-journey-native-20261018/models-host-running-result.json` with screenshots. C7 visually accepted this scoped leaf and owns its canonical
+open-work closure against this evidence commit. The registered 2-bit mix package
+SHA-256 is `ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`
+(existing registry value, no rehash).
+The separate maintenance-error fix is under focused/full source verification;
+do not close DISK-SPACE-CRASH before its native acceptance.
+
+Owned native inventory: S1
+`/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018` contains a copied native
+candidate and fresh private HOME, XDG, DBus, unlocked keyring, Xauthority and
+1200×800 Xvfb display; Wayland is unset. CPU-only at initial launch, then GPU1
+booking 2962 (04:07–04:16 UTC, canceled at return) covered Ensure, startup, Stop and tuning;
+the independent GPU0 fit is untouched. No disk filling, real download or changes
+to another user's profile. Native pointer/keyboard input; inspector observation only. Retire the
+owned copy and private state after retaining concise results.
+
+Completed real-lifecycle gate: the existing read-only
+`/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer` was imported
+using the native file picker. Custom settings selected only physical GPU1,
+262144 tokens, one request/copy, images enabled and automatic speculation/KV.
+The retained C3 hardware profile seeded this private Host; native artifact-scoped
+Ensure passed and the instance reached Ready. This checks model projection and
+post-Stop tuning visibility, not inference quality or speed. Next: native
+maintenance-error/retry acceptance with the separately fixed candidate, then
+close the demonstrated journey rows. The same private session is retained for
+that check.
+
 ## Engine settings native acceptance — C3
 
 `GUI-ENGINE-SETTINGS-GUIDANCE` source `38b97a33e` merged `51842219e`;
