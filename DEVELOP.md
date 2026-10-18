@@ -143,6 +143,12 @@ paths in saved state remain exactly as recorded. Moving App Data does not rewrit
 those paths or relocate their referenced external files. Keep the old files
 needed by those paths.
 
+Factory reset clears the selected App Data folder and keeps that location saved.
+It does not select or delete the retained copy from an earlier move. The startup
+preference also stays unchanged. With no saved settings, reset uses the normal
+default folder; unreadable or malformed saved settings must be repaired before
+reset can select a folder safely.
+
 GInfer and GChat share a per-user host locator: `%APPDATA%\GInfer\local-host.json`
 on Windows, or `$XDG_CONFIG_HOME/ginfer/local-host.json` on Linux (default
 `~/.config/ginfer/local-host.json`). It records the selected Host's state directory,

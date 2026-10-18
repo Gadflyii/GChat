@@ -1,5 +1,49 @@
 # GInfer host UI
 
+## Reset preserves relocated App Data selection — C3, October 18
+
+`GUI-RESET-RELOCATED-DATA-RESURRECTION`: the installed release `d0a8d06bf`
+retained its old data copy during native relocation around 05:00Z. A subsequent
+factory reset cleared the selected `relocated-data` folder but rewrote its
+configuration to select the retained default folder, exposing old data after
+restart. The coordinator owns that native evidence in the ongoing
+`out/c3-current-main-release-20261018/` walkthrough packet; no new native run is
+claimed here.
+
+The source candidate preserves installation configuration, including App Data
+location and startup preference. It reads the authoritative selection under the
+existing relocation write fence, then uses the unchanged Agent/Host/MCP reset
+lifecycle and deletion list. No settings file means the normal default folder;
+malformed, unreadable or unsafe saved settings return an actionable error before
+Host shutdown, window hiding or deletion. Ordinary desktop/CLI fallback behavior
+is unchanged. See the [ownership decision](../decisions/2026-10-18-preserve-selected-data-folder-during-reset.md).
+
+Acceptance: reset removes selected threads/models, preserves the old default
+sentinel and saved configuration, and subsequent resolution still selects the
+cleared folder. Four added native reset regressions cover that case, missing
+settings, invalid settings without fallback deletion, and a relocation commit
+while reset waits for the write fence. Existing Agent cancellation/timeout and
+Host teardown regressions remain intact. Focused Rust tests, check/Clippy, ONE
+`make verify` and changed-candidate native acceptance are queued with the
+coordinator; none has run on this source yet. No new GPU/model/profile work,
+deletion categories, unselected-path cleanup or cross-device Engine-binary
+preservation changes are in scope.
+
+Source self-check: `git diff --check`, scoped Rust parse/format checks and new
+decision-link target checks pass. The queued focused command is `cargo test
+--manifest-path src-tauri/Cargo.toml --lib --no-default-features --features
+test-tauri,cli factory_reset_ -- --test-threads=1`; the real-GPU case keeps its
+existing ignored status. Existing app-folder resolver cases also need to pass.
+
+Source inventory: owner C3, local worktree
+`/ai/gchat-worktrees/c3-reset-relocated-data-20261018`, branch
+`fix/c3-reset-relocated-data-20261018`, base `072655126`. Only source, regression
+tests and documentation are allocated here. No S1 stage/cache writes, builds,
+processes or resource bookings belong to this candidate. Retain the worktree for
+coordinated gates and review; the installed baseline remains owned by the broad
+walkthrough. Next: coordinator reviews/gates this source and verifies restart
+selection on the existing disposable native fixture.
+
 ## Gbot Hand back and task resume guidance — October 18
 
 `GBOT-HAND-BACK-RESUME-GUIDANCE`: the desktop viewer and companion previously
