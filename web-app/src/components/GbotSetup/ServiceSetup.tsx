@@ -106,6 +106,8 @@ export default function ServiceSetup({
     setPendingAction(action)
     setChecking(false)
     setError(null)
+    if (grant?.status === 'approved' && grant.service_configured === true)
+      change({ kind: 'paired_host', host_id: hostId }, false)
     try {
       const value = await gbotControlGrant(hostId, action)
       if (requestVersion.current !== version) return
@@ -220,7 +222,7 @@ export default function ServiceSetup({
                   ? 'Requesting Gbot control from the service computer…'
                   : pendingAction === 'status' || checking
                     ? 'Checking Gbot control approval…'
-                    : error && !grant
+                    : error
                       ? 'Could not confirm Gbot control approval. Try again.'
                       : grant?.status === 'approved'
                         ? 'Gbot control approved for this device.'
