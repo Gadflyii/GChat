@@ -1,5 +1,29 @@
 # Gbot design
 
+## Microsoft client launch follows its setup — Gchat 2
+
+`GBOT-M365-CLIENT-LAUNCH-LIFETIME`, based on main `ba3ec1a3a`, ignores a
+launch URL that arrives after the initiating Cloud PC setup has left.
+Previously, leaving setup while Open Microsoft client waited for its URL
+could still open that client later. A replacement setup requires its own
+explicit Open Microsoft client action and fresh URL.
+
+The rendered regression replaces setup during the delayed URL request,
+checks that the old response opens nothing, then opens the replacement
+client explicitly. Existing progress and duplicate-action guards remain.
+This is source/rendered UI scope; no real Microsoft account, sign-in or
+native client acceptance is claimed.
+
+Validation: the new journey failed against the original production code;
+fixed focus passed 182 tests across the Microsoft setup, setup wizard and Gbot
+route. Lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 20:31:41–20:37:43 UTC) passed 3,802 app tests
+(six skipped), 127 extension tests, 1,318 Rust tests (28 ignored) and all six
+critical coverage floors. All 3,461 tracked inputs matched raw bytes and modes
+before and after verification. Private cache and exports retired at 20:39 UTC;
+protected donor and guest image remain. Evidence:
+`/ai/gchat/out/gchat2-m365-client-launch-lifetime-20261018/SUMMARY.md`.
+
 ## LAN removal follows its bot panel — Gchat 2
 
 `GBOT-LAN-REMOVAL-REQUEST-LIFETIME`, based on main `82ad083b1`, ignores a
