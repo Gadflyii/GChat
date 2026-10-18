@@ -893,8 +893,9 @@ The following changed-source rows are separate from the fixed release pin:
   the old `relocated-data` runtime paths as invalid input for the queued locator
   regression; restarting at that old root would recreate them. This is fixture
   preparation, separate from the earlier native Move acceptance. No GPU repeat is planned.
-- `GUI-HOST-LOCATOR-DELETED-RUNTIME`: source `664a3b715` is pushed, self-checked
-  and queued after reset. Four added behavioral cases join nine registry tests.
+- `GUI-HOST-LOCATOR-DELETED-RUNTIME`: source `82f17a1ac` normally merges main
+  `d4ec7abab` into `664a3b715`, keeping both adjacent decision-index entries. It
+  is pushed, self-checked and queued after reset. Four added behavioral cases join nine registry tests.
   Native acceptance must recover the retained stale Desktop owner without
   editing its locator by hand; discovery and foreign/Service ownership remain
   strict. Evidence: `out/c3-current-main-release-20261018/remainder-runtime-locator-diagnosis.json`.
@@ -940,8 +941,11 @@ or GPU execution occurred.
 
 Merged Interface/CLI exported native copies were removed05:34:57Z after checking
 process/file references and inbound links. Their concise results/screenshots
-remain. The immutable AppDir, pending folder/badge candidates, shared source and
-dependencies, runnable assets, tools and private profile are retained.
+remain. The merged autostart/folder/badge exports were removed after process/open-file
+and inbound-link checks (about727 MiB allocated);
+`out/c3-current-main-release-20261018/merged-export-cleanup-0548.json` records
+that scoped cleanup. The immutable AppDir, shared source/dependencies, runnable
+assets, tools and private profile are retained.
 
 Autostart native app/session returned05:41Z; all private auxiliary processes
 have ended. Xvfb remains for reset/locator.
