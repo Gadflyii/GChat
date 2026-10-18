@@ -42,6 +42,56 @@ was canceled at 03:00Z; no GPU/model was used. The read-only release donor under
 remains untouched. Only concise result/summary and four screenshots are retained
 in the canonical GChat `out/` receipt folder and ignored worktree `out/`. The
 documentation-only gate is `git diff --check`; no source test gate was repeated.
+## Runtime preparation on first launch — C3, October 18
+
+`GUI-SETUP-RUNTIME-INSTALL-PROGRESS`: during the fresh native `201f46712` walk,
+Welcome reported that GInfer could not connect after 30 s while bundled runtime
+verification was still running. Models correctly showed preparation. Hosts
+had an empty list and disabled Refresh without an explanation. The private Host
+connected after resource preparation completed. Debug hashing duration is not
+release performance evidence.
+
+The fix uses the existing retained `useBundledResources` state on Welcome and
+Hosts. Preparation stays visible until completion; only then does the local
+Host connection grace begin. An installation failure explains restart/reinstall
+and keeps technical details closed. Existing setup action errors remain intact.
+Hosts explains why Refresh is waiting.
+
+Acceptance: regressions cover preparation beyond 30 s, transition to ready and
+its connection grace, installation failure and Host Refresh explanation; focused
+checks plus one `make verify`, then an actual changed-source private native
+pending-to-ready check. No GPU/model workload, Engine numerical change or release
+speed claim. Focused suites and lint pass: 48 affected cases plus three retained resource-state
+cases. The ONE `make verify` passed 3,276 frontend and 121 extension cases and six
+critical coverage groups, then failed an existing Fleet lib test with
+`NetworkUnreachable`: the offline container had `--network=none`. Its failure is
+retained. All seven original native commands then passed with container routing
+and dependency access still offline (1,216 passed, 28 ignored); the full verify
+was not repeated. The changed debug custom-protocol candidate built successfully.
+A fresh private native launch at 02:55:02Z retained preparation past 30 s on
+Welcome and Hosts; Refresh is disabled with its explanation associated by
+`aria-describedby`. At 02:58:35Z preparation cleared and its private Host connected; Welcome
+then showed graphics-card setup with no false error. This passes the changed-source
+Linux native check (English/Dark); installation-error rendering is covered by tests. The
+independent fresh walk continues in `c3-first-user-setup-20261018`.
+
+Merged `origin/main` at `b56d94faa` without rebasing after the conflict with
+Gchat 2’s setup-error persistence test (`ae9c3bed2`). The resolution keeps the
+runtime-preparation cases and the actionable alert plus expanded diagnostics
+through status polls. All31 focused first-run cases pass; neither affected
+product source file changed during this merge, so native acceptance is retained.
+
+Owner/source `/ai/gchat-worktrees/c3-setup-runtime-progress-20261018`, branch
+`fix/c3-setup-runtime-progress-20261018`, base `4ce2a2615`. S1 private root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains baseline native201
+at `runnable/bin/gchat`; the changed candidate is at `candidate/bin/gchat`.
+The fresh candidate profile is `runtime-progress-home`, with private display80
+and its own loopback Host7443 (baseline display79/Host17733). The desktop rewrote the seeded17734 locator and launched PID1945362 with all
+paths under the private profile. Existing private offline
+dependencies and pinned image are reused. CPU64–71,
+shared socket1 compile lock and nice10; no GPU held. Retain this root until the
+fresh walk, hardware candidate and merge review finish, then remove owned private copies and
+retain only result JSON and short summary. Read-only donor remains Claude's.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 

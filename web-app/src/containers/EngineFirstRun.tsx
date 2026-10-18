@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { engineCommand, type EngineHardwareProfile } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
+import { useBundledResources } from '@/hooks/useBundledResources'
 import { plainModelName, plainStartupModelName, gpuCardName } from '@/lib/engine-host-labels'
 import { diskSpaceWarning, downloadStatusLabel, formatModelBytes, releaseVerified, type ModelDownload, type ModelRelease } from '@/lib/model-release'
 
@@ -20,7 +21,7 @@ type FirstRun = {
 }
 
 /** All progress and long-running work belongs to the shared local Host. */
-/** First launch installs the engine before the local Host answers; measured at about 12 s. */
+/** Allow the local Host to connect after bundled resource preparation finishes. */
 const LOCAL_HOST_START_GRACE_MS = 30_000
 
 function FirstRunError({ message, details, label }: { message: string; details: string; label: string }) {
@@ -37,6 +38,8 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const snapshots = useEngineHosts(s => s.snapshots)
   const errors = useEngineHosts(s => s.errors)
   const refresh = useEngineHosts(s => s.refresh)
+  const resources = useBundledResources()
+  const resourcesReady = resources.ready === true && !resources.error
   const localId = hostId ?? hosts.find(host => host.local)?.host_id
   const snapshot = localId ? snapshots[localId] : undefined
   const [flow, setFlow] = useState<FirstRun>()
@@ -69,17 +72,17 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     if (step === 'complete' && !completed.current) { completed.current = true; onComplete?.() }
   }, [step, onComplete])
   useEffect(() => {
-    // The desktop starts this computer's GInfer Host in the background and, on
-    // first launch, installs the engine first. Saying it "could not connect"
-    // before that has had time to finish tells a new person their setup is
-    // broken, so keep reporting progress for a short grace period.
+    // Installation has its own retained status. A connection grace period can
+    // only begin after that work has actually finished.
+    setChecked(false)
+    if (!resourcesReady) return
     let stopped = false
     let grace: ReturnType<typeof setTimeout> | undefined
     void refresh().catch(e => setPollError(String(e))).finally(() => {
       if (!stopped) grace = setTimeout(() => setChecked(true), LOCAL_HOST_START_GRACE_MS)
     })
     return () => { stopped = true; clearTimeout(grace) }
-  }, [refresh])
+  }, [refresh, resourcesReady])
   useEffect(() => {
     if (!localId) return
     let stopped = false
@@ -155,8 +158,9 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   return <section ref={card} className="scroll-mt-4 space-y-4 rounded-xl border p-5" aria-label="Set up local GInfer">
     <h2 className="font-medium">Set up models on this computer</h2>
     <p className="text-sm text-muted-foreground">Choose the graphics cards and model folder to use, then choose a model. GInfer, the engine that runs your models, measures this hardware and checks that each model can start. Saving these measurements helps future model loads and switches finish faster.</p>
+    {resources.error && <FirstRunError message="Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat." details={resources.error} label="GInfer preparation error details" />}
     {unavailable && <FirstRunError message="GChat could not read or update setup on this computer. Check that GInfer is running, then select Retry local setup." details={unavailable} label="Connection error details" />}
-    {!localId && <p role="status" className="text-sm">{checked ? 'GInfer could not connect on this computer. Check that a supported NVIDIA graphics card and the GInfer engine are installed. You can also connect to another computer running GInfer.' : 'Starting GInfer on this computer. The first start can take about half a minute.'}</p>}
+    {!localId && !resources.error && <p role="status" className="text-sm">{!resourcesReady ? 'Preparing GInfer to run models on this computer… GChat is installing and checking its bundled files. This may take a few minutes.' : checked ? 'GInfer could not connect on this computer. Check that a supported NVIDIA graphics card and the GInfer engine are installed. You can also connect to another computer running GInfer.' : 'Starting GInfer on this computer…'}</p>}
     {localId && !flow && !unavailable && <p role="status">Reading saved setup…</p>}
     {flow?.error && <FirstRunError message="Setup could not finish this step. Check the details below, then try the step again. Your saved folder and model choices are kept." details={flow.error} label="Setup error details" />}
     {step === 'gpu' && !manualOpen && <fieldset disabled={busy} className="space-y-3"><legend className="font-medium">Select graphics cards</legend>
