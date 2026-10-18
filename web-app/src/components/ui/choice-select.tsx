@@ -27,7 +27,7 @@ export function ChoiceSelect({ value, onValueChange, options, className, ...prop
   const tabTarget = useRef<HTMLElement | null>(null)
   const selected = options.find(option => option.value === value)
   return <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
-    <DropdownMenuTrigger asChild>
+    <DropdownMenuTrigger asChild disabled={props.disabled}>
       <button {...props} ref={trigger} type="button" data-choice-select
         className={cn('inline-flex min-h-9 min-w-0 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-left font-sans text-sm font-normal text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50', className)}>
         <span className="min-w-0 truncate" title={selected?.label}>{selected?.label ?? value}</span>
