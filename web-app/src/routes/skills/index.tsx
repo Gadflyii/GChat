@@ -298,8 +298,10 @@ export function SkillsPage() {
                 </button>
                 <Switch
                   checked={skill.enabled}
-                  disabled={Boolean(skill.error) || toggling}
+                  disabled={Boolean(skill.error)}
+                  aria-disabled={Boolean(skill.error) || toggling}
                   aria-busy={toggling}
+                  className={toggling ? 'cursor-not-allowed opacity-50' : undefined}
                   aria-label={`${t('common:enableSkill')}: ${skill.name}`}
                   onCheckedChange={(enabled) =>
                     void toggleSkill(skill.name, enabled)

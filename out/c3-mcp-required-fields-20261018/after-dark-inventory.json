@@ -1,0 +1,24 @@
+{
+  "config": {
+    "mcpServers": {
+      "GChat Browser MCP": {
+        "active": false,
+        "args": [
+          "-y",
+          "search-mcp-server@latest"
+        ],
+        "command": "npx",
+        "env": {
+          "BRIDGE_HOST": "127.0.0.1",
+          "BRIDGE_PORT": "17389"
+        },
+        "official": true
+      }
+    },
+    "mcpSettings": {
+      "toolCallTimeoutSeconds": 30
+    }
+  },
+  "sha256": "3dbcc10950c34316ad4dd3f1c1063a635da925f6e15fb9bc84cf1c913aade02f",
+  "note": "Snapshot after dark Save rejections and Cancel; automatic inactive Browser entry is hidden in inventory. No probe entry exists."
+}

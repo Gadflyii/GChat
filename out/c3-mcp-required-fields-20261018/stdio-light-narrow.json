@@ -1,0 +1,119 @@
+{
+ "utc": "2026-10-18T09:23:59.131Z",
+ "size": [
+  1024,
+  800
+ ],
+ "theme": "bg-app",
+ "dialog": "Add tool connection\n\nUse the connection details supplied by the tool provider. Give the connection a name, choose how it connects, then select Save connection.\nConnection name\nHow to connect\nChoose the connection type named in the tool provider’s setup instructions.\n\n\nLocal program (STDIO)\n\nWeb address (HTTP)\n\nEvent stream (SSE)\nStart command\nAdd command options only if the provider lists them. Keep them in the same order.\n\nCommand options (arguments)\n\n\nLeave extra settings empty unless the provider supplies a setting name and value, such as an access key.\n\nExtra settings (environment variables)\n\n\nEnter the start command from the tool provider’s setup instructions.\nCancel\nSave connection\n",
+ "alerts": [
+  {
+   "text": "Enter the start command from the tool provider’s setup instructions.",
+   "rect": {
+    "x": 201,
+    "y": 642.5,
+    "width": 622,
+    "height": 20,
+    "top": 642.5,
+    "right": 823,
+    "bottom": 662.5,
+    "left": 201
+   }
+  }
+ ],
+ "inputs": [
+  {
+   "placeholder": "A name you will recognize, such as My calendar",
+   "value": "C3 light field probe"
+  },
+  {
+   "placeholder": "Paste the command from the tool provider",
+   "value": ""
+  },
+  {
+   "placeholder": "Argument 1",
+   "value": ""
+  },
+  {
+   "placeholder": "Key",
+   "value": ""
+  },
+  {
+   "placeholder": "Value",
+   "value": ""
+  }
+ ],
+ "radios": [
+  {
+   "state": "checked",
+   "rect": {
+    "x": 201,
+    "y": 316.5,
+    "width": 16,
+    "height": 16,
+    "top": 316.5,
+    "right": 217,
+    "bottom": 332.5,
+    "left": 201
+   }
+  },
+  {
+   "state": "unchecked",
+   "rect": {
+    "x": 387.375,
+    "y": 316.5,
+    "width": 16,
+    "height": 16,
+    "top": 316.5,
+    "right": 403.375,
+    "bottom": 332.5,
+    "left": 387.375
+   }
+  },
+  {
+   "state": "unchecked",
+   "rect": {
+    "x": 560.90625,
+    "y": 316.5,
+    "width": 16,
+    "height": 16,
+    "top": 316.5,
+    "right": 576.90625,
+    "bottom": 332.5,
+    "left": 560.90625
+   }
+  }
+ ],
+ "buttons": [
+  {
+   "text": "Cancel",
+   "rect": {
+    "x": 613.875,
+    "y": 678.5,
+    "width": 69.5,
+    "height": 32,
+    "top": 678.5,
+    "right": 683.375,
+    "bottom": 710.5,
+    "left": 613.875
+   }
+  },
+  {
+   "text": "Save connection",
+   "rect": {
+    "x": 691.375,
+    "y": 678.5,
+    "width": 131.625,
+    "height": 32,
+    "top": 678.5,
+    "right": 823,
+    "bottom": 710.5,
+    "left": 691.375
+   }
+  }
+ ],
+ "overflow": [
+  1024,
+  1024
+ ]
+}

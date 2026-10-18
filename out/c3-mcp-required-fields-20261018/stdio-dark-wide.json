@@ -1,0 +1,122 @@
+{
+ "utc": "2026-10-18T09:22:48.409Z",
+ "path": "/settings/mcp-servers",
+ "size": [
+  1500,
+  1000
+ ],
+ "theme": "bg-app dark",
+ "dialog": "Add tool connection\n\nUse the connection details supplied by the tool provider. Give the connection a name, choose how it connects, then select Save connection.\nConnection name\nHow to connect\nChoose the connection type named in the tool provider’s setup instructions.\n\n\nLocal program (STDIO)\n\nWeb address (HTTP)\n\nEvent stream (SSE)\nStart command\nAdd command options only if the provider lists them. Keep them in the same order.\n\nCommand options (arguments)\n\n\nLeave extra settings empty unless the provider supplies a setting name and value, such as an access key.\n\nExtra settings (environment variables)\n\n\nEnter the start command from the tool provider’s setup instructions.\nCancel\nSave connection\n",
+ "alerts": [
+  {
+   "text": "Enter the start command from the tool provider’s setup instructions.",
+   "rect": {
+    "x": 391,
+    "y": 742.5,
+    "width": 718,
+    "height": 20,
+    "top": 742.5,
+    "right": 1109,
+    "bottom": 762.5,
+    "left": 391
+   }
+  }
+ ],
+ "inputs": [
+  {
+   "placeholder": "A name you will recognize, such as My calendar",
+   "value": "C3 required field probe"
+  },
+  {
+   "placeholder": "Paste the command from the tool provider",
+   "value": ""
+  },
+  {
+   "placeholder": "Argument 1",
+   "value": ""
+  },
+  {
+   "placeholder": "Key",
+   "value": ""
+  },
+  {
+   "placeholder": "Value",
+   "value": ""
+  }
+ ],
+ "radios": [
+  {
+   "state": "checked",
+   "rect": {
+    "x": 391,
+    "y": 416.5,
+    "width": 16,
+    "height": 16,
+    "top": 416.5,
+    "right": 407,
+    "bottom": 432.5,
+    "left": 391
+   }
+  },
+  {
+   "state": "unchecked",
+   "rect": {
+    "x": 577.375,
+    "y": 416.5,
+    "width": 16,
+    "height": 16,
+    "top": 416.5,
+    "right": 593.375,
+    "bottom": 432.5,
+    "left": 577.375
+   }
+  },
+  {
+   "state": "unchecked",
+   "rect": {
+    "x": 750.90625,
+    "y": 416.5,
+    "width": 16,
+    "height": 16,
+    "top": 416.5,
+    "right": 766.90625,
+    "bottom": 432.5,
+    "left": 750.90625
+   }
+  }
+ ],
+ "buttons": [
+  {
+   "text": "Cancel",
+   "disabled": false,
+   "rect": {
+    "x": 899.875,
+    "y": 778.5,
+    "width": 69.5,
+    "height": 32,
+    "top": 778.5,
+    "right": 969.375,
+    "bottom": 810.5,
+    "left": 899.875
+   }
+  },
+  {
+   "text": "Save connection",
+   "disabled": false,
+   "rect": {
+    "x": 977.375,
+    "y": 778.5,
+    "width": 131.625,
+    "height": 32,
+    "top": 778.5,
+    "right": 1109,
+    "bottom": 810.5,
+    "left": 977.375
+   }
+  }
+ ],
+ "overflow": [
+  1500,
+  1500
+ ]
+}

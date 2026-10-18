@@ -1,0 +1,61 @@
+{
+ "utc": "2026-10-18T09:23:09.541Z",
+ "size": [
+  1500,
+  1000
+ ],
+ "theme": "bg-app dark",
+ "dialog": "Add tool connection\n\nUse the connection details supplied by the tool provider. Give the connection a name, choose how it connects, then select Save connection.\nConnection name\nHow to connect\nChoose the connection type named in the tool provider’s setup instructions.\n\n\nLocal program (STDIO)\n\nWeb address (HTTP)\n\nEvent stream (SSE)\nTool server address\nExtra connection details (headers)\n\nLeave these empty unless the tool provider supplies them, for example to sign in with an access key.\n\n\nConnection time limit (seconds)\nSet this only if the provider recommends a longer wait when connecting.\nEnter the web address from the tool provider’s setup instructions.\nCancel\nSave connection\n",
+ "alerts": [
+  {
+   "text": "Enter the web address from the tool provider’s setup instructions.",
+   "rect": {
+    "x": 391,
+    "y": 740.5,
+    "width": 718,
+    "height": 20,
+    "top": 740.5,
+    "right": 1109,
+    "bottom": 760.5,
+    "left": 391
+   }
+  }
+ ],
+ "inputs": [
+  {
+   "placeholder": "A name you will recognize, such as My calendar",
+   "value": "C3 required field probe"
+  },
+  {
+   "placeholder": "Paste the tool provider’s server address",
+   "value": ""
+  },
+  {
+   "placeholder": "Header name",
+   "value": ""
+  },
+  {
+   "placeholder": "Header value",
+   "value": ""
+  },
+  {
+   "placeholder": "Leave empty to use the default",
+   "value": ""
+  }
+ ],
+ "radios": [
+  {
+   "state": "unchecked"
+  },
+  {
+   "state": "unchecked"
+  },
+  {
+   "state": "checked"
+  }
+ ],
+ "overflow": [
+  1500,
+  1500
+ ]
+}
