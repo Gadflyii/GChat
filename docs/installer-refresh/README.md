@@ -176,9 +176,16 @@ errors in `core/gbot/inference.rs`; passive Client credential rules remain intac
 The [effective launch](/ai/gchat/out/c3-linux-rc-20261018/final-model-effective-process.json)
 records those inputs with the private API credential redacted.
 
-The model-list correction is merged in main `528288db2`. The final Release
-refresh is held for the Gbot correction and will retain the frozen Engine and
-prior catalog inputs. Private DEV HTTP acceptance passed at 13:32Z with eight
+The model-list correction is merged in main `528288db2`. The Gbot correction
+is pushed merge-ready as `1204902f74ffd89aa3bcadd22509502a378d3e35`.
+Four focused TLS/Host regressions, Rust check and Clippy pass. Its sole
+`make verify` passed 3,605 application tests, then stopped at a missing nested
+extension Vitest cache. After restoring that private cache, only the unreached
+stages continued: 127 extension tests, all six coverage floors and 1,294 Rust
+tests passed. The [receipt](/ai/gchat/out/c3-gbot-paired-model-session-20261018/verification-result.json)
+distinguishes the failed invocation from the completed continuation. The final
+Release refresh is held for that merge and will retain the frozen Engine.
+Private DEV HTTP acceptance passed at 13:32Z with eight
 packages / 116 profiles; consumers may resume. The eighth signed Flash5090
 input is frozen from source `9bfcec0bba2c8c25321c973308dbcb45b70a1bb1`, SHA256
 `56abd825c2b325242573a3e22a0194f7e421793228f94fb265bf0ed727b3b2a2`, at
@@ -198,8 +205,11 @@ acceptance. The authorized backstop did not
 trigger; minimum MemAvailable was 686,667,743,232 bytes. Its
 [receipt](/ai/gchat/out/c3-linux-rc-20261018/final-memory-backstop.json) is retained.
 
-Next: finish the isolated Gbot correction and its one verification gate, then
-refresh both installers from accepted main. Verify the installed model-list
+Next: pin accepted main after the Gbot merge and refresh both installers once.
+The prepared command preserves all eight signed inputs plus the other 19
+selected catalogs: 27 files / 179 profiles, expected staged JSON SHA256
+`8e528704aae69d2ca699daaf117fe918dbe2fc16c7e511793ad79ddb26aa389c`.
+Verify the installed model-list
 correction, Gbot ready-model selection and saved brain execution. The final
 private restart will remove the HTTP catalog fixture override and check the
 published catalog. Reuse the accepted hardware profile; no full recalibration
