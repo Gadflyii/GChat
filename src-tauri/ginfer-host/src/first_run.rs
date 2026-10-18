@@ -23,11 +23,18 @@ pub struct Progress {
     pub releases: Vec<Release>,
     pub catalog_loaded: bool,
     pub catalog_error: Option<String>,
-    pub selected_release_ids: Vec<String>,
+    /// None means the user has never chosen; Some([]) is an explicit clear.
+    pub selected_release_ids: Option<Vec<String>>,
     pub download_error: Option<String>,
     pub download_ids: Vec<Uuid>,
     pub startup_profiles: Vec<Startup>,
     pub complete: bool,
+}
+
+impl Progress {
+    fn selected_releases(&self) -> &[String] {
+        self.selected_release_ids.as_deref().unwrap_or_default()
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -51,13 +58,13 @@ fn stage(progress: &Progress, profiled: bool, reviewed: bool, jobs: &[Download])
     if !progress.storage_accepted {
         return "storage";
     }
-    if progress.download_ids.is_empty() && progress.selected_release_ids.is_empty() {
+    if progress.download_ids.is_empty() && progress.selected_releases().is_empty() {
         return "models";
     }
     if progress.download_ids.is_empty() && progress.download_error.is_some() {
         return "models";
     }
-    if progress.selected_release_ids.iter().any(|sha| {
+    if progress.selected_releases().iter().any(|sha| {
         !progress
             .download_ids
             .iter()
@@ -117,7 +124,7 @@ fn reconcile(progress: &mut Progress, jobs: &[Download]) -> bool {
 
 fn release_selection(progress: &mut Progress) {
     progress.reviewed_storage = None;
-    progress.selected_release_ids.clear();
+    progress.selected_release_ids = Some(Vec::new());
     progress.download_ids.clear();
     progress.download_error = None;
     progress.startup_profiles.clear();
@@ -145,7 +152,7 @@ fn needs_maintenance(progress: &Progress, jobs: &[Download]) -> bool {
         return true;
     }
     if progress.download_error.is_none()
-        && progress.selected_release_ids.iter().any(|sha| {
+        && progress.selected_releases().iter().any(|sha| {
             !progress.download_ids.iter().any(|id| {
                 jobs.iter()
                     .any(|job| job.id == *id && job.release.sha256 == *sha)
@@ -678,10 +685,10 @@ impl Host {
                 }
                 // Save the entire choice before admitting jobs. Maintenance can
                 // recover any interruption between individual journal writes.
-                progress.selected_release_ids = ids.into_iter().collect();
+                progress.selected_release_ids = Some(ids.into_iter().collect());
                 progress.download_error = None;
                 self.store_first_run(progress.clone()).await?;
-                if !progress.selected_release_ids.is_empty()
+                if !progress.selected_releases().is_empty()
                     && progress.storage_accepted
                     && !self.first_run_profile_busy().await
                 {
@@ -1054,7 +1061,7 @@ impl Host {
         }
         let jobs = self.downloads.list().await;
         let bytes = progress
-            .selected_release_ids
+            .selected_releases()
             .iter()
             .try_fold(0u64, |bytes, sha| {
                 if jobs.iter().any(|job| {
@@ -1092,7 +1099,7 @@ impl Host {
             self.store_first_run(progress.clone()).await?;
             return Err(error);
         }
-        for sha in progress.selected_release_ids.clone() {
+        for sha in progress.selected_releases().to_vec() {
             let jobs = self.downloads.list().await;
             if progress
                 .download_ids
@@ -1173,7 +1180,7 @@ impl Host {
         }
         self.apply_first_run_storage(&mut progress).await?;
         if progress.storage_accepted
-            && !progress.selected_release_ids.is_empty()
+            && !progress.selected_releases().is_empty()
             && progress.download_error.is_none()
         {
             self.admit_first_run_downloads(&mut progress).await?;
@@ -1447,6 +1454,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn model_choice_stays_unset_until_explicitly_cleared_and_survives_host_restart() {
+        let directory = tempfile::tempdir().unwrap();
+        let (host, _) = installed_host(directory.path(), 0).await;
+        host.store_first_run(Progress {
+            gpu_uuids: vec![gpu().uuid],
+            storage_accepted: true,
+            catalog_loaded: true,
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+        host.first_run_maintenance().await.unwrap();
+        assert!(host.first_run_status().await.unwrap()["selected_release_ids"].is_null());
+        let saved = std::fs::read(directory.path().join("host.json")).unwrap();
+        let read = host
+            .first_run_action(json!({"action":"models"}))
+            .await
+            .unwrap();
+        assert!(read["selected_release_ids"].is_null());
+        assert_eq!(
+            saved,
+            std::fs::read(directory.path().join("host.json")).unwrap()
+        );
+        drop(host);
+        let (host, _) = installed_host(directory.path(), 0).await;
+        assert!(host.first_run_status().await.unwrap()["selected_release_ids"].is_null());
+        let cleared = host
+            .first_run_action(json!({"action":"models","release_ids":[]}))
+            .await
+            .unwrap();
+        assert_eq!(cleared["selected_release_ids"], json!([]));
+        drop(host);
+        let (host, _) = installed_host(directory.path(), 0).await;
+        host.first_run_maintenance().await.unwrap();
+        let status = host.first_run_status().await.unwrap();
+        assert_eq!(status["selected_release_ids"], json!([]));
+        assert_eq!(status["selected_downloads"], json!([]));
+        assert_eq!(status["step"], "models");
+        assert!(!host.first_run_pending().await);
+    }
+
+    #[tokio::test]
     async fn maintenance_write_failure_is_visible_and_clears_after_retry() {
         let directory = tempfile::tempdir().unwrap();
         let (host, _) = installed_host(directory.path(), 0).await;
@@ -1663,7 +1712,7 @@ mod tests {
         storage_error.requested_storage = Some(directory.path().join("rejected-storage"));
         storage_error.storage_error = Some("choose another folder".into());
         let mut download_error = models.clone();
-        download_error.selected_release_ids = vec![jobs[0].release.sha256.clone()];
+        download_error.selected_release_ids = Some(vec![jobs[0].release.sha256.clone()]);
         download_error.download_error = Some("not enough free space".into());
         let mut catalog_error = models.clone();
         catalog_error.catalog_error = Some("catalog unavailable; refresh to retry".into());
@@ -1768,7 +1817,7 @@ mod tests {
             gpu_uuids: vec![gpu().uuid],
             storage_accepted: true,
             catalog_loaded: true,
-            selected_release_ids: vec![jobs[0].release.sha256.clone()],
+            selected_release_ids: Some(vec![jobs[0].release.sha256.clone()]),
             download_ids: vec![jobs[0].id],
             ..Default::default()
         };
@@ -1850,7 +1899,7 @@ mod tests {
         assert_eq!(progress.requested_storage, Some(selected_root.clone()));
         assert_eq!(
             progress.selected_release_ids,
-            vec![jobs[0].release.sha256.clone()]
+            Some(vec![jobs[0].release.sha256.clone()])
         );
         assert!(progress.storage_accepted);
         assert_eq!(progress.download_ids, vec![jobs[0].id]);
@@ -1973,7 +2022,7 @@ mod tests {
                 storage_accepted: true,
                 catalog_loaded: true,
                 releases: vec![jobs[0].release.clone()],
-                selected_release_ids: vec![jobs[0].release.sha256.clone()],
+                selected_release_ids: Some(vec![jobs[0].release.sha256.clone()]),
                 download_ids: vec![jobs[0].id],
                 ..Default::default()
             })
@@ -2062,7 +2111,7 @@ mod tests {
         let mut failed_choice = host.data.lock().await.first_run.clone();
         assert_eq!(
             failed_choice.selected_release_ids,
-            vec![jobs[0].release.sha256.clone()]
+            Some(vec![jobs[0].release.sha256.clone()])
         );
         failed_choice.download_error = Some("Previous download admission failed".into());
         host.store_first_run(failed_choice).await.unwrap();
@@ -2116,7 +2165,7 @@ mod tests {
         .unwrap();
         restored.first_run_maintenance().await.unwrap();
         let saved = restored.data.lock().await.first_run.clone();
-        assert!(saved.selected_release_ids.is_empty());
+        assert_eq!(saved.selected_release_ids, Some(vec![]));
         assert!(saved.download_ids.is_empty());
         assert!(saved.download_error.is_none());
         assert!(saved.storage_accepted);
@@ -2139,7 +2188,7 @@ mod tests {
             storage_accepted: true,
             catalog_loaded: true,
             releases: jobs.iter().map(|j| j.release.clone()).collect(),
-            selected_release_ids: jobs.iter().map(|j| j.release.sha256.clone()).collect(),
+            selected_release_ids: Some(jobs.iter().map(|j| j.release.sha256.clone()).collect()),
             download_ids: vec![jobs[0].id],
             ..Default::default()
         };
@@ -3023,7 +3072,7 @@ mod tests {
         let p0 = Progress {
             gpu_uuids: vec!["a".into()],
             storage_accepted: true,
-            selected_release_ids: vec!["sha".into()],
+            selected_release_ids: Some(vec!["sha".into()]),
             download_ids: vec![Uuid::new_v4()],
             download_error: Some("Not found".into()),
             ..Default::default()
@@ -3032,7 +3081,8 @@ mod tests {
         let mut p = p0.clone();
         assert!(reconcile(&mut p, &[]));
         assert_eq!(stage(&p, true, false, &[]), "models");
-        assert!(p.selected_release_ids.is_empty() && p.download_error.is_none());
+        assert_eq!(p.selected_release_ids, Some(vec![]));
+        assert!(p.download_error.is_none());
         assert!(!reconcile(&mut p, &[]));
     }
     #[test]

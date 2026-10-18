@@ -1,5 +1,22 @@
 # GInfer host UI
 
+## First-run cleared choices — active, Gchat 3, October 18
+
+`GUI-FIRST-RUN-CLEARED-CHOICE-REMOUNT` follows Bubbs's approved unset/empty
+design: new users retain the recommended preselection until an explicit
+choice; saving an empty selection persists `[]` and remains unchecked after
+polling, reopening the screen and restarting the Host. Recommendations stay
+visible as suggestions. Status reads and maintenance must not save an empty
+choice for a user who has never chosen.
+
+Owned branch `fix/gchat3-first-run-cleared-choice-remount-20261018`, base
+`15dbad1e6`, uses the matching `/ai/gchat-worktrees/` source tree. Acceptance
+is rendered new-user/clear/remount behavior, durable Host null/empty behavior,
+focused tests and one `make verify`. No GPU, installed-app or Windows claim is
+made. The independent S1 SSD fixture is being prepared from the inactive RC
+donor; no build or model is running. Next: freeze the focused correction and
+run the existing gates on a booked eight-CPU S1 slot.
+
 ## First-run action recovery — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-ACTION-ERROR-GUIDANCE` stops describing every rejected setup

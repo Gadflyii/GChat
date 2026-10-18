@@ -763,7 +763,37 @@ it('saves folder and model choices during profiling and restores them after reop
   expect(screen.queryByText('Downloading models')).not.toBeInTheDocument()
 })
 
-it('clears saved model choices before profiling admits downloads and keeps the cleared choice on polling', async () => {
+it.each([null, undefined])('preselects recommendations only before the first choice (%s) and saves an explicit clear', async selected => {
+  let saved = flow('profiling', {
+    gpu_uuids: ['GPU-one'], catalog_loaded: true, selected_release_ids: selected as string[] | null | undefined,
+    models: [{ release, recommended: true, reason: 'Capacity checks wait for profiling' }],
+  })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'models') saved = { ...saved, selected_release_ids: args.release_ids }
+    return Promise.resolve(saved)
+  })
+  const view = render(<EngineFirstRun />)
+  const choice = await screen.findByRole('checkbox', { name: /Muse/ })
+  await waitFor(() => expect(choice).toBeChecked())
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([])
+  fireEvent.click(choice)
+  const clear = screen.getByRole('button', { name: 'Clear saved model choices' })
+  expect(clear).toBeEnabled()
+  fireEvent.click(clear)
+  await waitFor(() => expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'models', release_ids: [] }))
+  await screen.findByRole('button', { name: 'Save model choices' })
+  view.unmount()
+  render(<EngineFirstRun />)
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: /Muse/ })).not.toBeChecked())
+  expect(screen.getByText(/Muse.*Recommended/)).toBeVisible()
+  expect(screen.getByText('No models are queued for download. Choose models when you are ready.')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Save model choices' })).toBeDisabled()
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([
+    ['first_run', { host_id: 'local', action: 'models', release_ids: [] }],
+  ])
+})
+
+it('clears saved model choices before profiling admits downloads and keeps the cleared choice on polling and reopening', async () => {
   vi.useFakeTimers()
   try {
     let saved = flow('profiling', {
@@ -775,7 +805,8 @@ it('clears saved model choices before profiling admits downloads and keeps the c
       if (args.action === 'models') saved = { ...saved, selected_release_ids: args.release_ids }
       return Promise.resolve(saved)
     })
-    await act(async () => { render(<EngineFirstRun />) })
+    let view!: ReturnType<typeof render>
+    await act(async () => { view = render(<EngineFirstRun />) })
     const choice = screen.getByRole('checkbox', { name: /Muse/ })
     expect(choice).toBeChecked()
     expect(screen.getByText(/Model choices saved\. Downloads will begin/)).toBeVisible()
@@ -796,6 +827,11 @@ it('clears saved model choices before profiling admits downloads and keeps the c
     expect(choice).not.toBeChecked()
     expect(screen.getByText('Measuring graphics cards…')).toBeVisible()
     expect(screen.queryByText(/Model choices saved\. Downloads will begin/)).not.toBeInTheDocument()
+    view.unmount()
+    await act(async () => { render(<EngineFirstRun />) })
+    expect(screen.getByRole('checkbox', { name: /Muse/ })).not.toBeChecked()
+    expect(screen.getByText(/Muse.*Recommended/)).toBeVisible()
+    expect(screen.getByText('No models are queued for download. Choose models when you are ready.')).toBeVisible()
     expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([
       ['first_run', { host_id: 'local', action: 'models', release_ids: [] }],
     ])
@@ -809,7 +845,7 @@ it('keeps edited folder and package choices when a pending profile completes', a
     return Promise.resolve(flow(ready ? 'models' : 'profiling', {
       gpu_uuids: ['GPU-one'],
       storage: { path: '/accepted', recommended_path: ready ? '/new-recommendation' : '/fast', available_bytes: ready ? 1024 ** 4 : null },
-      selected_release_ids: ready ? [release.sha256] : [],
+      selected_release_ids: ready ? [release.sha256] : null,
       models: [{ release, recommended: true, reason: ready ? 'Fits measured memory' : 'Capacity checks wait for profiling' }],
     }))
   })
