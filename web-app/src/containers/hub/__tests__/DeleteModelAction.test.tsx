@@ -184,6 +184,7 @@ describe('DeleteModelAction', () => {
     render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="ginfer" />)
     const { user, confirm } = await openConfirm()
     await user.click(confirm)
+    expect(within(screen.getByRole('dialog')).getAllByRole('button', { name: 'Close' })[0]).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('dialog')).toContainElement(document.activeElement as HTMLElement)
     await user.keyboard('{Escape}')
@@ -326,7 +327,7 @@ describe('DeleteModelAction', () => {
       })
 
       expect(getProviders).toHaveBeenCalledOnce()
-      expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')
+      expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent('You can close this dialog while the request finishes.')
       expect(useModelProvider.getState().providers[0].models).toHaveLength(0)
       expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
       expect(useModelProvider.getState().selectedModel).toBeNull()
@@ -493,7 +494,7 @@ describe('DeleteModelAction', () => {
         secondRow.unmount()
         expect(toastWarning).toHaveBeenCalledTimes(2)
       } else {
-        expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')
+        expect(within(screen.getByRole('dialog')).getByRole('status')).toHaveTextContent('You can close this dialog while the request finishes.')
         expect(secondDeleted).not.toHaveBeenCalled()
       }
 

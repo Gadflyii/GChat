@@ -18,8 +18,12 @@ same-turn duplicate protection, rejection/retry, accepted row removal and focus
 return; affected focused tests, lint, exactly one `make verify`, and private
 Linux native Light/Dark dialog/focus screenshots in this branch. No model load,
 backend change, Windows acceptance, new harness or dependency is in scope.
-Source implementation and regressions are ready for the focused gate; root
-owns this worktree and its source. No resource is reserved. Native preparation
+The first focused gate stopped at 84 passed / four failed before lint or verify.
+Three legacy assertions still expected a busy dialog, which would suppress its
+live status; those now check the announced pending state. Disabling the focused
+confirmation also lost keyboard focus, so acceptance now moves focus to Close
+before disabling confirmation. The pending keyboard test protects that handoff.
+Root owns this worktree and its source. The corrected focused gate is next. Native preparation
 must reuse the existing private-app workflow and retained valid fixture inputs.
 
 ## Models, Downloads and Hardware accessibility — C7, October 18

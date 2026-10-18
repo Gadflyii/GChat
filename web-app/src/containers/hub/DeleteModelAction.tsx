@@ -53,6 +53,7 @@ export function DeleteModelAction({
   const [deleting, setDeleting] = useState(false)
   const deletingRef = useRef(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const closeRef = useRef<HTMLButtonElement>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleDelete = useCallback(async () => {
@@ -60,6 +61,7 @@ export function DeleteModelAction({
     deletingRef.current = true
     setDeleting(true)
     setError(null)
+    closeRef.current?.focus()
     try {
       const refreshError = await deleteLocalModel(serviceHub, modelId, provider)
       onDeleted?.()
@@ -122,6 +124,7 @@ export function DeleteModelAction({
         </div>}
         <DialogFooter className="mt-2">
           <Button
+            ref={closeRef}
             variant="ghost"
             size="sm"
             autoFocus
