@@ -1,0 +1,184 @@
+{
+  "row": "GUI-STARTUP-CHECK-SIZES",
+  "status": "PASS",
+  "owner": "Codex 3",
+  "date": "2026-10-18",
+  "native_source": "66e766a4363980e28f412c8e072d0ff33c714275",
+  "native_binary_sha256": "c1cbae677d800a6deed86106ad0b00306f09a71d832bfd70dc2801dac064690a",
+  "host": "AIS-2-8592-L01 / S1 192.168.1.109",
+  "gpu_ordinal": 1,
+  "gpu_uuid": "GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c",
+  "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+  "catalog_url": "http://192.168.1.109:18761/catalog.json",
+  "artifact": {
+    "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/qwen38_27b_int_df2.ginfer",
+    "identity": {
+      "model_id": "qwen3.8-27b",
+      "weights_id": "groupwise-int-dflash2-q4"
+    },
+    "bytes": 18424985856,
+    "package_sha256": "bcf29abd1598f5666c641da7c59ac28bd999aa98a8d6ba533ae7aa579abd06a7",
+    "hash_source": "private catalog launch-profile receipt; no new full-package hash"
+  },
+  "request": {
+    "vision": true,
+    "structured_outputs": true,
+    "spec": "none",
+    "draft_tokens": 0,
+    "draft_tp": 0,
+    "kv_dtype": "auto",
+    "kv_arena_bytes": null,
+    "host_kv_cache_bytes": null,
+    "prefill_chunk": 0,
+    "no_cuda_graph": false,
+    "flash_host_ram_headroom_gib": null,
+    "expert_lfu": true,
+    "model_id": "ce407db1-89be-4f27-aef0-e2d416b47f73",
+    "gpu_uuids": [
+      "GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c"
+    ],
+    "max_context": 262144,
+    "concurrency": 1,
+    "remaining_instances": 2
+  },
+  "native_result": {
+    "instance_count": 2,
+    "kv_arena_bytes": 29532118784,
+    "model_identity": {
+      "model_id": "qwen3.8-27b",
+      "weights_id": "groupwise-int-dflash2-q4"
+    },
+    "quote": {
+      "model_id": "qwen3.8-27b",
+      "planning_scope": "single-plan",
+      "ranks": [
+        {
+          "device_ordinal": 0,
+          "device_total_bytes": 102005407744,
+          "free_bytes": 101171527680,
+          "graph_allowance_bytes": 25165824,
+          "graph_allowance_source": "planner",
+          "headroom_bytes": 1073741824,
+          "kv_arena_alignment_bytes": 256,
+          "kv_bytes_per_token": 65536,
+          "kv_segment_bytes": 67108864,
+          "kv_segment_tokens": 1024,
+          "kv_token_granularity": 1,
+          "minimum_kv_arena_bytes": 67239936,
+          "rank": 0,
+          "startup_peak_bytes": 20047143168,
+          "state_bytes": 2565527296,
+          "weights_bytes": 17389210112
+        }
+      ],
+      "schema": "ginfer-startup-quote-v1",
+      "tensor_parallel_size": 1,
+      "weights_id": "groupwise-int-dflash2-q4"
+    }
+  },
+  "displayed_text": "Model file checked: Qwen 3.8 27B \u2014 INT. 2 model copies. 27.5 GiB of graphics-card conversation memory per model copy. This check did not start a model.",
+  "checks": {
+    "formatted_memory": true,
+    "correct_plural": true,
+    "no_raw_bytes": true,
+    "no_instance_placeholder": true,
+    "no_model_started": true,
+    "only_gpu1_selected": true
+  },
+  "method": "Native XTest selected the installed artifact, physical GPU1 and 2 copies, then clicked Check model settings. Read-only WebKit inspection recorded DOM and the actual React quote response; no injected action or duplicate quote API call. Screenshot visually reviewed at Dark 1280x900.",
+  "profile": {
+    "status": "completed",
+    "scope": "artifact",
+    "schema_version": 2,
+    "elapsed_ms": 143836,
+    "base_complete": true,
+    "scope_complete": true,
+    "all_formats_complete": false,
+    "error": null,
+    "all_formats_note": "Other format grids were not required by this artifact-scoped quote.",
+    "job_id": "d0da36ad-49cc-4e9e-af8d-9b18f204a9de",
+    "profile_path": "/media/ron/SSD_RAID/ai/tmp-c3-startup-check-sizes-20261018/home/data/GChat/data/ginfer/host/hardware-profiles/0349a0c8a4cf1a4009c02e9d15568279eaa3249315180f784f1c6e7c94041afb.json",
+    "started_unix_ms": 1792320841113,
+    "finished_unix_ms": 1792320984949,
+    "selected_artifact": {
+      "directory_sha256": "bbffa5da92b20c98dc883f555fd3bd60c47d239b50bbcb1f41b8f070ddccc486",
+      "draft_tokens": null,
+      "draft_tp": 0,
+      "package_sha256": null,
+      "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/qwen38_27b_int_df2.ginfer",
+      "spec": "none",
+      "tp": 1
+    }
+  },
+  "verification": {
+    "reused_gate": "1062ba9f8 ONE make verify; 69 Host-model and 48 model-release cases",
+    "source_binding": "Result wording and byte formatter unchanged from retained 11ce0355d; complete files contain unrelated changes.",
+    "new_gate": "git diff --check only; evidence/docs only",
+    "build": "Fresh development frontend, native GChat and ginfer-host; locked/offline Cargo; all build commands exit 0.",
+    "engine_source": "e2282c336d114b7dcebdfa1a179bfb342731a8b8; source_dirty=false runtime manifest"
+  },
+  "limits": [
+    "Linux native development build acceptance; no Windows or installer acceptance",
+    "No model-quality or throughput claim",
+    "Check produced a quote only; Start model was never clicked"
+  ],
+  "cleanup": {
+    "resource_return": "11:08Z",
+    "private_session": "stopped",
+    "owned_ssd_root": "/media/ron/SSD_RAID/ai/tmp-c3-startup-check-sizes-20261018",
+    "owned_ssd_root_removed": true,
+    "retained": "Small result JSON, native quote JSON, summary and screenshot only; protected donor tools/resources, private catalog and released NAS input untouched."
+  },
+  "host_snapshot": {
+    "observed_at": "2026-10-18T11:05:39.987046+00:00",
+    "instances": []
+  },
+  "build_receipt": {
+    "source": "66e766a4363980e28f412c8e072d0ff33c714275",
+    "exit": 0,
+    "completion_lines": [
+      "\u2713 built in 23.39s",
+      "    Finished `dev` profile [unoptimized] target(s) in 12.27s",
+      "    Finished `dev` profile [unoptimized] target(s) in 56.11s"
+    ],
+    "native_binary_sha256": "c1cbae677d800a6deed86106ad0b00306f09a71d832bfd70dc2801dac064690a",
+    "build_log_bytes": 72665,
+    "build_log_sha256": "7e07fbfbb5bc6e8c874ae8f64ac6238f3c8e1c853893e812e37c94a99f9e94be",
+    "resource_return": "11:08Z"
+  },
+  "catalog_receipt": {
+    "observed_at": "2026-10-18T11:05:56.670073+00:00",
+    "url": "http://192.168.1.109:18761/catalog.json",
+    "http_status": 200,
+    "bytes": 263298,
+    "sha256": "fc0f30347188edb5b94d84441653cc890f8316768582e2ab58656bc1e4cba579",
+    "host_catalog_http_status": 200,
+    "host_catalog_entries": 7,
+    "host_catalog_bytes": 206234,
+    "selected_identity": {
+      "model_id": "qwen3.8-27b",
+      "weights_id": "groupwise-int-dflash2-q4"
+    },
+    "selected_package_bytes": 18424985856,
+    "catalog_package_sha256": "bcf29abd1598f5666c641da7c59ac28bd999aa98a8d6ba533ae7aa579abd06a7",
+    "model_url": "http://192.168.1.109:18761/qwen38_27b_int_df2.ginfer",
+    "selected_launch_profile_count": 29
+  },
+  "engine_runtime": {
+    "source_commit": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
+    "source_dirty": false,
+    "cuda_architecture": "sm_120a",
+    "cuda_toolkit": "13.3",
+    "manifest_schema": "ginfer-linux-runtime-v1",
+    "manifest_binary_receipts": {
+      "ginfer": {
+        "bytes": 408018832,
+        "sha256": "e2407139e71c2e32332a0d7f21bdffd0dd8b3770bd6a27f3042d3f76b2de4b33"
+      },
+      "ginfer-serve": {
+        "bytes": 408895144,
+        "sha256": "b80e46049c9655ee4667fce58de28879d8a6d3e38a61c5f2391d1d05a7fbef64"
+      }
+    }
+  }
+}

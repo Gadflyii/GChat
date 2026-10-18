@@ -41,7 +41,8 @@ export function BrainSetup({
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
   const disabled = busy || saving
-  const [error, setError] = useState<string>()
+  const [saveError, setSaveError] = useState<string>()
+  const [discoveryError, setDiscoveryError] = useState<string>()
   const [models, setModels] = useState<PairedModel[]>([])
   const [loading, setLoading] = useState(false)
   const [refresh, setRefresh] = useState(0)
@@ -50,7 +51,7 @@ export function BrainSetup({
     if (!editing || !paired) return
     let current = true
     setLoading(true)
-    setError(undefined)
+    setDiscoveryError(undefined)
     void gbot<PairedModel[]>('assignments/models')
       .then(
         (items) => {
@@ -59,7 +60,7 @@ export function BrainSetup({
         (reason: unknown) => {
           if (current) {
             setModels([])
-            setError(String(reason))
+            setDiscoveryError(String(reason))
           }
         }
       )
@@ -93,12 +94,12 @@ export function BrainSetup({
     if (busy || savingRef.current || !valid) return
     savingRef.current = true
     setSaving(true)
-    setError(undefined)
+    setSaveError(undefined)
     try {
       await onSave()
       setEditing(false)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason))
+      setSaveError(reason instanceof Error ? reason.message : String(reason))
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -108,7 +109,8 @@ export function BrainSetup({
   function cancelEdits() {
     if (!saved || disabled || savingRef.current) return
     onCancel()
-    setError(undefined)
+    setSaveError(undefined)
+    setDiscoveryError(undefined)
     setEditing(false)
   }
 
@@ -240,6 +242,11 @@ export function BrainSetup({
                 Refresh hosts
               </Button>
             </div>
+            {discoveryError && (
+              <p role="alert" className="text-sm text-destructive">
+                {discoveryError}
+              </p>
+            )}
             {!loading && !models.length && (
               <p className="text-sm text-muted-foreground">
                 No ready models. Open GInfer Hosts, pair the computer that runs
@@ -377,9 +384,9 @@ export function BrainSetup({
           Saving stores these settings. The connection is used when you start a
           task.
         </p>
-        {error && (
+        {saveError && (
           <p role="alert" className="text-sm text-destructive">
-            {error}
+            {saveError}
           </p>
         )}
         {saving && (
