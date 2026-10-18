@@ -114,7 +114,7 @@ it('keeps the submitted LAN bot name stable through Save and refresh, then permi
   expect(request.mock.calls).toEqual([
     ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
   ])
-  expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Saving name…' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
   await user.type(input, ' Reviewer')
   expect(input).toHaveValue('Editor')
@@ -154,6 +154,94 @@ it('keeps the submitted LAN bot name stable through Save and refresh, then permi
   )
   await user.click(screen.getByRole('button', { name: 'Rename bot' }))
   expect(screen.getByLabelText('Bot name')).toHaveValue('Copy editor')
+  expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+  expect(request).toHaveBeenCalledTimes(2)
+})
+
+it('submits a LAN rename once and keeps saving feedback through refresh and explicit retry', async () => {
+  const user = userEvent.setup()
+  const firstRename = deferred<void>()
+  const retryRename = deferred<void>()
+  const firstRefresh = deferred<string>()
+  const retryRefresh = deferred<string>()
+  const refresh = vi.fn()
+    .mockReturnValueOnce(firstRefresh.promise)
+    .mockReturnValueOnce(retryRefresh.promise)
+  request.mockReturnValueOnce(firstRename.promise).mockReturnValueOnce(retryRename.promise)
+  const perform = vi.fn()
+
+  function Parent() {
+    const [busy, setBusy] = useState(false)
+    const [name, setName] = useState('Writer')
+    return (
+      <GbotLanBot
+        id="bot-1"
+        name={name}
+        busy={busy}
+        connected={false}
+        perform={async (action) => {
+          perform()
+          setBusy(true)
+          try {
+            await action()
+          } finally {
+            try {
+              setName(await refresh())
+            } finally {
+              setBusy(false)
+            }
+          }
+        }}
+        removed={vi.fn()}
+      />
+    )
+  }
+  render(<Parent />)
+  await user.click(screen.getByRole('button', { name: 'Rename bot' }))
+  const input = screen.getByLabelText('Bot name')
+  await user.clear(input)
+  await user.type(input, 'Editor')
+  const form = screen.getByRole('form', { name: 'Rename bot' })
+  act(() => {
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+  })
+  expect(perform).toHaveBeenCalledTimes(1)
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+  ])
+  expect(screen.getByRole('status')).toHaveTextContent('Saving bot name…')
+  expect(screen.getByRole('button', { name: 'Saving name…' })).toBeDisabled()
+  expect(input).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  await act(async () => firstRename.reject(new Error('Could not save name')))
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+  expect(screen.getByRole('status')).toHaveTextContent('Saving bot name…')
+  expect(input).toBeDisabled()
+  fireEvent.submit(form)
+  expect(perform).toHaveBeenCalledTimes(1)
+  await act(async () => firstRefresh.resolve('Writer'))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not save this bot’s name.')
+  expect(input).toHaveValue('Editor')
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Save name' })).toBeEnabled()
+
+  await user.click(screen.getByRole('button', { name: 'Save name' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(perform).toHaveBeenCalledTimes(2)
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+  ])
+  await act(async () => retryRename.resolve())
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
+  expect(screen.queryByLabelText('Bot name')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Rename bot' })).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Saving bot name…')
+  await act(async () => retryRefresh.resolve('Editor'))
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Rename bot' }))
+  expect(screen.getByLabelText('Bot name')).toHaveValue('Editor')
   expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
   expect(request).toHaveBeenCalledTimes(2)
 })

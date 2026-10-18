@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { confirmAction } from '@/lib/confirm'
@@ -21,6 +21,9 @@ export default function GbotLanBot({
   removed: () => void
 }) {
   const [renaming, setRenaming] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const disabled = busy || saving
   const [draft, setDraft] = useState(name)
   const [error, setError] = useState('')
   const [removalError, setRemovalError] = useState('')
@@ -28,6 +31,26 @@ export default function GbotLanBot({
   const errorId = useId()
   const removalErrorId = useId()
   const trimmed = draft.trim()
+  async function saveName() {
+    if (disabled || savingRef.current || !trimmed || trimmed === name) return
+    savingRef.current = true
+    setSaving(true)
+    setError('')
+    try {
+      await perform(
+        async () => {
+          await gbot('workspaces/ssh/rename', { workspace_id: id, name: trimmed })
+          setRenaming(false)
+        },
+        true
+      )
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      savingRef.current = false
+      setSaving(false)
+    }
+  }
   return (
     <div className="space-y-2">
       {renaming ? (
@@ -36,35 +59,28 @@ export default function GbotLanBot({
           className="flex flex-wrap items-end gap-2"
           onSubmit={(event) => {
             event.preventDefault()
-            if (!trimmed || trimmed === name) return
-            setError('')
-            void perform(
-              async () => {
-                await gbot('workspaces/ssh/rename', { workspace_id: id, name: trimmed })
-                setRenaming(false)
-              },
-              true
-            ).catch((cause) => {
-              setError(cause instanceof Error ? cause.message : String(cause))
-            })
+            void saveName()
           }}
         >
           <label className="space-y-1 text-sm">
             Bot name
             <Input
               autoFocus
-              disabled={busy}
+              disabled={disabled}
               aria-describedby={error ? errorId : undefined}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />
           </label>
-          <Button disabled={busy || !trimmed || trimmed === name}>Save name</Button>
+          <Button disabled={disabled || !trimmed || trimmed === name}>
+            {saving ? 'Saving name…' : 'Save name'}
+          </Button>
           <Button
             type="button"
             variant="ghost"
-            disabled={busy}
+            disabled={disabled}
             onClick={() => {
+              if (busy || savingRef.current) return
               setError('')
               setRenaming(false)
             }}
@@ -76,7 +92,7 @@ export default function GbotLanBot({
         <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
-            disabled={busy}
+            disabled={disabled}
             onClick={() => {
               setDraft(name)
               setRenaming(true)
@@ -86,7 +102,7 @@ export default function GbotLanBot({
           </Button>
           <Button
             variant="outline"
-            disabled={busy || connected}
+            disabled={disabled || connected}
             aria-describedby={connected ? reasonId : removalError ? removalErrorId : undefined}
             onClick={() =>
               void confirmAction({
@@ -112,6 +128,11 @@ export default function GbotLanBot({
             Remove bot
           </Button>
         </div>
+      )}
+      {saving && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Saving bot name…
+        </p>
       )}
       {error && (
         <div id={errorId} role="alert" className="space-y-1 text-sm">
