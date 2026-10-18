@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-18** — [Refresh desktop Host registration from current runtime](2026-10-18-refresh-desktop-host-registration-from-current-runtime.md)
+
 - **2026-10-18** — [Own custom GInfer startup in Hosts](2026-10-18-own-custom-ginfer-startup-in-hosts.md)
 
 - **2026-10-18** — [Report typed Gbot startup failures](2026-10-18-report-typed-gbot-startup-failures.md)

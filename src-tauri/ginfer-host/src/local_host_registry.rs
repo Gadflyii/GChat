@@ -97,7 +97,10 @@ pub fn locator_path() -> Result<PathBuf, String> {
     Ok(root.join("local-host.json"))
 }
 
-fn read(path: &Path) -> Result<Option<Owner>, String> {
+// Decode the registration separately from checking whether its runtime files
+// still exist. A current Desktop seed owns its installed paths; discovery alone
+// must still validate the saved paths before using them.
+fn read_record(path: &Path) -> Result<Option<Owner>, String> {
     let file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -106,8 +109,13 @@ fn read(path: &Path) -> Result<Option<Owner>, String> {
     let locator: Locator = serde_json::from_reader(file)
         .map_err(|error| format!("Invalid local host locator {}: {error}", path.display()))?;
     if locator.schema != "ginfer-local-host-v1" { return Err("Unsupported local host locator schema".into()); }
-    locator.owner.validate()?;
     Ok(Some(locator.owner))
+}
+
+fn read(path: &Path) -> Result<Option<Owner>, String> {
+    let owner = read_record(path)?;
+    if let Some(owner) = &owner { owner.validate()?; }
+    Ok(owner)
 }
 
 fn select(path: &Path, seed: Option<Owner>) -> Result<Owner, String> {
@@ -128,38 +136,54 @@ fn select(path: &Path, seed: Option<Owner>) -> Result<Owner, String> {
     { use std::os::unix::fs::OpenOptionsExt; options.mode(0o600); }
     let lock = options.open(parent.join("local-host.lock")).map_err(|error| error.to_string())?;
     lock.lock().map_err(|error| error.to_string())?;
-    if let Some(owner) = read(path)? {
+    if let Some(owner) = read_record(path)? {
         if let (Owner::Desktop(current), Owner::Desktop(updated)) = (&owner, &seed) {
             if same_directory(&current.directory, &updated.directory) {
                 let mut refreshed = updated.clone();
                 refreshed.listen = current.listen;
+                refreshed.validate()?;
                 return write(path, Owner::Desktop(refreshed));
             }
+        } else {
+            // Service registrations and clients without an explicit Desktop
+            // root keep their existing validation and first-owner semantics.
+            owner.validate()?;
+            if !matches!(&seed, Owner::Desktop(_)) { return Ok(owner); }
         }
-        if !matches!(&seed, Owner::Desktop(_)) { return Ok(owner); }
         // A desktop owns its configured root. Registration never transfers another
         // installation's storage or stops its process; clients retain their owner.
     }
     write(path, seed)
 }
 
+fn refresh_connected_at(path: &Path, local: Box<LocalHost>) -> Result<(), String> {
+    if !path.try_exists().map_err(|e| e.to_string())? { return Ok(()); }
+    let Some(parent) = path.parent() else { return Err("local host locator has no parent".into()); };
+    // Only refresh an existing registration; a direct private bootstrap does
+    // not register itself, and a concurrent different root keeps its locator.
+    let lock = OpenOptions::new().read(true).write(true).open(parent.join("local-host.lock"))
+        .map_err(|e| e.to_string())?;
+    lock.lock().map_err(|e| e.to_string())?;
+    if let Some(owner) = read_record(path)? {
+        match owner {
+            Owner::Desktop(current) if same_directory(&current.directory, &local.directory) => {
+                // ensure_running already validated and authenticated this owner.
+                // Old runtime files may have been removed by an update or reset.
+                // Keep the latest registered paths: a connected older client
+                // must not undo a newer same-root Desktop seed.
+                write(path, Owner::Desktop(current))?;
+            }
+            service @ Owner::Service { .. } => service.validate()?,
+            Owner::Desktop(_) => {},
+        }
+    }
+    Ok(())
+}
+
 async fn refresh_connected(local: Box<LocalHost>) -> Result<(), String> {
     let path = locator_path()?;
-    tokio::task::spawn_blocking(move || {
-        if !path.try_exists().map_err(|e| e.to_string())? { return Ok(()); }
-        let Some(parent) = path.parent() else { return Err("local host locator has no parent".into()); };
-        // Only refresh an existing registration; a direct private bootstrap does
-        // not register itself, and a concurrent different root keeps its locator.
-        let lock = OpenOptions::new().read(true).write(true).open(parent.join("local-host.lock"))
-            .map_err(|e| e.to_string())?;
-        lock.lock().map_err(|e| e.to_string())?;
-        if let Some(Owner::Desktop(current)) = read(&path)? {
-            if same_directory(&current.directory, &local.directory) {
-                write(&path, Owner::Desktop(current))?;
-            }
-        }
-        Ok(())
-    }).await.map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || refresh_connected_at(&path, local))
+        .await.map_err(|e| e.to_string())?
 }
 
 fn relocate(path: &Path, previous: &Path, updated: LocalHost) -> Result<bool, String> {
@@ -197,6 +221,133 @@ pub async fn registered() -> Result<Option<Owner>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn desktop(provider: &Path, runtime: &Path) -> LocalHost {
+        LocalHost {
+            binary: std::env::current_exe().unwrap(), engine: runtime.into(),
+            engine_runtimes: [("12.0".into(), runtime.into())].into(),
+            directory: provider.join("host"), desktop_provider: Some(provider.into()),
+            models: vec![], artifact_sets: vec![], name: "Runtime replacement fixture".into(),
+            nvidia_smi: "unused".into(), listen: "127.0.0.1:17443".parse().unwrap(),
+        }
+    }
+
+    #[test]
+    fn current_desktop_seed_replaces_deleted_runtimes_at_same_or_changed_root() {
+        for changed_root in [false, true] {
+            let root = tempfile::tempdir().unwrap();
+            let path = root.path().join("config/local-host.json");
+            let obsolete = root.path().join("old-ginfer-serve");
+            let installed = root.path().join("current-ginfer-serve");
+            std::fs::write(&obsolete, "old runtime").unwrap();
+            std::fs::write(&installed, "current runtime").unwrap();
+            let mut previous = desktop(&root.path().join("previous"), &obsolete);
+            previous.listen = "127.0.0.1:17445".parse().unwrap();
+            std::fs::create_dir_all(&previous.directory).unwrap();
+            let retained = previous.directory.join("retained-data");
+            std::fs::write(&retained, "do not move or delete").unwrap();
+            select(&path, Some(Owner::Desktop(Box::new(previous.clone())))).unwrap();
+            std::fs::remove_file(&obsolete).unwrap();
+            let before = std::fs::read(&path).unwrap();
+
+            // Discovery cannot use a deleted runtime or silently repair it.
+            assert!(select(&path, None).err().unwrap().contains("Runtime for 12.0"));
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+            assert!(select(&path, Some(Owner::Service {
+                directory: root.path().join("service"), origin: "https://127.0.0.1:17443".into(),
+            })).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), before);
+
+            let provider = if changed_root { root.path().join("selected") }
+                else { previous.desktop_provider.clone().unwrap() };
+            let current = desktop(&provider, &installed);
+            let Owner::Desktop(selected) = select(&path, Some(Owner::Desktop(Box::new(current.clone())))).unwrap()
+                else { panic!("desktop owner expected"); };
+            assert_eq!(selected.directory, current.directory);
+            assert_eq!(selected.engine, installed);
+            assert_eq!(selected.engine_runtimes, current.engine_runtimes);
+            assert_eq!(selected.listen.port(), if changed_root { 17443 } else { 17445 });
+            let discovered = select(&path, None).unwrap();
+            assert_eq!(serde_json::to_value(discovered).unwrap(), serde_json::to_value(Owner::Desktop(selected)).unwrap());
+            assert_eq!(std::fs::read_to_string(retained).unwrap(), "do not move or delete");
+            if changed_root { assert!(!provider.exists()); }
+        }
+    }
+
+    #[test]
+    fn connected_refresh_ignores_deleted_files_and_preserves_newer_same_root_seed() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config/local-host.json");
+        let obsolete = root.path().join("old-ginfer-serve");
+        let installed = root.path().join("current-ginfer-serve");
+        std::fs::write(&obsolete, "old runtime").unwrap();
+        std::fs::write(&installed, "current runtime").unwrap();
+        let provider = root.path().join("provider");
+        let previous = desktop(&provider, &obsolete);
+        select(&path, Some(Owner::Desktop(Box::new(previous.clone())))).unwrap();
+        let current = desktop(&provider, &installed);
+        current.validate().unwrap();
+        std::fs::remove_file(&obsolete).unwrap();
+
+        refresh_connected_at(&path, Box::new(current.clone())).unwrap();
+        assert!(read(&path).is_err());
+        select(&path, Some(Owner::Desktop(Box::new(current.clone())))).unwrap();
+        refresh_connected_at(&path, Box::new(previous)).unwrap();
+        assert_eq!(serde_json::to_value(read(&path).unwrap().unwrap()).unwrap(),
+            serde_json::to_value(Owner::Desktop(Box::new(current.clone()))).unwrap());
+        // Connection already proved this owner. A later file removal does not
+        // turn its metadata refresh into a second bootstrap validation.
+        std::fs::remove_file(&installed).unwrap();
+        refresh_connected_at(&path, Box::new(current)).unwrap();
+        assert!(read(&path).is_err());
+    }
+
+    #[test]
+    fn connected_refresh_preserves_foreign_or_service_registration_and_does_not_register_private_hosts() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config/local-host.json");
+        let runtime = root.path().join("ginfer-serve");
+        std::fs::write(&runtime, "runtime").unwrap();
+        let connected = desktop(&root.path().join("connected"), &runtime);
+        refresh_connected_at(&path, Box::new(connected.clone())).unwrap();
+        assert!(!path.exists());
+        assert!(!path.with_file_name("local-host.lock").exists());
+
+        let foreign = desktop(&root.path().join("foreign"), &runtime);
+        select(&path, Some(Owner::Desktop(Box::new(foreign)))).unwrap();
+        std::fs::remove_file(&runtime).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        refresh_connected_at(&path, Box::new(connected.clone())).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+
+        let service = Owner::Service {
+            directory: root.path().join("service"), origin: "https://127.0.0.1:17443".into(),
+        };
+        write(&path, service).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        refresh_connected_at(&path, Box::new(connected)).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
+
+    #[test]
+    fn invalid_desktop_seed_or_service_registration_is_not_replaced() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("config/local-host.json");
+        let valid = desktop(&root.path().join("provider"), &std::env::current_exe().unwrap());
+        select(&path, Some(Owner::Desktop(Box::new(valid.clone())))).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        let invalid = desktop(&root.path().join("other"), &root.path().join("missing-runtime"));
+        assert!(select(&path, Some(Owner::Desktop(Box::new(invalid)))).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+
+        write(&path, Owner::Service {
+            directory: root.path().join("service"), origin: "https://192.0.2.1:17443".into(),
+        }).unwrap();
+        let before = std::fs::read(&path).unwrap();
+        assert!(select(&path, Some(Owner::Desktop(Box::new(valid.clone())))).is_err());
+        assert!(refresh_connected_at(&path, Box::new(valid)).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+    }
 
     #[tokio::test]
     async fn locator_records_root_identity_and_reuses_its_saved_management_port() {
@@ -334,5 +485,18 @@ mod tests {
             directory: root.path().join("other"), origin: "https://127.0.0.1:7443".into(),
         })).is_err());
         assert_eq!(std::fs::read(&path).unwrap(), b"incomplete");
+        let local = desktop(&root.path().join("provider"), &std::env::current_exe().unwrap());
+        let unsupported = serde_json::to_value(Locator {
+            schema: "ginfer-local-host-v2".into(), owner: Owner::Desktop(Box::new(local.clone())), identity: None,
+        }).unwrap();
+        let mut unknown_field = unsupported.clone();
+        unknown_field["schema"] = "ginfer-local-host-v1".into();
+        unknown_field["owner"]["unexpected"] = true.into();
+        for bytes in [b"incomplete".to_vec(), serde_json::to_vec(&unsupported).unwrap(), serde_json::to_vec(&unknown_field).unwrap()] {
+            std::fs::write(&path, &bytes).unwrap();
+            assert!(select(&path, Some(Owner::Desktop(Box::new(local.clone())))).is_err());
+            assert!(refresh_connected_at(&path, Box::new(local.clone())).is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        }
     }
 }

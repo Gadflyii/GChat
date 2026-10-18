@@ -1,5 +1,53 @@
 # GInfer host UI
 
+## Refresh desktop registration after runtime replacement — C3, October 18
+
+`GUI-HOST-LOCATOR-DELETED-RUNTIME`: the private installed `d0a8d06bf` walk
+found Models/Downloads failing with **Runtime for 12.0 must be an existing
+absolute executable path**. The saved desktop locator still named the
+reset-deleted relocated runtime set. The current default-folder runtime files
+existed and the running Host used those valid paths. At 05:21Z, retained path
+and process evidence distinguished a stale registration from a deleted live
+executable, an incomplete installer or a merely stale UI error:
+`out/c3-current-main-release-20261018/remainder-runtime-locator-diagnosis.json`.
+
+The candidate separates strict locator JSON/schema decoding from validation
+of saved runtime files. An explicit, fully validated desktop seed replaces
+obsolete desktop paths under the existing registration lock. Matching roots
+retain their saved management port; the resulting seed is validated again.
+A changed configured root registers its own paths without opening, copying,
+deleting or stopping the previous root. Discovery without a desktop seed still
+rejects unusable saved runtimes. Service registration validation and first-owner
+behavior remain intact.
+
+After a successful desktop connection, refresh updates identity/endpoint metadata
+only while the locked registration still names the same root. It keeps the
+latest registered paths so an older connected client cannot undo a newer
+same-root seed, and does not revalidate obsolete files from the saved record.
+A concurrently registered different desktop root or a service entry is
+preserved. Corrupt JSON, unknown fields and unsupported schemas remain errors,
+never silent replacement.
+Decision: [Refresh desktop Host registration from current runtime](../decisions/2026-10-18-refresh-desktop-host-registration-from-current-runtime.md).
+
+Acceptance: same-root runtime upgrades and changed-root reset/relocation recover
+through a valid seed after the old runtime is deleted; discovery alone refuses
+that old registration; connected refresh succeeds without taking over another
+owner or reverting a newer same-root seed. Regression cases also preserve
+retained old-root data, strict schema/service checks and rejection of an invalid
+replacement seed.
+Nine registry tests are prepared, including four new behavioral regressions.
+**Tests/build/native acceptance have not run for this candidate.** The next
+action is the parent's booked serial focused/check/Clippy and ONE verification
+gate after the reset candidate, then changed-source native acceptance.
+
+Owner Codex 3; source/docs worktree
+`/ai/gchat-worktrees/c3-host-locator-deleted-runtime-20261018`, branch
+`fix/c3-host-locator-deleted-runtime-20261018`, fetched main base `4ead3f88f`.
+Only `src-tauri/ginfer-host/src/local_host_registry.rs` and this branch's
+subject/decision records change. No new runtime fixture, build tree, process,
+resource booking, dependency or GPU/model work was created; the parent retains
+the installed AppDir and native fixture in its existing release packet.
+
 ## Gbot companion task-load retry — October 18
 
 `GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously
