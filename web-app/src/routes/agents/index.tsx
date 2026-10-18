@@ -15,7 +15,7 @@ import { AgentRunSetup } from '@/containers/AgentRunSetup'
 import { AgentWorkerPools } from '@/containers/AgentWorkerPools'
 import { AgentLiveRuns } from '@/containers/AgentLiveRuns'
 import { useStudioRuns } from '@/stores/studio-run-store'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useBlocker, useNavigate } from '@tanstack/react-router'
 import {
   IconAlertTriangle,
   IconBolt,
@@ -420,6 +420,24 @@ function AgentStudioPage() {
   const draftBusy = saving || creating || deleting
   const historyRevision = useStudioRuns((s) => s.historyRevision)
   const pageId = useId()
+
+  useBlocker({
+    enableBeforeUnload: false,
+    shouldBlockFn: async ({ next }) => {
+      if (
+        next.routeId === route.agents.index ||
+        !draft || JSON.stringify(draft) === draftBaseline.current
+      ) return false
+      const revision = draftRevision.current
+      const accepted = await confirmAction({
+        title: 'Discard unsaved agent changes?',
+        message: `Your changes to "${draft.name || 'Untitled Agent'}" have not been saved. Discard them to leave Agent Studio.`,
+        confirmLabel: 'Discard changes',
+        destructive: true,
+      })
+      return !accepted || revision !== draftRevision.current
+    },
+  })
 
   useEffect(() => {
     if (view === 'definitions' && draft && !draftBusy && !runSetup) {

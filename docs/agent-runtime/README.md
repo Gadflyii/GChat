@@ -22,6 +22,25 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Unsaved Agent Studio navigation — October 18
+
+An isolated native pass on main `f48c551e2` reproduced silent loss of an
+edited agent Name when opening **New Chat** and returning to Agent Studio.
+The source-compatible `8b5e2cd0c` desktop showed no confirmation; normal
+shutdown kept saved definitions and history byte-identical. Baseline receipts
+and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1134/`.
+
+Leaving Agent Studio with an edited draft now asks **Discard unsaved agent
+changes?**. Cancel is the keyboard default; Cancel and Escape keep the draft
+and current page. **Discard changes** permits the requested navigation without
+saving or deleting definitions. Studio tab/search changes keep the draft
+without a prompt. A successful save clears the warning, and approval for an
+older draft cannot discard newer edits. Native app closing and page reloads
+remain outside this route-navigation change.
+
+Validation pending in `/ai/gchat/out/gchat-agent-unsaved-navigation-20261018/`.
+
 ## Shared confirmation keyboard return — October 18
 
 Private native Agent Studio on main `0f604653e` reproduced focus loss after
