@@ -150,13 +150,13 @@ it('preserves a failed control request while refreshing service computers', asyn
   )
   await act(async () => initialList.reject('Computer list unavailable'))
   expect(screen.getAllByRole('alert')).toHaveLength(2)
-  expect(screen.getByText('Owner approval unavailable')).toBeVisible()
+  expect(screen.getByText('Error: Owner approval unavailable')).toBeVisible()
   expect(
     screen.getByRole('button', { name: 'Paired service computer' })
   ).toHaveTextContent('Service PC')
   expect(gbotControlGrant).toHaveBeenCalledTimes(2)
   fireEvent.click(screen.getByRole('button', { name: 'Refresh computers' }))
-  expect(screen.getByText('Owner approval unavailable')).toBeVisible()
+  expect(screen.getByText('Error: Owner approval unavailable')).toBeVisible()
   expect(
     screen.getByRole('button', { name: 'Refreshing computers…' })
   ).toBeDisabled()
