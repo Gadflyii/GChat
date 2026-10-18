@@ -1,0 +1,49 @@
+{
+  "subject": "GUI-JOURNEY-DISK-SPACE-CRASH",
+  "owner": "Codex 4",
+  "implementation_commit": "21a30afa5baebe7e86782ebaab1e239cea696e93",
+  "host": "S1 AIS-2-8592-L01",
+  "private_session": "Existing C4 journey HOME/XDG0700/DBus/unlocked keyring/Xauthority/Xvfb :196; WAYLAND_DISPLAY unset; replacement matched candidate; no user session access",
+  "native_build": {
+    "profile": "development Tauri custom-protocol with embedded production frontend",
+    "gchat_sha256": "bf3c0a851e91c84ed451cc80776972b180d9fadae989c40df52e808a64d4a037",
+    "ginfer_host_sha256": "c0a15137ad2d4ea880faba677ba5010c267dd7e8b83e30db28201403b7163281",
+    "source_binding": "Exact source hashes in /ai/gchat/out/c4-gui-maintenance-disk-error-20261018/native-export.json; external binding to21a30afa5"
+  },
+  "actions": "Native XTest pointer input and scrolling; WebKit inspector read-only DOM/snapshots",
+  "observations": [
+    "After valid Host startup, a private empty directory at host.json blocks atomic publication. Setup shows Is a directory error, preserves folder and offers enabled Retry setup; app and Host remain alive.",
+    "Restore host.json: failed private catalog request commits, then disposable regular file at requested folder produces File exists storage error, retained as stable setup error.",
+    "Restore original private folder, then native Retry setup: storage_accepted=true, storage_error=null, maintenance alert and Retry disappear, original requested path unchanged.",
+    "Catalog error from deliberate localhost handshake failure remains independently visible; not represented as successful catalog download.",
+    "No selected release, download or startup profile; no Engine child or GPU work during this fault/retry acceptance."
+  ],
+  "screenshots": [
+    "publication-error.png",
+    "storage-error.png",
+    "retry-recovered.png"
+  ],
+  "screenshots_visually_reviewed": true,
+  "limits": [
+    "No real disk filling or native ENOSPC; existing exact ENOSPC mapping and rendered disk-full tests are reused.",
+    "No fresh installer, Windows, inference quality or performance qualification."
+  ],
+  "resources": {
+    "cpu_booking": 2974,
+    "cpus": "80-87 nice10",
+    "terminal_utc": "2026-10-18T04:29:13Z",
+    "booking_canceled": true,
+    "app_host_keyring_dbus_listener_xvfb_forward_terminal": true,
+    "independent_gpu0_fit": "untouched"
+  },
+  "source_checks": "5 maintenance Rust +32 rendered UI; check/Clippy; ONE make verify + exact failed-network-fixture/unexecuted Rust continuation; full gate not repeated",
+  "receipt_files": [
+    "publication-fault.json",
+    "storage-failure.json",
+    "recovery.json",
+    "terminal.json"
+  ],
+  "evidence_branch": "test/c4-journey-native-evidence-20261018",
+  "evidence_commit": "f917c9d61",
+  "evidence_folder": "out/c4-disk-native-20261018"
+}

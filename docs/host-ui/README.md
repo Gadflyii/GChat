@@ -2516,15 +2516,28 @@ frontend is also retained at `candidate/frontend`.
 | `candidate/bin/gchat` | `bf3c0a851e91c84ed451cc80776972b180d9fadae989c40df52e808a64d4a037` |
 | `candidate/bin/ginfer-host` | `c0a15137ad2d4ea880faba677ba5010c267dd7e8b83e30db28201403b7163281` |
 
-The root retains 32,271,990,784 allocated bytes of source, isolated caches and
-exports pending private native acceptance and integration; the donor is untouched.
-Build/binding evidence: `/ai/gchat/out/c4-gui-maintenance-disk-error-20261018/native-export.json`.
+Native acceptance passed in the existing isolated C4 journey session at04:29 UTC.
+After valid Host startup, a private directory at its state-file path blocked
+atomic publication: the app stayed open, showed the error with Retry setup and
+retained the requested folder. Restoring state publication exposed a stable
+error from a disposable regular file at that folder. Restoring the original
+private directory and selecting Retry setup natively accepted the same path and
+cleared maintenance/storage errors. The deliberately failed private catalog
+request retained its independent error; no Engine child or GPU work occurred.
 
-Next action: parent-owned private native error/retry acceptance, then review and
-merge this branch. Native full-disk behavior remains untested; the regression
-uses a failed atomic publication and the existing ENOSPC message mapping without
-filling disk. The native fixture must open valid private state before blocking
-publication, restore that state before Retry and allow a fresh catalog request
-because failed state commits restore the previous in-memory progress. A private
-invalid folder can hold the existing storage-error state until it is repaired
-and Retry setup is selected, preserving the original requested path.
+The three reviewed 1200×800 screenshots and detailed receipts are retained on
+the single journey evidence branch `test/c4-journey-native-evidence-20261018`
+at `f917c9d61`, under `out/c4-disk-native-20261018`. This source branch also retains
+`out/c4-gui-maintenance-disk-error-20261018/native-result.json`, binding the native
+acceptance to this exact implementation and that evidence commit. No disk was
+filled and no native ENOSPC is claimed; actual publication/storage failures and
+recovery complement the existing ENOSPC mapping/rendered regressions. Windows,
+installer, inference quality and performance are outside this acceptance.
+
+App, idle Host, private keyring/D-Bus, listener, Xvfb and inspector forward are
+terminal; CPU80–87 booking2974 was canceled at04:29 UTC. The independent GPU0 fit
+is untouched. The S1 build root retains the tested app/Host and private caches
+pending integration; the donor is untouched. Build/binding evidence:
+`/ai/gchat/out/c4-gui-maintenance-disk-error-20261018/native-export.json`.
+Next action: coordinator review/integration and canonical row closure; retire
+owned disposable build copies after retaining this tested candidate and packet.
