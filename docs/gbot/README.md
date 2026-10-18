@@ -9,7 +9,15 @@ saved-bot data. Only explicit Save name retries the write; retry, successful Sav
 and Cancel clear the warning. Existing pending-field protection is retained.
 
 Rendered Error and native-string regressions cover failure, refresh, retained
-draft, exact retry payload, confirmed saved name and Cancel. Source gates pending.
+draft, exact retry payload, confirmed saved name and Cancel. Original-source baseline:
+3 FAIL / 4 filtered; the old direct-rejection Cancel fixture also reports one
+unhandled rejection, retained in the baseline receipt. Fixed focused suite: 7 PASS
+(`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotLanBot.test.tsx`);
+lint: 0 errors / 5 existing warnings. One `make verify`, 2026-10-18
+12:13:45–12:17:28Z: PASS, 3,577 app / 6 skipped, 127 extension, 1,288 Rust /
+28 ignored across 23 summaries, all six coverage floors, lint/typecheck/guards.
+All 3,452 tracked source hashes stayed unchanged through the gate; this final
+receipt was added afterward. CPU64–71 booking3276 returned 12:18Z.
 Evidence: `out/gchat2-lan-rename-inline-error-20261018/result.json`.
 This source/rendered scope does not qualify live SSH, guests or native Windows.
 
