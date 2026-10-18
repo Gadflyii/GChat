@@ -42,8 +42,11 @@ registered local card and quote identity/memory/no-start result; change one
 valid form field and observe invalidation, then restore/recheck. C4 confirmed
 that those assertions are folded into the pinned `250df804a` ordinary laptop
 preparation before its single Start, including the visible empty/unset download
-catalog and registered local model without a download dependency. Next: review
-C4's native UI quote/invalidation result and returned boundary against the
+catalog and registered local model without a download dependency. C4 will
+preserve the existing Windows catalog and profiles; if that catalog is
+unexpectedly nonempty, record the empty-catalog acceptance gap while the
+primary RC install/chat walk proceeds. Do not reset it or add a model launch.
+Next: review C4's native UI quote/invalidation result and returned boundary against the
 remaining row acceptance; perform no duplicate launch or model run.
 The independent Models registration refresh-recovery row is verified and
 submitted as `1abc01fd1`; no native resource is reserved.
