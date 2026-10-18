@@ -389,13 +389,27 @@ text and app colors in both themes; menu text followed Medium (14px) and
 Large (15.75px). A rapid Escape/Tab/Enter sequence did not reach its intended
 control and is excluded; separately observed Escape and Tab steps passed.
 
-The serving-instance, launch-profile and Fleet-coordinator selectors remain
-**unqualified**. The isolated profile has no connected Host inventory or paired
-Fleet computer, so those controls were absent. Shared-menu acceptance does
-not establish native HTML select popup rendering. The next required fixture
-is an isolated profile with a real connected Host, multiple recorded instances,
-launch inventory and a paired Fleet computer. No pairing, setup or model load
-was performed. Windows and release-wide qualification remain outside this leaf.
+C7 is continuing the serving-instance, launch-profile and Fleet-coordinator
+selectors in `test/c7-dropdown-host-selectors-20261018`, baseline `4ce2a2615`.
+The private S1 native fixture has two genuinely paired Hosts and two explicitly
+saved, stopped instances. The first OS screenshot reproduces a white GTK popup
+in app Dark mode, although computed select/option styles request dark colors.
+Explicitly choosing Dark through Interface does not correct it. Real Down/Enter
+changes the selected stopped instance without starting it. This invalidates the
+prior assumption that CSS color-scheme alone themes native WebKitGTK popups.
+
+The outcome is readable, app-themed typography and colors for these dropdowns,
+with keyboard navigation, selection, Escape and Tab verified in Light/Dark and
+Medium/Large. The next action is a shared app-rendered choice control using the
+existing Radix dropdown primitives, preserving disabled choices and callbacks.
+No dependency, model execution, Fleet authority change or Windows account change
+is needed. The prior Theme/Font Size acceptance remains valid.
+
+S1 CPUs104–111 are booked03:00–03:30Z (line2895); private root
+`/media/ron/SSD_RAID/ai/tmp-c7-dropdown-host-selectors-20261018` owns the
+Host bridge container and native app profile. The ed68 AppDir and Flash Next
+pure 2-bit package are read-only donors. No model or GPU execution is permitted.
+Windows and release-wide qualification remain outside this leaf.
 
 The shared menu, Interface and CSS source is unchanged at main `29c301aeb`;
 the affected Host/Fleet selectors retain the same styling and handlers. Source
