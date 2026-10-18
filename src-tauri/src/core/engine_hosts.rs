@@ -1220,6 +1220,7 @@ mod registration_tests {
             total_memory: 0,
             vendor,
             uuid: "fixture".into(),
+            pci_address: None,
             driver_version: String::new(),
             nvidia_info: None,
             vulkan_info: None,
