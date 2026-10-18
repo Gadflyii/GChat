@@ -826,8 +826,7 @@ ed68/e228 donor and refreshed with current GChat components. It remains immutabl
 and protected. The changed-source folder, Interface and CLI private app/Host sessions have
 stopped after their native checks. Private `current-main-home` now retains
 Dark/Medium at General; its stale Desktop Host locator is preserved as the
-locator candidate's regression input. Xvfb:79 PID2633590 remains live on
-CPU88–95, booking3039 through06:02Z. Keep `tools`: this display uses them.
+locator candidate's regression input. The reset native app/session/display stopped and booking3039 returned05:56Z. Keep `tools` for the next locator native fixture.
 C4's read-only dependency/debug copy and display196 were terminal04:29Z;
 C4 no longer uses this display or stage.
 
@@ -884,18 +883,13 @@ The following changed-source rows are separate from the fixed release pin:
   Evidence: `out/c3-linux-autostart-xdg-20261018/result.json`.
 - `GUI-RESET-RELOCATED-DATA-RESURRECTION`: source `cb6f5c964` includes a normal
   main merge preserving the four reset regressions and main folder-reveal and
-  first-run tests. Focused/check/Clippy/lint, ONE verify/build and private
-  selected-folder acceptance follow serially (booking3051 CPU80–87, launched
-  05:43Z). Native acceptance will select the private sibling `reset-selected-data`,
-  seed selected and old-default log sentinels, use ordinary Reset/confirmation, and
-  check selected sentinel deletion, old sentinel retention, identical installation
-  config bytes and the selected root after restart. The distinct sibling preserves
+  first-run tests. Focused9 reset plus8 resolver/check/Clippy/lint, ONE verify (3,382 app,127 extension,1,251 native and six floors) and build passed. Native05:55Z selected-folder Reset/confirmation/restart passed on private sibling `reset-selected-data`: selected log sentinel deleted, old-default sentinel retained, installation config bytes identical and General reporting the same selected root after restart. Dark wide/narrow screenshots were reviewed. Handoff `5693c8b8f` is merge-ready. The distinct sibling preserves
   the old `relocated-data` runtime paths as invalid input for the queued locator
   regression; restarting at that old root would recreate them. This is fixture
   preparation, separate from the earlier native Move acceptance. No GPU repeat is planned.
 - `GUI-HOST-LOCATOR-DELETED-RUNTIME`: source `82f17a1ac` normally merges main
   `d4ec7abab` into `664a3b715`, keeping both adjacent decision-index entries. It
-  is pushed, self-checked and queued after reset. Four added behavioral cases join nine registry tests.
+  is pushed and self-checked. Nine registry tests, Host check/Clippy and lint passed; ONE verify plus Host/desktop builds run serially under3062 CPU80–87 through06:16Z.
   Native acceptance must recover the retained stale Desktop owner without
   editing its locator by hand; discovery and foreign/Service ownership remain
   strict. Evidence: `out/c3-current-main-release-20261018/remainder-runtime-locator-diagnosis.json`.
@@ -916,8 +910,7 @@ risk of old pre-move chats/models returning follows from the source and retained
 copy; no seeded-chat resurrection was exercised natively. Evidence:
 `out/c3-current-main-release-20261018/factory-reset-relocation.json` and its
 linked relocation/reset receipts. The scoped reset candidate preserves selected
-installation configuration and existing Agent/Host drain ordering; tests/gates
-are still queued. No unselected path deletion, model/profile execution or GPU
+installation configuration and existing Agent/Host drain ordering; tests, ONE verify/build and native selected-folder acceptance now pass. No unselected path deletion, model/profile execution or GPU
 work is claimed.
 
 The release remainder walk reached Models/Downloads refresh and account-service
@@ -947,11 +940,9 @@ and inbound-link checks (about727 MiB allocated);
 that scoped cleanup. The immutable AppDir, shared source/dependencies, runnable
 assets, tools and private profile are retained.
 
-Autostart native app/session returned05:41Z; all private auxiliary processes
-have ended. Xvfb remains for reset/locator.
+Reset native app/session/display returned05:56Z; locator builder3062 is the active private stage user.
 
-Next: run selected-folder reset and stale-Desktop-locator gates/builds and
-native checks serially. Finish the remaining nonconditional controls. Keep the
+Next: deliver the qualified reset fix and finish the stale-Desktop-locator gates/builds/native checks. Finish the remaining nonconditional controls. Keep the
 immutable release and changed-source evidence distinct, preserve conditional
 prerequisites, and return resources when their fixtures stop.
 
