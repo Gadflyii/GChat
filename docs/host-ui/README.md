@@ -44,11 +44,23 @@ All 34 other dependency references match. Booking3613 returned22:46Z. The
 corrective continuation preserves the completed copies and original failed
 receipt, derives the donor reference from that donor, and keeps candidate
 bindings exclusively from frozen Git. Source staging requires its own successful
-continuation receipt. No tests have started. Small command/binding/result metadata is in
-`out/c7-models-stop-status-recovery-20261018/`; raw results stay on S1 until
-coordinator review, then the disposable fixture is retired. Next: finish
-preparation, then focused Models66, lint and exactly one `make verify`, stopping
-on failure.
+continuation receipt. That continuation passed35/35 donor references; frozen
+source staging passed all three source, 35 dependency and eleven catalog / 48
+profile bindings. The first focused attempt on `d45e01667` stopped at **63 passed / three
+failed**. All three accepted-Stop cases counted one download-list read, but
+switching from This computer to Lab server and back legitimately triggers a
+second local inventory read. Stop and status recovery themselves only read
+running state and the Host snapshot. The correction explicitly checks the
+unchanged count before navigation, awaits the one local-return read, and checks
+that subsequent retries add no download or mutation command. Production source
+is unchanged. Lint and `make verify` never started; **zero verify invocations**.
+Booking3617 returned22:53Z and was canceled. Original failure and before/after
+bindings remain in the owned S1 fixture; small metadata is in
+`out/c7-models-stop-status-recovery-20261018/`. Next: freeze and push the
+corrected test, reuse the same prepared fixture for focused66, lint and exactly
+one `make verify`, then review terminal evidence, retire the fixture and hand
+off the result for reviewed merge. No Ada job, build or copy is owned; the
+23:00–23:30Z Ada quiet window is respected.
 
 ## Models overlapping deletion recovery — C7, October 18
 

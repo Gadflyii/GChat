@@ -817,6 +817,8 @@ describe('host-scoped Models', () => {
     expect(screen.getByText(initialError)).not.toBeVisible()
     expect(stoppedRow.getByText(/^Status unavailable · /)).toBeVisible()
     for (const button of screen.getAllByRole('button', { name: /^(Load|Stop) model$/ })) expect(button).toBeDisabled()
+    expect(mocks.command.mock.calls.filter(([action]) => action !== 'snapshot')).toHaveLength(downloadReads)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(downloadReads)
 
     await user.click(screen.getByRole('button', { name: 'Model destination' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Lab server' }))
@@ -829,6 +831,9 @@ describe('host-scoped Models', () => {
     await user.click(screen.getAllByRole('menuitemradio', { name: 'This computer' })[0])
     await user.click(screen.getByRole('tab', { name: 'Installed' }))
     expect(screen.getByText(guidance)).toBeVisible()
+    // Returning to this computer refreshes its download inventory independently of Stop.
+    const navigationDownloadReads = downloadReads + 1
+    await waitFor(() => expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(navigationDownloadReads))
 
     const retryRead = deferred<string[]>()
     mocks.getActiveModels.mockReturnValueOnce(retryRead.promise)
@@ -855,8 +860,8 @@ describe('host-scoped Models', () => {
     expect(mocks.stopModel).toHaveBeenCalledTimes(route === 'desktop' ? 1 : 0)
     expect(mocks.controlHost).toHaveBeenCalledTimes(route === 'local Host' ? 1 : 0)
     expect(mocks.publishSnapshot).toHaveBeenCalledWith('local-host', stoppedSnapshot)
-    expect(mocks.command.mock.calls.filter(([action]) => action !== 'snapshot')).toHaveLength(downloadReads)
-    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(downloadReads)
+    expect(mocks.command.mock.calls.filter(([action]) => action !== 'snapshot')).toHaveLength(navigationDownloadReads)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(navigationDownloadReads)
     expect(mocks.switchModel).not.toHaveBeenCalled()
     expect(mocks.getProviders).not.toHaveBeenCalled()
     expect(mocks.open).not.toHaveBeenCalled()
