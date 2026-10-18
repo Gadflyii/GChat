@@ -529,54 +529,80 @@ it.each(['Stop', 'Resume'] as const)(
   }
 )
 
-it('shows the latest interruption reason after reopening and resumes that task', async () => {
+it.each([
+  { kind: 'service restart', reason: 'executor restarted' },
+  { kind: 'missing reason', reason: '' },
+])('offers interrupted task recovery for $kind after reopening', async ({ reason }) => {
   const [identity] = readyTaskBots()
   const call = mocks.call.getMockImplementation()!
-  const reason = 'model returned no answer; resume the task to try again'
+  const guidance =
+    'This task stopped before it finished. Check the model and computer connections, then resume the task to try again.'
   const previousReason = 'previous connection failed'
+  let resumed = false
   mocks.call.mockImplementation(
-    async (path: string, body: Record<string, unknown>) =>
-      path === 'tasks'
-        ? [
-            {
-              id: 'interrupted-task',
-              identity,
-              state: 'interrupted',
-              messages: [{ role: 'user', content: 'Write the saved note' }],
-              history: [
-                { state: 'interrupted', reason: previousReason, at: 42 },
-                { state: 'running', reason: 'started', at: 42 },
-                { state: 'interrupted', reason, at: 42 },
-              ],
-            },
-          ]
-        : call(path, body)
+    async (path: string, body: Record<string, unknown>) => {
+      if (path === 'tasks')
+        return [
+          {
+            id: 'interrupted-task',
+            identity,
+            state: resumed ? 'completed' : 'interrupted',
+            messages: [{ role: 'user', content: 'Write the saved note' }],
+            history: [
+              { state: 'interrupted', reason: previousReason, at: 40 },
+              { state: 'running', reason: 'started', at: 41 },
+              { state: 'interrupted', reason, at: 42 },
+            ],
+          },
+        ]
+      if (path === 'tasks/resume') resumed = true
+      return call(path, body)
+    }
   )
+  const taskWrites = () =>
+    mocks.call.mock.calls.filter(
+      ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+    )
   const expectInterruption = async () => {
-    const message = await screen.findByText(reason)
+    const message = await screen.findByText(guidance)
     const card = message.closest('article')!
     expect(message).toBeVisible()
     expect(within(card).getByText('Write the saved note')).toBeVisible()
-    expect(within(card).getByRole('button', { name: 'Resume' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Resume', exact: true })).toBeEnabled()
     expect(screen.queryByText(previousReason)).not.toBeInTheDocument()
+    if (reason) {
+      const diagnostic = within(card).getByText(reason)
+      const details = diagnostic.closest('details')!
+      expect(diagnostic).not.toBeVisible()
+      expect(details).not.toHaveAttribute('open')
+      fireEvent.click(within(card).getByText('Details', { exact: true }))
+      expect(diagnostic).toBeVisible()
+      expect(taskWrites()).toEqual([])
+      fireEvent.click(within(card).getByText('Details', { exact: true }))
+      expect(diagnostic).not.toBeVisible()
+    } else {
+      expect(within(card).queryByText('Details', { exact: true })).not.toBeInTheDocument()
+    }
+    expect(taskWrites()).toEqual([])
     return card
   }
 
   render(<Page />)
   await expectInterruption()
   fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
-  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  expect(screen.queryByText(guidance)).not.toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
   await expectInterruption()
   cleanup()
   render(<Page />)
   const card = await expectInterruption()
-  fireEvent.click(within(card).getByRole('button', { name: 'Resume' }))
-  await waitFor(() =>
-    expect(mocks.call).toHaveBeenCalledWith('tasks/resume', {
-      id: 'interrupted-task',
-    })
-  )
+  fireEvent.click(within(card).getByRole('button', { name: 'Resume', exact: true }))
+  expect(await within(card).findByText('completed', { exact: true })).toBeVisible()
+  expect(taskWrites()).toEqual([
+    ['tasks/resume', { id: 'interrupted-task' }],
+  ])
+  expect(screen.queryByText(guidance)).not.toBeInTheDocument()
+  if (reason) expect(screen.queryByText(reason)).not.toBeInTheDocument()
 })
 
 it('does not show an old interruption reason after a task completes', async () => {
@@ -607,6 +633,9 @@ it('does not show an old interruption reason after a task completes', async () =
   expect(reply).toBeVisible()
   expect(within(card).getByText('completed')).toBeVisible()
   expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  expect(
+    screen.queryByText(/This task stopped before it finished/)
+  ).not.toBeInTheDocument()
   expect(
     within(card).queryByRole('button', { name: 'Resume' })
   ).not.toBeInTheDocument()
