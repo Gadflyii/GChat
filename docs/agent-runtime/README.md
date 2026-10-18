@@ -39,7 +39,18 @@ without a prompt. A successful save clears the warning, and approval for an
 older draft cannot discard newer edits. Native app closing and page reloads
 remain outside this route-navigation change.
 
-Validation pending in `/ai/gchat/out/gchat-agent-unsaved-navigation-20261018/`.
+Validation: 97 focused tests and workspace lint PASS; one `make verify`
+PASS (3,562 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `ae95203a2`.
+Rebuilt private native acceptance PASS for saved, new and template drafts:
+Cancel is initially focused, Enter and Escape retain edits, and explicit
+discard reaches Chat or Models. A hidden draft on Templates remains protected;
+clean drafts and Studio tabs do not prompt. The candidate screenshot was viewed.
+Normal shutdown at 11:52Z kept saved definitions and history byte-identical;
+CPU booking 3265 was returned. Receipts:
+`/ai/gchat/out/gchat-agent-unsaved-navigation-20261018/`.
+This qualifies Linux route navigation; native closing/reload protection and
+Windows are outside this check. No save, delete, run or inference was performed.
 
 ## Shared confirmation keyboard return — October 18
 
