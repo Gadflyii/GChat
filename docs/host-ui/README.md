@@ -1,5 +1,50 @@
 # GInfer host UI
 
+## First-run edited startup settings — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-UNCHECKED-SETTINGS` fixes a confirmed first-run control defect:
+editing Advanced settings leaves the prior “Ready” message and Finish local
+setup enabled, so finishing silently uses different settings from those shown.
+Each model's displayed values must match the Host's checked settings before
+Finish is enabled. A newer edit must survive an older check response, status
+poll or rejected check. Restoring the checked values may reuse their check.
+
+Acceptance: reproduce the unchecked-edit and in-flight-check cases in the
+existing rendered tests, preserve separate model drafts, pass focused tests
+and ONE `make verify`. This changes frontend readiness only; Host/Engine
+startup, admission and physical qualification are unchanged. The candidate
+keeps controlled drafts by download ID, compares their numeric values with the
+Host's saved settings, and labels the summary as saved settings. Host startup
+already clears its old quote when accepting changed settings; no Host repair
+is needed. The unchanged base with only the new tests reproduced **5 expected
+failures / 39 skipped** at 12:27Z: Finish stayed enabled for unchecked edits,
+including after a rejected check or an older accepted check; both models kept
+their Ready messages after one model was edited. The newer input itself was
+preserved in the baseline; its incorrect readiness was the observed race.
+Candidate focused tests pass **44/44** (12:27Z, 10.44s). ONE `make verify`
+passed at 12:35:38Z: **3,586 app / 6 skipped, 127 extension, all six coverage
+floors, 1,288 native / 28 ignored**, with no failures across 23 native
+summaries. Lint has zero errors and five existing unrelated warnings;
+typecheck and quality guards pass. The coordinator inspected the actual logs,
+terminal exit0 and unchanged tested source bindings. No gate was repeated.
+Gchat2 and C3 confirm no component/test ownership overlap. Next: coordinator
+integration of the verified branch.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-first-run-unchecked-settings-20261018`, branch `fix/gchat3-first-run-unchecked-settings-20261018`, base `fbebb98b7` | Candidate component/tests and current authority; independent of main |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-unchecked-settings-tests-20261018` | Independent inactive RC dependency read-copy; CPU96–103 booking3278 returned 12:35Z, socket-1 shared compile lock, nice10/max8 jobs, no GPU; owned fixture and two exited containers removed 12:37Z, donor preserved |
+
+The [result](../../out/first-run-unchecked-settings-20261018/test-result.json)
+and [summary](../../out/first-run-unchecked-settings-20261018/test-summary.md)
+retain the commands, source bindings and outcomes after raw-log review. All 35
+dependency inputs and seven frozen catalog inputs match the prior accepted
+offline recipe. The baseline and candidate containers both exited without
+OOM; only the baseline has its expected regression exit1. Cleanup removed
+28,050,102,588 logical bytes from the owned S1 fixture. This is deterministic
+rendered-control verification; no native GUI or physical qualification is
+claimed.
+
 ## First-run request lifetime — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-REQUEST-LIFETIME` fixes confirmed response-order races in
