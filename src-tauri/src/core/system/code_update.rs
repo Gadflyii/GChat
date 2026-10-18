@@ -182,6 +182,7 @@ mod tests {
         let executable = opencode_runtime::managed_executable(dir.path());
         std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
         std::fs::write(&executable, "managed").unwrap();
+        std::fs::write(dir.path().join("code/opencode/runtime/.gchat-verified"), "1.2.3").unwrap();
         assert!(prepare_update(dir.path(), None, false).unwrap().is_none());
         let result = CodeUpdateResult::Updated {
             log_path: "selected data/code/opencode/gchat-update.log".into(),

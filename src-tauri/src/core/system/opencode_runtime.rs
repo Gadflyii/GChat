@@ -29,13 +29,15 @@ fn cache_directory(data: &Path) -> PathBuf {
 }
 
 pub fn managed_executable(data: &Path) -> PathBuf {
-    runtime_directory(data)
-        .join("node_modules/.bin")
-        .join(if cfg!(windows) {
-            "opencode.cmd"
-        } else {
-            "opencode"
-        })
+    runtime_executable(&runtime_directory(data))
+}
+
+fn runtime_executable(runtime: &Path) -> PathBuf {
+    runtime.join("node_modules/.bin").join(if cfg!(windows) {
+        "opencode.cmd"
+    } else {
+        "opencode"
+    })
 }
 
 fn resolve_with(
@@ -54,7 +56,7 @@ fn resolve_with(
         }));
     }
     let executable = managed_executable(data);
-    if executable.is_file() {
+    if executable.is_file() && runtime_directory(data).join(".gchat-verified").is_file() {
         return Ok(Some(ResolvedOpenCode {
             executable,
             ownership: OpenCodeOwnership::Managed,
@@ -250,6 +252,10 @@ fn install_with_probe(
     probe: impl Fn(&str) -> Result<Option<PathBuf>, String>,
     progress: impl Fn(&str) + Sync,
 ) -> Result<PathBuf, String> {
+    // Setup and the updater can both install. Keep publication and rollback
+    // together so neither can replace the other's last working runtime.
+    static INSTALLING: Mutex<()> = Mutex::new(());
+    let _installing = INSTALLING.lock().unwrap_or_else(|error| error.into_inner());
     let missing = "GChat needs Node.js and npm to set up Code. Install Node.js LTS from https://nodejs.org, then try again.";
     let node = probe("node")
         .map_err(|error| format!("{missing} Details: {error}"))?
@@ -268,11 +274,13 @@ fn install_with_probe(
             return Err(missing.into());
         }
     }
-    let runtime = runtime_directory(data);
+    let directory = super::opencode_config::config_directory(data);
     let cache = cache_directory(data);
-    std::fs::create_dir_all(&runtime).map_err(|error| format!("GChat could not create its Code folder. Check that your data folder is writable and try again. Details: {error}"))?;
     std::fs::create_dir_all(&cache).map_err(|error| error.to_string())?;
-    let log_path = super::opencode_config::config_directory(data).join(log_name);
+    let mut staging = RuntimeStaging::new(&directory)?;
+    let runtime = staging.directory.join("runtime");
+    std::fs::create_dir(&runtime).map_err(|error| error.to_string())?;
+    let log_path = directory.join(log_name);
     let log = std::fs::File::create(&log_path).map_err(|error| error.to_string())?;
     let package = target
         .map(|target| format!("opencode-ai@{target}"))
@@ -331,7 +339,7 @@ fn install_with_probe(
             .unwrap_or_else(|error| error.into_inner());
         return Err(format!("Code setup could not finish. Check the network connection and retry. Diagnostic log: {}\n{output}", log_path.display()));
     }
-    let executable = managed_executable(data);
+    let executable = runtime_executable(&runtime);
     let installed = version(&executable, data)?;
     if target.is_some_and(|target| installed != target) {
         return Err(format!(
@@ -339,7 +347,66 @@ fn install_with_probe(
             log_path.display()
         ));
     }
-    Ok(executable)
+    std::fs::write(runtime.join(".gchat-verified"), installed).map_err(|error| {
+        format!(
+            "GChat could not save the verified Code installation. Retry setup. Details: {error}"
+        )
+    })?;
+    staging.publish(&runtime, &runtime_directory(data))?;
+    Ok(managed_executable(data))
+}
+
+/// Unpublished npm files never participate in executable resolution. Keeping
+/// staging beside the destination permits directory renames on the same disk.
+struct RuntimeStaging {
+    directory: PathBuf,
+    retain: bool,
+}
+
+impl RuntimeStaging {
+    fn new(parent: &Path) -> Result<Self, String> {
+        let directory = parent.join(format!(".runtime-install-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&directory).map_err(|error| format!("GChat could not create its Code setup folder. Check that your data folder is writable and try again. Details: {error}"))?;
+        Ok(Self {
+            directory,
+            retain: false,
+        })
+    }
+
+    fn publish(&mut self, candidate: &Path, destination: &Path) -> Result<(), String> {
+        let previous = self.directory.join("previous");
+        let had_previous = destination.exists();
+        if had_previous {
+            std::fs::rename(destination, &previous).map_err(|error| format!("GChat could not replace its Code installation. Close Code sessions and retry. Details: {error}"))?;
+        }
+        if let Err(error) = std::fs::rename(candidate, destination) {
+            if had_previous {
+                if let Err(restore_error) = std::fs::rename(&previous, destination) {
+                    // Preserve the last working copy if the filesystem also
+                    // rejects rollback; never remove it during cleanup.
+                    self.retain = true;
+                    return Err(format!("GChat could not finish Code setup or restore its previous copy. The previous copy is saved at {}. Details: {error}; {restore_error}", previous.display()));
+                }
+            }
+            return Err(format!(
+                "GChat could not finish Code setup. Retry setup. Details: {error}"
+            ));
+        }
+        Ok(())
+    }
+}
+
+impl Drop for RuntimeStaging {
+    fn drop(&mut self) {
+        if !self.retain {
+            if let Err(error) = std::fs::remove_dir_all(&self.directory) {
+                log::warn!(
+                    "Could not remove Code setup folder {}: {error}",
+                    self.directory.display()
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -371,6 +438,15 @@ mod tests {
                 ownership: OpenCodeOwnership::Custom
             }
         );
+        // A shim left by an interrupted or failed older setup is unpublished.
+        assert_eq!(
+            resolve_with(&data, None, || Ok(Some(native.clone())))
+                .unwrap()
+                .unwrap()
+                .ownership,
+            OpenCodeOwnership::Native
+        );
+        file(&runtime_directory(&data).join(".gchat-verified"));
         let resolved = resolve_with(&data, None, || panic!("managed must win"))
             .unwrap()
             .unwrap();
@@ -477,7 +553,6 @@ printf '%s\n' "$npm_config_cache" "$HTTPS_PROXY" "$NO_PROXY" "$XDG_CONFIG_HOME" 
 read answer && exit 9
 echo 'private npm diagnostic'
 echo 'private stderr diagnostic' >&2
-[ {install_exit} = 0 ] || exit {install_exit}
 if [ '{write_shim}' = true ]; then
   mkdir -p "$prefix/node_modules/.bin"
   cat > "$prefix/node_modules/.bin/opencode" <<'SHIM'
@@ -488,6 +563,7 @@ exit {version_exit}
 SHIM
   chmod 700 "$prefix/node_modules/.bin/opencode"
 fi
+exit {install_exit}
 "##
                     ),
                 );
@@ -527,23 +603,33 @@ fi
                 )
             };
             let first = install(None, "gchat-install.log").unwrap();
+            let first_arguments =
+                std::fs::read_to_string(runtime_directory(&data).join("npm-arguments")).unwrap();
             let updated = install(Some("1.2.3"), "gchat-update.log").unwrap();
             assert_eq!(first, managed_executable(&data));
             assert_eq!(updated, first);
             assert_eq!(std::fs::read_to_string(&unrelated).unwrap(), "untouched");
             let runtime = runtime_directory(&data);
             let cache = cache_directory(&data);
-            let expected = |package: &str| {
-                format!(
-                    "install\n--global=false\n--prefix\n{}\n--cache\n{}\n{package}\n",
-                    runtime.display(),
-                    cache.display()
-                )
-            };
-            assert_eq!(
-                std::fs::read_to_string(runtime.join("npm-arguments")).unwrap(),
-                expected("opencode-ai") + &expected("opencode-ai@1.2.3")
-            );
+            let updated_arguments = std::fs::read_to_string(runtime.join("npm-arguments")).unwrap();
+            for (arguments, package) in [
+                (&first_arguments, "opencode-ai"),
+                (&updated_arguments, "opencode-ai@1.2.3"),
+            ] {
+                let arguments: Vec<_> = arguments.lines().collect();
+                assert_eq!(&arguments[..3], &["install", "--global=false", "--prefix"]);
+                let prefix = Path::new(arguments[3]);
+                assert!(prefix.starts_with(runtime.parent().unwrap()));
+                assert_ne!(prefix, runtime);
+                assert!(
+                    !prefix.exists(),
+                    "temporary prefix must be published or removed"
+                );
+                assert_eq!(
+                    &arguments[4..],
+                    &["--cache", cache.to_str().unwrap(), package]
+                );
+            }
             let directory = super::super::super::opencode_config::config_directory(&data);
             let environment = std::fs::read_to_string(runtime.join("npm-environment")).unwrap();
             let environment: Vec<_> = environment.lines().collect();
@@ -633,7 +719,115 @@ fi
                 let tools = Tools::new(version, install_exit, write_shim, version_exit);
                 let data = tools.root.path().join("private data");
                 assert!(install_with_probe(&data, Some("1.2.3"), None, "update.log", |bin| tools.probe(bin), |_| {}).is_err(), "version={version:?}, npm exit={install_exit}, shim={write_shim}, version exit={version_exit}");
+                assert!(!managed_executable(&data).exists());
+                assert!(resolve_with(&data, None, || Ok(None)).unwrap().is_none());
+                assert!(
+                    std::fs::read_dir(super::super::super::opencode_config::config_directory(
+                        &data
+                    ))
+                    .unwrap()
+                    .all(|entry| !entry
+                        .unwrap()
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with(".runtime-install-"))
+                );
             }
+        }
+
+        #[test]
+        fn interrupted_unmarked_install_is_ignored_and_replaced_by_successful_setup() {
+            let tools = Tools::new("1.2.3", 0, true, 0);
+            let data = tools.root.path().join("private data");
+            let shim = managed_executable(&data);
+            executable(&shim, "#!/bin/sh\necho 1.2.2\n");
+            let interrupted_file = runtime_directory(&data).join("unfinished-install");
+            std::fs::write(&interrupted_file, "interrupted npm files").unwrap();
+            // Even an executable shim cannot prove npm completed successfully.
+            assert_eq!(version(&shim, &data).unwrap(), "1.2.2");
+            assert!(resolve_with(&data, None, || Ok(None)).unwrap().is_none());
+            let native = tools.root.path().join("native Code");
+            executable(&native, "#!/bin/sh\necho 9.8.7\n");
+            assert_eq!(
+                resolve_with(&data, None, || Ok(Some(native.clone())))
+                    .unwrap()
+                    .unwrap()
+                    .executable,
+                native
+            );
+            install_with_probe(
+                &data,
+                None,
+                None,
+                "install.log",
+                |bin| tools.probe(bin),
+                |_| {},
+            )
+            .unwrap();
+            assert_eq!(
+                resolve_with(&data, None, || panic!("verified managed copy must win"))
+                    .unwrap()
+                    .unwrap()
+                    .ownership,
+                OpenCodeOwnership::Managed
+            );
+            assert_eq!(version(&shim, &data).unwrap(), "1.2.3");
+            assert!(!interrupted_file.exists());
+        }
+
+        #[test]
+        fn failed_updates_preserve_the_working_runtime_until_verified_replacement() {
+            let good = Tools::new("1.2.3", 0, true, 0);
+            let data = good.root.path().join("private data");
+            let installed = install_with_probe(
+                &data,
+                None,
+                None,
+                "install.log",
+                |bin| good.probe(bin),
+                |_| {
+                    assert!(resolve_with(&data, None, || Ok(None)).unwrap().is_none());
+                },
+            )
+            .unwrap();
+            let before = std::fs::read(&installed).unwrap();
+            for (install_exit, version_exit) in [(7, 0), (0, 7)] {
+                let failed = Tools::new("1.2.4", install_exit, true, version_exit);
+                assert!(install_with_probe(
+                    &data,
+                    Some("1.2.4"),
+                    None,
+                    "update.log",
+                    |bin| failed.probe(bin),
+                    |_| {
+                        assert_eq!(version(&installed, &data).unwrap(), "1.2.3");
+                        assert_eq!(
+                            resolve_with(&data, None, || panic!("managed remains ready"))
+                                .unwrap()
+                                .unwrap()
+                                .executable,
+                            installed
+                        );
+                    }
+                )
+                .is_err());
+                assert_eq!(std::fs::read(&installed).unwrap(), before);
+                assert_eq!(version(&installed, &data).unwrap(), "1.2.3");
+            }
+            let replacement = Tools::new("1.2.4", 0, true, 0);
+            assert_eq!(
+                install_with_probe(
+                    &data,
+                    Some("1.2.4"),
+                    None,
+                    "update.log",
+                    |bin| replacement.probe(bin),
+                    |_| {}
+                )
+                .unwrap(),
+                installed
+            );
+            assert_eq!(version(&installed, &data).unwrap(), "1.2.4");
         }
 
         #[test]

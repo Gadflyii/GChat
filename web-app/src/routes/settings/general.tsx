@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { invoke } from '@tauri-apps/api/core'
-import { isEnabled as isAutostartEnabled } from '@tauri-apps/plugin-autostart'
 import { route } from '@/constants/routes'
 import { EngineHostName } from '@/containers/EngineHostName'
 import SettingsMenu from '@/containers/SettingsMenu'
@@ -32,7 +31,7 @@ import { Input } from '@/components/ui/input'
 import { useHardware } from '@/hooks/useHardware'
 import LanguageSwitcher from '@/containers/LanguageSwitcher'
 import { isRootDir } from '@/utils/path'
-import { setLaunchAtStartup } from '@/lib/launchAtStartup'
+import { getLaunchAtStartup, setLaunchAtStartup } from '@/lib/launchAtStartup'
 const TOKEN_VALIDATION_TIMEOUT_MS = 10_000
 const GCHAT_CLI_COMMAND = 'gchat-cli'
 const GCHAT_ISSUES_URL = 'https://github.com/SectileLabs/gchat/issues'
@@ -115,7 +114,7 @@ function General() {
 
   useEffect(() => {
     if (!canManageAutostart) return
-    isAutostartEnabled()
+    getLaunchAtStartup()
       .then(setAutostartEnabled)
       .catch(() => setAutostartEnabled(false))
   }, [canManageAutostart])
@@ -128,7 +127,7 @@ function General() {
       } catch (error) {
         console.error('Failed to toggle launch at startup:', error)
         toast.error(t('settings:general.launchAtStartupError'))
-        setAutostartEnabled(await isAutostartEnabled().catch(() => !next))
+        setAutostartEnabled(await getLaunchAtStartup().catch(() => !next))
       }
     },
     [canManageAutostart, serviceHub, t]

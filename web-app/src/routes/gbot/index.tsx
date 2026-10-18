@@ -98,6 +98,9 @@ function GbotPage() {
   const [setupError, setSetupError] = useState('')
   const [prompts, setPrompts] = useState<Record<string, string>>({})
   const [submittingTask, setSubmittingTask] = useState<string>()
+  const [taskErrors, setTaskErrors] = useState<Record<string, string | undefined>>(
+    {}
+  )
   const taskSubmission = useRef(false)
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
@@ -431,6 +434,8 @@ function GbotPage() {
       ? 'Ready to run this task.'
       : 'Enter a task, then choose Run.'
   })()
+  const taskErrorKey = JSON.stringify([serviceTarget, workspaceId])
+  const taskError = taskErrors[taskErrorKey]
   const add = async (connection: BotConnection) => {
     if (connection.workspaceId) {
       setSelected(connection.workspaceId)
@@ -1054,7 +1059,7 @@ function GbotPage() {
                       key={task.id}
                       className="space-y-2 rounded-lg border p-3"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-start justify-between gap-3">
                         <span className="text-sm capitalize">
                           {task.state.replaceAll('_', ' ')}
                         </span>
@@ -1067,8 +1072,9 @@ function GbotPage() {
                           resumeLabel="Resume"
                           size="default"
                           onAction={(action) =>
-                            perform(() =>
-                              gbot(`tasks/${action}`, { id: task.id })
+                            perform(
+                              () => gbot(`tasks/${action}`, { id: task.id }),
+                              true
                             )
                           }
                         />
@@ -1117,6 +1123,19 @@ function GbotPage() {
                   >
                     {taskGuidance}
                   </p>
+                  {taskError !== undefined && (
+                    <div
+                      id="gbot-task-error"
+                      role="alert"
+                      className="space-y-1 text-sm"
+                    >
+                      <p>Could not send this task. Try again.</p>
+                      <details className="text-muted-foreground">
+                        <summary className="cursor-pointer">Details</summary>
+                        <p className="break-words">{taskError}</p>
+                      </details>
+                    </div>
+                  )}
                   <form
                     className="flex gap-2"
                     aria-busy={submittingTask === workspaceId}
@@ -1135,29 +1154,50 @@ function GbotPage() {
                       const submittedPrompt = prompt
                       taskSubmission.current = true
                       setSubmittingTask(submittedIdentity.workspace_id)
-                      void perform(async () => {
-                        await gbot('tasks/start', {
-                          identity: submittedIdentity,
-                          prompt: submittedPrompt,
+                      setTaskErrors((previous) => ({
+                        ...previous,
+                        [taskErrorKey]: undefined,
+                      }))
+                      void perform(
+                        async () => {
+                          await gbot('tasks/start', {
+                            identity: submittedIdentity,
+                            prompt: submittedPrompt,
+                          })
+                          setPrompts((previous) =>
+                            previous[submittedIdentity.workspace_id] ===
+                            submittedPrompt
+                              ? {
+                                  ...previous,
+                                  [submittedIdentity.workspace_id]: '',
+                                }
+                              : previous
+                          )
+                        },
+                        true
+                      )
+                        .catch((cause) => {
+                          setTaskErrors((previous) => ({
+                            ...previous,
+                            [taskErrorKey]:
+                              cause instanceof Error
+                                ? cause.message
+                                : String(cause),
+                          }))
                         })
-                        setPrompts((previous) =>
-                          previous[submittedIdentity.workspace_id] ===
-                          submittedPrompt
-                            ? {
-                                ...previous,
-                                [submittedIdentity.workspace_id]: '',
-                              }
-                            : previous
-                        )
-                      }).finally(() => {
-                        taskSubmission.current = false
-                        setSubmittingTask(undefined)
-                      })
+                        .finally(() => {
+                          taskSubmission.current = false
+                          setSubmittingTask(undefined)
+                        })
                     }}
                   >
                     <Input
                       aria-label="Bot task"
-                      aria-describedby="gbot-task-guidance"
+                      aria-describedby={
+                        taskError !== undefined
+                          ? 'gbot-task-guidance gbot-task-error'
+                          : 'gbot-task-guidance'
+                      }
                       placeholder="Give this bot a task"
                       value={prompt}
                       onChange={(event) => {
