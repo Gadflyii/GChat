@@ -65,9 +65,12 @@ type ModelProviderState = {
   providers: ModelProvider[]
   selectedProvider: string
   selectedModel: Model | null
-  deletedModels: string[]
+  // Session-local ordering; persisted inventory is not an in-flight read.
+  inventoryRevision: number
+  modelMutations: Record<string, { revision: number; deleted: boolean }>
+  recordModelInstall: (modelId: string) => void
   getModelBy: (modelId: string) => Model | undefined
-  setProviders: (providers: ModelProvider[]) => void
+  setProviders: (providers: ModelProvider[], readRevision?: number) => void
   getProviderByName: (providerName: string) => ModelProvider | undefined
   updateProvider: (providerName: string, data: Partial<ModelProvider>) => void
   selectModelProvider: (
@@ -91,7 +94,19 @@ export const useModelProvider = create<ModelProviderState>()(
       // model is actually loaded or imported, so the default is safe.
       selectedProvider: GINFER_DEFAULT_PROVIDER,
       selectedModel: null,
-      deletedModels: [],
+      inventoryRevision: 0,
+      modelMutations: {},
+      recordModelInstall: (modelId) =>
+        set((state) => {
+          const revision = state.inventoryRevision + 1
+          return {
+            inventoryRevision: revision,
+            modelMutations: {
+              ...state.modelMutations,
+              [modelId]: { revision, deleted: false },
+            },
+          }
+        }),
       getModelBy: (modelId: string) => {
         const provider = get().providers.find(
           (provider) => provider.provider === get().selectedProvider
@@ -99,9 +114,55 @@ export const useModelProvider = create<ModelProviderState>()(
         if (!provider) return undefined
         return provider.models.find((model) => model.id === modelId)
       },
-      setProviders: (providers) =>
-          set((state) => {
-          const incoming = providers
+      setProviders: (providers, readRevision) =>
+        set((state) => {
+          let revision = state.inventoryRevision
+          const mutations = { ...state.modelMutations }
+          // Unstamped publication is an explicit local inventory mutation.
+          // Every asynchronous read must supply its start revision instead.
+          if (readRevision === undefined) {
+            for (const provider of providers) {
+              if (provider.provider !== GINFER_DEFAULT_PROVIDER) continue
+              const current = state.providers.find(
+                (entry) => entry.provider === provider.provider
+              )
+              for (const model of current?.models ?? []) {
+                if (!provider.models.some((entry) => entry.id === model.id)) {
+                  mutations[model.id] = { revision: ++revision, deleted: true }
+                }
+              }
+              for (const model of provider.models) {
+                mutations[model.id] = { revision: ++revision, deleted: false }
+              }
+            }
+          }
+          const incoming = providers.map((provider) => {
+            if (
+              provider.provider !== GINFER_DEFAULT_PROVIDER ||
+              readRevision === undefined
+            ) return provider
+            const current = state.providers.find(
+              (entry) => entry.provider === provider.provider
+            )
+            // A deletion remains authoritative until a local installation
+            // supersedes it. New installations outrank older read snapshots.
+            const protectedIds = new Set(
+              Object.entries(mutations)
+                .filter(([, mutation]) =>
+                  mutation.deleted || mutation.revision > readRevision
+                )
+                .map(([id]) => id)
+            )
+            return {
+              ...provider,
+              models: [
+                ...provider.models.filter((model) => !protectedIds.has(model.id)),
+                ...(current?.models.filter((model) =>
+                  protectedIds.has(model.id) && !mutations[model.id].deleted
+                ) ?? []),
+              ],
+            }
+          })
           const existingProviders = state.providers
             // Filter out legacy cortex `llama.cpp` provider for migration
             // Can remove after a couple of releases
@@ -131,11 +192,6 @@ export const useModelProvider = create<ModelProviderState>()(
             )?.models
             localStorage.setItem('cortex_model_settings_migrated', 'true')
           }
-          // Ensure deletedModels is always an array
-          const currentDeletedModels = Array.isArray(state.deletedModels)
-            ? state.deletedModels
-            : []
-
           const updatedProviders = incoming.map((provider) => {
             const existingProvider = existingProviders.find(
               (x) => x.provider === provider.provider
@@ -150,8 +206,7 @@ export const useModelProvider = create<ModelProviderState>()(
                 (e) =>
                   ('id' in e || 'model' in e) &&
                   typeof (e.id ?? e.model) === 'string' &&
-                  !models.some((m) => m.id === e.id) &&
-                  !currentDeletedModels.includes(e.id)
+                  !models.some((m) => m.id === e.id)
               ),
               ...models,
             ]
@@ -233,11 +288,30 @@ export const useModelProvider = create<ModelProviderState>()(
           return {
             providers: nextProviders,
             selectedModel: nextSelectedModel,
+            inventoryRevision: revision,
+            modelMutations: mutations,
           }
         }),
       updateProvider: (providerName, data) => {
         set((state) => {
           let nextSelectedModel = state.selectedModel
+          let revision = state.inventoryRevision
+          const mutations = { ...state.modelMutations }
+          if (providerName === GINFER_DEFAULT_PROVIDER && data.models) {
+            const oldModels = state.providers.find(
+              (entry) => entry.provider === providerName
+            )?.models ?? []
+            for (const model of oldModels) {
+              if (!data.models.some((entry) => entry.id === model.id)) {
+                mutations[model.id] = { revision: ++revision, deleted: true }
+              }
+            }
+            for (const model of data.models) {
+              if (oldModels.find((entry) => entry.id === model.id) !== model) {
+                mutations[model.id] = { revision: ++revision, deleted: false }
+              }
+            }
+          }
 
           const nextProviders = state.providers.map((provider) => {
             if (provider.provider !== providerName) {
@@ -265,6 +339,8 @@ export const useModelProvider = create<ModelProviderState>()(
           return {
             providers: nextProviders,
             selectedModel: nextSelectedModel,
+            inventoryRevision: revision,
+            modelMutations: mutations,
           }
         })
       },
@@ -296,11 +372,7 @@ export const useModelProvider = create<ModelProviderState>()(
       },
       deleteModel: (modelId: string) => {
         set((state) => {
-          // Ensure deletedModels is always an array
-          const currentDeletedModels = Array.isArray(state.deletedModels)
-            ? state.deletedModels
-            : []
-
+          const revision = state.inventoryRevision + 1
           return {
             providers: state.providers.map((provider) => {
               const models = provider.models.filter(
@@ -311,27 +383,67 @@ export const useModelProvider = create<ModelProviderState>()(
                 models,
               }
             }),
-            deletedModels: [...currentDeletedModels, modelId],
-            selectedModel: state.selectedModel?.id === modelId ? null : state.selectedModel,
+            inventoryRevision: revision,
+            modelMutations: {
+              ...state.modelMutations,
+              [modelId]: { revision, deleted: true },
+            },
+            selectedModel:
+              state.selectedModel?.id === modelId ? null : state.selectedModel,
           }
         })
       },
       addProvider: (provider: ModelProvider) => {
-        set((state) => ({
-          providers: [...state.providers, provider],
-        }))
+        set((state) => {
+          let revision = state.inventoryRevision
+          const mutations = { ...state.modelMutations }
+          if (provider.provider === GINFER_DEFAULT_PROVIDER) {
+            for (const model of provider.models) {
+              mutations[model.id] = { revision: ++revision, deleted: false }
+            }
+          }
+          return {
+            providers: [...state.providers, provider],
+            inventoryRevision: revision,
+            modelMutations: mutations,
+          }
+        })
       },
       deleteProvider: (providerName: string) => {
-        set((state) => ({
-          providers: state.providers.filter(
-            (provider) => provider.provider !== providerName
-          ),
-        }))
+        set((state) => {
+          let revision = state.inventoryRevision
+          const mutations = { ...state.modelMutations }
+          if (providerName === GINFER_DEFAULT_PROVIDER) {
+            const models = state.providers.find(
+              (entry) => entry.provider === providerName
+            )?.models ?? []
+            for (const model of models) {
+              mutations[model.id] = { revision: ++revision, deleted: true }
+            }
+          }
+          return {
+            providers: state.providers.filter((provider) => provider.provider !== providerName),
+            inventoryRevision: revision,
+            modelMutations: mutations,
+          }
+        })
       },
     }),
     {
       name: localStorageKey.modelProvider,
       storage: createJSONStorage(() => localStorage),
+      partialize: ({ providers, selectedProvider, selectedModel }) => ({
+        providers, selectedProvider, selectedModel,
+      }),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<ModelProviderState>
+        return {
+          ...current,
+          providers: saved.providers ?? current.providers,
+          selectedProvider: saved.selectedProvider ?? current.selectedProvider,
+          selectedModel: saved.selectedModel ?? null,
+        }
+      },
       migrate: (persistedState: unknown, version: number) => {
         const state = persistedState as ModelProviderState
 

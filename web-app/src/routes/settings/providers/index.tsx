@@ -95,8 +95,9 @@ function ModelProviders() {
     // `getProviders()` is slow (e.g. while runtime engines enumerate models).
     void (async () => {
       try {
+        const revision = useModelProvider.getState().inventoryRevision
         const fresh = await serviceHub.providers().getProviders()
-        setProviders(fresh)
+        setProviders(fresh, revision)
       } catch (err) {
         console.warn('[providers] failed to apply refreshed registry:', err)
       }

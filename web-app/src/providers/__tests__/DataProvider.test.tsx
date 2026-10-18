@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   setAssistants: vi.fn(),
   setMessages: vi.fn(),
   setProviders: vi.fn(),
+  inventoryRevision: 7,
+  recordModelInstall: vi.fn(),
   setServers: vi.fn(),
   setSettings: vi.fn(),
   setThreads: vi.fn(),
@@ -46,10 +48,12 @@ vi.mock('@/hooks/useModelProvider', () => {
   const state = {
     providers: [],
     selectedModel: null,
-    selectedProvider: 'llamacpp-upstream',
+    selectedProvider: 'ginfer',
     getProviderByName: vi.fn(),
     selectModelProvider: vi.fn(),
     setProviders: mocks.setProviders,
+    get inventoryRevision() { return mocks.inventoryRevision },
+    recordModelInstall: mocks.recordModelInstall,
     updateProvider: vi.fn(),
   }
   const useModelProvider = () => ({ setProviders: mocks.setProviders })
@@ -115,10 +119,7 @@ vi.mock('@/hooks/useModelLoad', () => ({
 
 vi.mock('@/utils/registerRemoteProvider', () => ({
   isKeylessRemoteProvider: () => false,
-  isLocalProvider: (provider: string) =>
-    ['llamacpp', 'llamacpp-upstream', 'mlx', 'foundation-models'].includes(
-      provider
-    ),
+  isLocalProvider: (provider: string) => provider === 'ginfer',
   registerRemoteProvider: vi.fn(),
   unregisterRemoteProvider: vi.fn(),
 }))
@@ -174,6 +175,8 @@ describe('DataProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.inventoryRevision = 7
+    mocks.recordModelInstall.mockImplementation(() => { mocks.inventoryRevision += 1 })
     useGeneralSetting.setState({ gbotEnabled: false })
     mocks.autoStart = true
     useAppState.setState({
@@ -250,11 +253,16 @@ describe('DataProvider', () => {
   })
 
   it('hydrates startup stores from service data while rendering no UI', async () => {
+    let finishInventory!: (value: ModelProvider[]) => void
+    getProviders.mockReturnValueOnce(new Promise(resolve => { finishInventory = resolve }))
     const { container, unmount } = render(<DataProvider />)
 
     expect(container).toBeEmptyDOMElement()
+    await waitFor(() => expect(getProviders).toHaveBeenCalledOnce())
+    useModelProvider.getState().recordModelInstall('installed-during-startup')
+    await act(async () => finishInventory(providers))
     await waitFor(() => {
-      expect(mocks.setProviders).toHaveBeenCalledWith(providers)
+      expect(mocks.setProviders).toHaveBeenCalledWith(providers, 7)
       expect(mocks.setServers).toHaveBeenCalledWith(mcpConfig.mcpServers)
       expect(mocks.setSettings).toHaveBeenCalledWith(mcpConfig.mcpSettings)
       expect(mocks.setAssistants).toHaveBeenCalledWith(assistants)
@@ -462,9 +470,6 @@ describe('DataProvider', () => {
   })
 
   it('auto-switches an imported model to an active provider, skipping a deactivated one', async () => {
-    // Both llama.cpp providers list every GGUF from the shared models dir.
-    // TurboQuant comes first in the array but is deactivated (the fresh-install
-    // default) — the auto-switch must land on upstream.
     const { useModelProvider } = await import('@/hooks/useModelProvider')
     const { events } = await import('@gchat/core')
     const state = useModelProvider.getState() as unknown as {
@@ -472,13 +477,13 @@ describe('DataProvider', () => {
     }
     state.providers = [
       {
-        provider: 'llamacpp',
+        provider: 'openai',
         active: false,
         models: [{ id: 'imported-model' }],
         settings: [],
       },
       {
-        provider: 'llamacpp-upstream',
+        provider: 'ginfer',
         active: true,
         models: [{ id: 'imported-model' }],
         settings: [],
@@ -492,6 +497,7 @@ describe('DataProvider', () => {
         'onModelImported',
         expect.any(Function)
       )
+      expect(mocks.setProviders).toHaveBeenCalledOnce()
     })
 
     const handler = vi
@@ -499,19 +505,30 @@ describe('DataProvider', () => {
       .mock.calls.find(([event]) => event === 'onModelImported')?.[1] as (
       data?: Record<string, unknown>
     ) => Promise<void>
-    await handler({ modelId: 'imported-model' })
+    let finishImport!: (value: ModelProvider[]) => void
+    getProviders.mockImplementationOnce(() => {
+      expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('imported-model')
+      return new Promise(resolve => { finishImport = resolve })
+    })
+    const imported = handler({ modelId: 'imported-model' })
+    expect(mocks.setProviders).toHaveBeenCalledTimes(1)
+    const importRevision = mocks.inventoryRevision
+    useModelProvider.getState().recordModelInstall('another-install-during-import-read')
+    await act(async () => finishImport(providers))
+    await imported
+    expect(mocks.setProviders).toHaveBeenLastCalledWith(providers, importRevision)
 
     expect(mocks.switchToModel).toHaveBeenCalledWith(
       expect.objectContaining({
         modelId: 'imported-model',
-        providerName: 'llamacpp-upstream',
+        providerName: 'ginfer',
         isAutoStart: true,
       })
     )
     expect(
       JSON.parse(localStorage.getItem('last-used-model') ?? 'null')
     ).toEqual({
-      provider: 'llamacpp-upstream',
+      provider: 'ginfer',
       model: 'imported-model',
     })
 

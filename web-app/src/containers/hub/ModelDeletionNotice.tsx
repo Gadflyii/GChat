@@ -28,7 +28,7 @@ export function ModelDeletionNotice({
     pending.current = true
     setRefreshing(true)
     try {
-      await refreshModelProviders(serviceHub, modelId)
+      await refreshModelProviders(serviceHub)
       toast.success(title, {
         id: `delete-model-${modelId}`,
         description: `${description} The model list is up to date.`,
