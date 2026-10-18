@@ -22,6 +22,31 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Execution guides in narrow editor panels — October 18
+
+A native Linux pass at a 1,024 × 740 window reproduced execution-guide
+cards crossing the Agent Studio editor border. The editor was 324 pixels wide,
+but the guides used the window's small-screen breakpoint to arrange all three
+steps horizontally. The final Reply card extended 19 pixels past the border.
+
+The Standard Agent, Goal Loop, Coordinator and Workflow guides now choose
+their layout from the editor section's width. Steps stack below 32 rem of
+available content width; wider panels retain three steps and connecting arrows.
+Grid tracks can shrink within the panel. Execution, definitions and budgets
+are unchanged. Native source `ebcff436c` acceptance passed for all four stacked guides at
+1,024 × 740; all three cards fit the guide grid with no internal overflow. At
+1,600 × 900, Standard Agent retained three equal-width columns and both
+arrows. Unsaved composition changes were explicitly discarded; saved agents,
+run history and chat fixture files remained byte-identical. Normal Close
+completed cleanup. No model or run was used.
+
+Focused Agents tests (112), lint, one `make verify` (3,751 app, 127 extension
+and 1,316 Rust tests), frontend and native builds passed. Six app tests were
+skipped and 28 Rust tests ignored. Other narrow composition settings rows
+still overflow separately; this acceptance covers the execution-guide grids.
+Baseline, screenshots, geometry and gates:
+`/ai/gchat/out/gchat-agent-execution-guide-layout-20261018/`.
+
 ## Saved-agent catalog failures in Chat — October 18
 
 A private Linux native pass on main `5b48adfd9` selected a saved agent,
