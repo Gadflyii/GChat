@@ -2,37 +2,33 @@
 
 ## Account-service startup cause — C7
 
-`GUI-ACCOUNT-SERVICE-ERROR-WORDING`: source work is active on
+`GUI-ACCOUNT-SERVICE-ERROR-WORDING` is merge-ready on
 `fix/c7-account-service-startup-reason-20261018`, based on main `89024e1f2`.
-Acceptance: an explicit account-service connection reports the current child's
-secure-storage cause with a useful next step, keeps technical details closed,
-and never classifies a failure using an earlier attempt's append-only log.
-A concurrent service owner must still be allowed to become ready.
+A new failed connection could previously display an earlier attempt's last
+log line as its cause. The regression reproduces this with an unrelated current
+exit and a stale internal path; the original parser fails its assertion.
 
-The private service reports typed storage failures through reserved exit codes
-201–205; generic errors remain code 1. The Host formats guidance from that
-code and retains exit status/log location in the existing Details section.
-Credential-store and API vault errors retain their types until this boundary.
-No readiness, ownership, credential format or automatic-connection behavior changes.
-Arch signed the closed-enum/exit-code design; codes avoid the sysexits range.
-See the [startup-failure decision](../decisions/2026-10-18-report-typed-gbot-startup-failures.md).
+The private service now preserves typed credential-store and API vault errors
+through startup exit codes 201–205. The Host gives plain guidance from the
+current child's status and retains exit status/log location in the existing
+closed Details section. Generic failures use generic recovery guidance; logs
+remain diagnostic history. Concurrent-owner readiness, timeout, credential
+formats and automatic-connection behavior are unchanged. Arch signed this
+[decision](../decisions/2026-10-18-report-typed-gbot-startup-failures.md).
 
-Next: focused Host, service-boundary and rendered account-connection regressions,
-then one `make verify`. Frozen source `3444ff6d0` is staged in the retained
-private S1 cache. Booking 2975 grants CPUs 64–71 from 04:24–04:54 UTC,
-with eight build jobs, nice 10 and the shared socket-1 compile guard. The gate
-reproduced the defect against the old parser: the current generic child failure
-was displayed as `internal panic /private/old-attempt` from stale history.
-The image lacks `rg`; that checker-only stop was corrected with available
-`grep`, preserving the failed baseline result and continuing without rerunning it.
-The three Host cases and typed service-boundary case pass. The first rendered
-check exposed a test-fixture mismatch: a JavaScript `Error` adds a prefix absent
-from the native string rejection. The mock now uses that native contract; the
-focused frontend check resumes before the single full gate.
-No app, GPU or model is used. Owned source:
-`/ai/gchat-worktrees/c7-account-service-startup-reason-20261018`; retained owned
-S1 test cache: `/media/ron/SSD_RAID/ai/tmp-c7-private-catalog-gate-20261017`.
+Production source `3444ff6d0` and rendered test `7dbcecea2` pass three focused
+Host cases, one typed service-boundary case and 32 account-page cases, plus
+`cargo check` and strict Clippy. One `make verify` passes on Linux/S1 on
+18 October at 04:38 UTC: 3,345 app, 121 extension and 1,221 Rust tests pass;
+six app tests are skipped and 28 Rust tests ignored. The rendered mock uses
+the native string-rejection contract. No native GUI, Windows, installer,
+model or GPU acceptance is claimed.
 
+Evidence: `out/c7-account-service-startup-reason-20261018/{result.json,summary.md}`.
+Owned source: `/ai/gchat-worktrees/c7-account-service-startup-reason-20261018`.
+The exited containers and 36 GiB private S1 build/cache were retired after the
+gate; shared donor resources were preserved. CPUs 64–71 returned at 04:38 UTC,
+booking 2975 canceled. Next: bubbs merges the branch.
 
 ## SSH loopback fixture teardown
 
