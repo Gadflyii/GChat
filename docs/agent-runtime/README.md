@@ -37,6 +37,22 @@ read offers **Retry** or an explicit **Send without skill**; retry restores the
 original choice, and explicit opt-out clears the previous active skill. Later
 user choices and a successfully cleared draft retain the existing behavior.
 
+Native Linux acceptance of frozen source `91db9b295` passed at 1,024 × 740.
+The real catalog-read failure displayed the error and recovery controls. Send
+and Enter preserved **Build a weekly planning agent.** without starting a chat.
+Restoring directory access and choosing **Retry** restored `/agent-builder`
+with the same draft. A second failure followed by **Send without skill** cleared
+the selection, preserved the draft and reached the ordinary **Select a model**
+guidance. No model was selected or inference performed. Permissions were
+restored, the draft cleared through the UI and the app closed normally; protected
+agent, run, chat and skill files remained byte-identical.
+
+Focused tests (89), lint, one `make verify` (3,794 app, 127 extension and 1,318
+Rust tests), frontend and native builds passed. Six app tests were skipped and
+28 Rust tests ignored. Deferred/rejected catalog recovery and explicit opt-out
+dispatch are covered by the focused tests. Receipts and screenshots:
+`/ai/gchat/out/gchat-chat-try-skill-catalog-error-20261018/`.
+
 ## Saved-run deletion confirmation — October 18
 
 A private native Linux pass found that choosing **Delete** from a saved run’s
