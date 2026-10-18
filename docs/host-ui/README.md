@@ -1747,3 +1747,18 @@ lint, type checking, quality checks, 3,220 app tests, 121 extension tests, 1,212
 floors (six app tests skipped, 28 Rust tests ignored). The two changed source/test hashes matched locally and
 on S1 before and after verification. These are rendered React tests with mocked Host responses; this change
 makes no new native VM or Windows acceptance claim.
+
+## Schedule action errors, October 18 (Gchat 2)
+
+`GBOT-SCHEDULE-ACTION-ERROR-PERSISTENCE`: successful background list reads used to erase errors from rejected
+Create, Enable and Disable actions. Any bot task or approval can trigger that refresh; a list read does not
+acknowledge a failed action. Scheduled tasks now keeps action errors visible until the user tries again,
+while temporary list errors clear when reads recover. Failed creation keeps the prompt and start time.
+
+On main baseline `ae9c3bed2`, all three action-error regressions failed after a task-update refresh and the
+connection-recovery control passed. With separate action and refresh errors, all 15 rendered schedule tests
+pass, including successful retries and existing stale-response guards. One `make verify` passed: lint, type
+checking, quality checks, 3,221 app tests, 121 extension tests, 1,212 Rust tests and all six coverage
+floors (six app tests skipped, 28 Rust tests ignored). Changed source/test hashes matched locally and on S1
+before and after the gate. These are rendered React tests with mocked service responses; there is no new
+native VM or Windows acceptance claim.
