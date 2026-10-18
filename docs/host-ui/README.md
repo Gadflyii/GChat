@@ -1,5 +1,43 @@
 # GInfer host UI
 
+## Completed graphics-card setup note — C7, October 18
+
+`GUI-PROFILE-READY-NOTES` passes its remaining Linux completed-state
+rendering leaf. Source `d5841351d`, merged `54c378d03`, hides the duration
+and wait paragraph once setup is completed. The [native screenshot](../../out/c7-profile-ready-notes-20261018/completed-card.png)
+shows “Graphics-card settings ready” and the reminder that every model still
+needs a memory check. The entire card is visible in Dark 1200×800, with
+neither “Allow 10 minutes to an hour” nor “Wait for setup to stop”. Native
+pointer input opened the card; the inspector only read the DOM and captured
+pixels.
+
+This is an explicitly synthetic presentation fixture: an independent
+retained `11ce0355d` desktop reads a saved completed job with no pending
+work, GPU selection or artifact receipts. Its private resource copy uses the
+existing installer-test pattern of inert `/usr/bin/true` engines, with their
+actual sizes and hashes in the runtime manifests. The real Host reads the
+saved state. No Measure, model load or GPU execution was started. This
+qualifies the completed-card rendering, not profile validity or a new
+end-to-end hardware measurement. Windows and other themes/viewports remain
+unqualified. The old `hp7.png` and ed68 desktop predate the fix.
+
+The component and its running-to-completed regression are identical between
+the retained desktop source, this branch's base `3de78b829` and the reused
+ONE full gate `1062ba9f8`: **3,523 app / 6 skipped, 127 extension,
+1,284 native / 28 ignored**, all six critical floors. This evidence-only
+branch passes `git diff --check`; no duplicate build or test run.
+[Result](../../out/c7-profile-ready-notes-20261018/result.json),
+[source binding](../../out/c7-profile-ready-notes-20261018/source-binding.json)
+and [saved fixture](../../out/c7-profile-ready-notes-20261018/completed-job-fixture.json)
+retain the observations and limits.
+
+Owned worktree `/ai/gchat-worktrees/c7-profile-ready-notes-20261018`, branch
+`docs/c7-profile-ready-notes-20261018`, base `3de78b829`. The private S1 root
+`/media/ron/SSD_RAID/ai/tmp-c7-profile-ready-notes-20261018` was removed after
+its processes stopped by PID; CPU88–95 booking3229 canceled. No donor hold;
+only small JSON/PNG evidence remains. Next: coordinator integration and row
+closure.
+
 ## Progress bars — C3, October 18
 
 `GUI-PROGRESS-BARS` passes its remaining Linux native leaf. The original
