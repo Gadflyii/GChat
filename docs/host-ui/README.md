@@ -17,13 +17,14 @@ The optimized release packet
 and its cited
 `local5090-ed68c7443-e2282c336-release-flash-high/gui-dom-evidence.jsonl`
 resolve both pending Linux packaged retests. On October 17 the private native
-session recorded the ordinary Installed Load failure at19:17:38Z (lines12–13),
-then a custom Host with context8192/C1/vision off/spec none (line18), Ready
-at19:21:56Z (line30). New Chat selected the Host instance, retained the visible
-prompt with reasoning High, and submitted successfully at19:22:13Z
-(lines31–36). The completed answer was `RC_OK` at19:22:25Z (line39). Thus the
+session recorded the ordinary Installed Load failure at 19:17Z (lines 12–13),
+then a custom Host with context 8192/C1/vision off/spec none (line 18), Ready
+at 19:21:56Z (line 30). New Chat selected the Host instance, retained the visible
+prompt with reasoning High, and submitted successfully at 19:22:13Z
+(lines 31–36). The completed answer was `RC_OK` at 19:22:25Z (line 39). Thus the
 prior Installed Load failure did not block Send after the later successful
-Host load, and the8192 context no longer failed at output reservation.
+Host load, and the 8192-context request succeeded. The native log does not retain
+the internal prompt/output reservation counts; no exact budget claim is made.
 
 This closes the two reproduced Linux defects using retained native evidence;
 it does not qualify Windows or the unavailable automatic RTX5090 catalog
