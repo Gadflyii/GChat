@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,6 +14,10 @@ import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 export function ConfirmDialogHost() {
   const pending = useConfirmStore((state) => state.pending)
   const cancelRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    // A replacement request must not inherit focus from the previous Confirm.
+    if (pending) cancelRef.current?.focus()
+  }, [pending])
   return (
     <Dialog open={!!pending} onOpenChange={(open) => { if (!open) settleConfirm(false) }}>
       <DialogContent
