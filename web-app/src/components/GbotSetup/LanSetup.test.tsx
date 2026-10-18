@@ -277,3 +277,97 @@ it.each([
     expect(ready).toHaveBeenLastCalledWith(false)
   }
 )
+
+it.each([
+  ['Check tools', 'workspaces/ssh/tools', 'Checking tools…'],
+  ['Prepare tools', 'workspaces/ssh/prepare', 'Preparing tools…'],
+])(
+  'blocks %s during an SSH recheck before rerender and permits explicit recovery',
+  async (label, route, pendingLabel) => {
+    const recheck = deferred<{ authenticated: boolean }>()
+    const tools = deferred<{ installed: boolean }>()
+    let checks = 0
+    const api = vi.mocked(gbot).mockImplementation(async (path) => {
+      if (path === 'workspaces/ssh/key') return publicKey
+      if (path === 'workspaces/ssh/check')
+        return ++checks === 2 ? recheck.promise : { authenticated: true }
+      if (path === route) return tools.promise
+      throw new Error(`Unexpected ${path}`)
+    })
+    const { busy, ready } = setup({ ...connection, workspaceId: 'saved-bot' })
+    await screen.findByDisplayValue('ssh-ed25519 bot-key')
+    fireEvent.click(screen.getByRole('button', { name: 'Check SSH access' }))
+    const tool = await screen.findByRole('button', { name: label })
+    if (label === 'Prepare tools') {
+      fireEvent.click(
+        screen.getByRole('checkbox', {
+          name: /This computer is dedicated to Gbot/,
+        })
+      )
+    }
+    const ssh = screen.getByRole('button', { name: 'Check SSH access' })
+    act(() => {
+      ssh.click()
+      tool.click()
+      tool.click()
+    })
+    expect(
+      api.mock.calls.filter(([path]) => path === 'workspaces/ssh/check')
+    ).toEqual([
+      ['workspaces/ssh/check', { workspace_id: 'saved-bot' }],
+      ['workspaces/ssh/check', { workspace_id: 'saved-bot' }],
+    ])
+    expect(api.mock.calls.filter(([path]) => path === route)).toHaveLength(0)
+    expect(ssh).toBeDisabled()
+    expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
+    expect(busy).toHaveBeenLastCalledWith(true)
+    expect(ready).toHaveBeenLastCalledWith(false)
+
+    await act(async () =>
+      recheck.reject(new Error('The SSH host identity changed'))
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'The SSH host identity changed'
+    )
+    expect(ssh).toBeEnabled()
+    expect(busy).toHaveBeenLastCalledWith(false)
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(checks).toBe(2)
+    expect(api.mock.calls.filter(([path]) => path === route)).toHaveLength(0)
+
+    fireEvent.click(ssh)
+    const retry = await screen.findByRole('button', { name: label })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    if (label === 'Prepare tools') {
+      fireEvent.click(
+        screen.getByRole('checkbox', {
+          name: /This computer is dedicated to Gbot/,
+        })
+      )
+    }
+    act(() => {
+      retry.click()
+      ssh.click()
+      retry.click()
+    })
+    expect(api.mock.calls.filter(([path]) => path === route)).toEqual([
+      [
+        route,
+        {
+          workspace_id: 'saved-bot',
+          ...(label === 'Prepare tools' ? { consent: true } : {}),
+        },
+      ],
+    ])
+    expect(checks).toBe(3)
+    expect(screen.getByRole('button', { name: pendingLabel })).toBeDisabled()
+    expect(ssh).toBeDisabled()
+    expect(busy).toHaveBeenLastCalledWith(true)
+    expect(ready).toHaveBeenLastCalledWith(false)
+    await act(async () => tools.resolve({ installed: true }))
+    expect(ssh).toBeEnabled()
+    expect(screen.getByRole('button', { name: label })).toBeEnabled()
+    expect(busy).toHaveBeenLastCalledWith(false)
+    expect(ready).toHaveBeenLastCalledWith(true)
+  }
+)

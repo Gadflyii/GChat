@@ -921,3 +921,65 @@ it('keeps SSH and tools checks separate before enabling Continue', async () => {
     screen.queryByRole('button', { name: 'Check tools' })
   ).not.toBeInTheDocument()
 })
+
+it('keeps Continue off when an old tool response follows a failed SSH recheck', async () => {
+  let finishTools!: (value: { installed: boolean }) => void
+  const tools = new Promise<{ installed: boolean }>((resolve) => {
+    finishTools = resolve
+  })
+  let failSsh!: (reason: Error) => void
+  const recheck = new Promise<never>((_, reject) => {
+    failSsh = reject
+  })
+  let checks = 0
+  const api = vi.mocked(gbot).mockImplementation(async (route) => {
+    if (route === 'workspaces/ssh/key')
+      return { algorithm: 'ssh-ed25519', public_key: 'saved-public-key' }
+    if (route === 'workspaces/ssh/check')
+      return ++checks === 1 ? { authenticated: true } : recheck
+    if (route === 'workspaces/ssh/tools') return tools
+    throw new Error(`Unexpected ${route}`)
+  })
+  render(
+    <GbotSetup
+      save={vi.fn()}
+      localReady={vi.fn()}
+      cancel={vi.fn()}
+      resume={{
+        id: 'saved-bot',
+        name: 'Writer',
+        connection: {
+          kind: 'ssh',
+          endpoint: { hostname: 'bot.local', port: 22, user: 'bot' },
+          pinned_host_key: { algorithm: 'ssh-ed25519', public_key: 'pinned' },
+        },
+      }}
+    />
+  )
+  await screen.findByDisplayValue('ssh-ed25519 saved-public-key')
+  fireEvent.click(screen.getByRole('button', { name: 'Check SSH access' }))
+  const tool = await screen.findByRole('button', { name: 'Check tools' })
+  act(() => {
+    screen.getByRole('button', { name: 'Check SSH access' }).click()
+    tool.click()
+  })
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  await act(async () => failSsh(new Error('The SSH host identity changed')))
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'The SSH host identity changed'
+  )
+  await act(async () => finishTools({ installed: true }))
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: 'Check tools' })
+  ).not.toBeInTheDocument()
+  expect(
+    api.mock.calls.filter(([route]) => route === 'workspaces/ssh/check')
+  ).toEqual([
+    ['workspaces/ssh/check', { workspace_id: 'saved-bot' }],
+    ['workspaces/ssh/check', { workspace_id: 'saved-bot' }],
+  ])
+  expect(
+    api.mock.calls.filter(([route]) => route === 'workspaces/ssh/tools')
+  ).toHaveLength(0)
+})

@@ -348,6 +348,8 @@ export default function LanSetup({
                 <LanTools
                   workspaceId={connection.workspaceId}
                   ready={ready}
+                  disabled={action !== undefined}
+                  canStart={() => !pending.current}
                   busy={(value) => {
                     toolsPending.current = value
                     setToolsWorking(value)

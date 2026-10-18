@@ -30,6 +30,37 @@ No live provider, SSH, native Windows, VM, model or GPU action is part of this
 leaf. FRESH and OLD remain off with original XML and Gchat 2 custody. The
 private S1 build/cache was removed, the shared donor preserved, and CPUs
 96–103 returned at 07:41 UTC; booking 3130 canceled. Next: bubbs merges the
+## SSH rechecks block stale tool actions — Gchat 2
+
+`GBOT-LAN-TOOLS-PARENT-ACTION-OVERLAP`, based on main `3b449da5f`,
+fixes a rapid-click overlap between SSH access checks and tool checks or
+preparation. The old tool buttons could accept a request before React hid
+them for an SSH recheck. A late tool success could then enable Continue even
+after the SSH check failed.
+
+Tool actions now check the parent's synchronous pending guard before starting.
+The rendered controls also receive the parent's busy state. Accepted tool
+requests keep their existing busy handling and completion behavior. A failed
+SSH check requires an explicit successful retry before tools can be checked
+again.
+
+All three deferred regressions fail on unchanged main: both tool routes can
+overlap SSH, and the late tool success enables Continue after failed SSH
+(32 tests filtered). All 39 focused LanSetup, LanTools and setup-wizard cases
+pass with the fix. The checks cover same-turn activation, consented
+preparation, failed access, no automatic retry, explicit recovery and accepted
+tool completion.
+
+One isolated Linux/S1 `make verify` passes on 18 October, 07:44:26–07:52:20
+UTC: 3,502 app, 127 extension and 1,276 Rust tests pass; six app tests are
+skipped and 28 Rust tests ignored. Lint, type checking, quality guards and all
+six coverage floors pass. Source, test and documentation hashes match before
+and after the gate; this final receipt was added afterward. Evidence:
+`out/gchat2-lan-tools-parent-action-overlap-20261018/{result.json,SUMMARY.md}`.
+No live SSH, provider, native Windows, VM, model or GPU action is part of this
+leaf. FRESH and OLD remain off with original XML and Gchat 2 custody. The
+private S1 build/cache was removed, the shared donor preserved, and CPUs
+96–103 returned at 07:53 UTC; booking 3140 canceled. Next: bubbs merges the
 fix and its evidence.
 
 ## Cloud actions keep tool controls busy — Gchat 2
