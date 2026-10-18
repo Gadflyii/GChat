@@ -22,6 +22,28 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Agent composition selected state — October 18
+
+An isolated native keyboard pass selected Goal Loop with Tab and Space. Its
+fields and highlight changed, but none of the four composition buttons exposed
+a selected state. The Agent Studio source matched main `3dff672ee`; baseline
+DOM receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1434/`.
+
+Each composition button now exposes whether it is pressed. The state follows
+the current draft, including saved definitions and keyboard changes. Selection,
+draft contents and saving keep their existing behavior.
+
+Source `6fe30ffe4` passes all 99 Agent Studio tests, lint and one full
+`make verify` (3637 web tests, 127 extension tests and every supported Rust
+suite). The rebuilt Linux desktop passes native Tab/Space/Enter selection of
+all four compositions: exactly one button reports pressed and the activated
+card retains focus. Normal close preserves the two saved agent files and the
+two saved chat files. This checks DOM accessibility state, without claiming a
+live screen-reader or Windows run. Main `cbc1816d8` was merged afterward;
+its Gbot guidance changes leave these agent sources and tests identical.
+Receipts: `/ai/gchat/out/gchat-agent-composition-state-20261018/handoff.json`.
+
 ## Sampling assistant fallback wording — October 18
 
 An isolated native pass opened Sampling, selected the assistant menu's “None”

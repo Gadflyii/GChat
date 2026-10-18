@@ -958,6 +958,7 @@ function DefinitionEditor({
               <button
                 key={kind}
                 type="button"
+                aria-pressed={draft.kind === kind}
                 className={cn(
                   'rounded-xl border p-3 text-left transition hover:bg-accent',
                   draft.kind === kind && 'border-primary bg-primary/5'
