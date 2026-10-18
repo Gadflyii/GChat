@@ -22,6 +22,33 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Chat search query selection — October 18
+
+An isolated native Linux pass reproduced a stale keyboard selection when a new
+search query returned the same number of chats. After selecting the second
+match for `a`, replacing the query with `v` kept the second position selected
+even though the matching chats changed. Enter opened that chat instead of the
+first match. The Search dialog and sidebar are unchanged between the observed
+native source `edcd74e49` and main `beee1f2f9`.
+
+Search now resets selection when its items change and scrolls the selected
+item into view when results change. Arrow navigation within the current results
+is preserved. Three focused regressions, one `make verify`, the frontend build
+and the native build passed on frozen source `3c0a8ba45`. The unchanged-source
+negative control failed the selection regression as expected; its other two
+tests passed.
+
+The corrected native Linux replay selected the first `v` result after changing
+an equal-count query, kept it visible, and opened the expected saved HTML chat
+with Enter. Recent-chat reopening and Clear also passed. All eight saved
+thread/session files were unchanged. Candidate SHA256:
+`4b15c5a4df9fd73d581bb931f8de890a74e5425031c5306668315b5a08861e98`.
+The isolated HOME/XDG, Xvfb, D-Bus and unlocked test-keyring replay used no model
+or GPU; CPUs were returned at 04:55Z. Evidence is in
+`/ai/gchat/out/gchat-chat-search-keyboard-20261018/`. This qualifies the Linux
+debug desktop interaction; Windows was not built (dev phase), and installer
+behavior was not checked.
+
 ## First-use duplicate agent names — October 17
 
 An isolated native Linux pass of main `9e75fc31e` reproduced silent replacement:
