@@ -1,5 +1,41 @@
 # GInfer host UI
 
+## Passphrase form error guidance — verified, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-PASSPHRASE-ERROR-GUIDANCE` gives plain Create, Resume
+migration and Unlock recovery instructions with closed diagnostic details.
+Native operations can change the desktop vault before a later Gbot step
+rejects; a timeout can also leave the outcome uncertain. A fresh passive status
+now selects Resume for unfinished migration, Unlock for a locked vault, or
+read-only Check again when the state is unknown. A newly available vault closes
+the stale Create form. Desktop readiness does not claim Gbot access was
+restored. Secret fields stay cleared, and mutations require an explicit retry.
+
+The unchanged component reproduced all **seven intended failures**, with no
+hook or runner failure. The frozen candidate passed **22 credential tests**,
+lint with zero errors and five existing unrelated warnings, and exactly one
+`make verify`. The gate exited 0 at **16:13:01Z**: **3,686 app tests / 6 skipped,
+127 extension tests, all six critical coverage floors and 1,309 native tests /
+0 failed / 28 ignored** across 23 native summaries. Typecheck and quality guards
+passed. This verifies rendered frontend behavior; installed-desktop and Windows
+acceptance remain separate.
+
+The coordinator reviewed the actual failing and passing logs, terminal state,
+and matching source bytes/modes and all eleven catalog input bindings.
+
+Candidate: `/ai/gchat-worktrees/gchat3-secure-storage-passphrase-error-guidance-20261018`,
+branch `fix/gchat3-secure-storage-passphrase-error-guidance-20261018`, base
+`a4cd2835a`. S1 CPU80–87 returned **16:13Z**, booking3394 canceled. The owned
+SSD test copy was
+`ron@192.168.1.109:/media/ron/SSD_RAID/ai/tmp-gchat3-secure-storage-passphrase-error-guidance-tests-20261018`.
+Scoped cleanup finished **16:17:22Z**: the owned copy, prep log and two exited
+containers were removed after confirming no readers, releasing
+**28,064,308,537 logical bytes**. Their absence was verified; the inactive RC
+dependency donor was untouched. Only reviewed
+`out/secure-storage-passphrase-error-guidance-20261018/test-result.json` and
+`test-summary.md` remain. Next: send this branch for merge and continue the GUI
+queue without repeating accepted verification.
+
 ## Passphrase-vault Lock feedback — verified, Gchat 3, October 18
 
 `GUI-SECURE-STORAGE-LOCK-FEEDBACK` names the pending Lock and hides the
@@ -30,7 +66,8 @@ S1 CPU112–119 returned **15:46Z**, booking3368 canceled. Scoped cleanup finish
 removed, releasing **29,845,885,776 logical bytes**. Their absence was confirmed;
 the inactive RC dependency donor was untouched. Small reviewed results are
 `out/secure-storage-lock-feedback-20261018/test-result.json` and
-`test-summary.md`. Next: merge the verified branch and continue the GUI queue.
+`test-summary.md`. Source `04dfd2c74` is merged as `a4cd2835a`; continue
+the GUI queue without repeating the accepted verification.
 
 ## First-run accepted download actions — verified, Gchat 3, October 18
 
@@ -69,7 +106,8 @@ S1 CPU96–103 returned **15:11Z**, booking3351 canceled. Scoped cleanup finishe
 removed, releasing **28,064,389,959 logical bytes**. Their absence was confirmed;
 the inactive RC dependency donor was untouched. Small reviewed results are
 `out/first-run-download-action-result-20261018/test-result.json` and
-`test-summary.md`. Next: merge the verified branch and continue the GUI queue.
+`test-summary.md`. Source `71f48f238` is merged as `39f6acf78`; continue
+the GUI queue without repeating the accepted verification.
 
 ## First-run queued model choices — verified, Gchat 3, October 18
 

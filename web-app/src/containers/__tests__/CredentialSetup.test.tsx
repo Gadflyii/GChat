@@ -535,3 +535,293 @@ describe('Lock vault feedback', () => {
     expect(command).toHaveBeenCalledTimes(4)
   })
 })
+
+describe('Passphrase vault error guidance', () => {
+  const locked = {
+    ready: false,
+    platform: 'linux',
+    can_install: false,
+    tier: 'passphrase',
+    state: 'locked',
+  }
+  const unlocked = { ...locked, ready: true, state: 'ready' }
+  const canCreate = {
+    ready: false,
+    platform: 'linux',
+    can_install: false,
+    can_create: true,
+    state: 'missing_provider',
+  }
+
+  function expectClosedError(nativeError: string) {
+    const details = screen.getByText('Vault error details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toHaveTextContent(nativeError)
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+  }
+
+  it('explains a rejected Unlock, clears the secret and allows one explicit retry from a fresh locked status', async () => {
+    const nativeError = 'The passphrase is incorrect or the vault is damaged'
+    command
+      .mockResolvedValueOnce(locked)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(unlocked)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Unlock vault' }))
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'first passphrase' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+
+    expect(
+      await screen.findByText('Could not finish unlocking the vault.')
+    ).toBeVisible()
+    expect(screen.getByText(/The vault is currently locked/)).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+      'autocomplete',
+      'current-password'
+    )
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(ready).not.toHaveBeenCalledWith(true)
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'retry passphrase' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+    expect(await screen.findByRole('button', { name: 'Lock vault' })).toBeEnabled()
+    expect(command).toHaveBeenCalledTimes(4)
+    expect(command).toHaveBeenLastCalledWith('credential_unlock', {
+      passphrase: 'retry passphrase',
+    })
+    expect(screen.queryByText('Vault error details')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(true)
+  })
+
+  it('clears both Create fields and explains how to retry when fresh status still permits creation', async () => {
+    const nativeError = 'The vault file could not be written'
+    command
+      .mockResolvedValueOnce(canCreate)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(canCreate)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a passphrase vault' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.change(screen.getByLabelText('Confirm passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    )
+
+    expect(
+      await screen.findByText('Could not finish creating the passphrase vault.')
+    ).toBeVisible()
+    expect(screen.getByText(/Enter and confirm your passphrase/)).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Confirm passphrase')).toHaveValue('')
+    expect(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    ).toBeEnabled()
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+    expect(ready).not.toHaveBeenCalledWith(true)
+  })
+
+  it('keeps an interrupted migration on Resume with the existing passphrase even when fresh status is ready', async () => {
+    const migrating = {
+      ...unlocked,
+      tier: 'native',
+      migrating: true,
+    }
+    const nativeError = 'The connection copy could not be verified'
+    command
+      .mockResolvedValueOnce({ ...migrating, ready: false })
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(migrating)
+    render(<CredentialSetup />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Resume migration' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'existing passphrase' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Resume migration' }))
+
+    expect(
+      await screen.findByText('Could not finish resuming the vault migration.')
+    ).toBeVisible()
+    expect(
+      screen.getByText(/Your saved connections are still being moved/)
+    ).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.getByRole('button', { name: 'Resume migration' })).toBeEnabled()
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+      'autocomplete',
+      'current-password'
+    )
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Create passphrase vault' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(command).toHaveBeenCalledWith('credential_create', {
+      confirmed: true,
+      passphrase: 'existing passphrase',
+    })
+    expect(command).toHaveBeenCalledTimes(3)
+  })
+
+  it('closes Create after a rejected operation leaves an unlocked vault while retaining its warning', async () => {
+    const nativeError = 'Gbot could not unlock its saved connections'
+    command
+      .mockResolvedValueOnce(canCreate)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(unlocked)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a passphrase vault' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.change(screen.getByLabelText('Confirm passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    )
+
+    expect(
+      await screen.findByText('Could not finish creating the passphrase vault.')
+    ).toBeVisible()
+    expect(screen.getByText(/The vault is currently unlocked/)).toBeVisible()
+    expect(
+      screen.getByText(/If Gbot still cannot use your saved connections/)
+    ).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Create passphrase vault' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Lock vault' })).toBeEnabled()
+    expect(ready).toHaveBeenLastCalledWith(true)
+    expect(command).toHaveBeenCalledTimes(3)
+  })
+
+  it.each(['unavailable status', 'failed status read'])(
+    'requires a read-only Check after an unknown Unlock outcome from %s',
+    async (outcome) => {
+      const nativeError = 'Gbot did not confirm that its vault was unlocked'
+      command
+        .mockResolvedValueOnce(locked)
+        .mockRejectedValueOnce(new Error(nativeError))
+      if (outcome === 'unavailable status')
+        command.mockResolvedValueOnce({
+          ...locked,
+          state: 'unavailable',
+          error: 'The vault is busy finishing an earlier request',
+        })
+      else command.mockRejectedValueOnce(new Error('The status read timed out'))
+      command.mockResolvedValueOnce(locked)
+      const ready = vi.fn()
+      render(<CredentialSetup onReady={ready} />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Unlock vault' }))
+      fireEvent.change(screen.getByLabelText('Passphrase'), {
+        target: { value: 'existing passphrase' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+
+      expect(
+        await screen.findByText(
+          /The vault’s current state could not be confirmed/
+        )
+      ).toBeVisible()
+      expectClosedError(nativeError)
+      expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Unlock vault' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Create passphrase vault' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/The vault is currently locked/)
+      ).not.toBeInTheDocument()
+      expect(ready).not.toHaveBeenCalledWith(true)
+      expect(command).toHaveBeenCalledTimes(3)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+      expect(
+        await screen.findByRole('button', { name: 'Unlock vault' })
+      ).toBeEnabled()
+      expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+      expect(command).toHaveBeenCalledTimes(4)
+      expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
+      expect(
+        command.mock.calls.filter(([action]) => action === 'credential_unlock')
+      ).toHaveLength(1)
+      expect(ready).not.toHaveBeenCalledWith(true)
+    }
+  )
+
+  it('switches from Create to Unlock when a rejected creation has already left a locked vault', async () => {
+    const nativeError = 'Gbot did not accept the newly created vault'
+    command
+      .mockResolvedValueOnce(canCreate)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(locked)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a passphrase vault' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.change(screen.getByLabelText('Confirm passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    )
+
+    expect(
+      await screen.findByText('Could not finish creating the passphrase vault.')
+    ).toBeVisible()
+    expect(screen.getByText(/The vault is currently locked/)).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.getByRole('button', { name: 'Unlock vault' })).toBeEnabled()
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+      'autocomplete',
+      'current-password'
+    )
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Create passphrase vault' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Use a passphrase vault' })
+    ).not.toBeInTheDocument()
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+    expect(ready).not.toHaveBeenCalledWith(true)
+  })
+})

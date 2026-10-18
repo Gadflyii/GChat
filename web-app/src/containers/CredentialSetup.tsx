@@ -26,21 +26,40 @@ export function CredentialSetup({
   const [message, setMessage] = useState('')
   const [locking, setLocking] = useState(false)
   const [lockError, setLockError] = useState<string>()
+  const [vaultError, setVaultError] = useState<{
+    action: 'create' | 'resume' | 'unlock'
+    details: string
+  }>()
   const [intent, setIntent] = useState<'create' | 'unlock'>()
   const [passphrase, setPassphrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const check = useCallback(
-    async (interactive = false) => {
+    async (interactive = false, recoverVault = false) => {
       setBusy(true)
       onReady?.(false)
+      if (recoverVault) {
+        setPassphrase('')
+        setConfirmation('')
+      }
       try {
         const result = await engineCommand<Status>('credential_status', {
           check: interactive,
         })
         setStatus(result)
+        if (recoverVault)
+          setIntent(
+            result.migrating
+              ? 'create'
+              : result.tier === 'passphrase' && result.state === 'locked'
+                ? 'unlock'
+                : result.can_create
+                  ? 'create'
+                  : undefined
+          )
         if (interactive) setLockError(undefined)
         onReady?.(result.ready === true)
       } catch (error) {
+        if (recoverVault) setIntent(undefined)
         setStatus({
           ready: false,
           platform: 'unknown',
@@ -79,6 +98,7 @@ export function CredentialSetup({
       !status?.migrating &&
       passphrase !== confirmation
     ) {
+      setVaultError(undefined)
       setMessage('The passphrases do not match.')
       return
     }
@@ -87,6 +107,7 @@ export function CredentialSetup({
     setConfirmation('')
     setMessage('')
     setLockError(undefined)
+    setVaultError(undefined)
     setLocking(action === 'lock')
     setBusy(true)
     onReady?.(false)
@@ -105,8 +126,12 @@ export function CredentialSetup({
       setIntent(undefined)
     } catch (error) {
       if (action === 'lock') setLockError(String(error))
-      else setMessage(String(error))
-      await check()
+      else
+        setVaultError({
+          action: action === 'create' && status?.migrating ? 'resume' : action,
+          details: String(error),
+        })
+      await check(false, action !== 'lock')
     } finally {
       setLocking(false)
       setBusy(false)
@@ -118,7 +143,36 @@ export function CredentialSetup({
     setConfirmation('')
     setMessage('')
     setLockError(undefined)
+    setVaultError(undefined)
   }
+  const vaultFeedback = !busy && vaultError ? (
+    <div className="text-sm space-y-2" role="alert">
+      <p>
+        {vaultError.action === 'create'
+          ? 'Could not finish creating the passphrase vault.'
+          : vaultError.action === 'resume'
+            ? 'Could not finish resuming the vault migration.'
+            : 'Could not finish unlocking the vault.'}
+      </p>
+      <p>
+        {status?.migrating
+          ? 'Your saved connections are still being moved. Enter the same passphrase and choose Resume migration.'
+          : status?.tier === 'passphrase' && status.ready
+            ? 'The vault is currently unlocked. If Gbot still cannot use your saved connections, choose Lock vault, then unlock it again.'
+            : status?.tier === 'passphrase' && status.state === 'locked'
+              ? 'The vault is currently locked. Enter your passphrase and choose Unlock vault to try again.'
+              : status?.can_create
+                ? 'Enter and confirm your passphrase, then choose Create passphrase vault to try again.'
+                : status?.tier === 'native' && status.ready
+                  ? 'Your computer’s password storage is still selected. Choose Use a passphrase vault to try again.'
+                  : 'The vault’s current state could not be confirmed. Choose Check again before trying again.'}
+      </p>
+      <details className="text-xs">
+        <summary>Vault error details</summary>
+        <p className="break-words">{vaultError.details}</p>
+      </details>
+    </div>
+  ) : null
   const lockFeedback = locking ? (
     <div className="text-sm" role="status">
       <p>Locking the passphrase vault…</p>
@@ -156,6 +210,7 @@ export function CredentialSetup({
           </>
         )}
         {lockFeedback}
+        {vaultFeedback}
         {status.tier === 'passphrase' && (
           <Button
             variant="outline"
@@ -213,6 +268,7 @@ export function CredentialSetup({
         <p role="status">Checking or setting up secure storage…</p>
       )}
       {lockFeedback}
+      {vaultFeedback}
       {!busy && status && !status.ready && (
         <p role={status.state === 'unchecked' ? 'status' : 'alert'}>
           {status.state === 'unchecked'
@@ -291,6 +347,7 @@ export function CredentialSetup({
                 setConfirmation('')
                 setMessage('')
                 setLockError(undefined)
+                setVaultError(undefined)
               }}
             >
               Cancel
@@ -306,11 +363,13 @@ export function CredentialSetup({
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        {!intent && status?.tier === 'passphrase' && (
-          <Button disabled={busy} onClick={() => choose('unlock')}>
-            Unlock vault
-          </Button>
-        )}
+        {!intent &&
+          status?.tier === 'passphrase' &&
+          (!vaultError || status.state === 'locked') && (
+            <Button disabled={busy} onClick={() => choose('unlock')}>
+              Unlock vault
+            </Button>
+          )}
         {!intent && status?.migrating && (
           <Button disabled={busy} onClick={() => choose('create')}>
             Resume migration
@@ -334,7 +393,7 @@ export function CredentialSetup({
         <Button
           variant={status?.state === 'unchecked' ? 'default' : 'outline'}
           disabled={busy}
-          onClick={() => void check(true)}
+          onClick={() => void check(true, !!vaultError)}
         >
           {status?.state === 'unchecked'
             ? 'Check secure storage'
