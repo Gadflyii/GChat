@@ -1,5 +1,29 @@
 # GInfer host UI
 
+## Paused first-run download feedback — C3, October 18
+
+`GUI-FIRST-RUN-PAUSED-ERROR` was reproduced during the native real-transfer
+status-label acceptance: Welcome says **Paused; resume to continue**, but also
+shows a red failure directing users to absent Try again/Choose a different
+model buttons. The Host deliberately returns an informational pause diagnostic
+in `error`; the UI currently treats every diagnostic as a failed download.
+Evidence: `out/c3-first-run-download-status-20261018/native/paused.png` and
+`terminal-status.json`. Source recovery confirms the same condition in main
+`1ba852d1e`. Only failed downloads should render the failure panel; paused
+downloads retain progress and Resume downloads. Genuine failure/retry/model
+reselection behavior must remain intact.
+
+Owner C3; branch `fix/c3-first-run-paused-error-20261018`, worktree
+`/ai/gchat-worktrees/c3-first-run-paused-error-20261018`. Next: reproduce the
+paused-to-resumed rendered regression against unchanged source, fix the
+condition, run the focused first-run file and ONE `make verify`. No Host,
+Engine, Chat/Agents, selected-artifact, Windows or new native/GPU work.
+Own S1 SSD root is
+`/media/ron/SSD_RAID/ai/tmp-c3-first-run-paused-error-20261018`; use an independent
+copy of the granted inactive Gchat 3 RC cache, exact tracked source, booked
+socket1 CPUs, shared compile lock, nice10/max8 jobs and routed offline container.
+Remove that root when terminal; retain only small test/result evidence.
+
 ## MCP dialog row buttons — C7, October 18
 
 `GUI-MCP-DIALOG-ROW-BUTTONS`: command-option reorder handles are native named
