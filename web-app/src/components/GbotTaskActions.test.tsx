@@ -1,9 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { expect, it, vi } from 'vitest'
-import { toast } from 'sonner'
 import GbotTaskActions from './GbotTaskActions'
-
-vi.mock('sonner', () => ({ toast: { error: vi.fn() } }))
 
 const available = { busy: false, ready: true, botHasControl: true }
 
@@ -128,11 +125,19 @@ it.each([
   const control = screen.getByRole('button', { name: button })
   fireEvent.click(control)
   await waitFor(() => expect(control).toBeEnabled())
-  expect(toast.error).toHaveBeenCalledWith('Error: The bot is disconnected')
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent(
+    action === 'cancel'
+      ? 'Could not stop this task. Try again.'
+      : 'Could not resume this task. Try again.'
+  )
+  expect(screen.getByText('Details').closest('details')).not.toHaveAttribute('open')
+  expect(screen.getByText('The bot is disconnected')).not.toBeVisible()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   fireEvent.click(control)
   await waitFor(() => expect(onAction).toHaveBeenCalledTimes(2))
   expect(onAction.mock.calls).toEqual([[action], [action]])
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 it.each(['completed', 'needs_review'])(

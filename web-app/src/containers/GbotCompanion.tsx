@@ -406,7 +406,7 @@ export default function GbotCompanion() {
                   key={task.id}
                   className="space-y-3 rounded-lg border p-3"
                 >
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="flex items-start justify-between gap-3 text-xs text-muted-foreground">
                     <span>{task.state.replaceAll('_', ' ')}</span>
                     <GbotTaskActions
                       taskState={task.state}
@@ -414,7 +414,10 @@ export default function GbotCompanion() {
                       ready={ready}
                       botHasControl={botHasControl}
                       onAction={(action) =>
-                        perform(() => gbot(`tasks/${action}`, { id: task.id }))
+                        perform(
+                          () => gbot(`tasks/${action}`, { id: task.id }),
+                          true
+                        )
                       }
                     />
                   </div>
