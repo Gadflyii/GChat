@@ -53,6 +53,7 @@ export type ModelManagementTab = (typeof managementTabs)[number]
 
 const REGISTERED_MODEL_REFRESH_FAILED = 'The model was added, but the model list could not be refreshed. Choose Refresh installed models to try again.'
 const ACCEPTED_DOWNLOAD_REFRESH_FAILED = 'The download request was accepted, but its status could not be refreshed. Choose Refresh downloads to check its current state.'
+const STOPPED_MODEL_REFRESH_FAILED = 'The model stopped, but the running model list could not be refreshed. Choose Refresh model status before loading or stopping another model.'
 const NO_SETTINGS = ' has no tested settings for automatic loading. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.'
 const capabilityLabels = (capabilities: string[] = []) => capabilities.flatMap(capability => {
   switch (capability.toLowerCase()) {
@@ -111,6 +112,9 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const [busy, setBusy] = useState(false)
   const downloadActionPending = useRef(false)
   const [downloadRefreshErrors, setDownloadRefreshErrors] = useState<Record<string, string>>({})
+  const modelStatusPending = useRef(false)
+  const [modelStatusError, setModelStatusError] = useState<string | null>(null)
+  const [stoppedModelId, setStoppedModelId] = useState<string | null>(null)
   const registrationPending = useRef(false)
   const registrationNeedsRefresh = useRef(false)
   const [localRegistration, setLocalRegistration] = useState<'choosing' | 'registering' | null>(null)
@@ -351,15 +355,49 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       if (mounted.current) { setCancellingLoad(false); setCancelError(true) }
     }
   }
-  const stopLocal = (modelId: string) => act(async () => {
+  const updateModelStatus = async (stop?: { modelId: string; rowModelId: string; operation: () => Promise<void> }) => {
+    if (busy || modelStatusPending.current || (stop && modelStatusError !== null)) return
+    modelStatusPending.current = true
+    setBusy(true)
+    let stopped = false
+    try {
+      if (stop) {
+        await stop.operation()
+        stopped = true
+        const state = useAppState.getState()
+        state.setActiveModels(state.activeModels.filter(id => id !== stop.modelId))
+        if (mounted.current) setStoppedModelId(stop.rowModelId)
+      }
+      const active = await service.models().getActiveModels()
+      // Desktop unload confirms Stop without publishing the Host's new snapshot.
+      // Refresh it before merging ready aliases from that cache into active state.
+      if (localHost) {
+        const updated = await engineCommand<EngineSnapshot>('snapshot', { host_id: localHost.host_id })
+        publishSnapshot(localHost.host_id, updated)
+      }
+      syncActiveModelsFromEngines(active)
+      if (mounted.current) { setModelStatusError(null); setStoppedModelId(null); setError(null) }
+    } catch (e) {
+      if (mounted.current) {
+        if (stopped || modelStatusError !== null) {
+          setModelStatusError(errorMessage(e))
+          setError(null)
+        } else {
+          setErrorSummary('Could not stop this model. Check that the computer is connected, then try Stop model again.')
+          setError(errorMessage(e))
+        }
+      }
+    } finally {
+      modelStatusPending.current = false
+      if (mounted.current) setBusy(false)
+    }
+  }
+  const stopLocal = (modelId: string) => updateModelStatus({ modelId, rowModelId: modelId, operation: async () => {
     const result = await service.models().stopModel(modelId, 'ginfer')
     if (!result?.success) throw new Error(result?.error ?? 'The engine did not confirm that this model stopped.')
-    syncActiveModelsFromEngines(await service.models().getActiveModels())
-  }, 'Could not stop this model. Check that the computer is connected, then try Stop model again.')
-  const stopHostInstance = (alias: string) => act(async () => {
-    await controlLocalHostModel(alias, 'stop')
-    syncActiveModelsFromEngines(await service.models().getActiveModels())
-  }, 'Could not stop this model. Check that the computer is connected, then try Stop model again.')
+  } })
+  const stopHostInstance = (modelId: string, alias: string) => updateModelStatus({ modelId: alias, rowModelId: modelId,
+    operation: () => controlLocalHostModel(alias, 'stop') })
   const totalInstalled = local ? localDownloads.filter(j => j.status === 'installed').reduce((n, j) => n + j.release.bytes, 0)
     : snapshot?.models.reduce((n, m) => n + m.metadata.size_bytes, 0) ?? 0
   const partialBytes = downloads.filter(j => j.status !== 'installed').reduce((n, j) => n + j.received, 0)
@@ -404,6 +442,10 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         ? <div role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error} <Link to={route.engines.index} className="underline">Open GInfer Hosts</Link></div>
         : <ModelProblem message={errorSummary} detail={error} />)}
       {downloadNeedsRefresh && <ModelProblem message={ACCEPTED_DOWNLOAD_REFRESH_FAILED} detail={downloadRefreshError} />}
+      {local && modelStatusError !== null && <div className="space-y-2">
+        <ModelProblem message={STOPPED_MODEL_REFRESH_FAILED} detail={modelStatusError} />
+        <Button variant="outline" disabled={busy} onClick={() => void updateModelStatus()}>Refresh model status</Button>
+      </div>}
       {offline && <ModelProblem message={`Cannot reach ${host?.name ?? 'this computer'}. Check that it is on and GInfer Host is running, then reconnect in GInfer Hosts. The model list shown here may be out of date.`} detail={hostErrors[destination]} />}
       {local && !localLoadReady && (resources.error
         ? <ModelProblem message="Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat." detail={resources.error} />
@@ -430,7 +472,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
           {invalidGpuSelection && <p role="alert">{hardwareReady ? 'Select at least one available graphics card. A previously selected card may have been disconnected.' : 'Checking which graphics cards are available…'}</p>}
         </fieldset>}
         {local ? <>{!filteredModels.length && <div className="rounded-xl border p-8 text-center">{query ? <><p>No installed models match “{query}”.</p><Button className="mt-3" onClick={() => setQuery('')}>Clear search</Button></> : <><p>No installed models found.</p><Button className="mt-3" onClick={() => setTab('Recommended')}>Find a recommended model</Button></>}</div>}
-          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{plainModelName(m.displayName ?? m.id)}</h2><p className="text-sm text-muted-foreground">{activeModels.includes(m.id) || hostInstanceOf(m.path) ? 'Running' : 'Installed'} · {capabilityLabels(m.capabilities) || 'GInfer model'}. Load model uses tested settings for your selected graphics cards. To choose your own settings, open GInfer Hosts.</p></div><div className="flex gap-2"><Button disabled={busy || !localLoadReady || invalidGpuSelection || activeModels.includes(m.id) || !!hostInstanceOf(m.path)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || !(activeModels.includes(m.id) || hostInstanceOf(m.path))} onClick={() => void (activeModels.includes(m.id) ? stopLocal(m.id) : stopHostInstance(hostInstanceOf(m.path)!))}>Stop model</Button><DeleteModelAction modelId={m.id} label={m.displayName ?? m.name} provider="ginfer" externalReference={m.source === 'external'} /></div></section>)}</>
+          {filteredModels.map(m => <section key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4"><div><h2 className="font-medium">{plainModelName(m.displayName ?? m.id)}</h2><p className="text-sm text-muted-foreground">{stoppedModelId === m.id ? (modelStatusError !== null ? 'Status unavailable' : 'Checking status') : activeModels.includes(m.id) || hostInstanceOf(m.path) ? 'Running' : 'Installed'} · {capabilityLabels(m.capabilities) || 'GInfer model'}. Load model uses tested settings for your selected graphics cards. To choose your own settings, open GInfer Hosts.</p></div><div className="flex gap-2"><Button disabled={busy || modelStatusError !== null || !localLoadReady || invalidGpuSelection || activeModels.includes(m.id) || !!hostInstanceOf(m.path)} onClick={() => void loadLocal(m.id)}>Load model</Button><Button variant="outline" disabled={busy || modelStatusError !== null || !(activeModels.includes(m.id) || hostInstanceOf(m.path))} onClick={() => void (activeModels.includes(m.id) ? stopLocal(m.id) : stopHostInstance(m.id, hostInstanceOf(m.path)!))}>Stop model</Button><DeleteModelAction modelId={m.id} label={m.displayName ?? m.name} provider="ginfer" externalReference={m.source === 'external'} /></div></section>)}</>
           : host ? <HostCard key={host.host_id} host={host} snapshot={snapshot} error={hostErrors[destination]} /> : <p>Connect another computer in GInfer Hosts, then choose it from the Computer menu above.</p>}
         {!local && snapshot?.model_management && <details><summary className="cursor-pointer text-sm">Delete downloaded models</summary><p className="my-2 text-sm text-muted-foreground">You can delete models downloaded by GInfer. Files added from other folders stay in place. Stop a running model before deleting it.</p>{snapshot.models.filter(m => downloads.some(j => j.status === 'installed' && j.path === m.path)).map(m => <div key={m.id} className="flex items-center justify-between gap-3 border-b py-2"><span>{hostModelLabel(m)} · {formatModelBytes(m.metadata.size_bytes)}</span><Button variant="outline" disabled={busy || offline} onClick={async () => { if (await confirmAction({ title: 'Delete this downloaded model?', message: `Delete ${hostModelLabel(m)} from ${host?.name}? You will need to download it again to use it.`, confirmLabel: 'Delete model', destructive: true })) void act(() => engineCommand('remove_model', { host_id: destination, body: { model_id: m.id } }), 'Could not delete this model. Stop it if it is running, then try again.') }}>Delete model</Button></div>)}</details>}
       </>}
