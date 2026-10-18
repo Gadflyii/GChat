@@ -120,6 +120,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const [localRegistration, setLocalRegistration] = useState<'choosing' | 'registering' | null>(null)
   const mounted = useRef(true)
   const loadRef = useRef<PendingLocalLoad | null>(null)
+  const [loadResult, setLoadResult] = useState('')
   const [pendingLoad, setPendingLoad] = useState<PendingLocalLoad | null>(null)
   const [loadProgress, setLoadProgress] = useState<LocalModelLoadProgress | null>(null)
   const [loadStatusUnavailable, setLoadStatusUnavailable] = useState(false)
@@ -320,6 +321,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
     const load: PendingLocalLoad = { operationId: crypto.randomUUID(), controller: new AbortController(),
       startedAt: performance.now(), ready: false, settled: false, cancelRequested: false }
     loadRef.current = load
+    setLoadResult('')
     setPendingLoad(load)
     setLoadProgress(null)
     setLoadElapsedSeconds(0)
@@ -333,7 +335,9 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         signal: load.controller.signal,
         ...(selectedGpuUuids === null ? {} : { gpuUuids: [...selectedGpuUuids] }) })
       load.ready = true
+      if (mounted.current) setLoadResult('Model loaded and ready to use.')
     } catch (e) {
+      if (mounted.current) setLoadResult((e as { name?: string } | null)?.name === 'AbortError' ? 'Model startup cancelled.' : 'Model could not be loaded. Check the error below before trying again.')
       if ((e as { code?: string } | null)?.code === 'no_qualified_profile') {
         const m = localModels.find(x => x.id === modelId)
         throw new Error(plainModelName(m?.displayName ?? modelId) + NO_SETTINGS)
@@ -450,16 +454,17 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       {local && !localLoadReady && (resources.error
         ? <ModelProblem message="Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat." detail={resources.error} />
         : <p role="status" className="rounded border p-3 text-sm">Preparing GInfer to run models on this computer…</p>)}
-      {pendingLoad && <div role="status" className="space-y-2 rounded border p-3 text-sm">
-        <p className="font-medium">{cancellingLoad ? 'Cancelling model startup…' : loadProgress?.status === 'ready' ? 'The model is loaded. Finishing up…' : loadPhaseLabels[loadProgress?.phase ?? 'preparing']}</p>
+      <p role="status" aria-label="Model load status" aria-live="polite" aria-atomic="true" className={pendingLoad || loadResult ? 'rounded border p-3 text-sm font-medium' : 'sr-only'}>{pendingLoad
+        ? cancellingLoad ? 'Cancelling model startup…' : loadStatusUnavailable ? 'Cannot check progress right now. GChat is still waiting for the model to finish loading.' : loadProgress?.status === 'ready' ? 'The model is loaded. Finishing up…' : loadPhaseLabels[loadProgress?.phase ?? 'preparing']
+        : loadResult}</p>
+      {pendingLoad && <div className="space-y-2 rounded border p-3 text-sm">
         {loadProgress?.detail && <details className="text-muted-foreground"><summary className="cursor-pointer">Startup details</summary><p className="mt-2 whitespace-pre-wrap break-words">{loadProgress.detail}</p></details>}
         <p>Time since you chose Load model: {loadElapsedSeconds} seconds</p>
         {typeof loadProgress?.completed_bytes === 'number' && typeof loadProgress.total_bytes === 'number' && loadProgress.total_bytes > 0 && <>
           <progress aria-label="Model file check" className="h-2 w-full accent-primary" max={loadProgress.total_bytes} value={loadProgress.completed_bytes} />
           <p>{formatModelBytes(loadProgress.completed_bytes)} / {formatModelBytes(loadProgress.total_bytes)}</p>
         </>}
-        {loadStatusUnavailable && <p>Cannot check progress right now. GChat is still waiting for the model to finish loading.</p>}
-        {cancelError && <p>Could not confirm that startup was cancelled. Choose Cancel load to try again.</p>}
+        {cancelError && <p role="alert">Could not confirm that startup was cancelled. Choose Cancel load to try again.</p>}
         <Button variant="outline" disabled={cancellingLoad || pendingLoad.ready} onClick={() => void cancelPendingLoad()}>Cancel load</Button>
       </div>}
       {local && localDownloadError && !downloadNeedsRefresh && <ModelProblem message="Could not check your downloads. Open Downloads and choose Refresh downloads to try again." detail={localDownloadError} />}
