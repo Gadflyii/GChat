@@ -22,6 +22,31 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Finding a newly created skill — October 18
+
+A private Linux native pass created `weekly-status-report` with keyboard input.
+Its instructions opened, but the selected row and Skill actions stayed below
+the visible list (row y1,767 in an 800px viewport). Scrolling to the row exposed
+its highlight, and Try in chat correctly selected the skill in Chat. Baseline
+receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1557/`.
+
+The Skills list now reveals each new selection with the nearest scroll position.
+This includes a created or uploaded skill whose list refresh arrives after its
+details. Revealing the row preserves keyboard focus; later refreshes of the same
+selection preserve the user's manual scroll position.
+
+Source `cb4d28f9b` passes 56 focused tests, lint and one full `make verify`
+(3,683 app, 127 extension and 1,309 Rust tests; six coverage floors). The
+frontend and native builds pass. In the rebuilt private native app, keyboard
+creation selected a fully visible row (y735–800), kept focus on Create new,
+preserved a manual scroll through Refresh, and opened the correct skill via
+Try in chat. Normal close preserved existing agent definitions, runs and chat
+fixture files. This qualifies the Linux development app creation path; delayed
+import/list arrival is covered by the rendered regression. No model execution,
+Windows or installed-package acceptance is claimed.
+Receipts: `/ai/gchat/out/gchat-skill-created-selection-visibility-20261018/`.
+
 ## Starting an agent from a template — October 18
 
 A private native keyboard pass activated Goal Loop's **Use template** button.

@@ -84,6 +84,22 @@ export function SkillsPage() {
   const [togglingSkills, setTogglingSkills] = useState(new Map<string, boolean>())
   const pendingDownload = useRef(false)
   const [downloadingSkill, setDownloadingSkill] = useState<string | null>(null)
+  const selectedSkillRef = useRef<HTMLDivElement>(null)
+  const revealedSkillName = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!selected) {
+      revealedSkillName.current = null
+      return
+    }
+    if (
+      selected.name !== revealedSkillName.current &&
+      selectedSkillRef.current
+    ) {
+      selectedSkillRef.current.scrollIntoView?.({ block: 'nearest' })
+      revealedSkillName.current = selected.name
+    }
+  }, [selected, skills])
 
   useEffect(() => {
     return () => {
@@ -244,6 +260,7 @@ export function SkillsPage() {
             return (
               <div
                 key={skill.name}
+                ref={selected?.name === skill.name ? selectedSkillRef : undefined}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-lg border p-2 transition-colors hover:bg-accent',
                   selected?.name === skill.name && 'bg-accent'
