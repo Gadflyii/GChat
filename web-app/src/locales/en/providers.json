@@ -74,7 +74,5 @@
     "successDescription": "Provider catalog updated.",
     "errorDescription": "Could not refresh provider catalog. Using cached or built-in providers."
   },
-  "ginferAdvanced": "Advanced engine options",
-  "ginferAdvancedDesc": "Most people never need these. They change how the GInfer engine starts a model and apply the next time a model starts.",
   "manageInModels": "Start in Models"
 }

@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-18** — [Own custom GInfer startup in Hosts](2026-10-18-own-custom-ginfer-startup-in-hosts.md)
+
 - **2026-10-18** — [Report typed Gbot startup failures](2026-10-18-report-typed-gbot-startup-failures.md)
 
 - **2026-10-17** — [Contain Gbot desktop keyboard input](2026-10-17-contain-gbot-desktop-keyboard-input.md)

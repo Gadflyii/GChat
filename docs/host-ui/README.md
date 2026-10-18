@@ -1,5 +1,68 @@
 # GInfer host UI
 
+## GInfer settings ownership — C7, October 18
+
+`GUI-GINFER-PROVIDER-SETTINGS-ADVANCED` is active on main `25459ffc2`.
+The earlier plain labels and Start in Models link are already delivered; the
+remaining defect is structural. Settings still stores global launch overrides
+that chat/API loads consume, Installed Load explicitly selects a tested Host
+profile, and GInfer Hosts has an independent instance-settings editor.
+
+Deliverable: one clear owner for custom model startup settings, with useful
+navigation from Settings and Models. Acceptance requires preserving qualified
+automatic loading, explicit GPU selection, saved Host configuration, model
+discovery and application-level timeout/unload behavior; removing superseded
+controls and their project-owned paths; focused behavioral tests and ONE
+`make verify`. No numerical, qualification, GPU or Windows account change is
+authorized by this row.
+
+Arch signed the ownership and automatic-load changes at 04:46Z. Next action:
+implement the provider page, extension and model service together, then check
+profile selection, Settings navigation and the full gate. C7 owns local worktree
+`/ai/gchat-worktrees/c7-ginfer-settings-owner-20261018`, branch
+`fix/c7-ginfer-settings-owner-20261018`. Parallel agents own extension and model-service changes; C7 integrates the
+provider page and gates. Private S1 build/cache path is
+`/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018`; CPUs64–71
+are booked from04:49Z through05:19Z for dependency preparation and gates.
+No model or GPU allocation; disposable copies will be deleted after the gate.
+
+### Architecture decision — signed04:46Z
+
+Approved ownership: Models owns ordinary Load/Stop and package management;
+GInfer Hosts owns custom per-instance startup settings and saved hardware
+profiles. Settings > GInfer keeps application behavior (load timeout and
+automatic unloading), storage discovery and engine-program location, with
+direct links to Models and GInfer Hosts. Remove its global Vision/speculation,
+helper, KV, prefill, concurrency and CUDA-Graph controls and their extension
+configuration consumption rather than leaving invisible persisted overrides.
+The per-model GInfer settings gear is already absent.
+
+The decision also covers ordinary chat/API loading: these currently use
+global settings plus the model's native context, whereas Installed Load asks
+for a complete tested Host profile. Ordinary automatic starts
+use that same tested-profile selection and retain explicit GPU constraints;
+already attached running sessions keep their current saved Host settings.
+Models' explicit tested-profile Load retains its existing matching-resident
+rule. Custom settings remain available through Hosts and its existing
+instance attachment path. Do not silently start an unqualified custom profile
+or change any tested profile's context, concurrency or options.
+
+Relevant paths are `web-app/src/services/models/default.ts:startModel`,
+`extensions/ginfer-extension/src/index.ts:buildGinferConfig`, and
+`src-tauri/plugins/tauri-plugin-ginfer/src/managed.rs:load_on_control`.
+`use_profile_defaults` already discards provider launch options in native
+`options` and chooses an eligible complete profile. HostCard builds independent
+instance settings from its own form/saved profile and consumes no provider
+launch settings. CLI/native explicit `GinferConfig` remains supported; the
+obsolete desktop global configuration is the removed path.
+
+Risks to check: chat/API must not reject a valid non-native tested context;
+explicit GPU/order constraints and missing-profile rejection must survive;
+an existing custom Host session must not restart or change on a Settings save;
+storage/binary/timeout/unload settings must retain their existing behavior.
+Source tests should cover these supported transitions and Settings navigation.
+No HostCard edits are proposed because Gchat 3 owns its sharing-result work.
+
 ## Scheduled tasks brain setup guidance — October 18
 
 `GBOT-SCHEDULE-BRAIN-SETUP-GUIDANCE`: the disabled schedule form previously
