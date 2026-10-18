@@ -1,5 +1,28 @@
 # Gbot design
 
+## Account-service startup cause — C7
+
+`GUI-ACCOUNT-SERVICE-ERROR-WORDING`: source work is active on
+`fix/c7-account-service-startup-reason-20261018`, based on main `89024e1f2`.
+Acceptance: an explicit account-service connection reports the current child's
+secure-storage cause with a useful next step, keeps technical details closed,
+and never classifies a failure using an earlier attempt's append-only log.
+A concurrent service owner must still be allowed to become ready.
+
+The private service reports typed storage failures through reserved exit codes
+201–205; generic errors remain code 1. The Host formats guidance from that
+code and retains exit status/log location in the existing Details section.
+Credential-store and API vault errors retain their types until this boundary.
+No readiness, ownership, credential format or automatic-connection behavior changes.
+Arch signed the closed-enum/exit-code design; codes avoid the sysexits range.
+See the [startup-failure decision](../decisions/2026-10-18-report-typed-gbot-startup-failures.md).
+
+Next: focused Host, service-boundary and rendered account-connection regressions,
+then one `make verify`. No build, app, GPU or booking is live yet. Owned source:
+`/ai/gchat-worktrees/c7-account-service-startup-reason-20261018`; retained owned
+S1 test cache: `/media/ron/SSD_RAID/ai/tmp-c7-private-catalog-gate-20261017`.
+
+
 ## SSH loopback fixture teardown
 
 The disposable SSH fixture joins its aborted listener tasks within the existing

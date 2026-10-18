@@ -138,25 +138,41 @@ describe('Workspace connections', () => {
     expect(api.connectorAccounts).toHaveBeenCalledTimes(2)
   })
 
-  it('shows the cause of an account-service failure in plain words and keeps technical details behind Show details', async () => {
-    api.connectorAccounts
-      .mockRejectedValueOnce(new Error('Connect the account service first'))
-      .mockRejectedValueOnce(
-        new Error(
-          'Account connections could not start: Secure storage is unavailable.\n\nDetails: the Gbot service exited before becoming ready (exit status: 1); log: /data/gbot/service.log'
+  it.each([
+    {
+      cause: 'locked',
+      summary:
+        'Account connections could not start because secure storage is locked. Choose Check secure storage in GChat, unlock it, then connect again.',
+      exitStatus: 201,
+    },
+    {
+      cause: 'unavailable',
+      summary:
+        'Account connections could not start because secure storage is unavailable. Choose Check secure storage in GChat, then connect again.',
+      exitStatus: 202,
+    },
+  ])(
+    'shows the current startup cause when secure storage is $cause and keeps technical details behind Show details',
+    async ({ summary, exitStatus }) => {
+      const technicalDetails = `the Gbot service exited before becoming ready (exit status: ${exitStatus}); log: /data/gbot/service.log`
+      api.connectorAccounts
+        .mockRejectedValueOnce(new Error('Connect the account service first'))
+        .mockRejectedValueOnce(
+          new Error(`${summary}\n\nDetails: ${technicalDetails}`)
         )
-      )
-    render(<WorkspaceConnections />)
-    await userEvent
-      .setup()
-      .click(await screen.findByRole('button', { name: 'Connect account service' }))
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Account connections could not start: Secure storage is unavailable.')
-    const details = within(alert).getByText('Show details').closest('details')!
-    expect(details).not.toHaveAttribute('open')
-    expect(details).toHaveTextContent('log: /data/gbot/service.log')
-    expect(within(alert).getByText(/could not start/).textContent).not.toMatch(/service\.log|exit status/)
-  })
+      render(<WorkspaceConnections />)
+      await userEvent
+        .setup()
+        .click(await screen.findByRole('button', { name: 'Connect account service' }))
+      const alert = await screen.findByRole('alert')
+      const actionableSummary = within(alert).getByText(summary)
+      expect(actionableSummary).toBeVisible()
+      const details = within(alert).getByText('Show details').closest('details')!
+      expect(details).not.toHaveAttribute('open')
+      expect(details).toHaveTextContent(technicalDetails)
+      expect(actionableSummary.textContent).not.toMatch(/service\.log|exit status/)
+    }
+  )
 
   it('requires saved registration and explicit services before sign-in', async () => {
     const view = initialView()
