@@ -10,8 +10,8 @@ describe('native checkbox and radio theme', () => {
     expect(css).toMatch(/\.dark input\[type='checkbox'\],\s*\.dark input\[type='radio'\]\s*\{[^}]*color-scheme: dark/)
   })
 
-  it('shows a keyboard focus ring on them', () => {
-    expect(css).toMatch(/input\[type='checkbox'\]:focus-visible,\s*input\[type='radio'\]:focus-visible/)
+  it('keeps radio focus visible when WebKit omits focus-visible after an arrow key', () => {
+    expect(css).toMatch(/input\[type='checkbox'\]:focus-visible,\s*input\[type='radio'\]:focus\s*\{[^}]*outline-ring/)
   })
 
   it('drops the spacing under the summary of a collapsed details element', () => {
