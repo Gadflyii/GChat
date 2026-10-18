@@ -10,7 +10,17 @@ not replay removal. An explicit retry requires the shared confirmation again;
 canceling that confirmation keeps the warning and makes no request. Rename
 feedback remains separate.
 
-Acceptance: baseline, focused, lint and ONE `make verify` PENDING.
+The warning names the recovery steps outside Details: finish the bot’s tasks,
+turn off its schedules, unlink its accounts and disconnect it before retrying.
+Rendered Error and native-string regressions cover persistent feedback, closed
+Details, no automatic replay, Cancel and an explicitly reconfirmed retry.
+Original-source baseline: 2 FAIL / 7 filtered; fixed focused suite: 9 PASS
+(`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotLanBot.test.tsx`);
+lint: 0 errors / 5 existing warnings. One `make verify`, 2026-10-18
+12:24:59–12:29:59Z: PASS, 3,583 app / 6 skipped, 127 extension, 1,288 Rust /
+28 ignored across 23 summaries, all six coverage floors, lint/typecheck/guards.
+All 3,452 tracked source hashes stayed unchanged through the gate; this final
+receipt was added afterward. CPU64–71 booking3280 returned 12:30Z.
 Evidence: `out/gchat2-lan-remove-inline-error-20261018/result.json`.
 This rendered/source scope does not qualify native, Windows or live SSH.
 
