@@ -1,5 +1,29 @@
 # GInfer host UI
 
+## Collapsed-section spacing recovery — C3, October 18
+
+`GUI-CLOSED-DETAILS-GAP` is owned by C3 on
+`docs/c3-closed-details-gap-20261018`, worktree
+`/ai/gchat-worktrees/c3-closed-details-gap-20261018`, base `a7ab6dc02`.
+The original fix `6fb07b18c` (merged `d54a0db25`) remains ineffective: its
+closed-summary override sits in Tailwind's base layer, below the utilities
+layer that supplies `space-y-3`. The source-text assertion passes despite
+the cascade defect. The retained `d0a8d06bf` light narrow manual-Host box is
+consistent with an extra 12 px; the original 66→54 px claim has no retained
+geometry receipt and cannot establish current behavior.
+
+Acceptance is removal of the extra spacing under closed summaries while
+open contents retain their spacing. Move the closed-state override into the
+utilities layer and remove the ineffective source-text assertion. Use the
+existing native inspector to measure baseline/candidate geometry and native
+clicks to open/close the real manual-Host section, plus focused tests and ONE
+`make verify`. No new harness, model/GPU work, setup behavior or Windows claim.
+Owned S1 root `/media/ron/SSD_RAID/ai/tmp-c3-closed-details-gap-20261018`
+will hold independent copies from the inactive Gchat 3 RC dependency/AppDir
+donor; no donor writes or shared fixture. CPU80–87, socket1 shared guard,
+nice10, max8; private HOME/XDG700/D-Bus/keyring/Xvfb. Next action: baseline
+native measurement, then current-source candidate build and acceptance.
+
 ## First-run button spacing — C3, October 18
 
 `GUI-FIRST-RUN-BUTTON-GAP` passes its remaining Linux native leaf.
