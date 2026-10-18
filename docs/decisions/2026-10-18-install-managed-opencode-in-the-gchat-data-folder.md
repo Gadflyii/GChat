@@ -19,6 +19,15 @@ Readiness, embedded and external launch, CLI and offline deletion all use this
 resolver. Managed updates use the same npm prefix and verify the requested
 version. A partial installation is not successful setup.
 
+The October 18 P2 correction installs into a private temporary sibling prefix.
+Only npm success and a successful runtime version check permit writing the
+verification marker and renaming the complete runtime into place. The resolver
+ignores unmarked shims, including files left by interrupted earlier setup, and
+continues to the native PATH. Failed setup is cleaned up and remains retryable;
+failed updates preserve the last working runtime. Publication restores the
+previous directory if replacement fails. Arch signed this correction at
+05:40:41Z.
+
 For external/custom installations GChat displays their own `upgrade` command
 without executing it. The user may explicitly choose **Use managed copy**;
 only successful private installation clears the custom override and switches

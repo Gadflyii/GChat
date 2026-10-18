@@ -4,11 +4,10 @@ use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_ginfer::cleanup_ginfer_processes;
 
 use crate::core::app::commands::{
-    default_data_folder_path, get_app_configurations, get_jan_data_folder_path,
-    update_app_configuration,
+    default_data_folder_path, get_configuration_file_path, get_jan_data_folder_path,
+    read_configured_data_folder,
 };
 use crate::core::app::constants::{JAN_DATA_FILES, JAN_DATA_SUBDIRS};
-use crate::core::app::models::AppConfiguration;
 use crate::core::mcp::helpers::{stop_mcp_servers_with_context, ShutdownContext};
 use crate::core::state::AppState;
 
@@ -116,39 +115,60 @@ pub async fn factory_reset<R: Runtime>(
     app_handle: tauri::AppHandle<R>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let autostart_preference = get_app_configurations(app_handle.clone()).autostart_preference;
-    let data_folder = get_jan_data_folder_path(app_handle.clone());
-    if data_folder.exists() && !is_safe_to_delete(&data_folder) {
-        log::error!(
-            "Refusing factory reset: path is too close to filesystem root: {}",
-            data_folder.display()
-        );
-        return Ok(());
-    }
+    let configuration_file = get_configuration_file_path(app_handle.clone());
+    let default_folder = PathBuf::from(default_data_folder_path(app_handle.clone()));
+    reset_configured_app_data(&app_handle, &state, &configuration_file, &default_folder).await?;
 
-    reset_app_data(&app_handle, &state, &data_folder).await?;
-
-    // Reset the configuration
-    let default_config = AppConfiguration {
-        data_folder: default_data_folder_path(app_handle.clone()),
-        autostart_preference,
-    };
-    let _ = update_app_configuration(app_handle.clone(), default_config);
-
+    // Keep the installation's selected location and startup preference. A move
+    // retains its old copy, so selecting the default here can resurrect data.
     restart_app(&app_handle)
 }
 
-/// Drain Agents and stop the configured Host before deleting their data.
+async fn reset_configured_app_data<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    state: &State<'_, AppState>,
+    configuration_file: &Path,
+    default_folder: &Path,
+) -> Result<(), String> {
+    reset_app_data_with(app_handle, state, || {
+        let folder = read_configured_data_folder(configuration_file, default_folder).map_err(
+            |error| format!("GChat reset could not select its data folder: {error}. Your data has not been deleted. Repair the settings file, then try again."),
+        )?;
+        if !folder.is_absolute() || !is_safe_to_delete(&folder) {
+            return Err(format!(
+                "GChat reset refused the unsafe data folder {}. Your data has not been deleted. Select an absolute App Data folder away from the filesystem root, then try again.",
+                folder.display()
+            ));
+        }
+        Ok(folder)
+    })
+    .await
+}
+
+#[cfg(test)]
 pub(crate) async fn reset_app_data<R: Runtime>(
     app_handle: &AppHandle<R>,
     state: &State<'_, AppState>,
     data_folder: &Path,
 ) -> Result<(), String> {
+    reset_app_data_with(app_handle, state, || Ok(data_folder.to_path_buf())).await
+}
+
+/// Drain Agents, select the current root under the relocation fence, then stop
+/// its Host before deleting data. Retain both fences through the deletion.
+async fn reset_app_data_with<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    state: &State<'_, AppState>,
+    select_data_folder: impl FnOnce() -> Result<PathBuf, String>,
+) -> Result<(), String> {
     crate::core::agent::commands::shutdown(app_handle)
         .await
         .map_err(|error| format!("GChat reset could not finish: {error}. Try resetting again after the Agent runs stop."))?;
 
-    let _access = crate::core::engine_hosts::data_folder_access().write().await;
+    let _access = crate::core::engine_hosts::data_folder_access()
+        .write()
+        .await;
+    let data_folder = select_data_folder()?;
     let client = crate::core::engine_hosts::reset_client(app_handle);
     let _host = client
         .prepare_local_reset(&data_folder.join("ginfer/host"))
@@ -209,7 +229,7 @@ pub(crate) async fn reset_app_data<R: Runtime>(
             false
         };
 
-        remove_jan_data_contents(data_folder);
+        remove_jan_data_contents(&data_folder);
 
         if bin_preserved {
             let ginfer_dir = data_folder.join("ginfer");
@@ -4978,6 +4998,207 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+    struct ResetWithoutHostCredentials;
+
+    impl ginfer_host::client::CredentialStore for ResetWithoutHostCredentials {
+        fn get(&self, _: uuid::Uuid) -> ginfer_host::client::CredentialFuture<'_, String> {
+            panic!("resetting a folder without a Host must not read credentials");
+        }
+
+        fn set<'a>(
+            &'a self,
+            _: uuid::Uuid,
+            _: &'a str,
+        ) -> ginfer_host::client::CredentialFuture<'a, ()> {
+            panic!("resetting a folder without a Host must not write credentials");
+        }
+
+        fn delete(&self, _: uuid::Uuid) -> ginfer_host::client::CredentialFuture<'_, ()> {
+            panic!("resetting a folder without a Host must not delete credentials");
+        }
+    }
+
+    fn reset_test_app(data_folder: &Path) -> tauri::App<tauri::test::MockRuntime> {
+        let client = std::sync::Arc::new(ginfer_host::client::Client::new(
+            None,
+            std::sync::Arc::new(ResetWithoutHostCredentials),
+        ));
+        tauri::test::mock_builder()
+            .manage(AppState::default())
+            .manage(client)
+            .manage(crate::test_support::TestDataRoot(data_folder.to_path_buf()))
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn factory_reset_keeps_relocated_selection_and_old_default_data() {
+        let root = tempfile::tempdir().unwrap();
+        let default_folder = root.path().join("original-data");
+        let selected = root.path().join("relocated-data");
+        let old_chat = default_folder.join("threads/retained-chat.json");
+        let current_chat = selected.join("threads/current-chat.json");
+        let current_model = selected.join("ginfer/models/current-model.ginfer");
+        fs::create_dir_all(old_chat.parent().unwrap()).unwrap();
+        fs::create_dir_all(current_chat.parent().unwrap()).unwrap();
+        fs::create_dir_all(current_model.parent().unwrap()).unwrap();
+        fs::write(&old_chat, b"old copy retained by relocation").unwrap();
+        fs::write(&current_chat, b"selected chat to reset").unwrap();
+        fs::write(&current_model, b"selected model to reset").unwrap();
+        let configuration_file = root.path().join("settings.json");
+        let configuration =
+            serde_json::to_vec_pretty(&crate::core::app::models::AppConfiguration {
+                data_folder: selected.to_string_lossy().into_owned(),
+                autostart_preference: crate::core::app::models::AutostartPreference::Disabled,
+            })
+            .unwrap();
+        fs::write(&configuration_file, &configuration).unwrap();
+        let app = reset_test_app(&selected);
+
+        reset_configured_app_data(
+            app.handle(),
+            &app.state::<AppState>(),
+            &configuration_file,
+            &default_folder,
+        )
+        .await
+        .unwrap();
+
+        assert!(!selected.join("threads").exists());
+        assert!(!current_model.exists());
+        assert_eq!(
+            fs::read(&old_chat).unwrap(),
+            b"old copy retained by relocation"
+        );
+        assert_eq!(fs::read(&configuration_file).unwrap(), configuration);
+        // This is also the reader used by the desktop/CLI folder resolver:
+        // restarting must keep selecting the cleared folder, never the old copy.
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &default_folder).unwrap(),
+            selected
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_without_saved_settings_clears_the_default_folder() {
+        let root = tempfile::tempdir().unwrap();
+        let default_folder = root.path().join("default-data");
+        let chat = default_folder.join("threads/current-chat.json");
+        fs::create_dir_all(chat.parent().unwrap()).unwrap();
+        fs::write(&chat, b"default chat to reset").unwrap();
+        let configuration_file = root.path().join("no-settings-yet/settings.json");
+        let app = reset_test_app(&default_folder);
+
+        reset_configured_app_data(
+            app.handle(),
+            &app.state::<AppState>(),
+            &configuration_file,
+            &default_folder,
+        )
+        .await
+        .unwrap();
+
+        assert!(!default_folder.join("threads").exists());
+        assert!(!configuration_file.exists());
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &default_folder).unwrap(),
+            default_folder
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_reads_selection_after_the_relocation_fence() {
+        let root = tempfile::tempdir().unwrap();
+        let original = root.path().join("original-data");
+        let selected = root.path().join("relocated-data");
+        for folder in [&original, &selected] {
+            fs::create_dir_all(folder.join("threads")).unwrap();
+            fs::write(folder.join("threads/chat.json"), b"chat").unwrap();
+        }
+        let configuration_file = root.path().join("settings.json");
+        let write_selection = |folder: &Path| {
+            fs::write(
+                &configuration_file,
+                serde_json::to_vec(&serde_json::json!({ "data_folder": folder })).unwrap(),
+            )
+            .unwrap();
+        };
+        write_selection(&original);
+        let app = reset_test_app(&selected);
+        let state = app.state::<AppState>();
+        let relocation = crate::core::engine_hosts::data_folder_access()
+            .write()
+            .await;
+        let reset = reset_configured_app_data(app.handle(), &state, &configuration_file, &original);
+        tokio::pin!(reset);
+        std::future::poll_fn(|context| {
+            assert!(std::future::Future::poll(reset.as_mut(), context).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+
+        // A move commits its new selection before releasing this same fence.
+        write_selection(&selected);
+        drop(relocation);
+        reset.await.unwrap();
+
+        assert_eq!(
+            fs::read(original.join("threads/chat.json")).unwrap(),
+            b"chat"
+        );
+        assert!(!selected.join("threads").exists());
+        assert_eq!(
+            read_configured_data_folder(&configuration_file, &original).unwrap(),
+            selected
+        );
+    }
+
+    #[tokio::test]
+    async fn factory_reset_does_not_fall_back_from_invalid_saved_settings() {
+        for configuration_kind in ["malformed", "unreadable", "relative"] {
+            let root = tempfile::tempdir().unwrap();
+            let default_folder = root.path().join("default-data");
+            let selected = root.path().join("relocated-data");
+            let old_chat = default_folder.join("threads/retained-chat.json");
+            let current_chat = selected.join("threads/current-chat.json");
+            fs::create_dir_all(old_chat.parent().unwrap()).unwrap();
+            fs::create_dir_all(current_chat.parent().unwrap()).unwrap();
+            fs::write(&old_chat, b"retained default").unwrap();
+            fs::write(&current_chat, b"retained selection").unwrap();
+            let configuration_file = root.path().join("settings.json");
+            match configuration_kind {
+                "malformed" => fs::write(&configuration_file, b"{malformed").unwrap(),
+                "unreadable" => fs::create_dir(&configuration_file).unwrap(),
+                "relative" => {
+                    fs::write(&configuration_file, br#"{"data_folder":"./data"}"#).unwrap();
+                }
+                _ => unreachable!(),
+            }
+            let original_configuration = fs::read(&configuration_file).ok();
+            let app = reset_test_app(&selected);
+
+            let error = reset_configured_app_data(
+                app.handle(),
+                &app.state::<AppState>(),
+                &configuration_file,
+                &default_folder,
+            )
+            .await
+            .expect_err("an unknown or unsafe selection must not reset the fallback");
+
+            assert!(error.contains("Your data has not been deleted"), "{error}");
+            assert_eq!(fs::read(&old_chat).unwrap(), b"retained default");
+            assert_eq!(fs::read(&current_chat).unwrap(), b"retained selection");
+            assert_eq!(fs::read(&configuration_file).ok(), original_configuration);
+            assert_eq!(
+                configuration_file.is_dir(),
+                configuration_kind == "unreadable"
+            );
+            assert!(!default_folder.join("ginfer").exists());
+            assert!(!selected.join("ginfer").exists());
+        }
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn reveal_item_in_dir_returns_error_without_panicking_on_runtime_worker() {
@@ -5260,26 +5481,209 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    fn opencode_fixture_executable(path: &Path, script: &str) {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn opencode_setup_fixture(test_name: &str) -> Option<PathBuf> {
+        const FIXTURE_ROOT: &str = "GCHAT_OPENCODE_SETUP_FIXTURE_ROOT";
+        let root = match std::env::var_os(FIXTURE_ROOT) {
+            Some(root) => PathBuf::from(root),
+            None => {
+                // Keep PATH/HOME private without changing other tests' environment.
+                let root = tempfile::tempdir().unwrap();
+                let tools = root.path().join("tools with spaces");
+                fs::create_dir_all(&tools).unwrap();
+                fs::create_dir_all(root.path().join("home")).unwrap();
+                let result = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        &format!("core::system::commands::tests::{test_name}"),
+                        "--nocapture",
+                    ])
+                    .env(FIXTURE_ROOT, root.path())
+                    .env("PATH", &tools)
+                    .env("HOME", root.path().join("home"))
+                    .output()
+                    .unwrap();
+                assert!(
+                    result.status.success(),
+                    "{}{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr),
+                );
+                assert!(
+                    String::from_utf8_lossy(&result.stdout).contains("test result: ok. 1 passed;")
+                );
+                return None;
+            }
+        };
+        let tools = root.join("tools with spaces");
+        std::os::unix::fs::symlink("/usr/bin/which", tools.join("which")).unwrap();
+        opencode_fixture_executable(&tools.join("node"), "#!/bin/sh\nprintf 'v18.19.1\\n'\n");
+        opencode_fixture_executable(
+            &tools.join("npm"),
+            r##"#!/bin/sh
+if [ "$1" = --version ]; then printf '9.2.0\n'; exit 0; fi
+[ "$1" = install ] && [ "$2" = --global=false ] && [ "$3" = --prefix ] && [ "$5" = --cache ] || exit 8
+prefix="$4"
+[ "$PWD" = "$prefix" ] || exit 8
+IFS= read -r mode < "$GCHAT_OPENCODE_SETUP_FIXTURE_ROOT/install-mode"
+/bin/mkdir -p "$prefix/node_modules/.bin" || exit 9
+if [ "$mode" = broken-version ]; then
+  printf '#!/bin/sh\nexit 29\n' > "$prefix/node_modules/.bin/opencode"
+else
+  printf '#!/bin/sh\nprintf "1.2.3\\n"\n' > "$prefix/node_modules/.bin/opencode"
+fi
+/bin/chmod 700 "$prefix/node_modules/.bin/opencode" || exit 9
+printf '%s\n' "$mode" >> "$GCHAT_OPENCODE_SETUP_FIXTURE_ROOT/npm-install-attempts"
+if [ "$mode" = npm-failure ]; then echo 'fixture npm failed after writing its shim' >&2; exit 23; fi
+"##,
+        );
+        fs::write(root.join("install-mode"), "success\n").unwrap();
+        Some(root)
+    }
+
+    #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn opencode_detection_uses_the_selected_managed_root_and_keeps_custom_authoritative() {
-        let root = tempfile::tempdir().unwrap();
-        let data = root.path().join("selected Code data");
+        let Some(root) = opencode_setup_fixture(
+            "opencode_detection_uses_the_selected_managed_root_and_keeps_custom_authoritative",
+        ) else {
+            return;
+        };
+        let data = root.join("selected Code data");
         let managed = super::super::opencode_runtime::managed_executable(&data);
-        std::fs::create_dir_all(managed.parent().unwrap()).unwrap();
-        std::fs::write(&managed, "managed Code").unwrap();
         let app = tauri::test::mock_app();
         app.manage(crate::test_support::TestDataRoot(data));
-        let found = super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+        super::install_agent(app.handle().clone(), "opencode".into(), None)
+            .await
+            .unwrap();
+        let installed = fs::read(&managed).unwrap();
+        let found =
+            super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
         assert!(found.installed);
         assert!(!found.via_wsl);
-        for invalid in [root.path().join("missing Code"), PathBuf::from("relative Code")] {
+        for invalid in [root.join("missing Code"), PathBuf::from("relative Code")] {
             let found = super::detect_agent_installed(
-                app.handle().clone(), "opencode".into(), Some(invalid.to_string_lossy().into_owned()),
-            ).await;
+                app.handle().clone(),
+                "opencode".into(),
+                Some(invalid.to_string_lossy().into_owned()),
+            )
+            .await;
             assert!(!found.installed);
             assert!(!found.via_wsl);
         }
-        assert_eq!(std::fs::read_to_string(managed).unwrap(), "managed Code");
+        assert_eq!(fs::read(managed).unwrap(), installed);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn opencode_failed_setup_stays_missing_until_an_explicit_successful_retry() {
+        let Some(root) = opencode_setup_fixture(
+            "opencode_failed_setup_stays_missing_until_an_explicit_successful_retry",
+        ) else {
+            return;
+        };
+        for failure in ["npm-failure", "broken-version"] {
+            fs::write(root.join("install-mode"), format!("{failure}\n")).unwrap();
+            let data = root.join(failure).join("selected data");
+            let app = tauri::test::mock_app();
+            app.manage(crate::test_support::TestDataRoot(data.clone()));
+            let error = super::install_agent(app.handle().clone(), "opencode".into(), None)
+                .await
+                .expect_err("a failed setup must not publish its shim");
+            assert!(error.contains("Code"), "{error}");
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(!found.installed, "{failure} must remain repairable");
+            assert!(!found.via_wsl);
+            assert!(super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .is_none());
+
+            fs::write(root.join("install-mode"), "success\n").unwrap();
+            super::install_agent(app.handle().clone(), "opencode".into(), None)
+                .await
+                .expect("an explicit retry must repair the failed setup");
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(found.installed);
+            assert!(!found.via_wsl);
+            let resolved = super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                resolved.ownership,
+                super::super::opencode_runtime::OpenCodeOwnership::Managed
+            );
+            assert_eq!(
+                resolved.executable,
+                super::super::opencode_runtime::managed_executable(&data)
+            );
+            assert_eq!(
+                super::super::opencode_runtime::version(&resolved.executable, &data).unwrap(),
+                "1.2.3"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(root.join("npm-install-attempts")).unwrap(),
+            "npm-failure\nsuccess\nbroken-version\nsuccess\n",
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn opencode_failed_managed_adoption_keeps_the_working_native_path_available() {
+        let Some(root) = opencode_setup_fixture(
+            "opencode_failed_managed_adoption_keeps_the_working_native_path_available",
+        ) else {
+            return;
+        };
+        let native = root.join("tools with spaces/opencode");
+        opencode_fixture_executable(&native, "#!/bin/sh\nprintf '9.8.7\\n'\n");
+        let original = fs::read(&native).unwrap();
+        for failure in ["npm-failure", "broken-version"] {
+            fs::write(root.join("install-mode"), format!("{failure}\n")).unwrap();
+            let data = root.join(failure).join("selected data");
+            let app = tauri::test::mock_app();
+            app.manage(crate::test_support::TestDataRoot(data.clone()));
+            assert!(
+                super::install_agent(app.handle().clone(), "opencode".into(), None)
+                    .await
+                    .is_err()
+            );
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(
+                found.installed,
+                "{failure} must not hide the PATH installation"
+            );
+            assert!(!found.via_wsl);
+            let resolved = super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                resolved.ownership,
+                super::super::opencode_runtime::OpenCodeOwnership::Native
+            );
+            assert_eq!(resolved.executable, native);
+            assert_eq!(
+                super::super::opencode_runtime::version(&resolved.executable, &data).unwrap(),
+                "9.8.7"
+            );
+        }
+        assert_eq!(fs::read(native).unwrap(), original);
+        assert_eq!(
+            fs::read_to_string(root.join("npm-install-attempts")).unwrap(),
+            "npm-failure\nbroken-version\n",
+        );
     }
 
     #[tokio::test]

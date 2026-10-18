@@ -1,5 +1,123 @@
 # GInfer host UI
 
+## Gbot task-control failure recovery — October 18
+
+`GBOT-TASK-ACTION-INLINE-ERRORS`: rejected **Stop** and **Resume** requests
+previously produced only a short raw-error toast. Each task now keeps plain,
+action-specific failure guidance beneath its controls, with technical details
+closed until requested. Settings and the companion pass errors to these
+controls while retaining their normal refresh. Explicit retry preserves the
+same task and action; pending requests still block duplicates and opposites.
+
+Baseline `e0a67a528`; all four rendered Stop/Resume regressions fail at the
+missing alert. Fixed focused tests pass 129 cases in three files. ONE
+`make verify` passed on S1 CPUs40–47, 05:39:10–05:46:53Z: lint, typecheck,
+quality guards, 3,386 app tests (six skipped), 127 extension tests, all six
+coverage floors and 1,247 Rust tests (28 ignored). Private offline caches,
+socket0 shared lock, nice10/max8 jobs; source, tests and documentation hashes
+matched before and after the gate. Private remote scratch was removed and
+booking3043 canceled; CPUs returned05:47Z. No task state, approval policy or
+backend behavior changed. No VM, native Windows, model or live task was run.
+FRESH/OLD remain OFF/original XML/custody Gchat2. Windows not built (dev phase).
+
+Result: `out/gchat2-task-action-inline-errors-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-task-action-inline-errors-20261018`.
+## Reset preserves relocated App Data selection — C3, October 18
+
+`GUI-RESET-RELOCATED-DATA-RESURRECTION`: the installed release `d0a8d06bf`
+retained its old data copy during native relocation around 05:00Z. A subsequent
+factory reset cleared the selected `relocated-data` folder but rewrote its
+configuration to select the retained default folder, exposing old data after
+restart. The coordinator owns that native evidence in the ongoing
+`out/c3-current-main-release-20261018/` walkthrough packet; no new native run is
+claimed here.
+
+The source candidate preserves installation configuration, including App Data
+location and startup preference. It reads the authoritative selection under the
+existing relocation write fence, then uses the unchanged Agent/Host/MCP reset
+lifecycle and deletion list. No settings file means the normal default folder;
+malformed, unreadable or unsafe saved settings return an actionable error before
+Host shutdown, window hiding or deletion. Ordinary desktop/CLI fallback behavior
+is unchanged. See the [ownership decision](../decisions/2026-10-18-preserve-selected-data-folder-during-reset.md).
+
+Acceptance: reset removes selected threads/models, preserves the old default
+sentinel and saved configuration, and subsequent resolution still selects the
+cleared folder. Four added native reset regressions cover that case, missing
+settings, invalid settings without fallback deletion, and a relocation commit
+while reset waits for the write fence. Existing Agent cancellation/timeout and
+Host teardown regressions remain intact. All nine focused reset cases passed (one existing live-GPU ignore), as did
+eight folder resolver cases, scoped library check/Clippy and lint (zero errors,
+five existing warnings). ONE `make verify` passed at05:50:45Z: 3,382 app tests
+(six skipped), 127 extension tests, all six coverage floors and 1,251 native
+tests (28 ignored). No failure or continuation occurred. Vite/default-desktop
+debug build passed at05:52:26Z. The candidate ELF, private pre-install, resource
+link and all45 source bindings were checked. Native Reset/confirmation/restart passed05:55Z on the private selected sibling. The selected log sentinel was removed, the retained default sentinel survived and installation configuration bytes stayed identical. General reported the selected sibling after restart; Dark wide/narrow selected-folder and wide confirmation screenshots were reviewed. The old invalid Desktop locator bytes and missing runtimes stayed unchanged. See `out/c3-reset-relocated-data-20261018/native-result.json`. No new GPU/model/profile work,
+deletion categories, unselected-path cleanup or cross-device Engine-binary
+preservation changes are in scope.
+
+Source self-check: `git diff --check`, scoped Rust parse/format checks and new
+decision-link target checks pass. The focused command was `cargo test
+--manifest-path src-tauri/Cargo.toml --lib --no-default-features --features
+test-tauri,cli factory_reset_ -- --test-threads=1`; the real-GPU case keeps its
+existing ignored status. Existing app-folder resolver cases also passed.
+
+Source inventory: owner C3, local worktree
+`/ai/gchat-worktrees/c3-reset-relocated-data-20261018`, branch
+`fix/c3-reset-relocated-data-20261018`, base `072655126`. The private S1 root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` reuses inactive source,
+dependencies and debug target after C4 completed its read-copy at 05:41Z.
+Booking3051 CPUs80–87 returned05:53Z after the container and disposable local/
+remote source archives were removed. The socket1 shared build ran at nice10.
+Packet `out/c3-reset-relocated-data-20261018/` retains commands, source bindings
+and results. Retain the worktree for gates and review; the installed baseline
+remains owned by the broad walkthrough. Current main `e0a67a528` is merged
+normally before gates. The adjacent
+native test insertion conflict retains all four reset tests and main's folder
+reveal worker regression; the decision index retains both sets of entries.
+All35 dependency manifests matched the retained cache. The tested export is
+`reset-relocated-candidate/bin/gchat` (SHA256
+`70e9aef690f23040ea45b5f3f6cd2f5db40efb993ff683bd6c95f5c2a669c131`),
+with a private pre-install copy and linkage to retained runnable resources.
+Native app/session/display stopped and booking3039 returned05:56Z. The source and native acceptance are merge-ready; the exported binary is retained until merge.
+Shared source/cache is handed serially to the Host-locator gate; the installed
+AppDir/home, reset/autostart/folder/badge candidates, runnable resources and
+tools remain protected. No GPU/model run is needed.
+## Host model inventory scan feedback — Gchat 3, October 18
+
+`GUI-HOST-SCAN-REFRESH-RESULT-20261018`: Refresh model list now publishes the
+Host's returned inventory before reading the host list. A failed list read
+keeps **Model list refreshed.** and the updated model choices, with separate
+read-error feedback and a read-only **Refresh host list** retry. That retry
+never repeats the scan. A rejected scan keeps its recovery guidance, original
+inventory and explicit retry; pending input cannot duplicate either operation.
+The native scan route returns a snapshot and also cancels draft-width tuning,
+so retrying a list read must not invoke it again. No native behavior changed.
+
+Acceptance: rendered baseline reproduction; authoritative inventory publication
+before the read; persistent separate accepted/read outcomes; read-only retry,
+genuine scan rejection and pending protection; focused tests, lint and ONE
+`make verify`. Both new regressions fail on base `d4ec7abab` (40 skipped).
+The fixed focused file passes all 42 cases; lint has zero errors and five
+existing warnings. ONE verify passed 05:46:24–05:54:24Z: typecheck, quality and
+contract checks, 3,395 app tests (six skipped), 127 extension tests, all six
+coverage floors and 1,252 Rust tests (28 ignored, 23 summaries). The coordinator
+reviewed actual logs, independently summed native results and checked the
+matching post-gate component/test bindings. These checks establish rendered
+mocked-command behavior and the Linux source gate. No installed GUI, live
+scan, Engine, GPU, Windows or installer qualification is claimed.
+
+Owner `/ai/gchat-worktrees/gchat3-host-scan-refresh-result-20261018`, branch
+`fix/gchat3-host-scan-refresh-result-20261018`. The independent eight-CPU S1
+fixture `/media/ron/SSD_RAID/ai/tmp-gchat3-host-scan-refresh-tests-20261018`
+used the inactive RC donor read-only; all 35 dependency inputs matched the
+offline recipe. It ran on AIS-2-8592-L01 CPUs120–127 under the shared socket-1
+compile lock, nice10/max8 jobs, without GPU devices. Booking3054 canceled;
+returned 05:54Z. The owned SSD fixture (42.33 GB), two exited containers and
+285 MB local source archive were removed by 05:56Z. The RC donor is untouched;
+only `out/host-scan-refresh-result-20261018/test-result.json` and adjacent
+`test-summary.md` remain. Current main has no intervening changes to either
+owned source/test file. Status: MERGE READY; next unresolved action is Bubbs’s merge.
+
 ## Gbot permission decision failure recovery — October 18
 
 `GBOT-APPROVAL-INLINE-ERRORS`: failed **Allow** and **Deny** requests previously
@@ -102,6 +220,41 @@ rejection remains covered by the focused native/rendered cases; no GUI rejection
 was injected. App/private session returned05:41Z; Xvfb remains for the next two
 checks. No login/reboot or Windows runtime is claimed. Next: coordinator merge.
 Packet: `out/c3-linux-autostart-xdg-20261018/{result.json,terminal.json,summary.md}`.
+## First-run Retry after background recovery — C4, October 18
+
+`GUI-FIRST-RUN-RETRY-FOLLOWUPS` fixes both follow-ups to merged `16a4b2f25`.
+Retry now wakes retained maintenance failures at GPU and complete as well as
+storage and models, preserving saved choices. If the monitor clears the error
+before the click arrives, Retry quietly returns current status without writing
+unchanged progress or waking maintenance. Explicit download, profiling and
+startup Resume actions retain their existing behavior.
+
+The two Host regressions cover GPU/complete recovery and the stale-click race
+at GPU/storage/models/complete; the latter prevents disk publication to verify
+that refreshing status needs no write. Focused native Linux Host tests passed
+19 cases (one existing disk-specific case ignored), with Cargo check and strict
+Clippy also passing. ONE `make verify` stopped at root coverage because the
+fresh private source stage omitted generated `core/dist`. Its preceding lint,
+typecheck and contract stages passed. After building core from the exact staged
+source, only the failed coverage stage and remaining Rust suites were run:
+3,378 app/core tests, 127 extension tests, all six coverage floors and 1,249
+Rust tests passed (28 ignored). The original failed invocation is retained in
+the result; no second `make verify` was run. Fresh isolated source stages must
+build core before these gates.
+
+Owner C4; branch `fix/c4-first-run-retry-followups-20261018`, baseline
+`50aa7e1cc`, local worktree
+`/ai/gchat-worktrees/c4-first-run-retry-followups-20261018`. Source hashes matched
+before and after the native gate. S1 used CPUs112–119, socket1 shared, nice10
+and offline dependencies in a private SSD source/cache copy. The inactive C3
+donor was unchanged and returned immediately after copying. Checks finished
+05:53:31Z; the two stopped containers and owned 21 GiB SSD root
+`/media/ron/SSD_RAID/ai/tmp-c4-first-run-retry-followups-20261018` were retired,
+and booking3047 returned. No GUI, Windows, GPU or model run was performed.
+No Engine source changed; Engine CTest is not required. Native test evidence:
+`out/c4-first-run-retry-followups-20261018/result.json`, with a short summary
+and exact commands beside it. Next: coordinator merge.
+
 ## Gbot companion task-load retry — October 18
 
 `GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously
@@ -225,7 +378,7 @@ matching post-gate source bindings. Current main has no intervening changes
 to either owned source/test file. Booking3035 is canceled; returned 05:37Z.
 The owned SSD fixture (42.33 GB), two exited containers and local source archive
 were removed by 05:39Z. The RC donor is untouched and only the concise result
-and summary remain. Status: MERGE READY; next unresolved action is Bubbs's merge.
+and summary remain. Status: CLOSED; source `1fee4844a` merged as `63e13d812`.
 These checks establish rendered mocked-command behavior and the Linux source
 gate; they do not establish native connection, installed GUI or Windows acceptance.
 

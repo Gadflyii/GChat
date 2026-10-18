@@ -33,7 +33,9 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [connectionCleanupWarning, setConnectionCleanupWarning] = useState<string | null>(null)
   const [connectionRefreshError, setConnectionRefreshError] = useState<string | null>(null)
   const [connectionResult, setConnectionResult] = useState(false)
+  const [scanResult, setScanResult] = useState(false)
   const connectPending = useRef(false)
+  const scanPending = useRef(false)
   const hostListRefreshPending = useRef(false)
   const [hostStopError, setHostStopError] = useState<string | null>(null)
   const [hostStopping, setHostStopping] = useState(false)
@@ -89,8 +91,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       return true
     }
     catch (e) {
-      const message = action === 'scan' ? 'Could not refresh the model list. Check that the model files are available, then try again.'
-            : action === 'stop' ? 'Could not stop this model. Check its status and try again.'
+      const message = action === 'stop' ? 'Could not stop this model. Check its status and try again.'
               : action === 'restart' || action === 'reload' ? 'Could not restart this model. Check the settings and try again.'
                 : action === 'hardware_profile' ? 'Could not change the graphics-card setup. Check the connection and try again.'
                   : action === 'gbot_grant' ? 'Could not change this connection’s access. Check the connection and try again.'
@@ -127,6 +128,24 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       setActionError({ message, details: String(e) })
       toast.error(message)
     } finally { connectPending.current = false; setBusy(false) }
+  }
+  const scanModels = async () => {
+    if (busy || scanPending.current) return
+    scanPending.current = true
+    setBusy(true)
+    setActionError(null)
+    setScanResult(false)
+    setConnectionRefreshError(null)
+    try {
+      const scannedSnapshot = await engineCommand<EngineSnapshot>('scan', { host_id: host.host_id })
+      publishSnapshot(host.host_id, scannedSnapshot)
+      setScanResult(true)
+      await refreshHostList()
+    } catch (e) {
+      const message = 'Could not refresh the model list. Check that the model files are available, then try again.'
+      setActionError({ message, details: String(e) })
+      toast.error(message)
+    } finally { scanPending.current = false; setBusy(false) }
   }
   const removeConnection = async () => {
     if (busy || connectionRemoved) return
@@ -186,6 +205,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       }}>{hostStopping ? 'Quitting…' : 'Stop model service and quit'}</Button>}
     </div>
     {connectionResult && <p role="status" className="text-sm">Connected to {host.name}.</p>}
+    {scanResult && <p role="status" className="text-sm">Model list refreshed.</p>}
     {connectionRefreshFeedback}
     {actionError && <div role="alert" className="text-sm text-destructive"><p>{actionError.message}</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{actionError.details}</p></details></div>}
     {hostStopError && <div role="alert" className="text-sm text-destructive"><p>Could not stop the model service. Wait for any model loading or other work to finish, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{hostStopError}</p></details></div>}
@@ -233,7 +253,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       <summary className="cursor-pointer font-medium" onClick={event => { event.preventDefault(); setSettingsOpen(!settingsOpen) }}>{editing ? 'Change model settings' : 'Choose model settings'}</summary>
       {editingInstance && <p className="text-sm text-muted-foreground">Changing {hostInstanceLabel(editingInstance, snapshot)}. Save and restart below to apply your choices.</p>}
       <h3 className="font-medium">Installed models</h3>
-      {!!snapshot.inventory_errors?.length && <div role="alert" className="rounded border border-destructive/40 p-3 text-sm"><p className="font-medium">Some model files could not be read. Check that the files are available, then refresh the model list.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary>{snapshot.inventory_errors.map((item, index) => <p key={`${item.path}-${index}`} className="mt-1 break-all">{item.path}: {item.error}</p>)}</details><Button variant="outline" disabled={busy || !!error} onClick={() => void act('scan')}>Refresh model list</Button></div>}
+      {!!snapshot.inventory_errors?.length && <div role="alert" className="rounded border border-destructive/40 p-3 text-sm"><p className="font-medium">Some model files could not be read. Check that the files are available, then refresh the model list.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary>{snapshot.inventory_errors.map((item, index) => <p key={`${item.path}-${index}`} className="mt-1 break-all">{item.path}: {item.error}</p>)}</details><Button variant="outline" disabled={busy || !!error} onClick={() => void scanModels()}>Refresh model list</Button></div>}
       <p className="text-sm text-muted-foreground">Choose an installed model and the graphics cards it will use. Check these settings to confirm which model file will be used and how much memory it needs before starting it.</p>
       <label className="block text-sm">Installed model<ChoiceSelect aria-label="Installed model" className="mt-1 w-full" value={modelId} onValueChange={(value) => {
         setModelId(value)

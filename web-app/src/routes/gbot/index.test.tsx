@@ -183,6 +183,136 @@ it('attributes saved task messages to you or the selected bot in conversation or
   await expectConversation()
 })
 
+it.each(['Stop', 'Resume'] as const)(
+  'keeps a failed task action %s inline through refresh and retries it in settings',
+  async (action) => {
+    const [identity] = readyTaskBots()
+    const call = mocks.call.getMockImplementation()!
+    const path = action === 'Stop' ? 'tasks/cancel' : 'tasks/resume'
+    const progress =
+      action === 'Stop' ? 'Stopping this task…' : 'Resuming this task…'
+    const message = `Could not ${action.toLowerCase()} this task. Try again.`
+    const outcome = action === 'Stop' ? 'cancelled' : 'running'
+    const prompt = 'Read my saved notes'
+    const task = {
+      id: 'writer-task',
+      identity,
+      state: 'paused',
+      messages: [{ role: 'user', content: prompt }],
+      help_requests: [],
+    }
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let fail!: (cause: string) => void
+    let finish!: () => void
+    const request = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    mocks.call.mockImplementation(
+      async (calledPath: string, body: Record<string, unknown>) => {
+        if (calledPath === 'tasks') return [task]
+        if (calledPath === path) return request(body)
+        return call(calledPath, body)
+      }
+    )
+    render(<Page />)
+    const card = (await screen.findByText(prompt)).closest('article')!
+    const submit = within(card).getByRole('button', { name: action, exact: true })
+    const opposite = within(card).getByRole('button', {
+      name: action === 'Stop' ? 'Resume' : 'Stop',
+      exact: true,
+    })
+    expect(submit).toBeEnabled()
+    expect(opposite).toBeEnabled()
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      opposite.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const payload = { id: 'writer-task' }
+    expect(request).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+
+    await act(async () => fail('Task action unavailable'))
+    const alert = await within(card).findByRole('alert')
+    expect(within(alert).getByText(message)).toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(within(alert).getByText('Task action unavailable')).not.toBeVisible()
+    expect(within(card).getByText(prompt)).toBeVisible()
+    expect(within(card).getByText('paused', { exact: true })).toBeVisible()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(
+      within(card).getByRole('button', { name: 'Stop', exact: true })
+    ).toBeEnabled()
+    expect(
+      within(card).getByRole('button', { name: 'Resume', exact: true })
+    ).toBeEnabled()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([calledPath]) => calledPath === 'tasks'
+    ).length
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([calledPath]) => calledPath === 'tasks')
+          .length
+      ).toBeGreaterThan(reads)
+    )
+    expect(
+      within(within(card).getByRole('alert')).getByText(message)
+    ).toBeVisible()
+    expect(within(card).getByText('paused', { exact: true })).toBeVisible()
+    expect(request).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(request.mock.calls).toEqual([[payload], [payload]])
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    task.state = outcome
+    await act(async () => finish())
+    expect(await within(card).findByText(outcome, { exact: true })).toBeVisible()
+    expect(within(card).getByText(prompt)).toBeVisible()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(
+      within(card).getByRole('button', {
+        name: action === 'Stop' ? 'Resume' : 'Stop',
+        exact: true,
+      })
+    ).toBeEnabled()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([calledPath]) =>
+          calledPath.startsWith('tasks/') && calledPath !== 'tasks/approvals'
+      )
+    ).toEqual([
+      [path, payload],
+      [path, payload],
+    ])
+  }
+)
+
 it('shows the latest interruption reason after reopening and resumes that task', async () => {
   const [identity] = readyTaskBots()
   const call = mocks.call.getMockImplementation()!
@@ -1615,6 +1745,124 @@ it('blocks same-tick duplicate tasks, then restores the failed draft for retry',
   fireEvent.submit(form)
   await waitFor(() => expect(input).toHaveValue(''))
   expect(submit).toHaveBeenCalledTimes(2)
+})
+
+it('keeps a failed task submission inline through refresh and isolates its settings bot retry', async () => {
+  let fail!: (cause: string) => void
+  let finish!: () => void
+  let accepted = false
+  const submit = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject
+        })
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
+  const [identity] = readyTaskBots(submit)
+  const fallback = mocks.call.getMockImplementation()!
+  mocks.call.mockImplementation((path: string, body: Record<string, unknown>) =>
+    path === 'tasks'
+      ? Promise.resolve(
+          accepted
+            ? [
+                {
+                  id: 'accepted-writer-task',
+                  identity,
+                  state: 'running',
+                  messages: [{ role: 'user', content: 'Write the saved note' }],
+                },
+              ]
+            : []
+        )
+      : fallback(path, body)
+  )
+  const updates = new Set<() => void>()
+  mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+    if (event === 'gbot-task-update') updates.add(update)
+    return () => updates.delete(update)
+  })
+  render(<Page />)
+  await screen.findByRole('heading', { name: 'Writer' })
+  const input = screen.getByLabelText('Bot task')
+  fireEvent.change(input, { target: { value: 'Write the saved note' } })
+  const form = input.closest('form')!
+  const payload = { identity, prompt: 'Write the saved note' }
+  act(() => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  expect(submit).toHaveBeenCalledExactlyOnceWith(payload)
+  expect(form).toHaveAttribute('aria-busy', 'true')
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  expect(screen.getByText('Sending this task to the bot…')).toHaveAttribute(
+    'role',
+    'status'
+  )
+  await act(async () => fail('Task admission unavailable'))
+  const message = 'Could not send this task. Try again.'
+  const alert = await screen.findByRole('alert')
+  expect(within(alert).getByText(message)).toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  expect(within(alert).getByText('Task admission unavailable')).not.toBeVisible()
+  expect(input).toHaveValue(payload.prompt)
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  expect(screen.queryByText(payload.prompt)).not.toBeInTheDocument()
+
+  const reads = mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+  await act(async () => updates.forEach((update) => update()))
+  await waitFor(() =>
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+    ).toBeGreaterThan(reads)
+  )
+  expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+  expect(screen.getByRole('alert')).toHaveTextContent(message)
+  expect(input).toHaveValue(payload.prompt)
+  expect(submit).toHaveBeenCalledTimes(1)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(input).toHaveValue('')
+  fireEvent.change(input, { target: { value: 'Researcher draft' } })
+  expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeEnabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  expect(input).toHaveValue(payload.prompt)
+  expect(screen.getByRole('alert')).toHaveTextContent(message)
+
+  act(() => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+  })
+  expect(submit.mock.calls).toEqual([[payload], [payload]])
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+  accepted = true
+  await act(async () => finish())
+  await waitFor(() => expect(input).toHaveValue(''))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(form).toHaveAttribute('aria-busy', 'false')
+  expect(screen.getByText(payload.prompt)).toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(input).toHaveValue('Researcher draft')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    mocks.call.mock.calls.filter(
+      ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+    )
+  ).toEqual([
+    ['tasks/start', payload],
+    ['tasks/start', payload],
+  ])
 })
 
 it('keeps a rejected task draft available for retry', async () => {

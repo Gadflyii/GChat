@@ -624,13 +624,28 @@ impl Host {
                         profile.quote = None;
                     }
                 }
-                "storage" if self.first_run_maintenance_error.read().await.is_some() => {
-                    progress.storage_error = None;
+                _ => {
+                    // Maintenance may recover between rendering Retry and
+                    // receiving the action. Return its current status quietly.
+                    if self.first_run_maintenance_error.read().await.is_none() {
+                        return self.first_run_status().await;
+                    }
+                    let changed = match step {
+                        "storage" => progress.storage_error.take().is_some(),
+                        "models" => progress.download_error.take().is_some(),
+                        _ => false,
+                    };
+                    if !changed {
+                        // A maintenance failure can remain at any stage. Wake
+                        // its retry without rewriting unchanged saved choices.
+                        self.processes
+                            .lock()
+                            .await
+                            .activity_notification()
+                            .notify_one();
+                        return self.first_run_status().await;
+                    }
                 }
-                "models" if self.first_run_maintenance_error.read().await.is_some() => {
-                    progress.download_error = None;
-                }
-                _ => return Err("No interrupted work to resume at this step".into()),
             },
             "startup" => {
                 if step != "startup" {
@@ -956,7 +971,9 @@ impl Host {
     }
 
     pub async fn first_run_maintenance(&self) -> Result<(), String> {
-        if !self.first_run_pending().await && self.first_run_maintenance_error.read().await.is_none() {
+        if !self.first_run_pending().await
+            && self.first_run_maintenance_error.read().await.is_none()
+        {
             return Ok(());
         }
         let _operation = self.first_run_operation.lock().await;
@@ -1278,7 +1295,9 @@ mod tests {
             catalog_loaded: true,
             requested_storage: Some(requested.clone()),
             ..Default::default()
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         let saved = directory.path().join("host.json");
         let retained = directory.path().join("retained-host.json");
         std::fs::rename(&saved, &retained).unwrap();
@@ -1286,16 +1305,25 @@ mod tests {
         let revision = host.revision.load(Ordering::SeqCst);
         let error = host.first_run_maintenance().await.unwrap_err();
         let status = host.first_run_status().await.unwrap();
-        assert_eq!(status["maintenance_error"], crate::service::plain_disk_error(error));
+        assert_eq!(
+            status["maintenance_error"],
+            crate::service::plain_disk_error(error)
+        );
         assert_eq!(status["storage"]["requested_path"], json!(requested));
         assert!(host.revision.load(Ordering::SeqCst) > revision);
-        assert!(serde_json::from_slice::<Value>(&std::fs::read(&retained).unwrap()).unwrap()
-            .get("maintenance_error").is_none());
+        assert!(
+            serde_json::from_slice::<Value>(&std::fs::read(&retained).unwrap())
+                .unwrap()
+                .get("maintenance_error")
+                .is_none()
+        );
 
         std::fs::remove_dir(&saved).unwrap();
         std::fs::rename(&retained, &saved).unwrap();
         // Resume wakes maintenance using the existing action, preserving choices.
-        host.first_run_action(json!({"action":"resume"})).await.unwrap();
+        host.first_run_action(json!({"action":"resume"}))
+            .await
+            .unwrap();
         host.first_run_maintenance().await.unwrap();
         let status = host.first_run_status().await.unwrap();
         assert!(status["maintenance_error"].is_null());
@@ -1314,7 +1342,9 @@ mod tests {
             catalog_loaded: true,
             requested_storage: Some(requested.clone()),
             ..Default::default()
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         host.first_run_maintenance().await.unwrap_err();
         let status = host.first_run_status().await.unwrap();
         assert!(status["maintenance_error"].is_string());
@@ -1324,13 +1354,134 @@ mod tests {
 
         // Repair the fixture without changing the saved folder choice.
         std::fs::remove_file(&requested).unwrap();
-        host.first_run_action(json!({"action":"resume"})).await.unwrap();
+        host.first_run_action(json!({"action":"resume"}))
+            .await
+            .unwrap();
         assert!(host.data.lock().await.first_run.storage_error.is_none());
         host.first_run_maintenance().await.unwrap();
         let status = host.first_run_status().await.unwrap();
         assert!(status["maintenance_error"].is_null());
         assert_eq!(status["storage"]["accepted"], true);
         assert_eq!(status["storage"]["requested_path"], json!(requested));
+    }
+
+    #[tokio::test]
+    async fn maintenance_retry_accepts_gpu_and_complete_without_rewriting_progress() {
+        for (step, progress) in [
+            (
+                "gpu",
+                Progress {
+                    catalog_loaded: true,
+                    ..Default::default()
+                },
+            ),
+            (
+                "complete",
+                Progress {
+                    gpu_uuids: vec![gpu().uuid],
+                    storage_accepted: true,
+                    catalog_loaded: true,
+                    complete: true,
+                    ..Default::default()
+                },
+            ),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let (host, _) = installed_host(directory.path(), 0).await;
+            host.store_first_run(progress).await.unwrap();
+            // A failure from an earlier maintenance pass remains visible even
+            // after another client changes the first-run stage.
+            *host.first_run_maintenance_error.write().await =
+                Some("Previous state write failed".into());
+            let saved = std::fs::read(directory.path().join("host.json")).unwrap();
+            let revision = host.revision.load(Ordering::SeqCst);
+            let activity = host.processes.lock().await.activity_notification();
+            let notified = activity.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            assert!(matches!(
+                futures_util::poll!(notified.as_mut()),
+                std::task::Poll::Pending
+            ));
+
+            let status = host
+                .first_run_action(json!({"action":"resume"}))
+                .await
+                .unwrap();
+            assert_eq!(status["step"], step);
+            assert_eq!(status["maintenance_error"], "Previous state write failed");
+            assert_eq!(host.revision.load(Ordering::SeqCst), revision);
+            assert_eq!(
+                std::fs::read(directory.path().join("host.json")).unwrap(),
+                saved
+            );
+            assert!(matches!(
+                futures_util::poll!(notified.as_mut()),
+                std::task::Poll::Ready(())
+            ));
+
+            host.first_run_maintenance().await.unwrap();
+            assert!(host.first_run_status().await.unwrap()["maintenance_error"].is_null());
+        }
+    }
+
+    #[tokio::test]
+    async fn stale_maintenance_retry_returns_current_status_without_writing_or_waking() {
+        for (step, gpu_selected, storage_accepted, complete) in [
+            ("gpu", false, false, false),
+            ("storage", true, false, false),
+            ("models", true, true, false),
+            ("complete", true, true, true),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let (host, _) = installed_host(directory.path(), 0).await;
+            host.store_first_run(Progress {
+                gpu_uuids: if gpu_selected {
+                    vec![gpu().uuid]
+                } else {
+                    vec![]
+                },
+                storage_accepted,
+                catalog_loaded: true,
+                releases: vec![package(0).0],
+                complete,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+            *host.first_run_maintenance_error.write().await =
+                Some("Previous state write failed".into());
+            assert!(host.first_run_status().await.unwrap()["maintenance_error"].is_string());
+            // The monitor repairs the failure after Welcome rendered Retry.
+            host.first_run_maintenance().await.unwrap();
+            assert!(host.first_run_status().await.unwrap()["maintenance_error"].is_null());
+            let revision = host.revision.load(Ordering::SeqCst);
+            let activity = host.processes.lock().await.activity_notification();
+            let notified = activity.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            assert!(matches!(
+                futures_util::poll!(notified.as_mut()),
+                std::task::Poll::Pending
+            ));
+            // A stale action must not require another successful disk write.
+            let saved = directory.path().join("host.json");
+            let retained = directory.path().join("retained-host.json");
+            std::fs::rename(&saved, &retained).unwrap();
+            std::fs::create_dir(&saved).unwrap();
+
+            let status = host
+                .first_run_action(json!({"action":"resume"}))
+                .await
+                .unwrap();
+            assert_eq!(status["step"], step);
+            assert!(status["maintenance_error"].is_null());
+            assert_eq!(host.revision.load(Ordering::SeqCst), revision);
+            assert!(matches!(
+                futures_util::poll!(notified.as_mut()),
+                std::task::Poll::Pending
+            ));
+        }
     }
 
     #[tokio::test]

@@ -1,5 +1,36 @@
 # Gbot design
 
+## Task submission recovery — Gchat 2
+
+`GBOT-TASK-SUBMIT-INLINE-ERRORS`, based on main `d4ec7abab`, fixes failed
+new-task submissions in Gbot settings and the companion. Previously the draft
+survived, but the failure appeared only in a temporary diagnostic toast. Both
+composers now retain a plain inline error with closed Details. The error stays
+with the selected bot and service and clears on an explicit retry. Successful
+submission keeps the existing draft-clearing and duplicate guards.
+
+Both rendered regressions fail on the unchanged baseline because no inline
+alert exists (two failures; 110 tests filtered). The cases cover Error and native
+string rejections, a task-update refresh, separate bot drafts and errors,
+duplicate submissions, identical retry payloads and accepted task history.
+The first focused run passed 111 cases; the remaining acceptance assertion
+matched the prompt in both the conversation and avatar preview. Scoping that
+visibility assertion to the conversation preserves its check. Both complete
+view suites then pass all 112 cases.
+
+One `make verify` passes on Linux/S1 on 18 October, 05:54:10–06:01:53 UTC:
+3,395 app, 127 extension and 1,252 Rust tests pass; six app tests are skipped
+and 28 Rust tests ignored. Lint, type checking, quality guards and all six
+coverage floors pass. Production, test and documentation hashes match before
+and after the gate. No live task, VM, Windows, model or GPU acceptance is
+claimed. FRESH and OLD remain off with their original XML and Gchat 2 custody.
+
+Evidence: `out/gchat2-task-submit-inline-errors-20261018/{result.json,SUMMARY.md}`.
+Owned source: `/ai/gchat-worktrees/gchat2-task-submit-inline-errors-20261018`.
+The private S1 build/cache was removed after the gate; the shared donor was
+preserved. CPUs 96–103 returned at 06:03 UTC, booking 3058 canceled. Next:
+bubbs merges the fix and its evidence.
+
 ## Account-service startup cause — C7
 
 `GUI-ACCOUNT-SERVICE-ERROR-WORDING` is merge-ready on
