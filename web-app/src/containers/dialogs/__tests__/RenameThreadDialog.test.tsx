@@ -57,6 +57,14 @@ describe('RenameThreadDialog submission', () => {
     vi.useFakeTimers()
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      // RTL's Jest-specific timer detection does not flush its final zero-delay
+      // asyncWrapper timer under Vitest. Flush it without crossing the focus delay.
+      const finishInteraction = async (interaction: Promise<void>) => {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(0)
+          await interaction
+        })
+      }
       render(<ThreadRename />)
       const input = screen.getByRole<HTMLInputElement>('textbox', {
         name: 'common:threadTitle',
@@ -67,15 +75,15 @@ describe('RenameThreadDialog submission', () => {
       expect(input.selectionStart).toBe(0)
       expect(input.selectionEnd).toBe('Research'.length)
 
-      await user.keyboard('Typing')
+      await finishInteraction(user.keyboard('Typing'))
       expect(input).toHaveValue('Typing')
       await act(async () => {
         await vi.advanceTimersByTimeAsync(100)
       })
-      await user.keyboard('PreservesPrefix')
+      await finishInteraction(user.keyboard('PreservesPrefix'))
       expect(input).toHaveValue('TypingPreservesPrefix')
 
-      await user.tab()
+      await finishInteraction(user.tab())
       const cancel = screen.getByRole('button', { name: 'common:cancel' })
       expect(cancel).toHaveFocus()
       await act(async () => {
@@ -83,8 +91,8 @@ describe('RenameThreadDialog submission', () => {
       })
       expect(cancel).toHaveFocus()
 
-      await user.tab({ shift: true })
-      await user.keyboard('{Enter}')
+      await finishInteraction(user.tab({ shift: true }))
+      await finishInteraction(user.keyboard('{Enter}'))
       expect(mocks.rename).toHaveBeenCalledExactlyOnceWith(
         'thread-1',
         'TypingPreservesPrefix'
