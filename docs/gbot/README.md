@@ -1,5 +1,29 @@
 # Gbot design
 
+## Cloud connection completion follows its setup — Gchat 2
+
+`GBOT-CLOUD-CONNECT-REQUEST-LIFETIME`, based on main `af8d1b4dc`, keeps a
+late cloud desktop connection from completing a setup that has already left.
+Previously, its completion callback could select the old bot and close a
+replacement setup. The submitted connection may finish; the callback now
+checks that its initiating setup is still present.
+
+The rendered journey replaces setup while Connect bot desktop is pending,
+checks that the old response does not complete setup, then requires the
+replacement’s SSH identity, access and tool checks plus an explicit connect.
+Existing consent and duplicate-action guards remain. This is source/rendered
+UI scope, with no cloud provider, service, native or real-account acceptance.
+
+Validation: the new journey failed against the original production code;
+fixed focus passed 173 tests (26 cloud setup, 40 wizard, 107 Gbot route).
+Lint passed with zero errors and five existing warnings. ONE `make verify`
+(2026-10-18 20:44:33–20:50:36 UTC) passed 3,809 app tests (six skipped),
+127 extension tests, 1,318 Rust tests (28 ignored), all six coverage floors
+and typecheck/quality guards. All 3,475 tracked raw bytes and modes matched
+before and after the gates, with fresh tracked timestamps. Only this receipt
+was added afterward. Booking3551 returned20:52Z. Evidence:
+`/ai/gchat/out/gchat2-cloud-connect-request-lifetime-20261018/SUMMARY.md`.
+
 ## Microsoft client launch follows its setup — Gchat 2
 
 `GBOT-M365-CLIENT-LAUNCH-LIFETIME`, based on main `ba3ec1a3a`, ignores a
