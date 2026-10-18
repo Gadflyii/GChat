@@ -1,5 +1,37 @@
 # Gbot design
 
+## Cloud actions keep tool controls busy — Gchat 2
+
+`GBOT-CLOUD-TOOLS-PARENT-ACTION-OVERLAP`, based on main `20244e007`,
+fixes tool controls remaining active during cloud computer actions after SSH
+verification. Checking progress or deleting a computer could overlap with
+checking or installing its tools. A tool response could then unlock the
+parent controls while the cloud request was still pending.
+
+Cloud actions now disable tool consent, Prepare tools and Check tools. The
+tool handler also checks the parent's synchronous pending guard so rapid
+activation cannot start an overlapping SSH request before React renders the
+disabled state. Existing tool consent, child request handling and LAN setup
+behavior are preserved.
+
+Both new cases fail on unchanged main because a tool request overlaps the
+cloud action (nine tests filtered). All 23 focused CloudCosts, LanTools and
+LanSetup cases pass with the fix. The rendered checks cover same-turn blocking,
+disabled consent, provider rejection, explicit tool check/preparation, installed
+completion and restored parent controls.
+
+One isolated Linux/S1 `make verify` passes on 18 October, 07:18:15–07:26:12
+UTC: 3,460 app, 127 extension and 1,275 Rust tests pass; six app tests are
+skipped and 28 Rust tests ignored. Lint, type checking, quality guards and all
+six coverage floors pass. Source, test and documentation hashes match before
+and after the gate; this final receipt was added afterward. Evidence:
+`out/gchat2-cloud-tools-parent-action-overlap-20261018/{result.json,SUMMARY.md}`.
+No live provider, SSH, native Windows, VM, model or GPU action is part of this
+leaf. FRESH and OLD remain off with original XML and Gchat 2 custody. The
+private S1 build/cache was removed, the shared donor preserved, and CPUs
+96–103 returned at 07:27 UTC; booking 3119 canceled. Next: bubbs merges the
+fix and its evidence.
+
 ## Saved Cloud PC setup removal confirmation — Gchat 2
 
 `GBOT-M365-SAVED-SETUP-CONFIRMATION`, based on main `232317655`,

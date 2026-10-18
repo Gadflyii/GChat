@@ -119,10 +119,69 @@ The coordinator reviewed the terminal raw results and confirmed both frozen
 source hashes still match. CPUs returned06:38Z and booking3087 was canceled.
 Owned-fixture cleanup completed06:39Z: removed the 42.33 GB SSD fixture, two
 terminal containers and 286.09 MB of local disposable inputs/raw output.
-The read-only RC donor remains intact. The source fix is ready for merge review.
+The read-only RC donor remains intact. Fix `f6e609a2c` merged as `014df1845`.
 Use independent copies of the inactive RC donor; retain only
 `out/host-model-editor-save-result-20261018/test-result.json` and adjacent
 summary after cleanup. No installed or Windows acceptance is claimed.
+
+## Laptop context admission catalog prerequisite — Gchat 3, October 18
+
+Bubbs prioritized `LAPTOP-CONTEXT-ADMISSION` ahead of the hardware-feedback
+candidate. Land these four Arch-approved full-Text context bounds with or
+before GInfer Engine fix `18865fd1d` (accepted packet `dbf4674c4`):
+
+| Exact profile ID | Previous context | Admitted context |
+| --- | ---: | ---: |
+| `rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8` | 172032 | 161792 |
+| `rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8` | 149069 | 138240 |
+| `rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated` | 92832 | 82944 |
+| `rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated` | 69423 | 60416 |
+
+The four owning files are GInfer `config/launch-profiles/linux-rtx{3090,4090}-qwen38-groupwise-int-dflash2-q4{,-vision}.json`.
+Correct their displayed contexts too; retain IDs, package identity, arenas,
+options and historical evidence tiers. The numeric-risk report and signed
+disposition are on Codex 1's branch in `docs/laptop-natural-c4-soak/README.md`
+and `bench/reports/laptop-context-admission-20261018/gchat-numeric-risk.json`.
+This metadata repair adds no model/device/Vision qualification.
+
+The private catalog generator input mirrors all four entries. The selected
+live catalog contains only the two Text entries; its pending Vision entries
+remain omitted. C7 and C4 authorized a metadata-only atomic overlay during the
+active package GET: preserve the service PID, URLs, payload identity and exact
+263298-byte catalog size. Context values were overlaid at 07:13Z and display
+names at 07:18Z. A fresh coordinator GET returned 200 with the same 263298 bytes
+and the two corrected Text profiles. The service and package symlinks are
+unchanged. Original generation receipts remain historical evidence; separate
+value and name overlay receipts record the changed metadata.
+
+Acceptance: focused existing Host supplied-catalog validation with all four
+corrected source catalogs, exact mirror comparison, and ONE `make verify`.
+No native Engine code, installed GUI, GPU/model run or Windows qualification.
+Owner source trees are `/ai/gchat-worktrees/gchat3-context-profile-bounds-20261018`
+(base `cf670bced`) and `/ai/ginfer-worktrees/gchat3-context-profile-bounds-20261018`
+(base `8c3911145`), both on `fix/gchat3-context-profile-bounds-20261018`.
+Results live in `out/laptop-context-admission-20261018/`. The independent S1
+SSD fixture `/media/ron/SSD_RAID/ai/tmp-gchat3-context-profile-bounds-tests-20261018`
+uses the inactive RC donor without writes to it. All 35 dependency inputs and
+the six frozen source/catalog inputs match; all four owning catalogs equal
+their generator-input copies. The coordinator inspected the effective argv:
+existing Python packaging tests, the exact Host supplied-catalog test, then
+ONE `make verify`, retaining the explicit four-file `GINFER_PROFILE_CATALOGS`
+through every stage. The durable run started 07:19Z under booking 3123,
+S1 CPUs 120–127/socket1 shared compile lock, nice 10/max 8 jobs, no GPU.
+The exact supplied-catalog test passed (one executed, 280 filtered); the
+existing packaging suite passed five cases and skipped five Windows-only
+cases. ONE full gate passed lint (zero errors, five existing warnings),
+typecheck, quality checks, all six coverage floors, 3441 app/core tests (six
+skipped), 127 extension tests and 1275 native tests (28 ignored, 23 summaries).
+It exited 0 at 07:27Z without OOM; CPUs returned 07:28Z. The coordinator
+reviewed raw results, exit bytes and all six unchanged source/catalog hashes.
+The normal build staged all 38 profiles as an exact ordered merge of the four
+sources, including the four corrected bounds and names. Cleanup finished
+07:30Z: removed the 42.34 GB owned S1 fixture, its terminal container and
+288.87 MB of local disposable inputs/raw output. The inactive RC donor is
+untouched. Retain only the result JSON, short summary and two metadata-overlay
+receipts. Both branches are ready for handoff before the Engine source merge.
 
 ## Host model controls and host-list read feedback — Gchat 3, October 18
 
@@ -316,6 +375,57 @@ Native app/session/display stopped and booking3039 returned05:56Z. The source an
 Shared source/cache is handed serially to the Host-locator gate; the installed
 AppDir/home, reset/autostart/folder/badge candidates, runnable resources and
 tools remain protected. No GPU/model run is needed.
+
+## Graphics-card setup command results — Gchat 3, October 18
+
+`GUI-HOST-HARDWARE-SETUP-RESULT-20261018`: HostCard discards the accepted
+status returned by Measure, Measure again, Continue and Stop setup. If the
+following host-list read fails, the controls retain their previous state and
+give no accepted-request feedback. Publish the typed hardware status onto the
+latest existing host snapshot, then report acceptance separately from read
+recovery. Acceptance does not establish completed measurements.
+
+Acceptance: reproduce the missing result on branch base `3399f6768`; rendered coverage
+for all four actions, pending protection, failed subsequent reads, read-only
+retry and genuine rejection/retry. Store coverage must preserve newer polled
+model/instance data, failed-read errors, full lifecycle publications and changed
+Host boots; later polling must replace the acknowledged status normally.
+Focused rendered/store tests, lint and ONE `make verify`. No native protocol,
+Engine, real setup/model, GPU, installed GUI or Windows qualification changes.
+
+Owner `/ai/gchat-worktrees/gchat3-host-model-editor-save-result-20261018`, reused
+only after its clean editor fix merged, now branch
+`fix/gchat3-host-hardware-setup-result-20261018`, based on `3399f6768` (the
+four affected source/test files match `014df1845`). Native inspection confirms
+hardware commands return `HardwareProfileStatus`, without snapshot revision or
+boot ID. The store distinguishes full lifecycle publication from a partial
+hardware update, preserving independent fields and connection errors. The independent S1 offline fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-hardware-tests-20261018` copied the
+inactive RC dependencies06:50–06:51Z on CPUs120–127; booking3105 returned06:52Z.
+Source was streamed directly to S1 after the local timed work returned. The
+first baseline screen found ambiguous setup/model GPU checkbox labels and
+queued mock responses leaking after early test failures. Scope selectors to
+the setup region and reset response queues between cases; that screen does
+not establish all regressions. The corrected baseline finished06:59Z with
+16 intended failures and 59 existing cases skipped: eight missing store
+publications and eight rendered accepted-result failures. The coordinator
+reviewed every failure and the exact baseline/test hashes; no selector or
+queued-response failure remains. Booking3112 returned06:59Z. Candidate focused
+tests, lint and ONE full gate launched07:04Z on verified S1 under booking3115,
+CPUs120–127 through07:18Z, socket1 shared compile lock, nice10/max8 jobs.
+Only the two production files were overlaid; all four frozen inputs and 35
+dependency bindings match. All 75 focused tests pass (17 store, 58 rendered);
+lint has zero errors and five existing warnings. ONE `make verify` passed
+typecheck, quality checks, 3443 app/core tests (six skipped), 127 extension
+tests, all six coverage floors and 1271 native tests (28 ignored). It exited 0
+at 07:12Z without OOM. The coordinator reviewed the terminal raw results,
+exit bytes and frozen source hashes. CPUs returned 07:13Z. Cleanup completed
+07:19Z: removed the 42.05 GB owned fixture and three terminal containers after
+checking no live jobs or readers; the inactive RC donor remains untouched.
+Retain only `out/host-hardware-setup-result-20261018/test-result.json` and its
+short summary. The priority context catalog prerequisite has been handed off
+as GInfer `5825c2e39` and GChat `2b6f00370`; this fix is ready for merge review.
+
 ## Host model inventory scan feedback — Gchat 3, October 18
 
 `GUI-HOST-SCAN-REFRESH-RESULT-20261018`: Refresh model list now publishes the

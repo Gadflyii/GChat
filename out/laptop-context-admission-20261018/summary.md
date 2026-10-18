@@ -1,0 +1,9 @@
+# Laptop context admission — Gchat 3
+
+PASS on exact GChat base `cf670bced` plus the two frozen mirror/test edits and four explicitly supplied corrected GInfer catalogs. Four owning catalogs equal their generator mirrors; all six input hashes match before/after. IDs, options and evidence are preserved; only four names and four context bounds change.
+
+Existing package tests: five passed, five Windows-only skipped. Exact supplied-catalog test: one passed. ONE `make verify`: 3,441 app tests (six skipped), 127 extension tests, six coverage floors and 1,275 native tests (28 ignored; 23 summaries) pass. Lint has zero errors and five existing warnings. Container exited0 without OOM at07:27:23Z; booking3123 CPUs120–127 returned07:28Z.
+
+The staged `resources/bin/launch-profiles.json` is the exact ordered merge of all four source catalogs: 38 profiles. Corrected bounds are 161792/138240 for Text and 82944/60416 for Vision, with matching display names. The live private catalog retains its original selection: only two Text entries updated, Vision still omitted. Separate context/name overlay receipts retain the atomic overlay history; service and payloads are unchanged.
+
+ROOT reviewed actual raw logs, all native summaries, source bindings, staged catalog and terminal state. Exact-owned cleanup completed 2026-10-18T07:30:39.509472+00:00: removed 42340113396 logical bytes from the owned S1 fixture, its one exited container, and 288870084 bytes of local disposable inputs/raw evidence. Both inventories confirm absence; only this summary, test-result.json and the two private overlay receipts remain. The inactive RC donor stays protected. No model/device/Vision, installed GUI, Engine-run or Windows qualification is claimed. Coordinator owns paired-branch integration; next is paired merge handoff.

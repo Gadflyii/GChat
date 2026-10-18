@@ -388,13 +388,45 @@ mod tests {
     }
 
     #[test]
-    fn supplied_release_catalogs_validate_with_exact_screened_pro_settings() {
+    fn supplied_release_catalogs_validate_with_exact_admitted_settings() {
         let Some(paths) = std::env::var_os("GINFER_PROFILE_CATALOGS") else {
             return;
         };
         let mut ids = BTreeSet::new();
         let mut screened_pro_found = false;
         let supplied_paths: Vec<_> = std::env::split_paths(&paths).collect();
+        let laptop_context_limits = [
+            (
+                "linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json",
+                "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8",
+                161792,
+            ),
+            (
+                "linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json",
+                "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8",
+                138240,
+            ),
+            (
+                "linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json",
+                "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated",
+                82944,
+            ),
+            (
+                "linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json",
+                "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated",
+                60416,
+            ),
+        ];
+        let expected_laptop_ids: BTreeSet<_> = laptop_context_limits
+            .iter()
+            .filter(|(file, _, _)| {
+                supplied_paths
+                    .iter()
+                    .any(|path| path.file_name().is_some_and(|name| name == *file))
+            })
+            .map(|(_, id, _)| *id)
+            .collect();
+        let mut laptop_ids = BTreeSet::new();
         let screened_pro_supplied = supplied_paths.iter().any(|path| {
             path.file_name().is_some_and(|name| {
                 name == "linux-rtx-pro6000-flash-next-smol-q2g64.json"
@@ -405,6 +437,13 @@ mod tests {
             assert!(!profiles.is_empty(), "{}", path.display());
             for p in profiles {
                 assert!(ids.insert(p.id.clone()), "duplicate {}", p.id);
+                if let Some((_, id, max_context)) = laptop_context_limits
+                    .iter()
+                    .find(|(_, id, _)| p.id == *id)
+                {
+                    assert_eq!(p.max_context, *max_context, "{}", p.id);
+                    laptop_ids.insert(*id);
+                }
                 if p.id == "rtx-pro6000-flash-next-smol-q2g64-tp1-c8-128k-int8-screened" {
                     screened_pro_found = true;
                     assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
@@ -420,6 +459,7 @@ mod tests {
             }
         }
         assert_eq!(screened_pro_found, screened_pro_supplied);
+        assert_eq!(laptop_ids, expected_laptop_ids);
     }
 
     #[test]

@@ -1,0 +1,383 @@
+{
+  "row": "GUI-HOST-HARDWARE-SETUP-RESULT-20261018",
+  "status": "ROOT_REVIEWED_PASS",
+  "scope": "GChat frontend component/store only; no native protocol, Engine, model, GPU, installed GUI or Windows qualification",
+  "base": "3399f67687904ca606da92e705e42629020a5f89",
+  "worktree": "/ai/gchat-worktrees/gchat3-host-model-editor-save-result-20261018",
+  "frozen_inputs": {
+    "web-app/src/containers/EngineHostModels.tsx": "459b24a4144d5e8d25173bc3f8fffa5ce80c28be3c4bcb788bb887e3a578327a",
+    "web-app/src/containers/__tests__/EngineHostModels.test.tsx": "69ac29a2fe56b386e599b093476c26dc6e7d3edc2dbf550143d64709868b848e",
+    "web-app/src/stores/engine-hosts-store.ts": "84b0a03b334b49288e459691d8317c5206a5743ddb4b8fbe9208b18bbd370c6f",
+    "web-app/src/stores/engine-hosts-store.test.ts": "908ecc01d24369c5d4183459572bd6a427adc4d66dbdd083e139e3e65814540b"
+  },
+  "root_review": {
+    "accepted": true,
+    "reviewer": "ROOT",
+    "scope": "Corrected baseline and all candidate raw stage results, exit bytes, hashes reviewed; no rerun"
+  },
+  "baseline": {
+    "status": "ACCEPTED_REPRODUCTION",
+    "attempt": 2,
+    "filter": "hardware setup action result|Host hardware-profile publication",
+    "tests_failed": 16,
+    "tests_skipped": 59,
+    "test_files_failed": 2,
+    "exit": 1,
+    "finished_at": "2026-10-18T06:59:41.568706476Z",
+    "findings": "Eight missing store hardware-profile publications and eight rendered accepted-result failures; ROOT reviewed all corrected raw failures, no ambiguous selector/response queue failure remains.",
+    "raw_evidence": {
+      "test-baseline.log": {
+        "bytes": 250768,
+        "sha256": "74a43cc491ec7f461cc9382a942f550dab0f34f07d18615ef57bbf0e749fa7fb"
+      },
+      "test-baseline.exit": {
+        "bytes": 2,
+        "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+      },
+      "test-baseline-runner.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "invalid_first_screen": {
+    "status": "INVALID_FIXTURE_SCREEN",
+    "valid_regression_claim": false,
+    "reason": "Ambiguous setup/model GPU checkbox labels failed before dispatch; queued mocks leaked after early failures. Corrected scoped selector/reset queues before accepted baseline rerun.",
+    "raw_log_sha256": "430cff7256e1f2e8da4bf34770d201feec2ec53e72aff914dc4daaf03119aa0a"
+  },
+  "candidate": {
+    "status": "ROOT_REVIEWED_PASS",
+    "started_at": "2026-10-18T07:04:08.489690111Z",
+    "finished_at": "2026-10-18T07:12:11.916883655Z",
+    "exit": 0,
+    "oom_killed": false,
+    "source_hashes_before_after_match_frozen": true,
+    "dependency_binding_files": 35,
+    "dependency_bindings_before_after_match": true,
+    "copied_raw_hashes_verified": true,
+    "stages": {
+      "focused": {
+        "exit": 0,
+        "test_files_passed": 2,
+        "tests_passed": 75,
+        "store_tests": 17,
+        "component_tests": 58,
+        "exit_file_bytes": "300a",
+        "exit_written_at": "2026-10-18T07:04:15.861264+00:00"
+      },
+      "lint": {
+        "exit": 0,
+        "errors": 0,
+        "warnings": 5,
+        "exit_file_bytes": "300a",
+        "exit_written_at": "2026-10-18T07:04:26.244149+00:00"
+      },
+      "verify": {
+        "status": "PASS",
+        "invocations": 1,
+        "typecheck": "PASS",
+        "quality_guards": "PASS",
+        "app_core": {
+          "test_files_passed": 339,
+          "test_files_skipped": 1,
+          "tests_passed": 3443,
+          "tests_skipped": 6
+        },
+        "extensions": {
+          "test_files_passed": 5,
+          "tests_passed": 127
+        },
+        "coverage_floors_passed": 6,
+        "native_status": "PASS",
+        "exit": 0,
+        "exit_file_bytes": "300a",
+        "exit_written_at": "2026-10-18T07:12:11.909749+00:00",
+        "native": {
+          "passed": 1271,
+          "failed": 0,
+          "ignored": 28,
+          "measured": 0,
+          "filtered_out": 0,
+          "summaries": 23
+        }
+      }
+    },
+    "raw_evidence": {
+      "test-focused.log": {
+        "bytes": 358,
+        "sha256": "e4d5341e192f0af9803859f503ec5651bfcb58dd477d883f105704e37a187930",
+        "mtime": "2026-10-18T07:04:15.736266+00:00"
+      },
+      "test-focused.exit": {
+        "bytes": 2,
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "mtime": "2026-10-18T07:04:15.861264+00:00"
+      },
+      "test-lint.log": {
+        "bytes": 1731,
+        "sha256": "cc74b882040154691975e9216d23cda007ac2cf0882c414786da9dd6b32531d8",
+        "mtime": "2026-10-18T07:04:25.975152+00:00"
+      },
+      "test-lint.exit": {
+        "bytes": 2,
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "mtime": "2026-10-18T07:04:26.244149+00:00"
+      },
+      "test-verify.log": {
+        "bytes": 473684,
+        "sha256": "add7aa7a61dcb163492115a867455eb68d58f2a83eae1561fee803add664ec13",
+        "mtime": "2026-10-18T07:12:11.893749+00:00"
+      },
+      "test-verify.exit": {
+        "bytes": 2,
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+        "mtime": "2026-10-18T07:12:11.909749+00:00"
+      },
+      "test-candidate-runner.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mtime": "2026-10-18T07:04:08.436347+00:00"
+      }
+    }
+  },
+  "execution": {
+    "host": "AIS-2-8592-L01",
+    "ssh": "ron@192.168.1.109",
+    "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+    "uid": "1000:1000",
+    "nice": 10,
+    "jobs": 8,
+    "no_gpu_devices": true,
+    "offline_dependencies": true,
+    "lock": "/tmp/ginfer-s1-socket1-compile.lock",
+    "cpus": "120-127",
+    "booking": 3115,
+    "booking_return": {
+      "booking": 3115,
+      "returned_at": "2026-10-18T07:13Z",
+      "cancelled": true,
+      "cpus": "120-127"
+    },
+    "base_source": "git archive exact3399 streamed directly; only corrected2tests overlaid baseline, then only2frozen production files for candidate",
+    "effective_create_argv": [
+      "docker",
+      "create",
+      "--init",
+      "--pull=never",
+      "--cpuset-cpus=120-127",
+      "--user",
+      "1000:1000",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--network=bridge",
+      "-v",
+      "/media/ron/SSD_RAID/ai/tmp-gchat3-host-hardware-tests-20261018:/work",
+      "-w",
+      "/work/gchat",
+      "-e",
+      "HOME=/tmp",
+      "-e",
+      "XDG_CACHE_HOME=/work/build-xdg-cache",
+      "-e",
+      "XDG_DATA_HOME=/work/build-xdg-data",
+      "-e",
+      "COREPACK_ENABLE_NETWORK=0",
+      "-e",
+      "COREPACK_ENABLE_DOWNLOAD_PROMPT=0",
+      "-e",
+      "YARN_ENABLE_GLOBAL_CACHE=false",
+      "-e",
+      "YARN_CACHE_FOLDER=/work/gchat/.yarn/cache",
+      "-e",
+      "YARN_ENABLE_NETWORK=0",
+      "-e",
+      "IS_TAURI=true",
+      "-e",
+      "TAURI_ENV_PLATFORM=linux",
+      "-e",
+      "CARGO_HOME=/work/cargo-home",
+      "-e",
+      "CARGO_TARGET_DIR=/work/native-target",
+      "-e",
+      "CARGO_INCREMENTAL=0",
+      "-e",
+      "CARGO_PROFILE_DEV_DEBUG=0",
+      "-e",
+      "CARGO_PROFILE_TEST_DEBUG=0",
+      "-e",
+      "CARGO_BUILD_JOBS=8",
+      "-e",
+      "CARGO_NET_OFFLINE=true",
+      "-e",
+      "RUSTC_WRAPPER=",
+      "-e",
+      "OPENSSL_NO_VENDOR=1",
+      "-e",
+      "PROTOC=/usr/bin/protoc",
+      "--name",
+      "gchat3-host-hardware-verify-20261018",
+      "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+      "nice",
+      "-n",
+      "10",
+      "bash",
+      "--noprofile",
+      "--norc",
+      "-c",
+      "set -euo pipefail\nulimit -c 0\nunset VITE_MODEL_CATALOG_URL GINFER_MODEL_CATALOG_URL IS_DEV NODE_OPTIONS NODE_ENV FORCE_ONBOARDING FRESH_INSTALL FORCE_HARDWARE_TIER TAURI_CONFIG TAURI_DEV_HOST TAURI_ENV_DEBUG IS_IOS IS_ANDROID IS_CLEAN CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_TARGET RUSTFLAGS GINFER_PROFILE_CATALOGS CUDA_VISIBLE_DEVICES NVIDIA_VISIBLE_DEVICES\nrun_stage() { stage=\"$1\"; shift; if \"$@\" > \"/work/${stage}.log\" 2>&1; then code=0; else code=$?; fi; printf '%s\\n' \"$code\" > \"/work/${stage}.exit\"; return \"$code\"; }\nrun_stage test-focused yarn workspace @gchat/web-app test src/containers/__tests__/EngineHostModels.test.tsx src/stores/engine-hosts-store.test.ts\nrun_stage test-lint yarn lint\nrun_stage test-verify make verify\n"
+    ],
+    "effective_runner_argv": [
+      "taskset",
+      "-c",
+      "120-127",
+      "nice",
+      "-n",
+      "10",
+      "flock",
+      "-s",
+      "/tmp/ginfer-s1-socket1-compile.lock",
+      "docker",
+      "start",
+      "-a",
+      "gchat3-host-hardware-verify-20261018"
+    ],
+    "effective_shell_counts": {
+      "newlines": 7,
+      "slashquote": 0,
+      "printf_literal_backslash_n": 1
+    },
+    "decode_applied": false,
+    "dependency_binding_recipe": "/ai/gchat/out/host-connect-refresh-result-20261018/test-result.json#execution.dependency_binding",
+    "verification_recipe": "/ai/gchat/out/host-model-editor-save-result-20261018/test-result.json#execution"
+  },
+  "fixture": {
+    "ssh": "ron@192.168.1.109",
+    "expected_hostname": "AIS-2-8592-L01",
+    "root": "/media/ron/SSD_RAID/ai/tmp-gchat3-host-hardware-tests-20261018",
+    "donor_mutated": false
+  },
+  "cleanup": {
+    "status": "COMPLETE",
+    "s1": {
+      "status": "COMPLETE",
+      "at": "2026-10-18T07:19:13.303337+00:00",
+      "host": "AIS-2-8592-L01",
+      "removed_root": "/media/ron/SSD_RAID/ai/tmp-gchat3-host-hardware-tests-20261018",
+      "root_exists": false,
+      "root_apparent_bytes_removed": 42050461507,
+      "root_allocated_bytes_before_removal": 43194466304,
+      "containers_removed": [
+        {
+          "container": "gchat3-host-hardware-verify-20261018",
+          "id": "27cf19c11294fc8043fa87d8b660248bba825c17c59fd7498694a873116d7b9f",
+          "writable_bytes": 6611888,
+          "exit": 0
+        },
+        {
+          "container": "gchat3-host-hardware-baseline-20261018-2",
+          "id": "2187c14e27605c0e15d8710f7b6d3a5152ca3946f13bdf0438b102b4f33f7338",
+          "writable_bytes": 0,
+          "exit": 1
+        },
+        {
+          "container": "gchat3-host-hardware-baseline-20261018",
+          "id": "d0081bee5b4f555619a84534c50a14d7357e0de3d179fc255344dd2d6d1573c8",
+          "writable_bytes": 0,
+          "exit": 1
+        }
+      ],
+      "free_bytes_before": 1636920750080,
+      "free_bytes_after": 1672143425536,
+      "net_free_bytes_change": 35222675456,
+      "net_free_change_note": "Filesystem-wide observation; other jobs may write concurrently.",
+      "pre_removal_live_process_holds": [],
+      "pre_removal_other_container_mount_holds": [],
+      "donor_touched": false
+    },
+    "local": {
+      "removed_files": [
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/baseline-command.json",
+          "bytes": 5064
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/candidate-command.json",
+          "bytes": 5643
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/frozen-inputs.json",
+          "bytes": 485
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/preparation-command.json",
+          "bytes": 2141
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-baseline-invalid-fixture-runner.log",
+          "bytes": 0
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-baseline-invalid-fixture.exit",
+          "bytes": 2
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-baseline-invalid-fixture.log",
+          "bytes": 168614
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-baseline-runner.log",
+          "bytes": 0
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-baseline.exit",
+          "bytes": 2
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-baseline.log",
+          "bytes": 250768
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-candidate-runner.log",
+          "bytes": 0
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-command-preparation.json",
+          "bytes": 4653
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-focused.exit",
+          "bytes": 2
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-focused.log",
+          "bytes": 358
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-lint.exit",
+          "bytes": 2
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-lint.log",
+          "bytes": 1731
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-verify.exit",
+          "bytes": 2
+        },
+        {
+          "path": "/ai/gchat/out/host-hardware-setup-result-20261018/test-verify.log",
+          "bytes": 473684
+        }
+      ],
+      "disposable_bytes_removed": 913151,
+      "retained_files": [
+        "test-result.json",
+        "summary.md"
+      ],
+      "raw_results_retention": "Only reviewed counts, raw-log hashes, source hashes, effective recipe and concise summary retained; raw bytes intentionally removed after ROOT review."
+    },
+    "completed_at": "2026-10-18T07:19:35.877465+00:00"
+  },
+  "next": "Verification and authorized cleanup complete; coordinator owns source/docs/commit handoff. No rerun."
+}

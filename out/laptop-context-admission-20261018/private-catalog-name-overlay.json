@@ -1,0 +1,42 @@
+{
+  "row": "LAPTOP-CONTEXT-ADMISSION",
+  "applied_at": "2026-10-18T07:18:03.908853+00:00",
+  "prior_overlay": "context-admission-overlay-20261018.json",
+  "scope": "Name-only follow-up; IDs, numeric bounds and every other leaf retained",
+  "generator_input": {
+    "bytes": 645107,
+    "before_sha256": "4ac372fd4015497daa09af0f1d9d94a4f4e5b39b56a57eac2abd6b7e47426a2d",
+    "after_sha256": "103ea747be3d4b12503111f3dd9378092c76c49986040b30f0727c423062daa5",
+    "updated_names": 4
+  },
+  "live_catalog": {
+    "bytes": 263298,
+    "before_sha256": "4f754bf8f859312825d7b24c1ce64d3f1c12ecc93d8b98c8b959e6ea8e1cfc1b",
+    "after_sha256": "fc0f30347188edb5b94d84441653cc890f8316768582e2ab58656bc1e4cba579",
+    "changed_leaves": [
+      [
+        "/models/1/releases/0/launch_profiles/0/name",
+        "Qwen3.8 Text \u00b7 168K context \u00b7 1 request",
+        "Qwen3.8 Text \u00b7 158K context \u00b7 1 request"
+      ],
+      [
+        "/models/1/releases/0/launch_profiles/10/name",
+        "Qwen3.8 Text \u00b7 149,069 context \u00b7 1 request",
+        "Qwen3.8 Text \u00b7 138,240 context \u00b7 1 request"
+      ]
+    ],
+    "profiles": 112,
+    "vision_entries_remain_omitted": true
+  },
+  "service_pid": 3708693,
+  "service_identity_unchanged": true,
+  "package_symlinks_unchanged": true,
+  "payloads_read_or_changed": false,
+  "generation_receipt_sha256_preserved": "4044f805825f09cdf8421b404d99196bb9bfc8a9ccc52adb5ec4d77612c8b318",
+  "served_catalog": {
+    "status": 200,
+    "content_length": 263298,
+    "sha256": "fc0f30347188edb5b94d84441653cc890f8316768582e2ab58656bc1e4cba579"
+  },
+  "preflight_correction": "Generator name overlay succeeded; live catalog serialization size check rejected ASCII re-encoding before write. Applied equal-width byte replacements to retain original Unicode encoding and exact served byte length."
+}
