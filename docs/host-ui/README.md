@@ -1,5 +1,35 @@
 # GInfer host UI
 
+## Progress bars — C3, October 18
+
+`GUI-PROGRESS-BARS` passes its remaining Linux native leaf. The original
+fix `01caea779` (merge `836f7f4e9`) is delivered. Retained frames of a real
+RTX 5090 profile show the turquoise indeterminate segment at different
+positions while both report 70 seconds elapsed: [first](../../out/c3-progress-bars-20261018/hp5.png)
+and [second](../../out/c3-progress-bars-20261018/hp6.png). The original author
+confirmed movement in live WebKitGTK. Those frames precede the source commit
+by seconds; no exact executable pin survives. Their file timestamps are
+retention metadata, not independently verified capture times.
+
+C7's already committed [real transfer](../../out/c7-managed-downloads-native-20261018/native/downloading-popover.png)
+at `71abf1708` shows the Models determinate bar with a turquoise fill and
+neutral track in Dark 1280×900. The retained [Light capture](../../out/c3-progress-bars-20261018/lt3.png)
+is a synthetic native-control preview, not an actual download card. The
+progress CSS, including the reduced-motion rule, is unchanged from the
+original fix through both native sources and current main `925f99195`.
+The existing three native-control CSS checks pass in the retained ONE full
+gate at `1062ba9f8`: **3,523 app, 127 extension, 1,284 native**, six floors.
+This evidence-only closure reuses those checks and passes `git diff --check`.
+No fresh profile, transfer or build is needed. Runtime reduced-motion,
+Windows and current-package acceptance are unqualified.
+
+[Result](../../out/c3-progress-bars-20261018/result.json) binds the source,
+captures, receipts and limits. Owned worktree
+`/ai/gchat-worktrees/c3-progress-bars-20261018`, branch
+`docs/c3-progress-bars-20261018`, base `925f99195`; only small JSON/PNG evidence,
+no new resources, dependency copies or private state. C7's transfer fixture
+and build are already retired. Next: coordinator integration and row closure.
+
 ## Plain Models error banner — C3, October 18
 
 `GUI-MODELS-ERROR-BANNER` passes its remaining Linux native leaf. The
