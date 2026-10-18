@@ -27,11 +27,12 @@ branch `fix/gchat3-secure-storage-locked-recovery-20261018`, base `d53b88432`.
 S1 CPU112–119 returned **16:44Z**, booking3414 canceled. Small evidence:
 `out/secure-storage-locked-recovery-20261018/test-result.json` and
 `test-summary.md`. P2 scratch is retired after review; the independent S1 cache
-at `/media/ron/SSD_RAID/ai/tmp-gchat3-secure-storage-install-error-guidance-tests-20261018`
-remains idle for the deferred installer-guidance candidate. That dirty candidate
-is preserved in `/ai/gchat-worktrees/gchat3-secure-storage-install-error-guidance-20261018`;
-its tests have not launched. The retained RC dependency donor is untouched.
-Next: Codex 8 review and merge-ready handoff, then resume installer guidance.
+was reused for installer guidance below and retired after its accepted result.
+That candidate is preserved in
+`/ai/gchat-worktrees/gchat3-secure-storage-install-error-guidance-20261018`.
+The retained RC dependency donor is untouched.
+Source `ac922560b` is merged as `a30bda127` (Codex 8 review clean).
+Continue installer guidance without repeating the accepted P2 gates.
 
 ## Model deletion confirmation — verified, Codex 7, October 18
 
@@ -60,6 +61,43 @@ S1 CPU104–111 returned **16:03Z**, booking3381 canceled. The owned
 review; the retained RC dependency donor was untouched. Small evidence:
 `out/c7-model-delete-confirmation-20261018/test-result.json` and
 `test-summary.md`. Next: merge the verified branch, then continue the owned queue.
+## Secure-storage installation error guidance — verified, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-INSTALL-ERROR-GUIDANCE` replaces raw installation failure
+text with plain recovery instructions and closed diagnostic details. Rejection
+can follow a partial package operation, so the panel refreshes passive status
+once before offering an explicit installation retry, Check secure storage or
+Check again. Controls and readiness remain pending during that read. A newly
+present native provider remains unchecked until the user explicitly checks it.
+The failure warning survives a later successful check without claiming that
+installation succeeded. Installation is never replayed automatically; existing
+administrator consent and native commands are preserved.
+
+All **four new regressions fail on the unchanged component**, with no runner or
+hook failure. The frozen candidate passed all **26 credential tests** and lint
+with zero errors and five existing unrelated warnings. Exactly one `make verify`
+exited 0 at **17:07:27Z**: **3,707 app tests / 6 skipped, 127 extension tests,
+all six critical coverage floors and 1,311 native tests / 0 failed / 28 ignored**
+across 23 native summaries. Typecheck and quality guards passed. The coordinator
+reviewed the actual baseline and candidate logs, terminal state, matching
+source bytes and non-executable modes, 35 dependency inputs and all eleven
+catalog inputs. This verifies rendered recovery with mocked native commands;
+live installation, desktop vault, Windows and GPU acceptance remain separate.
+
+Candidate: `/ai/gchat-worktrees/gchat3-secure-storage-install-error-guidance-20261018`,
+branch `fix/gchat3-secure-storage-install-error-guidance-20261018`, tested source
+`d2a4dbf63`. It includes accepted P2 `ac922560b`, already merged as `a30bda127`
+after Codex 8 review. Its separate gates were not repeated. CPU80–87 returned
+**17:08Z**, booking3429 canceled; baseline booking3427 returned **16:58Z**.
+Owned independent cache:
+`ron@192.168.1.109:/media/ron/SSD_RAID/ai/tmp-gchat3-secure-storage-install-error-guidance-tests-20261018`.
+Scoped cleanup finished **17:11:57Z** after no-reader checks: the owned cache,
+prep log and two stopped containers were removed, releasing **30,093,398,157
+logical bytes**. Their absence was confirmed. Only reviewed
+`out/secure-storage-install-error-guidance-20261018/test-result.json` and
+`test-summary.md` remain. The inactive RC dependency donor and protected inputs
+are untouched. Next: merge the verified branch, then continue the owned queue.
+
 ## Passphrase form error guidance — verified, Gchat 3, October 18
 
 `GUI-SECURE-STORAGE-PASSPHRASE-ERROR-GUIDANCE` gives plain Create, Resume
@@ -93,8 +131,8 @@ containers were removed after confirming no readers, releasing
 **28,064,308,537 logical bytes**. Their absence was verified; the inactive RC
 dependency donor was untouched. Only reviewed
 `out/secure-storage-passphrase-error-guidance-20261018/test-result.json` and
-`test-summary.md` remain. Source `ca17dc7cb` is merged as `d53b88432`; the
-Check-again P2 above is the current follow-up. Accepted verification is not repeated.
+`test-summary.md` remain. Source `ca17dc7cb` is merged as `d53b88432`;
+continue the GUI queue without repeating accepted verification.
 
 ## Passphrase-vault Lock feedback — verified, Gchat 3, October 18
 
