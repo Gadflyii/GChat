@@ -22,6 +22,36 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Run setup minimum context editing — October 18
+
+A private native Linux pass reproduced a forced zero in **Minimum context**
+when rerunning a saved Agent Studio result. Clearing the field immediately
+restored `0`; typing `32768` produced `032768`, which survived leaving the
+field. Cancel and reopening restored the saved `0`. No run was started and
+both saved definition/run files remained byte-identical after normal shutdown.
+The affected setup source is unchanged from native `925f99195` through main
+`3934c671b`. Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-agent-run-number-input-20261018/`.
+
+The field now keeps its text while editing, updates numeric role requirements
+immediately and normalizes on blur. Each role keeps its own draft. Existing
+invalid-limit checks, model readiness and saved-default behavior are unchanged.
+Four rendered regressions cover clear/type and submission before blur, role
+isolation, blur normalization, invalid limits and cancelled/reopened drafts.
+
+The focused file passes all 14 tests. The new clear/submission regression
+fails once against parent production source because clearing receives `0`.
+Workspace lint and one `make verify` pass: 3,540 web, 127 extension and
+1,288 Rust tests. Production frontend and Linux desktop builds also pass.
+
+The rebuilt private native candidate (`663bd9a4c3f7…`) passes clear/type,
+blank-to-zero and leading-zero normalization on blur. Negative input stays
+visible with its validation message and Run disabled. Cancel and reopening
+restore saved `0` with defaults unchecked. Both saved definition/run files
+remain byte-identical after normal shutdown. The viewed candidate screenshot
+and native receipts are in the baseline packet above. This qualifies Linux
+keyboard editing; live-model execution and Windows were outside this pass.
+
 ## Message memory dialog keyboard focus — October 18
 
 A private Linux native chat pass reproduced focus loss after **Save to
