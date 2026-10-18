@@ -17,6 +17,25 @@ describe('ConfirmDialogHost', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('returns focus to Cancel when a newer request replaces a focused destructive confirmation', async () => {
+    const user = userEvent.setup()
+    render(<ConfirmDialogHost />)
+    let first: Promise<boolean>
+    let second: Promise<boolean>
+    act(() => { first = confirmAction({ title: 'Delete first item?', message: 'The first item will be removed.', destructive: true }) })
+    await screen.findByRole('dialog', { name: 'Delete first item?' })
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Confirm' })).toHaveFocus()
+
+    act(() => { second = confirmAction({ title: 'Delete second item?', message: 'The second item will be removed.', destructive: true }) })
+    await expect(first!).resolves.toBe(false)
+    await screen.findByRole('dialog', { name: 'Delete second item?' })
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    await user.keyboard('{Enter}')
+    await expect(second!).resolves.toBe(false)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('resolves true only from the confirm button and false on Escape or a newer request', async () => {
     const user = userEvent.setup()
     render(<ConfirmDialogHost />)

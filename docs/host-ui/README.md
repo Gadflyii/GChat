@@ -1,5 +1,20 @@
 # GInfer host UI
 
+## Confirmation replacement focus — October 18
+
+`GUI-NATIVE-CONFIRM-DIALOGS` already uses the shared themed confirmation dialog
+merged in `b04ff4e25` / `89590531e`. If a second request replaces an open prompt
+while **Confirm** is focused, the replacement now resets focus to **Cancel**.
+The first promise resolves `false`; pressing Enter then declines the second
+request. Explicit confirmation and Escape retain their existing behavior.
+The regression reproduced as one failure and two passes before the fix; all
+three focused cases pass with the fix. One full `make verify` passes on S1
+CPUs104–111: 3,199 frontend, 120 extension and 1,208 Rust tests (six frontend
+skips, 27 Rust ignores); all six critical coverage floors pass. The source
+postcheck passes for all 3,100 tracked files. This qualifies the rendered
+component on Linux.
+Evidence: [replacement-focus result](../../out/gui-confirm-replacement-focus-20261018/result.json).
+
 ## Models tabs installed keyboard acceptance — C7, closed October 18
 
 `GUI-MODELS-TABS-KEYBOARD` passes the remaining native Linux keyboard leaf.
