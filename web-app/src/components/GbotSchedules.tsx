@@ -62,6 +62,8 @@ function WorkspaceSchedules({
   const pendingRef = useRef(false)
   const busy = !!pending
   const [error, setError] = useState('')
+  const [refreshError, setRefreshError] = useState('')
+  const visibleError = error || refreshError
   const [stopped, setStopped] = useState<string | null>(null)
   const refreshVersion = useRef(0)
   const refresh = useCallback(async () => {
@@ -76,10 +78,10 @@ function WorkspaceSchedules({
         values.schedules.filter((value) => value.workspace_id === workspaceId)
       )
       setStopped(values.stopped)
-      setError('')
+      setRefreshError('')
     } catch (cause) {
       if (version !== refreshVersion.current) return
-      setError(String(cause))
+      setRefreshError(String(cause))
     }
   }, [workspaceId])
   useEffect(() => {
@@ -119,9 +121,9 @@ function WorkspaceSchedules({
           recover before schedules run again.
         </p>
       )}
-      {error && (
+      {visibleError && (
         <p role="alert" className="mb-3 text-sm text-destructive">
-          {error}
+          {visibleError}
         </p>
       )}
       {pending && (

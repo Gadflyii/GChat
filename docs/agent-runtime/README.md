@@ -79,6 +79,21 @@ active indicator, Stop worker or stale approval control remained. The first
 candidate exposed only a duration and was rejected before this correction.
 Windows: not built (dev phase).
 
+A follow-up native pass found that leaving Chat for Studio and returning to the
+cached conversation changed **Run interrupted** back to **Working...** with a
+Stop worker control. The saved outcome lived only in the destroyed Chat route,
+while the conversation cache retained the original running spawn response.
+Referenced durable outcomes now share that conversation cache and are discarded
+when its session is removed or cleared. The regression checks cached reopening,
+isolation from another conversation, and session removal/clearing.
+Native Linux replay passed cold open, Studio continuation setup/cancel, and
+switching conversations: one **Run interrupted** card, the retained reply and
+worker ID, no Working/Stop or approval controls, and the saved-work explanation.
+Focused tests passed 24/24 and the sole `make verify` passed; the rebuilt native
+candidate and evidence are in
+`/ai/gchat/out/gchat-worker-history-navigation-20261018/`. No inference or new-run
+execution was qualified by this replay. Windows: not built (dev phase).
+
 ## Client tools and native request capability errors — release scope
 
 Inference-server hosted retrieval, `file_search`, `web_search` and MCP are
