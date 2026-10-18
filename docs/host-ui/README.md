@@ -1,5 +1,40 @@
 # GInfer host UI
 
+## Installed dropdown acceptance — C7, October 18
+
+`GUI-DROPDOWN-THEME-CONSISTENCY-20261017` passes the shared Theme and Font
+Size menu scope in retained Linux release `ed68c7443`. Real trusted keyboard
+input opened the menus, selected Light/Dark and Medium/Large, closed with
+Escape and moved focus with Tab. Visual inspection confirmed readable Geist
+text and app colors in both themes; menu text followed Medium (14px) and
+Large (15.75px). A rapid Escape/Tab/Enter sequence did not reach its intended
+control and is excluded; separately observed Escape and Tab steps passed.
+
+The serving-instance, launch-profile and Fleet-coordinator selectors remain
+**unqualified**. The isolated profile has no connected Host inventory or paired
+Fleet computer, so those controls were absent. Shared-menu acceptance does
+not establish native HTML select popup rendering. The next required fixture
+is an isolated profile with a real connected Host, multiple recorded instances,
+launch inventory and a paired Fleet computer. No pairing, setup or model load
+was performed. Windows and release-wide qualification remain outside this leaf.
+
+The shared menu, Interface and CSS source is unchanged at main `29c301aeb`;
+the affected Host/Fleet selectors retain the same styling and handlers. Source
+fix `05669cea1` / merge `7ad61917c` and existing focused/full and CSS-render
+gates are reused. This documentation-only result uses `git diff --check`.
+Evidence is retained at
+`out/c7-dropdown-installed-20261018/{result.json,summary.md}`.
+
+S1 FRESH returned OFF with its original XML restored and verified. CPUs40–47
+returned01:28Z. All private app/session and forwarding processes stopped by
+recorded PID; the private guest copy/profile and S1 runtime root were removed.
+The original fixture data and read-only release donor were preserved. No live
+job or booking remains. C7 retains source worktree
+`/ai/gchat-worktrees/c7-dropdown-installed-20261018`, branch
+`test/c7-dropdown-installed-20261018`, and only the result JSON and short
+summary as new local artifacts. The row stays open for the missing Host/Fleet
+selector acceptance.
+
 ## Models tabs installed keyboard acceptance — C7, closed October 18
 
 `GUI-MODELS-TABS-KEYBOARD` passes the remaining native Linux keyboard leaf.
