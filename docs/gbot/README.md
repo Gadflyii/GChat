@@ -24,6 +24,39 @@ added afterward; production and test hashes stayed unchanged.
 Evidence: `out/gchat2-brain-refresh-save-error-20261018/result.json`.
 FRESH and OLD are untouched; rendered service responses do not qualify native
 Windows or live Host execution.
+## Service computer lists can be refreshed without repeating approval — Gchat 2
+
+`GBOT-SERVICE-COMPUTER-LIST-RETRY`, based on main `f414a35bc`, fixes
+an empty paired-computer picker with no recovery after its initial read fails.
+A late list failure could also replace an unrelated control-approval error.
+
+The service setup step now offers **Refresh computers**, with pending feedback
+and a synchronous duplicate guard. List errors have plain recovery guidance
+and closed diagnostic Details. Refresh preserves the selected computer and
+approval error; it reads the computer list without repeating a control request.
+
+Deferred rendered regressions cover an empty-list failure, repeated clicks,
+another read failure, recovery with a selectable computer, and a late list
+failure after rejected approval. Only an explicit approval retry requests
+access again. Both new regressions fail against the old source; all 13 affected
+tests pass. The first focused run retained one assertion failure, corrected to
+match the existing `Error:` diagnostic prefix before its passing continuation.
+
+One `make verify` began at 11:28:16 UTC on 18 October. Lint, type checking and
+quality guards passed; the app run had 3,545 passes, 6 skips and one unrelated
+first-run fixture failure. Its owner supplied an initial-folder hydration wait;
+only that wait was applied to the gate source, and the exact failed case passed.
+The remaining stages passed by continuation: 127 extension tests and 1,288 Rust
+tests (28 ignored). Because the failed app run produced no coverage report,
+six existing critical-flow test files regenerated coverage (87 passes). Two
+existing provider-store consumer files added the missing paths (22 passes);
+their separate Istanbul reports were merged and all six unchanged coverage
+floors passed at 11:42:14 UTC. No whole-app or full-gate run was repeated.
+All 3,451 tracked gate-source files match the final manifest, including the
+owner's isolated test wait; this final receipt was added afterward. Commands,
+failures, selected files and report hashes are recorded in
+`out/gchat2-service-computer-list-retry-20261018/result.json`.
+FRESH and OLD remain untouched; no native Windows or live grant is qualified.
 
 ## Task controls discard errors after confirmed progress — Gchat 2
 
