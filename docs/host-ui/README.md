@@ -1,5 +1,38 @@
 # GInfer host UI
 
+## Recovered W8 chat-send closures — C3, October 18
+
+`GUI-CHAT-STALE-LOAD-ERROR-SEND-20261017` and
+`GUI-CHAT-SMALL-CONTEXT-SEND-BLOCKED-20261017` retained obsolete merge-ready
+states after their source fixes and release acceptance had completed. C3
+recovered the abandoned Claude RC rows; Gchat 1 confirmed no overlap by row ID.
+Both source tips (`47048c447`, `b1c098a17`) are ancestors of current main and
+release `ed68c7443`. Existing focused checks (31 and 87 cases respectively)
+and each row's single passing `make verify` remain recorded in
+`out/stale-load-error-clear-20261017/result.json` and
+`out/context-output-reserve-20261017/result.json`; no source or test changed.
+
+The optimized release packet
+`out/linux-rc-final-20261017/current-ed68c7443-e2282c336-release/result.json`
+and its cited
+`local5090-ed68c7443-e2282c336-release-flash-high/gui-dom-evidence.jsonl`
+resolve both pending Linux packaged retests. On October 17 the private native
+session recorded the ordinary Installed Load failure at19:17:38Z (lines12–13),
+then a custom Host with context8192/C1/vision off/spec none (line18), Ready
+at19:21:56Z (line30). New Chat selected the Host instance, retained the visible
+prompt with reasoning High, and submitted successfully at19:22:13Z
+(lines31–36). The completed answer was `RC_OK` at19:22:25Z (line39). Thus the
+prior Installed Load failure did not block Send after the later successful
+Host load, and the8192 context no longer failed at output reservation.
+
+This closes the two reproduced Linux defects using retained native evidence;
+it does not qualify Windows or the unavailable automatic RTX5090 catalog
+profile. The model was stopped via the GUI, the app closed normally and the
+private Host/helpers exited in the existing shutdown record. C3 allocated no
+new compute, model, build or profile. Only this small documentation worktree
+`/ai/gchat-worktrees/c3-w8-send-recovery-20261018` and the existing small
+result/evidence files are retained. Documentation gate: `git diff --check`.
+
 ## Saved model settings editor completion — Gchat 3, October 18
 
 `GUI-HOST-MODEL-EDITOR-SAVE-RESULT-20261018`: after an accepted Save-and-restart,
