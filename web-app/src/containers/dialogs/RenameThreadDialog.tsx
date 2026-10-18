@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import {
   Dialog,
@@ -23,6 +23,7 @@ interface RenameThreadDialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   withoutTrigger?: boolean
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export function RenameThreadDialog({
@@ -33,6 +34,7 @@ export function RenameThreadDialog({
   open,
   onOpenChange,
   withoutTrigger,
+  returnFocusRef,
 }: RenameThreadDialogProps) {
   const { t } = useTranslation()
   const [title, setTitle] = useState('')
@@ -115,7 +117,15 @@ export function RenameThreadDialog({
           </DropdownMenuItem>
         </DialogTrigger>
       )}
-      <DialogContent showCloseButton={!isRenaming}>
+      <DialogContent
+        showCloseButton={!isRenaming}
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef?.current?.isConnected) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
+      >
         <form onSubmit={handleRename}>
           <DialogHeader>
             <DialogTitle>{t('common:threadTitle')}</DialogTitle>

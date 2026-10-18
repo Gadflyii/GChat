@@ -69,6 +69,7 @@ const ThreadItem = memo(
     const { t } = useTranslation()
     const [renameOpen, setRenameOpen] = useState(false)
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+    const menuButtonRef = useRef<HTMLButtonElement>(null)
 
     const serviceHub = useServiceHub()
     const getMessages = useMessages((state) => state.getMessages)
@@ -221,6 +222,7 @@ const ThreadItem = memo(
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <SidebarMenuAction
+              ref={menuButtonRef}
               showOnHover={!subItem}
               className={cn(
                 'hover:bg-sidebar-foreground/8',
@@ -329,6 +331,7 @@ const ThreadItem = memo(
           onRename={renameThread}
           open={renameOpen}
           onOpenChange={setRenameOpen}
+          returnFocusRef={menuButtonRef}
           withoutTrigger
         />
 
@@ -337,6 +340,7 @@ const ThreadItem = memo(
           onDelete={deleteThread}
           open={deleteConfirmOpen}
           onOpenChange={setDeleteConfirmOpen}
+          returnFocusRef={menuButtonRef}
           withoutTrigger
         />
       </MenuItemWrapper>
