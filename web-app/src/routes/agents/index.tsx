@@ -399,6 +399,23 @@ function AgentStudioPage() {
   }, [templateFocusRequest])
   // The editable identifier does not determine which saved record this draft owns.
   const [draftSavedId, setDraftSavedId] = useState<string | null>(null)
+  const selectedDefinitionRef = useRef<HTMLButtonElement>(null)
+  const revealedDefinitionId = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (view !== 'definitions' || !draftSavedId) {
+      revealedDefinitionId.current = null
+      return
+    }
+    if (
+      draftSavedId !== revealedDefinitionId.current &&
+      selectedDefinitionRef.current
+    ) {
+      selectedDefinitionRef.current.scrollIntoView?.({ block: 'nearest' })
+      revealedDefinitionId.current = draftSavedId
+    }
+  }, [view, draftSavedId, definitions])
+
   const draftBaseline = useRef<string | null>(null)
   const draftRevision = useRef(0)
   const mutatingDraft = useRef(false)
@@ -786,6 +803,7 @@ function AgentStudioPage() {
                 return (
                   <button
                     key={definition.id}
+                    ref={draftSavedId === definition.id ? selectedDefinitionRef : undefined}
                     type="button"
                     className={cn(
                       'w-full rounded-xl border p-3 text-left transition hover:bg-accent/60',

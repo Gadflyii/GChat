@@ -22,6 +22,32 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Finding a newly saved agent — October 18
+
+A private Linux native pass saved `Zebraweeklyplanner` in a long Agent Studio
+library. The editor showed the saved definition, but its selected library row
+stayed at y1,481–1,583 below the visible y105–800 list, with scrollTop 0.
+Baseline geometry and the viewed screenshot are retained in
+`/ai/gchat/out/gchat-agent-saved-selection-visibility-20261018/` and
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1617/`.
+
+The library now reveals a newly selected saved definition with nearest
+scrolling, including when its refreshed list arrives after save completion.
+It preserves focus and leaves manual scrolling alone when the same definition
+is refreshed or edited. Returning from another Studio section reveals the
+selected definition again.
+
+Source `63974c7ee` passes 117 focused tests, lint and one `make verify`
+(3,705 app, 127 extension and 1,309 Rust tests; six coverage floors). Frontend
+and native builds pass. The private 1,200×800 Linux desktop saved
+`ZZ Library Visibility` with its selected row fully visible at y698–800.
+Editing and saving after manually scrolling the library to the top preserved
+scrollTop 0. Returning from Templates revealed the selected row and kept focus
+on **Agents & flows**. All 13 earlier definitions, run records and chat files
+were unchanged. Normal window close completed cleanup; returned16:35Z.
+`native-result.json` and viewed screenshots are retained in the evidence folder
+above. This is a native editor check with no model run.
+
 ## Finding a newly created skill — October 18
 
 A private Linux native pass created `weekly-status-report` with keyboard input.
