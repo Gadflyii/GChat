@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentProps } from 'react'
+import { useEffect, useRef, useState, type ComponentProps } from 'react'
 import { ChevronDownIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -26,6 +26,15 @@ export function ChoiceSelect({ value, onValueChange, options, className, ...prop
   const content = useRef<HTMLDivElement>(null)
   const tabTarget = useRef<HTMLElement | null>(null)
   const selected = options.find(option => option.value === value)
+  useEffect(() => {
+    if (!open) return
+    const frame = requestAnimationFrame(() => {
+      const items = content.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]:not([data-disabled])')
+      const checked = content.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]:not([data-disabled])')
+      ;(checked ?? items?.[0] ?? content.current)?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [open])
   return <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
     <DropdownMenuTrigger asChild disabled={props.disabled}>
       <button {...props} ref={trigger} type="button" data-choice-select
@@ -36,14 +45,6 @@ export function ChoiceSelect({ value, onValueChange, options, className, ...prop
     </DropdownMenuTrigger>
     <DropdownMenuContent ref={content} align="start"
       className="w-(--radix-dropdown-menu-trigger-width) min-w-56 max-w-[calc(100vw-2rem)]"
-      onOpenAutoFocus={event => {
-        event.preventDefault()
-        requestAnimationFrame(() => {
-          const items = content.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]:not([data-disabled])')
-          const checked = content.current?.querySelector<HTMLElement>('[role="menuitemradio"][aria-checked="true"]:not([data-disabled])')
-          ;(checked ?? items?.[0] ?? content.current)?.focus()
-        })
-      }}
       onCloseAutoFocus={event => {
         if (tabTarget.current) {
           event.preventDefault()
