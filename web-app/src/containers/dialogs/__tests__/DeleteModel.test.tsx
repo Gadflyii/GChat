@@ -73,7 +73,7 @@ beforeEach(async () => {
   })
   useModelProvider.setState({
     providers: [provider],
-    deletedModels: [],
+    inventoryRevision: 0, modelMutations: {},
     selectedProvider: 'ginfer',
     selectedModel: { id: 'model-selected' } as Model,
   })

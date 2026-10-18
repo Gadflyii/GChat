@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-18** — [Order local model inventory by mutation revision](2026-10-18-order-local-model-inventory-by-mutation-revision.md)
+
 - **2026-10-18** — [Expose the per-launch GPU memory reserve](2026-10-18-expose-per-launch-gpu-memory-reserve.md)
 - **2026-10-18** — [Reuse Ready graph receipts for dense models](2026-10-18-reuse-ready-graph-receipts-for-dense-models.md)
 

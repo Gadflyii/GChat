@@ -202,6 +202,7 @@ function ProviderDetail() {
 
       // Count models that will newly appear on this provider after the
       // registry merge — for the success toast.
+      const revision = useModelProvider.getState().inventoryRevision
       const fresh = await serviceHub.providers().getProviders()
       const registryProvider = fresh.find(
         (p) => p.provider === provider.provider
@@ -277,7 +278,7 @@ function ProviderDetail() {
       // Apply the registry refresh. `setProviders` merges catalog updates while
       // preserving API keys, base URLs, and user-tweaked settings per provider,
       // and never removes existing models.
-      setProviders(fresh)
+      setProviders(fresh, revision)
 
       // Persist the live-discovered models onto THIS provider. We cannot inject
       // into `fresh` because custom / self-hosted providers (AIML, Cerebras,
