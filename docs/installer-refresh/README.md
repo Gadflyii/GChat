@@ -44,9 +44,24 @@ manifest and guide match their selected inputs; all 178 members and 175
 profiles are accounted for in [the archive receipt](../../out/c4-cli-driver-guidance-20261018/archive-result.json).
 The first metadata extraction used `source_revision`; the manifest's actual
 field is `source_commit`. That receipt-only correction repeated no gate or
-packaging. Next: the parent's private driver-free refusal with zero writes and
-normal driver-present `--install --no-wizard` acceptance. Native cases remain
-pending; no GPU, model load or profiling belongs to this fix.
+packaging. Native setup acceptance passed at 04:58Z: the real driver-free runc
+container exited 1 with the declared library, bundled CUDA version, driver repair
+and container guidance, before creating any installation target or locator.
+The same archive on S1 with its existing driver completed `--install --no-wizard`
+with exit 0, created its launcher and registered private Host, and reported idle
+hardware preparation. No GPU was selected and no calibration or model ran.
+See [native results](../../out/c4-cli-driver-guidance-20261018/native/result.json).
+
+After the successful driver-present setup, the parent unnecessarily invoked
+`first-run` on this older Host and hit the known standalone runtime-set defect.
+That extra check and failed wrapper are retained and excluded from setup
+acceptance; the independent launcher repair is already merged as `a82f8c1e0`
+with its own native wizard evidence. No installation or passing gate was repeated.
+Future setup-only acceptance must stop at the Host handoff, checking further
+first-run behavior only with the launcher branch's matching Host/configuration.
+All private Host/keyring/DBus processes are terminal; booking 3006 returned at
+04:59Z. Next: merge this isolated setup fix; the model-download/profile journey
+still waits for the separately recorded W12 release-catalog publication.
 
 Owned inventory: local source worktree
 `/ai/gchat-worktrees/c4-cli-driver-guidance-20261018`; S1 source, archive and
@@ -55,7 +70,7 @@ Booking 2995 was canceled and CPUs112–119 **returned at 04:57:55Z**. Verificat
 used nice10, eight Cargo jobs and the shared socket1 compile lock in pinned
 bridge image `sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14`.
 The owned root retains 24,664,739,840 allocated bytes at handoff, including
-private copied Rust/frontend caches pending scoped cleanup after native
+private copied Rust/frontend caches now authorized for scoped cleanup after native
 acceptance. Donors, source, archive and concise receipts are preserved. No GPU
 or model inputs were copied.
 

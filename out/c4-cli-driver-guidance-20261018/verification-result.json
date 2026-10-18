@@ -37,7 +37,7 @@
   "shared_lock": "/tmp/ginfer-s1-socket1-compile.lock",
   "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
   "gpu_used": false,
-  "native_acceptance": "pending parent driver-free zero-write and normal no-wizard installs",
+  "native_acceptance": "PASS; see native/result.json for scoped setup results and excluded olderHost first-run failure",
   "raw_verify_log": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/verify.log",
   "verify_log_bytes": 485818,
   "verify_log_sha256": "1592de65e0b43ec89b0c5641391c1f0531a8ba9f1cbe25648da2160493faab7e",
