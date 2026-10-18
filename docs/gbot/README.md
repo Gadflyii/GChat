@@ -1,5 +1,32 @@
 # Gbot design
 
+## Brain setup error recovery — Gchat 2
+
+`GBOT-BRAIN-ERROR-GUIDANCE`, based on main `8de8e5f3d`, gives failed
+brain saves and ready-Host checks plain recovery steps beside their controls.
+Save feedback explains that the outcome could not be confirmed, keeps the
+entries available, and names Save brain settings for an explicit retry.
+Host discovery feedback names Refresh hosts. Technical diagnostics remain in
+Details, initially closed.
+
+A failed Host read no longer claims there are no ready models or that the saved
+session is unavailable. Those messages require a successful read. The selected
+model, context size and API key draft stay intact; opening Details and refreshing
+Hosts do not save settings or start a model. Rendered regressions cover both
+connection types and initial or refreshed discovery failures. This is
+source/rendered UI scope.
+
+All four new cases failed on unchanged production. The fixed brain setup and
+wizard suites passed all 53 cases; lint passed with zero errors and five existing
+warnings. ONE `make verify`, 18 October 16:17:34–16:23:22 UTC, passed 3,698 app
+tests (six skipped), 127 extension tests, 1,309 Rust tests (28 ignored,
+23 summaries), six coverage floors and lint/typecheck/guards. All 3,459 tracked
+raw source bytes and modes matched before and after the gate; tracked timestamps
+were refreshed before checks. This receipt was added afterward with product
+and test source unchanged. CPU120–127 booking3399 returned 16:23Z. Evidence:
+`out/gchat2-brain-error-guidance-20261018/result.json` and adjacent raw logs.
+No retry or whole-gate repeat.
+
 ## Keep setup open during local computer actions — Gchat 2
 
 `GBOT-LOCAL-VM-NAVIGATION-PENDING`, based on main `aec8f8710`, keeps

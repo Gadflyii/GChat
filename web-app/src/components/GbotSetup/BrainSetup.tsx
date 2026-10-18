@@ -243,11 +243,21 @@ export function BrainSetup({
               </Button>
             </div>
             {discoveryError && (
-              <p role="alert" className="text-sm text-destructive">
-                {discoveryError}
-              </p>
+              <div role="alert" className="space-y-1 text-sm text-destructive">
+                <p>
+                  GChat could not check which Host models are ready. Check the
+                  Gbot service connection, then choose Refresh hosts to try
+                  again.
+                </p>
+                <details>
+                  <summary className="cursor-pointer">Details</summary>
+                  <p className="whitespace-pre-wrap break-words">
+                    {discoveryError}
+                  </p>
+                </details>
+              </div>
             )}
-            {!loading && !models.length && (
+            {!loading && !discoveryError && !models.length && (
               <p className="text-sm text-muted-foreground">
                 No ready models. Open GInfer Hosts, pair the computer that runs
                 your model and start the model there. Then return here and
@@ -255,6 +265,7 @@ export function BrainSetup({
               </p>
             )}
             {!loading &&
+              !discoveryError &&
               !selected &&
               connection.kind === 'paired_host' &&
               connection.target.session_id && (
@@ -385,9 +396,18 @@ export function BrainSetup({
           task.
         </p>
         {saveError && (
-          <p role="alert" className="text-sm text-destructive">
-            {saveError}
-          </p>
+          <div role="alert" className="space-y-1 text-sm text-destructive">
+            <p>
+              GChat could not confirm that these brain settings were saved. Your
+              entries are still here. Check the Gbot service connection and unlock
+              secure storage if needed, then choose Save brain settings to try
+              again.
+            </p>
+            <details>
+              <summary className="cursor-pointer">Details</summary>
+              <p className="whitespace-pre-wrap break-words">{saveError}</p>
+            </details>
+          </div>
         )}
         {saving && (
           <p role="status" className="text-sm text-muted-foreground">
