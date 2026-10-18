@@ -499,6 +499,8 @@ struct GinferModelManifest<'a> {
     size_bytes: u64,
     embedding: bool,
     source: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    identity: Option<&'a ginfer_host::engine_inventory::ArtifactIdentity>,
 }
 
 fn is_root_ginfer_artifact(path: &Path) -> bool {
@@ -603,6 +605,7 @@ pub(crate) fn register_local_model_in(
         size_bytes: entry.metadata.size_bytes,
         embedding: false,
         source: "external",
+        identity: Some(&entry.metadata.identity),
     };
     fs::create_dir_all(model_dir.parent().ok_or("Model catalog root is missing")?)
         .map_err(|error| error.to_string())?;
@@ -642,6 +645,7 @@ fn adopt_one(models_root: &Path, source: &Path) -> Result<AdoptedGinferModel, St
         size_bytes,
         embedding: false,
         source: "local",
+        identity: None,
     };
     if let Err(error) = write_manifest(&manifest_path, &manifest) {
         let rollback = fs::rename(&destination, source);
@@ -779,6 +783,10 @@ mod tests {
         assert_eq!(manifest["name"].as_str(), Some("My model"));
         assert_eq!(manifest["source"].as_str(), Some("external"));
         assert_eq!(manifest["size_bytes"].as_u64(), Some(bytes.len() as u64));
+        assert_eq!(
+            manifest["identity"],
+            serde_yaml::to_value(&entry.metadata.identity).unwrap()
+        );
         let duplicate = register_at_host(&host, &payload).await.unwrap();
         assert_eq!(duplicate.id, entry.id);
         assert_eq!(

@@ -15,10 +15,12 @@ vi.hoisted(() => {
 })
 
 import { DefaultModelsService } from '../models/default'
+import { TauriProvidersService } from '../providers/tauri'
 import type { HuggingFaceRepo } from '../models/types'
 import { EngineManager, events, DownloadEvent } from '@gchat/core'
 import { BASELINE_MODEL_CATALOG } from '@/constants/models'
 import { clearCatalogCache } from '@/services/model-catalog-registry'
+import { ensureRegistryLoaded } from '@/stores/provider-registry-store'
 
 const { mockEvents, mockDownloadEvent } = vi.hoisted(() => ({
   mockEvents: {
@@ -42,6 +44,14 @@ vi.mock('@tauri-apps/plugin-http', () => ({
   fetch: vi.fn(),
 }))
 
+vi.mock('@/stores/provider-registry-store', () => ({
+  ensureRegistryLoaded: vi.fn(),
+}))
+
+vi.mock('@/lib/extension', () => ({
+  ExtensionManager: { getInstance: vi.fn() },
+}))
+
 // Mock fetch
 global.fetch = vi.fn()
 
@@ -50,6 +60,7 @@ describe('DefaultModelsService', () => {
 
   const mockEngine = {
     list: vi.fn(),
+    getSettings: vi.fn(),
     updateSettings: vi.fn(),
     update: vi.fn(),
     import: vi.fn(),
@@ -65,6 +76,7 @@ describe('DefaultModelsService', () => {
 
   const mockEngineManager = {
     get: vi.fn().mockReturnValue(mockEngine),
+    engines: new Map([['ginfer', mockEngine]]),
   }
 
   beforeEach(() => {
@@ -345,6 +357,41 @@ describe('DefaultModelsService', () => {
   })
 
   describe('startModel', () => {
+    it('auto-loads a freshly registered UUID with the artifact context from provider discovery', async () => {
+      const id = '8d76994a-a344-4bb5-9e42-c643011f8d2a'
+      vi.mocked(ensureRegistryLoaded).mockResolvedValue([])
+      mockEngine.list.mockResolvedValue([
+        {
+          id,
+          name: 'My Qwen model',
+          path: '/external/qwen38_27b_int_df2.ginfer',
+          source: 'external',
+          nativeContextTokens: 131_072,
+          capabilities: ['vision'],
+        },
+      ])
+      mockEngine.getSettings.mockResolvedValue([])
+      mockEngine.getLoadedModels.mockResolvedValue([])
+      mockEngine.load.mockResolvedValue({ id: 'session1' })
+
+      const providers = await new TauriProvidersService().getProviders()
+      const provider = providers.find((candidate) => candidate.provider === 'ginfer')!
+      expect(provider.models[0]).toMatchObject({
+        id,
+        source: 'external',
+        settings: { ctx_len: { controller_props: { value: 131_072, max: 131_072 } } },
+      })
+
+      await modelsService.startModel(provider, id)
+
+      expect(mockEngine.load).toHaveBeenCalledWith(
+        id,
+        { max_context: 131_072 },
+        false,
+        false
+      )
+    })
+
     it('passes only GInfer-owned startup settings to GInfer', async () => {
       const provider = {
         provider: 'ginfer',
