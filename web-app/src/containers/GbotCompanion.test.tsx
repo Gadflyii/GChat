@@ -1349,6 +1349,85 @@ it('releases desktop input, audio and leases on hide, then reopens without resta
   await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(2))
 })
 
+it.each(['open', 'media'] as const)(
+  'explains a desktop %s failure and reconnects only the view on explicit retry',
+  async (failure) => {
+    await mount()
+    let opens = 0
+    const diagnostic = 'RCDP handshake rejected: fixture transport unavailable'
+    mocks.call.mockImplementation(async (path: string) => {
+      if (path === 'state') return snapshot
+      if (path === 'tasks') return tasks
+      if (path === 'tasks/approvals') return []
+      if (path === 'view/open') {
+        ++opens
+        if (failure === 'open' && opens === 1) throw new Error(diagnostic)
+        return {
+          lease_id: `lease-${opens}`,
+          ws_url: 'ws://127.0.0.1/mock',
+          media_session_id: `media-${opens}`,
+          interactive: false,
+        }
+      }
+      return {}
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+    const desktop = within(screen.getByRole('region', { name: 'Bot desktop' }))
+    if (failure === 'media') {
+      await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1))
+      const options = mocks.start.mock.calls[0][0] as MediaSessionOptions
+      act(() => options.onStatus?.('failed', diagnostic))
+    }
+    const alert = await desktop.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      'Could not connect to the bot’s desktop. Choose Reconnect view to try again.'
+    )
+    expect(desktop.getByRole('status')).toHaveTextContent(
+      /^Desktop view could not connect$/
+    )
+    const details = within(alert).getByText('Details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(details).getByText(diagnostic)).not.toBeVisible()
+    fireEvent.click(within(details).getByText('Details'))
+    expect(within(details).getByText(diagnostic)).toBeVisible()
+    expect(opens).toBe(1)
+
+    fireEvent.click(desktop.getByRole('button', { name: 'Reconnect view' }))
+    await waitFor(() =>
+      expect(desktop.getByRole('status')).toHaveTextContent(
+        /^Desktop view connected$/
+      )
+    )
+    expect(opens).toBe(2)
+    expect(desktop.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(([path]) =>
+        /^(tasks\/(submit|cancel|resume)|control\/|connect$|disconnect$)/.test(path)
+      )
+    ).toEqual([])
+  }
+)
+
+it('explains an ended desktop view without automatically reopening it', async () => {
+  await mount()
+  fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
+  fireEvent.click(screen.getByRole('button', { name: 'View bot’s desktop' }))
+  await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1))
+  const desktop = within(screen.getByRole('region', { name: 'Bot desktop' }))
+  const options = mocks.start.mock.calls[0][0] as MediaSessionOptions
+  act(() => options.onStatus?.('ended'))
+  expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view ended$/)
+  expect(
+    desktop.getByText('Choose Reconnect view to open the desktop again.')
+  ).toBeVisible()
+  expect(desktop.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    mocks.call.mock.calls.filter(([path]) => path === 'view/open')
+  ).toHaveLength(1)
+  expect(desktop.getByRole('button', { name: 'Reconnect view' })).toBeEnabled()
+})
+
 it('returns keyboard focus from a human desktop without closing the view or handing control back', async () => {
   await mount()
   const identity = snapshot.live_sessions[0]
@@ -1398,7 +1477,7 @@ it('returns keyboard focus from a human desktop without closing the view or hand
   act(() => options.onInputEscape?.())
 
   expect(document.activeElement).toBe(returnKeyboard)
-  expect(desktop.getByRole('status')).toHaveTextContent(/^streaming$/)
+  expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view connected$/)
   expect(desktop.getByRole('button', { name: 'Close view' })).toBeEnabled()
   expect(desktop.getByText('You have control')).toBeInTheDocument()
   expect(mocks.start).toHaveBeenCalledTimes(1)
@@ -1719,7 +1798,7 @@ it('reconnects a paused view-only desktop after failed hand back without resumin
     await screen.findByRole('region', { name: 'Bot desktop', exact: true })
   )
   await waitFor(() =>
-    expect(desktop.getByRole('status')).toHaveTextContent(/^streaming$/)
+    expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view connected$/)
   )
   expect(desktop.getByText('View only')).toBeInTheDocument()
   expect(desktop.queryByRole('button', { name: 'Reconnect view' })).toBeNull()
@@ -1739,7 +1818,7 @@ it('reconnects a paused view-only desktop after failed hand back without resumin
     'control/hand-back',
     expect.objectContaining({ identity })
   )
-  expect(desktop.getByRole('status')).toHaveTextContent(/^ended$/)
+  expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view ended$/)
   expect(mocks.stop).toHaveBeenCalledTimes(1)
   expect(mocks.start).toHaveBeenCalledTimes(1)
   expect(leases).toBe(1)
@@ -1749,7 +1828,7 @@ it('reconnects a paused view-only desktop after failed hand back without resumin
 
   const stopped = mocks.start.mock.calls[0][0] as MediaSessionOptions
   act(() => stopped.onStatus?.('streaming'))
-  expect(desktop.getByRole('status')).toHaveTextContent(/^ended$/)
+  expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view ended$/)
   expect(desktop.getByRole('button', { name: 'Reconnect view' })).toBe(
     reconnect
   )
@@ -1780,7 +1859,7 @@ it('reconnects a paused view-only desktop after failed hand back without resumin
     })
   )
   await waitFor(() =>
-    expect(desktop.getByRole('status')).toHaveTextContent(/^streaming$/)
+    expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view connected$/)
   )
   expect(desktop.getByText('View only')).toBeInTheDocument()
   expect(desktop.queryByRole('button', { name: 'Reconnect view' })).toBeNull()
@@ -1843,7 +1922,7 @@ it('closes a desktop ticket arriving after failed hand back and waits for manual
     await screen.findByRole('region', { name: 'Bot desktop', exact: true })
   )
   await waitFor(() => expect(leases).toBe(1))
-  expect(desktop.getByRole('status')).toHaveTextContent(/^connecting$/)
+  expect(desktop.getByRole('status')).toHaveTextContent(/^Connecting to the desktop…$/)
   expect(mocks.start).not.toHaveBeenCalled()
 
   fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
@@ -1857,7 +1936,7 @@ it('closes a desktop ticket arriving after failed hand back and waits for manual
     'control/hand-back',
     expect.objectContaining({ identity })
   )
-  expect(desktop.getByRole('status')).toHaveTextContent(/^ended$/)
+  expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view ended$/)
   expect(leases).toBe(1)
   expect(useGbotCompanion.getState().snapshot.controls[0].state).toBe('paused')
   expect(useGbotCompanion.getState().tasks[0].state).toBe('paused')
@@ -1877,7 +1956,7 @@ it('closes a desktop ticket arriving after failed hand back and waits for manual
     )
   )
   expect(mocks.start).not.toHaveBeenCalled()
-  expect(desktop.getByRole('status')).toHaveTextContent(/^ended$/)
+  expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view ended$/)
   expect(desktop.getByRole('button', { name: 'Reconnect view' })).toBe(
     reconnect
   )
@@ -1904,7 +1983,7 @@ it('closes a desktop ticket arriving after failed hand back and waits for manual
     })
   )
   await waitFor(() =>
-    expect(desktop.getByRole('status')).toHaveTextContent(/^streaming$/)
+    expect(desktop.getByRole('status')).toHaveTextContent(/^Desktop view connected$/)
   )
   expect(desktop.getByText('View only')).toBeInTheDocument()
   expect(desktop.queryByRole('button', { name: 'Reconnect view' })).toBeNull()

@@ -49,6 +49,26 @@ have separate receipts in `verification-result.json` and the adjacent logs.
 Production/test source stayed unchanged throughout. CPU88–95 booking3314 was
 returned after all jobs exited. Next: release-owner installed native brain
 selection and execution from the integrated candidate.
+## Desktop connection guidance — Gchat 2
+
+`GBOT-DESKTOP-CONNECTION-ERROR-GUIDANCE`, based on main `9c93804cf`,
+replaces transport status tokens with plain desktop connection messages. Failed
+opens and media connections show a recovery step beside Reconnect view;
+technical diagnostics stay in Details, initially closed. An ended view explains
+how to open it again. Only an explicit retry opens a new view; the guidance does
+not send task, control or computer connection actions.
+
+Rendered regressions cover failed opens, failed media, diagnostic disclosure,
+explicit retry and an ended view. Unchanged production reproduced all three
+failures (37 filtered); the fixed companion suite passed all 40 tests with
+`node node_modules/vitest/vitest.mjs run web-app/src/containers/GbotCompanion.test.tsx`.
+Lint passed with 0 errors / 5 existing warnings. ONE `make verify`, 18 October
+14:00:52–14:06:43 UTC, passed: 3,624 app / 6 skipped, 127 extension, 1,304 Rust /
+28 ignored across 23 summaries, all six coverage floors, typecheck and guards.
+All 3,457 tracked raw source hashes and modes stayed unchanged through the gate;
+this final receipt was added afterward. CPU120–127 booking3320 returned 14:07Z.
+Evidence: `out/gchat2-desktop-connection-error-guidance-20261018/result.json`.
+Installed/native connection acceptance is separate.
 
 ## Failed cloud SSH checks keep retry guidance — Gchat 2
 
