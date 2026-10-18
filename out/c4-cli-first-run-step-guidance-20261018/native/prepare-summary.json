@@ -1,0 +1,31 @@
+{
+  "keys": [
+    "all_formats_complete",
+    "available",
+    "base_complete",
+    "checkpoint_available",
+    "diagnostic_tail",
+    "duration_source",
+    "elapsed_ms",
+    "engine_path",
+    "error",
+    "expected_duration_ms",
+    "finished_unix_ms",
+    "gpu_uuids",
+    "job_id",
+    "pending_gpu_groups",
+    "phase",
+    "phase_detail",
+    "pid",
+    "profile_path",
+    "remaining_ms",
+    "reprofile",
+    "scope",
+    "scope_complete",
+    "selected_artifact",
+    "stale_groups",
+    "started_unix_ms",
+    "status"
+  ],
+  "hardware_profile": null
+}

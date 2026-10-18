@@ -1,0 +1,47 @@
+{
+  "row": "CLI-FIRST-RUN-STEP-GUIDANCE",
+  "status": "PASS through actual catalog boundary",
+  "source_base": "84d6b23f009f68eb413537f18c52e5b861b86d09",
+  "launcher_sha256": "ee9cb28ecdfe188b2565d30bb1cfd1608214dc8adf540351354687919be11d54",
+  "scope": "Two first-run CLI messages; behavior/runtime ownership/Engine unchanged",
+  "host": "S1 ron@192.168.1.109 AIS-2-8592-L01",
+  "remote_root": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018",
+  "booking": 3005,
+  "cpus": "112-119",
+  "job_pid": 2939076,
+  "focused_tests": [
+    "first_run::tests::shared_progress_resumes_in_order",
+    "first_run::tests::verified_download_choices_precede_selected_profiling_and_survive_restart"
+  ],
+  "make_verify_invocations": 1,
+  "native_status": "PASS",
+  "native_limit": "Empty release-bearing catalog prevents selected-artifact profiling; no fixture or model execution authorized",
+  "prior_archive": "Preserved unchanged; no archive rebuild",
+  "host_sha256": "a2920cc133201fc260dc38ea25f9d907c19d3d519bf45273f860748aca06f24e",
+  "job_exit": 0,
+  "job_start": "2026-10-18T04:58:21.047409+00:00",
+  "job_end": "2026-10-18T05:05:04.434187+00:00",
+  "gates": "gates.json",
+  "native_start": "2026-10-18T05:06:53Z",
+  "native_end": "2026-10-18T05:07:08Z",
+  "native_gpu_uuids": [
+    "GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c"
+  ],
+  "native_step": "models",
+  "hardware_profile_status": "idle",
+  "runtime_set": false,
+  "source_scope": "Exactly two println replacements in launcher.rs",
+  "profiling_message_evidence": "Source, focused progression tests and compiled Host; not natively reached because published release catalog is empty",
+  "resource_return": "2026-10-18T05:07Z; booking3005 canceled; Host2999322 and keyring2998677 absent",
+  "execution_recovery": {
+    "first_native_attempt": "Prompt displayed; Python heredoc supplied EOF instead of forwarding PTY keyboard input. Exact private Host stopped05:06:32Z. No state choice or calibration occurred.",
+    "correction": "Fresh step-guidance-native-pty state; python -c inherits PTY stdin. Actual inputs 2, Enter, q completed0. No gates or builds repeated.",
+    "prevention": "Interactive subprocess launch uses python -c/direct exec, preserving PTY stdin; no heredoc source on stdin."
+  },
+  "retention": {
+    "local": "This worktree source and concise evidence; no archive/binary copied locally",
+    "S1": "Owned retained root/cache plus prior accepted archive/native receipts and new step-guidance Host/native evidence kept temporarily pending merge and coordinated cleanup",
+    "donors": "No donor writes/deletion; prior accepted archive unchanged",
+    "S1_size": "33GiB total by du after native terminal; retained temporarily pending parent merge/cleanup"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "data_dir": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/step-guidance-native-pty/data/ginfer/host",
+  "host_url": "https://127.0.0.1:7549",
+  "desktop": {
+    "provider": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/step-guidance-native-pty/data/ginfer",
+    "engine": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/lib/ginfer/bin/ginfer-serve",
+    "runtime_set": false
+  }
+}
