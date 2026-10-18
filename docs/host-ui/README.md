@@ -27,18 +27,32 @@ acknowledged deletion; an old A read cannot replace or omit a re-added B.
 No delete/load/Stop mutation is replayed. Run focused deletion tests, lint and
 exactly one new `make verify`, as requested for this correction; return to
 Codex 8 before mailing merge-ready. No backend, Engine, installed-app or Windows
-qualification changes. Next: implement the request identities, integrate the
-rendered regressions, freeze source and run those gates. No fixture, booking
-or resource hold is active. The separate Stop/status candidate is preserved.
+qualification changes. Source `540b1761f` implements that contract with five
+added regressions. All 31 focused cases across both deletion suites passed;
+lint passed with zero errors and five existing unrelated warnings. Exactly one
+new `make verify` passed at **21:55:01Z**: **3,834 app tests / six skipped,
+130 extension tests, 65 Node contract tests and 1,319 native tests / 28 ignored**
+across 23 native summaries, all six critical coverage floors, typecheck and
+quality guards. The coordinator directly reviewed the raw stage results and
+exited-zero container, plus unchanged before/after bindings for three source
+files, 35 dependencies and eleven catalogs / 48 profiles. No test reruns occurred.
+Booking3588 CPU104–111 returned **21:56Z** and was canceled.
+Next: Codex 8 review, then mail merge-ready on acceptance.
+No GPU or Windows resource hold exists. The separate Stop/status candidate is
+preserved.
 
-Retained rejected-candidate evidence is currently
+Current correction evidence is
 `out/c7-models-delete-overlap-recovery-20261018/test-result.json` and
-`test-summary.md`; replace the current result with the correction's outcome
-while retaining a concise rejection note. Reuse the owned S1 fixture path
+`test-summary.md`, with the prior candidate retained only as a concise rejection
+note. The owned S1 fixture is
 `/media/ron/SSD_RAID/ai/tmp-c7-models-delete-overlap-recovery-20261018`
-only after confirming it remains absent. Reuse the inactive offline donor;
-compare its manifest references separately from the candidate's test-only
-Tokio addition, which caused the previous preparation to stop before tests.
+and was recreated only after confirming the previous fixture was absent.
+The inactive offline donor's manifest references were compared separately from
+the candidate's test-only Tokio addition; this prevents the mismatch that
+stopped the previous preparation before tests. The reviewed fixture and sole
+exited candidate container were retired at **21:57:58Z**; the coordinator
+independently confirmed both absent and the inactive donor retained. Only the
+result JSON and short summary remain. Protected inputs are preserved.
 
 ## Models accepted deletion and inventory recovery — C7, October 18
 
