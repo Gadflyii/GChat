@@ -328,26 +328,20 @@ const ChatInput = memo(function ChatInput({
     selectedAgentDefinitionId,
   ])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!preselectedAgentSkillName) {
       preselectedAgentSkillAppliedRef.current = null
       return
     }
     if (
-      agentSkillsLoading ||
       preselectedAgentSkillAppliedRef.current === preselectedAgentSkillName
     ) {
       return
     }
-    const skill = findAvailableAgentSkill(
-      agentSkills,
-      preselectedAgentSkillName
-    )
+    // Keep the explicit choice while its catalog is loading or unavailable.
     preselectedAgentSkillAppliedRef.current = preselectedAgentSkillName
-    if (skill) setDraftSkill(conversationKey, skill.name)
+    setDraftSkill(conversationKey, preselectedAgentSkillName)
   }, [
-    agentSkills,
-    agentSkillsLoading,
     conversationKey,
     preselectedAgentSkillName,
     setDraftSkill,

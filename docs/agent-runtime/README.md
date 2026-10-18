@@ -22,6 +22,21 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Try in chat skill catalog failures — October 18
+
+A private Linux native walk found that **Try in chat** silently lost the chosen
+skill when the new composer's skill-catalog read failed. Typing a task enabled
+Send without a skill chip, error or recovery guidance. The failure was induced
+only by temporarily removing read access to the disposable private skill
+directory; permissions were restored and no message was submitted. Baseline:
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1927/baseline.json`.
+
+The route now records the chosen skill before catalog resolution. The existing
+draft-skill safeguards hold Send and Enter while loading or unresolved. A failed
+read offers **Retry** or an explicit **Send without skill**; retry restores the
+original choice, and explicit opt-out clears the previous active skill. Later
+user choices and a successfully cleared draft retain the existing behavior.
+
 ## Saved-run deletion confirmation — October 18
 
 A private native Linux pass found that choosing **Delete** from a saved run’s
