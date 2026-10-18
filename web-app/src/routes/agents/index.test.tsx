@@ -326,6 +326,7 @@ describe('AgentStudioPage', () => {
         id === firstAgent.id ? firstAgent : secondAgent
       ))
       await renderRunHistory()
+      navigate.mockClear()
       const user = userEvent.setup()
 
       for (const run of [firstHistoricalRun, secondHistoricalRun]) {
@@ -354,6 +355,7 @@ describe('AgentStudioPage', () => {
 
   it('returns a dismissed continuation to its result overview button', async () => {
     await renderRunHistory()
+    navigate.mockClear()
     const user = userEvent.setup()
     const trigger = screen.getByRole('button', { name: 'Continue as new run…' })
     trigger.focus()
