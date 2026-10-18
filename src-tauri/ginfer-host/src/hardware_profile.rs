@@ -1727,7 +1727,7 @@ fn read_tail(
 mod tests {
     use super::*;
     use crate::{
-        engine_host::{EngineLaunch, LaunchOptions},
+        engine_host::{EngineLaunch, HostProcesses, LaunchOptions},
         service::{Gpu, Host},
     };
     use hyper::{Body, Request};
@@ -1853,7 +1853,7 @@ mod tests {
         let host = Host::open(
             state.clone(),
             "Profiling fixture".into(),
-            serve,
+            serve.clone(),
             vec![],
             vec![],
             vec![
@@ -1875,6 +1875,21 @@ mod tests {
         )
         .await
         .unwrap();
+        // These scripts simulate GPUs even when CPU-only validation masks the
+        // machine's physical devices. Keep their inventory local to the fixture.
+        let mut processes = HostProcesses::new(
+            serve,
+            ["GPU-fixture".into(), "GPU-second".into()].into(),
+            Duration::from_secs(600),
+        )
+        .unwrap();
+        processes.hardware_profile = host.processes.lock().await.hardware_profile.clone();
+        processes
+            .hardware_profile
+            .as_ref()
+            .unwrap()
+            .set_activity_notification(processes.activity_notification());
+        *host.processes.lock().await = processes;
         Configuration {
             gpu_uuids: vec!["GPU-fixture".into()],
             engine: cli,
@@ -3179,12 +3194,11 @@ mod tests {
         );
         assert!(resumed["reprofile"].as_bool().unwrap());
         assert_ne!(resumed["job_id"], first["job_id"]);
-        assert!(host
-            .processes
+        host.processes
             .lock()
             .await
             .validate_launch(&launch, false)
-            .is_ok());
+            .unwrap();
     }
     #[tokio::test]
     async fn hardware_profile_exit_zero_requires_v2_before_publishing_accepted_file() {

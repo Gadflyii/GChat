@@ -23,15 +23,34 @@ bytes are not replaced by the failed run. Focused regressions cover the failed
 native job/persist/resume path in both all-format and artifact scopes and both
 visible screens. All-format profiling now requests the existing JSON result so
 the typed failure reaches first-run setup; its Windows command guard admits that
-exact shape. No build or test has run yet. The authorized verification uses a
-private copy of retained dependencies/build cache under
+exact shape. Source **97755dd8c** is committed and pushed. Authorized verification
+started at **23:02:30Z** on S1, using a private copy of retained
+dependencies/build cache under
 `/media/ron/SSD_RAID/ai/tmp-c4-profile-ram-message-20261018` on S1, with disjoint
-booked socket-1 CPUs and the shared compile guard. Focused tests, Rust check/clippy
-and ONE `make verify` remain pending. Existing RC execution remains parent-owned.
+booked socket-1 CPUs **72–79** (through23:32Z) and the shared compile guard.
+The durable run owns `launch.log`, per-stage logs/exits and
+`validation-command.json` there. Its donor
+`/media/ron/SSD_RAID/ai/tmp-gchat3-windows-consumer-host-20261018` remains read-only.
+The first focused sequence stopped before Rust check/clippy or `make verify`:
+both UI suites passed **65/65** tests; Host profiling passed **25/27**, including
+the new typed-failure regression in both scopes. The two failing shell-only
+launch fixtures inherited `CUDA_VISIBLE_DEVICES=''`, so `Host::open` correctly
+created an empty visible GPU inventory and rejected `GPU-fixture` before the
+intended fingerprint/cancel-resume checks. This was a fixture assumption, not
+an AllFormats JSON command failure. The preventive correction gives this fixture
+an explicit synthetic process inventory, preserving the production visibility
+mask, real command construction and profiling-job activity link. Its final
+launch assertion now exposes the rejection message. Rerun only those two failed
+cases first; inspect their outputs before check/clippy and the still-unrun ONE
+`make verify`. Booking3626 returned23:07Z and is canceled. The small local command
+receipt is `out/profile-ram-message-20261018/validation-command.json`. Existing RC execution
+remains parent-owned. Ada retry is **pending Ron via Bubbs**, per the23:01Z
+instruction. Arch withdrew the cache-reclaim suggestion at23:02Z; this task
+changes no cache, system or RAM-floor policy and performs no target action.
 
-Prepared focused checks (not run):
+Focused checks in the launched sequence:
 `yarn workspace @gchat/web-app test src/containers/__tests__/EngineHardwareProfile.test.tsx src/containers/__tests__/EngineFirstRun.test.tsx`
-and `cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml --lib hardware_profile::tests::hardware_profile_retains_typed_ram_failure_and_clears_it_after_resume`.
+and `cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml --lib hardware_profile::tests -- --nocapture`.
 The repository's applicable lint/typecheck/Rust checks remain pending.
 
 Current priority (21:47Z): the driver-bound Host and ordinary actual-Start receipt marker are complete. The driver-key delta passed four focused regressions, check, clippy and standalone Host build at21:33:09Z; the marker continuation passed the same delta checks at21:44:19Z. Parent review confirms the raw Flash/Qwen/Muse sequence: unknown/0 before a matching Ready receipt, then receipt/1200 on the second actual Start. Retain the completed ONE make verify (frontend3751, extension127, six coverage floors, Rust1318) and request-log focused2/check/clippy/Host317/build. C1's ac53611e0 implements Arch21:36's total physical startup overhead minus weight/state ledger, with at most2MiB total rounding and separate cuda_graph_observed_bytes diagnostics. The first/second laptop53248 Automatic app gates remain held for its corrected Engine donor, six secondReady controls and residual clearance. GINFER_HOST_REQUEST_LOG_JSONL remains an absolute owned spawn-only control; no catalog graph field. Unknown or changed NVIDIA drivers prevent receipt reuse, and unknown drivers prevent saving; first solo Automatic remains available.
