@@ -207,13 +207,19 @@ test('shared first-run flow selects GPUs, resumes work and approves Engine start
       view.first_run = { ...view.first_run, step: 'storage', storage: { ...initial.storage, error: 'One disk could not be measured', candidates: [{ path: '/full', available_bytes: 0, eligible: false, reason: 'Insufficient capacity' }] } }
     } else if (args.action === 'storage') {
       assert.equal(args.path, '/chosen')
-      view.first_run = { ...view.first_run, step: 'models', catalog_loaded: false }
+      view.first_run = { ...view.first_run, step: 'models', catalog_loaded: false, storage: { ...view.first_run.storage, path: args.path } }
     } else if (args.action === 'refresh_catalog') {
       view.first_run = { ...view.first_run, catalog_loaded: true, models: [{ release, recommended: true, reason: 'Fits measured memory' }] }
     } else if (args.action === 'models') {
       assert.deepEqual(args.release_ids, [release.sha256])
       view.first_run = { ...view.first_run, step: 'downloads', selected_downloads: [{ id: 'download', release, status: 'failed', received: 1024, bytes_per_second: 0, error: 'Network interrupted' }] }
     } else if (args.action === 'resume') {
+      view.first_run = { ...view.first_run, step: 'storage_review', storage: { ...view.first_run.storage,
+        review_key: 'verified-placement', required_bytes: release.bytes,
+        selected_models: [{ download_id: 'download', name: release.name, path: '/chosen/muse.ginfer', bytes: release.bytes }],
+      } }
+    } else if (args.action === 'accept_storage') {
+      assert.deepEqual(args, { action: 'accept_storage', review_key: 'verified-placement' })
       view.first_run = { ...view.first_run, step: 'startup', startup_profiles: [] }
     } else if (args.action === 'startup') {
       assert.deepEqual(args, { action: 'startup', download_id: 'download', concurrency: 2, max_context: 32768, instance_count: 1, kv_arena_bytes: null })
@@ -242,6 +248,12 @@ test('shared first-run flow selects GPUs, resumes work and approves Engine start
   button(app.document, 'Download selected models').click()
   await waitFor(() => app.document.body.textContent.includes('Network interrupted'), 'download failure must render')
   button(app.document, 'Resume downloads').click()
+  await waitFor(() => app.document.body.textContent.includes('Review model locations'), 'verified downloads must lead to a placement review')
+  assert.equal(app.document.querySelector('[aria-label="Model download folder"]').value, '/chosen', 'the recommendation must not replace the saved destination')
+  assert.match(app.document.body.textContent, /Current location: \/chosen\/muse.ginfer/)
+  assert.equal([...app.document.querySelectorAll('button')].some(item => item.textContent === 'Finish local setup'), false)
+  assert.equal(requests(app).at(-1).args.action, 'resume', 'the review must wait for an explicit decision')
+  button(app.document, 'Keep these locations and continue').click()
   await waitFor(() => app.document.body.textContent.includes('Preparing startup settings and checking Engine memory…'), 'initial quote preparation must be visible')
   assert.equal(button(app.document, 'Finish local setup').disabled, true)
   view.first_run.startup_profiles = [startup]
@@ -283,6 +295,87 @@ test('first-run storage preserves typed and candidate choices when the catalog a
     await completed(app, calls => calls.length === 1)
     assert.equal(requests(app)[0].args.path, expected)
   }
+})
+
+test('measured placement review saves a destination separately from moving a selected model', async (t) => {
+  const view = fixture()
+  view.first_run = { step: 'storage_review', gpu_uuids: ['GPU-local'], hardware_profile: { status: 'completed', scope: 'artifact', scope_complete: true },
+    storage: { path: '/models', recommended_path: '/fast', available_bytes: 1024 ** 4, required_bytes: 3 * 1024 ** 3, review_key: 'original-placement',
+      selected_models: [
+        { download_id: 'muse', name: 'Muse', path: '/models/muse.ginfer', bytes: 1024 ** 3 },
+        { download_id: 'qwen', name: 'Qwen', path: '/models-other/qwen.ginfer', bytes: 2 * 1024 ** 3 },
+      ],
+      candidates: [
+        { path: '/fast', available_bytes: 1024 ** 4, required_bytes: 3 * 1024 ** 3, eligible: true, measured_read_bytes_per_second: 2048 * 1024 ** 2 },
+        { path: '/full', available_bytes: 0, eligible: false, reason: 'Not enough free space for the selected models' },
+      ],
+    }, models: [], selected_downloads: [], startup_profiles: [],
+  }
+  const app = await manager(t, view, request => {
+    const args = request.args
+    if (args.action === 'storage') {
+      assert.deepEqual(args, { action: 'storage', path: '/fast' })
+      view.first_run.storage = { ...view.first_run.storage, path: args.path, review_key: 'chosen-destination' }
+    } else if (args.action === 'move') {
+      assert.deepEqual(args, { action: 'move', download_id: 'qwen' })
+      view.first_run = { ...view.first_run, step: 'profiling', hardware_profile: { status: 'running', scope: 'artifact' } }
+    } else assert.fail(`unexpected first-run action ${args.action}`)
+    return structuredClone(view.first_run)
+  })
+  await waitFor(() => app.document.body.textContent.includes('Review model locations'), 'review must render')
+  assert.equal(app.document.querySelector('[aria-label="Model download folder"]').value, '/models')
+  assert.match(app.document.body.textContent, /Selected models: 3.0 GiB total/)
+  assert.match(app.document.body.textContent, /Muse · 1.0 GiB/)
+  assert.match(app.document.body.textContent, /Qwen · 2.0 GiB/)
+  assert.match(app.document.body.textContent, /Current location: \/models-other\/qwen.ginfer/)
+  assert.match(app.document.body.textContent, /Eligible · Measured read: 2048.0 MiB\/s · Additional space needed: 3.0 GiB/)
+  assert.match(app.document.body.textContent, /Unavailable · Read speed unavailable/)
+  assert.match(app.document.body.textContent, /Not enough free space for the selected models/)
+  assert.equal(button(app.document, '/full · 0.0 GiB free').disabled, true)
+  assert.equal([...app.document.querySelectorAll('button')].some(item => item.textContent === 'Move Muse to selected storage'), false)
+  assert.equal(button(app.document, 'Move Qwen to selected storage').disabled, false)
+  assert.deepEqual(requests(app), [], 'opening the review must not accept, move, or change the destination')
+
+  button(app.document, '/fast · 1024.0 GiB free').click()
+  assert.equal(app.document.querySelector('[aria-label="Model download folder"]').value, '/fast')
+  assert.equal(button(app.document, 'Keep these locations and continue').disabled, true, 'an unsaved destination cannot be accepted')
+  assert.deepEqual(requests(app), [], 'choosing a candidate only edits the destination')
+  button(app.document, 'Use this folder').click()
+  await completed(app, calls => calls.length === 1)
+  assert.match(app.document.body.textContent, /Selected download folder: \/fast/)
+  assert.match(app.document.body.textContent, /Current location: \/models-other\/qwen.ginfer/)
+  assert.equal(button(app.document, 'Keep these locations and continue').disabled, false)
+  assert.deepEqual(requests(app).map(request => request.args.action), ['storage'])
+
+  button(app.document, 'Move Qwen to selected storage').click()
+  await completed(app, calls => calls.length === 2)
+  assert.match(app.document.body.textContent, /Hardware profiling: running/)
+  assert.equal([...app.document.querySelectorAll('button')].some(item => item.textContent === 'Keep these locations and continue'), false)
+  assert.deepEqual(requests(app).map(request => request.args.action), ['storage', 'move'])
+
+  app.runtime.stop()
+  view.first_run = { ...view.first_run, step: 'storage_review', storage: { ...view.first_run.storage, review_key: 'moved-placement',
+    selected_models: view.first_run.storage.selected_models.map(model => model.download_id === 'qwen' ? { ...model, path: '/fast/qwen.ginfer' } : model),
+  } }
+  const reopened = await manager(t, view, request => {
+    assert.deepEqual(request.args, { action: 'accept_storage', review_key: 'moved-placement' })
+    return { ...view.first_run, step: 'startup', startup_profiles: [] }
+  })
+  await waitFor(() => reopened.document.body.textContent.includes('Current location: /fast/qwen.ginfer'), 'reopening must show the new managed location')
+  assert.deepEqual(requests(reopened), [], 'reopening the updated review must not accept it')
+  assert.equal([...reopened.document.querySelectorAll('button')].some(item => item.textContent === 'Move Qwen to selected storage'), false)
+  button(reopened.document, 'Keep these locations and continue').click()
+  await completed(reopened, calls => calls.length === 1)
+  assert.equal(button(reopened.document, 'Finish local setup').disabled, true, 'startup still waits for fresh Engine quotes')
+})
+
+test('placement review waits for the current Host review key', async (t) => {
+  const view = fixture()
+  view.first_run = { step: 'storage_review', gpu_uuids: ['GPU-local'], storage: { path: '/models' }, models: [] }
+  const app = await manager(t, view)
+  await waitFor(() => app.document.body.textContent.includes('Review model locations'), 'review must render')
+  assert.equal(button(app.document, 'Keep these locations and continue').disabled, true)
+  assert.deepEqual(requests(app), [])
 })
 
 test('secure storage results show neutral success and an error alert only on failure', async (t) => {

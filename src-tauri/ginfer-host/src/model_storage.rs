@@ -22,6 +22,7 @@ pub struct StorageCandidate {
     pub path: PathBuf,
     pub measured_read_bytes_per_second: Option<f64>,
     pub available_bytes: Option<u64>,
+    pub required_bytes: u64,
     pub eligible: bool,
     pub reason: Option<String>,
 }
@@ -61,6 +62,7 @@ struct InspectedCandidate {
     identity: Option<DiskIdentity>,
     available_bytes: Option<u64>,
     failures: Vec<String>,
+    required_bytes: Option<u64>,
 }
 
 /// Recommend placement using saved native measurements and current filesystem
@@ -70,6 +72,31 @@ pub async fn recommend_storage(
     profile: &serde_json::Value,
     requested_root: &Path,
     required_bytes: u64,
+) -> Result<StorageRecommendation, String> {
+    recommend_placement(profile, requested_root, required_bytes, &[]).await
+}
+
+/// Review the actual selected packages. Existing verified files in a candidate
+/// folder consume no additional space; a different destination needs the bytes
+/// still to be copied plus the managed mover's staging reserve.
+pub async fn recommend_storage_for_models(
+    profile: &serde_json::Value,
+    requested_root: &Path,
+    models: &[(PathBuf, u64)],
+) -> Result<StorageRecommendation, String> {
+    let required = models.iter().try_fold(0u64, |total, (_, bytes)| {
+        total
+            .checked_add(*bytes)
+            .ok_or("Selected package size overflow")
+    })?;
+    recommend_placement(profile, requested_root, required, models).await
+}
+
+async fn recommend_placement(
+    profile: &serde_json::Value,
+    requested_root: &Path,
+    required_bytes: u64,
+    models: &[(PathBuf, u64)],
 ) -> Result<StorageRecommendation, String> {
     if profile
         .get("schema_version")
@@ -92,7 +119,21 @@ pub async fn recommend_storage(
     .map_err(|error| format!("Invalid hardware profile disk inventory: {error}"))?;
     let mut inspected = Vec::with_capacity(disks.len());
     for disk in &disks {
-        inspected.push(inspect_candidate(disk.clone(), requested_root.to_path_buf()).await);
+        let mut candidate = inspect_candidate(disk.clone(), requested_root.to_path_buf()).await;
+        if !models.is_empty() && candidate.identity.is_some() {
+            let path = candidate.path.clone();
+            let models = models.to_vec();
+            match tokio::task::spawn_blocking(move || {
+                placement_required_bytes(&path, required_bytes, &models)
+            })
+            .await
+            .map_err(|error| format!("Cannot inspect installed model placement: {error}"))?
+            {
+                Ok(bytes) => candidate.required_bytes = Some(bytes),
+                Err(error) => candidate.failures.push(error),
+            }
+        }
+        inspected.push(candidate);
     }
     Ok(select_storage(
         &disks,
@@ -100,6 +141,38 @@ pub async fn recommend_storage(
         requested_root,
         required_bytes,
     ))
+}
+
+fn placement_required_bytes(
+    path: &Path,
+    total: u64,
+    models: &[(PathBuf, u64)],
+) -> Result<u64, String> {
+    let (root, ancestor) = canonical_existing_prefix(path)?;
+    let identity = live_disk_identity(&ancestor)?;
+    let mut remaining = total;
+    for (model, bytes) in models {
+        let Ok(current) = fs::canonicalize(model) else {
+            continue;
+        };
+        if current.starts_with(&root)
+            && fs::metadata(&current)
+                .is_ok_and(|metadata| metadata.is_file() && metadata.len() == *bytes)
+            && live_disk_identity(&current)
+                .is_ok_and(|disk| disk.filesystem_id == identity.filesystem_id)
+        {
+            remaining = remaining
+                .checked_sub(*bytes)
+                .ok_or("Selected package size overflow")?;
+        }
+    }
+    if remaining == 0 {
+        Ok(0)
+    } else {
+        remaining
+            .checked_add(64 << 20)
+            .ok_or_else(|| "Selected package size overflow".into())
+    }
 }
 
 fn saved_rate(disk: &SavedDisk) -> Option<f64> {
@@ -132,6 +205,7 @@ fn select_storage(
     required_bytes: u64,
 ) -> StorageRecommendation {
     let mut candidates: Vec<StorageCandidate> = disks.iter().zip(inspected).map(|(disk, live)| {
+        let required_bytes = live.required_bytes.unwrap_or(required_bytes);
         let rate = saved_rate(disk);
         let mut failures = live.failures;
         if rate.is_none() {
@@ -161,6 +235,7 @@ fn select_storage(
             path: live.path,
             measured_read_bytes_per_second: rate,
             available_bytes: live.available_bytes,
+            required_bytes,
             eligible: failures.is_empty(),
             reason: (!failures.is_empty()).then(|| failures.join("; ")),
         }
@@ -256,6 +331,7 @@ async fn inspect_candidate(disk: SavedDisk, requested: PathBuf) -> InspectedCand
                 identity: Some(identity),
                 available_bytes,
                 failures,
+                required_bytes: None,
             }
         }
         Err(error) => InspectedCandidate {
@@ -263,6 +339,7 @@ async fn inspect_candidate(disk: SavedDisk, requested: PathBuf) -> InspectedCand
             identity: None,
             available_bytes: None,
             failures: vec![error],
+            required_bytes: None,
         },
     }
 }
@@ -745,7 +822,84 @@ mod tests {
             }),
             available_bytes: Some(available),
             failures,
+            required_bytes: None,
         }
+    }
+
+    #[tokio::test]
+    async fn selected_storage_uses_total_sizes_and_credits_only_files_already_in_place() {
+        let directory = tempfile::tempdir().unwrap();
+        let current = directory.path().join("models");
+        let other = directory.path().join("other");
+        fs::create_dir(&current).unwrap();
+        fs::create_dir(&other).unwrap();
+        let a = current.join("a.ginfer");
+        let b = current.join("b.ginfer");
+        fs::write(&a, [1; 100]).unwrap();
+        fs::write(&b, [2; 200]).unwrap();
+        let models = vec![(a.clone(), 100), (b.clone(), 200)];
+        let profile = serde_json::json!({"schema_version":2,"disks":[]});
+        let recommendation = recommend_storage_for_models(&profile, &current, &models)
+            .await
+            .unwrap();
+        assert_eq!(recommendation.required_bytes, 300);
+        assert!(recommendation.recommended_path.is_none()); // No invented rate.
+        assert_eq!(placement_required_bytes(&current, 300, &models).unwrap(), 0);
+        assert_eq!(
+            placement_required_bytes(&other, 300, &models).unwrap(),
+            300 + (64 << 20)
+        );
+        // One retained file needs no second copy; the other must be staged.
+        let moved = other.join("b.ginfer");
+        fs::rename(&b, &moved).unwrap();
+        let split = vec![(a.clone(), 100), (moved.clone(), 200)];
+        assert_eq!(
+            placement_required_bytes(&current, 300, &split).unwrap(),
+            200 + (64 << 20)
+        );
+        assert_eq!(
+            placement_required_bytes(&other, 300, &split).unwrap(),
+            100 + (64 << 20)
+        );
+        // A changed file cannot obtain space credit from its old download size.
+        fs::write(&a, [1; 99]).unwrap();
+        assert_eq!(
+            placement_required_bytes(&current, 300, &split).unwrap(),
+            300 + (64 << 20)
+        );
+        assert!(a.is_file() && moved.is_file()); // Recommendations never move.
+        assert!(
+            recommend_storage_for_models(&profile, &current, &[(a, u64::MAX), (moved, 1)])
+                .await
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn placement_ranking_respects_retained_file_credit_and_live_free_space() {
+        let disks = vec![
+            measured_disk("/fast", "fast", 300.0),
+            measured_disk("/current", "current", 100.0),
+        ];
+        let mut fast = inspected("/fast/ginfer/models", "fast", 399, vec![]);
+        fast.required_bytes = Some(400);
+        let mut current = inspected("/current/models", "current", 0, vec![]);
+        current.required_bytes = Some(0);
+        let result = select_storage(
+            &disks,
+            vec![fast, current],
+            Path::new("/current/models"),
+            300,
+        );
+        assert_eq!(result.required_bytes, 300);
+        assert_eq!(
+            result.recommended_path,
+            Some(PathBuf::from("/current/models"))
+        );
+        assert_eq!(result.candidates[0].required_bytes, 400);
+        assert!(!result.candidates[0].eligible);
+        assert!(result.candidates[1].eligible);
+        assert_eq!(result.candidates[1].required_bytes, 0);
     }
 
     #[test]

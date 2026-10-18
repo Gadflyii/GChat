@@ -376,6 +376,90 @@ pub async fn first_run(control: &LocalControl) -> Result<(), String> {
                 }
                 json!({"action":"models","release_ids":selected.into_iter().map(|index| models[index]["release_id"].as_str().unwrap_or_else(|| models[index]["release"]["sha256"].as_str().unwrap_or(""))).collect::<Vec<_>>()})
             }
+            Some("storage_review") => {
+                let storage = &flow["storage"];
+                let root = storage["path"].as_str().unwrap_or("");
+                println!("\nReview measured model storage before startup. Managed folder: {root}");
+                println!(
+                    "Recommended folder: {}",
+                    storage["recommended_path"]
+                        .as_str()
+                        .unwrap_or("No eligible measured location")
+                );
+                if let Some(error) = storage["error"].as_str() {
+                    println!("{error}");
+                }
+                for model in storage["selected_models"].as_array().into_iter().flatten() {
+                    println!(
+                        "  {} · {:.1} GiB · {}",
+                        model["name"].as_str().unwrap_or("Model"),
+                        model["bytes"].as_u64().unwrap_or(0) as f64 / 1073741824.0,
+                        model["path"].as_str().unwrap_or("Location unavailable")
+                    );
+                }
+                for candidate in storage["candidates"].as_array().into_iter().flatten() {
+                    let rate = candidate["measured_read_bytes_per_second"]
+                        .as_f64()
+                        .map(|rate| format!("{:.1} MiB/s measured read", rate / 1048576.0))
+                        .unwrap_or_else(|| "Read speed unavailable".into());
+                    let free = candidate["available_bytes"]
+                        .as_u64()
+                        .map(|bytes| format!("{:.1} GiB free", bytes as f64 / 1073741824.0))
+                        .unwrap_or_else(|| "Free space unavailable".into());
+                    println!(
+                        "  {} · {rate} · {free} · {:.1} GiB additional space needed · {}",
+                        candidate["path"].as_str().unwrap_or("Unknown location"),
+                        candidate["required_bytes"].as_u64().unwrap_or(0) as f64 / 1073741824.0,
+                        candidate["reason"].as_str().unwrap_or("Eligible")
+                    );
+                }
+                println!("Choosing a folder changes the destination for managed downloads. Moving an installed package is a separate action.");
+                let input = prompt("[k] Keep these locations and continue  [f] Choose folder  [m] Move installed model  [Enter] Refresh  [q] Leave: ")?;
+                match input.as_str() {
+                    "q" => return Ok(()),
+                    "k" => json!({"action":"accept_storage","review_key":storage["review_key"]}),
+                    "f" => {
+                        let input = prompt("Absolute destination folder (blank to cancel): ")?;
+                        if input.is_empty() {
+                            continue;
+                        }
+                        json!({"action":"storage","path":input.trim_matches('"')})
+                    }
+                    "m" => {
+                        let models: Vec<_> = storage["selected_models"]
+                            .as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter(|model| {
+                                model["path"]
+                                    .as_str()
+                                    .is_some_and(|path| !Path::new(path).starts_with(root))
+                            })
+                            .collect();
+                        if models.is_empty() {
+                            println!("Selected models are already in the managed folder.");
+                            continue;
+                        }
+                        let labels: Vec<_> = models
+                            .iter()
+                            .map(|model| {
+                                format!(
+                                    "{} · {}",
+                                    model["name"].as_str().unwrap_or("Model"),
+                                    model["path"].as_str().unwrap_or("")
+                                )
+                            })
+                            .collect();
+                        let Some(index) =
+                            select(&labels, "Move a verified package to the chosen folder")?
+                        else {
+                            continue;
+                        };
+                        json!({"action":"move","download_id":models[index]["download_id"]})
+                    }
+                    _ => continue,
+                }
+            }
             Some("downloads") => {
                 for job in flow["selected_downloads"].as_array().into_iter().flatten() {
                     println!(

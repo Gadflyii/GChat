@@ -1,0 +1,191 @@
+{
+  "status": "PASS",
+  "owner": "Codex 4",
+  "row": "CLI-FIRST-RUN-MEASURED-STORAGE-REVIEW",
+  "scope": "Current Host998a72815 native acceptance passed: Keep persisted through normal restart and fresh selected-artifact Ensure, the ordinary startup quote passed, and completion saved the instance stopped. Normal keeper shutdown passed and resources returned at 09:33Z. Historical Host432108dbb and Host6a8dcdbb0 evidence is retained below.",
+  "prior_checks": "measured-storage-review-20261018.json",
+  "components": {
+    "host_source": "998a72815dec393a7e15275ac90ebfadd31cbdfa",
+    "host_bytes": 56930472,
+    "host_sha256": "720ef2cdc8ff3105760b465b7f8f702a9777e24e4be68b2109aa801b0f023208",
+    "engine_source": "278e94f635d3f0fbf6ac7da6a1e1559b5a1be9ce",
+    "verification_terminal_utc": "2026-10-18T09:24:49Z",
+    "focused_checks": {
+      "passed": 20,
+      "failed": 0,
+      "ignored": 1
+    },
+    "one_make_verify_exit": 0,
+    "native_host_build_exit": 0,
+    "note": "Current storage-specific fingerprint correction; the accepted native replay is recorded in next_replay. The historical sessions below used the same Engine with their stated Host revisions."
+  },
+  "installed_package": {
+    "sha256": "849fec1d7797a53f03bf548ba03d8b7a6823fa1184577a08d4f7df42aafbd5d7",
+    "bytes": 21707145472,
+    "download_id": "b757c1ea-6d2f-44ff-b385-892942fadfe2",
+    "adopted_utc": "2026-10-18T08:45:49Z",
+    "second_transfer": false
+  },
+  "session": {
+    "host": "S1; historical Host432108dbb replay",
+    "start_utc": "2026-10-18T08:43:00Z",
+    "start_precision": "minute",
+    "gpu": 1,
+    "cpus": "24-31",
+    "booking": 3170,
+    "normal_stop_utc": "2026-10-18T08:52:11Z",
+    "booking_canceled": true
+  },
+  "selected_artifact_ensure": {
+    "status": "ACCEPTED",
+    "job_id": "06ef3e87-8200-4fc0-b044-3401e425211d",
+    "elapsed_seconds": 122.291587,
+    "completed_utc_approximate": "2026-10-18T08:47:52Z",
+    "profile": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/data/ginfer/host/hardware-profiles/0349a0c8a4cf1a4009c02e9d15568279eaa3249315180f784f1c6e7c94041afb.json",
+    "disk_evidence": {
+      "RAID_sequential_read_bytes_per_second": 1254199425.45,
+      "ssd2_sequential_read_bytes_per_second": 7050107460.2,
+      "root_unavailable_reason": "No known writable parent; private HOME is on RAID."
+    },
+    "limitation": "Historical Host432108dbb accepted Ensure; the following optional-completion blocker prevented displayed storage-review acceptance."
+  },
+  "blocker": {
+    "operation": "complete_remaining_formats",
+    "observed_behavior": "Historical Host432108dbb: optional idle completion started while storage_review awaited input. The busy gate kept the CLI at profiling and hid the review. Host6a8dcdbb0 subsequently kept review visible.",
+    "retry_input": "r",
+    "retry_error": "Resolve the interrupted hardware profiling job in Hardware settings before selected-artifact profiling can continue",
+    "after_retry": "The optional completion job restarted before normal Host stop.",
+    "restarted_job_id_prefix": "d9a01519",
+    "restarted_pid": 320908
+  },
+  "decision": {
+    "authority": "Arch",
+    "signed_utc": "2026-10-18T08:52:23Z",
+    "required_guard": "Optional remaining-format admission must wait for durable first_run.complete."
+  },
+  "next_replay": {
+    "status": "PASS",
+    "required": "Native acceptance, normal keeper shutdown and resource return are complete. No further replay, transfer or move is required.",
+    "start_utc": "2026-10-18T09:27:52Z",
+    "gpu": 1,
+    "cpus": "24-31",
+    "native_exclusive": true,
+    "booking": 3210,
+    "bounded_minutes": 12,
+    "hard_end_utc": "2026-10-18T09:42:00Z",
+    "receipt_prefix": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/persist-",
+    "observed": [
+      "Fresh Keep advanced to startup at 09:28Z (minute precision)",
+      "Initial ordinary C1/context262144/automatic GPU KV startup quote passed with no error",
+      "Normal Host restart and fresh selected-artifact Ensure retained the same review key, disks, managed root, installed path and UUID; no second Keep was needed",
+      "The fresh ordinary startup quote passed after restart",
+      "Save completed at 09:30:51Z; the CLI exited normally with first_run complete and no error",
+      "The completion snapshot confirms the saved instance is stopped with no process, session or last error and unchanged ordinary launch settings"
+    ],
+    "review_key": "3e38ccf736e19db44a38af117e6d216f757aa410628d9fd64b5ffdab8cd98a0e",
+    "initial_startup_quote": {
+      "status": "PASS",
+      "concurrency": 1,
+      "context_tokens": 262144,
+      "gpu_kv": "automatic",
+      "quoted_bytes": 24794272512,
+      "error": null
+    },
+    "restart_ensure": {
+      "status": "ACCEPTED",
+      "job_id": "9d3646d3-1310-4c2e-9a5b-9c05eb8096ac",
+      "elapsed_seconds": 69.317,
+      "review_key_unchanged": true,
+      "disks_root_path_uuid_unchanged": true,
+      "second_keep_required": false
+    },
+    "post_restart_startup_quote": {
+      "status": "PASS",
+      "concurrency": 1,
+      "context_tokens": 262144,
+      "gpu_kv": "automatic"
+    },
+    "completion": {
+      "saved_utc": "2026-10-18T09:30:51Z",
+      "pty_exit": 0,
+      "pty_exit_utc": "2026-10-18T09:30:52.446675Z",
+      "stage": "complete",
+      "error": null,
+      "snapshot_utc": "2026-10-18T09:32:53.277846Z",
+      "instance_id": "71f394f7-83c7-4934-be39-e28de327cf5d",
+      "instance_status": "stopped",
+      "pid": null,
+      "session_id": null,
+      "last_error": null,
+      "ordinary_launch_config_unchanged": true
+    },
+    "stop_requested_utc": "2026-10-18T09:32:53Z",
+    "normal_stop_status": "PASS",
+    "normal_stop_utc": "2026-10-18T09:32:59.349353+00:00",
+    "lifecycle": {
+      "terminal": true,
+      "status": 0,
+      "command_returncode": 0,
+      "end_utc": "2026-10-18T09:32:59.349353+00:00",
+      "elapsed_seconds": 307.282574232202
+    },
+    "resource_return_utc": "2026-10-18T09:33:00Z",
+    "resource_return_precision": "minute",
+    "booking_canceled": true,
+    "unverified": []
+  },
+  "raw_evidence": {
+    "blocker_status": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/measured-background-blocker.json",
+    "transcript": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/measured-wizard-output.log",
+    "terminal": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/measured-host-terminal.json",
+    "current_after_restart": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/persist-after-restart.json",
+    "current_completion": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/persist-completion-snapshot.json",
+    "current_terminal": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/persist-host-terminal.json",
+    "current_session_end": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018/native-pty/persist-session.end",
+    "current_lifecycle_terminal": "results/storage-key-20261018.lifecycle/terminal.json"
+  },
+  "corrected_replay": {
+    "status": "HISTORICAL_PARTIAL_PASS_RESTART_KEEP_BLOCKED",
+    "Host": "6a8dcdbb060a41c42c4a9a5adb833f83eb9850be",
+    "Host_sha256": "00cb0fa2f13fe46a31c036563f430064232205e4a023a858df5af7ccf9a68279",
+    "Engine": "278e94f63",
+    "start": "2026-10-18T09:04:15Z",
+    "booking": 3189,
+    "gpu": 1,
+    "cpus": "24-31",
+    "native_exclusive": true,
+    "selected_profile_reuse_ms": 306,
+    "accepted_job_id": "4516972d-91b5-47e1-8a10-d8d5577965b2",
+    "observed": [
+      "Selected-artifact Ensure revalidated the retained profile; storage_review stays visible without optional remaining-format profiling",
+      "Future-folder choice persisted without moving the installed package or changing its download UUID",
+      "Old review key refused after future-folder choice",
+      "Explicit managed move to /mnt/ssd2/c4-cli-first-run-storage-20261018/models completed with the same download and inventory UUID; old source removed; fresh artifact Ensure accepted in 2.147s",
+      "Keep advanced to startup; ordinary unchanged C1/context262144/automatic GPU KV quote accepted",
+      "Normal Host restart retained placement and identities, but fresh Ensure in 69.421s changed unrelated profile sections, so whole-profile review key incorrectly requires Keep again"
+    ],
+    "active_action": "Historical replay stopped normally; no live action. Restart re-Ensure changed unrelated GPU/source profile sections and invalidated durable Keep despite identical disks.",
+    "remaining": [
+      "No remaining acceptance action: Host998a72815 passed restart persistence, fresh quote and completion with the saved instance stopped; see next_replay"
+    ],
+    "restart_blocker": {
+      "utc": "2026-10-18T09:17:44Z",
+      "disks_identical": true,
+      "changed_profile_sections": [
+        "duplex_transfers",
+        "gpu_expert_rates",
+        "gpus",
+        "mapped_host_scatter_reads",
+        "sources",
+        "warnings"
+      ],
+      "before_key": "9d05f20d48411d6f98242837b1c28bf6ce88b61eae1d6accb638b09a0c49d5d2",
+      "after_key": "f51db88cb72e904feb95544537918c38ebe2f76dfaf5570210ed202ff6815558",
+      "decision_requested": "Bind acceptance to selected GPU UUIDs, disk profile, selected files/root; ignore unrelated GPU/source timing refresh.",
+      "arch_signed_utc": "2026-10-18T09:17:34Z",
+      "correction": "Fingerprint schema_version/disks, preserving selected GPU UUIDs, package identities/sizes/paths and managed root. Ignore unrelated GPU timings/source metadata."
+    },
+    "normal_stop_utc": "2026-10-18T09:18:05Z",
+    "booking_canceled": true
+  }
+}

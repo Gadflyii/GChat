@@ -672,7 +672,10 @@ impl Host {
         }
         self.draft_width.reconcile(&recipes)?;
         self.draft_width.start_next(&recipes)?;
-        if self.draft_width.busy() || self.first_run_pending().await {
+        // Waiting for placement or startup review is foreground setup, even
+        // though it needs no maintenance polling. Do not let optional work
+        // hide those steps behind the hardware-profile busy state.
+        if self.draft_width.busy() || !self.data.lock().await.first_run.complete {
             return Ok(());
         }
         if self.downloads.list().await.iter().any(|download|

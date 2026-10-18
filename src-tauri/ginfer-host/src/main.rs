@@ -101,12 +101,15 @@ struct FirstRun {
     /// Drive the text wizard; automation without this flag prints JSON and never prompts.
     #[arg(long, conflicts_with = "action")]
     interactive: bool,
-    #[arg(long, value_parser = ["profile", "storage", "models", "refresh_catalog", "startup", "move", "complete", "resume"])]
+    #[arg(long, value_parser = ["profile", "storage", "accept_storage", "models", "refresh_catalog", "startup", "move", "complete", "resume"])]
     action: Option<String>,
     #[arg(long)]
     gpu: Vec<String>,
     #[arg(long)]
     path: Option<PathBuf>,
+    /// Accept exactly the placement/measurements returned by first-run status.
+    #[arg(long)]
+    review_key: Option<String>,
     #[arg(long)]
     release: Vec<String>,
     #[arg(long)]
@@ -137,6 +140,9 @@ async fn first_run(args: FirstRun) -> Result<(), String> {
         }
         if let Some(path) = args.path {
             body["path"] = serde_json::json!(path);
+        }
+        if let Some(key) = args.review_key {
+            body["review_key"] = serde_json::json!(key);
         }
         if !args.release.is_empty() {
             body["release_ids"] = serde_json::json!(args.release);
