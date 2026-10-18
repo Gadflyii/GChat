@@ -2149,7 +2149,7 @@ function RunInspector({
           ))}
         </div>
       </aside>
-      <main className="min-h-0 overflow-y-auto p-6">
+      <main key={selected?.id} className="min-h-0 overflow-y-auto p-6">
         {selected ? (
           <div className="mx-auto max-w-4xl space-y-5">
             <section className="space-y-3 rounded-lg border bg-card p-4">

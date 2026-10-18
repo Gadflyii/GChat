@@ -1,5 +1,92 @@
 # GInfer host UI
 
+## Physical graphics-card inventory — C3, October 18
+
+`GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED`: the fresh private native main
+`201f46712` walk showed one card in Hardware and System Monitor on S1 despite
+two physical PRO 6000 cards with distinct NVML UUIDs and indices. The frontend
+collapsed every matching vendor/name/memory tuple. That heuristic also hid real
+cards after the native probe had correctly distinguished them.
+
+The candidate reconciles NVML/Vulkan aliases by exact PCI domain/bus/device/
+function, preserving NVML identity for telemetry. UUID is used when a comparable
+PCI address is unavailable. Two different PCI addresses remain separate even
+if their UUID strings match. Missing shared identity cannot prove an alias, so
+such entries remain separate. PCI identity stays internal to the native plugin.
+Both UI views now render the physical inventory without tuple collapse.
+
+Acceptance: rendered regressions for both views with the retained two-card
+identities, native alias/unknown/conflicting-PCI regressions, focused plugin
+check/Clippy, lint, one `make verify`, and changed-source native two-card
+rendering. No model load, GPU profiling, numerical or performance claim.
+Focused Hardware cases (8), lint, and plugin tests (16), check and Clippy pass.
+The ONE `make verify` stopped on an existing stale first-run Cancel label test.
+Its selectors now match the existing Stop setup wording. The affected first-run
+suite (28 cases), coverage stage (3,275 frontend and121 extension cases) and all
+six coverage floors then passed. The native continuation stopped at a desktop
+GPU fixture missing the new internal PCI field; the fixture now explicitly uses
+`None`. Both failures remain recorded and the full verify is not repeated.
+The seven original native suites then passed (1,220 tests,28 ignored), and
+the changed-source frontend/native build passed. Native Linux acceptance also
+passes: real pointer input opened Hardware and System Monitor, each showing
+two physical PRO 6000 cards with95.59GB. Reviewed Dark-theme screenshots cover
+Hardware1500×1000 and Monitor1000×1000/800×650. No horizontal overflow.
+Live GPU statistics remain unavailable in this fixture; no GPU work was run.
+Windows, installers and release builds remain unqualified. Result and summary:
+`out/c3-hardware-card-identity-20261018/{result.json,summary.md}`.
+The requested merge of main `394ba2f1f` preserves all first-run cases, including
+action-error persistence, preparation readiness and expandable error details.
+The focused `EngineFirstRun.test.tsx` passes all31 cases after resolution;
+the file matches main. No full verify was repeated for this merge. Receipt:
+`out/c3-hardware-card-identity-20261018/merge-focused-result.json`.
+Next action: push the resolved merge and return it for integration.
+
+Owner/source `/ai/gchat-worktrees/c3-hardware-card-identity-20261018`, branch
+`fix/c3-hardware-card-identity-20261018`, base `832fddb85`. Reuse the owned
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` CPU-only build fixture
+and private dependency cache; preserve baseline and preparation binaries.
+The tested binary is retained at `hardware-candidate/bin/gchat`. No new GPU
+booking or model process is needed. Build copies retire when this walk and its
+native candidates finish; result JSON and short summary remain.
+## Secure-storage Check feedback — Gchat 3 native acceptance, October 18
+
+`GCHAT-SECURE-STORAGE-SETUP-FEEDBACK-20261017` passes its remaining Linux
+native visible-feedback leaf. Ordinary **Check secure storage** on Welcome and
+Hosts showed **Secure storage is ready.** as a status with the explanatory
+success panel. Welcome stayed ready through native scrolling and settling;
+Hosts remained ready for 86 seconds. Three accepted screenshots were visually
+inspected. Native pointer/wheel input drove the app; WebKit only observed state.
+
+Retained packaged release `ed68c7443` is bound to allocated main `4b3a70853`:
+the explicit check handler, ready panel, Hosts route and native credential paths
+are unchanged. Current main changes the unchecked hint wording and Welcome card
+order; those changes are outside this retained visual evidence. Persistence
+means while the component is mounted: navigating to Hosts creates an unchecked
+card until another explicit Check. No readiness-across-restart claim is made.
+
+C3's native Check success at 02:33:48Z on `201f46712` is reused; his 03:04:19Z
+handoff lacked a success screenshot and left this visual leaf to Gchat 3. His
+fixture was untouched. Passive launch/status does not probe or unlock storage;
+that claim reuses the accepted installed locked-keyring evidence in
+[agent-runtime acceptance](../agent-runtime/remaining-acceptance.md#installed-linux-locked-keyring-launch-and-explicit-connect--october-17)
+and the [explicit-storage decision](../decisions/2026-10-16-open-secure-storage-only-for-explicit-connections.md),
+without repeating that campaign. This leaf covers English, Dark-theme packaged
+Linux with a private unlocked keyring. Windows and passphrase-vault feedback
+remain unqualified. No account/host connection was attempted; nearby C7
+Pair/Ignore controls were untouched. Startup's existing updater returned 404;
+no whole-app offline claim is made.
+
+Worktree `/ai/gchat-worktrees/gchat3-secure-storage-feedback-native-20261018`,
+branch `test/gchat3-secure-storage-feedback-native-20261018`, retains documentation
+only. Result, summary and three screenshots are retained in canonical GChat
+`out/secure-storage-feedback-native-20261018` and the ignored worktree `out/`.
+The private S1 container, HOME/cache/keyring, D-Bus/display and relay are removed;
+no owned processes remain and 3,451,232,455 bytes were reclaimed. CPUs 80–87
+booking line2901 was canceled at 03:07:29Z; no GPU/model/build was used. The
+read-only donor under
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+remains untouched. The documentation-only gate is `git diff --check`.
+
 ## Google setup credential save/import — Gchat 3 native acceptance, October 18
 
 `GCHAT-GOOGLE-WORKSPACE-SETUP-WIZARD-20261017` passes its remaining Linux
@@ -1875,3 +1962,45 @@ pass (six app skips, 28 Rust ignores). The first failure remains recorded; no se
 Changed source/test hashes matched locally and on S1 before and after the continuation. Private build data
 was removed and CPUs returned at 02:54 UTC. These are mocked-service React checks, with no new native VM,
 Windows or live sign-in acceptance claim.
+
+## Stopping unfinished bot tasks, October 18 (Gchat 2)
+
+`GBOT-TASK-HISTORY-STOP-PAUSED-INTERRUPTED`: ready, paused and interrupted tasks offered only Resume. If
+the model was unavailable or a person held control, that button was disabled and the user could not stop the
+task. The shared history control now offers Stop alongside Resume for those states. Stop uses the existing
+service cancellation operation; Resume retains its readiness checks. Both buttons lock during either request,
+including same-tick clicks, and a failed action remains available for an explicit retry.
+
+On main baseline `b56d94faa`, five rendered cases failed because Stop was absent; ten controls passed.
+All 15 focused cases pass with the fix, covering cancellation without model/control readiness, pending feedback
+through a task-state change, duplicate requests, retries and terminal states. Settings' surrounding setup
+restriction is unchanged. Backend cancellation still retains task history and marks unresolved effects for
+review. These are rendered React tests with inert task callbacks; there is no new native VM or Windows claim.
+
+One `make verify` passed: lint, type checking, quality checks, 3,281 app tests, 121 extension tests, 1,216 Rust
+tests and all six coverage floors (six app skips, 28 Rust ignores). Changed source/test hashes matched locally
+and on S1 before and after verification. Private build data was removed and CPUs returned at 03:07 UTC.
+Commands and results: `/ai/gchat/out/gchat2-stop-paused-tasks-20261018/result.json`.
+
+
+## Cancelling brain edits restores task readiness, October 18 (Gchat 2)
+
+`GBOT-BRAIN-CANCEL-EDITS-RESTORE-READINESS`: opening Edit brain and choosing Cancel edits
+restored the visible saved brain but created an unsaved draft in the parent page, even if no field
+was changed. Run and Resume then stayed disabled with instructions to save settings that were
+no longer visible. Cancellation now explicitly discards the selected bot's draft. The page returns
+to its saved assignment, keeps the task text and permits Run or Resume when the bot is ready.
+Other bots' drafts and saved API-key handling retain their existing behavior.
+
+Both new route cases fail on main baseline `faa818658`: cancel with unchanged fields and cancel
+a changed model. With the fix, all 82 route and brain-component tests pass, including restored
+Run/Resume readiness, retained task text and a subsequent task start without saving an assignment.
+The component cases retain cancellation during pending/busy operations and saved-key coverage.
+These are rendered React checks against a mocked service; no new native VM, Windows or live
+model acceptance is claimed. Commands and results:
+`/ai/gchat/out/gchat2-brain-cancel-readiness-20261018/result.json`.
+
+One `make verify` passed: lint, type checking, quality checks, 3,288 app tests, 121 extension tests,
+1,216 Rust tests and all six coverage floors (six app skips, 28 Rust ignores). Changed source/test
+hashes matched locally and on S1 before and after verification. Private build data was removed
+and CPUs returned at 03:20 UTC.

@@ -20,6 +20,12 @@ it.each([
     action: 'resume',
     pending: 'Resuming',
   },
+  {
+    state: 'paused',
+    button: 'Stop task',
+    action: 'cancel',
+    pending: 'Stopping',
+  },
 ])(
   'shows $pending until completion and ignores repeat clicks',
   async ({ state, button, action, pending }) => {
@@ -34,15 +40,18 @@ it.each([
       <GbotTaskActions {...available} taskState={state} onAction={onAction} />
     )
     const control = screen.getByRole('button', { name: button })
+    const controls = screen.getAllByRole('button')
     act(() => {
       fireEvent.click(control)
       fireEvent.click(control)
+      controls.filter((other) => other !== control).forEach((other) => fireEvent.click(other))
     })
     expect(onAction).toHaveBeenCalledExactlyOnceWith(action)
     expect(screen.getByRole('status')).toHaveTextContent(
       `${pending} this task…`
     )
     expect(screen.getByRole('button', { name: `${pending}…` })).toBeDisabled()
+    controls.forEach((other) => expect(other).toBeDisabled())
     expect(control).toHaveAttribute('aria-busy', 'true')
     view.rerender(
       <GbotTaskActions
@@ -80,26 +89,35 @@ it.each([
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
 })
 
-it('keeps Stop available without a ready brain or bot control', async () => {
-  const onAction = vi.fn().mockResolvedValue(undefined)
-  render(
-    <GbotTaskActions
-      busy={false}
-      ready={false}
-      botHasControl={false}
-      taskState="waiting_for_human"
-      onAction={onAction}
-    />
-  )
-  const control = screen.getByRole('button', { name: 'Stop task' })
-  expect(control).toBeEnabled()
-  fireEvent.click(control)
-  await waitFor(() =>
-    expect(onAction).toHaveBeenCalledExactlyOnceWith('cancel')
-  )
-})
+it.each(['waiting_for_human', 'ready', 'paused', 'interrupted'])(
+  'keeps Stop available for %s without a ready brain or bot control',
+  async (taskState) => {
+    const onAction = vi.fn().mockResolvedValue(undefined)
+    render(
+      <GbotTaskActions
+        busy={false}
+        ready={false}
+        botHasControl={false}
+        taskState={taskState}
+        onAction={onAction}
+      />
+    )
+    const control = screen.getByRole('button', { name: 'Stop task' })
+    expect(control).toBeEnabled()
+    if (taskState !== 'waiting_for_human') {
+      expect(screen.getByRole('button', { name: 'Resume task' })).toBeDisabled()
+    }
+    fireEvent.click(control)
+    await waitFor(() =>
+      expect(onAction).toHaveBeenCalledExactlyOnceWith('cancel')
+    )
+  }
+)
 
-it('keeps a failed task action available for an explicit retry', async () => {
+it.each([
+  { button: 'Stop task', action: 'cancel' },
+  { button: 'Resume task', action: 'resume' },
+])('keeps a failed $button available for an explicit retry', async ({ button, action }) => {
   const onAction = vi
     .fn()
     .mockRejectedValueOnce(new Error('The bot is disconnected'))
@@ -107,12 +125,26 @@ it('keeps a failed task action available for an explicit retry', async () => {
   render(
     <GbotTaskActions {...available} taskState="paused" onAction={onAction} />
   )
-  const control = screen.getByRole('button', { name: 'Resume task' })
+  const control = screen.getByRole('button', { name: button })
   fireEvent.click(control)
   await waitFor(() => expect(control).toBeEnabled())
   expect(toast.error).toHaveBeenCalledWith('Error: The bot is disconnected')
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   fireEvent.click(control)
   await waitFor(() => expect(onAction).toHaveBeenCalledTimes(2))
-  expect(onAction.mock.calls).toEqual([['resume'], ['resume']])
+  expect(onAction.mock.calls).toEqual([[action], [action]])
+})
+
+it.each(['completed', 'needs_review'])(
+  'does not offer task controls for %s',
+  (taskState) => {
+    render(<GbotTaskActions {...available} taskState={taskState} onAction={vi.fn()} />)
+    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  }
+)
+
+it('offers only Resume for a cancelled task', () => {
+  render(<GbotTaskActions {...available} taskState="cancelled" onAction={vi.fn()} />)
+  expect(screen.getByRole('button', { name: 'Resume task' })).toBeEnabled()
+  expect(screen.queryByRole('button', { name: 'Stop task' })).not.toBeInTheDocument()
 })

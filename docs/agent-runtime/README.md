@@ -281,6 +281,28 @@ The desktop was rebuilt from `dd064f1d5` plus this correction; its SHA-256 is
 Retained sidecars were not rebuilt, so this qualifies the Studio controls only.
 No model requests or GPU use. Windows not built (dev phase).
 
+## Studio run selection starts at its overview — October 18
+
+In the native 1024 × 740 pass with the sidebar expanded, reading the bottom of a
+finished run and selecting a failed run retained the previous 430 px scroll
+position. The selected run’s result overview and continuation controls were above
+the visible pane. The details pane now starts at the top when the selected saved
+run changes. Selecting records does not change their saved contents.
+
+The regression selects another run after scrolling, then returns to the original
+and checks each new selection starts at its result overview. All 40 focused
+Studio tests passed. The isolated native candidate passed finished, failed and
+incomplete saved-run transitions at 1024 × 740, plus a larger 1200 × 800 replay:
+each selection opened at scrollTop 0 with its overview and actions visible and
+no horizontal overflow. No inference or continuation execution occurred.
+
+Full `make verify` passed on the combined branch after merging the setup polling
+test reconciliation and current main. The original failed gate remains in the
+packet. The native replay used the earlier candidate with identical scroll
+implementation and regression bytes; no new desktop build was needed.
+Evidence and gate results:
+`/ai/gchat/out/gchat-run-selection-scroll-20261018/`. Windows not built (dev phase).
+
 ## Studio worker exit persistence — October 15
 
 Normal app exit now tracks direct Studio turns alongside Chat and Code workers,
@@ -459,6 +481,26 @@ for `GCHAT-ATTACHMENT-PICKER-STALE-TOOL-SNAPSHOT-20261015`; it does not qualify
 sending the PDF or reading its contents. The preliminary New Chat attempt did
 not exercise the relevant processing branch and is not a causal pass.
 [Native procedure and evidence](remaining-acceptance.md#native-attachment-chooser-current-tools--october-17).
+The separate [October 18 PDF Send check](#native-pdf-send-and-folder-permission--october-18)
+passes the bounded send, folder permission and answer path.
+
+## Native PDF Send and folder permission — October 18
+
+An isolated Linux native Chat selected the correct `short.pdf` (585 bytes)
+through the ordinary attachment chooser and sent a prompt containing no answer
+code. The folder dialog named `os.fs.read_document`; after **Allow folder**, the
+answer included the expected `ORCHID-472`. Saved messages record the exact PDF
+path passed to `os_fs_read_document` and its untruncated 12-character result.
+The dialog disclosed that the grant
+adds the folder to External with **CAN EDIT** access for that session. Expanded
+final tool details were not captured before shutdown.
+
+This uses the retained `832fddb85` desktop plus the run-selection-scroll fix and
+retained sidecars. It does not qualify all latest sidecars, Windows or a fresh
+installation. The initial CPU-profile mismatch and live-cpuset NVIDIA failure,
+corrected restart, and GPU return at 03:17Z after the 03:16Z cutoff remain part
+of the record. No timing claim; broader OI-068 remains PARTIAL.
+[Procedure, identities and evidence](remaining-acceptance.md#oi-068-native-pdf-send-and-folder-permission--october-18).
 
 ## Worker review follow-up
 

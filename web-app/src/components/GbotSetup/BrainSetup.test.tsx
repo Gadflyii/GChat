@@ -64,6 +64,14 @@ function Setup({
       computerReady
       busy={false}
       onChange={setValue}
+      onCancel={() => {
+        if (configured)
+          setValue({
+            connection: configured.connection,
+            model: configured.model,
+            context_tokens: configured.context_tokens,
+          })
+      }}
       onSave={() => save(value)}
     />
   )
@@ -251,6 +259,7 @@ it('disables the form without claiming to save during another page action', () =
       busy
       computerReady
       onChange={vi.fn()}
+      onCancel={vi.fn()}
       onSave={save}
     />
   )
