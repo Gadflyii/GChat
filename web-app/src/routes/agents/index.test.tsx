@@ -1395,6 +1395,62 @@ describe('AgentStudioPage', () => {
     expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
   })
 
+  it.each([
+    ['Save definition', '256.5'],
+    ['Save & run', '256.5'],
+    ['Save definition', '255'],
+    ['Save & run', '255'],
+    ['Save definition', '262145'],
+    ['Save & run', '262145'],
+  ])('reveals and focuses an invalid output budget before %s with %s', async (action, value) => {
+    definitionState.value.save.mockImplementation(async (definition) => definition)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    const input = screen.getByLabelText('Output budget per model call')
+    const advanced = input.closest('details')!
+    fireEvent.change(input, { target: { value } })
+    expect(advanced.open).toBe(false)
+
+    screen.getByRole('button', { name: action }).focus()
+    await userEvent.setup().keyboard('{Enter}')
+
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith(
+      'Output budget must be Auto or a whole number from 256 to 262,144 tokens.'
+    )
+    expect(advanced.open).toBe(true)
+    expect(input).toHaveFocus()
+    expect(input).toHaveValue(Number(value))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.change(input, { target: { value: '4096' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ maxOutputTokens: 4096 })
+    ))
+  })
+
+  it.each([
+    ['', null],
+    ['256', 256],
+    ['262144', 262144],
+  ])('preserves the valid output budget %s when saving', async (value, maxOutputTokens) => {
+    definitionState.value.save.mockImplementation(async (definition) => definition)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    const input = screen.getByLabelText('Output budget per model call')
+    fireEvent.change(input, { target: { value: '4096' } })
+    fireEvent.change(input, { target: { value } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ maxOutputTokens })
+    ))
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('saves once while keeping newer edits when the reviewed save completes', async () => {
     const pending = deferred<AgentDefinition>()
     definitionState.value.save.mockReturnValue(pending.promise)
