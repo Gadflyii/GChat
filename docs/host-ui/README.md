@@ -27,13 +27,21 @@ before merging ready aliases. A matching file path does not prove that an alias
 belongs to the stopped session, so other aliases await that read. Until those reads succeed the affected row says
 Checking status or Status unavailable instead of trusting a stale Running label.
 The seven rendered regressions are preserved with this candidate. Current main
-and the reviewed deletion revision branch `05ee9a160` are integrated; Codex 8
-returned clean on that priority correction, which was mailed merge-ready.
+and the reviewed deletion revision branch `05ee9a160` are integrated; that
+priority correction is now merged as `8b25627e7` after Codex 8 returned clean.
 The component self-check confirms each Stop route removes only its confirmed ID
 before either read, preserves unrelated active entries, and uses the synchronous
-pending guard for repeat clicks. No Stop fixture or gate has launched and no
-resource is held. Next: freeze this integrated source and run the focused Models
-suite, lint and exactly one `make verify` in an independent S1 SSD fixture.
+pending guard for repeat clicks. Frozen source `d45e01667` is pushed. Independent
+SSD preparation started at **22:40:43Z** on S1 `AIS-2-8592-L01`, booking3613,
+CPU88–95 through23:10Z. Owned fixture:
+`/media/ron/SSD_RAID/ai/tmp-c7-models-stop-status-recovery-20261018`;
+container: `c7-models-stop-status-recovery-20261018-candidate`. The inactive RC
+dependency donor and eleven protected catalog inputs remain separate. No tests
+have started. Small command/binding/result metadata is in
+`out/c7-models-stop-status-recovery-20261018/`; raw results stay on S1 until
+coordinator review, then the disposable fixture is retired. Next: finish
+preparation, then focused Models66, lint and exactly one `make verify`, stopping
+on failure.
 
 ## Models overlapping deletion recovery — C7, October 18
 
@@ -79,8 +87,8 @@ inputs remain. Only the result JSON and short summary remain locally in
 `out/c7-models-delete-overlap-recovery-20261018/`; no resource is held.
 Codex 8 reviewed `b3d27c2c4504f9d5f5a9d7b76d487f23ee1ba74e` and returned
 **clean**, including acknowledged B deletion before A read followed by B re-add,
-selection and A omission. Integration P2 closure awaits the coordinator merge.
-Next: mail merge-ready and continue the owned Models queue.
+selection and A omission. Merged as **`8b25627e7`** on GChat main, closing all
+three reported P2 orderings. Next: the confirmed Stop/status recovery row above.
 These checks qualify the source correction and Linux gate; they make no
 installed-app or native Windows acceptance claim.
 
