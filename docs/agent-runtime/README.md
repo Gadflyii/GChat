@@ -76,6 +76,36 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Typing an agent identifier — October 18
+
+An isolated native Linux Studio pass reproduced the main **Identifier** field
+dropping a hyphen during ordinary typing: `keyboard-helper` became
+`keyboardhelper`, in both an existing draft and a new agent. Focus remained in
+the field. The affected editor is byte-identical from retained native source
+`edcd74e49` through main `25459ffc2`.
+
+The field now retains a trailing separator while editing and normalizes it on
+blur, matching the role identifier controls. Native baseline DOM captures and
+the viewed screenshot are in
+`/ai/gchat/out/gchat-agent-identifier-keyboard-20261018/`.
+The focused Studio suite passed 65 tests; the sole `make verify`, frontend
+build and native build passed on frozen source `6e6286019`. The first native
+build linked a stale Host dependency and stopped on missing imports. A bounded
+native-only recovery refreshed two staged source timestamps; all 3,151 frozen
+source hashes remained unchanged, and the rebuilt Host resolved both imports.
+
+The corrected native replay retained `keyboard-helper` and focus in both new
+and existing drafts, kept a trailing `-` while editing, and normalized it on
+Tab. Save and reselect preserved the identifier. All ten prior definitions were
+unchanged; only the private `IdentifierKeyboardProbe` fixture was added.
+Candidate SHA256 is
+`651c447194dcefdb12bd601c7fecbc7c37ec34465072f3807762151b54e8543c`.
+Both passes used a private HOME/XDG profile, authenticated Xvfb, D-Bus and an
+unlocked test keyring, with no model or GPU request. The corrected screenshot
+was viewed and CPUs were returned at 05:08Z. This qualifies the Linux debug
+editor interaction; installer behavior was not checked.
+Windows: not built (dev phase).
+
 ## Skill slash-menu keyboard visibility — October 18
 
 An isolated native Linux Chat pass qualified the pending keyboard interaction
