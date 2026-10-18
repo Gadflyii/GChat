@@ -38,6 +38,19 @@ Replacing an open request keeps the original opener; an exiting dialog does
 not take focus from a newer request. Cancel remains the initial keyboard
 default. No confirmation action or decision is changed.
 
+Validation: 92 focused tests and workspace lint PASS; one `make verify`
+PASS (3,557 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux desktop builds PASS on `8b5e2cd0c`.
+Rebuilt private native acceptance PASS: Escape, default Cancel and explicit
+discard return to the opening library row; the next Tab moves to the adjacent
+library row. Cancel also returns to the opening New agent and Use template
+buttons while retaining the draft. The candidate screenshot was viewed.
+Normal shutdown at 11:33Z kept saved definitions and history byte-identical;
+CPU booking 3260 was returned. Receipts:
+`/ai/gchat/out/gchat-confirm-dialog-focus-20261018/`.
+This qualifies the Linux keyboard scope; no save, delete, run, inference or
+Windows acceptance was performed.
+
 ## Unsaved Agent Studio draft replacement — October 18
 
 An isolated native pass on main `de74862d6` reproduced silent loss of edits
