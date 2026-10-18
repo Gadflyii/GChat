@@ -1,0 +1,64 @@
+{
+  "terminal_utc": "2026-10-18T04:39:56.902227+00:00",
+  "host": "AIS-2-8592-L01",
+  "engine_source": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
+  "installed_archive": "ae903f3f4c397e132a87c8980fef0d313d4124f7d0f447e0dc08d7fe7e6c22c5",
+  "model": "/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer",
+  "no_visible_gpu": {
+    "command": [
+      "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018/novice/home/.local/lib/ginfer/bin/ginfer",
+      "/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer",
+      "--prompt",
+      "Hello",
+      "--max-new",
+      "1",
+      "--no-profile"
+    ],
+    "CUDA_VISIBLE_DEVICES": "",
+    "result": {
+      "exit": 1,
+      "stdout": "",
+      "stderr": "phase       detail                      elapsed/progress\nerror: cudaGetDeviceCount: cudaErrorNoDevice: no CUDA-capable device is detected\nusage: /media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018/novice/home/.local/lib/ginfer/bin/ginfer (<model.ginfer>|--tp-artifact-set <set.json>) (--prompt <text>|--messages <messages.json>)\n       [--max-context N] [--max-concurrency 1..8] [--kv-arena-bytes N] [--kv-arena-headroom-bytes N] [--host-kv-cache-bytes N] [--vram-budget-bytes N] [--host-weight-bytes N] [--flash-host-ram-headroom-gib N] [--host-threads N] [--host-topology auto|interleave|NODES|off] [--cpu-pin on|off] [--expert-lfu on|off] [--expert-placement auto|cpu|device] [--expert-pcie-share FRACTION|auto] [--prefill-layer-group-size 1..48] [--kv-strict-output-reservation|--kv-elastic-output-reservation]\n       [--prefix-cache-default-priority N]\n       [--prefill-chunk N] [--max-new N]\n       [--tp 1|2|4] [--tp-fallback largest-healthy|reject] [--draft-tp 1|2|4]\n       [--kv-dtype bf16|int8|nvfp4] [--spec auto|none|dflash|mtp --draft-tokens N]\n       [--draft-policy auto|fixed|adaptive] [--calibrate-draft-width (offline; save policy then exit)]\n       [--temperature F] [--top-p F] [--top-k N] [--min-p F]\n       [--presence-penalty F] [--frequency-penalty F] [--seed N] [--greedy]\n       [--stop-token-id N]... [--stop <text>]... [--reasoning-stop <text>]...\n       [--raw-output] [--print-token-ids] [--no-thinking]\n       [--reasoning-effort low|medium|high|xhigh] [--vision]\n       [--structured-outputs] [--w4a8-mlp|--no-w4a8-mlp] [--w2a8-smol|--no-w2a8-smol] [--w5a8-down|--no-w5a8-down]\n       [--a8-proj[=classes]|--no-a8-proj]\n       [--no-cuda-graph] [--progressive-ready]\n       [--hardware-profile PATH] overrides the saved profile location; [--no-profile] reads it without profiling at startup\n       profile-cpu-phase-pools <model.ginfer> [normal Engine options] [--phase-pools-output PATH]\n       Measures the public 4096-token/512-output benchmark corpus with representative and sibling pools, one warmup and one measured request each.\n\nEngine startup waits for admitted expert fill by default on every card;\n--progressive-ready explicitly allows serving during fill.\nStreams answer content to stdout and reasoning plus diagnostics to stderr.\nStructured message content accepts text, image/image_url, and video/video_url parts;\nmedia sources may be local paths, HTTP(S) URLs, or base64 data URIs.\n--vision enables image/video input and loads the fixed Vision GPU allocations.\n--structured-outputs enables the Engine's structured-output host pool and constrained-graph capture (off by default); it has no effect unless the request sets ExecutionOptions::output_constraint.\nThe Q4G64 target MLP projections run with INT8 activations (W4A8, per-token K64-group scales) at every batch width by default wherever registered (TP1 groupwise-int Q4 targets on sm_80/86/89/120a; A16 elsewhere); --no-w4a8-mlp keeps the A16 route (different output bits), --w4a8-mlp fails startup where W4A8 is not registered.\nW2A8 smol is on by default for the registered TP1 Q2G64 targets on the 58-SM sm_86 RTX 3080 Ti Laptop and 82-SM sm_86 RTX 3090; A16 elsewhere. --no-w2a8-smol selects A16 (different output bits); --w2a8-smol requires registration at startup.\n--w5a8-down runs the Qwen3.8 Q5G64 MLP down projection with INT8 activations (W5A8, per-token K64-group scales) at every batch width, on by default for registered TP1 Q4 targets on sm_80/86/89/120a. --no-w5a8-down selects A16 (different output bits); an explicit --w5a8-down fails startup where W5A8 is not registered.\n--a8-proj runs the TP1 attention and GDN projections of the AutoRound Q4 targets with INT8 activations (A8, per-token stored-group scales) at every batch width (sm_80/86/89/120a; on by default where registered, different output bits); --a8-proj=<classes> selects qwen-gdn-in, qwen-attn-in, qwen-out, muse-attn-in, muse-attn-out; --no-a8-proj selects A16.\nQwen G32 TP1 on sm_120a uses W4A8 gate/up, W5A8 down and A8 GDN/attention input with per-token K32-group scales; G32 output projections keep A16.\nUse the exact image for the device: sm_80, sm_86, sm_89, or sm_120a; sm_80 admits groupwise integer/BF16 routes only and rejects FP8/NVFP4 identities.\n--kv-arena-bytes selects an exact per-rank physical arena on generic targets; Flash-Next uses a physical ceiling without padding. When omitted, segmented targets allocate the automatic maximum after startup with device-sized headroom: 256 MiB up to 16 GiB, 512 MiB up to 24 GiB, 1 GiB above; --kv-arena-headroom-bytes overrides it (including 0).\nFlash-Next protects mandatory Device KV floors and full-context indexer keys, then shares the remaining pool between expert slots and KV images. Each admitted request reserves a complete-horizon Host home; older history remains exact in pinned mapped RAM.\n--host-kv-cache-bytes budgets pinned-host prefix bytes: whole-instance for Flash-Next, per TP rank for Qwen/Muse (omitted: 0). Flash omission uses the remainder after mandatory owners and Host experts, up to 4 GiB; it is disabled if one actual 32K-token conversation image cannot fit. Explicit Flash bytes are exact, may displace Host experts, and fail with a typed shortfall if they cannot fit. Explicit 0 disables it.\nFlash-Next weight residency: VRAM bytes and host threads are per rank; host weight bytes cover the whole TP group. Zero resolves automatically at startup. Explicit topology uses semicolon-separated rank lists, e.g. '0,1;2,3'. Host RAM headroom defaults to 4 GiB; explicit 0 reserves no floor.\n--prefill-layer-group-size selects Flash-Next layers per prefill service unit (default 48); every chunk commits only after all 48 layers.\n--kv-strict-output-reservation reserves the complete allowed continuation at admission (opt-in for Qwen/Muse).\n--kv-elastic-output-reservation selects incremental reservation (default for Qwen/Muse); shared KV pressure preempts/requeues with committed-token replay.\n--prefix-cache-default-priority sets the eviction priority for newly published inactive prefixes; lower values evict first.\nSampling defaults come from the loaded model and thinking mode; flags override individual fields.\n"
+    },
+    "isolation": "private HOME/XDG0700/DBus/unlocked keyring; terminal normal keyring stop"
+  },
+  "driver_unavailable": {
+    "command": [
+      "docker",
+      "run",
+      "--rm",
+      "--pull=never",
+      "--runtime=runc",
+      "--name",
+      "c4-cli-no-driver-20261018",
+      "--cpuset-cpus=8-15",
+      "--user",
+      "1000:1000",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--network=none",
+      "-v",
+      "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018/novice/home/.local/lib/ginfer:/runtime:ro",
+      "-v",
+      "/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer:/model.ginfer:ro",
+      "-e",
+      "HOME=/tmp",
+      "-e",
+      "NVIDIA_VISIBLE_DEVICES=void",
+      "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+      "/runtime/bin/ginfer",
+      "/model.ginfer",
+      "--prompt",
+      "Hello",
+      "--max-new",
+      "1",
+      "--no-profile"
+    ],
+    "exit": 127,
+    "stdout": "",
+    "stderr": "/runtime/bin/ginfer: error while loading shared libraries: libnvidia-ml.so.1: cannot open shared object file: No such file or directory\n",
+    "scope": "existing runc container without NVIDIA device/driver injection, same installed runtime read-only; physical host driver unchanged"
+  },
+  "gpu_load_or_calibration": false,
+  "source_changed": false
+}

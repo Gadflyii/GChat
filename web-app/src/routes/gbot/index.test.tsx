@@ -1778,6 +1778,111 @@ it.each(['success', 'failure'] as const)(
   }
 )
 
+it.each(['Send reply', 'Decline'])(
+  'keeps a failed human-help %s visible and retryable in settings',
+  async (action) => {
+    const [identity] = readyTaskBots()
+    const call = mocks.call.getMockImplementation()!
+    const request = {
+      id: 'help',
+      question: 'Which folder?',
+      status: 'pending',
+      response: null as string | null,
+    }
+    const task = {
+      id: 'help-task',
+      identity,
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [request],
+    }
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let rejectReply!: (cause: string) => void
+    const pending = new Promise<void>((_, reject) => {
+      rejectReply = reject
+    })
+    let attempts = 0
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'tasks') return [task]
+        if (path === 'tasks/help') {
+          if (++attempts === 1) return pending
+          task.state = 'interrupted'
+          request.status = body.response === null ? 'declined' : 'completed'
+          request.response = body.response as string | null
+          return {}
+        }
+        return call(path, body)
+      }
+    )
+    render(<Page />)
+    const card = (await screen.findByText('Which folder?')).parentElement!
+    const reply = within(card).getByLabelText('Your reply')
+    fireEvent.change(reply, { target: { value: 'Use Documents' } })
+    const submit = within(card).getByRole('button', { name: action })
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      action === 'Send reply' ? 'Sending reply…' : 'Declining request…'
+    )
+    expect(reply).toBeDisabled()
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    const payload = {
+      id: 'help-task',
+      request_id: 'help',
+      response: action === 'Send reply' ? 'Use Documents' : null,
+    }
+    expect(attempts).toBe(1)
+    expect(mocks.call).toHaveBeenCalledWith('tasks/help', payload)
+
+    await act(async () => rejectReply('Gbot service unavailable. Try again.'))
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      'Gbot service unavailable. Try again.'
+    )
+    expect(reply).toHaveValue('Use Documents')
+    expect(reply).toBeEnabled()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Request declined')).not.toBeInTheDocument()
+    expect(
+      within(card).queryByText('Your reply: Use Documents')
+    ).not.toBeInTheDocument()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+      ).toBeGreaterThan(reads)
+    )
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      'Gbot service unavailable. Try again.'
+    )
+    fireEvent.click(within(card).getByRole('button', { name: action }))
+    expect(
+      await within(card).findByText(
+        action === 'Send reply' ? 'Your reply: Use Documents' : 'Request declined'
+      )
+    ).toBeVisible()
+    expect(attempts).toBe(2)
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks/help')
+    ).toEqual([
+      ['tasks/help', payload],
+      ['tasks/help', payload],
+    ])
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
 it('sends task-bound human replies and declines, retaining them after reload', async () => {
   const identity = { workspace_id: 'one', session_id: 'session' }
   const tasks = [

@@ -2,6 +2,8 @@
 
 - **2026-10-18** — [Own Linux XDG autostart registration](2026-10-18-own-linux-xdg-autostart-registration.md)
 
+- **2026-10-18** — [Own custom GInfer startup in Hosts](2026-10-18-own-custom-ginfer-startup-in-hosts.md)
+
 - **2026-10-18** — [Report typed Gbot startup failures](2026-10-18-report-typed-gbot-startup-failures.md)
 
 - **2026-10-17** — [Contain Gbot desktop keyboard input](2026-10-17-contain-gbot-desktop-keyboard-input.md)
@@ -546,3 +548,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-18** — [Register local model files in place](2026-10-18-register-local-model-files-in-place.md)
 - **2026-10-18** — [Render choice popups with the app theme](2026-10-18-render-choice-popups-with-the-app-theme.md)
 - **2026-10-18** — [Surface background setup failures](2026-10-18-surface-background-setup-failures.md)
+- **2026-10-18** — [Declare installed launcher runtime ownership](2026-10-18-declare-installed-launcher-runtime-ownership.md)

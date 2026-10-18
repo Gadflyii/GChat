@@ -139,22 +139,23 @@ export default class ginfer_extension extends AIEngine {
   }
 
   private buildGinferConfig(
-    perLoad?: { max_context?: number; gpu_uuids?: string[]; use_profile_defaults?: boolean; load_operation_id?: string }
+    perLoad?: { gpu_uuids?: string[]; load_operation_id?: string }
   ): GinferConfig {
-    const cfg = this.config ?? {}
     return {
-      ...(perLoad?.use_profile_defaults === true ? { use_profile_defaults: true } : {}),
+      // Desktop starts use the Host's complete tested profile. Neutral values
+      // satisfy the native request schema without forwarding global overrides.
+      use_profile_defaults: true,
       ...(perLoad?.load_operation_id === undefined ? {} : { load_operation_id: perLoad.load_operation_id }),
-      vision: cfg.vision !== false,
-      spec: String(cfg.spec ?? 'auto'),
-      draft_tokens: Number(cfg.draft_tokens) || 0,
-      draft_tp: Number(cfg.draft_tp) || 0,
-      kv_dtype: String(cfg.kv_dtype ?? 'auto'),
-      max_context: Number(perLoad?.max_context ?? cfg.max_context) || 0,
-      kv_arena_bytes: String(cfg.kv_arena_bytes ?? 'auto'),
-      prefill_chunk: Number(cfg.prefill_chunk) || 0,
-      max_concurrency: Number(cfg.max_concurrency) || 0,
-      no_cuda_graph: !!cfg.no_cuda_graph,
+      vision: true,
+      spec: 'auto',
+      draft_tokens: 0,
+      draft_tp: 0,
+      kv_dtype: 'auto',
+      max_context: 0,
+      kv_arena_bytes: 'auto',
+      prefill_chunk: 0,
+      max_concurrency: 0,
+      no_cuda_graph: false,
       ...(perLoad?.gpu_uuids === undefined
         ? {}
         : { gpu_uuids: [...perLoad.gpu_uuids] }),

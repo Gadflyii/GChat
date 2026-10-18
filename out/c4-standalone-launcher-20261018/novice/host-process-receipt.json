@@ -1,0 +1,6 @@
+{
+  "pid": 2781372,
+  "command": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/lib/ginfer/bin/ginfer-host --desktop-managed --data-dir /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/data/ginfer/host --engine /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/lib/ginfer/bin/ginfer-serve --name AIS-2-8592-L01 --listen 127.0.0.1:7443 --nvidia-smi nvidia-smi --desktop-provider /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/data/ginfer ",
+  "stop": "SIGTERM to exact verified owned PID",
+  "stopped": true
+}

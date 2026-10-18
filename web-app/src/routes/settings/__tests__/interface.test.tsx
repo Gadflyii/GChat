@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { Route as InterfaceRoute } from '../interface'
+import { toast } from 'sonner'
+
+const { resetInterface } = vi.hoisted(() => ({
+  resetInterface: vi.fn(),
+}))
 
 // Mock all the dependencies
 vi.mock('@/containers/SettingsMenu', () => ({
@@ -65,7 +70,7 @@ vi.mock('@/containers/AccentColorPicker', () => ({
 
 vi.mock('@/hooks/useInterfaceSettings', () => ({
   useInterfaceSettings: () => ({
-    resetInterface: vi.fn(),
+    resetInterface,
   }),
 }))
 
@@ -94,6 +99,7 @@ vi.mock('@/components/ui/button', () => ({
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
+    error: vi.fn(),
   },
 }))
 
@@ -115,6 +121,7 @@ vi.mock('@tanstack/react-router', () => ({
 describe('Interface Settings Route', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetInterface.mockResolvedValue(undefined)
   })
 
   it('should render the interface settings page', () => {
@@ -169,7 +176,7 @@ describe('Interface Settings Route', () => {
     })
   })
 
-  it('should render reset functionality', () => {
+  it('should render reset functionality', async () => {
     const Component = InterfaceRoute.component as React.ComponentType
     render(<Component />)
 
@@ -181,6 +188,49 @@ describe('Interface Settings Route', () => {
       fireEvent.click(button)
       expect(button).toBeInTheDocument()
     })
+    await waitFor(() => expect(toast.success).toHaveBeenCalled())
+  })
+
+  it('reports success only after reset completes and blocks another reset while pending', async () => {
+    let finish!: () => void
+    resetInterface.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve
+      })
+    )
+    const Component = InterfaceRoute.component as React.ComponentType
+    render(<Component />)
+    const reset = screen.getByRole('button', { name: 'common:reset' })
+
+    fireEvent.click(reset)
+    expect(reset).toBeDisabled()
+    expect(toast.success).not.toHaveBeenCalled()
+    fireEvent.click(reset)
+    expect(resetInterface).toHaveBeenCalledTimes(1)
+    finish()
+
+    await waitFor(() => expect(reset).toBeEnabled())
+    expect(toast.success).toHaveBeenCalledWith(
+      'settings:interface.resetInterfaceSuccess',
+      expect.any(Object)
+    )
+  })
+
+  it('shows a reset failure instead of claiming settings were restored', async () => {
+    resetInterface.mockRejectedValueOnce(new Error('Window theme unavailable'))
+    const Component = InterfaceRoute.component as React.ComponentType
+    render(<Component />)
+    const reset = screen.getByRole('button', { name: 'common:reset' })
+
+    fireEvent.click(reset)
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'settings:interface.resetInterfaceError'
+      )
+    )
+    expect(reset).toBeEnabled()
+    expect(toast.success).not.toHaveBeenCalled()
   })
 
   it('should render all card items with proper structure', () => {
