@@ -60,6 +60,8 @@ export default function GbotCompanion() {
   const pageState = useGbotPage()
   const [owner] = useState(gbotControlOwner)
   const [busy, setBusy] = useState(false)
+  const [retryingConnection, setRetryingConnection] = useState(false)
+  const connectionRetry = useRef(false)
   const [submittingTask, setSubmittingTask] = useState<string>()
   const [taskErrors, setTaskErrors] = useState<Record<string, string | undefined>>(
     {}
@@ -207,6 +209,18 @@ export default function GbotCompanion() {
     wasVisible.current = visible
   }, [visible, workspaceId])
 
+  const retryConnection = async () => {
+    const current = useGbotCompanion.getState()
+    if (connectionRetry.current || current.loading) return
+    connectionRetry.current = true
+    setRetryingConnection(true)
+    try {
+      await current.refresh()
+    } finally {
+      connectionRetry.current = false
+      setRetryingConnection(false)
+    }
+  }
   const perform = async (
     action: () => Promise<unknown>,
     propagateError = false
@@ -397,13 +411,24 @@ export default function GbotCompanion() {
           {resources.error ? (
             <p>Restart GChat to try resource preparation again.</p>
           ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void state.refresh()}
-            >
-              Retry connection
-            </Button>
+            <>
+              {(retryingConnection || state.loading) && (
+                <p role="status">
+                  Checking the Gbot service connection. You can hide this pane
+                  while the check finishes.
+                </p>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={retryingConnection || state.loading}
+                onClick={() => void retryConnection()}
+              >
+                {retryingConnection || state.loading
+                  ? 'Checking connection…'
+                  : 'Retry connection'}
+              </Button>
+            </>
           )}
         </div>
       )}
