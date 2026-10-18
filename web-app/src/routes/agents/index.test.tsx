@@ -320,6 +320,8 @@ describe('AgentStudioPage', () => {
     nativeWindow.onCloseRequested.mockRejectedValueOnce(new Error('native listener failed'))
     await renderSavedAgents()
     expect(toast.error).toHaveBeenCalledWith('Could not protect unsaved agent changes when closing GChat. Save your changes before closing.')
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Save before closing' } })
+    expect(screen.getByLabelText('Name')).toHaveValue('Save before closing')
   })
 
   it('retires a late native close subscription when Agent Studio unmounts', async () => {
@@ -330,6 +332,10 @@ describe('AgentStudioPage', () => {
     page.unmount()
     await act(async () => registration.resolve(nativeWindow.unlisten))
     expect(nativeWindow.unlisten).toHaveBeenCalledOnce()
+    const retiredClose = await requestNativeClose()
+    expect(retiredClose.finished).toBe(true)
+    expect(retiredClose.preventDefault).toHaveBeenCalledOnce()
+    expect(useConfirmStore.getState().pending).toBeNull()
   })
 
   it('rejects pending close approval after Agent Studio unmounts', async () => {
