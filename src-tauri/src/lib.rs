@@ -22,8 +22,12 @@ use tauri_plugin_store::StoreExt;
 #[cfg(not(feature = "cli"))]
 use tokio::sync::Mutex;
 
-#[cfg(all(not(feature = "cli"), any(target_os = "linux", target_os = "windows")))]
-pub(crate) fn handle_agent_window_event(state: &AppState, label: &str, event: &tauri::WindowEvent) {
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub(crate) fn handle_agent_window_event(
+    state: &core::state::AppState,
+    label: &str,
+    event: &tauri::WindowEvent,
+) {
     // A close request can be cancelled by the unsaved-draft dialog.
     // Fence turns only after the main window really closes.
     if label == "main" && matches!(event, tauri::WindowEvent::Destroyed) {

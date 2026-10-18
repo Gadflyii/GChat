@@ -2656,7 +2656,7 @@ while True:
             .is_empty());
     }
 
-    #[cfg(all(not(feature = "cli"), any(target_os = "linux", target_os = "windows")))]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[tokio::test]
     async fn cancelled_window_close_keeps_turn_admission_until_main_destroyed() {
         let root = tempfile::tempdir().unwrap();
@@ -2664,15 +2664,45 @@ while True:
         app.manage(AppState::default());
         app.manage(crate::test_support::TestDataRoot(root.path().to_owned()));
         let state = app.state::<AppState>();
-        let (signal_tx, signal_rx) = std::sync::mpsc::channel();
-        let requested = tauri::WindowEvent::from(
-            tauri::runtime::window::WindowEvent::CloseRequested { signal_tx },
-        );
-        crate::handle_agent_window_event(&state, "main", &requested);
-        if let tauri::WindowEvent::CloseRequested { api, .. } = requested {
-            api.prevent_close();
-        }
-        assert!(signal_rx.recv().unwrap());
+        // Get a real close-request API from Tauri's mock runtime rather than
+        // constructing its private sender. Keep the application under test
+        // separate from the mock event loop used to deliver the request.
+        let close_app = tauri::test::mock_app();
+        let close_window = tauri::WebviewWindowBuilder::new(
+            &close_app,
+            "main",
+            Default::default(),
+        )
+        .build()
+        .unwrap();
+        close_window.close().unwrap();
+        let admission_app = app.handle().clone();
+        let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let observed = cancelled.clone();
+        close_app.run_return(move |handle, event| match event {
+            tauri::RunEvent::WindowEvent {
+                label,
+                event: event @ tauri::WindowEvent::CloseRequested { .. },
+            } => {
+                crate::handle_agent_window_event(
+                    &admission_app.state::<AppState>(),
+                    &label,
+                    &event,
+                );
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                }
+                observed.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            tauri::RunEvent::MainEventsCleared
+                if observed.load(std::sync::atomic::Ordering::SeqCst) =>
+            {
+                assert!(handle.get_webview_window("main").is_some());
+                close_window.destroy().unwrap();
+            }
+            _ => {}
+        });
+        assert!(cancelled.load(std::sync::atomic::Ordering::SeqCst));
         // A secondary window disappearing must not disable the main window.
         crate::handle_agent_window_event(&state, "other", &tauri::WindowEvent::Destroyed);
         let request: AgentTurnRequest = serde_json::from_value(serde_json::json!({
