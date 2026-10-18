@@ -4066,6 +4066,22 @@ source; the original failure and bounded resume are recorded separately in
 This covers Linux keyboard and DOM semantics; spoken assistive output and
 Windows were not exercised.
 
+In **Agent Studio → Skills**, select a skill to read its **Instructions**.
+**Refresh** reloads the selected skill and keeps its instructions with that
+selection.
+
+Linux acceptance (`GUI-AGENT-SKILL-SELECTION-LIFETIME-NATIVE-20261018`): native
+Space selected `lifecycle-probe`, then `keyboard-01`, each with its matching
+Instructions. Refresh kept `keyboard-01` selected with its matching body;
+selecting and refreshing `lifecycle-probe` did the same. All 17 saved records,
+45 skill files, two workspace inputs and disabled-state bytes/modes stayed
+unchanged. Retained `8f7d18f6f` matches the selection/Refresh path at `bb194ff03`;
+the recorded switch-only difference was outside this read-only journey.
+Resources returned at 09:32Z. Evidence:
+[`out/gchat-agent-skill-selection-lifetime-native-20261018/`](../../out/gchat-agent-skill-selection-lifetime-native-20261018/).
+The source fix retains its 10 focused cases and ONE `make verify` PASS. Delayed
+request ordering remains source-test qualification; Windows was not exercised.
+
 ## Enabling and disabling skills
 
 In **Agent Studio → Skills**, focus a skill's switch and press Space to enable
