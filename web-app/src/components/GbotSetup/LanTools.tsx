@@ -23,7 +23,11 @@ export default function LanTools({
   const working = action !== null
   const [command, setCommand] = useState('')
   const [installed, setInstalled] = useState(false)
-  const [issue, setIssue] = useState('')
+  const [issue, setIssue] = useState<{
+    message: string
+    action: 'prepare' | 'check'
+    diagnostic: boolean
+  } | null>(null)
   const run = async (prepare: boolean) => {
     if (pending.current || disabled || (canStart && !canStart())) return
     pending.current = true
@@ -32,18 +36,30 @@ export default function LanTools({
     ready(false)
     setInstalled(false)
     setCommand('')
-    setIssue('')
+    setIssue(null)
     try {
       const result = await gbot<LanPreparation>(
         prepare ? 'workspaces/ssh/prepare' : 'workspaces/ssh/tools',
         { workspace_id: workspaceId, ...(prepare ? { consent } : {}) }
       )
       setCommand(result.command ?? '')
-      setIssue(result.issue ?? '')
+      if (result.issue) {
+        setIssue({
+          message: result.issue,
+          action: prepare ? 'prepare' : 'check',
+          diagnostic: /^Guest (archive|installer) upload failed:/.test(
+            result.issue
+          ),
+        })
+      }
       setInstalled(result.installed)
       ready(result.installed)
     } catch (cause) {
-      setIssue(String(cause instanceof Error ? cause.message : cause))
+      setIssue({
+        message: String(cause instanceof Error ? cause.message : cause),
+        action: prepare ? 'prepare' : 'check',
+        diagnostic: true,
+      })
     } finally {
       pending.current = false
       setAction(null)
@@ -116,9 +132,25 @@ export default function LanTools({
         </div>
       )}
       {issue && (
-        <p role="alert" className="text-destructive">
-          {issue}
-        </p>
+        <div role="alert" className="space-y-2 text-destructive">
+          {issue.diagnostic ? (
+            <>
+              <p>
+                {issue.action === 'prepare'
+                  ? 'GChat could not finish preparing the tools. Check the computer’s connection and available disk space, then choose Prepare tools to try again. If you already ran the installation command, choose Check tools first.'
+                  : 'GChat could not check the tools. Check the computer’s connection, then choose Check tools to try again.'}
+              </p>
+              <details>
+                <summary className="cursor-pointer">Details</summary>
+                <p className="whitespace-pre-wrap break-words">
+                  {issue.message}
+                </p>
+              </details>
+            </>
+          ) : (
+            <p className="whitespace-pre-wrap break-words">{issue.message}</p>
+          )}
+        </div>
       )}
       {installed && (
         <p role="status">
