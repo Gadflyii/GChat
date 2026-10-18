@@ -37,7 +37,12 @@ const agentDefinitions = vi.hoisted(() => ({
   value: [] as AgentDefinition[],
   loading: false,
 }))
-const agentSkills = vi.hoisted(() => ({ value: [] as AgentSkill[], loading: false }))
+const agentSkills = vi.hoisted(() => ({
+  value: [] as AgentSkill[],
+  loading: false,
+  error: null as string | null,
+  load: vi.fn(),
+}))
 const conversationPolicyState = vi.hoisted(() => ({
   activeDefinitions: {} as Record<string, string>,
   setActiveDefinition: vi.fn(),
@@ -83,7 +88,12 @@ vi.mock('@/hooks/useTools', () => ({
 }))
 
 vi.mock('@/hooks/useAgentSkills', () => ({
-  useAgentSkills: () => ({ skills: agentSkills.value, loading: agentSkills.loading }),
+  useAgentSkills: () => ({
+    skills: agentSkills.value,
+    loading: agentSkills.loading,
+    error: agentSkills.error,
+    load: agentSkills.load,
+  }),
 }))
 
 vi.mock('@/hooks/useAgentDefinitions', () => ({
@@ -182,11 +192,14 @@ describe('ChatInput', () => {
     agentDefinitions.loading = false
     agentSkills.value = []
     agentSkills.loading = false
+    agentSkills.error = null
+    agentSkills.load.mockReset()
     conversationPolicyState.activeDefinitions = {}
     conversationPolicyState.activeSkills = {}
     conversationPolicyState.approvalModes = {}
     conversationPolicyState.defaultApprovalMode = 'manual'
     conversationPolicyState.setActiveDefinition.mockReset()
+    conversationPolicyState.setActiveSkill.mockReset()
     conversationPolicyState.setApprovalMode.mockReset()
 
     const model = {
@@ -636,8 +649,9 @@ describe('ChatInput', () => {
     expect(usePrompt.getState().draftSkills[threadId]).toBeUndefined()
   })
 
-  it('allows ordinary chat while the skill catalog loads when there is no draft skill to restore', async () => {
-    agentSkills.loading = true
+  it.each(['loading', 'failed'])('allows ordinary chat when the skill catalog is %s and there is no draft skill', async (status) => {
+    agentSkills.loading = status === 'loading'
+    agentSkills.error = status === 'failed' ? 'catalog read failed' : null
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     render(<ChatInput onSubmit={onSubmit} />)
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'An ordinary question' } })
@@ -645,6 +659,107 @@ describe('ChatInput', () => {
     expect(send).toBeEnabled()
     fireEvent.click(send)
     await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('An ordinary question', undefined, undefined, undefined, []))
+  })
+
+  it.each(['click', 'Enter'])('keeps a reopened skill draft blocked after a rejected catalog read, then retries with %s', async (method) => {
+    const threadId = 'failed-skill-draft'
+    useThreads.setState({ currentThreadId: threadId })
+    usePrompt.setState({
+      drafts: { [threadId]: 'Summarize the document' },
+      draftSkills: { [threadId]: 'pdf' },
+    })
+    conversationPolicyState.activeSkills[threadId] = 'slides'
+    agentSkills.loading = true
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const view = render(<ChatInput onSubmit={onSubmit} />)
+    const catalog = deferred<AgentSkill[]>()
+    const rejected = catalog.promise.catch((error) => {
+      agentSkills.loading = false
+      agentSkills.error = String(error)
+      view.rerender(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+    })
+    await act(async () => {
+      catalog.reject(new Error('catalog read failed'))
+      await rejected
+    })
+
+    const input = screen.getByTestId('chat-input')
+    const send = document.querySelector('[data-test-id="send-message-button"]')!
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load skills. Retry to restore /pdf")
+    expect(send).toBeDisabled()
+    expect(send).toHaveAttribute('aria-busy', 'false')
+    fireEvent.click(send)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(conversationPolicyState.setActiveSkill).not.toHaveBeenCalled()
+    expect(input).toHaveValue('Summarize the document')
+    expect(usePrompt.getState().draftSkills[threadId]).toBe('pdf')
+
+    const retry = deferred<AgentSkill[]>()
+    agentSkills.load.mockImplementation(() => {
+      agentSkills.loading = true
+      agentSkills.error = null
+      view.rerender(<ChatInput onSubmit={onSubmit} />)
+      return retry.promise.then((skills) => {
+        agentSkills.value = skills
+        agentSkills.loading = false
+        view.rerender(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+      })
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(agentSkills.load).toHaveBeenCalledOnce()
+    expect(send).toBeDisabled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(usePrompt.getState().draftSkills[threadId]).toBe('pdf')
+    await act(async () => {
+      retry.resolve([{
+        name: 'pdf', description: 'PDF', version: '1.0.0', requiresTools: [], requiresScripts: [],
+        dangerous: false, platforms: null, enabled: true, compatible: true,
+        reserved: false, unavailableReasons: [], error: null,
+      }])
+      await agentSkills.load.mock.results[0].value
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/pdf')
+    if (method === 'click') fireEvent.click(send)
+    else fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Summarize the document', undefined, 'pdf', undefined, []))
+  })
+
+  it.each(['failed', 'missing'])('requires explicit Send without skill for a %s draft skill and clears the previous active skill', async (status) => {
+    const threadId = 'without-skill-draft'
+    useThreads.setState({ currentThreadId: threadId })
+    usePrompt.setState({
+      drafts: { [threadId]: 'Summarize the document', other: 'Other draft' },
+      draftSkills: { [threadId]: 'pdf', other: 'slides' },
+    })
+    conversationPolicyState.activeSkills = { [threadId]: 'slides', other: 'slides' }
+    conversationPolicyState.setActiveSkill.mockImplementation((key: string, name?: string) => {
+      if (name) conversationPolicyState.activeSkills[key] = name
+      else delete conversationPolicyState.activeSkills[key]
+    })
+    agentSkills.error = status === 'failed' ? 'catalog read failed' : null
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const view = render(<ChatInput onSubmit={onSubmit} />)
+    const input = screen.getByTestId('chat-input')
+    expect(document.querySelector('[data-test-id="send-message-button"]')).toBeDisabled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Send without skill' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Summarize the document', undefined, undefined, undefined, []))
+    expect(usePrompt.getState().draftSkills[threadId]).toBeUndefined()
+    expect(conversationPolicyState.activeSkills[threadId]).toBeUndefined()
+    expect(usePrompt.getState().draftSkills.other).toBe('slides')
+    expect(usePrompt.getState().drafts.other).toBe('Other draft')
+    expect(conversationPolicyState.activeSkills.other).toBe('slides')
+
+    // The opt-out must also stick for later messages in the same conversation.
+    view.unmount()
+    render(<ChatInput onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Next question' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('Next question', undefined, undefined, undefined, []))
   })
 
   it.each([false, true])('clears the sending thread skill after an attachment send finishes away from its composer (reopen=%s)', async (reopen) => {
@@ -1059,7 +1174,7 @@ describe('ChatInput', () => {
     notice.mockRestore()
   })
 
-  it('reserves /compact ahead of skills and never starts an intentionally stopped model', async () => {
+  it.each(['loading', 'failed'])('reserves /compact while the draft skill catalog is %s and never starts an intentionally stopped model', async (status) => {
     const model = { id: 'test-model', capabilities: [], settings: {} } as Model
     useModelProvider.setState({
       providers: [{ provider: 'ginfer', active: true, models: [model], settings: [] } as ModelProvider],
@@ -1067,7 +1182,9 @@ describe('ChatInput', () => {
     })
     useAppState.setState({ activeModels: [], intentionallyStoppedModels: new Set(['ginfer::test-model']) })
     seedServiceHub({ models: { getActiveModels: vi.fn().mockResolvedValue([]) } as unknown as ModelsService })
-    agentSkills.value = [{ name: 'compact' } as AgentSkill]
+    usePrompt.getState().setDraftSkill(usePrompt.getState().activeThreadId, 'pdf')
+    agentSkills.loading = status === 'loading'
+    agentSkills.error = status === 'failed' ? 'catalog read failed' : null
     const start = vi.spyOn(switchModel, 'switchToModel').mockResolvedValue()
     const onSubmit = vi.fn()
     const view = render(<ChatInput onSubmit={onSubmit} chatStatus="streaming" />)

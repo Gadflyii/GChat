@@ -84,6 +84,20 @@ plus frontend and native builds. The deferred response is exercised by rendered
 tests; this follow-up makes no additional native race or model-execution claim.
 Follow-up receipts: `/ai/gchat/out/gchat-chat-skill-draft-loading-20261018/`.
 
+A failed catalog read keeps the stored draft skill unresolved. Send and Enter
+remain blocked, with a visible Retry action. Retry restores the selected skill
+before submission. An explicit **Send without skill** action sends the draft
+without either its stored skill or the conversation's previous active skill;
+that choice also clears both selections for later messages. A missing or
+unavailable skill follows the same explicit recovery choices. Other conversation
+drafts stay intact, and ordinary Chat without a stored skill remains usable.
+
+Source `d8ab682c6` passes 77 focused tests, lint and one `make verify`,
+including all supported Rust suites. Rejected-load recovery and the explicit
+no-skill choice are covered by rendered regressions; this change makes no
+additional native catalog-failure, Windows or model-execution claim. Receipts:
+`/ai/gchat/out/gchat-chat-skill-draft-load-error-20261018/`.
+
 ## Finding a newly saved agent — October 18
 
 A private Linux native pass saved `Zebraweeklyplanner` in a long Agent Studio
