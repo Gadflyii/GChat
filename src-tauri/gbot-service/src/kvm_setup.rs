@@ -3342,6 +3342,26 @@ mod native_tests {
             println!("{}", serde_json::json!({"event":"restarted", "persistent_disk":true, "pinned_ssh_identity":true}));
             Ok(())
         }.await;
+        if result.is_err() {
+            // Preserve bounded boot/endpoint evidence before retirement removes
+            // this disposable guest. Never retain its private SSH credential.
+            let endpoint = match crate::hyperv::PreparedVm::open(&directory).await {
+                Ok(vm) => vm
+                    .endpoint(&setup.tools)
+                    .await
+                    .map_err(|error| error.to_string()),
+                Err(error) => Err(error.to_string()),
+            };
+            let console = fs::read(directory.join("serial.log"))
+                .await
+                .unwrap_or_default();
+            let tail = &console[console.len().saturating_sub(16 * 1024)..];
+            println!(
+                "{}",
+                serde_json::json!({"event":"failure_diagnostics", "endpoint":endpoint,
+                "serial_tail":String::from_utf8_lossy(tail)})
+            );
+        }
         // Always use the production owned-guest retirement path, including after
         // acceptance failure; errors retain its ownership record for safe retry.
         let retired = setup.remove(id).await.map_err(|error| error.to_string());

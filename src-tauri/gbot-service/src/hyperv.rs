@@ -222,7 +222,7 @@ impl PreparedVm {
         }
         let seed = vm.directory.join("seed");
         fs::create_dir_all(&seed).await?;
-        fs::write(seed.join("user-data"), vm.spec.cloud_init()?).await?;
+        fs::write(seed.join("user-data"), hyperv_cloud_init(&vm.spec)?).await?;
         fs::write(
             seed.join("meta-data"),
             format!("instance-id: {}\n", vm.spec.id),
@@ -341,6 +341,32 @@ impl PreparedVm {
         self.state(tools).await?;
         serial_capture(self.clone(), tools.clone()).await
     }
+}
+
+fn hyperv_cloud_init(spec: &KvmSpec) -> io::Result<String> {
+    let cloud = spec.cloud_init()?;
+    let mut value: Value = serde_json::from_str(
+        cloud
+            .strip_prefix("#cloud-config\n")
+            .ok_or_else(|| invalid("guest setup is invalid"))?,
+    )?;
+    // The genericcloud image does not include the KVP daemon. Hyper-V needs
+    // this guest integration service to report the guest's current IP address.
+    value["packages"]
+        .as_array_mut()
+        .ok_or_else(|| invalid("guest packages are missing"))?
+        .push(json!("hyperv-daemons"));
+    value["runcmd"]
+        .as_array_mut()
+        .ok_or_else(|| invalid("guest startup is missing"))?
+        .insert(
+            0,
+            json!(["systemctl", "enable", "--now", "hv-kvp-daemon.service"]),
+        );
+    Ok(format!(
+        "#cloud-config\n{}\n",
+        serde_json::to_string_pretty(&value)?
+    ))
 }
 
 fn parse_state(value: &Value) -> io::Result<VmState> {
@@ -587,8 +613,13 @@ impl SshRelay {
                         let vm = vm.clone();
                         let tools = tools.clone();
                         connections.spawn(async move {
-                            let Ok(Ok(endpoint)) = tokio::time::timeout(Duration::from_secs(15), vm.endpoint(&tools)).await else { return };
-                            let Ok(Ok(mut guest)) = tokio::time::timeout(Duration::from_secs(10), TcpStream::connect(endpoint)).await else { return };
+                            let mut guest = match wait_for_ssh(|| vm.endpoint(&tools), Duration::from_secs(20)).await {
+                                Ok(guest) => guest,
+                                Err(error) => {
+                                    eprintln!("Gbot Hyper-V SSH relay: {error}");
+                                    return;
+                                }
+                            };
                             let _ = tokio::io::copy_bidirectional(&mut client, &mut guest).await;
                         });
                     }
@@ -604,6 +635,136 @@ impl SshRelay {
 impl Drop for SshRelay {
     fn drop(&mut self) {
         self.task.abort();
+    }
+}
+
+async fn wait_for_ssh<F, R>(mut resolve: F, deadline: Duration) -> io::Result<TcpStream>
+where
+    F: FnMut() -> R,
+    R: std::future::Future<Output = io::Result<SocketAddr>>,
+{
+    let mut last_error = "guest address discovery did not finish".to_owned();
+    let connecting = async {
+        loop {
+            let attempt = async { TcpStream::connect(resolve().await?).await }.await;
+            match attempt {
+                Ok(guest) => return guest,
+                Err(error) => last_error = error.to_string(),
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    };
+    tokio::time::timeout(deadline, connecting)
+        .await
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::TimedOut,
+                format!("guest SSH did not become reachable: {last_error}"),
+            )
+        })
+}
+
+#[cfg(test)]
+mod relay_tests {
+    use super::*;
+    use tokio::io::AsyncReadExt;
+
+    #[test]
+    fn hyperv_seed_starts_ip_reporting_before_publishing_readiness() {
+        let key = russh::keys::PrivateKey::random(
+            &mut russh::keys::key::safe_rng(),
+            russh::keys::Algorithm::Ed25519,
+        )
+        .unwrap();
+        let spec = KvmSpec {
+            id: Uuid::new_v4(),
+            cpus: 2,
+            host_cpus: Vec::new(),
+            memory_mib: 4096,
+            disk_gib: 40,
+            ssh_port: 2222,
+            ssh_public_key: key.public_key().to_openssh().unwrap(),
+            browser_package: "firefox-esr".into(),
+            driver: GuestBinary::Download {
+                url: "https://example.test/driver".into(),
+                sha256: "a".repeat(64),
+            },
+            driver_revision: crate::kvm::CUA_DRIVER_REVISION.into(),
+            media: GuestBinary::Download {
+                url: "https://example.test/media".into(),
+                sha256: "b".repeat(64),
+            },
+            media_revision: crate::kvm::CUA_REVISION.into(),
+        };
+        let cloud = hyperv_cloud_init(&spec).unwrap();
+        let value: Value =
+            serde_json::from_str(cloud.strip_prefix("#cloud-config\n").unwrap()).unwrap();
+        assert!(value["packages"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("hyperv-daemons")));
+        assert_eq!(
+            value["runcmd"][0],
+            json!(["systemctl", "enable", "--now", "hv-kvp-daemon.service"])
+        );
+        assert!(value["runcmd"].to_string().contains("GBOT_READY_KEY"));
+        assert!(!spec.cloud_init().unwrap().contains("hyperv-daemons"));
+    }
+
+    #[tokio::test]
+    async fn relay_waits_for_delayed_address_before_opening_ssh_stream() {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut attempts = 0;
+        let mut stream = wait_for_ssh(
+            || {
+                attempts += 1;
+                let result = if attempts < 3 {
+                    Err(io::Error::other("no guest IP yet"))
+                } else {
+                    Ok(address)
+                };
+                std::future::ready(result)
+            },
+            Duration::from_secs(3),
+        )
+        .await
+        .unwrap();
+        assert_eq!(attempts, 3);
+        let (mut server, _) = listener.accept().await.unwrap();
+        stream.write_all(b"SSH-2.0-fixture\r\n").await.unwrap();
+        let mut bytes = [0; 17];
+        server.read_exact(&mut bytes).await.unwrap();
+        assert_eq!(&bytes, b"SSH-2.0-fixture\r\n");
+    }
+
+    #[tokio::test]
+    async fn relay_retries_tcp_until_the_guest_listens() {
+        let socket = tokio::net::TcpSocket::new_v4().unwrap();
+        socket.bind((Ipv4Addr::LOCALHOST, 0).into()).unwrap();
+        let address = socket.local_addr().unwrap();
+        let connecting = tokio::spawn(wait_for_ssh(
+            move || std::future::ready(Ok(address)),
+            Duration::from_secs(3),
+        ));
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!connecting.is_finished());
+        let listener = socket.listen(1).unwrap();
+        let stream = connecting.await.unwrap().unwrap();
+        let (_, peer) = listener.accept().await.unwrap();
+        assert_eq!(stream.local_addr().unwrap(), peer);
+    }
+
+    #[tokio::test]
+    async fn relay_bounds_unavailable_guest_and_preserves_cause() {
+        let error = wait_for_ssh(
+            || std::future::ready(Err(io::Error::other("no private IPv4 address yet"))),
+            Duration::from_millis(20),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+        assert!(error.to_string().contains("no private IPv4 address yet"));
     }
 }
 
