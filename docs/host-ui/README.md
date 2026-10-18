@@ -2,66 +2,63 @@
 
 ## Models confirmed Stop and status recovery — C7, October 18
 
-`GUI-MODELS-STOP-STATUS-RECOVERY` corrects a confirmed Stop followed by a failed
-running-model read: the shared action catch currently reports that Stop failed
-and invites a duplicate Stop. Both desktop-loaded models and local Host instances
-must retain their confirmed stopped result, remove the confirmed session's ID
-from active UI state immediately, and preserve other active models. A failed follow-up read
-must explain the stopped result, keep diagnostics in closed Technical details,
-and offer **Refresh model status**. That recovery only reads running-model
-status, with duplicate-click protection; local Load/Stop controls wait for a
-successful read. A genuine rejected Stop keeps its existing explicit retry.
-Download inventory is unrelated and must not determine whether Stop succeeded.
+`GUI-MODELS-STOP-STATUS-RECOVERY` separates a confirmed Stop from a later
+running-model read failure. Desktop-loaded models and local Host instances
+immediately remove only the confirmed stopped session ID from active UI state,
+preserving other models. A failed follow-up read explains that Stop succeeded,
+keeps diagnostics in closed Technical details and offers **Refresh model status**.
+That recovery only reads running-model status, with duplicate-click protection;
+local Load/Stop controls wait for a successful read. A genuine rejected Stop
+retains its explicit retry. Download inventory does not determine Stop success.
+
+Desktop unload does not publish a new Host snapshot, so status recovery reads
+that snapshot before merging ready aliases. A matching file path does not prove
+that an alias belongs to the stopped session. Until fresh reads succeed the
+affected row says Checking status or Status unavailable. The production service
+propagates running-model read errors, so this recovery also applies outside the
+rendered fixture; no backend change is needed.
 
 Owned branch `fix/c7-models-stop-status-recovery-20261018`, matching
-`/ai/gchat-worktrees/` tree, base `51dc678b9`. Parent owns the component and
-this authority; the test worker owns the existing rendered Models suite and
-independent S1 SSD fixture. Acceptance: both Stop routes, pending/failed then
-successful read-only recovery, immediate stopped-state publication, preservation
-of unrelated active models, repeated-click protection, true rejection/retry,
-focused tests, lint and exactly one `make verify`. No Engine, native backend,
-model run, installed-app or Windows qualification change. The accepted/read
-split and recovery are implemented. Desktop unload returns confirmation without
-publishing a new Host snapshot, so the read also refreshes that local snapshot
-before merging ready aliases. A matching file path does not prove that an alias
-belongs to the stopped session, so other aliases await that read. Until those reads succeed the affected row says
-Checking status or Status unavailable instead of trusting a stale Running label.
-The seven rendered regressions are preserved with this candidate. Current main
-and the reviewed deletion revision branch `05ee9a160` are integrated; that
-priority correction is now merged as `8b25627e7` after Codex 8 returned clean.
-The component self-check confirms each Stop route removes only its confirmed ID
-before either read, preserves unrelated active entries, and uses the synchronous
-pending guard for repeat clicks. Frozen source `d45e01667` is pushed. Independent
-SSD preparation started at **22:40:43Z** on S1 `AIS-2-8592-L01`, booking3613,
-CPU88–95 through23:10Z. Owned fixture:
-`/media/ron/SSD_RAID/ai/tmp-c7-models-stop-status-recovery-20261018`;
-container: `c7-models-stop-status-recovery-20261018-candidate`. The inactive RC
-dependency donor and eleven protected catalog inputs remain separate. Preparation
-stopped before source staging or tests: the reused recipe expected candidate
-Cargo manifest `44ea3465` as the donor reference, but the retained donor is
-`9c7223b0`; its only difference is the already-cached Tokio test-util feature.
-All 34 other dependency references match. Booking3613 returned22:46Z. The
-corrective continuation preserves the completed copies and original failed
-receipt, derives the donor reference from that donor, and keeps candidate
-bindings exclusively from frozen Git. Source staging requires its own successful
-continuation receipt. That continuation passed35/35 donor references; frozen
-source staging passed all three source, 35 dependency and eleven catalog / 48
-profile bindings. The first focused attempt on `d45e01667` stopped at **63 passed / three
-failed**. All three accepted-Stop cases counted one download-list read, but
-switching from This computer to Lab server and back legitimately triggers a
-second local inventory read. Stop and status recovery themselves only read
-running state and the Host snapshot. The correction explicitly checks the
-unchanged count before navigation, awaits the one local-return read, and checks
-that subsequent retries add no download or mutation command. Production source
-is unchanged. Lint and `make verify` never started; **zero verify invocations**.
-Booking3617 returned22:53Z and was canceled. Original failure and before/after
-bindings remain in the owned S1 fixture; small metadata is in
-`out/c7-models-stop-status-recovery-20261018/`. Corrected test freeze `fe64a9bd6` is pushed; its source staging matched all
-three source, 35 dependency and eleven catalog / 48 profile bindings. The
-corrected gate launched **22:58:30Z**, booking3622 CPU88–95 through23:23Z:
-focused66, lint and exactly one `make verify`, stopping on failure. Next: review
-terminal evidence, retire the fixture and hand off the result for reviewed merge. No Ada job, build or copy is owned; the
-23:00–23:30Z Ada quiet window is respected.
+`/ai/gchat-worktrees/` tree. Current main and the reviewed deletion correction
+`05ee9a160` are integrated; deletion is merged as `8b25627e7`. Parent owns the
+component and authority; the test worker owns the existing rendered suite and
+independent S1 SSD gate. Acceptance covers both Stop routes, immediate stopped
+state, preservation of unrelated active models, pending/failed/successful
+read-only recovery, duplicate-click protection, true rejection/retry, focused
+tests, lint and exactly one `make verify`. No Engine, native backend, model run,
+installed-app or Windows qualification change.
+
+Frozen source `fe64a9bd6` passed **66 focused tests** and lint with zero errors
+and five existing warnings. Exactly one `make verify` passed at **23:07:13Z**:
+**3,867 app tests / six skipped, 130 extension tests, 65 Node contract tests and
+1,323 native tests / 28 ignored** across 23 native summaries, all six critical
+coverage floors, typecheck and the quality guard. The parent directly reviewed
+raw stage logs and the exited-zero container and matched before/after bindings
+for three source files, 35 dependencies and eleven read-only catalogs / 48
+profiles to the frozen revision. The component self-check is complete.
+
+S1 `AIS-2-8592-L01` booking3622, CPU88–95 returned **23:09Z** and was canceled.
+The verified candidate is merge-ready. No Ada resource is held; its 23:00–23:30Z quiet window is respected. These checks qualify the source
+correction and Linux gate; they make no installed-app or Windows claim.
+
+The first focused attempt on `d45e01667` stopped at **63 passed / three failed**:
+the test counted the legitimate download-list read when navigation returns to
+This computer as a Stop/recovery read. The test-only correction checks the count
+before navigation, awaits that one return read and then checks that retries add
+no download or mutation command. Lint and verify never started in that attempt;
+booking3617 returned22:53Z. Earlier fixture preparation stopped on an obsolete
+donor-manifest expectation; its continuation retained the completed copies and
+separated the freshly read donor reference from frozen Git candidate bindings.
+Neither failure caused a production change or duplicate verify run.
+
+The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-c7-models-stop-status-recovery-20261018`
+and sole exited container `c7-models-stop-status-recovery-20261018-candidate`
+were retired at **23:11:29Z**, reclaiming **29,370,376,192 allocated bytes**
+after parent terminal review. The inactive RC dependency donor and protected
+catalog inputs remain. Only the result JSON and short summary remain in
+`out/c7-models-stop-status-recovery-20261018/`; no resource is held.
+Next: Bubbs merge, then review C4's pending Windows quote/collision handoff.
 
 ## Models overlapping deletion recovery — C7, October 18
 
