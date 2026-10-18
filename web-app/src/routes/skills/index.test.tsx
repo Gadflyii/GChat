@@ -375,13 +375,12 @@ describe('SkillsPage', () => {
 
     render(<SkillsPage />)
 
-    expect(screen.getAllByText('common:skillUnavailableOnComputer')).toHaveLength(
-      2
-    )
+    expect(screen.getByText('common:skillUnavailableOnComputer')).toBeVisible()
     const notice = screen.getByRole('heading', {
       name: 'common:skillUnavailable',
     }).parentElement!
-    expect(within(notice).getByText(`Supported systems: ${systems}.`)).toBeVisible()
+    expect(notice).toHaveTextContent('common:skillUnavailableOnComputer')
+    expect(notice).toHaveTextContent(`Supported systems: ${systems}.`)
     expect(notice).toHaveTextContent('Required tool is missing')
     expect(screen.getByRole('switch')).toBeChecked()
     const tryButton = screen.getByRole('button', { name: 'common:tryInChat' })
