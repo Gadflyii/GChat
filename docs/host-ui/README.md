@@ -1,5 +1,48 @@
 # GInfer host UI
 
+## Google setup credential save/import — Gchat 3 native acceptance, October 18
+
+`GCHAT-GOOGLE-WORKSPACE-SETUP-WIZARD-20261017` passes its remaining Linux
+native registration-save/import leaf. In the retained packaged app, native JSON
+file selection and manual client ID/secret **Save** each reached **Step 6 of 6 —
+Google setup is saved**, explicitly stating that the account was not connected.
+**Choose services** returned to Workspace connections; selecting Gmail enabled
+**Connect Google Workspace** with Read only selected and no connected accounts.
+Connect was untouched. Returning to the manual form showed an empty secret field.
+
+After stopping and relaunching the private app/container with the same profile
+and keyring, explicitly reconnecting the local account service restored the saved
+card and **Review Google setup** opened the guide. Public registration metadata
+was mode 0600, recorded a saved secret and zero accounts, and contained no secret
+material. Successful native configuration acknowledges the vault write; this
+check does not independently read back the secret or establish credential validity.
+
+Retained release `ed68c7443` is bound to allocated main `832fddb85`: the wizard,
+import/Save service and native account/vault persistence paths are unchanged.
+The route difference formats outer startup errors and does not affect this leaf.
+C3's `201f46712` guide steps 1–5/manual-disabled-Save walkthrough is reused
+(`out/c3-first-user-setup-20261018/google-manual-narrow.png`); his fixture was
+untouched. Pointer/keyboard and GTK file selection were native; WebKit only
+observed state. Four accepted screenshots were visually inspected. Results and
+short summary: `out/google-setup-native-20261018/{result.json,SUMMARY.md}`.
+
+This covers English, Dark-theme packaged Linux. Real Google consent, OAuth
+callback, connected-account/token persistence, service access and Windows remain
+unqualified. The first-run **Check secure storage** action belongs to its separate
+row. Startup's existing updater request returned 404; no whole-app offline claim
+is made. An initial file-picker driver command/path mistake was corrected using
+separate native type/key calls and the actual private HOME path; no source changed.
+
+Worktree `/ai/gchat-worktrees/gchat3-google-setup-native-20261018`, branch
+`test/gchat3-google-setup-native-20261018`, retains documentation only. The S1
+private container, HOME/cache/keyring, DBus/display and relay are removed; no
+private processes remain and 3,425,223,923 bytes were reclaimed. CPUs 80–87 booking
+was canceled at 03:00Z; no GPU/model was used. The read-only release donor under
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+remains untouched. Only concise result/summary and four screenshots are retained
+in the canonical GChat `out/` receipt folder and ignored worktree `out/`. The
+documentation-only gate is `git diff --check`; no source test gate was repeated.
+
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
 `GUI-CONNECT-NEEDS-SERVICE-HINT` passes its Linux native check in the
@@ -1762,3 +1805,23 @@ checking, quality checks, 3,221 app tests, 121 extension tests, 1,212 Rust tests
 floors (six app tests skipped, 28 Rust tests ignored). Changed source/test hashes matched locally and on S1
 before and after the gate. These are rendered React tests with mocked service responses; there is no new
 native VM or Windows acceptance claim.
+
+## Removing the last disconnected bot account, October 18 (Gchat 2)
+
+`GBOT-LINKED-ACCOUNTS-UNLINK-LAST-DISCONNECTED`: clearing the last disconnected account checkbox disabled
+Save linked accounts before the change could be saved. The bot kept its old saved account reference. Save now
+remains available while saved references need removal, including an empty selection. After a successful save,
+the existing empty-account explanation and disabled Save state return.
+
+The rendered regression follows the checkbox through saving an empty account list and receiving the saved
+response. On baseline `08e49496d`, removal failed at the disabled Save button while the empty-account control
+passed. The fix passes all 12 account tests.
+
+One `make verify` passed lint, type checking and quality checks, then stopped on a stale setup regression
+after an independent wording change. That existing test now uses Stop setup and checks the plain error plus
+expandable details through polling and retry; all 28 setup tests pass. Only the failed coverage and remaining
+Rust stages were continued: 3,272 app tests, 121 extension tests, 1,216 Rust tests and all six coverage floors
+pass (six app skips, 28 Rust ignores). The first failure remains recorded; no second full gate was run.
+Changed source/test hashes matched locally and on S1 before and after the continuation. Private build data
+was removed and CPUs returned at 02:54 UTC. These are mocked-service React checks, with no new native VM,
+Windows or live sign-in acceptance claim.
