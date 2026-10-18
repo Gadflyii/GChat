@@ -519,10 +519,11 @@ setup search, provider ordering, selected-model marker and sidebar layout.
 Keyboard focus must be visible and Enter must open the selected provider.
 
 Acceptance: focused rendered navigation regressions and one `make verify`, then
-push the isolated branch merge-ready. Existing installed evidence is
-`/ai/gchat/out/c4-settings-sweep-20261017/provider-navigation-semantics.json`;
-the parent retains the ordinary installed keyboard recheck. No provider setup,
-model, GPU, Engine, install or existing user data is involved in this source fix.
+push the isolated branch merge-ready. The initial native finding is retained in
+`/ai/gchat/out/c4-settings-sweep-20261017/provider-navigation-semantics.json`.
+The ordinary Linux native keyboard leaf passed in the later C4 replay below.
+No provider setup, model, GPU, Engine, install or existing user data is involved
+in this source fix.
 
 Owned tree: `/ai/gchat-worktrees/c7-settings-provider-keyboard-20261017`, branch
 `fix/c7-settings-provider-keyboard-20261017`, base `0099e0a1d`. Implementation
@@ -541,10 +542,22 @@ Returned15:35Z; booking2630 canceled. The private verification copy and four
 exited containers were removed, with the read-only donor untouched. Concise
 results are retained in
 `/ai/gchat/out/settings-provider-keyboard-20261017/{result.json,summary.md}`.
-Next: coordinator merge, then Codex4's sidebar-density integration and Gchat3's
-ordinary installed keyboard recheck. The Models/Hub/Engine/Hardware hands-on
-pass waits for Gchat3's RC Load and Codex3's GMUL TIMING pair to return;
-Windows collision remains pending Gchat2's installed RC handoff.
+Source merged in `c68027c6b`; the pending installed-keyboard wording is
+superseded by C4's retained native Linux replay on `5a46f3fb5`.
+`final-provider-keyboard-focus.json` records the OpenAI link focused;
+`final-provider-keyboard-result.json` records `/settings/providers/openai`, its
+heading and API Key/Base URL fields after Enter. The compact-sidebar account
+above records the native keyboard action. The final `0c598c378` replay preserves
+this result and confirms providers visible at the original 1200×800 viewport;
+its only follow-up changes Hermes link spacing. OLD returned OFF with its
+original XML at 16:39Z. This closes the ordinary Linux provider-navigation leaf.
+
+Gchat2 reconciled these existing receipts on 2026-10-18 without another app,
+build or test run; the documentation-only change passes `git diff --check`.
+Receipt hashes and scope are retained in
+`/ai/gchat/out/gchat2-provider-keyboard-closure-20261018/{result.json,SUMMARY.md}`.
+This result does not qualify Windows, live provider setup/sign-in or the broader
+Models/Hub/Engine/Hardware workflows.
 ## Copy result and accessible control — C6
 
 `GUI-COPY-RESULT-ACCESSIBILITY-20261017` fixes the shared Copy button in
