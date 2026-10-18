@@ -4,6 +4,74 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## OI-068 Linux Code document continuation — October 18, Codex 3
+
+The actual selected Linux stock Code session passes workbook access through
+GChat's tool bridge, explicit folder approval, native `/compact` and a completed
+same-session answer using the retained values. OI-068 remains PARTIAL; Hermes,
+Windows and configured connectors retain their separate acceptance leaves.
+
+This reused the accepted Linux RC DEB, GChat `3e32ad0c9` / Engine `b26ec5b8f`,
+from S1 `/media/ron/SSD_RAID/ai/tmp-c3-linux-rc-20261018/packages/`.
+Hashes and installed-package scope are in
+[installer refresh](../installer-refresh/README.md). Code-owning source is
+unchanged through this evidence branch's main base `394532881`; no rebuild or
+source edit was needed. Ordinary managed provisioning installed OpenCode
+1.19.3 in a fresh isolated S1 HOME, private D-Bus/runtime and unlocked keyring.
+The protected workbook was copied outside the selected workspace so the real
+folder-approval boundary remained necessary.
+
+The first request could not connect: the local API server was stopped and the
+managed Code model limits were context/output 0/0. Native **Start server** and
+turning OpenCode off/on in Integrations refreshed the ordinary managed provider
+to context 262144/output 65536, with its GChat bridge connected. No answer is
+claimed for the failed prerequisite attempt. The retry retained selected stock
+session `ses_eb05875d4ffek6ANwxKB1S5MPO` and the correct workspace. Session,
+reply, configuration and approval state were never injected.
+
+The model discovered the document capability and schema, then called
+`os_fs_read_document`. Native **Allow once** approved exactly `external-doc`.
+The completed answer reported worksheet **Budget**, **Revenue 42000** and
+**Expenses 12000**. The tool returned all 46 extracted characters without
+truncation. Native `/compact` completed in 9.4 seconds; the stock transcript
+records an explicit compaction request, completed assistant summary and 714
+output tokens. The subsequent same-session request completed in 3.3 seconds
+with **42000 − 12000 = 30000**, without another tool call or document read.
+The stock completion has `finish: stop`, input/output 9460/102 tokens and idle
+session status. Native TokenSidebar shows 9562 tokens, 4%, $0.00 and OpenCode
+1.19.3; the final screenshot was viewed.
+
+The normal Qwen INT artifact was read from its existing NAS path without a
+model copy: package SHA256
+`bcf29abd1598f5666c641da7c59ac28bd999aa98a8d6ba533ae7aa579abd06a7`.
+S1 GPU1 reached Ready at 15:31:39Z with configured context 262144, one
+request/copy, Automatic memory, Vision and structured responses on, speculation
+off. Effective conversation memory was 74.63 GiB; maximum request context was
+261632. This functional check does not promote a hardware/profile qualification.
+Normal native terminal Stop, local API Stop and Host model Stop completed.
+Returned15:43Z; an inherited wrapper child retained the GPU lock until its exact
+owned PID was retired at 15:45Z. Future wrapper retirement must include the
+verified child that inherited the lock descriptor.
+
+Normal WM Close at 15:42:53Z logged window close, destruction and application
+exit request, but the app then hung before cleanup with a hidden default Code
+terminal still alive. This leaf does **not** qualify normal app exit. Preserve
+that failure separately from the passing transcript; investigate terminal
+shutdown next rather than repeating the model-backed document gate. Cleanup
+completed at 15:50:32Z only after exact owned Code child signals; this was
+assisted retirement. The shell-only killer lost the separate Code process
+groups, leaving a PTY reader blocked before the app's unbounded join.
+
+Small receipts are in `/ai/gchat/out/c3-code-doc-continuation-20261018/`, including
+`result.json`, stock transcripts, viewed approval/final screenshots, the normal
+hardware profile and `shutdown.json`. The owned fixture is S1
+`/media/ron/SSD_RAID/ai/tmp-c3-code-doc-continuation-20261018` (short alias
+`/tmp/c3code18`), stopped and retained only for `GUI-CODE-APP-EXIT-20261018` source correction
+and native regression before same-day retirement; no other owner's
+runtime or input is disposable. Evidence-only branch
+`test/c3-code-doc-continuation-20261018` owns this record; Gchat 1 retains the
+subject README. Verification is `git diff --check`, without source gates.
+
 Completed **GCHAT-GENERAL-WORKER-TEST-GBOT-BOOTSTRAP**: the existing mock app and
 reopened app manage explicitly stopped Gbot state; an empty connector catalog no
 longer launches a real service. The dispatch/cancel/policy/reopen fixture passes
