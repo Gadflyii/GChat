@@ -4,6 +4,50 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## Saved Host credential after abrupt Linux desktop loss — October 18, Codex 3
+
+The bounded Linux saved-Host crash/relaunch leaf of
+`GCHAT-KEYRING-PROMPT-AT-LAUNCH` **passes**. The accepted RC `3e32ad0c9` /
+Engine `b26ec5b8f` was freshly installed with ordinary `dpkg -i`; eleven owning
+saved-Host/startup/credential paths match main `cd688c428`. The earlier
+normal-restart, fresh-install and Gbot-token/key checks remain valid.
+
+Ordinary native Pair saved a private synthetic remote Host and showed it
+Connected. Only the owned desktop received SIGKILL at 17:30:02Z; the Host
+survived. With the private login collection then locked, same-data relaunch
+and ordinary Hosts navigation made **zero Secret Service calls** and left the
+collection locked. Explicit saved **Connect** alone opened an unlock prompt.
+Native Cancel retained the saved Host, locked collection and Connect action.
+Retrying Connect and unlocking retrieved the same saved item once and
+reconnected the same Host, with **zero CreateItem, SetSecret or Delete** calls.
+The D-Bus caller was verified as the relaunched desktop. Read-only observer
+Locked-property queries are distinguished from app calls in the trace.
+
+Normal window Close completed app cleanup by 17:31:49Z and made no storage
+calls. This uses private S1 SSD HOME, D-Bus, mode-700 runtime, X display and
+synthetic keyring; no model or GPU. The first GTK launch failed because the
+private Xauthority hostname did not match the container; importing the same
+private cookie with a wildcard family corrected preparation. Ron's display
+and keyring were not used.
+
+Small result, original receipts/logs and viewed paired/passive/prompt/cancel/
+reconnected screenshots are retained in
+`/ai/gchat/out/c3-keyring-crash-relaunch-20261018/` (`result.json`, `summary.md`).
+The disposable container, processes, inspector tunnel and S1
+`/media/ron/SSD_RAID/ai/tmp-c3-keyring-crash-relaunch-20261018` were retired;
+returned17:33Z. Restricted root-owned packaged-skill directories required an
+owned-root-only cleanup container; original small receipts were copied and
+checked before final deletion. The protected accepted package remains in
+`tmp-c3-linux-rc-20261018/packages/`.
+
+Evidence branch: `test/c3-keyring-crash-relaunch-20261018`; Gchat 1 retains the
+subject README. Verification: `git diff --check`; no source edits or source
+gates. The parent remains OPEN for provider credentials, Gbot task/crash
+recovery and native Windows. This does not qualify general crash or power-loss
+recovery. Next: coordinate remaining provider acceptance and its real-token
+prerequisite with Gchat 1; keep this saved-Host result accepted without repeating
+it.
+
 ## OI-068 Linux Code document continuation — October 18, Codex 3
 
 The actual selected Linux stock Code session passes workbook access through
@@ -66,9 +110,9 @@ Small receipts are in `/ai/gchat/out/c3-code-doc-continuation-20261018/`, includ
 `result.json`, stock transcripts, viewed approval/final screenshots, the normal
 hardware profile and `shutdown.json`. The owned fixture is S1
 `/media/ron/SSD_RAID/ai/tmp-c3-code-doc-continuation-20261018` (short alias
-`/tmp/c3code18`), stopped and retained only for `GUI-CODE-APP-EXIT-20261018` source correction
-and native regression before same-day retirement; no other owner's
-runtime or input is disposable. Evidence-only branch
+`/tmp/c3code18`), retired after `GUI-CODE-APP-EXIT-20261018` passed its source
+correction and native regression at 17:09Z. No other owner's runtime or input
+was removed. Evidence-only branch
 `test/c3-code-doc-continuation-20261018` owns this record; Gchat 1 retains the
 subject README. Verification is `git diff --check`, without source gates.
 
@@ -136,7 +180,8 @@ RC Engine `b26ec5b8f`, Gbot and catalog 179 were reused without a model gate
 repeat. Socket1 builds used only its shared compile guard. CPU resources returned
 17:09Z; no GPU was held. Evidence:
 `/ai/gchat/out/c3-code-app-exit-20261018/{result.json,native-result.json,summary.md}`.
-Next is normal merge of the completed correction.
+Source `b09241e25` is merged as `89ee4b9b6`. The clean owned source worktree
+was retired after confirming that ancestry; no repeat gate remains for this leaf.
 
 ## OI-068 native near-full-input task — October 15
 
