@@ -138,7 +138,7 @@ pub async fn factory_reset<R: Runtime>(
     restart_app(&app_handle)
 }
 
-/// Drain every shared Agent turn before tearing down its dependencies or data.
+/// Drain Agents and stop the configured Host before deleting their data.
 pub(crate) async fn reset_app_data<R: Runtime>(
     app_handle: &AppHandle<R>,
     state: &State<'_, AppState>,
@@ -147,6 +147,13 @@ pub(crate) async fn reset_app_data<R: Runtime>(
     crate::core::agent::commands::shutdown(app_handle)
         .await
         .map_err(|error| format!("GChat reset could not finish: {error}. Try resetting again after the Agent runs stop."))?;
+
+    let _access = crate::core::engine_hosts::data_folder_access().write().await;
+    let client = crate::core::engine_hosts::reset_client(app_handle);
+    let _host = client
+        .prepare_local_reset(&data_folder.join("ginfer/host"))
+        .await
+        .map_err(|error| format!("GChat reset could not stop its local Host: {error}. Your data has not been deleted. Check Host status, then try resetting again."))?;
 
     // Keep the windows alive until restart: closing the last one exits the app
     // before asynchronous shutdown and data deletion can finish.
@@ -172,7 +179,7 @@ pub(crate) async fn reset_app_data<R: Runtime>(
     if let Err(e) = cleanup_own_locks(app_handle) {
         log::warn!("Failed to cleanup lock files: {}", e);
     }
-    // Clean up the ginfer process map.
+    // Host-owned Engines have exited; detached client handles can now be cleared.
     let _ = cleanup_ginfer_processes(app_handle.clone()).await;
 
     // Windows needs time to release file handles after TerminateProcess

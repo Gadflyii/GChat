@@ -29,6 +29,13 @@ pub(crate) struct TestFleet {
     pause_reads: Arc<std::sync::atomic::AtomicBool>,
     read_arrived: Arc<tokio::sync::Notify>,
     read_resumed: Arc<tokio::sync::Notify>,
+    reset_shutdown: Option<ResetShutdown>,
+}
+
+struct ResetShutdown {
+    stopped: Arc<tokio::sync::Notify>,
+    release: Arc<tokio::sync::Notify>,
+    task: tokio::task::JoinHandle<()>,
 }
 
 #[derive(Default)]
@@ -80,9 +87,24 @@ impl TestFleet {
     }
 
     async fn start_bound(configured: bool, shared: bool) -> Self {
+        Self::start_bound_at(configured, shared, None).await
+    }
+
+    /// A desktop-managed Host retains its real root lock until idle Stop has
+    /// finished. Tests release that lock separately to observe reset ordering.
+    pub async fn desktop_reset(data: &Path) -> Self {
+        Self::start_bound_at(false, false, Some(data)).await
+    }
+
+    async fn start_bound_at(configured: bool, shared: bool, reset_data: Option<&Path>) -> Self {
         let directory = tempfile::tempdir().unwrap();
+        let host_directory = reset_data
+            .map(|data| data.join("ginfer/host"))
+            .unwrap_or_else(|| directory.path().join("host"));
+        let owner = reset_data
+            .map(|_| ginfer_host::service_owner::ServiceOwner::acquire(&host_directory).unwrap());
         let host = ginfer_host::service::Host::open(
-            directory.path().join("host"),
+            host_directory,
             "Fixture".into(),
             std::env::current_exe().unwrap(),
             vec![],
@@ -91,6 +113,26 @@ impl TestFleet {
         )
         .await
         .unwrap();
+        let reset_shutdown = owner.map(|owner| {
+            host.enable_relocation_stop();
+            let stopped = Arc::new(tokio::sync::Notify::new());
+            let release = Arc::new(tokio::sync::Notify::new());
+            let stopping_host = host.clone();
+            let observed = stopped.clone();
+            let released = release.clone();
+            let task = tokio::spawn(async move {
+                let _owner = owner;
+                stopping_host.wait_for_normal_stop().await;
+                assert!(!stopping_host.processes.lock().await.needs_monitoring());
+                observed.notify_one();
+                released.notified().await;
+            });
+            ResetShutdown {
+                stopped,
+                release,
+                task,
+            }
+        });
         let listener =
             tokio::net::TcpListener::bind(if shared { "0.0.0.0:0" } else { "127.0.0.1:0" })
                 .await
@@ -210,6 +252,7 @@ impl TestFleet {
             pause_reads,
             read_arrived,
             read_resumed,
+            reset_shutdown,
         }
     }
 
@@ -256,6 +299,21 @@ impl TestFleet {
     pub fn stop(&self) {
         self.server.abort();
     }
+    pub async fn wait_for_reset_stop(&self) {
+        self.reset_shutdown
+            .as_ref()
+            .expect("desktop reset fixture")
+            .stopped
+            .notified()
+            .await;
+    }
+    pub fn release_reset_owner(&self) {
+        self.reset_shutdown
+            .as_ref()
+            .expect("desktop reset fixture")
+            .release
+            .notify_one();
+    }
     pub fn pause_fleet_reads(&self) {
         self.pause_reads
             .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -272,6 +330,9 @@ impl TestFleet {
 impl Drop for TestFleet {
     fn drop(&mut self) {
         self.server.abort();
+        if let Some(shutdown) = &self.reset_shutdown {
+            shutdown.task.abort();
+        }
     }
 }
 

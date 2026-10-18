@@ -1,5 +1,37 @@
 # GInfer host UI
 
+## Factory reset unloads Host instances — C3, October 18
+
+Active priority P2 on `991a55e74`, merged `0b370ec2a`: the removed frontend
+unload has no native replacement; session-map cleanup leaves loaded Host
+instances and GPU allocations alive through reset deletion. Native reset must
+stop and await every loaded Host instance before clearing handles or deleting
+data, after Agent admission is fenced and active tools have drained. Teardown
+failure must refuse deletion and remain visible to the user.
+
+Acceptance: a loaded native Host instance is stopped through the production
+reset path before data deletion; its owning process and GPU allocation are
+gone. Add a meaningful regression, run focused tests/check/Clippy and one full
+`make verify`, send Codex 8 the result, then mail Bubbs merge-ready. Reuse the
+retained exact Engine/model donor for one private S1 native GPU check if needed.
+
+Owner/source: `/ai/gchat-worktrees/c3-reset-host-unload-20261018`, branch
+`fix/c3-reset-host-unload-20261018`, base `910fcd6ac`. Implementation is complete;
+all five focused reset cases, Rust check and strict Clippy pass. One full
+`make verify` is running; the real GPU allocation/release check remains next.
+Reset owns only the selected
+local desktop Host; paired remote Hosts retain their independent ownership.
+Its fresh native snapshot covers Ready and still-starting sessions absent from
+the plugin map. Stop waits for Engine exit, then idle Host Stop seals admission
+and reset retains the Host ownership lock through deletion.
+
+Private build root: `/media/ron/SSD_RAID/ai/tmp-c3-reset-host-unload-20261018`,
+S1 CPUs24–31 booked01:48–02:13Z, offline read-only dependencies from
+`/media/ron/SSD_RAID/ai/tmp-claude-gchat-finish-20261017/tool-source` and its
+Cargo cache; pinned image `sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14`.
+Only private copies are mutated. CPU24–31 uses the shared native build lock
+(socket 0), nice10 and eight Cargo jobs. No GPU allocation yet. The startup-quote row is paused.
+
 ## Launch form initial error — C7 installed acceptance, closed October 18
 
 `GUI-LAUNCH-ERROR-EARLY` passes its native Linux installed recheck. In retained

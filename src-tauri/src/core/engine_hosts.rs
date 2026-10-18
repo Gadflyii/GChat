@@ -229,6 +229,18 @@ pub async fn shared_client() -> Result<Arc<Client>, String> {
     client().initialize().await?;
     Ok(client().clone())
 }
+/// Reset must use the configured owner without discovery or starting a Host.
+pub(crate) fn reset_client<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Arc<Client> {
+    #[cfg(test)]
+    {
+        use tauri::Manager;
+        if let Some(client) = app.try_state::<Arc<Client>>() {
+            return client.inner().clone();
+        }
+    }
+    let _ = app;
+    client().clone()
+}
 pub async fn initialize<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     crate::core::setup::wait_for_bundled_resources(app).await?;
     let _access = data_folder_access().read().await;
