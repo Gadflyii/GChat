@@ -2004,3 +2004,29 @@ One `make verify` passed: lint, type checking, quality checks, 3,288 app tests, 
 1,216 Rust tests and all six coverage floors (six app skips, 28 Rust ignores). Changed source/test
 hashes matched locally and on S1 before and after verification. Private build data was removed
 and CPUs returned at 03:20 UTC.
+
+
+## Confirming deletion of a bot computer, October 18 (Gchat 2)
+
+`GBOT-LOCAL-COMPUTER-REMOVE-CONFIRMATION`: Remove owned computer previously sent the
+removal request immediately. The service then stopped/unregistered the owned VM and
+deleted its disk, saved files and connection. The control now opens the existing app
+confirmation dialog, names the saved bot, explains that all files are permanently
+deleted and requires an explicit Delete computer action. Cancel sends no removal
+request. Leaving setup before accepting also prevents removal.
+
+Both ready-computer and unfinished-setup regressions fail on main baseline `9c3e7603a`
+at the premature removal request. With the fix,
+`yarn test web-app/src/components/GbotSetup/KvmSetup.test.tsx` passes all 15 cases, including
+Cancel, explicit acceptance, exact saved identity, duplicate-action protection, pending
+refreshes, late status replies and acceptance after unmount. The existing shared dialog
+provides initial Cancel focus and Escape cancellation. Backend ownership and in-use
+checks retain their existing behavior. No real VM was deleted during qualification.
+These are rendered React tests using a mocked service; no new native VM or Windows
+acceptance is claimed. Commands and results:
+`/ai/gchat/out/gchat2-computer-remove-confirmation-20261018/result.json`.
+
+One `make verify` passed: lint, type checking, quality checks, 3,294 app tests,
+121 extension tests, 1,220 Rust tests and all six coverage floors (six app skips,
+28 Rust ignores). Changed source/test hashes matched locally and on S1 before
+and after the gate. Private build data was removed and CPUs returned at 03:33 UTC.
