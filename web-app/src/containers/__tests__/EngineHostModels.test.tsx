@@ -1026,3 +1026,159 @@ it('keeps a rejected start model control result actionable until an explicit gua
   expect(engineCommand).toHaveBeenCalledTimes(2)
   expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
 })
+
+it('completes an accepted model editor save result after a failed read and reopens with the replacement session', async () => {
+  const initial: EngineSnapshot = { ...importedModelSnapshot, instances: [{
+    instance_id: 'saved', session_id: 'session-one', display_name: 'Saved model', upstream_model_id: 'imported-model', status: 'ready',
+    configuration: savedModelProfile, profile: savedModelProfile,
+  }] }
+  const firstProfile = { ...savedModelProfile, max_context: 32768, concurrency: 2 }
+  const firstAccepted: EngineSnapshot = { ...initial, revision: 2, instances: [{
+    ...initial.instances[0], session_id: 'session-two', status: 'starting', configuration: firstProfile, profile: firstProfile,
+  }] }
+  const secondProfile = { ...firstProfile, max_context: 16384 }
+  const secondAccepted: EngineSnapshot = { ...firstAccepted, revision: 3, instances: [{
+    ...firstAccepted.instances[0], session_id: 'session-three', configuration: secondProfile, profile: secondProfile,
+  }] }
+  let finishFirst!: (snapshot: EngineSnapshot) => void
+  let finishSecond!: (snapshot: EngineSnapshot) => void
+  let rejectRefresh!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishFirst = resolve }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishSecond = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+  fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '2' } })
+  const save = screen.getByRole('button', { name: 'Save and restart model' })
+  fireEvent.click(save)
+  expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?', confirmLabel: 'Save and restart' })
+  expect(engineCommand).not.toHaveBeenCalled()
+  await act(async () => settleConfirm(true))
+  expect(save).toBeDisabled()
+  fireEvent.click(save)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining(firstProfile), expected_session_id: 'session-one',
+  } })
+  await act(async () => finishFirst(firstAccepted))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  await act(async () => rejectRefresh(new Error('Host list unavailable')))
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', firstAccepted)
+  expect(publishSnapshot.mock.invocationCallOrder[0]).toBeLessThan(refreshHosts.mock.invocationCallOrder[0])
+  expect(screen.getByRole('status')).toHaveTextContent('Model settings saved; restart requested.')
+  expect(screen.queryByRole('button', { name: 'Save and restart model' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Cancel editing' })).not.toBeInTheDocument()
+  expect(screen.getByText('Choose model settings').closest('details')).not.toHaveAttribute('open')
+  expect(screen.queryByText(/^Changing .*Saved model/)).not.toBeInTheDocument()
+  const readFeedback = screen.getByRole('alert')
+  expect(readFeedback).toHaveTextContent('Could not refresh the host list. Choose Refresh host list to try again.')
+  expect(within(readFeedback).getByText('Error: Host list unavailable')).not.toBeVisible()
+  expect(toast.error).not.toHaveBeenCalled()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+  expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
+  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
+  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '16384' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save and restart model' }))
+  expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?' })
+  await act(async () => settleConfirm(true))
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining(secondProfile), expected_session_id: 'session-two',
+  } })
+  await act(async () => finishSecond(secondAccepted))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Save and restart model' })).not.toBeInTheDocument())
+  expect(screen.getByText('Choose model settings').closest('details')).not.toHaveAttribute('open')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Model settings saved; restart requested.')
+  expect(screen.getByText(/Saved model.*Starting/)).toBeVisible()
+  expect(publishSnapshot).toHaveBeenNthCalledWith(2, 'host', secondAccepted)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(toast.error).not.toHaveBeenCalled()
+})
+
+it('retains a canceled or rejected model editor save result draft until an explicit retry is accepted', async () => {
+  const initial: EngineSnapshot = { ...importedModelSnapshot, instances: [{
+    instance_id: 'saved', session_id: 'session-one', display_name: 'Saved model', upstream_model_id: 'imported-model', status: 'ready',
+    configuration: savedModelProfile, profile: savedModelProfile,
+  }] }
+  const draft = { ...savedModelProfile, max_context: 32768, concurrency: 2 }
+  const accepted: EngineSnapshot = { ...initial, revision: 2, instances: [{
+    ...initial.instances[0], session_id: 'session-two', status: 'starting', configuration: draft, profile: draft,
+  }] }
+  let rejectSave!: (reason: Error) => void
+  let finishRetry!: (snapshot: EngineSnapshot) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((_resolve, reject) => { rejectSave = reject }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishRetry = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  const view = render(<HostCard host={localHost} snapshot={initial} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={localHost} snapshot={snapshot} />)
+  })
+  fireEvent.click(screen.getByText('Model and memory settings'))
+  fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
+  fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
+  fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '2' } })
+  const save = screen.getByRole('button', { name: 'Save and restart model' })
+  fireEvent.click(save)
+  expect(useConfirmStore.getState().pending).toMatchObject({ title: 'Save and restart this model?' })
+  await act(async () => settleConfirm(false))
+  expect(save).toBeEnabled()
+  expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
+  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
+  expect(engineCommand).not.toHaveBeenCalled()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  fireEvent.click(save)
+  await act(async () => settleConfirm(true))
+  expect(save).toBeDisabled()
+  fireEvent.click(save)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining(draft), expected_session_id: 'session-one',
+  } })
+  await act(async () => rejectSave(new Error('Assigned engine session has changed')))
+  const failureMessage = 'Could not restart this model. Check the settings and try again.'
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent(failureMessage)
+  expect(within(feedback).getByText('Error: Assigned engine session has changed')).not.toBeVisible()
+  expect(within(feedback).getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+  expect(save).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Cancel editing' })).toBeEnabled()
+  expect(screen.getByText('Change model settings').closest('details')).toHaveAttribute('open')
+  expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(32768)
+  expect(screen.getByLabelText('Requests at once')).toHaveValue(2)
+  expect(screen.getByText(/Saved model.*Ready to chat/)).toBeVisible()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  fireEvent.click(save)
+  await act(async () => settleConfirm(true))
+  expect(save).toBeDisabled()
+  expect(feedback).not.toBeInTheDocument()
+  fireEvent.click(save)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'reload', { host_id: 'host', instance_id: 'saved', body: {
+    configuration: expect.objectContaining(draft), expected_session_id: 'session-one',
+  } })
+  await act(async () => finishRetry(accepted))
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Save and restart model' })).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Cancel editing' })).not.toBeInTheDocument()
+  expect(screen.getByText('Choose model settings').closest('details')).not.toHaveAttribute('open')
+  expect(screen.getByRole('status')).toHaveTextContent('Model settings saved; restart requested.')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(refreshHosts).toHaveBeenCalledOnce()
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(toast.error).toHaveBeenCalledExactlyOnceWith(failureMessage)
+})

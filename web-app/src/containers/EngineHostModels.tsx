@@ -328,7 +328,13 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {
         if (editing && !await confirmAction({ title: 'Save and restart this model?', message: 'The model will finish its current replies, then restart with your chosen settings. Other people using it will be affected while it restarts.', confirmLabel: 'Save and restart' })) return
-        if (editing) void act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })
+        if (editing) {
+          if (await act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })) {
+            setEditing(null)
+            setEditingSession(null)
+            setSettingsOpen(false)
+          }
+        }
         else void (async () => {
           for (let remaining = instanceCount; remaining > 0; remaining--) {
             if (!await act('launch', { body: { ...configuration, remaining_instances: remaining } })) {
@@ -338,7 +344,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           }
         })()
       }}>{editing ? 'Save and restart model' : 'Start model with these settings'}</Button>
-        {editing && <Button variant="outline" onClick={() => { setEditing(null); setSettingsOpen(false) }}>Cancel editing</Button>}
+        {editing && <Button variant="outline" onClick={() => { setEditing(null); setEditingSession(null); setSettingsOpen(false) }}>Cancel editing</Button>}
       </div>
       </details>
     </details>}
