@@ -1,0 +1,73 @@
+{
+  "stages": {
+    "focused_native.finished": "2026-10-18T09:41:51Z",
+    "continuation.exit": "0",
+    "continuation.started": "2026-10-18T09:44:28Z",
+    "focused_native.exit": "101",
+    "focused_native_corrected.finished": "2026-10-18T09:44:29Z",
+    "preparation.finished": "2026-10-18T09:40:01Z",
+    "verify.finished": "2026-10-18T09:51:32Z",
+    "chain.exit": "101",
+    "focused_frontend.exit": "0",
+    "preparation.exit": "0",
+    "verify.exit": "0",
+    "focused_native.started": "2026-10-18T09:41:01Z",
+    "chain.started": "2026-10-18T09:40:56Z",
+    "focused_native_corrected.exit": "0",
+    "focused_native_corrected.started": "2026-10-18T09:44:28Z",
+    "continuation.finished": "2026-10-18T09:51:32Z",
+    "focused_frontend.started": "2026-10-18T09:40:56Z",
+    "chain.finished": "2026-10-18T09:41:51Z",
+    "verify.started": "2026-10-18T09:44:29Z",
+    "focused_frontend.finished": "2026-10-18T09:41:01Z",
+    "preparation.started": "2026-10-18T09:39:41Z"
+  },
+  "containers": [
+    {
+      "id": "539d941962ac0ec2f1635ed9a7544b2eca4e3bc1d417cbda98462b1f9915fc70",
+      "name": "/c3-load-needs-profile-message-20261018",
+      "state": {
+        "Status": "exited",
+        "Running": false,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 0,
+        "ExitCode": 101,
+        "Error": "",
+        "StartedAt": "2026-10-18T09:40:56.71262813Z",
+        "FinishedAt": "2026-10-18T09:41:51.187308138Z"
+      },
+      "mounts": [
+        {
+          "source": "/media/ron/SSD_RAID/ai/tmp-c3-load-needs-profile-message-20261018",
+          "destination": "/work"
+        }
+      ]
+    },
+    {
+      "id": "b0c1970d37359663de94d8bd6fcc605ad40759648d1874eab1fec43a7de714ea",
+      "name": "/c3-load-needs-profile-message-20261018-continuation",
+      "state": {
+        "Status": "exited",
+        "Running": false,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 0,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-10-18T09:44:28.215379436Z",
+        "FinishedAt": "2026-10-18T09:51:32.096971828Z"
+      },
+      "mounts": [
+        {
+          "source": "/media/ron/SSD_RAID/ai/tmp-c3-load-needs-profile-message-20261018",
+          "destination": "/work"
+        }
+      ]
+    }
+  ]
+}

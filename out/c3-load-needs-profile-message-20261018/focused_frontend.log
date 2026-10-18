@@ -1,0 +1,75 @@
+
+ RUN  v3.2.4 /work/gchat/web-app
+
+stderr | src/routes/hub/__tests__/index.test.tsx > host-scoped Models > keeps the host selector clear of the window edge
+An update to ModelManagement inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ModelManagement inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/routes/hub/__tests__/index.test.tsx > host-scoped Models > disables Load for unavailable explicit selection []
+An update to ModelManagement inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ModelManagement inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/routes/hub/__tests__/index.test.tsx > host-scoped Models > disables Load for unavailable explicit selection [ 'missing-gpu' ]
+An update to ModelManagement inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ModelManagement inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/routes/hub/__tests__/index.test.tsx (51 tests) 2204ms
+
+ Test Files  1 passed (1)
+      Tests  51 passed (51)
+   Start at  09:40:57
+   Duration  3.62s (transform 298ms, setup 164ms, collect 691ms, tests 2.20s, environment 307ms, prepare 71ms)
