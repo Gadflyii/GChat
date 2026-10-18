@@ -111,6 +111,45 @@ model, profile, host install or shared terminal PATH mutation. Reuse pinned
 routed-offline dependencies only after all retained manifests match. Preserve
 current-main AppDir/home, Interface/folder/badge candidates and runnable assets.
 Packet: `out/c3-cli-packaged-path-detection-20261018/{result.json,summary.md}`.
+## Saved-host connection and refresh feedback — Gchat 3, October 18
+
+`GUI-HOST-CONNECT-REFRESH-RESULT-20261018`: on base `c63557f3b`, Connect
+discards its successful Host snapshot and catches a subsequent list-read failure
+as a connection failure. The candidate publishes that authoritative snapshot,
+preserves the accepted result and gives a separate read-only Refresh host list
+retry. A genuine Connect rejection retains its existing recovery/details
+and requires an explicit Connect retry. Pending actions cannot duplicate.
+
+Acceptance: rendered baseline reproduction, authoritative publication before
+the read, distinct persistent command/read outcomes, read-only retry and pending
+protection, then focused tests, lint and ONE `make verify`. No native/protocol,
+Engine, installed GUI, network, GPU, Windows or installer changes/qualification.
+Owner: `/ai/gchat-worktrees/gchat3-host-connect-refresh-result-20261018`, branch
+`fix/gchat3-host-connect-refresh-result-20261018`. Execution uses an independent
+booked eight-CPU S1 fixture at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-connect-refresh-tests-20261018`, then
+removes owned copies/builds after results are reviewed. Retain only
+`out/host-connect-refresh-result-20261018/test-result.json` and adjacent
+`test-summary.md`. Source and two rendered regressions are frozen for the
+baseline comparison and gate. The independent fixture preparation passed;
+booking3031 returned 05:23Z. Baseline execution started 05:26Z on S1
+AIS-2-8592-L01 CPUs120–127, booking3035, with the socket-1 shared compile lock.
+Only the frozen tests were overlaid on the exact base for that phase. Both
+regressions failed as expected (38 skipped): accepted Connect followed by a
+failed read never published its snapshot, and an explicit successful retry
+still left the card Not connected. The coordinator reviewed the actual log.
+All 40 focused cases pass with the frozen fix; lint passes with zero errors
+and five existing warnings. ONE `make verify` passes: 3,374 app tests (six
+skipped), 127 extension tests, all six critical coverage floors and 1,229 Rust
+tests (28 ignored). The candidate ran 05:27:43–05:35:38Z, exit zero without OOM.
+The coordinator reviewed actual logs, terminal states, source/test diffs and
+matching post-gate source bindings. Current main has no intervening changes
+to either owned source/test file. Booking3035 is canceled; returned 05:37Z.
+The owned SSD fixture (42.33 GB), two exited containers and local source archive
+were removed by 05:39Z. The RC donor is untouched and only the concise result
+and summary remain. Status: MERGE READY; next unresolved action is Bubbs's merge.
+These checks establish rendered mocked-command behavior and the Linux source
+gate; they do not establish native connection, installed GUI or Windows acceptance.
 
 ## Gbot human-help failure recovery — October 18
 

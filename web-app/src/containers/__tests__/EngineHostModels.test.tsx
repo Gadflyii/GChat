@@ -6,16 +6,22 @@ import { HostCard } from '../EngineHostModels'
 import { engineCommand, type EngineSnapshot, type EngineStartupQuote } from '@/services/engines'
 import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 
-const { refreshHosts } = vi.hoisted(() => ({ refreshHosts: vi.fn().mockResolvedValue(undefined) }))
+const { refreshHosts, publishSnapshot } = vi.hoisted(() => ({
+  refreshHosts: vi.fn().mockResolvedValue(undefined),
+  publishSnapshot: vi.fn(),
+}))
 
 vi.mock('@/services/engines', async (original) => ({
   ...await original<typeof import('@/services/engines')>(),
   engineCommand: vi.fn().mockResolvedValue({}),
 }))
-vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: () => refreshHosts }))
+vi.mock('@/stores/engine-hosts-store', () => ({
+  useEngineHosts: (selector: (state: { refresh: typeof refreshHosts; publishSnapshot: typeof publishSnapshot }) => unknown) =>
+    selector({ refresh: refreshHosts, publishSnapshot }),
+}))
 vi.mock('../EngineProfilePicker', () => ({ EngineProfilePicker: () => null }))
 vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId, hardwareProfileControls }: { hostId: string; hardwareProfileControls?: ReactNode }) => <section aria-label={`First-run setup for ${hostId}`}>{hardwareProfileControls}</section> }))
-afterEach(() => { cleanup(); settleConfirm(false); vi.clearAllMocks() })
+afterEach(() => { cleanup(); settleConfirm(false); vi.clearAllMocks(); publishSnapshot.mockReset() })
 
 const localHost = { local: true, host_id: 'host', name: 'Host', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
 const importedModelSnapshot: EngineSnapshot = {
@@ -346,6 +352,7 @@ it('discards late quote results after settings change and reports a fresh Host r
 it('keeps a saved remote host passive until its Connect button is used', async () => {
   const host = { local: false, host_id: 'remote', name: 'Saved server', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
   const error = 'Connect this saved host to unlock its credential for this session'
+  vi.mocked(engineCommand).mockReset().mockResolvedValueOnce({ ...importedModelSnapshot, host_id: host.host_id, display_name: host.name })
   render(<HostCard host={host} error={error} />)
   expect(screen.getByText(/Choose Connect to use this saved computer/)).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -356,19 +363,125 @@ it('keeps a saved remote host passive until its Connect button is used', async (
   await waitFor(() => expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled())
 })
 
-it('explains a remote connection failure, preserves its details and allows retry', async () => {
-  vi.mocked(engineCommand).mockRejectedValueOnce('TLS credential unavailable: keyring locked')
-  render(<HostCard host={{ ...localHost, local: false }} />)
-  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
+it('keeps an accepted Connect result through host-list refresh failure and read-only retries', async () => {
+  const host = { ...localHost, local: false, host_id: 'remote', name: 'Saved server' }
+  const accepted: EngineSnapshot = {
+    host_id: 'remote', display_name: 'Saved server', revision: 2, instances: [], gpus: [], models: [],
+  }
+  const refreshMessage = 'Could not refresh the host list. Choose Refresh host list to try again.'
+  let finishConnect!: (snapshot: EngineSnapshot) => void
+  let rejectRefresh!: (reason: Error) => void
+  let rejectRetry!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset().mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishConnect = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRetry = reject }))
+  const view = render(<HostCard host={host} error="Connect this saved host to unlock its credential for this session" />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={host} snapshot={snapshot} />)
+  })
+  const connect = screen.getByRole('button', { name: 'Connect' })
+  fireEvent.click(connect)
+  expect(connect).toBeDisabled()
+  fireEvent.click(connect)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+
+  await act(async () => finishConnect(accepted))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeDisabled()
+
+  await act(async () => rejectRefresh(new Error('Host list unavailable')))
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('remote', accepted)
+  expect(publishSnapshot.mock.invocationCallOrder[0]).toBeLessThan(refreshHosts.mock.invocationCallOrder[0])
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryByText(/Could not connect to this computer/)).not.toBeInTheDocument()
+  const feedback = screen.getByRole('alert')
+  expect(feedback).toHaveTextContent(refreshMessage)
+  const diagnostic = within(feedback).getByText('Error: Host list unavailable')
+  expect(diagnostic).not.toBeVisible()
+  expect(within(feedback).getByText('Host refresh error details').closest('details')).not.toHaveAttribute('open')
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.queryByText(/Could not connect to this computer/)).not.toBeInTheDocument()
+  const refreshButton = within(feedback).getByRole('button', { name: 'Refresh host list' })
+  expect(refreshButton).toBeEnabled()
+  fireEvent.click(refreshButton)
+  expect(refreshButton).toBeDisabled()
+  fireEvent.click(refreshButton)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
+  await act(async () => rejectRetry(new Error('Host list still unavailable')))
+  expect(feedback).toHaveTextContent(refreshMessage)
+  expect(within(feedback).getByText('Error: Host list still unavailable')).not.toBeVisible()
+  expect(refreshButton).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+
+  fireEvent.click(refreshButton)
+  await waitFor(() => expect(feedback).not.toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(refreshHosts).toHaveBeenCalledTimes(3)
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('remote', accepted)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
+})
+
+it('keeps a rejected Connect result retryable without publishing or reading the host list', async () => {
+  const host = { ...localHost, local: false, host_id: 'remote', name: 'Saved server' }
+  const accepted: EngineSnapshot = {
+    host_id: 'remote', display_name: 'Saved server', revision: 2, instances: [], gpus: [], models: [],
+  }
+  let rejectConnect!: (reason: string) => void
+  let finishRetry!: (snapshot: EngineSnapshot) => void
+  vi.mocked(engineCommand).mockReset()
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((_resolve, reject) => { rejectConnect = reject }))
+    .mockReturnValueOnce(new Promise<EngineSnapshot>((resolve) => { finishRetry = resolve }))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  const view = render(<HostCard host={host} />)
+  publishSnapshot.mockImplementation((_hostId: string, snapshot: EngineSnapshot) => {
+    view.rerender(<HostCard host={host} snapshot={snapshot} />)
+  })
+  const connect = screen.getByRole('button', { name: 'Connect' })
+  fireEvent.click(connect)
+  expect(connect).toBeDisabled()
+  fireEvent.click(connect)
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('connect', { host_id: 'remote' })
+  await act(async () => rejectConnect('TLS credential unavailable: keyring locked'))
   const alert = await screen.findByRole('alert')
   expect(alert).toHaveTextContent('Could not connect to this computer. Check that it is on and reachable, then try Connect again.')
   const details = within(alert).getByText('TLS credential unavailable: keyring locked')
   expect(details).not.toBeVisible()
+  expect(details.closest('details')).not.toHaveAttribute('open')
   fireEvent.click(within(alert).getByText('Technical details'))
   expect(details).toBeVisible()
-  fireEvent.click(screen.getByRole('button', { name: 'Connect' }))
-  await waitFor(() => expect(engineCommand).toHaveBeenCalledTimes(2))
-  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  expect(connect).toBeEnabled()
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Connected to Saved server.')).not.toBeInTheDocument()
+
+  fireEvent.click(connect)
+  expect(connect).toBeDisabled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  fireEvent.click(connect)
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'connect', { host_id: 'remote' })
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  await act(async () => finishRetry(accepted))
+  await waitFor(() => expect(screen.getByText(`${host.base_url} · Connected`)).toBeVisible())
+  expect(publishSnapshot).toHaveBeenCalledExactlyOnceWith('remote', accepted)
+  expect(refreshHosts).toHaveBeenCalledOnce()
+  expect(screen.getByRole('status')).toHaveTextContent('Connected to Saved server.')
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 it.each([

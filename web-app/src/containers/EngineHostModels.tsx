@@ -20,6 +20,7 @@ const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', sto
 
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
   const refresh = useEngineHosts((s) => s.refresh)
+  const publishSnapshot = useEngineHosts((s) => s.publishSnapshot)
   const [modelId, setModelId] = useState('')
   const [gpus, setGpus] = useState<string[]>([])
   const [context, setContext] = useState(0)
@@ -31,6 +32,9 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [connectionRemoved, setConnectionRemoved] = useState(false)
   const [connectionCleanupWarning, setConnectionCleanupWarning] = useState<string | null>(null)
   const [connectionRefreshError, setConnectionRefreshError] = useState<string | null>(null)
+  const [connectionResult, setConnectionResult] = useState(false)
+  const connectPending = useRef(false)
+  const hostListRefreshPending = useRef(false)
   const [hostStopError, setHostStopError] = useState<string | null>(null)
   const [hostStopping, setHostStopping] = useState(false)
   const profiling = hardwareProfileBlocksLaunch(snapshot?.hardware_profile)
@@ -85,8 +89,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       return true
     }
     catch (e) {
-      const message = action === 'connect' ? 'Could not connect to this computer. Check that it is on and reachable, then try Connect again.'
-        : action === 'scan' ? 'Could not refresh the model list. Check that the model files are available, then try again.'
+      const message = action === 'scan' ? 'Could not refresh the model list. Check that the model files are available, then try again.'
             : action === 'stop' ? 'Could not stop this model. Check its status and try again.'
               : action === 'restart' || action === 'reload' ? 'Could not restart this model. Check the settings and try again.'
                 : action === 'hardware_profile' ? 'Could not change the graphics-card setup. Check the connection and try again.'
@@ -97,13 +100,33 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       return false
     } finally { setBusy(false) }
   }
-  const refreshRemovedConnection = async () => {
+  const refreshHostList = async () => {
+    if (hostListRefreshPending.current) return
+    hostListRefreshPending.current = true
     setBusy(true)
     try {
       await refresh()
       setConnectionRefreshError(null)
     } catch (e) { setConnectionRefreshError(String(e)) }
-    finally { setBusy(false) }
+    finally { hostListRefreshPending.current = false; setBusy(false) }
+  }
+  const connectHost = async () => {
+    if (busy || connectPending.current) return
+    connectPending.current = true
+    setBusy(true)
+    setActionError(null)
+    setConnectionResult(false)
+    setConnectionRefreshError(null)
+    try {
+      const connectedSnapshot = await engineCommand<EngineSnapshot>('connect', { host_id: host.host_id })
+      publishSnapshot(host.host_id, connectedSnapshot)
+      setConnectionResult(true)
+      await refreshHostList()
+    } catch (e) {
+      const message = 'Could not connect to this computer. Check that it is on and reachable, then try Connect again.'
+      setActionError({ message, details: String(e) })
+      toast.error(message)
+    } finally { connectPending.current = false; setBusy(false) }
   }
   const removeConnection = async () => {
     if (busy || connectionRemoved) return
@@ -115,25 +138,26 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       setConnectionCleanupWarning(result?.credential_cleanup_warning ?? null)
       toast.success('Connection removed')
       if (result?.credential_cleanup_warning) toast.warning('Connection removed. Its saved sign-in could not be cleared.')
-      await refreshRemovedConnection()
+      await refreshHostList()
     } catch (e) {
       const message = 'Could not remove this saved connection. Try again.'
       setActionError({ message, details: String(e) })
       toast.error(message)
     } finally { setBusy(false) }
   }
+  const connectionRefreshFeedback = connectionRefreshError !== null && <div role="alert" className="space-y-2 text-sm text-destructive"><p>Could not refresh the host list. Choose Refresh host list to try again.</p><details><summary className="cursor-pointer">Host refresh error details</summary><p className="whitespace-pre-wrap break-all">{connectionRefreshError}</p></details><Button variant="outline" disabled={busy} onClick={() => void refreshHostList()}>Refresh host list</Button></div>
   if (connectionRemoved) return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold">{host.name}</h2><Button variant="outline" disabled>Remove connection</Button></div>
     <p role="status" className="text-sm">The saved connection was removed.</p>
     {connectionCleanupWarning && <div role="alert" className="text-sm text-destructive"><p>The saved connection was removed, but its saved sign-in could not be cleared from this computer.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{connectionCleanupWarning}</p></details></div>}
-    {connectionRefreshError !== null && <div role="alert" className="space-y-2 text-sm text-destructive"><p>Could not refresh the host list. Choose Refresh host list to try again.</p><details><summary className="cursor-pointer">Host refresh error details</summary><p className="whitespace-pre-wrap break-all">{connectionRefreshError}</p></details><Button variant="outline" disabled={busy} onClick={() => void refreshRemovedConnection()}>Refresh host list</Button></div>}
+    {connectionRefreshFeedback}
   </section>
   const hardwareProfileControls = snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
     action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />
   return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Computer not reachable' : snapshot ? 'Connected' : host.local ? 'Connecting' : 'Not connected'}</p></div>
-      {!host.local && (error || !snapshot) && <Button variant="outline" disabled={busy} onClick={() => void act('connect')}>Connect</Button>}
+      {!host.local && (error || !snapshot) && <Button variant="outline" disabled={busy} onClick={() => void connectHost()}>Connect</Button>}
       {active && snapshot && <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
         <div className="min-w-0 basis-64 flex-1">
         {snapshot.instances.length > 1 ? <label className="block min-w-0 text-xs font-medium">Model server
@@ -161,6 +185,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         finally { setBusy(false) }
       }}>{hostStopping ? 'Quitting…' : 'Stop model service and quit'}</Button>}
     </div>
+    {connectionResult && <p role="status" className="text-sm">Connected to {host.name}.</p>}
+    {connectionRefreshFeedback}
     {actionError && <div role="alert" className="text-sm text-destructive"><p>{actionError.message}</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{actionError.details}</p></details></div>}
     {hostStopError && <div role="alert" className="text-sm text-destructive"><p>Could not stop the model service. Wait for any model loading or other work to finish, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{hostStopError}</p></details></div>}
     {!error && snapshot?.draft_width_calibrations?.some(job => job.status === 'running') && <p role="status" className="text-sm text-muted-foreground">Finishing graphics-card speed tuning (about 1 minute). Your graphics card is busy until it finishes. Starting a model stops the tuning.</p>}
