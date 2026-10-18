@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { getServiceHub } from '@/hooks/useServiceHub'
 import {
   gbot,
@@ -296,32 +297,30 @@ export default function M365Setup({
           )}
           <label className="block space-y-1">
             Microsoft account
-            <select
+            <ChoiceSelect
+              aria-label="Microsoft account"
               className="block w-full rounded-md border bg-background p-2"
               value={accountId}
               disabled={disabled}
-              onChange={(event) => {
-                setAccountId(event.target.value)
+              onValueChange={(value) => {
+                setAccountId(value)
                 setPcId('')
                 setPcs(undefined)
                 setDedicated(false)
                 setError('')
                 setNotice('')
               }}
-            >
-              <option value="">Choose a Microsoft account</option>
-              {initial &&
-                !accounts.some((item) => item.id === initial.account_id) && (
-                  <option value={initial.account_id}>
-                    Disconnected saved account
-                  </option>
-                )}
-              {accounts.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.email || item.display_name || item.id}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: 'Choose a Microsoft account' },
+                ...(initial && !accounts.some((item) => item.id === initial.account_id)
+                  ? [{ value: initial.account_id, label: 'Disconnected saved account' }]
+                  : []),
+                ...accounts.map((item) => ({
+                  value: item.id,
+                  label: item.email || item.display_name || item.id,
+                })),
+              ]}
+            />
           </label>
           {accountId && !account && (
             <p role="alert">
@@ -469,24 +468,24 @@ export default function M365Setup({
       {pcs && pcs.length > 0 && (
         <label className="block space-y-1">
           Assigned Cloud PC
-          <select
+          <ChoiceSelect
+            aria-label="Assigned Cloud PC"
             className="block w-full rounded-md border bg-background p-2"
             value={pcId}
             disabled={disabled}
-            onChange={(event) => {
-              setPcId(event.target.value)
+            onValueChange={(value) => {
+              setPcId(value)
               setDedicated(false)
               setNotice('')
             }}
-          >
-            <option value="">Choose an assigned Cloud PC</option>
-            {pcs.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.display_name || item.id} ·{' '}
-                {item.plan_name || 'Plan not supplied'}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: '', label: 'Choose an assigned Cloud PC' },
+              ...pcs.map((item) => ({
+                value: item.id,
+                label: `${item.display_name || item.id} · ${item.plan_name || 'Plan not supplied'}`,
+              })),
+            ]}
+          />
         </label>
       )}
       {(pc || record) && (

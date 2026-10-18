@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import type { ReactNode } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { HostCard } from '../EngineHostModels'
@@ -81,16 +82,17 @@ it('keeps the Host available and reports the reason when normal Stop is refused'
   expect(screen.queryByText('The model service is stopping. Quitting GChat…')).not.toBeInTheDocument()
   expect(refreshHosts).not.toHaveBeenCalled()
 })
-function selectImportedModel() {
+async function selectImportedModel() {
   fireEvent.click(screen.getByText('Model and memory settings'))
   fireEvent.click(screen.getByText('Choose model settings'))
-  fireEvent.change(screen.getByLabelText('Installed model'), { target: { value: 'imported-model' } })
+  await userEvent.click(screen.getByLabelText('Installed model'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: /Qwen 3.8 27B/ }))
 }
 
 it('checks imported artifact settings without a catalog or download and uses the same count when launching', async () => {
   vi.mocked(engineCommand).mockResolvedValue(importedQuote)
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.change(screen.getByLabelText('Model copies'), { target: { value: '2' } })
   fireEvent.change(screen.getByLabelText('Requests at once'), { target: { value: '4' } })
   fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '65536' } })
@@ -113,12 +115,13 @@ it('checks imported artifact settings without a catalog or download and uses the
   }))
 })
 
-it('does not show a number error before a model is chosen, then reports an emptied context', () => {
+it('does not show a number error before a model is chosen, then reports an emptied context', async () => {
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
   fireEvent.click(screen.getByText('Model and memory settings'))
   fireEvent.click(screen.getByText('Choose model settings'))
   expect(screen.queryByText(/Use whole numbers/)).not.toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Installed model'), { target: { value: 'imported-model' } })
+  await userEvent.click(screen.getByLabelText('Installed model'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: /Qwen 3.8 27B/ }))
   expect(screen.queryByText(/Use whole numbers/)).not.toBeInTheDocument()
   fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '' } })
   expect(screen.getByRole('alert')).toHaveTextContent('Use whole numbers')
@@ -142,7 +145,7 @@ it.each(['running', 'cancelling'] as const)('allows an imported model quote and 
   } }
   vi.mocked(engineCommand).mockResolvedValue(importedQuote)
   const view = render(<HostCard host={localHost} snapshot={data} />)
-  selectImportedModel()
+  await selectImportedModel()
   expect(screen.getByRole('progressbar', { name: 'Graphics-card setup in progress' })).toBeInTheDocument()
   expect(screen.getByText(/Your selected model is ready to load/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeEnabled()
@@ -163,13 +166,13 @@ it.each(['running', 'cancelling'] as const)('allows an imported model quote and 
 
 it.each([
   ['running', 'artifact'], ['cancelling', 'artifact'], ['running', 'all_formats'], ['cancelling', 'all_formats'],
-] as const)('keeps imported model launch blocked during %s %s profiling', (status, scope) => {
+] as const)('keeps imported model launch blocked during %s %s profiling', async (status, scope) => {
   render(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, hardware_profile: {
     status, scope, pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', job_id: 'job', pid: 42,
     reprofile: false, started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
     checkpoint_available: true, diagnostic_tail: '', error: null, available: true,
   } }} />)
-  selectImportedModel()
+  await selectImportedModel()
   expect(screen.getByRole('button', { name: 'Check model settings' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeDisabled()
   expect(engineCommand).not.toHaveBeenCalled()
@@ -178,7 +181,7 @@ it.each([
 it('invalidates an imported-model quote when the Host restarts at the same revision', async () => {
   vi.mocked(engineCommand).mockResolvedValue(importedQuote)
   const { rerender } = render(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, boot_id: 'first-boot' }} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   expect(await screen.findByRole('status')).toHaveTextContent('Model file checked:')
   rerender(<HostCard host={localHost} snapshot={{ ...importedModelSnapshot, boot_id: 'second-boot' }} />)
@@ -196,7 +199,7 @@ it('keeps a pending startup check through polling and displays its result', asyn
     checkpoint_available: true, diagnostic_tail: '', error: null, available: true, elapsed_ms: 100,
   } }
   const { rerender } = render(<HostCard host={localHost} snapshot={snapshot} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   expect(screen.getByRole('button', { name: 'Check model settings' })).toBeDisabled()
   rerender(<HostCard host={localHost} snapshot={{ ...snapshot, revision: 2, hardware_profile: {
@@ -215,7 +218,7 @@ it.each(['success', 'rejection'] as const)('keeps a completed startup-check %s t
   if (outcome === 'success') vi.mocked(engineCommand).mockResolvedValueOnce(importedQuote)
   else vi.mocked(engineCommand).mockRejectedValueOnce('Not enough memory for these settings')
   const { rerender } = render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   const message = outcome === 'success' ? /Model file checked: Qwen 3.8 27B — INT/ : /These model settings could not be checked/
   expect(await screen.findByText(message)).toBeInTheDocument()
@@ -236,9 +239,12 @@ it.each([
   let finishQuote!: (quote: EngineStartupQuote) => void
   vi.mocked(engineCommand).mockReturnValueOnce(new Promise<EngineStartupQuote>(resolve => { finishQuote = resolve }))
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
-  fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  if (label === 'Reply speedup' || label === 'Conversation memory format') {
+    await userEvent.click(screen.getByLabelText(label))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: label === 'Reply speedup' ? 'Automatic' : 'INT8' }))
+  } else fireEvent.change(screen.getByLabelText(label), { target: { value } })
   finishQuote(importedQuote)
   await waitFor(() => expect(screen.getByRole('button', { name: 'Check model settings' })).toBeEnabled())
   expect(screen.queryByText(/Model file checked:/)).not.toBeInTheDocument()
@@ -257,7 +263,7 @@ it.each([
 ] satisfies [string, EngineSnapshot][])('invalidates a completed and pending startup check when %s changes', async (_label, changed) => {
   vi.mocked(engineCommand).mockResolvedValueOnce(importedQuote)
   const { rerender } = render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   expect(await screen.findByText(/Model file checked:/)).toBeInTheDocument()
   // These changes matter even if a Host reuses its snapshot revision.
@@ -276,7 +282,7 @@ it.each([
 it('does not restore a completed or pending quote after changing settings and changing them back', async () => {
   vi.mocked(engineCommand).mockResolvedValue(importedQuote)
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   expect(await screen.findByRole('status')).toHaveTextContent('Model file checked:')
   const context = screen.getByLabelText('Conversation length (tokens)')
@@ -294,7 +300,7 @@ it('does not restore a completed or pending quote after changing settings and ch
   expect(engineCommand).toHaveBeenCalledTimes(2)
 })
 
-it('ignores the hidden new-instance count when editing a saved instance', () => {
+it('ignores the hidden new-instance count when editing a saved instance', async () => {
   const profile = {
     model_id: 'imported-model', gpu_uuids: ['GPU-one'], max_context: 65536, concurrency: 1,
     vision: true, structured_outputs: true, spec: 'none' as const, draft_tokens: 0, draft_tp: 0,
@@ -305,7 +311,7 @@ it('ignores the hidden new-instance count when editing a saved instance', () => 
     status: 'stopped', configuration: profile, profile,
   }] }
   render(<HostCard host={localHost} snapshot={snapshot} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.change(screen.getByLabelText('Model copies'), { target: { value: '0' } })
   expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
@@ -319,7 +325,7 @@ it('discards late quote results after settings change and reports a fresh Host r
   let finishQuote!: (quote: EngineStartupQuote) => void
   vi.mocked(engineCommand).mockReturnValueOnce(new Promise<EngineStartupQuote>(resolve => { finishQuote = resolve }))
   render(<HostCard host={localHost} snapshot={importedModelSnapshot} />)
-  selectImportedModel()
+  await selectImportedModel()
   fireEvent.click(screen.getByRole('button', { name: 'Check model settings' }))
   fireEvent.change(screen.getByLabelText('Conversation length (tokens)'), { target: { value: '32768' } })
   finishQuote(importedQuote)
@@ -428,7 +434,8 @@ it.each([
   fireEvent.click(screen.getByText('Choose model settings'))
   expect(screen.getByLabelText('Conversation length (tokens)')).toHaveDisplayValue('')
   expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Installed model'), { target: { value: 'model' } })
+  await userEvent.click(screen.getByLabelText('Installed model'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: target === 'muse-glimmer-30b' ? /Muse 30B/ : target === 'qwen3.8-flash-next' ? /Qwen 3.8 Flash/ : /Qwen 3.8 27B/ }))
   expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(nativeContext)
   fireEvent.click(screen.getByRole('button', { name: 'Start model with these settings' }))
   await waitFor(() => expect(engineCommand).toHaveBeenCalledWith('launch', expect.objectContaining({

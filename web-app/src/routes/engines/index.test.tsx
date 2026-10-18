@@ -1,4 +1,5 @@
 import { spyConfirm } from '@/test/confirm'
+import userEvent from '@testing-library/user-event'
 import {
   cleanup,
   fireEvent,
@@ -184,7 +185,7 @@ describe('Engines host intake and launch controls', () => {
     expect(details.closest('details')).not.toHaveAttribute('open')
     fireEvent.click(launch)
     expect(
-      screen.getByRole('combobox', { name: 'Lab host model' })
+      screen.getByRole('button', { name: 'Lab host model' })
     ).toBeVisible()
     expect(details.closest('details')).not.toHaveAttribute('open')
     fireEvent.click(details)
@@ -375,6 +376,7 @@ describe('Engines host intake and launch controls', () => {
   })
 
   it('labels adjacent selectors and resolves generated instance names without changing command IDs', async () => {
+    const user = userEvent.setup()
     const profile: EngineLaunchProfile = {
       model_id: 'model',
       gpu_uuids: ['GPU-one'],
@@ -401,19 +403,21 @@ describe('Engines host intake and launch controls', () => {
       profile,
     }))
     renderExpandedPage()
-    const instance = screen.getByRole('combobox', {
+    const instance = screen.getByRole('button', {
       name: 'Lab host serving instance',
     })
-    const model = screen.getByRole('combobox', { name: 'Lab host model' })
+    const model = screen.getByRole('button', { name: 'Lab host model' })
     expect(instance.closest('label')).toHaveTextContent('Model server')
     expect(model.closest('label')).toHaveTextContent('Model')
-    expect(instance).toHaveValue('internal-id-1')
-    const hardwareProfile = screen.getByRole('combobox', {
+    await user.click(instance)
+    expect(screen.getByRole('menuitemradio', { name: /^Model server 2 ·/ })).toBeChecked()
+    await user.keyboard('{Escape}')
+    const hardwareProfile = screen.getByRole('button', {
       name: 'Saved model settings',
     })
     expect(model.parentElement?.parentElement).toContainElement(hardwareProfile)
     expect(
-      model.parentElement?.parentElement?.querySelectorAll('select')
+      within(model.parentElement!.parentElement!).getAllByRole('button')
     ).toHaveLength(3)
     expect(
       model.compareDocumentPosition(hardwareProfile) &
@@ -424,7 +428,8 @@ describe('Engines host intake and launch controls', () => {
     )
     expect(instance).not.toHaveTextContent('internal-id')
     expect(model).toHaveTextContent('Qwen 3.8 27B — NVFP4')
-    fireEvent.change(instance, { target: { value: 'internal-id-0' } })
+    await user.click(instance)
+    await user.click(screen.getByRole('menuitemradio', { name: /^Model server 1 ·/ }))
     fireEvent.click(within(screen.getByRole('button', { name: 'Stop model', exact: true }).parentElement!).getByRole('button', { name: 'Start model', exact: true }))
     await waitFor(() =>
       expect(mocks.command).toHaveBeenCalledWith('start', {
@@ -565,11 +570,11 @@ describe('Engines host intake and launch controls', () => {
   })
 
   it('blocks fractional launch values but allows Qwen Vision with speculation', async () => {
+    const user = userEvent.setup()
     renderExpandedPage()
     fireEvent.click(screen.getByText('Choose model settings'))
-    fireEvent.change(screen.getByLabelText('Installed model'), {
-      target: { value: 'model' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Installed model' }))
+    await user.click(screen.getByRole('menuitemradio', { name: /^Qwen 3.8 27B — NVFP4/ }))
     expect(screen.getByLabelText('Graphics card 1: RTX 5090')).toBeChecked()
     const load = screen.getByRole('button', { name: 'Start model with these settings' })
     expect(load).toBeEnabled()
@@ -581,14 +586,12 @@ describe('Engines host intake and launch controls', () => {
     fireEvent.change(screen.getByLabelText('Requests at once'), {
       target: { value: '4' },
     })
-    fireEvent.change(screen.getByLabelText('Reply speedup'), {
-      target: { value: 'auto' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Reply speedup' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Automatic' }))
     expect(load).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Reply speedup'), {
-      target: { value: 'none' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Reply speedup' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Off' }))
     fireEvent.click(load)
     await waitFor(() =>
       expect(mocks.command).toHaveBeenCalledWith('launch', {
@@ -604,13 +607,13 @@ describe('Engines host intake and launch controls', () => {
   })
 
   it('retains unavailable host inventory without permitting a new load', async () => {
+    const user = userEvent.setup()
     mocks.error =
       'error sending request for url (https://192.168.1.111:7444/host/v1/snapshot): tcp connect error: connection refused (os error 10061)'
     renderExpandedPage()
     fireEvent.click(screen.getByText('Choose model settings'))
-    fireEvent.change(screen.getByLabelText('Installed model'), {
-      target: { value: 'model' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Installed model' }))
+    await user.click(screen.getByRole('menuitemradio', { name: /^Qwen 3.8 27B — NVFP4/ }))
     fireEvent.click(screen.getByLabelText('Graphics card 1: RTX 5090'))
     expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeDisabled()
     expect(screen.getByText(/Computer not reachable/)).toHaveClass(
@@ -622,12 +625,12 @@ describe('Engines host intake and launch controls', () => {
     await screen.findByText('Secure storage is ready.')
   })
   it('launches structured outputs by default and preserves explicit OFF and Host KV AUTO or zero', async () => {
+    const user = userEvent.setup()
     renderExpandedPage()
     fireEvent.click(screen.getByText('Choose model settings'))
     fireEvent.click(screen.getByText('Advanced model settings'))
-    fireEvent.change(screen.getByLabelText('Installed model'), {
-      target: { value: 'model' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Installed model' }))
+    await user.click(screen.getByRole('menuitemradio', { name: /^Qwen 3.8 27B — NVFP4/ }))
     const structured = screen.getByRole('checkbox', {
       name: 'Follow a response format',
       exact: true,

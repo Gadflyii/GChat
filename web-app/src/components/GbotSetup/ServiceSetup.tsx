@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import {
   gbotControlGrant,
@@ -122,28 +123,26 @@ export default function ServiceSetup({
         {target.kind === 'paired_host' && (
           <label className="block space-y-1 text-sm">
             Paired service computer
-            <select
+            <ChoiceSelect
+              aria-label="Paired service computer"
               className="w-full rounded border bg-background p-2"
               value={hostId}
-              onChange={(event) =>
+              disabled={busy}
+              onValueChange={(value) =>
                 change(
-                  { kind: 'paired_host', host_id: event.target.value },
+                  { kind: 'paired_host', host_id: value },
                   false
                 )
               }
-            >
-              <option value="">Choose a paired computer</option>
-              {remote.map((host) => (
-                <option
-                  key={host.host_id}
-                  value={host.host_id}
-                  disabled={!!errors[host.host_id]}
-                >
-                  {host.name}
-                  {errors[host.host_id] ? ' · Offline' : ''}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: 'Choose a paired computer' },
+                ...remote.map((host) => ({
+                  value: host.host_id,
+                  label: `${host.name}${errors[host.host_id] ? ' · Offline' : ''}`,
+                  disabled: !!errors[host.host_id],
+                })),
+              ]}
+            />
           </label>
         )}
       </fieldset>

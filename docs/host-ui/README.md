@@ -1092,38 +1092,51 @@ No app, model, GPU, installer, Windows account or shared app data was involved.
 CPUs returned 01:15Z. Next: Codex 8 review and coordinator merge.
 ## Installed dropdown acceptance — C7, October 18
 
-`GUI-DROPDOWN-THEME-CONSISTENCY-20261017` passes the shared Theme and Font
-Size menu scope in retained Linux release `ed68c7443`. Real trusted keyboard
-input opened the menus, selected Light/Dark and Medium/Large, closed with
-Escape and moved focus with Tab. Visual inspection confirmed readable Geist
-text and app colors in both themes; menu text followed Medium (14px) and
-Large (15.75px). A rapid Escape/Tab/Enter sequence did not reach its intended
-control and is excluded; separately observed Escape and Tab steps passed.
+`GUI-DROPDOWN-THEME-CONSISTENCY-20261017` now replaces native select popups
+with the existing app-rendered Radix radio menus through `ChoiceSelect`. Native
+WebKitGTK reproduced a white serving popup in Dark mode despite dark computed
+option styles, so CSS color-scheme alone did not meet the contract. The shared
+control preserves values, disabled choices and callbacks, focuses the checked
+choice, restores focus on Escape, and advances on Tab or Shift-Tab. It explicitly
+skips controls inside closed details: WebKit reports rectangles for them even
+though they cannot receive focus. The serving field and action buttons wrap so
+long labels retain a usable width.
 
-The serving-instance, launch-profile and Fleet-coordinator selectors remain
-**unqualified**. The isolated profile has no connected Host inventory or paired
-Fleet computer, so those controls were absent. Shared-menu acceptance does
-not establish native HTML select popup rendering. The next required fixture
-is an isolated profile with a real connected Host, multiple recorded instances,
-launch inventory and a paired Fleet computer. No pairing, setup or model load
-was performed. Windows and release-wide qualification remain outside this leaf.
+Native Linux acceptance on S1 `AIS-2-8592-L01` uses source `8f4d0724f`, two
+actually paired private Hosts and two saved, stopped instances. OS screenshots
+show readable serving-instance, saved-profile and Fleet-coordinator popups in
+Light/Medium (Geist 14px) and Dark/Large (15.75px), with app palette colors and
+wrapped long choices. Trusted XTest keyboard input selects another stopped
+server, a saved profile and a coordinator draft. Escape restores trigger focus;
+Tab reaches Start model without activating it; Shift-Tab reaches the preceding
+visible summary instead of a hidden setting. The shared Theme/Font Size native
+acceptance in retained release `ed68c7443` remains valid. Results and seven
+native screenshots are in `out/c7-dropdown-host-selectors-20261018/` in this
+source branch.
 
-The shared menu, Interface and CSS source is unchanged at main `29c301aeb`;
-the affected Host/Fleet selectors retain the same styling and handlers. Source
-fix `05669cea1` / merge `7ad61917c` and existing focused/full and CSS-render
-gates are reused. This documentation-only result uses `git diff --check`.
-Evidence is retained at
-`out/c7-dropdown-installed-20261018/{result.json,summary.md}`.
+One `make verify` invocation stopped on an unsupported Radix lifecycle prop.
+After that correction, the remaining stages found and corrected tests that used
+native-select interaction and split eight reasoning-effort saves into independent
+cases with unchanged payload assertions and timeout. All verification stages
+then pass: 3,298 frontend tests, 121 extension tests, all six critical coverage
+floors and 1,216 Rust tests (six frontend skips, 28 Rust ignores); lint has zero
+errors and five existing warnings. After the native layout/focus corrections,
+42 focused tests, typecheck, production-control lint and frontend/native builds
+pass. This is a continued stage result, not a second full verification run.
 
-S1 FRESH returned OFF with its original XML restored and verified. CPUs40–47
-returned01:28Z. All private app/session and forwarding processes stopped by
-recorded PID; the private guest copy/profile and S1 runtime root were removed.
-The original fixture data and read-only release donor were preserved. No live
-job or booking remains. C7 retains source worktree
-`/ai/gchat-worktrees/c7-dropdown-installed-20261018`, branch
-`test/c7-dropdown-installed-20261018`, and only the result JSON and short
-summary as new local artifacts. The row stays open for the missing Host/Fleet
-selector acceptance.
+C7 owns `/ai/gchat-worktrees/c7-dropdown-host-selectors-20261018`, branch
+`test/c7-dropdown-host-selectors-20261018`, based on `d03667c8d`. The native
+session and all fixture services are stopped. The 39 GiB private SSD build/cache
+and five stopped containers are removed; CPUs104–111 returned04:04Z. Merge of
+main `548d73ed8` at `45354f116` preserves both adjacent regression suites and
+passes 214 focused cases across six affected files plus typecheck. Read-only
+ed68 AppDir and Flash Next pure 2-bit donors
+were unchanged (package SHA256
+`8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`).
+No model start, GPU computation, Fleet authority change, Windows account change
+or release-wide qualification is claimed. Windows native UI remains unqualified.
+The earlier FRESH VM is OFF with original XML and its private stage removed.
+Next: coordinator review and merge of source and native evidence together.
 
 ## Models tabs installed keyboard acceptance — C7, closed October 18
 

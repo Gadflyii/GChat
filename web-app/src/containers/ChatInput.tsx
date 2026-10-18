@@ -14,6 +14,7 @@ import {
   memo,
 } from 'react'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import {
   Tooltip,
   TooltipContent,
@@ -2736,26 +2737,26 @@ const ChatInput = memo(function ChatInput({
                   </DropdownMenu>
 
                   {agentDefinitions.length > 0 && (
-                    <label className="mb-1 flex h-8 min-w-0 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
+                    <div className="mb-1 flex h-8 min-w-0 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
                       <IconSparkles className="size-3.5 shrink-0 text-primary" />
-                      <select
+                      <ChoiceSelect
                         aria-label="Invoke saved agent"
-                        className="min-w-0 flex-1 bg-transparent outline-none"
+                        className="min-h-0 min-w-0 flex-1 border-0 bg-transparent p-0 outline-none"
                         value={selectedAgentDefinitionId}
-                        onChange={(event) => {
-                          setSelectedAgentDefinitionId(event.target.value)
+                        onValueChange={(value) => {
+                          setSelectedAgentDefinitionId(value)
                           setSelectedAgentSkill(null)
                           useConversationPolicy.getState().setActiveSkill(conversationKey)
                         }}
-                      >
-                        <option value="general">Chat</option>
-                        {agentDefinitions.map((definition) => (
-                          <option key={definition.id} value={definition.id}>
-                            {definition.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                        options={[
+                          { value: 'general', label: 'Chat' },
+                          ...agentDefinitions.map((definition) => ({
+                            value: definition.id,
+                            label: definition.name,
+                          })),
+                        ]}
+                      />
+                    </div>
                   )}
                   <AgentExternalFolderButton workspaceKey={conversationKey} />
                   <ConversationApprovalModeSelect

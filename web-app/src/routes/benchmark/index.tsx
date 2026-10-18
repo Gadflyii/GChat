@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import HeaderPage from '@/containers/HeaderPage'
@@ -631,13 +632,13 @@ function BenchmarkPage() {
                   </div>
                   {runs.length > 0 && (
                     <div className="flex items-center gap-2">
-                      <select
+                      <ChoiceSelect
+                        aria-label="Benchmark result"
                         value={selectedRun?.run_id ?? ''}
-                        onChange={(event) => selectRun(event.target.value)}
+                        onValueChange={selectRun}
                         className="h-9 max-w-[360px] rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        {runs.map((run) => <option key={run.run_id} value={run.run_id}>{runLabel(run)}</option>)}
-                      </select>
+                        options={runs.map((run) => ({ value: run.run_id, label: runLabel(run) }))}
+                      />
                       <Button variant="ghost" size="icon-sm" aria-label="Delete selected local benchmark" title="Delete local history only; published results remain on the leaderboard" onClick={() => selectedRun && deleteRun(selectedRun.run_id)}>
                         <IconTrash />
                       </Button>

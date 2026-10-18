@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import GbotSetup from './index'
 import {
@@ -86,12 +87,16 @@ async function chooseLan(serviceHostId?: string) {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   )
   if (serviceHostId) {
+    const user = userEvent.setup()
     fireEvent.click(
       screen.getByLabelText('Another PC on the home or office network (LAN)')
     )
-    fireEvent.change(screen.getByLabelText('Paired service computer'), {
-      target: { value: serviceHostId },
-    })
+    await user.click(screen.getByRole('button', { name: 'Paired service computer' }))
+    await user.click(
+      screen.getByRole('menuitemradio', {
+        name: hostStore.hosts.find((host) => host.host_id === serviceHostId)!.name,
+      })
+    )
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
     )
@@ -515,6 +520,7 @@ it('selects the service once for same-tick submissions and allows retry after fa
 it.each(['success', 'failure'])(
   'keeps the selected service consistent while selection is pending (%s)',
   async (outcome) => {
+    const user = userEvent.setup()
     hostStore.hosts = [
       {
         host_id: 'service-host',
@@ -551,20 +557,28 @@ it.each(['success', 'failure'])(
     fireEvent.click(
       screen.getByLabelText('Another PC on the home or office network (LAN)')
     )
-    const computer = screen.getByLabelText('Paired service computer')
-    fireEvent.change(computer, { target: { value: 'service-host' } })
+    const computer = screen.getByRole('button', { name: 'Paired service computer' })
+    await user.click(computer)
+    await user.click(
+      screen.getByRole('menuitemradio', { name: 'Office bot server' })
+    )
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
     )
+    // A menu opened before submission may still receive a late selection.
+    await user.click(computer)
+    const otherComputer = screen.getByRole('menuitemradio', {
+      name: 'Other paired computer',
+    })
     act(() => {
       fireEvent.submit(screen.getByRole('form', { name: 'Set up Gbot' }))
-      fireEvent.change(computer, { target: { value: 'other-host' } })
     })
+    await user.click(otherComputer)
     expect(selectGbotService).toHaveBeenCalledExactlyOnceWith({
       kind: 'paired_host',
       host_id: 'service-host',
     })
-    expect(computer).toHaveValue('service-host')
+    expect(computer).toHaveTextContent('Office bot server')
     expect(computer).toBeDisabled()
     expect(screen.getByLabelText('This PC (recommended)')).toBeDisabled()
     expect(
@@ -583,10 +597,15 @@ it.each(['success', 'failure'])(
       expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
       expect(screen.getByText('Step 2 · Service')).toBeInTheDocument()
     }
-    const restoredComputer = screen.getByLabelText('Paired service computer')
+    const restoredComputer = screen.getByRole('button', {
+      name: 'Paired service computer',
+    })
     expect(restoredComputer).toBeEnabled()
-    expect(restoredComputer).toHaveValue('service-host')
-    fireEvent.change(restoredComputer, { target: { value: 'other-host' } })
+    expect(restoredComputer).toHaveTextContent('Office bot server')
+    await user.click(restoredComputer)
+    await user.click(
+      screen.getByRole('menuitemradio', { name: 'Other paired computer' })
+    )
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
     )
@@ -603,6 +622,7 @@ it.each(['success', 'failure'])(
 it.each(['late result', 'late failure', 'result after selection'])(
   'preserves an explicit service choice after the saved-service lookup (%s)',
   async (outcome) => {
+    const user = userEvent.setup()
     hostStore.hosts = [
       {
         host_id: 'service-host',
@@ -630,9 +650,10 @@ it.each(['late result', 'late failure', 'result after selection'])(
     fireEvent.click(
       screen.getByLabelText('Another PC on the home or office network (LAN)')
     )
-    fireEvent.change(screen.getByLabelText('Paired service computer'), {
-      target: { value: 'service-host' },
-    })
+    await user.click(screen.getByRole('button', { name: 'Paired service computer' }))
+    await user.click(
+      screen.getByRole('menuitemradio', { name: 'Office bot server' })
+    )
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
     )
@@ -646,9 +667,9 @@ it.each(['late result', 'late failure', 'result after selection'])(
     })
     if (outcome === 'result after selection')
       fireEvent.click(screen.getByRole('button', { name: 'Back' }))
-    expect(screen.getByLabelText('Paired service computer')).toHaveValue(
-      'service-host'
-    )
+    expect(
+      screen.getByRole('button', { name: 'Paired service computer' })
+    ).toHaveTextContent('Office bot server')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
@@ -679,9 +700,9 @@ it('restores and checks the saved service when no new choice was made', async ()
     target: { value: 'Writer' },
   })
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
-  expect(await screen.findByLabelText('Paired service computer')).toHaveValue(
-    'service-host'
-  )
+  expect(
+    await screen.findByRole('button', { name: 'Paired service computer' })
+  ).toHaveTextContent('Office bot server')
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
   )

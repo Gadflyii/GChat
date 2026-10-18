@@ -33,6 +33,7 @@ import {
   type AgentStudioSection,
 } from '@/containers/AgentStudioHeader'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1086,15 +1087,15 @@ function DefinitionEditor({
               ] as const
             ).map(([key, label]) => (
               <Field key={key} label={label}>
-                <select
+                <ChoiceSelect
                   aria-label={label}
                   className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
                   value={draft.permissions?.[key] ?? 'default'}
-                  onChange={(event) =>
+                  onValueChange={(value) =>
                     common({
                       permissions: {
                         ...draft.permissions,
-                        [key]: event.target.value as
+                        [key]: value as
                           | 'default'
                           | 'allow'
                           | 'ask'
@@ -1102,12 +1103,13 @@ function DefinitionEditor({
                       },
                     })
                   }
-                >
-                  <option value="default">Default</option>
-                  <option value="allow">Allow</option>
-                  <option value="ask">Ask every time</option>
-                  <option value="deny">Block</option>
-                </select>
+                  options={[
+                    { value: 'default', label: 'Default' },
+                    { value: 'allow', label: 'Allow' },
+                    { value: 'ask', label: 'Ask every time' },
+                    { value: 'deny', label: 'Block' },
+                  ]}
+                />
               </Field>
             ))}
           </div>
@@ -1606,21 +1608,21 @@ function WorkflowEditor({
                   label="Workspace"
                   help="Isolated stages can safely run in parallel and receive the source workspace read-only. A main-workspace stage can edit the user’s files and must be the only writer at its level."
                 >
-                  <select
+                  <ChoiceSelect
+                    aria-label="Workspace"
                     className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                     value={node.workspace}
-                    onChange={(event) =>
+                    onValueChange={(value) =>
                       updateNode(index, {
                         ...node,
-                        workspace: event.target.value as 'isolated' | 'shared',
+                        workspace: value as 'isolated' | 'shared',
                       })
                     }
-                  >
-                    <option value="isolated">Isolated (parallel-safe)</option>
-                    <option value="shared">
-                      Main workspace (single writer)
-                    </option>
-                  </select>
+                    options={[
+                      { value: 'isolated', label: 'Isolated (parallel-safe)' },
+                      { value: 'shared', label: 'Main workspace (single writer)' },
+                    ]}
+                  />
                 </Field>
               </div>
             </div>
@@ -1805,28 +1807,21 @@ function ModelInstanceSelect({
   const selectedIsUnavailable = value !== null && resolved?.length !== 1
   return (
     <Field label={label} className="mt-3">
-      <select
+      <ChoiceSelect
         aria-label={label}
         className="h-9 w-full rounded-md border bg-background px-3 text-sm"
         value={value ?? ''}
-        onChange={(event) => onChange(event.target.value || null)}
-      >
-        <option value="">{inheritLabel}</option>
-        {selectedIsUnavailable && (
-          <option value={value ?? ''}>{value} (not loaded)</option>
-        )}
-        {legacySelected && (
-          <option value={value ?? ''}>
-            {legacySelected.modelId} · saved local instance
-          </option>
-        )}
-        {instances.map((instance) => (
-          <option key={instance.id} value={instance.id}>
-            {instance.modelId}
-            {instance.port == null ? ' · LAN host' : ` · port ${instance.port}`}
-          </option>
-        ))}
-      </select>
+        onValueChange={(value) => onChange(value || null)}
+        options={[
+          { value: '', label: inheritLabel },
+          ...(selectedIsUnavailable ? [{ value: value ?? '', label: `${value} (not loaded)` }] : []),
+          ...(legacySelected ? [{ value: value ?? '', label: `${legacySelected.modelId} · saved local instance` }] : []),
+          ...instances.map((instance) => ({
+            value: instance.id,
+            label: `${instance.modelId}${instance.port == null ? ' · LAN host' : ` · port ${instance.port}`}`,
+          })),
+        ]}
+      />
       {instances.length === 0 && (
         <p className="mt-1 text-xs text-muted-foreground">
           No GInfer model instances are loaded.
@@ -1862,21 +1857,15 @@ function ReasoningEffortSelect({
 }) {
   return (
     <Field label={label} className="mt-3">
-      <select
+      <ChoiceSelect
         aria-label={label}
         className="h-9 w-full rounded-md border bg-background px-3 text-sm"
         value={value ?? ''}
-        onChange={(event) =>
-          onChange((event.target.value as AgentReasoningEffort) || null)
+        onValueChange={(value) =>
+          onChange((value as AgentReasoningEffort) || null)
         }
-      >
-        <option value="">{inheritLabel}</option>
-        {REASONING_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        options={[{ value: '', label: inheritLabel }, ...REASONING_OPTIONS]}
+      />
     </Field>
   )
 }

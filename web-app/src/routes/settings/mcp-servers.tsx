@@ -29,6 +29,7 @@ import { useAppState } from '@/hooks/useAppState'
 import { listen } from '@tauri-apps/api/event'
 import { SystemEvent } from '@/types/events'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { cn } from '@/lib/utils'
 import { createSafeUnlisten } from '@/lib/tauriEvent'
 import { MCPLogViewer } from '@/components/MCPLogViewer'
@@ -674,26 +675,18 @@ function MCPServersDesktop() {
                   <CardItem
                     title={t('mcp-servers:logs.serverFilterLabel')}
                     actions={
-                      <select
+                      <ChoiceSelect
+                        aria-label={t('mcp-servers:logs.serverFilterLabel')}
                         value={selectedLogServer ?? ''}
-                        onChange={(event) =>
-                          setSelectedLogServer(
-                            event.target.value === ''
-                              ? undefined
-                              : event.target.value
-                          )
+                        onValueChange={(value) =>
+                          setSelectedLogServer(value === '' ? undefined : value)
                         }
                         className="h-9 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
-                      >
-                        <option value="">
-                          {t('mcp-servers:logs.allServers')}
-                        </option>
-                        {visibleMcpServerEntries.map(([key]) => (
-                          <option key={key} value={key}>
-                            {key}
-                          </option>
-                        ))}
-                      </select>
+                        options={[
+                          { value: '', label: t('mcp-servers:logs.allServers') },
+                          ...visibleMcpServerEntries.map(([key]) => ({ value: key, label: key })),
+                        ]}
+                      />
                     }
                   />
                 </Card>
