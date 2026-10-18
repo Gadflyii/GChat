@@ -957,7 +957,7 @@ the accepted RC documentation; its compiled package remains GChat250df804a /
 Engine6b85ecf77 below. Nothing is published; the builder's installed app/profile
 is excluded. Ada is installed, but its Automatic chat remains blocked by native
 profiling RAM admission; the23:00Z idle-window preflight failed before any
-retry. The laptop installer is staged and its installed walk follows C5's
+retry, which is now pending Ron's environmental decision via Bubbs. The laptop installer is staged and its installed walk follows C5's
 current first-use run.
 
 | Field | Refreshed RC |
@@ -1094,8 +1094,8 @@ retry with WSL lanes idle and native availability at least reserve plus buffers,
 recorded before launch; Bubbs assigned23:00–23:30Z with all Ada WSL lanes idle.
 If native memory remains insufficient, record the available/vmmem figures and
 return without retry. Gchat3's authorized Muse retry follows the RC's normal
-return sequentially in that window. No WSL shutdown or RAM
-reclamation is authorized while other lanes are live. The reserve policy versus
+return sequentially in that window. This environmental plan was superseded by
+Bubbs's23:01Z instruction below. The reserve policy versus
 Engine serving's10GiB headroom is outside this row. Source work is split between
 owned `c4-profile-ram-admission-20261018` GInfer and
 `c4-profile-ram-message-20261018` GChat worktrees; the pinned RC remains unchanged.
@@ -1112,7 +1112,10 @@ C4 did not launch or book a profiling retry, reclaim memory or change settings,
 and returned the boundary to Gchat3 at23:00Z. The RC Automatic chat remains
 unexecuted; the next Ada retry requires an admitted environment and renewed
 coordination. The typed product failure and first-run message continue through
-focused verification independently.
+focused verification independently. Bubbs's23:01Z STOP leaves the Ada retry
+pending Ron's answer and forbids `drop_caches`, `sysctl` and `wsl --shutdown`.
+Arch withdrew his cache-reclaim suggestion at23:02Z. No such action ran; the
+typed RAM-shortfall error and GChat message are the current product deliverable.
 
 C5's corrected1209/e001 laptop app gate returned22:28Z after a pre-Engine
 fixture CLI rejection, with no C5 hold. C4 had not yet staged or launched there at that boundary. Arch
