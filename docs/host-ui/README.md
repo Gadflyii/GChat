@@ -1782,3 +1782,22 @@ pass (six app skips, 28 Rust ignores). The first failure remains recorded; no se
 Changed source/test hashes matched locally and on S1 before and after the continuation. Private build data
 was removed and CPUs returned at 02:54 UTC. These are mocked-service React checks, with no new native VM,
 Windows or live sign-in acceptance claim.
+
+## Stopping unfinished bot tasks, October 18 (Gchat 2)
+
+`GBOT-TASK-HISTORY-STOP-PAUSED-INTERRUPTED`: ready, paused and interrupted tasks offered only Resume. If
+the model was unavailable or a person held control, that button was disabled and the user could not stop the
+task. The shared history control now offers Stop alongside Resume for those states. Stop uses the existing
+service cancellation operation; Resume retains its readiness checks. Both buttons lock during either request,
+including same-tick clicks, and a failed action remains available for an explicit retry.
+
+On main baseline `b56d94faa`, five rendered cases failed because Stop was absent; ten controls passed.
+All 15 focused cases pass with the fix, covering cancellation without model/control readiness, pending feedback
+through a task-state change, duplicate requests, retries and terminal states. Settings' surrounding setup
+restriction is unchanged. Backend cancellation still retains task history and marks unresolved effects for
+review. These are rendered React tests with inert task callbacks; there is no new native VM or Windows claim.
+
+One `make verify` passed: lint, type checking, quality checks, 3,281 app tests, 121 extension tests, 1,216 Rust
+tests and all six coverage floors (six app skips, 28 Rust ignores). Changed source/test hashes matched locally
+and on S1 before and after verification. Private build data was removed and CPUs returned at 03:07 UTC.
+Commands and results: `/ai/gchat/out/gchat2-stop-paused-tasks-20261018/result.json`.
