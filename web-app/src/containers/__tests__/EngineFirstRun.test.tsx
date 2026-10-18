@@ -83,7 +83,8 @@ it('starts a new first-run request lifetime when Welcome discovers a replacement
     storage: { path: '/models', recommended_path: args.host_id === 'replacement' ? '/new-host-models' : '/fast', available_bytes: 1024 ** 4 },
   })))
   const view = render(<EngineFirstRun />)
-  fireEvent.change(await screen.findByLabelText('Model download folder'), { target: { value: '/former-host-draft' } })
+  await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast'))
+  fireEvent.change(screen.getByLabelText('Model download folder'), { target: { value: '/former-host-draft' } })
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use this folder' })) })
   expect(screen.getByRole('button', { name: 'Use this folder' })).toBeDisabled()
   mocks.state = { ...mocks.state, hosts: [{ host_id: 'replacement', local: true }], snapshots: { replacement: { gpus: [] } } }

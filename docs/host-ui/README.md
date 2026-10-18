@@ -19,7 +19,12 @@ fixture retains its initial preparation name,
 `/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-maintenance-guidance-tests-20261018`;
 it is disposable after result review, with the inactive RC donor protected.
 Small results go in `out/first-run-action-error-guidance-20261018/`.
-Next: execute the focused checks and single full gate on the frozen source.
+The initial focused run passed 52 cases and stopped on the existing replacement-
+Host test: it edited the folder before initial `/fast` hydration settled. The
+test now waits for that value before entering its draft, preserving the actual
+replacement-Host assertions. All action-error cases passed; lint and the full
+gate had not started. Next: rerun only that failed case, then lint and the
+single full gate on the corrected frozen source.
 
 ## Locked-vault next action — verified, Gchat 3, October 18
 
