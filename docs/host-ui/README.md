@@ -1710,3 +1710,35 @@ Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
 Method note: release Host and frontend accept only commit-pinned Hugging Face package URLs, so the download
 steps used the release profile with debug assertions, a development frontend and the private loopback catalog
 (`c6a23a4d4`); the pure release build stops at 'No model downloads are available for these graphics cards'.
+
+## Engine settings native acceptance — C3
+
+`GUI-ENGINE-SETTINGS-GUIDANCE` source `38b97a33e` merged `51842219e`;
+14 focused cases and the required source gate are retained in
+`/ai/gchat/out/c3-engine-settings-guidance-20261017/result.json`. The earlier
+installed recheck stopped before reaching an instance and remains a fixture
+limitation, not passing acceptance.
+
+Native acceptance PASS (2026-10-18): real XTest opened Runtime details and
+Technical details, checked requested versus reported values and purpose/help,
+and changed draft context 131072 to 65536. Cancel closed the editor; reopening
+restored 131072. The authenticated Host instance snapshot and complete saved
+Host document were unchanged, status stopped and session null. No Apply,
+reload, inference, remote mutation or Windows action. Ready-engine reported
+values were not exercised. Packet:
+`/ai/gchat/out/c3-engine-settings-native-20261018/{result.json,summary.md}`.
+Reuse the existing source gates; evidence-only diff check.
+
+Owned source `/ai/gchat-worktrees/c3-engine-settings-native-20261018`, branch
+`test/c3-engine-settings-native-20261018`, baseline `fd897c5d7`. Retained
+`ed68c7443` AppDir on S1 has identical EngineInstanceSettings source; editor
+edit/cancel path is unchanged (later apply confirmation changes are outside
+this no-apply check). Fixture decision: a real Host projects a saved LaunchRequest with no live
+process as a stopped instance (service.rs). Use an explicitly seeded stopped
+Muse profile, not a Ready claim or measured hardware profile. Acceptance
+checks the truthful unreported-runtime state and configured values. No GPU
+is needed. S1 private scratch `/media/ron/SSD_RAID/ai/tmp-c3-engine-settings-native-20261018`;
+CPU8–15 booked at launch, with private Xvfb/HOME/XDG/dbus/keyring. Retain
+only result JSON and short summary after cleanup. Private app/Host/Xvfb and
+supporting processes stopped, private mounts and SSH forward gone, owned SSD
+scratch removed, retained donor untouched; returned 02:24Z.
