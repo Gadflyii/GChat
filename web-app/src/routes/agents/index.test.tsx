@@ -13,6 +13,7 @@ import { useGbotPage } from '@/stores/gbot-page-store'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import type { Task } from '@/services/gbot'
+import { seedServiceHub } from '@/test/service-hub'
 const AgentStudioPage = Route.options.component!
 
 const navigate = vi.hoisted(() => vi.fn())
@@ -241,6 +242,7 @@ describe('AgentStudioPage', () => {
   }
 
   it('keeps keyboard focus on the selected section across Skills route replacement', async () => {
+    seedServiceHub()
     const api = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
     const { SkillsPage } = await import('../skills')
     blockNavigation.mockImplementation(api.useBlocker)
