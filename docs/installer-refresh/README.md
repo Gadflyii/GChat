@@ -1,5 +1,24 @@
 # GChat installer refresh
 
+## Linux archive install command — Python 3.11 or newer, October 18
+
+The novice archive walk on S1 found that the delivered guide's literal
+`python3.11 setup.py` command exited 127: this supported installation has
+`python3` 3.12.3 and no executable named `python3.11`. Continuing with
+`python3 setup.py` installed the archive successfully before the separately
+tracked standalone launcher failure. The unchanged setup script already uses
+`#!/usr/bin/env python3` and requires Python 3.11 or newer.
+
+`fix/c4-cli-install-python-command-20261018` corrects the
+[Linux setup instruction](../lan-host-setup.md) to `python3 setup.py` and states
+that prerequisite. The packager copies this guide verbatim into the archive;
+maintainers' selected Python 3.11 build environment is unchanged. Evidence is
+`test/c4-cli-first-run-20261018` at `7f8e9a61e`,
+`out/c4-cli-first-run-20261018/novice/walk-result.json` and its PTY transcript.
+This documentation-only fix needs `git diff --check`. Next: include the corrected
+guide in the standalone-launcher archive refresh and continue that same novice
+walk; there is no new build or model execution for this wording change.
+
 ## Windows RC refresh — release installer delivered, October 18
 
 Bubbs's post-merge refresh is **PASS**. The unsigned Windows release installer

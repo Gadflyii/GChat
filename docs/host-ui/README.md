@@ -2592,18 +2592,20 @@ steps used the release profile with debug assertions, a development frontend and
 
 ## C4 first-run journey native acceptance — October 18
 
-Owner: Codex 4. All eight orphaned journey source fixes are merged. This single
-**evidence branch** recovers their outstanding native acceptance; it does not
-repeat merged implementations or their passing source gates. The eight rows are
+Owner: Codex 4. Seven orphaned journey leaves pass their merged source fixes;
+the eighth needed the background-maintenance error correction `21a30afa5`.
+This single **evidence branch** retains their isolated native acceptance and
+reuses the passing source gates. The eight rows are
 WELCOME-BELOW-FOLD, FAILED-DOWNLOAD-STUCK, MODEL-NOT-SELECTED,
 LOAD-WITHOUT-PROFILE, NO-RECOMMENDATION-CONTRADICTS, JARGON, DISK-SPACE-CRASH,
 and POST-STOP-GPU-BUSY, all prefixed `GUI-JOURNEY-`.
 
 Acceptance: exercise the changed controls in one isolated Linux native session,
-retain observed results and limitations, and close only demonstrated rows on
-GInfer `docs/open-work`. Current unresolved question: which merged fixes still
-have an observable native gap? The maintenance-time ENOSPC error is known to be
-log-only and must not be represented as fixed by the earlier warning change.
+retain observed results and limitations, and close demonstrated rows on GInfer
+`docs/open-work`. All eight native leaves now pass at the recorded scope. The
+background-maintenance failure reporting fix merged as `16a4b2f25` from
+`810e9e7bb`; all eight canonical rows are CLOSED at GInfer `816a6ffb4`. The
+earlier warning change alone did not resolve that gap.
 
 Source: `origin/main@e6b28e8d4`; the retained C3 native donor is `be69f9190`
 plus Downloads source `f928613b1`. The journey components, release predicate,
@@ -2636,17 +2638,19 @@ remaining-formats profiler was stopped through Stop setup. GPU1 returned at
 open-work closure against this evidence commit. The registered 2-bit mix package
 SHA-256 is `ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`
 (existing registry value, no rehash).
-The separate maintenance-error fix is under focused/full source verification;
-do not close DISK-SPACE-CRASH before its native acceptance.
+The separate maintenance-error source fix `21a30afa5` passes its focused checks,
+one verification gate plus bounded failed-stage continuation, and the native
+fault/retry acceptance described below.
 
 Owned native inventory: S1
-`/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018` contains a copied native
+`/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018` held the copied native
 candidate and fresh private HOME, XDG, DBus, unlocked keyring, Xauthority and
 1200×800 Xvfb display; Wayland is unset. CPU-only at initial launch, then GPU1
 booking 2962 (04:07–04:16 UTC, canceled at return) covered Ensure, startup, Stop and tuning;
 the independent GPU0 fit is untouched. No disk filling, real download or changes
-to another user's profile. Native pointer/keyboard input; inspector observation only. Retire the
-owned copy and private state after retaining concise results.
+to another user's profile. Native pointer/keyboard input; inspector observation only.
+The completed native root and separate disk-fix build root are retired after
+retaining the result JSON and screenshots; no donor or model input is removed.
 
 Completed real-lifecycle gate: the existing read-only
 `/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer` was imported
@@ -2654,10 +2658,26 @@ using the native file picker. Custom settings selected only physical GPU1,
 262144 tokens, one request/copy, images enabled and automatic speculation/KV.
 The retained C3 hardware profile seeded this private Host; native artifact-scoped
 Ensure passed and the instance reached Ready. This checks model projection and
-post-Stop tuning visibility, not inference quality or speed. Next: native
-maintenance-error/retry acceptance with the separately fixed candidate, then
-close the demonstrated journey rows. The same private session is retained for
-that check.
+post-Stop tuning visibility, not inference quality or speed. The same private
+session then accepted the separately fixed maintenance-error candidate. After
+the Host opened valid state, blocking atomic publication with an empty directory
+at its private state-file path produced a visible setup error and enabled Retry
+setup without exiting. Restoring state publication exposed a stable folder error
+from a disposable regular file at the unchanged requested folder. After restoring
+the original private directory, native Retry setup accepted that same folder and
+cleared both maintenance and storage errors. The deliberately failed catalog
+request retained its separate catalog error; no Engine child ran. Three reviewed
+1200×800 screenshots and the concise result are in
+`out/c4-disk-native-20261018/result.json`. This checks actual publication and
+folder failures plus recovery, with existing ENOSPC mapping/rendered regressions;
+no disk was filled and no native ENOSPC is claimed. App, idle Host, keyring, D-Bus,
+listener, inspector forward and Xvfb are stopped; CPU80–87 returned at04:29 UTC.
+The source fix is merged and its canonical row is CLOSED. Both verified-inactive
+owned roots, `tmp-c4-gui-journey-20261018` (7.3 GiB allocated) and
+`tmp-c4-gui-maintenance-disk-error-20261018` (31 GiB allocated), were removed
+from S1 after acceptance. Concise results and screenshots remain in this branch;
+the read-only model and dependency donors remain unchanged. Next: continue the
+separately owned Linux CLI archive first-run walk.
 
 ## Engine settings native acceptance — C3
 
