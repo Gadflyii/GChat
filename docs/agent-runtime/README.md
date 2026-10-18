@@ -34,6 +34,21 @@ their existing contract. Baseline DOM receipts and viewed screenshots are in
 `/ai/gchat/out/gchat-chat-agents-pass-20261018-1412/`; the affected source matched
 main `fe17d90f6`.
 
+All 34 focused tests and workspace lint PASS. One `make verify` passed 3,634
+web tests, 127 extension tests and all six coverage floors, then failed the
+unchanged Gbot `scoped_media_policies_and_revocation` test at `media.rs:97`.
+The remaining Rust suites were not reached. Gchat 2 owns that teardown-test
+failure; this change does not claim an overall verification pass.
+
+Frontend and native Linux builds PASS on `cb85244ec`. The rebuilt private app
+shows “Use default (GChat)” without “None”; selecting it keeps GChat selected
+and preserves all seven sampling values. The screenshot was viewed. Normal
+close preserved the saved thread, messages, agent definitions and run history
+byte-for-byte; returned14:32Z. Receipts are in
+`/ai/gchat/out/gchat-chat-assistant-default-option-20261018/`.
+This qualifies private source-native Linux UI behavior; installed packages,
+Windows, screen readers and inference were outside this check.
+
 ## Sampling control labels — October 18
 
 A private native Chat pass opened Sampling and found all seven numeric inputs
