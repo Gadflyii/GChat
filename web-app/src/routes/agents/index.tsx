@@ -374,6 +374,7 @@ function unusedDefinitionId(name: string, definitions: AgentDefinition[]): strin
 function AgentStudioPage() {
   const [runSetup, setRunSetup] = useState<AgentDefinition | null>(null)
   const runSetupRequest = useRef(0)
+  const runSetupReturnFocus = useRef<HTMLElement | null>(null)
   const [preparingRun, setPreparingRun] = useState(false)
   const invalidateRunSetup = () => {
     ++runSetupRequest.current
@@ -587,15 +588,23 @@ function AgentStudioPage() {
     }
   }
 
-  const tryInChat = async (definition: AgentDefinition) => {
+  const tryInChat = async (
+    definition: AgentDefinition,
+    trigger: HTMLButtonElement
+  ) => {
     const saved = definition === draft ? await saveDraft(false) : definition
     if (!saved) return
+    runSetupReturnFocus.current = trigger
     setRunTask('')
     setRunWorkspace('')
     setRunSetup(saved)
   }
 
-  const rerun = async (run: AgentRunRecord, continueWork = false) => {
+  const rerun = async (
+    run: AgentRunRecord,
+    continueWork = false,
+    trigger?: HTMLButtonElement
+  ) => {
     if (!run.userMessage.trim()) {
       toast.error('This older run does not contain a reusable task prompt.')
       return
@@ -605,6 +614,7 @@ function AgentStudioPage() {
     try {
       const definition = await getAgentDefinition(run.definitionId)
       if (request !== runSetupRequest.current) return
+      runSetupReturnFocus.current = trigger ?? null
       setRunTask(continueWork ? continuationTask(run) : run.userMessage)
       setRunWorkspace(run.workspace ?? '')
       setRunSetup({
@@ -752,7 +762,7 @@ function AgentStudioPage() {
                 busy={draftBusy}
                 onSave={() => void saveDraft()}
                 onDelete={() => void deleteDraft()}
-                onTry={() => void tryInChat(draft)}
+                onTry={(trigger) => void tryInChat(draft, trigger)}
                 saved={draftSavedId !== null}
               />
             )}
@@ -798,6 +808,7 @@ function AgentStudioPage() {
           definition={runSetup}
           initialTask={runTask}
           initialWorkspace={runWorkspace}
+          returnFocusRef={runSetupReturnFocus}
           onClose={() => {
             invalidateRunSetup()
             setRunSetup(null)
@@ -825,8 +836,8 @@ function AgentStudioPage() {
               invalidateRunSetup()
               setSelectedRunId(id)
             }}
-            onRerun={(run) => void rerun(run)}
-            onContinue={(run) => void rerun(run, true)}
+            onRerun={(run, trigger) => void rerun(run, false, trigger)}
+            onContinue={(run, trigger) => void rerun(run, true, trigger)}
             onDelete={(run) => void deleteRun(run)}
             onRefresh={() => void refreshRuns()}
           />
@@ -1998,7 +2009,7 @@ function DefinitionInspector({
   busy: boolean
   onSave: () => void
   onDelete: () => void
-  onTry: () => void
+  onTry: (trigger: HTMLButtonElement) => void
   saved: boolean
 }) {
   const meta = KIND_META[draft.kind]
@@ -2061,7 +2072,10 @@ function DefinitionInspector({
         approval policy still cascade from the parent run.
       </div>
       <div className="grid gap-2">
-        <Button disabled={busy || !draft.name.trim()} onClick={onTry}>
+        <Button
+          disabled={busy || !draft.name.trim()}
+          onClick={(event) => onTry(event.currentTarget)}
+        >
           <IconPlayerPlay /> Save &amp; run
         </Button>
         <Button variant="outline" disabled={busy} onClick={onSave}>
@@ -2090,8 +2104,8 @@ function RunInspector({
   deletingRunIds: ReadonlySet<string>
   onSelect: (id: string) => void
   onRefresh: () => void
-  onRerun: (run: AgentRunRecord) => void
-  onContinue: (run: AgentRunRecord) => void
+  onRerun: (run: AgentRunRecord, trigger?: HTMLButtonElement) => void
+  onContinue: (run: AgentRunRecord, trigger?: HTMLButtonElement) => void
   onDelete: (run: AgentRunRecord) => void
 }) {
   const instanceMetrics = aggregateAgentMetrics(
@@ -2101,6 +2115,7 @@ function RunInspector({
       inference: stage.inference,
     })) ?? []
   )
+  const actionTriggers = useRef(new Map<string, HTMLButtonElement>())
   const finishReason = selected?.finishReason
   const incompleteMessage = incompleteOutcomeMessage(finishReason)
   return (
@@ -2170,6 +2185,10 @@ function RunInspector({
                     variant="ghost"
                     className="m-1.5 shrink-0"
                     aria-label={`Actions for ${run.definitionName}`}
+                    ref={(node) => {
+                      if (node) actionTriggers.current.set(run.id, node)
+                      else actionTriggers.current.delete(run.id)
+                    }}
                   >
                     <IconDotsVertical />
                   </Button>
@@ -2177,14 +2196,14 @@ function RunInspector({
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem
                     disabled={!run.userMessage.trim() || deletingRunIds.has(run.id)}
-                    onSelect={() => onRerun(run)}
+                    onSelect={() => onRerun(run, actionTriggers.current.get(run.id))}
                   >
                     <IconRepeat /> Re-run
                   </DropdownMenuItem>
                   {run.status !== 'finished' && (
                     <DropdownMenuItem
                       disabled={!run.userMessage.trim() || deletingRunIds.has(run.id)}
-                      onSelect={() => onContinue(run)}
+                      onSelect={() => onContinue(run, actionTriggers.current.get(run.id))}
                     >
                       Continue as new run…
                     </DropdownMenuItem>
@@ -2217,7 +2236,7 @@ function RunInspector({
                 {selected.status !== 'finished' && (
                   <Button
                     variant="outline"
-                    onClick={() => onContinue(selected)}
+                    onClick={(event) => onContinue(selected, event.currentTarget)}
                   >
                     Continue as new run…
                   </Button>

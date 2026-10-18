@@ -320,6 +320,78 @@ describe('AgentStudioPage', () => {
     return screen.findByRole('menu')
   }
 
+  it.each(['Re-run', 'Continue as new run…'] as const)(
+    'returns dismissed %s setup to its own history action button', async (action) => {
+      getAgentDefinition.mockImplementation(async (id) => (
+        id === firstAgent.id ? firstAgent : secondAgent
+      ))
+      await renderRunHistory()
+      const user = userEvent.setup()
+
+      for (const run of [firstHistoricalRun, secondHistoricalRun]) {
+        const trigger = screen.getByRole('button', {
+          name: `Actions for ${run.definitionName}`,
+        })
+        trigger.focus()
+        await user.keyboard(' ')
+        await user.click(await screen.findByRole('menuitem', { name: action }))
+        const dialog = await screen.findByRole('dialog', { name: `Run ${run.definitionName}` })
+        expect(within(dialog).getByLabelText('Task or goal')).toHaveFocus()
+        fireEvent.change(within(dialog).getByLabelText('Task or goal'), {
+          target: { value: 'A cancelled task edit' },
+        })
+        if (run === firstHistoricalRun) await user.keyboard('{Escape}')
+        else await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+        await waitFor(() => expect(trigger).toHaveFocus())
+      }
+
+      expect(navigate).not.toHaveBeenCalled()
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+    }
+  )
+
+  it('returns a dismissed continuation to its result overview button', async () => {
+    await renderRunHistory()
+    const user = userEvent.setup()
+    const trigger = screen.getByRole('button', { name: 'Continue as new run…' })
+    trigger.focus()
+    await user.keyboard('{Enter}')
+    const dialog = await screen.findByRole('dialog', { name: `Run ${firstAgent.name}` })
+    await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(trigger).toHaveFocus())
+    await user.keyboard('{Enter}')
+    expect((await screen.findByLabelText('Task or goal') as HTMLTextAreaElement).value)
+      .toContain(firstHistoricalRun.userMessage)
+    expect(screen.getByLabelText('Workspace')).toHaveValue(firstHistoricalRun.workspace)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(trigger).toHaveFocus())
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('returns cancelled setup to Save & run after an asynchronous definition save', async () => {
+    const pending = deferred<AgentDefinition>()
+    definitionState.value.save.mockReturnValue(pending.promise)
+    await renderSavedAgents()
+    const user = userEvent.setup()
+    const trigger = screen.getByRole('button', { name: 'Save & run' })
+    trigger.focus()
+    await user.keyboard('{Enter}')
+    expect(trigger).toBeDisabled()
+    await act(async () => pending.resolve(firstAgent))
+    const dialog = await screen.findByRole('dialog', { name: `Run ${firstAgent.name}` })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(trigger).toHaveFocus())
+    expect(trigger).toBeEnabled()
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(firstAgent)
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
   it('keeps both history records deleted when independent deletions finish in reverse order', async () => {
     const first = deferred<void>()
     const second = deferred<void>()

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type RefObject } from 'react'
 import { useStudioCatalog } from '@/hooks/useStudioCatalog'
 import { roleReadiness } from '@/lib/agent-preflight'
 import { StatusLabel } from './StatusLabel'
@@ -64,12 +64,14 @@ export function AgentRunSetup({
   onRun,
   initialTask = '',
   initialWorkspace = '',
+  returnFocusRef,
 }: {
   definition: AgentDefinition
   onClose: () => void
   onRun: () => void
   initialTask?: string
   initialWorkspace?: string
+  returnFocusRef?: RefObject<HTMLElement | null>
 }) {
   const [showPools, setShowPools] = useState(false)
   const { catalog, error: catalogError, refresh } = useStudioCatalog()
@@ -145,7 +147,15 @@ export function AgentRunSetup({
         if (!open) close()
       }}
     >
-      <DialogContent className="grid-cols-1 max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent
+        className="grid-cols-1 max-h-[90vh] overflow-y-auto sm:max-w-3xl"
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef?.current?.isConnected) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Run {definition.name}</DialogTitle>
           <DialogDescription>
