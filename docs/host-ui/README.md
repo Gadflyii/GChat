@@ -3974,3 +3974,29 @@ pending integration; the donor is untouched. Build/binding evidence:
 `/ai/gchat/out/c4-gui-maintenance-disk-error-20261018/native-export.json`.
 Next action: coordinator review/integration and canonical row closure; retire
 owned disposable build copies after retaining this tested candidate and packet.
+
+## Switch keyboard focus — C7 native acceptance
+
+`GUI-SWITCH-FOCUS-RING` passed native Linux acceptance on October 18. The shared
+Switch fix `cc59fd5db`, rebuilt at `014df1845` with its production frontend,
+shows a visible keyboard-focus ring in Light and Dark. Native Tab/Shift-Tab
+reached the General setting **Load default model on startup**; Space changed
+its state and retained focus and the three-pixel ring in both themes. In Skills,
+a disposable invalid skill provided a disabled switch: Tab/Shift-Tab skipped it,
+and clicking it left its state unchanged. Screenshots and read-only DOM/style
+observations agree. All input used native XTest; the inspector only read state.
+
+The relevant Switch, CSS, General and Skills source is unchanged from `71abf1708`,
+whose ONE `make verify` passed. This evidence-only branch adds no source changes
+and passes `git diff --check`. Windows remains outside this Linux acceptance.
+No model load, account sign-in or shared catalog mutation occurred.
+
+Candidate: `/ai/gchat-worktrees/c7-switch-focus-native-20261018`, branch
+`test/c7-switch-focus-native-20261018`. The small packet is
+[`out/c7-switch-focus-native-20261018/`](../../out/c7-switch-focus-native-20261018/),
+including `native-result.json`, build receipts and five screenshots. The private
+S1 app, D-Bus, keyring, Xvfb and inspector session are stopped; CPUs were returned
+at 07:00 UTC. The owned S1 source/build/AppDir/HOME/tools root
+`/media/ron/SSD_RAID/ai/tmp-c7-switch-focus-native-20261018` was retired,
+removing 41.42 GB. The shared development catalog is retained. Next: coordinator
+integration and canonical Linux leaf closure.
