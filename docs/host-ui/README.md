@@ -1365,9 +1365,11 @@ retains its package context through provider discovery and auto-load.
 The Rust registration/reopen fixture checks the serialized identity. The
 extension regression uses an external UUID entry with Muse identity and a
 misleading Qwen filename/display label; list, get and context lookup all return
-131,072. The provider/model regression calls the real provider discovery and
-`DefaultModelsService.startModel`, asserting `max_context: 131072` reaches load.
-Existing explicit context settings retain their meaning.
+131,072. The original provider/model regression checked that this context
+reached auto-load. The October 18 settings-ownership decision above supersedes
+that startup forwarding: ordinary automatic loads now select a complete tested
+Host profile, whose context may differ from the artifact's native context.
+Manifest identity and native-context discovery remain preserved.
 
 All 81 focused cases pass (24 extension, 49 provider/model, eight Rust), as do
 Rust check and Clippy. One `make verify` exited 0: 3,199 frontend tests and

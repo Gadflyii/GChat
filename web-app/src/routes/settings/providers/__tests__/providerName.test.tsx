@@ -64,10 +64,12 @@ vi.mock('@/hooks/useModelLoad', () => ({
   }),
 }))
 vi.mock('@/hooks/useModelProvider', () => ({
-  useModelProvider: () => ({
+  useModelProvider: Object.assign(() => ({
     getProviderByName: () => state.provider,
     setProviders: vi.fn(),
     updateProvider: state.updateProvider,
+  }), {
+    getState: () => ({ providers: state.provider ? [state.provider] : [] }),
   }),
 }))
 vi.mock('@/i18n/react-i18next-compat', () => ({
