@@ -7,6 +7,7 @@ import {
   within,
 } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import GbotCompanion from './GbotCompanion'
@@ -1517,6 +1518,91 @@ it('returns keyboard focus from a human desktop without closing the view or hand
   expect(mocks.stop).not.toHaveBeenCalled()
   expect(mocks.call).not.toHaveBeenCalled()
 })
+
+it.each([false, true])(
+  'returns keyboard focus to the desktop opener after closing an interactive=%s view',
+  async (interactive) => {
+    const user = userEvent.setup()
+    const identity = snapshot.live_sessions[0]
+    let opens = 0
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) => {
+      if (path === 'view/open') {
+        ++opens
+        return Promise.resolve({
+          lease_id: `close-focus-${opens}`,
+          ws_url: 'ws://127.0.0.1/mock',
+          media_session_id: `close-focus-media-${opens}`,
+          interactive,
+        })
+      }
+      return fallback(path, body)
+    })
+    await mount()
+    if (interactive) {
+      snapshot.controls = [
+        {
+          identity,
+          owner: sessionStorage.getItem('gbot-control-owner'),
+          state: 'human',
+        },
+      ]
+      await act(async () => {
+        await useGbotCompanion.getState().refresh()
+      })
+    }
+    const desktopTab = screen.getByRole('button', {
+      name: 'Desktop',
+      exact: true,
+    })
+    desktopTab.focus()
+    await user.keyboard('{Enter}')
+    expect(desktopTab).toHaveFocus()
+    const opener = screen.getByRole('button', { name: 'View bot’s desktop' })
+    opener.focus()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(1))
+    const desktop = within(screen.getByRole('region', { name: 'Bot desktop' }))
+    expect(
+      desktop.getByText(interactive ? 'You have control' : 'View only')
+    ).toBeVisible()
+    expect(
+      (mocks.start.mock.calls[0][0] as MediaSessionOptions).interactive
+    ).toBe(interactive)
+    const close = desktop.getByRole('button', { name: 'Close view' })
+    close.focus()
+    await user.keyboard('{Enter}')
+
+    const reopen = screen.getByRole('button', { name: 'View bot’s desktop' })
+    expect(reopen).toHaveFocus()
+    expect(
+      screen.queryByRole('region', { name: 'Bot desktop' })
+    ).not.toBeInTheDocument()
+    expect(mocks.stop).toHaveBeenCalledTimes(1)
+    expect(mocks.call).toHaveBeenCalledWith('view/close', {
+      identity,
+      owner: sessionStorage.getItem('gbot-control-owner'),
+      lease_id: 'close-focus-1',
+    })
+    expect(opens).toBe(1)
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'view/close')
+    ).toHaveLength(1)
+    expect(
+      mocks.call.mock.calls.filter(([path]) =>
+        /^(tasks\/(submit|cancel|resume)|control\/|connect$|disconnect$)/.test(path)
+      )
+    ).toEqual([])
+
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(mocks.start).toHaveBeenCalledTimes(2))
+    expect(opens).toBe(2)
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'view/close')
+    ).toHaveLength(1)
+    expect(screen.getByRole('region', { name: 'Bot desktop' })).toBeVisible()
+  }
+)
 
 it('closes a late desktop ticket after hiding and never starts its media session', async () => {
   await mount()
