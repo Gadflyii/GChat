@@ -1,5 +1,19 @@
 # Gbot design
 
+## Failed LAN bot removals keep recovery guidance — Gchat 2
+
+`GBOT-LAN-REMOVE-INLINE-ERROR`, based on main `fbebb98b7`, keeps a
+failed or uncertain Remove bot result beside the saved bot, with plain guidance
+and technical Details initially closed. It does not claim the bot or saved key
+was retained: service cleanup can fail after removal was saved. Refresh does
+not replay removal. An explicit retry requires the shared confirmation again;
+canceling that confirmation keeps the warning and makes no request. Rename
+feedback remains separate.
+
+Acceptance: baseline, focused, lint and ONE `make verify` PENDING.
+Evidence: `out/gchat2-lan-remove-inline-error-20261018/result.json`.
+This rendered/source scope does not qualify native, Windows or live SSH.
+
 ## Failed saved-bot renames keep recovery guidance — Gchat 2
 
 `GBOT-LAN-RENAME-INLINE-ERROR`, based on main `e16adae7d`, replaces
