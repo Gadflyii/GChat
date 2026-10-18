@@ -245,9 +245,10 @@ describe('AgentStudioPage', () => {
     const { SkillsPage } = await import('../skills')
     blockNavigation.mockImplementation(api.useBlocker)
     definitionState.value.definitions = [firstAgent]
-    const search = vi.spyOn(Route, 'useSearch').mockImplementation(() =>
-      api.useSearch({ strict: false })
-    )
+    function useStudioSearch() {
+      return api.useSearch({ strict: false })
+    }
+    const search = vi.spyOn(Route, 'useSearch').mockImplementation(useStudioSearch)
     const root = api.createRootRoute({ component: api.Outlet })
     const agents = api.createRoute({ getParentRoute: () => root, path: '/agents', component: AgentStudioPage })
     const skills = api.createRoute({ getParentRoute: () => root, path: '/skills', component: SkillsPage })
