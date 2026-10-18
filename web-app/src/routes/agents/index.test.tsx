@@ -8,7 +8,7 @@ import type { AgentSkill } from '@/services/agent/skills'
 import { Route } from './index'
 import GbotCompanion from '@/containers/GbotCompanion'
 import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
-import { settleConfirm } from '@/lib/confirm'
+import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 import { useGbotPage } from '@/stores/gbot-page-store'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
@@ -535,7 +535,7 @@ describe('AgentStudioPage', () => {
 
   async function renderRunHistory() {
     listAgentRuns.mockResolvedValue([firstHistoricalRun, secondHistoricalRun])
-    const view = render(<AgentStudioPage />)
+    const view = render(<><AgentStudioPage /><ConfirmDialogHost /></>)
     fireEvent.click(await screen.findByRole('button', { name: 'Runs', exact: true }))
     fireEvent.click(await screen.findByRole('button', { name: /Review assistant incomplete/ }))
     expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
@@ -621,6 +621,69 @@ describe('AgentStudioPage', () => {
     return screen.findByRole('menu')
   }
 
+  async function requestHistoricalRunDeletion(run: AgentRunRecord) {
+    fireEvent.click(within(await openHistoricalRunActions(run))
+      .getByRole('menuitem', { name: 'Delete', exact: true }))
+    return screen.findByRole('dialog', { name: 'Delete saved run?' })
+  }
+
+  async function confirmHistoricalRunDeletion(run: AgentRunRecord) {
+    const dialog = await requestHistoricalRunDeletion(run)
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete run' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  }
+
+  it.each([firstHistoricalRun, secondHistoricalRun].flatMap((run) =>
+    (['Cancel', 'Enter', 'Escape'] as const).map((dismissal) => ({
+      run, dismissal, name: run.definitionName,
+    }))
+  ))('preserves $name and returns to its action trigger after delete $dismissal', async ({ run, dismissal }) => {
+    await renderRunHistory()
+    const user = userEvent.setup()
+    const trigger = screen.getByRole('button', { name: `Actions for ${run.definitionName}` })
+    trigger.focus()
+    await user.keyboard(' ')
+    await screen.findByRole('menu')
+    await user.keyboard('{End}{Enter}')
+
+    const dialog = await screen.findByRole('dialog', { name: 'Delete saved run?' })
+    expect(dialog).toHaveTextContent(run.definitionName)
+    expect(dialog).toHaveTextContent(new Date(run.startedAtMs).toLocaleString())
+    expect(dialog).toHaveTextContent(/saved history/i)
+    expect(dialog).toHaveTextContent(/run files/i)
+    expect(dialog).toHaveTextContent(/cannot be undone/i)
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(deleteAgentRun).not.toHaveBeenCalled()
+
+    if (dismissal === 'Cancel') await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    else await user.keyboard(`{${dismissal}}`)
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(trigger).toHaveFocus())
+    expect(deleteAgentRun).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: `Actions for ${firstAgent.name}` })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `Actions for ${secondAgent.name}` })).toBeInTheDocument()
+    expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
+  })
+
+  it('deletes only the explicitly named run after confirmation even when another run is selected', async () => {
+    await renderRunHistory()
+    const dialog = await requestHistoricalRunDeletion(secondHistoricalRun)
+    expect(dialog).toHaveTextContent(secondHistoricalRun.definitionName)
+    expect(dialog).not.toHaveTextContent(firstHistoricalRun.definitionName)
+    expect(deleteAgentRun).not.toHaveBeenCalled()
+
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete run' }))
+
+    await waitFor(() => expect(deleteAgentRun).toHaveBeenCalledExactlyOnceWith(secondHistoricalRun.id))
+    await waitFor(() => expect(screen.queryByRole('button', {
+      name: `Actions for ${secondAgent.name}`,
+    })).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: `Actions for ${firstAgent.name}` })).toBeInTheDocument()
+    expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+  })
+
   it.each(['Re-run', 'Continue as new run…'] as const)(
     'returns dismissed %s setup to its own history action button', async (action) => {
       getAgentDefinition.mockImplementation(async (id) => (
@@ -701,10 +764,8 @@ describe('AgentStudioPage', () => {
     deleteAgentRun.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     await renderRunHistory()
 
-    fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
-      .getByRole('menuitem', { name: 'Delete', exact: true }))
-    fireEvent.click(within(await openHistoricalRunActions(secondHistoricalRun))
-      .getByRole('menuitem', { name: 'Delete', exact: true }))
+    await confirmHistoricalRunDeletion(firstHistoricalRun)
+    await confirmHistoricalRunDeletion(secondHistoricalRun)
     expect(deleteAgentRun.mock.calls).toEqual([[firstHistoricalRun.id], [secondHistoricalRun.id]])
 
     await act(async () => second.resolve())
@@ -775,13 +836,25 @@ describe('AgentStudioPage', () => {
     const menu = await openHistoricalRunActions(firstHistoricalRun)
     const deleteItem = within(menu).getByRole('menuitem', { name: 'Delete', exact: true })
 
+    let confirmation: ReturnType<typeof useConfirmStore.getState>['pending'] = null
     act(() => {
       fireEvent.click(deleteItem)
+      confirmation = useConfirmStore.getState().pending
       fireEvent.click(deleteItem)
     })
 
-    expect(deleteAgentRun).toHaveBeenCalledOnce()
-    expect(deleteAgentRun).toHaveBeenCalledWith(firstHistoricalRun.id)
+    expect(confirmation).not.toBeNull()
+    expect(useConfirmStore.getState().pending).toBe(confirmation)
+    expect(deleteAgentRun).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog', { name: 'Delete saved run?' })
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    const confirmButton = within(dialog).getByRole('button', { name: 'Delete run' })
+    act(() => {
+      fireEvent.click(confirmButton)
+      fireEvent.click(confirmButton)
+    })
+    await waitFor(() => expect(deleteAgentRun).toHaveBeenCalledExactlyOnceWith(firstHistoricalRun.id))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     const pendingMenu = await openHistoricalRunActions(firstHistoricalRun)
     const deletingItem = within(pendingMenu).getByRole('menuitem', { name: 'Deleting…' })
     expect(deletingItem).toHaveAttribute('aria-disabled', 'true')
@@ -798,8 +871,7 @@ describe('AgentStudioPage', () => {
     const pending = deferred<void>()
     deleteAgentRun.mockReturnValue(pending.promise)
     await renderRunHistory()
-    fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
-      .getByRole('menuitem', { name: 'Delete', exact: true }))
+    await confirmHistoricalRunDeletion(firstHistoricalRun)
     fireEvent.click(screen.getByRole('button', { name: /Research assistant incomplete/ }))
 
     await act(async () => pending.resolve())
@@ -814,19 +886,18 @@ describe('AgentStudioPage', () => {
     const retry = deferred<void>()
     deleteAgentRun.mockReturnValueOnce(failed.promise).mockReturnValueOnce(retry.promise)
     await renderRunHistory()
-    fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
-      .getByRole('menuitem', { name: 'Delete', exact: true }))
+    await confirmHistoricalRunDeletion(firstHistoricalRun)
 
     await act(async () => failed.reject(new Error('History storage is unavailable')))
 
     expect(toast.error).toHaveBeenCalledWith(expect.stringContaining('History storage is unavailable'))
     expect(screen.getByRole('button', { name: `Actions for ${firstAgent.name}` })).toBeInTheDocument()
     expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
-    const retryMenu = await openHistoricalRunActions(firstHistoricalRun)
-    const retryItem = within(retryMenu).getByRole('menuitem', { name: 'Delete', exact: true })
-    expect(retryItem).not.toHaveAttribute('aria-disabled', 'true')
-    fireEvent.click(retryItem)
-    expect(deleteAgentRun).toHaveBeenCalledTimes(2)
+    const retryDialog = await requestHistoricalRunDeletion(firstHistoricalRun)
+    expect(deleteAgentRun).toHaveBeenCalledTimes(1)
+    expect(retryDialog).toHaveTextContent(firstHistoricalRun.definitionName)
+    await userEvent.setup().click(within(retryDialog).getByRole('button', { name: 'Delete run' }))
+    await waitFor(() => expect(deleteAgentRun).toHaveBeenCalledTimes(2))
 
     await act(async () => retry.resolve())
 
@@ -846,8 +917,7 @@ describe('AgentStudioPage', () => {
         ? screen.getByTitle('Refresh runs')
         : screen.getByRole('button', { name: 'Runs', exact: true }))
       expect(listAgentRuns).toHaveBeenCalledTimes(callsBeforeRefresh + 1)
-      fireEvent.click(within(await openHistoricalRunActions(firstHistoricalRun))
-        .getByRole('menuitem', { name: 'Delete', exact: true }))
+      await confirmHistoricalRunDeletion(firstHistoricalRun)
 
       await act(async () => deletion.resolve())
       expect(screen.queryByRole('button', { name: `Actions for ${firstAgent.name}` })).not.toBeInTheDocument()
