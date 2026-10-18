@@ -1,5 +1,32 @@
 # Gbot design
 
+## Human-help response error recovery — Gchat 2
+
+`GBOT-HUMAN-HELP-ERROR-GUIDANCE`, based on main `3b967a5bc`, gives failed
+Send reply and Decline actions plain recovery guidance. It describes the
+unconfirmed outcome, keeps the reply draft and names the matching control for
+an explicit retry if the task is still asking for help. Technical diagnostics
+remain in Details, initially closed.
+
+The shared settings and companion component preserves confirmed saved-response
+guidance: check the model and computer connections, then resume the task without
+resending the response. If the help request closes during an unconfirmed action,
+the message asks the user to check task status and offers no response control.
+Background updates preserve the error while relevant; continuing the task clears
+it. Opening Details does not retry an action. This is source/rendered UI scope.
+
+All three regressions failed on unchanged production. The fixed component suite
+passed seven cases, and four existing settings/companion saved-response cases
+passed. Lint passed with zero errors and five existing warnings. ONE
+`make verify`, 18 October 16:51:07–16:57:29 UTC, passed 3,713 app tests (six
+skipped), 127 extension tests, 1,309 Rust tests (28 ignored, 23 summaries), six
+coverage floors and lint/typecheck/guards. All 3,459 tracked raw source bytes
+and modes matched before and after the gate, with timestamps refreshed before
+checks. This receipt was added afterward with product and test source unchanged.
+CPU120–127 booking3423 returned 16:58Z. Evidence:
+`out/gchat2-human-help-error-guidance-20261018/result.json` and adjacent logs.
+No retry or whole-gate repeat.
+
 ## Keep confirmed schedule changes after a failed reload — Gchat 2
 
 `GBOT-SCHEDULE-ACTION-RESULT`, based on main `739d5da2f`, displays the saved
