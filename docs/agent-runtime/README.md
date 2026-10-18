@@ -35,8 +35,12 @@ its text is identical, and newer edits in A remain available. Submitted
 attachments keep their existing per-conversation cleanup. Failed sends retain
 their drafts and attachments for retry.
 
-Validation is pending focused rendered attachment-send/navigation tests,
-workspace lint and one `make verify`. Receipts:
+The extended rendered regression fails on the original cleanup: returning to A
+restores already-sent text. Both navigation cases pass with the fix. Validation:
+53 focused tests and workspace lint PASS; one `make verify` PASS (3,597
+web-app, 127 extension and 1,288 Rust tests, plus six coverage floors) on
+`40e51840b`. No native, inference, installed-package or Windows acceptance is
+claimed for this follow-up. Receipts:
 `/ai/gchat/out/gchat-chat-attachment-sent-draft-20261018/`.
 
 ## Conversation draft isolation — October 18
