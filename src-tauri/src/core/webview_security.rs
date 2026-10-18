@@ -17,7 +17,6 @@ fn preview_url(url: &Url) -> bool {
         || (url.scheme() == "http"
             && url.host_str() == Some("gchat-preview.localhost")
             && url.port().is_none())
-        || matches!(url.scheme(), "blob" | "data")
         || (url.scheme() == "asset" && url.host_str() == Some("localhost"))
         || (matches!(url.scheme(), "http" | "https")
             && url.host_str() == Some("asset.localhost")
@@ -255,8 +254,6 @@ mod tests {
                 "http://gchat-preview.localhost/test",
                 "asset://localhost/tmp/preview.html",
                 "http://asset.localhost/C:/preview.html",
-                "blob:tauri://localhost/123",
-                "data:text/html,hello",
             ] {
                 let target = Url::parse(target).unwrap();
                 assert!(!navigation_allowed(&origin, &target, true));
@@ -269,12 +266,25 @@ mod tests {
                 "tauri://example.test/",
                 "http://tauri.localhost.example.test/",
                 "file:///tmp/page.html",
+                "blob:tauri://localhost/123",
+                "blob:http://tauri.localhost/123",
+                "data:text/html,<script>window.__TAURI_INTERNALS__.invoke('join_path')</script>",
             ] {
                 let target = Url::parse(target).unwrap();
                 assert!(!navigation_allowed(&origin, &target, true));
                 assert!(!navigation_allowed(&origin, &target, false));
             }
         }
+    }
+
+    #[test]
+    fn main_origin_blob_html_cannot_become_a_privileged_frame() {
+        let origin = Url::parse("tauri://localhost/").unwrap();
+        // A text/html Blob made by the application inherits its origin. No
+        // desktop frame uses Blob/data documents, so reject both altogether.
+        let blob = Url::parse("blob:tauri://localhost/text-html-fixture").unwrap();
+        assert!(!navigation_allowed(&origin, &blob, false));
+        assert!(!navigation_allowed(&origin, &blob, true));
     }
 
     #[test]
