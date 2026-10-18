@@ -338,8 +338,26 @@ it('disables Save linked accounts with a visible reason when no accounts exist',
 })
 
 it('keeps Save enabled to unlink a disconnected account when none are connected', async () => {
-  request.mockResolvedValue(connectors(['gone'], []))
+  request
+    .mockResolvedValueOnce(connectors(['gone'], []))
+    .mockResolvedValueOnce(connectors([], []))
   mount()
-  await screen.findByText(/Disconnected account \(gone\)/)
-  expect(screen.getByRole('button', { name: 'Save linked accounts' })).toBeEnabled()
+  const disconnected = await screen.findByRole('checkbox', {
+    name: 'Disconnected account (gone)',
+  })
+  const save = screen.getByRole('button', { name: 'Save linked accounts' })
+  expect(disconnected).toBeChecked()
+  fireEvent.click(disconnected)
+  expect(save).toBeEnabled()
+  fireEvent.click(save)
+
+  await waitFor(() =>
+    expect(screen.getByRole('status')).toHaveTextContent('Linked accounts saved.')
+  )
+  expect(request).toHaveBeenLastCalledWith('connectors/save', {
+    workspace_id: 'bot-one',
+    account_ids: [],
+  })
+  expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  expect(save).toBeDisabled()
 })

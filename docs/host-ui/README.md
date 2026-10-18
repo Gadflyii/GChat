@@ -1762,3 +1762,23 @@ checking, quality checks, 3,221 app tests, 121 extension tests, 1,212 Rust tests
 floors (six app tests skipped, 28 Rust tests ignored). Changed source/test hashes matched locally and on S1
 before and after the gate. These are rendered React tests with mocked service responses; there is no new
 native VM or Windows acceptance claim.
+
+## Removing the last disconnected bot account, October 18 (Gchat 2)
+
+`GBOT-LINKED-ACCOUNTS-UNLINK-LAST-DISCONNECTED`: clearing the last disconnected account checkbox disabled
+Save linked accounts before the change could be saved. The bot kept its old saved account reference. Save now
+remains available while saved references need removal, including an empty selection. After a successful save,
+the existing empty-account explanation and disabled Save state return.
+
+The rendered regression follows the checkbox through saving an empty account list and receiving the saved
+response. On baseline `08e49496d`, removal failed at the disabled Save button while the empty-account control
+passed. The fix passes all 12 account tests.
+
+One `make verify` passed lint, type checking and quality checks, then stopped on a stale setup regression
+after an independent wording change. That existing test now uses Stop setup and checks the plain error plus
+expandable details through polling and retry; all 28 setup tests pass. Only the failed coverage and remaining
+Rust stages were continued: 3,272 app tests, 121 extension tests, 1,216 Rust tests and all six coverage floors
+pass (six app skips, 28 Rust ignores). The first failure remains recorded; no second full gate was run.
+Changed source/test hashes matched locally and on S1 before and after the continuation. Private build data
+was removed and CPUs returned at 02:54 UTC. These are mocked-service React checks, with no new native VM,
+Windows or live sign-in acceptance claim.
