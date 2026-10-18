@@ -1,5 +1,93 @@
 # GInfer host UI
 
+## Gbot companion task-load retry — October 18
+
+`GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously
+cleared the companion history and disabled Send without a recovery control,
+even for a connected bot with a saved model. The companion now explains that
+tasks and approval requests could not load and offers **Retry loading tasks**.
+The retry reads state, tasks and approvals; it sends no task action. It disables
+the retry while loading, preserves the unsent draft through repeated failures,
+and restores history, approval requests and Send after a successful read.
+The raw cause remains in closed Details; misleading setup and empty-history
+prompts stay hidden while loading has failed.
+
+Baseline `ca25804f6`; rendered cases cover failures of each read, repeated
+failure, duplicate-click prevention, draft preservation and successful recovery.
+Both regressions fail baseline because Retry is absent; all 40 focused tests
+pass. ONE `make verify` passed on S1 CPUs96–103, 05:14:10–05:21:54Z:
+lint, typecheck, quality guards, 3,371 app tests (six skipped), 127 extension
+tests, all six coverage floors and 1,229 Rust tests (28 ignored). Source and
+test hashes matched before and after the gate. The private remote tree was
+removed and booking3020 canceled; CPUs returned05:22Z before the next booking.
+No backend, approval policy or task state changed.
+No VM, native Windows, model or live task was run. FRESH/OLD remain OFF with
+original XML, in Gchat 2 custody. Windows: not built (dev phase).
+
+Result: `out/gchat2-companion-task-load-retry-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-companion-task-load-retry-20261018`.
+## Packaged CLI terminal-install detection — C3, October 18
+
+`GUI-CLI-PACKAGED-PATH-DETECTION` corrects Settings → General → terminal
+command detection. The private current-main release `d0a8d06bf` reproduced
+**Installed at …/current-main-appdir/usr/bin//gchat-cli** with only Uninstall
+available, although the inherited terminal PATH had no `gchat-cli`. The
+packaged AppRun prepends its private directories to PATH; `which` therefore
+mistook the bundled executable for a terminal installation. Baseline receipt:
+`out/c3-current-main-release-20261018/cli-false-installed.json`.
+
+The candidate traverses PATH directly for the platform's CLI executable,
+excluding the private `resources/bin` directory and, on Linux, the AppDir
+captured by Tauri from `APPDIR`. The approved GTK AppRun hook also sets
+`APPDIR` when running an extracted AppDir. Directory canonicalization excludes
+aliases into the bundle while retaining an external installed file symlink;
+the executable target itself is not canonicalized. Detection continues past
+the bundle to the first external executable. Without an AppDir, a real system
+`/usr/bin` installation remains eligible. Windows checks `gchat-cli.exe` on
+PATH without `where`'s implicit current-directory lookup; the separate per-user
+desktop-linked launcher remains eligible. Install, uninstall and launcher
+ownership are unchanged; C4 owns the separate standalone-launcher work.
+
+Acceptance requires the packaged-only native case to offer Install, a real
+terminal installation to report its external path, and existing CLI install
+and uninstall behavior to remain intact. Five filesystem regressions cover
+bundle-only lookup, PATH ordering after AppRun, system installation without
+AppDir, directory aliases versus installed file symlinks, and missing or
+non-executable commands. Focused command:
+`cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli cli_install_detection -- --test-threads=1`.
+The five focused Rust regressions, library-scope Cargo check/Clippy and lint
+passed. ONE `make verify` passed on S1 CPUs80–87 (booking3025): 3,369 app tests
+(six skipped), 127 extension tests, all six coverage floors and 1,234 native
+tests (28 ignored). There was no gate failure or continuation. Vite and the
+default desktop debug build passed at 05:25:46Z. The exported source-native
+`cli-candidate/bin/gchat` is bound to source `86c3068ad`; ELF, private pre-install
+and retained resource linkage were verified. Installed-layout acceptance passed
+at 05:32Z with explicit APPDIR and bundled-first PATH: Install was offered, the
+CLI installed in private HOME/.local/bin, and reopening General retained the
+external Installed path. Uninstall removed the private CLI executable; reopening
+General offered Install again. The system bin directory was unwritable. Viewed
+Light 1500×1000 and Dark 1024×800 screenshots show readable controls without
+horizontal overflow. Windows is not built or exercised.
+
+Current main `b9a56c96c` was merged normally before gates. Its retained
+first-run disk-full test already includes the exact folder hydration wait;
+all first-run regressions are preserved without another source correction.
+The Interface candidate is immutable and excluded from this CLI source.
+
+Inventory: owner C3, branch
+`fix/c3-cli-packaged-path-detection-20261018`, baseline `bbc81c2ec`, worktree
+`/ai/gchat-worktrees/c3-cli-packaged-path-detection-20261018`. Only
+`src-tauri/src/core/system/commands.rs` and this authority are owned by this
+row. The shared S1 source/dependencies/native target were returned at 05:26Z; app,
+idle Host and private session returned at 05:32Z. The tested CLI export is retained
+for integration, and shared private Xvfb remains in use for the next candidate.
+Next: coordinator integration, then retire this candidate. Native acceptance
+used private HOME and explicit APPDIR/bundled PATH; no GPU,
+model, profile, host install or shared terminal PATH mutation. Reuse pinned
+routed-offline dependencies only after all retained manifests match. Preserve
+current-main AppDir/home, Interface/folder/badge candidates and runnable assets.
+Packet: `out/c3-cli-packaged-path-detection-20261018/{result.json,summary.md}`.
+
 ## Gbot human-help failure recovery — October 18
 
 `GBOT-HUMAN-HELP-INLINE-ERRORS`: Gbot settings and the companion previously
@@ -27,6 +115,97 @@ original XML, in Gchat 2 custody. Windows: not built (dev phase).
 
 Result: `out/gchat2-human-help-inline-errors-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-human-help-inline-errors-20261018`.
+## Interface reset restores the theme — C3, October 18
+
+`GUI-INTERFACE-RESET-KEEPS-THEME`: Settings → Interface promised to reset all
+interface settings, but its reset only restored font size and the accent preset.
+The independently persisted Light/System theme stayed selected. The candidate
+restores the existing Dark default through the shared theme service before
+resetting the font to Medium. It waits for completion, disables another reset
+while pending and shows failure feedback if the theme service rejects. The
+description names the defaults that Reset restores.
+
+Outcome and acceptance: ordinary Reset from Light with a larger text size
+restores Dark/Medium, reports success after completion, and preserves the
+chosen settings on a rejected theme operation. Existing hook and rendered-route
+tests cover those behaviors. The changed-source Linux native acceptance is
+**PASS** and the row is **MERGE READY**.
+
+Owner Codex 3; worktree
+`/ai/gchat-worktrees/c3-interface-reset-theme-20261018`, branch
+`fix/c3-interface-reset-theme-20261018`, original base `d0a8d06bf`, source
+`18c405b1d`. Current main `072655126` was merged normally before gates.
+Main still lacked the known first-run disk-full test synchronization correction:
+the alert can commit before the folder hydration effect. This branch includes
+only the same one-line `waitFor` before Retry, preserving all assertions; the
+unrelated folder-reveal runtime fix is excluded.
+
+Source `5c53a6cc2` is pushed. Focused Interface hook/route/theme and first-run
+suites passed 60 cases; lint passed with zero errors and five existing warnings.
+The first and only `make verify` stopped at TS2367: the new default constant
+narrowed `initialState.activeTheme` to Dark. The original failure is retained.
+The approved correction annotates `initialState: ThemeState`, preserving Auto.
+Affected theme9/typecheck and every original unrun guard/coverage/native stage
+passed: 3,367 app/core tests (six skipped), 121 extension tests, six floors,
+1,228 native tests (28 ignored). Passed stages were reused; no second full
+verify ran. Vite and default desktop/custom-protocol debug build passed.
+
+The parent launched the checked candidate at 05:14:21Z with the private
+`current-main-home`, preserving Light/Extra Large. Actual Settings → Interface
+showed those values. An ordinary Reset click changed them to Dark/Medium; the
+retained post-action DOM has the root `dark` class, `--font-size-base: 16px`,
+visible Dark/Medium controls and no horizontal overflow at 1500×1000.
+The parent reviewed all three screenshots: Light/Extra Large before Reset at
+1500×1000, then Dark/Medium at 1500×1000 and 1024×800. Wording and controls are
+readable without overflow. Evidence:
+`out/c3-interface-reset-theme-20261018/{native-after-reset-wide.json,native-before-light-xl-wide.png,native-after-dark-medium-wide.png,native-after-dark-medium-narrow.png}`.
+Packet:
+`out/c3-interface-reset-theme-20261018/{result.json,summary.md}`. Immutable
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/interface-candidate/bin/gchat`
+is 255,482,456 bytes, SHA256
+`81e922c84d7912bbb239ac3c7f11ba30790f5fbf564eeace2ef7adaea4463eaa`.
+Its private pre-install and runnable-resource link were checked at 05:13:59Z.
+Both terminal containers and disposable local/remote source archives are
+removed; booking3010 returned. Candidate, concise logs and existing shared
+source/dependency/target caches remain for parent integration and serial CLI
+gates. Native app PID3080914 stopped at 05:15:22Z and its private session ended;
+no Host launched. The parent's Xvfb:79 remains retained under booking3001 through
+05:32Z. Launch and stop receipts are `native-launch.json` and
+`native-terminal.json` in the same packet; only the completed build booking3010
+is claimed returned here.
+Installed current-main AppDir/home, folder/badge candidates and runnable
+resources were preserved. This debug build does not refresh installer qualification.
+No dependencies, model/profile, GPU or native settings service change. Next:
+merge integration; no further test or build is needed.
+## Discovered-host pairing failure guidance — Gchat 3, October 18
+
+`GUI-HOST-NEARBY-PAIR-ERROR-GUIDANCE-20261018`: a rejected Pair for a discovered
+host now leaves recovery guidance beside that host. It names sharing on the
+other computer and explicit Pair retry, keeps the diagnostic in closed details,
+and describes the Pair button accessibly. Refresh and actions on another host
+preserve the failure; explicit retry clears only that host's message. Existing
+pending protection and accepted-pair/read-failure behavior remain intact.
+No native or protocol behavior changes.
+
+The allocated base `072655126` reproduces both rendered defects (two failed,
+23 skipped), each at its host card's missing alert. The fixed route passes all
+25 focused cases. Lint passes with zero errors and five existing warnings.
+ONE `make verify` passes: 3,365 app tests (six skipped), 121 extension tests,
+all six critical coverage floors and 1,228 Rust tests (28 ignored). The candidate
+chain ran 05:06:30–05:14:36Z, exit zero. Source/test hashes match before and after
+the gate. The coordinator reviewed the actual logs, effective commands and
+source/test diffs. Main `5c00b46ea` has no intervening change to either owned file.
+
+Owner: `/ai/gchat-worktrees/gchat3-host-nearby-pair-error-guidance-20261018`,
+branch `fix/gchat3-host-nearby-pair-error-guidance-20261018`, base `072655126`.
+Retained evidence: `out/host-nearby-pair-error-guidance-20261018/test-result.json`
+and adjacent `test-summary.md`. S1 AIS-2-8592-L01 CPUs104–111, booking 3009,
+used independent offline dependency/cache copies from the unchanged RC donor.
+The owned SSD fixture (42.33 GB), two exited containers and local source
+archive were removed; returned 05:15Z and booking canceled. Only the concise
+result and summary remain. Rendered mocked-command behavior and the Linux
+source gate are qualified; live native pairing/network, installed GUI, account,
+Engine/GPU, Windows and installer qualification remain separate.
 
 ## Gbot Hand back and task resume guidance — October 18
 
@@ -78,7 +257,7 @@ used independent offline dependency/cache copies from the unchanged RC donor.
 The owned root `/media/ron/SSD_RAID/ai/tmp-gchat3-host-sharing-refresh-tests-20261018`
 (42.32 GB), two containers and local source archive were removed; returned
 04:59Z and booking canceled. Only concise result/summary evidence remains.
-Next: commit/push and merge review. Rendered mocked behavior and the Linux
+Source `0f91c1dd2` merged as `072655126`. Rendered mocked behavior and the Linux
 source gate are qualified; live sharing/network, installed GUI, account/pairing,
 Engine/GPU, Windows and installer qualification remain separate.
 ## Folder reveal runtime crash — C3, October 18

@@ -40,6 +40,7 @@ function EnginesPage() {
   const [sharingRefreshError, setSharingRefreshError] = useState<string | null>(null)
   const [address, setAddress] = useState('')
   const [pairError, setPairError] = useState<string | null>(null)
+  const [nearbyPairErrors, setNearbyPairErrors] = useState<Record<string, string>>({})
   const [pairRefreshError, setPairRefreshError] = useState<string | null>(null)
   const addressInvalid = !!address.trim() && !validHostAddress(address.trim())
   const [busy, setBusy] = useState<string | null>(null)
@@ -73,7 +74,12 @@ function EnginesPage() {
   }, [refresh])
   const pair = async (hostId?: string) => {
     if (!credentialReady || busy || (!hostId && (!address.trim() || addressInvalid))) return
-    if (!hostId) setPairError(null)
+    if (hostId) setNearbyPairErrors((errors) => {
+      const remaining = { ...errors }
+      delete remaining[hostId]
+      return remaining
+    })
+    else setPairError(null)
     setBusy(hostId ?? 'manual')
     try {
       const result = await engineCommand<{ credential_cleanup_warning?: string }>('pair', hostId ? { host_id: hostId } : { base_url: address.trim() })
@@ -83,7 +89,7 @@ function EnginesPage() {
       catch (e) { setPairRefreshError(String(e)) }
     }
     catch (e) {
-      if (hostId) toast.error(String(e))
+      if (hostId) setNearbyPairErrors((errors) => ({ ...errors, [hostId]: String(e) }))
       else setPairError(String(e))
     } finally { setBusy(null) }
   }
@@ -106,10 +112,11 @@ function EnginesPage() {
       <CredentialSetup onReady={setCredentialReady} />
       {enabled && nearby.filter((h) => !ignored[h.host_id] && !hosts.some((saved) => saved.host_id === h.host_id)).map((host) => <div key={host.host_id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-4">
         <span>New host found: {host.name}</span><div className="flex gap-2">
-          <Button aria-describedby={credentialReady ? undefined : `pair-needs-storage-${host.host_id}`} disabled={!credentialReady || busy !== null} onClick={() => void pair(host.host_id)}>{busy === host.host_id ? 'Pairing…' : 'Pair'}</Button>
+          <Button aria-describedby={[!credentialReady && `pair-needs-storage-${host.host_id}`, nearbyPairErrors[host.host_id] !== undefined && `pair-error-${host.host_id}`].filter(Boolean).join(' ') || undefined} disabled={!credentialReady || busy !== null} onClick={() => void pair(host.host_id)}>{busy === host.host_id ? 'Pairing…' : 'Pair'}</Button>
           <Button variant="outline" disabled={busy === host.host_id} onClick={() => ignore(host.host_id, host.name)}>Ignore</Button>
         </div>
         {!credentialReady && <p id={`pair-needs-storage-${host.host_id}`} className="w-full text-sm text-muted-foreground">Pairing needs secure storage. Choose Check secure storage above first.</p>}
+        {nearbyPairErrors[host.host_id] !== undefined && <div id={`pair-error-${host.host_id}`} role="alert" className="w-full space-y-2 text-sm text-destructive"><p>Could not pair with {host.name}. Check that GInfer sharing is on at the other computer, then choose Pair to try again.</p><details><summary className="cursor-pointer">Pairing error details</summary><p className="whitespace-pre-wrap break-all">{nearbyPairErrors[host.host_id]}</p></details></div>}
         <details className="w-full text-xs text-muted-foreground"><summary className="cursor-pointer">Connection details</summary>{host.urls.map(url => <p key={url} className="break-all font-mono">{url}</p>)}</details>
       </div>)}
       {!!Object.keys(ignored).length && <details className="rounded-lg border p-4"><summary className="cursor-pointer">Ignored hosts ({Object.keys(ignored).length})</summary><p className="text-sm text-muted-foreground">Ignored hosts do not appear in nearby results or trigger notifications. This does not revoke an existing pairing.</p>{Object.entries(ignored).map(([id, name]) => <div key={id} className="mt-2 flex items-center justify-between gap-2"><span>{name}</span><Button variant="outline" onClick={() => restore(id)}>Show again</Button></div>)}</details>}

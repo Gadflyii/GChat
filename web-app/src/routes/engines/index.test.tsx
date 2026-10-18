@@ -444,7 +444,7 @@ describe('Engines host intake and launch controls', () => {
     expect(screen.queryByLabelText('Pairing code')).not.toBeInTheDocument()
   })
 
-  it('prevents duplicate clicks and allows retry after a pairing failure', async () => {
+  it('keeps nearby pairing failure actionable through Refresh and explicit retry', async () => {
     mocks.nearby = [
       {
         host_id: 'nearby-host',
@@ -452,36 +452,130 @@ describe('Engines host intake and launch controls', () => {
         urls: ['https://192.168.1.111:7444'],
       },
     ]
-    let fail: (error: Error) => void = () => undefined
-    mocks.command.mockImplementation((action: string) =>
+    let fail!: (error: Error) => void
+    const original = mocks.command.getMockImplementation()!
+    mocks.command.mockImplementation((action: string, args: unknown) =>
       action === 'pair'
         ? new Promise((_resolve, reject) => {
             fail = reject
           })
-        : Promise.resolve({
-            ready: true,
-            platform: 'linux',
-            can_install: false,
-          })
+        : original(action, args)
     )
-    renderExpandedPage()
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: 'Pair', exact: true })
-      ).toBeEnabled()
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Pair', exact: true }))
-    expect(screen.getByRole('button', { name: 'Pairing…' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Pairing…' }))
-    expect(
-      mocks.command.mock.calls.filter(([action]) => action === 'pair')
-    ).toHaveLength(1)
-    fail(new Error('Host unavailable'))
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: 'Pair', exact: true })
-      ).toBeEnabled()
-    )
+    render(<Page />)
+    await screen.findByText('Secure storage is ready.')
+    mocks.refresh.mockClear()
+    const card = screen.getByText('New host found: Server 2').parentElement!
+    const pair = within(card).getByRole('button', { name: 'Pair', exact: true })
+    fireEvent.click(pair)
+    expect(pair).toHaveTextContent('Pairing…')
+    expect(pair).toBeDisabled()
+    fireEvent.click(pair)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'pair')).toEqual([
+      ['pair', { host_id: 'nearby-host' }],
+    ])
+    await act(async () => fail(new Error('Host unavailable')))
+    await waitFor(() => expect(pair).toBeEnabled())
+    const feedback = within(card).getByRole('alert')
+    const message = 'Could not pair with Server 2. Check that GInfer sharing is on at the other computer, then choose Pair to try again.'
+    expect(feedback).toHaveTextContent(message)
+    expect(pair).toHaveAccessibleDescription(new RegExp(message.replaceAll('.', '\\.')))
+    const diagnostic = within(feedback).getByText('Error: Host unavailable')
+    expect(diagnostic).not.toBeVisible()
+    expect(diagnostic.closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(within(feedback).getByText('Pairing error details'))
+    expect(diagnostic).toBeVisible()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh', exact: true }))
+    })
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+    expect(feedback).toBeInTheDocument()
+    expect(diagnostic).toBeVisible()
+    expect(pair).toHaveAccessibleDescription(new RegExp(message.replaceAll('.', '\\.')))
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'pair')).toHaveLength(1)
+
+    let finishRetry!: (result: object) => void
+    mocks.command.mockImplementation((action: string, args: unknown) => action === 'pair'
+      ? new Promise((resolve) => { finishRetry = resolve })
+      : original(action, args))
+    fireEvent.click(pair)
+    expect(pair).toBeDisabled()
+    expect(pair).toHaveTextContent('Pairing…')
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(pair).not.toHaveAccessibleDescription(new RegExp(message.replaceAll('.', '\\.')))
+    fireEvent.click(pair)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'pair')).toEqual([
+      ['pair', { host_id: 'nearby-host' }],
+      ['pair', { host_id: 'nearby-host' }],
+    ])
+    await act(async () => finishRetry({}))
+    await waitFor(() => expect(pair).toBeEnabled())
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.refresh).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps nearby pairing failure scoped when another host fails then pairs successfully', async () => {
+    mocks.nearby = [
+      { host_id: 'server-2', name: 'Server 2', urls: ['https://server-2:7444'] },
+      { host_id: 'server-3', name: 'Server 3', urls: ['https://server-3:7444'] },
+    ]
+    let finishRetry!: (result: object) => void
+    const otherPair = vi.fn()
+      .mockRejectedValueOnce(new Error('Server 3 refused pairing'))
+      .mockImplementationOnce(() => new Promise((resolve) => { finishRetry = resolve }))
+    const original = mocks.command.getMockImplementation()!
+    mocks.command.mockImplementation((action: string, args?: { host_id?: string }) => action === 'pair'
+      ? args?.host_id === 'server-2'
+        ? Promise.reject(new Error('Server 2 unavailable'))
+        : otherPair()
+      : original(action, args))
+    render(<Page />)
+    await screen.findByText('Secure storage is ready.')
+    mocks.refresh.mockClear()
+    const failedCard = screen.getByText('New host found: Server 2').parentElement!
+    const otherCard = screen.getByText('New host found: Server 3').parentElement!
+    const failedPair = within(failedCard).getByRole('button', { name: 'Pair', exact: true })
+    const otherPairButton = within(otherCard).getByRole('button', { name: 'Pair', exact: true })
+    fireEvent.click(failedPair)
+    await waitFor(() => expect(failedPair).toBeEnabled())
+    const failedFeedback = within(failedCard).getByRole('alert')
+    expect(failedFeedback).toHaveTextContent('Could not pair with Server 2.')
+    expect(within(otherCard).queryByRole('alert')).not.toBeInTheDocument()
+    expect(otherPairButton).not.toHaveAccessibleDescription(/Could not pair/)
+
+    fireEvent.click(otherPairButton)
+    await waitFor(() => expect(otherPairButton).toBeEnabled())
+    const otherFeedback = within(otherCard).getByRole('alert')
+    expect(otherFeedback).toHaveTextContent('Could not pair with Server 3.')
+    expect(within(otherFeedback).getByText('Error: Server 3 refused pairing')).not.toBeVisible()
+    expect(otherPairButton).toHaveAccessibleDescription(/Could not pair with Server 3\./)
+    expect(failedFeedback).toBeInTheDocument()
+    expect(within(failedFeedback).getByText('Error: Server 2 unavailable')).not.toBeVisible()
+    expect(failedPair).toHaveAccessibleDescription(/Could not pair with Server 2\./)
+    expect(mocks.refresh).not.toHaveBeenCalled()
+
+    fireEvent.click(otherPairButton)
+    expect(otherPairButton).toBeDisabled()
+    expect(otherPairButton).toHaveTextContent('Pairing…')
+    expect(within(otherCard).queryByRole('alert')).not.toBeInTheDocument()
+    expect(otherPairButton).not.toHaveAccessibleDescription(/Could not pair/)
+    expect(failedFeedback).toBeInTheDocument()
+    expect(failedPair).toBeDisabled()
+    expect(failedPair).toHaveAccessibleDescription(/Could not pair with Server 2\./)
+    fireEvent.click(otherPairButton)
+    await act(async () => finishRetry({}))
+    await waitFor(() => expect(otherPairButton).toBeEnabled())
+    expect(failedFeedback).toBeInTheDocument()
+    expect(failedPair).toBeEnabled()
+    expect(failedPair).toHaveAccessibleDescription(/Could not pair with Server 2\./)
+    expect(within(otherCard).queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'pair')).toEqual([
+      ['pair', { host_id: 'server-2' }],
+      ['pair', { host_id: 'server-3' }],
+      ['pair', { host_id: 'server-3' }],
+    ])
   })
 
   it('starts saved instances and confirms a running-instance restart', async () => {

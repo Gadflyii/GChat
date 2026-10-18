@@ -1,0 +1,70 @@
+{
+  "result": "REPRODUCED",
+  "scope": "Native Linux archive-style startup and Code-page baseline with safe private denied npm global prefix.",
+  "source": {
+    "binary_revision": "dbb8ee2b9",
+    "relevance": "The OpenCode npm installer section and EmbeddedIntegrationProvisioner are unchanged from d31e328d6. Other commands.rs differences concern GInfer desktop launcher configuration only.",
+    "installer": "src-tauri/src/core/system/commands.rs:1818-1847 at dbb8ee2b9 calls npm install -g opencode-ai.",
+    "provisioner": "web-app/src/containers/EmbeddedIntegrationProvisioner.tsx",
+    "binary_sha256": "d137cec32bf133be9f9c0675467df5486ca80041e64d3e49f0055afb90a4ca3c"
+  },
+  "native": {
+    "host": "AIS-2-8592-L01 (S1)",
+    "display": ":197",
+    "screenshots": [
+      "baseline-startup.png",
+      "baseline-code-failed.png"
+    ],
+    "input": "Actual xdotool pointer click on the Code sidebar; no Retry. Screenshots captured from the native X11 root and visually checked.",
+    "observed_code_state": "OpenCode: Preparing the embedded OpenCode terminal\u2026 plus an error toast: The installer for opencode failed. Installer output: npm ERR! code EACCES\u2026",
+    "plain_error_page": "Not observed; baseline retained the preparing spinner and raw npm failure toast."
+  },
+  "npm": {
+    "node": "v18.19.1",
+    "version": "9.2.0",
+    "argv": [
+      "install",
+      "--global",
+      "opencode-ai"
+    ],
+    "error": "EACCES",
+    "syscall": "mkdir",
+    "errno": -13,
+    "path": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-baseline-home/data/GChat/data/denied-global/lib",
+    "denied_prefix_mode": "0555",
+    "log": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-baseline-home/data/GChat/data/npm-cache/_logs/2026-10-18T05_11_38_026Z-debug-0.log",
+    "evidence_lines": [
+      "20 verbose argv \"install\" \"--global\" \"opencode-ai\"",
+      "38 error code EACCES",
+      "39 error syscall mkdir",
+      "41 error errno -13",
+      "44 verbose exit -13"
+    ],
+    "safety": "The launch redirected npm global prefix to an owned non-writable private directory; the failure occurred there. No host-wide installation was requested."
+  },
+  "fixture_limit": "The baseline placed executable at stage/gchat and resources at stage/resources; bundled extension/runtime resources were not found. Native frontend and actual OpenCode provisioner ran, reproducing the npm global-prefix defect. This evidence does not qualify extension installation or GInfer readiness.",
+  "candidate_resources_recipe": {
+    "executable": "stage/bin/gchat",
+    "resources": "stage/lib/GChat/resources",
+    "layout": "resources/{bin,ginfer,gbot,agent-skills,LICENSE,pre-install}; copy pre-install into the private stage, point remaining entries at read-only retained donor paths.",
+    "basis": "This executable/resource layout installed all bundled extensions during the earlier current Settings native acceptance. setup.rs joins resource_dir/resources/pre-install and resource_dir/resources/bin/launch-profiles.json.",
+    "donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage/usr/lib/GChat/resources"
+  },
+  "cleanup": {
+    "app_pid": 3045060,
+    "wrapper_pid": 3045057,
+    "xvfb_pid": 3045056,
+    "method": "SIGTERM verified exact app PID; private bus/keyring/renderers exited with session. SIGTERM exact Xvfb PID.",
+    "terminal_return_utc": "2026-10-18T05:15:18Z",
+    "verification": "No live process using the baseline HOME, no named app/wrapper/Xvfb process, and no private runtime mount remained.",
+    "retained": "Concise JSON and two screenshots retained in the source branch. Disposable profile, stage, logs and build/cache/source root deleted after candidate acceptance.",
+    "parent_disposal": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018",
+      "deleted_at": "2026-10-18T05:33:05Z",
+      "exists_after": false,
+      "live_references_before": [],
+      "mounts_before": [],
+      "scope": "Owned source copy, build/dependency caches and disposable baseline/candidate profiles/stages only; read-only donor symlinks not followed."
+    }
+  }
+}

@@ -1,0 +1,121 @@
+{
+  "scope": "Native Linux automatic managed OpenCode installation and no-model Code workspace; no inference or configured-model startup claim",
+  "source": "13125b2ab",
+  "host": "AIS-2-8592-L01 (S1 Linux)",
+  "launch": {
+    "started_at": "2026-10-18T05:28:27.224020+00:00",
+    "source": "13125b2ab",
+    "binary_source": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/native-target/debug/gchat",
+    "binary_sha256": "3fed683776f75581625f2ef6f89af1de74c13cf083da4cd39ddf5e1fe8f49a33",
+    "home": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home",
+    "stage": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-stage",
+    "wrapper_pid": 3214341,
+    "xvfb_pid": 3214172,
+    "cpus": "0-7",
+    "gpu": false,
+    "display": 197,
+    "native_opencode_absent_from_PATH": {
+      "returncode": 1,
+      "stdout": "",
+      "path": "/usr/local/bin:/usr/bin:/bin"
+    },
+    "environment": {
+      "HOME": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home",
+      "XDG_RUNTIME_DIR": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/runtime",
+      "XDG_CONFIG_HOME": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/config",
+      "XDG_DATA_HOME": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data",
+      "XDG_CACHE_HOME": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/cache",
+      "XDG_STATE_HOME": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/state",
+      "TMPDIR": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/tmp",
+      "NPM_CONFIG_PREFIX": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/denied-global",
+      "NPM_CONFIG_CACHE": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/ambient-npm-cache",
+      "CUDA_VISIBLE_DEVICES": ""
+    },
+    "scope": "automatic managed installation and Code no-model workspace readiness; no inference",
+    "native_build_pass_at": "2026-10-18T05:26:18Z (parent gate signal)"
+  },
+  "automatic_install": {
+    "before_opening_code": true,
+    "package_version": "1.19.3",
+    "actual_npm_install": [
+      {
+        "path": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/npm-cache/_logs/2026-10-18T05_28_30_385Z-debug-0.log",
+        "selected_lines": [
+          "0 verbose cli /usr/bin/node /usr/bin/npm",
+          "1 info using npm@9.2.0",
+          "2 info using node@v18.19.1",
+          "20 verbose title npm install opencode-ai",
+          "21 verbose argv \"install\" \"--global\" \"false\" \"--prefix\" \"/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/runtime\" \"--cache\" \"/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/npm-cache\" \"opencode-ai\"",
+          "25 verbose logfile logs-max:10 dir:/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/npm-cache/_logs/2026-10-18T05_28_30_385Z-",
+          "26 verbose logfile /media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/npm-cache/_logs/2026-10-18T05_28_30_385Z-debug-0.log",
+          "168 verbose exit 0",
+          "170 info ok"
+        ]
+      }
+    ],
+    "global_prefix_untouched": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/denied-global",
+      "mode": "0o555",
+      "entries": []
+    },
+    "ambient_cache_entries": [],
+    "actual_cache": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/npm-cache"
+  },
+  "managed_program": {
+    "absolute_path": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/runtime/node_modules/.bin/opencode",
+    "resolved_path": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/runtime/node_modules/opencode-ai/bin/opencode.exe",
+    "native_PATH_still_absent": {
+      "returncode": 1,
+      "stdout": "",
+      "path": "/usr/local/bin:/usr/bin:/bin"
+    },
+    "version_command": [
+      "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/data/GChat/data/code/opencode/runtime/node_modules/.bin/opencode",
+      "--version"
+    ],
+    "version_exit": 0,
+    "version_stdout": "1.19.3",
+    "version_stderr": ""
+  },
+  "native_code": {
+    "input": "xdotool native pointer click on Code sidebar",
+    "route": "tauri://localhost/code",
+    "workspace": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home/workspace",
+    "observed_text": "Choose or download a model first. OpenCode is installed; GChat will configure and launch it automatically when a model is selected.",
+    "update_code_enabled": true,
+    "check_again_enabled": true,
+    "model": "none",
+    "no_error_toast": true,
+    "screenshots": [
+      "candidate-startup.png",
+      "candidate-code-no-model.png"
+    ],
+    "inspector": "existing insp.mjs read-only DOM observation; no DOM actions",
+    "root_review": "Root viewed both PNGs and accepted installed/no-model scope before cleanup"
+  },
+  "recorded_at": "2026-10-18T05:30:41.289516+00:00",
+  "cleanup": {
+    "pending": false,
+    "returned_at": "2026-10-18T05:31:02.528389+00:00",
+    "remaining_private_HOME_processes": [],
+    "private_mounts": [],
+    "no_build_or_test_rerun": true,
+    "app_pid": 3214343,
+    "wrapper_pid": 3214341,
+    "xvfb_pid": 3214172,
+    "private_session_processes_stopped": 16,
+    "booking_cancelled": "s1 line 3037, Codex 7, CPU0-7",
+    "parent_disposal": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018",
+      "deleted_at": "2026-10-18T05:33:05Z",
+      "exists_after": false,
+      "live_references_before": [],
+      "mounts_before": [],
+      "scope": "Owned source copy, build/dependency caches and disposable baseline/candidate profiles/stages only; read-only donor symlinks not followed."
+    },
+    "deleted_private_paths": [
+      "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-home",
+      "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018/opencode-candidate-stage"
+    ]
+  }
+}

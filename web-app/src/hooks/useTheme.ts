@@ -4,6 +4,8 @@ import { getServiceHub } from '@/hooks/useServiceHub'
 import type { ThemeMode } from '@/services/theme/types'
 import { localStorageKey } from '@/constants/localStorage'
 
+export const DEFAULT_APP_THEME: AppTheme = 'dark'
+
 // Function to check if OS prefers dark mode
 export const checkOSDarkMode = (): boolean => {
   return (
@@ -14,7 +16,7 @@ export const checkOSDarkMode = (): boolean => {
 
 export type ThemeState = {
   activeTheme: AppTheme
-  setTheme: (theme: AppTheme) => void
+  setTheme: (theme: AppTheme) => Promise<void>
   isDark: boolean
   setIsDark: (isDark: boolean) => void
 }
@@ -23,8 +25,8 @@ export const useTheme = create<ThemeState>()(
   persist(
     (set) => {
       // Initialize isDark based on OS preference if theme is auto
-      const initialState = {
-        activeTheme: 'dark' as AppTheme,
+      const initialState: ThemeState = {
+        activeTheme: DEFAULT_APP_THEME,
         isDark: true,
         setTheme: async (activeTheme: AppTheme) => {
           if (activeTheme === 'auto') {
