@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Models without automatic settings — C3, October 18
+
+`GUI-LOAD-NEEDS-PROFILE-MESSAGE` is IN PROGRESS. The original named-model
+correction `68cfa4204` (merged `7f549eef6`) is retained, but the subsequent
+startup-settings ownership change made its recovery advice obsolete. Models
+Load selects tested settings and deliberately rejects custom resident
+settings; choosing custom settings cannot make retrying that Load succeed.
+The native diagnostic also names the removed Custom server settings section.
+Gchat 3 reported this mismatch and retains separate ownership of the Host
+launch-validation diagnostic in `engine_host.rs`.
+
+The candidate directs both error surfaces to GInfer Hosts → Model and memory
+settings → Choose model settings → Check model settings → Start model with
+these settings. Acceptance: the Models alert retains the readable model name
+and Hosts link, and the real native automatic-load rejection gives this
+working manual-start route while preserving the existing custom resident.
+Focused rendered Models and native Host lifecycle regressions plus ONE
+`make verify` remain to run. No startup/admission behavior changes.
+
+Owned worktree `/ai/gchat-worktrees/c3-load-needs-profile-message-20261018`,
+branch `fix/c3-load-needs-profile-message-20261018`, base `163025d3c`.
+Planned independent S1 cache/build root:
+`/media/ron/SSD_RAID/ai/tmp-c3-load-needs-profile-message-20261018`.
+No model/GPU work is needed. Retained ed68 native visible wording establishes
+the original name/destination correction only; it does not qualify the new
+guidance. Next: focused tests, one full gate, then merge-ready handoff and
+owned scratch cleanup.
+
 ## MCP duplicate-name protection — C3, October 18
 
 `GUI-MCP-DUPLICATE-NAME` passes Linux native acceptance. Original fix
