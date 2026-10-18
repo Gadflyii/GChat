@@ -645,8 +645,8 @@ function AgentStudioPage() {
           )}
         </div>
       ) : view === 'definitions' ? (
-        <div className="grid h-full min-h-0 grid-cols-[250px_minmax(360px,1fr)_280px] xl:grid-cols-[280px_minmax(420px,1fr)_300px]">
-          <aside className="min-h-0 overflow-y-auto border-r p-3">
+        <div className="grid h-full min-h-0 min-w-0 grid-cols-[180px_minmax(360px,1fr)_240px] min-[1100px]:grid-cols-[220px_minmax(360px,1fr)_260px] xl:grid-cols-[280px_minmax(420px,1fr)_300px]">
+          <aside className="min-h-0 min-w-0 overflow-y-auto border-r p-3">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Library
@@ -697,7 +697,7 @@ function AgentStudioPage() {
             </div>
           </aside>
 
-          <main className="min-h-0 overflow-y-auto p-5">
+          <main className="min-h-0 min-w-0 overflow-y-auto p-5">
             {draft ? (
               <DefinitionEditor
                 draft={draft}
@@ -710,7 +710,7 @@ function AgentStudioPage() {
             ) : null}
           </main>
 
-          <aside className="min-h-0 overflow-y-auto border-l bg-muted/15 p-4">
+          <aside className="min-h-0 min-w-0 overflow-y-auto border-l bg-muted/15 p-4">
             {draft && (
               <DefinitionInspector
                 draft={draft}

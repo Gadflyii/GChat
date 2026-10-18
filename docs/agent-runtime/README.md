@@ -150,6 +150,32 @@ inference, tools and continuation remain deferred;
 this change does not provision Hermes or qualify its installed walkthrough.
 [Scope and remaining acceptance](remaining-acceptance.md#oi-068-linux-hermes-home-override--october-15).
 
+## Agent Studio minimum-window layout — October 17
+
+The isolated native GUI pass on `9e75fc31e` reproduced a clipped execution
+inspector and Save controls at the supported minimum window size, 1024 × 740.
+The 240 px navigation sidebar leaves 784 px, while the Studio columns required
+890 px. Evidence: `/ai/gchat/out/gchat1-chat-agents-pass-20261017/05-editor-minimum-clipped.png`.
+The pass used a private HOME, private mode-700 runtime directory, its own
+DBus/keyring and X display, with `WAYLAND_DISPLAY` unset.
+
+The candidate changes four CSS class strings: the grid uses 180/360-minimum/240 px
+columns below 1100 px viewport width and 220/360-minimum/260 px from 1100 px;
+the existing extra-large columns remain. The grid and its three children gain
+`min-w-0`. This preserves the editor's 360 px minimum while fitting the inspector.
+The isolated branch is based on `fee25e419`; changes after the reproduced main
+revision were documentation-only and the Agent Studio source was identical.
+
+`git diff --check`, focused lint and all 35 Agent Studio tests pass. The full
+`make verify` passes, including JavaScript coverage and the platform Rust suites.
+The separate native candidate passes at 1024 × 740 and 1200 × 800. The page has
+no horizontal overflow at either size. At minimum size, ordinary vertical
+scrolling exposes the complete Save controls (right edge 1008 px); saving
+reports success. The preserved agents and descriptions remain readable.
+Screenshots `11`–`13`, gate logs and candidate receipts are retained in
+`/ai/gchat/out/gchat1-chat-agents-pass-20261017`. This qualifies the Linux debug
+desktop layout; installer and Windows qualification remain separate.
+
 ## Studio worker exit persistence — October 15
 
 Normal app exit now tracks direct Studio turns alongside Chat and Code workers,
