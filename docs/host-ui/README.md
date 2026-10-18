@@ -56,10 +56,11 @@ that subsequent retries add no download or mutation command. Production source
 is unchanged. Lint and `make verify` never started; **zero verify invocations**.
 Booking3617 returned22:53Z and was canceled. Original failure and before/after
 bindings remain in the owned S1 fixture; small metadata is in
-`out/c7-models-stop-status-recovery-20261018/`. Next: freeze and push the
-corrected test, reuse the same prepared fixture for focused66, lint and exactly
-one `make verify`, then review terminal evidence, retire the fixture and hand
-off the result for reviewed merge. No Ada job, build or copy is owned; the
+`out/c7-models-stop-status-recovery-20261018/`. Corrected test freeze `fe64a9bd6` is pushed; its source staging matched all
+three source, 35 dependency and eleven catalog / 48 profile bindings. The
+corrected gate launched **22:58:30Z**, booking3622 CPU88–95 through23:23Z:
+focused66, lint and exactly one `make verify`, stopping on failure. Next: review
+terminal evidence, retire the fixture and hand off the result for reviewed merge. No Ada job, build or copy is owned; the
 23:00–23:30Z Ada quiet window is respected.
 
 ## Models overlapping deletion recovery — C7, October 18
