@@ -251,6 +251,28 @@ Screenshots `11`–`13`, gate logs and candidate receipts are retained in
 `/ai/gchat/out/gchat1-chat-agents-pass-20261017`. This qualifies the Linux debug
 desktop layout; installer and Windows qualification remain separate.
 
+## Studio run selection starts at its overview — October 18
+
+In the native 1024 × 740 pass with the sidebar expanded, reading the bottom of a
+finished run and selecting a failed run retained the previous 430 px scroll
+position. The selected run’s result overview and continuation controls were above
+the visible pane. The details pane now starts at the top when the selected saved
+run changes. Selecting records does not change their saved contents.
+
+The regression selects another run after scrolling, then returns to the original
+and checks each new selection starts at its result overview. All 40 focused
+Studio tests passed. The isolated native candidate passed finished, failed and
+incomplete saved-run transitions at 1024 × 740, plus a larger 1200 × 800 replay:
+each selection opened at scrollTop 0 with its overview and actions visible and
+no horizontal overflow. No inference or continuation execution occurred.
+
+Full `make verify` passed on the combined branch after merging the setup polling
+test reconciliation and current main. The original failed gate remains in the
+packet. The native replay used the earlier candidate with identical scroll
+implementation and regression bytes; no new desktop build was needed.
+Evidence and gate results:
+`/ai/gchat/out/gchat-run-selection-scroll-20261018/`. Windows not built (dev phase).
+
 ## Studio worker exit persistence — October 15
 
 Normal app exit now tracks direct Studio turns alongside Chat and Code workers,

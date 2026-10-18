@@ -239,6 +239,21 @@ describe('AgentStudioPage', () => {
     expect(screen.getByText('Completed Agent Studio runs will appear here.')).toBeInTheDocument()
   })
 
+  it('opens each selected run at its result overview after scrolling another run', async () => {
+    await renderRunHistory()
+    const detail = () => screen.getByRole('heading', { name: 'Result overview' }).closest('main')!
+    detail().scrollTop = 430
+
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant incomplete/ }))
+    expect(detail().scrollTop).toBe(0)
+    expect(within(detail()).getAllByText(secondHistoricalRun.finalReply).length).toBeGreaterThan(0)
+
+    detail().scrollTop = 160
+    fireEvent.click(screen.getByRole('button', { name: /Review assistant incomplete/ }))
+    expect(detail().scrollTop).toBe(0)
+    expect(within(detail()).getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
+  })
+
   it('lets the run history pane fill the page height so its divider reaches the bottom', async () => {
     listAgentRuns.mockResolvedValue([])
     await renderRunHistory()
