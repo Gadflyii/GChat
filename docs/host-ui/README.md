@@ -2210,18 +2210,19 @@ steps used the release profile with debug assertions, a development frontend and
 
 ## C4 first-run journey native acceptance — October 18
 
-Owner: Codex 4. All eight orphaned journey source fixes are merged. This single
-**evidence branch** recovers their outstanding native acceptance; it does not
-repeat merged implementations or their passing source gates. The eight rows are
+Owner: Codex 4. Seven orphaned journey leaves pass their merged source fixes;
+the eighth needed the background-maintenance error correction `21a30afa5`.
+This single **evidence branch** retains their isolated native acceptance and
+reuses the passing source gates. The eight rows are
 WELCOME-BELOW-FOLD, FAILED-DOWNLOAD-STUCK, MODEL-NOT-SELECTED,
 LOAD-WITHOUT-PROFILE, NO-RECOMMENDATION-CONTRADICTS, JARGON, DISK-SPACE-CRASH,
 and POST-STOP-GPU-BUSY, all prefixed `GUI-JOURNEY-`.
 
 Acceptance: exercise the changed controls in one isolated Linux native session,
-retain observed results and limitations, and close only demonstrated rows on
-GInfer `docs/open-work`. Current unresolved question: which merged fixes still
-have an observable native gap? The maintenance-time ENOSPC error is known to be
-log-only and must not be represented as fixed by the earlier warning change.
+retain observed results and limitations, and close demonstrated rows on GInfer
+`docs/open-work`. All eight native leaves now pass at the recorded scope. The
+new background-maintenance failure reporting fix awaits branch integration; the
+earlier warning change alone did not resolve that gap.
 
 Source: `origin/main@e6b28e8d4`; the retained C3 native donor is `be69f9190`
 plus Downloads source `f928613b1`. The journey components, release predicate,
@@ -2254,8 +2255,9 @@ remaining-formats profiler was stopped through Stop setup. GPU1 returned at
 open-work closure against this evidence commit. The registered 2-bit mix package
 SHA-256 is `ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`
 (existing registry value, no rehash).
-The separate maintenance-error fix is under focused/full source verification;
-do not close DISK-SPACE-CRASH before its native acceptance.
+The separate maintenance-error source fix `21a30afa5` passes its focused checks,
+one verification gate plus bounded failed-stage continuation, and the native
+fault/retry acceptance described below.
 
 Owned native inventory: S1
 `/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018` contains a copied native
@@ -2272,10 +2274,22 @@ using the native file picker. Custom settings selected only physical GPU1,
 262144 tokens, one request/copy, images enabled and automatic speculation/KV.
 The retained C3 hardware profile seeded this private Host; native artifact-scoped
 Ensure passed and the instance reached Ready. This checks model projection and
-post-Stop tuning visibility, not inference quality or speed. Next: native
-maintenance-error/retry acceptance with the separately fixed candidate, then
-close the demonstrated journey rows. The same private session is retained for
-that check.
+post-Stop tuning visibility, not inference quality or speed. The same private
+session then accepted the separately fixed maintenance-error candidate. After
+the Host opened valid state, blocking atomic publication with an empty directory
+at its private state-file path produced a visible setup error and enabled Retry
+setup without exiting. Restoring state publication exposed a stable folder error
+from a disposable regular file at the unchanged requested folder. After restoring
+the original private directory, native Retry setup accepted that same folder and
+cleared both maintenance and storage errors. The deliberately failed catalog
+request retained its separate catalog error; no Engine child ran. Three reviewed
+1200×800 screenshots and the concise result are in
+`out/c4-disk-native-20261018/result.json`. This checks actual publication and
+folder failures plus recovery, with existing ENOSPC mapping/rendered regressions;
+no disk was filled and no native ENOSPC is claimed. App, idle Host, keyring, D-Bus,
+listener, inspector forward and Xvfb are stopped; CPU80–87 returned at04:29 UTC.
+Next: integrate the source fix and close its canonical row; preserve the concise
+packet while retiring owned disposable builds/private state.
 
 ## Engine settings native acceptance — C3
 

@@ -1,0 +1,7 @@
+{
+  "terminal_utc": "2026-10-18T04:29:13Z",
+  "native_app_host_listener_terminal": true,
+  "no_model_children": true,
+  "xvfb_stop_signaled": 2352941,
+  "scope": "C4 private native test only"
+}
