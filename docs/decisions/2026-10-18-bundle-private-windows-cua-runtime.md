@@ -21,10 +21,11 @@ title: "Bundle the accepted Cua runtime on Windows"
 - **Consequences:** No user Python installation or second executor is needed.
   Retain Python/Microsoft notices and every package notice. Bubbs approved
   Colorama, unchanged certifi/tqdm MPL files and the vendor redistributables on
-  October 18; GPL-3.0 and AGPL remain excluded. Native relocation and isolation
-  checks passed; the real model-driven Hyper-V guest task remains a pending
-  release acceptance gate. Implemented Windows packaging is not yet qualified
-  by offline manifest verification or the startup sign-off.
+  October 18; GPL-3.0 and AGPL remain excluded. Native relocation, isolation
+  and typed-unavailability checks passed. The real model-driven Windows
+  Hyper-V task passed with independent exact file readback, persistent-disk
+  restart and production retirement. This qualifies the tested text-only
+  route; Vision and browser playback remain outside its scope.
 - **Owner:** GChat / Codex 7; Gchat 2 owns Gbot and the Hyper-V lifecycle.
 - **Links:** [Current implementation and acceptance](../gbot/README.md#windows-cua-runtime-packaging--codex-7),
   [Cua ownership](../gbot/cua-map.md),

@@ -175,8 +175,10 @@ discovery are implemented. Arch-signed startup requires the absolute bundled
 Python, isolated `._pth` paths, ignored `PYTHON*` variables and user site-packages,
 and no system Python fallback. A missing or corrupt Windows bundle reports typed
 **Bot unavailable** with reinstall guidance while GChat starts and serves ordinary
-chat independently. Windows remains unqualified until the real model-driven
-Hyper-V guest acceptance gate passes; see the
+chat independently. The native Windows text-only Hyper-V gate passed on
+October 18: a real model-driven task, independent exact file readback,
+persistent-disk restart and production guest retirement. Vision and browser
+playback are outside this qualification; see the
 [Windows runtime decision](../decisions/2026-10-18-bundle-private-windows-cua-runtime.md).
 
 ### Durable actions and approval

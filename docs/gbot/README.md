@@ -2,7 +2,7 @@
 
 ## Windows Cua runtime packaging — Codex 7
 
-`GBOT-CUA-RUNTIME-PACKAGING` is active on branch
+`GBOT-CUA-RUNTIME-PACKAGING` is implemented and qualified on branch
 `feat/c7-gbot-cua-windows-runtime-20261018`, base `8482f841c`.
 Bubbs authorized the Windows runtime and a real Hyper-V guest task on Ada4090;
 Gchat 2 owns Gbot/guest lifecycle, Codex 7 owns packaging/resource discovery.
@@ -44,28 +44,44 @@ Completed checks:
   startup sentinel did not run. Imports resolved inside the bundle.
 
 The typed-unavailable delta passed both focused child-exit/error-state tests
-and affected check/strict Clippy; S1 returned 18:23Z. No full gate was repeated.
-The next unresolved action is the existing native Hyper-V lifecycle test with one real
-model-driven Mousepad task, independent exact file readback, persistent-disk
-restart and production guest retirement. Use the retained accepted Qwen package
+and affected check/strict Clippy; S1 returned 18:23Z. The real native Hyper-V
+gate passed on Ada4090 at 19:22Z using the packaged executor without
+development executor overrides. The model completed the Mousepad task with
+21 replies and nine foreground input receipts; independent exact file readback
+passed, including the final newline. Persistent-disk restart preserved the
+sentinel and pinned SSH identity. Production guest retirement, task cleanup
+and runtime closure passed; native test and Engine exited zero. Booking779
+was canceled at return.
+
+This qualifies the Windows bundled runtime for the tested text-only Hyper-V
+route. It does not qualify Vision, M365 or browser playback. The gate reused
+the accepted Qwen package
 `ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61`
-with its accepted Engine at 262144/C1/INT8/DFlash K7/greedy/no-thinking.
-Ada's schedule now lists C1 booking777 through 19:02Z after C5's booking776.
-Launch at C1's direct return, before C4's queued RC walk; there is no idle
-reservation, model or guest. The prepared controller uses a private Windows
-working directory, logs memory and retains guards through native retirement.
+and Engine at 262144/C1/INT8/DFlash K7/greedy/no-thinking.
+
+Earlier attempts exposed two fixture issues. Windows reached the WSL model
+endpoint through IPv4 loopback, so the controller now verifies native model
+inventory before guest setup. The model then omitted the task's final newline;
+the existing prompt now explicitly requires Enter and inspection before saving.
+The exact byte criterion, runtime, model and sampler were unchanged. The
+prompt-only rebuild and 34 MB executable staging passed at 19:16–19:17Z.
+Passed packaging, isolation and full verification gates were reused.
 
 Evidence: `/ai/gchat/out/c7-gbot-cua-windows-runtime-20261018/result.json`
 and adjacent small native/build/isolation receipts. Retained failed setup
 attempts explain the preventive changes: unsupported reflinks were replaced
 with ordinary copies; the native offline cache was completed from exact locked
 archives without changing its donor; accepted LiteLLM's explicit cwd import-path
-addition requires a private working directory. Passed checks were not repeated.
+addition requires a private working directory; noninteractive SSH needs the
+absolute WSL `nvidia-smi` path. The latter preflight stopped before model or
+guest launch. Passed checks were not repeated.
 
 Owned inventory: source at
 `/ai/gchat-worktrees/c7-gbot-cua-windows-runtime-20261018`; S1 SSD fixture
 `/media/ron/SSD_RAID/ai/tmp-c7-gbot-cua-windows-runtime-20261018` contains the
-staged release input and disposable test/build caches. Ada's private fixture is
+staged release input, frozen source and pinned inputs. Its disposable test/build
+caches and superseded native archive were retired at 19:15Z, freeing 35.95 GiB.
+Ada's private fixture is
 `C:\Users\Ron\AppData\Local\GChat\c7-gbot-cua-acceptance-20261018`;
 the local private native test build is
 `C:\Users\Ron\AppData\Local\GChat\c7-gbot-cua-native-20261018`.
@@ -2564,8 +2580,8 @@ portable distributions, 17 pinned native replacements and Colorama 0.4.6:
 62 packages in total. Its absolute isolated interpreter ignores `PYTHON*`
 variables and user site-packages. Missing or damaged installed resources report
 typed **Bot unavailable** with reinstall guidance; ordinary chat remains
-available. Native staging, imports and isolation passed; the real Hyper-V task
-remains the release gate recorded in the current Windows packaging section.
+available. Native staging, imports, isolation and the real model-driven Hyper-V
+task passed; the current Windows packaging section records the qualified scope.
 
 Stage the Linux release with `scripts/build-linux-release.sh --gbot-cua-runtime
 <accepted-closure>` alongside its required GInfer runtime/catalog/docs inputs.
@@ -2601,8 +2617,8 @@ Evidence is in
 `out/gbot-cua-runtime-20261012/result.json`. This is focused packaging evidence;
 a complete DEB/AppImage installation remains a release gate. The current viewer
 implementation adds the guest media endpoint and embedded panel; dedicated
-Linux capture/audio and control pass. Windows runtime and browser playback
-qualification remain owed.
+Linux capture/audio and control pass. Windows runtime qualification passed
+for the text-only Hyper-V route; browser playback qualification remains owed.
 
 Historical guest/runtime candidate: `/ai/gchat-worktrees/gbot-cua-skill-918c`, branch
 `feat/gbot-cua-guest-9ab` (merged in `45ac4ae7e`). Retain source and concise evidence in
