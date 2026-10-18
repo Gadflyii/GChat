@@ -103,15 +103,20 @@ returns an empty list.
 
 Four focused CPU-only native TLS/Host regressions passed for cold saved sessions,
 late model availability, local-owner attachment, partial success, credential/poll
-errors and dispatch without discovery. Rust check and Clippy passed. Installed
-native brain selection and execution remain with the release owner. No Host
-server, Engine, GPU, frontend or passive Client authorization changes.
+errors and dispatch without discovery. Rust check and Clippy passed. The final
+installed Linux DEB at main `3e32ad0c9` also passed native ready-model selection,
+Save brain settings, Edit brain restoration, Cancel edits and normal task
+completion with the unchanged 262,144-token context. The rendered task finished
+with “C3 Linux RC bot ready”; see
+[native acceptance](/ai/gchat/out/c3-linux-rc-20261018/refreshed-gbot-result.json).
+No Host server, Engine, GPU, frontend or passive Client authorization changes.
 
 Owned source: `fix/c3-gbot-paired-model-session-20261018` at
-`/ai/gchat-worktrees/c3-gbot-paired-model-session-20261018`. S1 disposable source,
-read-copied caches and check output remain inactive at
-`/media/ron/SSD_RAID/ai/tmp-c3-gbot-paired-model-session-20261018` pending release
-integration; remove the owned copy after merge. Small retained evidence is
+`/ai/gchat-worktrees/c3-gbot-paired-model-session-20261018`. The correction is
+merged in main `3e32ad0c9`. Its inactive S1 disposable source, read-copied caches
+and check output at
+`/media/ron/SSD_RAID/ai/tmp-c3-gbot-paired-model-session-20261018` were removed
+after merge at 14:08Z, reclaiming 38.4 GB. Small retained evidence is
 `out/c3-gbot-paired-model-session-20261018/` in the main checkout. Discovery also
 checks that a credential failure cannot
 advertise a previous ready snapshot; only Hosts connected successfully in the
@@ -152,6 +157,9 @@ All 3,457 tracked raw source hashes and modes stayed unchanged through the gate;
 this final receipt was added afterward. CPU120–127 booking3320 returned 14:07Z.
 Evidence: `out/gchat2-desktop-connection-error-guidance-20261018/result.json`.
 Installed/native connection acceptance is separate.
+returned after all jobs exited. Installed native acceptance is complete; the
+[installer record](../installer-refresh/README.md) owns final package hashes,
+fixture retirement and the release scope.
 
 ## Failed cloud SSH checks keep retry guidance — Gchat 2
 
