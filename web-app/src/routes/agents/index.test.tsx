@@ -290,7 +290,7 @@ describe('AgentStudioPage', () => {
   })
 
   it.each(['saved agent', 'unsaved template'] as const)(
-    'moves keyboard focus into the template editor from an %s without interrupting edits', async (source) => {
+    'moves keyboard focus into the template editor from %s without interrupting edits', async (source) => {
       listAgentTemplates.mockResolvedValue([{
         id: 'review-template', name: 'Review template', description: '', definition: firstAgent,
       }])
@@ -308,11 +308,11 @@ describe('AgentStudioPage', () => {
         expect(screen.getByRole('button', { name: 'Agents & flows', current: 'page' })).toBeInTheDocument()
       }
       await user.keyboard('{Control>}a{/Control}')
-      await user.type(screen.getByLabelText('Name'), 'My keyboard template')
+      await user.keyboard('My keyboard template')
       expect(screen.getByLabelText('Name')).toHaveFocus()
       await user.tab()
       expect(screen.getByLabelText('Identifier')).toHaveFocus()
-      await user.type(screen.getByLabelText('Identifier'), 'keyboard-template')
+      await user.keyboard('keyboard-template')
       expect(screen.getByLabelText('Identifier')).toHaveFocus()
       expect(screen.getByLabelText('Name')).toHaveValue('My keyboard template')
       expect(definitionState.value.save).not.toHaveBeenCalled()
