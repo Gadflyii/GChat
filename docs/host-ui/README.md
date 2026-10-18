@@ -1,5 +1,31 @@
 # GInfer host UI
 
+## Launch form initial error — C7 installed acceptance, closed October 18
+
+`GUI-LAUNCH-ERROR-EARLY` passes its native Linux installed recheck. In retained
+release `ed68c7443`, real pointer input opened **Hosts → Server details → Custom
+server settings**. With no model selected and Context tokens blank, no number
+error appeared. **Check startup settings** and **Load model** remained disabled.
+The connected private Host had no loaded models. WebKit inspection observed the
+state and did not synthesize the acceptance input.
+
+The release contains source fix `a929b3d48`; the relevant selection, numeric
+validation and alert condition match main `1f2124845`. Existing 32 focused cases
+and combined full gate `c48538a27` are reused. This documentation-only leaf uses
+`git diff --check`. Evidence: `out/c7-launch-error-installed-20261018/`
+`{result.json,summary.md}`. This qualifies the initial no-model form in that
+Linux release; Windows, selected-model validation and release-wide acceptance
+are outside this observation.
+
+C7 retains worktree `/ai/gchat-worktrees/c7-launch-error-installed-20261018`,
+branch `test/c7-launch-error-installed-20261018`. S1 CPUs40–47 returned01:37Z;
+all private app/Host/session and forwarding processes stopped by recorded PID,
+and the 7.80GB private runtime root
+`/media/ron/SSD_RAID/ai/tmp-c7-launch-error-installed-20261018` was removed.
+The read-only release donor was preserved. Only result JSON and short summary
+remain; no live job or booking remains. No model load, hardware Ensure, startup
+check, pairing, sharing, installer, Windows account or shared app data was used.
+
 ## Confirmation replacement focus — October 18
 
 `GUI-NATIVE-CONFIRM-DIALOGS` already uses the shared themed confirmation dialog
