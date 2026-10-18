@@ -49,6 +49,23 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Typing an agent identifier — October 18
+
+An isolated native Linux Studio pass reproduced the main **Identifier** field
+dropping a hyphen during ordinary typing: `keyboard-helper` became
+`keyboardhelper`, in both an existing draft and a new agent. Focus remained in
+the field. The affected editor is byte-identical from retained native source
+`edcd74e49` through main `25459ffc2`.
+
+The field now retains a trailing separator while editing and normalizes it on
+blur, matching the role identifier controls. Native baseline DOM captures and
+the viewed screenshot are in
+`/ai/gchat/out/gchat-agent-identifier-keyboard-20261018/`.
+Focused tests, the sole `make verify`, and corrected native replay are pending.
+The baseline used a private HOME/XDG profile, authenticated Xvfb, D-Bus and an
+unlocked test keyring, with no Save, model or GPU request. CPUs were returned
+at 04:46Z. Windows: not built (dev phase).
+
 ## Adding roles after removal — October 18
 
 An isolated native Linux Studio pass reproduced duplicate generated IDs after
