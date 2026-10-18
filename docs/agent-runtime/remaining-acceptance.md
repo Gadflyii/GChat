@@ -80,6 +80,64 @@ behavior and dependencies are unchanged. Evidence: `out/worker-fixture-gbot-2026
 Next: consume C2's actual native-v2 benchmark output; while unavailable, attribute
 `GCHAT-LINUX-NATIVE-IDLE-CPU` before selecting an owner fix.
 
+## Linux Code Stop and app exit — October 18, Codex 3
+
+`GUI-CODE-APP-EXIT-20261018` corrects a native shutdown regression reproduced
+in the accepted Linux RC: the shell-only signal left stock Code in another
+process group, then app Close blocked joining its PTY reader. A selected
+workspace's Code process also survived the shell exit. Cleanup completed only
+after assisted child signals at 15:50:32Z. The passing model-backed workbook,
+folder approval, compact and continuation leaf is preserved in `ded50e26e`;
+no repeat of that model gate is needed.
+
+Acceptance is native **Stop** and normal WM Close completing for hidden and
+selected Code terminals, with owned descendants and reader/waiter workers
+drained. An unrelated session must survive. Real PTY tests cover separate job
+process groups, a shell that exits before its child and resisted termination.
+Keep termination ownership until cleanup, signal every slot before draining,
+and make PTY reads cancellable; a detached blocked reader is insufficient.
+Natural exit must preserve final buffered output before publishing Exited,
+including when output flow was paused.
+Windows retains its pinned process-handle contract. No Engine, model, provider,
+permission or context behavior changes are authorized by this correction.
+
+Owner: Codex 3, branch `fix/c3-code-app-exit-20261018`, base `a4cd2835a`.
+Source and existing tests: `src-tauri/src/core/terminal.rs`; Gchat 1 retains the
+subject README. All 27 terminal tests, library check and strict Clippy pass.
+The sole `make verify` and its resumed failed/unreached targets now cover all
+verification commands: web 3,679, extension 127, six coverage floors and all
+supported Rust suites pass. Passing targets were retained rather than repeated.
+
+The prepared independent cache lacked nested workspace dependencies and generated
+core entries; matching workspace copies, `yarn build:core` and actual entry checks
+corrected that preparation. The synthetic GPU fixture required visibility variables
+unset while physical devices remained absent. The supplied-catalog test required
+its original named inputs: all 27 recovered files match the accepted binding and
+total 179 profiles; the failed exact test now passes. Release uses the original
+aggregate, while other Rust suites use their default catalog environment. Normal
+Release initially lacked generated Tauri icons. Existing `yarn build:icon` and
+the configured-resource preflight corrected that prerequisite; normal Release
+passed at 17:00:46Z. These preparation corrections required no source changes.
+
+The rebuilt source-native Linux desktop passes the affected stock Code route.
+Native **Stop** removes the selected shell, Code process and both terminal
+workers while the hidden workspace remains running. **Restart OpenCode**
+creates a new selected session. Normal WM Close at 17:07:42Z then ends both
+workspaces, all four workers and the app; `App cleanup completed` is logged at
+17:07:43Z. No assisted process signals were used for the acceptance gate.
+Screenshots were inspected. This qualifies source-native Linux Stop/Close,
+without an updated installer or Windows claim.
+
+S1 build/cache root is `/media/ron/SSD_RAID/ai/tmp-c3-code-app-exit-20261018`.
+The private fixture is
+`/media/ron/SSD_RAID/ai/tmp-c3-code-doc-continuation-20261018`. Both owned roots
+were retired after acceptance; accepted packages and protected inputs remain. Accepted
+RC Engine `b26ec5b8f`, Gbot and catalog 179 were reused without a model gate
+repeat. Socket1 builds used only its shared compile guard. CPU resources returned
+17:09Z; no GPU was held. Evidence:
+`/ai/gchat/out/c3-code-app-exit-20261018/{result.json,native-result.json,summary.md}`.
+Next is normal merge of the completed correction.
+
 ## OI-068 native near-full-input task — October 15
 
 One ordinary Linux native Standard Agent run reached a correct Reply with

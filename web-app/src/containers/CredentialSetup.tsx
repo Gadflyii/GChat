@@ -24,6 +24,7 @@ export function CredentialSetup({
   const [skipped, setSkipped] = useState(false)
   const [guide, setGuide] = useState(false)
   const [message, setMessage] = useState('')
+  const [installError, setInstallError] = useState<string>()
   const [locking, setLocking] = useState(false)
   const [lockError, setLockError] = useState<string>()
   const [vaultError, setVaultError] = useState<{
@@ -76,7 +77,9 @@ export function CredentialSetup({
     void check()
   }, [check])
   const install = async () => {
+    setInstallError(undefined)
     setBusy(true)
+    onReady?.(false)
     setMessage(
       'Approve the system administrator prompt to install GNOME Keyring. GChat never receives your administrator password.'
     )
@@ -87,7 +90,9 @@ export function CredentialSetup({
       )
       await check(true)
     } catch (error) {
-      setMessage(String(error))
+      setMessage('')
+      setInstallError(String(error))
+      await check()
     } finally {
       setBusy(false)
     }
@@ -106,6 +111,7 @@ export function CredentialSetup({
     setPassphrase('')
     setConfirmation('')
     setMessage('')
+    setInstallError(undefined)
     setLockError(undefined)
     setVaultError(undefined)
     setLocking(action === 'lock')
@@ -142,9 +148,28 @@ export function CredentialSetup({
     setPassphrase('')
     setConfirmation('')
     setMessage('')
+    setInstallError(undefined)
     setLockError(undefined)
     setVaultError(undefined)
   }
+  const installationFeedback = !busy && installError ? (
+    <div className="text-sm space-y-2" role="alert">
+      <p>Could not finish setting up secure storage.</p>
+      <p>
+        {status?.ready
+          ? 'Secure storage is now ready. You can continue setup.'
+          : status?.state === 'unchecked'
+            ? 'Choose Check secure storage to confirm whether it is ready. Your computer may ask you to unlock its password storage.'
+            : status?.can_install
+              ? 'Choose Set up secure storage to retry installation. Your computer will ask for administrator approval again.'
+              : 'Choose Check again to confirm the current state. If a keyring is already installed, unlock it using your desktop’s password or keyring app. You may need to sign out and back in.'}
+      </p>
+      <details className="text-xs">
+        <summary>Installation error details</summary>
+        <p className="break-words">{installError}</p>
+      </details>
+    </div>
+  ) : null
   const vaultFeedback = !busy && vaultError ? (
     <div className="text-sm space-y-2" role="alert">
       <p>
@@ -211,6 +236,7 @@ export function CredentialSetup({
         )}
         {lockFeedback}
         {vaultFeedback}
+        {installationFeedback}
         {status.tier === 'passphrase' && (
           <Button
             variant="outline"
@@ -269,6 +295,7 @@ export function CredentialSetup({
       )}
       {lockFeedback}
       {vaultFeedback}
+      {installationFeedback}
       {!busy && status && !status.ready && (
         <p role={status.state === 'unchecked' ? 'status' : 'alert'}>
           {status.state === 'unchecked'

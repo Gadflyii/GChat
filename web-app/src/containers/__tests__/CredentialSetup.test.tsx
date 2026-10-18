@@ -871,3 +871,234 @@ describe('Passphrase vault error guidance', () => {
     expect(ready).not.toHaveBeenCalledWith(true)
   })
 })
+
+describe('Secure storage installation error guidance', () => {
+  const installable = {
+    ready: false,
+    platform: 'linux',
+    can_install: true,
+    tier: 'native',
+    state: 'missing_provider',
+  }
+  const readyNative = {
+    ...installable,
+    ready: true,
+    can_install: false,
+    state: 'ready',
+  }
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+
+  function expectClosedInstallationError(nativeError: string) {
+    const details = screen
+      .getByText('Installation error details')
+      .closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toHaveTextContent(nativeError)
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+  }
+
+  it('keeps recovery pending through a passive status read and permits only an explicit confirmed installation retry', async () => {
+    const recovery = deferred<typeof installable>()
+    const retry = deferred<{ installed: boolean }>()
+    const nativeError = 'Administrator approval was cancelled'
+    command
+      .mockResolvedValueOnce(installable)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockReturnValueOnce(recovery.promise)
+      .mockReturnValueOnce(retry.promise)
+      .mockResolvedValueOnce(readyNative)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    await screen.findByText(/Secure storage is unavailable/)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Set up secure storage' })
+    )
+
+    await waitFor(() => expect(command).toHaveBeenCalledTimes(3))
+    expect(command.mock.calls).toEqual([
+      ['credential_status', { check: false }],
+      ['credential_install', { confirmed: true }],
+      ['credential_status', { check: false }],
+    ])
+    expect(
+      screen.getByRole('button', { name: 'Set up secure storage' })
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeDisabled()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Installation finished/)).not.toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(nativeError))).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+
+    await act(async () => {
+      recovery.resolve(installable)
+    })
+    expect(
+      await screen.findByText('Could not finish setting up secure storage.')
+    ).toBeVisible()
+    expect(
+      screen.getByText(/Choose Set up secure storage to retry installation/)
+    ).toBeVisible()
+    expectClosedInstallationError(nativeError)
+    const installButton = screen.getByRole('button', {
+      name: 'Set up secure storage',
+    })
+    expect(installButton).toBeEnabled()
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(ready).not.toHaveBeenCalledWith(true)
+
+    fireEvent.click(installButton)
+    expect(installButton).toBeDisabled()
+    expect(
+      screen.queryByText('Could not finish setting up secure storage.')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Installation error details')
+    ).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    fireEvent.click(installButton)
+    expect(command).toHaveBeenCalledTimes(4)
+    expect(command).toHaveBeenLastCalledWith('credential_install', {
+      confirmed: true,
+    })
+
+    await act(async () => {
+      retry.resolve({ installed: true })
+    })
+    expect(await screen.findByText('Secure storage is ready.')).toBeVisible()
+    expect(screen.getByText(/Installation finished/)).toBeVisible()
+    expect(
+      screen.queryByText('Could not finish setting up secure storage.')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Installation error details')
+    ).not.toBeInTheDocument()
+    expect(command.mock.calls).toEqual([
+      ['credential_status', { check: false }],
+      ['credential_install', { confirmed: true }],
+      ['credential_status', { check: false }],
+      ['credential_install', { confirmed: true }],
+      ['credential_status', { check: true }],
+    ])
+    expect(ready).toHaveBeenLastCalledWith(true)
+  })
+
+  it('requires an explicit Check for a fresh native provider and retains the installation warning after readiness is confirmed', async () => {
+    const nativeError = 'The package command failed after installing the provider'
+    command
+      .mockResolvedValueOnce(installable)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce({
+        ...installable,
+        can_install: false,
+        state: 'unchecked',
+      })
+      .mockResolvedValueOnce(readyNative)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    await screen.findByText(/Secure storage is unavailable/)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Set up secure storage' })
+    )
+
+    expect(
+      await screen.findByText('Could not finish setting up secure storage.')
+    ).toBeVisible()
+    expectClosedInstallationError(nativeError)
+    expect(
+      screen.getByText(
+        /Choose Check secure storage to confirm whether it is ready/
+      )
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Set up secure storage' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Installation finished/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(ready).not.toHaveBeenCalledWith(true)
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Check secure storage' })
+    )
+    expect(await screen.findByText('Secure storage is ready.')).toBeVisible()
+    expect(
+      screen.getByText('Could not finish setting up secure storage.')
+    ).toBeVisible()
+    expectClosedInstallationError(nativeError)
+    expect(
+      screen.getByText('Secure storage is now ready. You can continue setup.')
+    ).toBeVisible()
+    expect(screen.queryByText(/Installation finished/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Set up secure storage' })
+    ).not.toBeInTheDocument()
+    expect(command.mock.calls).toEqual([
+      ['credential_status', { check: false }],
+      ['credential_install', { confirmed: true }],
+      ['credential_status', { check: false }],
+      ['credential_status', { check: true }],
+    ])
+    expect(ready).toHaveBeenLastCalledWith(true)
+  })
+
+  it.each(['unavailable status', 'failed status read'])(
+    'recovers a rejected installation with a read-only Check again after %s',
+    async (outcome) => {
+      const nativeError = 'The installer could not finish setting up the provider'
+      command
+        .mockResolvedValueOnce(installable)
+        .mockRejectedValueOnce(new Error(nativeError))
+      if (outcome === 'unavailable status')
+        command.mockResolvedValueOnce({
+          ...installable,
+          can_install: false,
+          state: 'unavailable',
+          error: 'The selected password storage is unavailable',
+        })
+      else command.mockRejectedValueOnce(new Error('Passive status timed out'))
+      command.mockResolvedValueOnce(readyNative)
+      const ready = vi.fn()
+      render(<CredentialSetup onReady={ready} />)
+      await screen.findByText(/Secure storage is unavailable/)
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Set up secure storage' })
+      )
+
+      expect(
+        await screen.findByText('Could not finish setting up secure storage.')
+      ).toBeVisible()
+      expect(
+        screen.getByText(/Choose Check again to confirm the current state/)
+      ).toBeVisible()
+      expectClosedInstallationError(nativeError)
+      expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled()
+      expect(screen.queryByText(/Installation finished/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText('Secure storage is ready.')
+      ).not.toBeInTheDocument()
+      expect(command.mock.calls).toEqual([
+        ['credential_status', { check: false }],
+        ['credential_install', { confirmed: true }],
+        ['credential_status', { check: false }],
+      ])
+      expect(ready).not.toHaveBeenCalledWith(true)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+      expect(await screen.findByText('Secure storage is ready.')).toBeVisible()
+      expect(command).toHaveBeenCalledTimes(4)
+      expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
+      expect(
+        command.mock.calls.filter(([action]) => action === 'credential_install')
+      ).toHaveLength(1)
+      expect(ready).toHaveBeenLastCalledWith(true)
+    }
+  )
+})
