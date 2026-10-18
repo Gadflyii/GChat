@@ -1,5 +1,26 @@
 # GInfer host UI
 
+## Scheduled tasks brain setup guidance — October 18
+
+`GBOT-SCHEDULE-BRAIN-SETUP-GUIDANCE`: the disabled schedule form previously
+said “Save this bot’s inference assignment,” although the adjacent setup uses
+**Next: choose a brain** and **Save brain settings**. The hint now says “Choose
+a brain, then click Save brain settings before creating a schedule.” It names
+the visible action needed to enable scheduling.
+
+The existing rendered missing-settings case checks the new wording and retains
+its disabled prompt/Create schedule and blocked submit assertions. All 15
+focused tests pass. ONE full `make verify` passed on S1 CPUs96–103,
+04:15:30–04:23:16Z: lint, typecheck, quality guards, 3,341 app tests (six
+skipped), 121 extension tests, all six coverage floors and 1,220 Rust tests
+(28 ignored). Pre/post source hashes matched. Baseline `d0a8d06bf`; copy and
+its existing expectation changed only. No VM, native Windows, model or live
+scheduled task was run. FRESH/OLD remain OFF/original XML/custody Gchat 2.
+Windows: not built (dev phase); shared frontend copy only.
+
+Result: `out/gchat2-schedule-brain-guidance-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-schedule-brain-guidance-20261018`.
+
 ## Google client ID validation — Gchat 3 native acceptance, October 18
 
 `GUI-GOOGLE-CLIENT-ID-SHAPE` passes its remaining native Linux negative leaf.
@@ -58,6 +79,70 @@ custody. Windows: not built (dev phase); the change uses shared frontend APIs.
 
 Result: `out/gchat2-cloud-setup-remove-confirmation-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-cloud-setup-remove-confirmation-20261018`.
+## Passphrase-vault feedback — Gchat 3 native acceptance, October 18
+
+`GCHAT-SECURE-STORAGE-SETUP-FEEDBACK-20261017`: native Linux vault creation,
+Lock, wrong-Unlock feedback and correct retry pass in a fresh private profile.
+Matching drafts followed by Cancel close the form and clear both fields.
+Mismatched drafts retain the form and show “The passphrases do not match.”
+Cancel after that error reproduced a defect: the form disappeared but the error
+remained on the native-ready card. Cancel now clears the discarded error along
+with both secret drafts. Reopening creation shows blank fields and dispatches
+no vault action. The rendered regression fails against the unchanged base
+(1 failed, 10 skipped), then the corrected component suite passes all 11 cases.
+Lint passes with zero errors and five existing warnings. ONE `make verify`
+passes: 3316 app cases with 6 skipped, 121 extension cases, 1220 native cases
+with 28 ignored, and all six critical coverage floors.
+
+Explicit Check secure storage showed native ready. Creating an inert passphrase
+vault showed ready and Lock vault; Lock showed the locked state and Unlock
+form. Wrong Unlock displayed the actionable error and cleared the secret field;
+correct retry returned ready. A new process with the same complete private
+profile started locked, then unlocked correctly. The encrypted vault remained
+byte-identical across Lock, failed/correct Unlock and that restart. The attempted
+`xdotool windowclose` destroyed the X window and caused GTK BadDrawable:
+new-process persistence is qualified, clean normal shutdown is excluded.
+Future close checks must use the supported app exit or window-manager close
+protocol, rather than XDestroyWindow. No additional lifecycle repeat is needed.
+
+Allocated base `36c278f28`, branch
+`test/gchat3-passphrase-vault-native-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-passphrase-vault-native-20261018`.
+The retained `ed68c7443` AppDir has unchanged vault handlers, native storage,
+credential-control and relevant initialization paths. Its only CredentialSetup
+difference before the correction is the unchecked hint; adapter reset/model/
+Windows differences are outside this leaf. The installed donor stayed unchanged:
+these observations reproduce the original Cancel behavior and qualify the
+existing vault route, not native rendering of the correction. Accepted
+native backend lifecycle gates are reused; the new frontend regression and
+focused/lint/full checks qualify the source correction.
+
+The private vault was 0600, active passphrase, with zero records/references and
+no migration. Private `gbot/service.json`, workspace-connections metadata and
+Host identity stayed absent. The unchanged credential-control path returns
+without starting that service when its configuration is absent. Existing
+credential migration, accounts, Host pairing, model/GPU, external services,
+Windows and installer behavior remain unqualified.
+
+Canonical result, short summary, source binding, six visually reviewed masked
+screenshots and storage/isolation/cleanup receipts:
+`out/passphrase-vault-native-20261018/{result.json,summary.md}`.
+S1 `AIS-2-8592-L01` used CPU104–111, private HOME/runtime0700,
+D-Bus/unlocked keyring, Xvfb and a uid-1000 container with all capabilities
+dropped and software rendering. Native pointer/keyboard drove controls;
+WebKit only observed. At 04:11:25Z the exact owned root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-passphrase-vault-native-20261018`,
+container, private helpers and display socket were retired; 3.43 GB was released,
+the inspector forward closed and booking 2960 returned. The read-only donor at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+was untouched. The separate correction gate ran 04:12:35–04:20:26Z on S1
+CPU112–119 with an independent offline dependency copy. Its owned SSD fixture
+(42.31 GB logical file lengths), two exited containers and local source archive
+were removed; booking 2964 returned at 04:22Z. Source bindings, expected baseline
+failure, full logs and cleanup are in `test-result.json` and `test-summary.md`
+beside the native packet. The correction and scoped native acceptance are ready
+for branch integration. Windows and installed rendering of the correction
+remain unqualified.
 
 ## Model deletion confirmation — Gchat 3 native acceptance, October 18
 
@@ -2459,7 +2544,8 @@ Fixed (one branch each, rows in the open-work list):
 - `GUI-JOURNEY-DISK-SPACE-CRASH`: the model list warns in plain words when the chosen models plus about 2 GB of
   working space do not fit the free space (and blocks the download when the models alone do not fit); an
   out-of-space error from the Host (HTTP error, setup status, log) now reads 'The disk is full. Free some space,
-  then try again.' Not done: a maintenance-time out-of-space error is only logged, and the original exit was
+  then try again.' Background first-run maintenance failures are now retained in Host memory and exposed
+  on Welcome with Retry setup; a successful maintenance retry clears the alert. The original exit was
   also caused by the profile-copy loop fixed under `GUI-JOURNEY-PROFILE-INSTALL-LOOP`.
 - `GUI-JOURNEY-PROFILE-PROGRESS-LAYOUT`: the profiling bar and Cancel profiling no longer overlap.
 - `GUI-JOURNEY-NO-RECOMMENDATION-CONTRADICTS`: Welcome and Models share `releaseVerified` (`lib/model-release.ts`); a release
@@ -2720,3 +2806,80 @@ One `make verify` passed: lint, type checking, quality checks, 3,294 app tests,
 121 extension tests, 1,220 Rust tests and all six coverage floors (six app skips,
 28 Rust ignores). Changed source/test hashes matched locally and on S1 before
 and after the gate. Private build data was removed and CPUs returned at 03:33 UTC.
+
+
+## Background setup disk errors — Codex 4, October 18
+
+`GUI-JOURNEY-DISK-SPACE-CRASH` keeps the existing disk-capacity warning and fixes
+its remaining background error reporting gap. First-run maintenance publishes its
+last failure in process-local setup status, even when `host.json` cannot be
+written. Welcome displays the actionable disk-full message and Retry setup using
+the existing Resume action. Successful maintenance clears the failure; waiting
+for an active profile or model does not. Saved choices and Engine admission are
+unchanged. See the [ownership decision](../decisions/2026-10-18-surface-background-setup-failures.md).
+
+Acceptance: a failed atomic state publication remains visible without a second
+state write, retry retains the chosen folder and clears the failure; the rendered
+UI exposes the disk-full action and clears it on success. Both Host regressions,
+the existing maintenance cases, Host check/Clippy and all 32 setup UI cases pass.
+No disk filling, model load or GPU work occurred in these checks.
+
+The one S1 `make verify` passed lint, types, quality checks, 3,314 app cases,
+121 extension cases and all six coverage floors. Its first Rust stage passed
+728 cases and stopped at the shared-address fixture's UDP route discovery:
+the container's `--network=none` caused `NetworkUnreachable`. The exact failed
+case and every remaining Rust stage pass with Docker bridge networking and
+Cargo/Yarn dependency access still disabled. Together the gate and this bounded
+continuation pass 1,222 distinct Rust cases (28 ignored). The passed stages and
+full gate were not repeated. Future private gate containers must retain a route
+for the existing UDP address-discovery fixture while keeping dependency access
+offline. Commands and results: `/ai/gchat/out/c4-gui-maintenance-disk-error-20261018/result.json`.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| Codex 4 / local | `/ai/gchat-worktrees/c4-gui-maintenance-disk-error-20261018`, `fix/c4-gui-maintenance-disk-error-20261018` | Candidate from `548d73ed8`; no main merge |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-gui-maintenance-disk-error-20261018` | Isolated SSD source/cache copy and matched native export; initial CPU lease returned at 04:10 UTC, continuation/build returned at 04:20 UTC; nice 10, maximum eight jobs, socket 1 shared; no GPU |
+
+Dependency locks and Host manifest match retained `tmp-gchat3-gui-novice-20261017`;
+its older workspace lacks only the subsequently added Tokio test utility feature.
+Reused caches are private copies; tracked source is the current candidate.
+
+The matched native export completed at 04:19:48 UTC from the same verified source.
+`candidate/bin/gchat` embeds the production frontend through Tauri's custom
+protocol; `candidate/bin/ginfer-host` is the newly built Host. Both are native
+development-profile binaries with complete shared-library dependencies. The
+export references the retained runtime resources in
+`tmp-c4-gui-journey-20261018/candidate/lib/GChat/resources`, overriding only the
+bundled Host with this build. It copies no Engine or model. The standalone
+frontend is also retained at `candidate/frontend`.
+
+| Export | SHA-256 |
+| --- | --- |
+| `candidate/bin/gchat` | `bf3c0a851e91c84ed451cc80776972b180d9fadae989c40df52e808a64d4a037` |
+| `candidate/bin/ginfer-host` | `c0a15137ad2d4ea880faba677ba5010c267dd7e8b83e30db28201403b7163281` |
+
+Native acceptance passed in the existing isolated C4 journey session at04:29 UTC.
+After valid Host startup, a private directory at its state-file path blocked
+atomic publication: the app stayed open, showed the error with Retry setup and
+retained the requested folder. Restoring state publication exposed a stable
+error from a disposable regular file at that folder. Restoring the original
+private directory and selecting Retry setup natively accepted the same path and
+cleared maintenance/storage errors. The deliberately failed private catalog
+request retained its independent error; no Engine child or GPU work occurred.
+
+The three reviewed 1200×800 screenshots and detailed receipts are retained on
+the single journey evidence branch `test/c4-journey-native-evidence-20261018`
+at `f917c9d61`, under `out/c4-disk-native-20261018`. This source branch also retains
+`out/c4-gui-maintenance-disk-error-20261018/native-result.json`, binding the native
+acceptance to this exact implementation and that evidence commit. No disk was
+filled and no native ENOSPC is claimed; actual publication/storage failures and
+recovery complement the existing ENOSPC mapping/rendered regressions. Windows,
+installer, inference quality and performance are outside this acceptance.
+
+App, idle Host, private keyring/D-Bus, listener, Xvfb and inspector forward are
+terminal; CPU80–87 booking2974 was canceled at04:29 UTC. The independent GPU0 fit
+is untouched. The S1 build root retains the tested app/Host and private caches
+pending integration; the donor is untouched. Build/binding evidence:
+`/ai/gchat/out/c4-gui-maintenance-disk-error-20261018/native-export.json`.
+Next action: coordinator review/integration and canonical row closure; retire
+owned disposable build copies after retaining this tested candidate and packet.

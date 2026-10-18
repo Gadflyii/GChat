@@ -213,7 +213,8 @@ function WorkspaceSchedules({
         ))}
         {!assignment && (
           <p className="text-sm text-muted-foreground">
-            Save this bot’s inference assignment before creating a schedule.
+            Choose a brain, then click Save brain settings before creating a
+            schedule.
           </p>
         )}
         <form

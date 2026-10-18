@@ -233,6 +233,45 @@ describe('secure storage intake', () => {
     })
     expect(ready).toHaveBeenLastCalledWith(true)
   })
+  it('clears discarded vault errors and secret drafts when creation is canceled', async () => {
+    command.mockResolvedValue({
+      ready: true,
+      platform: 'linux',
+      can_install: false,
+      tier: 'native',
+      state: 'ready',
+    })
+    render(<CredentialSetup />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a passphrase vault' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'test passphrase' },
+    })
+    fireEvent.change(screen.getByLabelText('Confirm passphrase'), {
+      target: { value: 'different' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    )
+    await screen.findByText('The passphrases do not match.')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Secure storage is ready.')).toBeInTheDocument()
+    expect(
+      screen.queryByText('The passphrases do not match.')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(command).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Use a passphrase vault' })
+    )
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Confirm passphrase')).toHaveValue('')
+    expect(command).toHaveBeenCalledTimes(1)
+  })
   it('keeps a selected locked provider and clears a rejected vault passphrase', async () => {
     command.mockResolvedValue({
       ready: false,
