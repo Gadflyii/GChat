@@ -890,6 +890,133 @@ describe('ChatInput', () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Summarize the document', undefined, 'pdf', undefined, []))
   })
 
+  it.each(['click', 'Enter'])('preserves Try in chat skill intent through a deferred catalog rejection and retry with %s', async (method) => {
+    const threadId = 'try-skill-retry'
+    const prompt = 'Build a document-review agent'
+    useThreads.setState({ currentThreadId: threadId })
+    usePrompt.setState({ drafts: { [threadId]: prompt } })
+    conversationPolicyState.activeSkills[threadId] = 'slides'
+    agentSkills.loading = true
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const view = render(<ChatInput onSubmit={onSubmit} preselectedAgentSkillName="agent-builder" />)
+    const input = screen.getByTestId('chat-input')
+    const send = document.querySelector('[data-test-id="send-message-button"]')!
+
+    // Studio supplies a route choice, not an already-restored draft skill.
+    expect(usePrompt.getState().draftSkills[threadId]).toBe('agent-builder')
+    expect(send).toBeDisabled()
+    expect(send).toHaveAccessibleName('Restoring selected skill')
+    expect(send).toHaveAttribute('aria-busy', 'true')
+    fireEvent.click(send)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(input).toHaveValue(prompt)
+
+    const catalog = deferred<AgentSkill[]>()
+    const rejected = catalog.promise.catch((error) => {
+      agentSkills.loading = false
+      agentSkills.error = String(error)
+      view.rerender(<ChatInput onSubmit={onSubmit} preselectedAgentSkillName="agent-builder" chatStatus="ready" />)
+    })
+    await act(async () => {
+      catalog.reject(new Error('catalog read failed'))
+      await rejected
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load skills. Retry to restore /agent-builder")
+    expect(screen.getByRole('button', { name: 'Send without skill' })).toBeEnabled()
+    expect(send).toBeDisabled()
+    expect(send).toHaveAttribute('aria-busy', 'false')
+    fireEvent.click(send)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(conversationPolicyState.setActiveSkill).not.toHaveBeenCalled()
+    expect(input).toHaveValue(prompt)
+    expect(usePrompt.getState().draftSkills[threadId]).toBe('agent-builder')
+
+    const retry = deferred<AgentSkill[]>()
+    agentSkills.load.mockImplementation(() => {
+      agentSkills.loading = true
+      agentSkills.error = null
+      view.rerender(<ChatInput onSubmit={onSubmit} preselectedAgentSkillName="agent-builder" />)
+      return retry.promise.then((skills) => {
+        agentSkills.value = skills
+        agentSkills.loading = false
+        view.rerender(<ChatInput onSubmit={onSubmit} preselectedAgentSkillName="agent-builder" chatStatus="ready" />)
+      })
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(agentSkills.load).toHaveBeenCalledOnce()
+    expect(send).toBeDisabled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    await act(async () => {
+      retry.resolve(['agent-builder', 'slides'].map((name) => ({
+        name, description: name, version: '1.0.0', requiresTools: [], requiresScripts: [],
+        dangerous: false, platforms: null, enabled: true, compatible: true,
+        reserved: false, unavailableReasons: [], error: null,
+      })))
+      await agentSkills.load.mock.results[0].value
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/agent-builder')
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+    if (method === 'click') fireEvent.click(send)
+    else fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith(prompt, undefined, 'agent-builder', undefined, []))
+    expect(conversationPolicyState.setActiveSkill).toHaveBeenCalledWith(threadId, 'agent-builder')
+    expect(usePrompt.getState().draftSkills[threadId]).toBeUndefined()
+  })
+
+  it.each(['failed', 'missing'])('keeps a Try in chat skill opt-out after a %s catalog across same-route rerenders and conversation changes', async (status) => {
+    const threadId = 'try-skill-opt-out'
+    useThreads.setState({ currentThreadId: threadId })
+    usePrompt.setState({
+      drafts: { [threadId]: 'Build an agent', other: 'Other draft' },
+      draftSkills: { other: 'pdf' },
+    })
+    conversationPolicyState.activeSkills = { [threadId]: 'slides', other: 'pdf' }
+    conversationPolicyState.setActiveSkill.mockImplementation((key: string, name?: string) => {
+      if (name) conversationPolicyState.activeSkills[key] = name
+      else delete conversationPolicyState.activeSkills[key]
+    })
+    agentSkills.error = status === 'failed' ? 'catalog read failed' : null
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const view = render(<ChatInput onSubmit={onSubmit} preselectedAgentSkillName="agent-builder" />)
+    expect(usePrompt.getState().draftSkills[threadId]).toBe('agent-builder')
+    expect(screen.getByRole('alert')).toHaveTextContent(status === 'failed'
+      ? "Couldn't load skills. Retry to restore /agent-builder"
+      : "Skill /agent-builder isn't available")
+    expect(document.querySelector('[data-test-id="send-message-button"]')).toBeDisabled()
+    fireEvent.keyDown(screen.getByTestId('chat-input'), { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Send without skill' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Build an agent', undefined, undefined, undefined, []))
+    expect(usePrompt.getState().draftSkills[threadId]).toBeUndefined()
+    expect(conversationPolicyState.activeSkills[threadId]).toBeUndefined()
+    expect(conversationPolicyState.setActiveSkill).toHaveBeenCalledWith(threadId)
+
+    // Catalog completion and rerenders of the unchanged route must not undo the opt-out.
+    agentSkills.error = null
+    agentSkills.value = ['agent-builder', 'slides', 'pdf'].map((name) => ({
+      name, description: name, version: '1.0.0', requiresTools: [], requiresScripts: [],
+      dangerous: false, platforms: null, enabled: true, compatible: true,
+      reserved: false, unavailableReasons: [], error: null,
+    }))
+    view.rerender(<ChatInput onSubmit={onSubmit} preselectedAgentSkillName="agent-builder" chatStatus="ready" />)
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    expect(usePrompt.getState().draftSkills[threadId]).toBeUndefined()
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Continue without a skill' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith('Continue without a skill', undefined, undefined, undefined, []))
+
+    act(() => useThreads.setState({ currentThreadId: 'other' }))
+    expect(screen.getByTestId('chat-input')).toHaveValue('Other draft')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/pdf')
+    expect(usePrompt.getState().draftSkills.other).toBe('pdf')
+    expect(conversationPolicyState.activeSkills.other).toBe('pdf')
+    expect(onSubmit).toHaveBeenCalledTimes(2)
+  })
+
   it.each(['failed', 'missing'])('requires explicit Send without skill for a %s draft skill and clears the previous active skill', async (status) => {
     const threadId = 'without-skill-draft'
     useThreads.setState({ currentThreadId: threadId })
