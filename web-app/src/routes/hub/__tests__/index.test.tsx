@@ -295,13 +295,18 @@ describe('host-scoped Models', () => {
   it.each(['SHA256 mismatch', 'not a GInfer version-3 container'])('discards unusable saved bytes instead of retrying them: %s', async (error) => {
     spyConfirm().mockReturnValueOnce(true)
     let discarded = false
+    let fresh = false
     mocks.command.mockImplementation(async (action, args) => {
       if (action === 'local_model_download_action') {
         expect(args).toEqual({ id: 'job', operation: 'discard' })
         discarded = true
       }
-      return action === 'local_model_downloads' && !discarded
-        ? [{ id: 'job', release, status: 'failed', received: 4096, bytes_per_second: 0, error, path: null }] : []
+      const job = { id: fresh ? 'new-job' : 'job', release, status: fresh ? 'queued' : 'failed', received: fresh ? 0 : 4096, bytes_per_second: 0, error: fresh ? null : error, path: null }
+      if (action === 'local_model_download') {
+        fresh = true
+        return { ...job, id: 'new-job', status: 'queued', received: 0, error: null }
+      }
+      return action === 'local_model_downloads' && (!discarded || fresh) ? [job] : []
     })
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
@@ -314,6 +319,8 @@ describe('host-scoped Models', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
     fireEvent.click(screen.getByRole('button', { name: 'Download to this computer' }))
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_download', { host_id: 'local', body: release }))
+    expect(await screen.findByText('Waiting to download')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0')
     expect(mocks.command.mock.calls.some(call => call[0] === 'local_model_download_action' && call[1]?.operation === 'resume')).toBe(false)
   })
   it.each([
@@ -341,6 +348,7 @@ describe('host-scoped Models', () => {
     expect(await screen.findByText('Waiting to download')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Pause download' })).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '1024')
     expect(mocks.command).toHaveBeenCalledWith('local_model_download_action', { id: 'job', operation: 'resume' })
   })
   it('says it is checking, not that there are no downloads, until the Host has answered', async () => {
