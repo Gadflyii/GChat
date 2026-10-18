@@ -327,7 +327,10 @@ describe('AgentStudioPage', () => {
   it('retires a late native close subscription when Agent Studio unmounts', async () => {
     nativeWindow.isTauri.mockReturnValue(true)
     const registration = deferred<() => void>()
-    nativeWindow.onCloseRequested.mockReturnValueOnce(registration.promise)
+    nativeWindow.onCloseRequested.mockImplementationOnce((handler) => {
+      nativeWindow.handler = handler
+      return registration.promise
+    })
     const page = render(<AgentStudioPage />)
     page.unmount()
     await act(async () => registration.resolve(nativeWindow.unlisten))
