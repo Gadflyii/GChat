@@ -1,0 +1,30 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "96-103",
+    "flock",
+    "-s",
+    "/tmp/ginfer-s1-socket1-compile.lock",
+    "nice",
+    "-n",
+    "10",
+    "/media/ron/SSD_RAID/ai/tmp-c3-checkbox-theme-20261018/runnable/lib/GChat/resources/bin/ginfer-host",
+    "--desktop-managed",
+    "--data-dir",
+    "/media/ron/SSD_RAID/ai/tmp-c3-checkbox-theme-20261018/home/data/GChat/data/ginfer/host",
+    "--engine",
+    "/media/ron/SSD_RAID/ai/tmp-c3-checkbox-theme-20261018/host-bin/ginfer-serve",
+    "--name",
+    "C3 private checkbox Host",
+    "--listen",
+    "127.0.0.1:19433",
+    "--nvidia-smi",
+    "/usr/bin/nvidia-smi",
+    "--desktop-provider",
+    "/media/ron/SSD_RAID/ai/tmp-c3-checkbox-theme-20261018/home/data/GChat/data/ginfer"
+  ],
+  "pid": 867972,
+  "gpu_access": "real nvidia-smi inventory only; absent sibling CLI prevents CUDA-order query",
+  "engine_reference": "/media/ron/SSD_RAID/ai/tmp-c3-checkbox-theme-20261018/host-bin/ginfer-serve"
+}

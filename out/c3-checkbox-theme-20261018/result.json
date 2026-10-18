@@ -1,0 +1,88 @@
+{
+  "row": "GUI-CHECKBOX-THEME",
+  "owner": "Codex 3",
+  "date": "2026-10-18",
+  "outcome": "PASS: remaining Linux Connected Host keyboard and naturally disabled-control leaves; no source fix needed",
+  "desktop": {
+    "source": "11ce0355dc56ec0a4ade63e0499a68ef109c49fc",
+    "sha256": "c1cbae677d800a6deed86106ad0b00306f09a71d832bfd70dc2801dac064690a",
+    "runtime_source": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
+    "host": "S1 AIS-2-8592-L01",
+    "viewport": "1280x900",
+    "input": "xdotool XTest only",
+    "observer": "existing read-only WebKit inspector"
+  },
+  "fixture": {
+    "backend": "genuine idle ginfer-host with real S1 NVIDIA inventory; no synthetic responses",
+    "local_owner": "private service locator seeded explicitly; not first-run discovery acceptance",
+    "isolation": "independent HOME/XDG700, DBus/keyring, Xauthority/Xvfb; WAYLAND unset; desktop container has no GPU devices",
+    "engine": "engine symlink with absent sibling CLI prevents passive CUDA-order query; no CUDA/model/profile operation requested",
+    "accounts": "none"
+  },
+  "source_binding": {
+    "current_main": "297895834",
+    "checkbox_css": "unchanged from 11ce through current main; only index.css change moves unrelated closed-details utility",
+    "EngineHardwareProfile.tsx": "unchanged",
+    "EngineProfilePicker.tsx": "unchanged",
+    "EngineHostModels.tsx": "existing GPU/Read images/Follow a response format checkbox rendering unchanged; unrelated additions are not qualified"
+  },
+  "checks": [
+    {
+      "name": "connected_light",
+      "result": "PASS",
+      "action": "pointer unchecks Read images; Tab focuses checked Follow a response format; Space unchecks it",
+      "evidence": [
+        "light-checked.png",
+        "light-checked.json",
+        "light-unchecked.png",
+        "light-unchecked.json"
+      ],
+      "focus": "2px solid rgb(11,107,107), offset2px; focus-visible true"
+    },
+    {
+      "name": "connected_dark",
+      "result": "PASS",
+      "action": "same native Tab/Space route",
+      "evidence": [
+        "dark-checked.png",
+        "dark-checked.json",
+        "dark-unchecked.png",
+        "dark-unchecked.json"
+      ],
+      "focus": "2px solid rgb(61,211,200), offset2px; focus-visible true"
+    },
+    {
+      "name": "offline_light",
+      "result": "PASS",
+      "action": "select one hardware checkbox without Measure, terminate only private Host, await ordinary offline polling; checked and unchecked boxes disable through fieldset; clicks do not change values; Tab skips to saved-settings summary",
+      "evidence": [
+        "light-disabled.png",
+        "light-disabled-before.json",
+        "light-disabled-after.json"
+      ],
+      "appearance": "theme fill/border, opacity0.5, not-allowed cursor"
+    },
+    {
+      "name": "offline_dark",
+      "result": "PASS",
+      "action": "ordinary theme switch and Hosts reopen; disabled unchecked hardware and checked saved-settings boxes; clicks do not change values; Tab skips to next summary",
+      "evidence": [
+        "dark-disabled.png",
+        "dark-disabled-before.json",
+        "dark-disabled-after.json",
+        "dark-disabled-checked.png",
+        "dark-disabled-checked.json",
+        "dark-disabled-checked-after.json"
+      ],
+      "appearance": "theme fill/border, opacity0.5, not-allowed cursor"
+    }
+  ],
+  "verification": "evidence/docs only: git diff --check; existing source gates reused, no make verify repeated",
+  "limits": [
+    "signed-in Workspace and Windows remain open",
+    "retained Linux source-compatible desktop; not a fresh current-package release gate",
+    "no heterogeneous-card disabled selection, model load, download or hardware measurement acceptance"
+  ],
+  "resources": "owned 9.1GiB S1 runtime/copies removed; donors preserved; booking3233 canceled; returned10:25Z",
+  "next": "coordinator integrate evidence; remaining Workspace/Windows leaves stay open with Gchat2"
+}
