@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { gbot, type CloudReview, type SshIdentity } from '@/services/gbot'
 import LanTools from './LanTools'
@@ -51,6 +51,13 @@ export default function CloudComputer({
   const blocked = working || disabled
   const [action, setAction] = useState<keyof typeof actionLabels>()
   const pending = useRef(false)
+  const active = useRef(true)
+  useEffect(() => {
+    active.current = true
+    return () => {
+      active.current = false
+    }
+  }, [])
   const [error, setError] = useState<{
     action: keyof typeof failureMessages
     details: string
@@ -314,6 +321,7 @@ export default function CloudComputer({
                       workspace_id: review.id,
                       session_id: crypto.randomUUID(),
                     })
+                    if (!active.current) return
                     await connected(review.id)
                   })
                 }
