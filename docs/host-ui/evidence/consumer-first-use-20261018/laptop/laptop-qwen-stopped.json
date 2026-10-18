@@ -1,0 +1,51 @@
+{
+  "checked_utc": "2026-10-18T23:31:30.438386+00:00",
+  "instances": [
+    {
+      "instance_id": "72b8ec45-af0c-42bb-aaa2-53826d19481a",
+      "status": "stopped",
+      "state": null,
+      "last_error": null
+    },
+    {
+      "instance_id": "ab042b27-d5fe-4d73-ae84-14a036c66111",
+      "status": "stopped",
+      "state": null,
+      "last_error": null
+    },
+    {
+      "instance_id": "a6cc56c4-2447-4be1-8a68-7decfa304e74",
+      "status": "stopped",
+      "state": null,
+      "last_error": null
+    }
+  ],
+  "api_1337_connect": 111,
+  "engine_process_exists": false,
+  "vmstat": {
+    "pswpin": 468,
+    "pswpout": 775
+  },
+  "process_memory_observed_before_stop": {
+    "checked_utc": "2026-10-18T23:30:59.519767+00:00",
+    "app": {
+      "pid": 263306,
+      "VmSwap_kB": 0
+    },
+    "host": {
+      "pid": 263314,
+      "VmSwap_kB": 0
+    },
+    "engine": {
+      "pid": 264721,
+      "VmSwap_kB": 0
+    }
+  },
+  "normal_stop_controls": [
+    "Integrations / Stop server",
+    "Local model menu / Stop model"
+  ],
+  "guard_release": "complete-pair-guard-release",
+  "booking": 427,
+  "booking_canceled": true
+}

@@ -1,0 +1,21 @@
+{
+  "utc": "2026-10-18T22:28:24.858702+00:00",
+  "status": "PRE_ENGINE_REJECTED",
+  "ui_error": "Failed to load Qwen 3.8 27B 2-bit mix 483343c2: No native profiling CLI configured for this GPU group",
+  "app_source": "770f3c03dddef2f528ecd100f25cb37685a12d2b",
+  "host_source": "e001e9ea3",
+  "engine_source": "1209de84905028ba78291751df719b7d09fe38f8",
+  "catalog_sha_prefix": "19a1d986",
+  "model_sha256": "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+  "automatic": true,
+  "engine_started": false,
+  "ready": false,
+  "receipt_count": 0,
+  "instance_count": 0,
+  "pswpin": 468,
+  "pswpout": 775,
+  "gpu": "NVIDIA GeForce RTX 3080 Ti Laptop GPU, GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6, 0 MiB",
+  "second_attempted": false,
+  "natural_attempted": false,
+  "next_action": "Hold model starts; recover missing native profiling CLI mapping and report to Arch/C1 before any retry."
+}

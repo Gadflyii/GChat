@@ -1,0 +1,31 @@
+{
+  "started_utc": "2026-10-18T23:07:28.432324+00:00",
+  "pid": 265628,
+  "endpoint": "http://127.0.0.1:1337/v1",
+  "deadline_utc": "2026-10-18T23:31:00Z",
+  "process_memory_before": {
+    "263306": {
+      "Name": "gchat",
+      "VmRSS": "320912 kB",
+      "VmSwap": "0 kB"
+    },
+    "263314": {
+      "Name": "ginfer-host",
+      "VmRSS": "47884 kB",
+      "VmSwap": "0 kB"
+    },
+    "264721": {
+      "Name": "ginfer-serve",
+      "VmRSS": "5476232 kB",
+      "VmSwap": "0 kB"
+    }
+  },
+  "selected_profile_id": "rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-52k-int8-screened",
+  "argv": [
+    "/home/ron/tmp-c5-consumer-launch-profiles-20261018/python311/bin/python3.11",
+    "/home/ron/tmp-c5-consumer-first-use-20261018/controls/natural.py",
+    "/home/ron/tmp-c5-consumer-first-use-20261018/evidence/laptop-qwen-natural-corrected",
+    "--attach"
+  ],
+  "application_instance_id": "ab042b27-d5fe-4d73-ae84-14a036c66111"
+}
