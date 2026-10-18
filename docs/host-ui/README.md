@@ -6163,9 +6163,44 @@ before download completion through model Stop; the request deadline was
 [request guard](evidence/consumer-first-use-20261018/ada/ada-muse-natural-guard.json),
 [selected settings](evidence/consumer-first-use-20261018/ada/ada-muse-installed.json)
 and [normal Stop](evidence/consumer-first-use-20261018/ada/ada-muse-stopped.json).
-Laptop has an isolated idle app and configured private API key, with its API server stopped
-and no managed Download, Load or inference requested. Its Download waits for
-the resize worker's normal return. Before requests, the two laptop natural request files were corrected from target-family names to the exact package IDs advertised by the app; the maintained 28,116-character prompt and uncapped output remain unchanged.
+Laptop has an isolated app and configured private API key. Its ordinary Muse
+Download started at 17:48:28 UTC, after Ada resize
+returned at 17:38 UTC, S1's timed standard returned at 17:41 UTC, the short Ada
+Flash quote returned at 17:45 UTC and C6's Op gate returned at 17:47 UTC.
+The UI confirmed Download complete and the local model loaded at18:19:56 UTC.
+The existing Host snapshot confirmed Ready at18:20:08 UTC; Automatic selected
+131072 context/C1, INT8 KV, fixed seven-token DFlash2, prefill1024, automatic
+arena,300MiB headroom and Vision off. Its qualification ID is null after the
+Automatic arena override. The unique compatible catalog source is
+`rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated`.
+This is a derived source ID. The normal Integrations control started the API;
+at18:22:41 UTC, `/v1/models` returned HTTP200 and the exact Muse package hash.
+Booking408 began at18:06 UTC through18:55 UTC; the canonical laptop GPU
+guard was acquired before completion triggered Automatic load. At Download
+terminal, C6's queued three-minute S1 Op pair preceded the laptop app and
+Ada native Muse naturals.
+At18:07 UTC before model load, app and Host VmSwap were zero; system counters
+were pswpin468/pswpout775, with the existing1816KiB allocated swap unchanged.
+The load check at18:20 UTC found unchanged system swap counters, and app,
+Host and Engine VmSwap were zero at18:23 UTC. The final chat check compares
+deltas from the same baseline. C1 returned Ada at18:08 UTC; C7's final CPU-only
+isolation check returned18:18 UTC. C6's S1 pair returned18:24 UTC with
+terminal0 and3489 canceled. The coordinator cleared the prepared laptop app
+and Ada native Muse naturals to start together after that direct return.
+Laptop C4 measures four app clients queued through the selected C1 Engine.
+The unchanged attach driver started18:25:09 UTC under booking408 and the
+held canonical GPU guard, with an18:55 UTC deadline,600-second C1 then
+600-second C4 phases, uncapped responses and a3GiB system memory floor.
+The first bounded check at 18:29:25 UTC found 30 HTTP200 responses, unchanged
+system swap counters and zero app, Host and Engine VmSwap. This check was
+45 seconds earlier than the planned five-minute boundary; subsequent checks
+are explicitly gated by the recorded prior check time, next at or after
+18:34:30 UTC. Ada's independent signed72153 Muse native natural reached Ready
+at 18:27:09 UTC in 9.032 seconds under booking776, through 18:52 UTC, and runs
+the same 600-second C1/C4 phases concurrently.
+Before requests, the two laptop natural request files were corrected from target-family
+names to the exact package IDs advertised by the app; the maintained
+28,116-character prompt and uncapped output remain unchanged.
 
 Bubbs added parallel requalification after GInfer `c09b5315b`: resize the Ada
 and laptop Qwen/Muse bounds and retry laptop Muse C8, with admitted bounds,
@@ -6188,12 +6223,33 @@ requests returned HTTP200, exact-ID comparisons matched, all lifecycle exits
 were zero and no new swap was recorded. Laptop returned at 17:22 UTC and
 booking405 was canceled. Ada first-use returned at 17:10 UTC and was handed
 to the resize worker. Frozen SM89/helpers, isolated Flash ELFs and small raw
-evidence transfers finished by 17:24 UTC. Ada sizing and standard checks run
+evidence transfers finished by 17:24 UTC. Ada sizing and standard checks completed
 before laptop's ordinary Muse Download; matching app/native natural checks
 then run on separate hosts after Download finishes, followed by the same
 sequence for Qwen. The Windows RC owner was notified of the complete transfer
 return before its quiet native build.
-No overlapping model loads, timing or bulk relays are allowed.
+Ada Muse sizing, C8 smoke and the canonical standard passed at 131072/C8,
+with exact IDs, no new swap and its own explicit Automatic arena of
+9091153920 bytes; Arch signed at 17:33 UTC. Qwen sizing published 130560
+context, rounded down to 130048/C8, with exact IDs and no new swap. Its
+canonical standard completed at 17:36:31 UTC, with 52 arrays/26000 IDs exact,
+all lifecycle exits zero and no new swap. Arch signed the 130048/C8 bound at
+17:35:54 UTC; the published policy cap remains 131072 and no full-context
+request was measured.
+The separate Ada and laptop Flash metadata-only quote searches overlap the
+ordinary app Download, with CUDA and GPU release required by 18:07 UTC before
+download completion can trigger app auto-load. Laptop context 81920/C8 hit an
+Engine planner geometry error before quote JSON; Bubbs received the retained
+packet for Engine diagnosis, and laptop boundary qualification is held. This
+is distinct from a Host RAM fit rejection. No Flash Engine or witness has
+started. Ada quotes found a provisional 140288/C8 Host fit and rejected the
+next 141312 granule; Ada returned at 17:53 UTC. Physical witness and numeric
+sign remain pending. No bulk Download or relay overlaps speed timing.
+Arch signed the Flash planner correction source `5d46a8664`; its owner is
+building SM86 and will replay only the no-load C8/81920 crash quote plus
+C8/262144 after booking408 returns and the shared native build has ended.
+Those two quotes precede ordinary laptop Qwen Download if the donor is ready;
+no Flash model or timing gate is included in that handoff.
 Existing signed catalog entries and the eb777 bundle remain the first-use
 inputs until replacement bounds are signed and coordinated with Gchat 3.
 
@@ -6253,7 +6309,7 @@ Owned inventory:
 | local5090 | `/ai/gchat-worktrees/c5-consumer-first-use-20261018`, branch `test/c5-consumer-first-use-20261018` | Documentation/evidence integration; no local model or build |
 | S1 | `/media/ron/SSD_RAID/ai/tmp-c5-consumer-first-use-20261018` | Accepted app/Host/runtime builds and 4.65 GB AppDir donor; retain through first-use |
 | Ada | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated AppDir/tools/controls, private HOME/run/tmp, managed Qwen and Muse; Qwen and Muse app natural PASS, both models/API stopped; retain small evidence and fixture through integration |
-| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated idle app/API settings, no managed download; retain for first-use |
+| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated app/API settings; ordinary Muse Download complete, Automatic Ready confirmed18:20 UTC; app natural active from18:25 UTC, deadline18:55 UTC; retain for first-use |
 | Ada | `/tmp/c5x/xkbcomp` | Owned compiler symlink for private Xvfb; remove with fixture |
 
 Both targets use private mode-700 runtime directories, private HOME/XDG,
