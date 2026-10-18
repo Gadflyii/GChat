@@ -613,11 +613,25 @@ it('keeps a failed save reviewable and allows retry', async () => {
   await checkTools()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
-  await screen.findByRole('alert')
-  expect(screen.getByRole('alert')).toHaveTextContent('Vault unavailable')
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Could not confirm the bot was saved.')
+  expect(alert).toHaveTextContent(
+    'Review the bot and computer details, then choose Save bot to try again.'
+  )
   expect(screen.getByText('bot@bot.local:22')).toBeInTheDocument()
+  expect(screen.getByText('Writer', { selector: 'dd' })).toBeInTheDocument()
+  const details = alert.querySelector('details')!
+  expect(details).not.toHaveAttribute('open')
+  const requestCount = vi.mocked(gbot).mock.calls.length
+  fireEvent.click(screen.getByText('Details', { selector: 'summary' }))
+  expect(details).toHaveAttribute('open')
+  expect(alert).toHaveTextContent('Vault unavailable')
+  expect(save).toHaveBeenCalledTimes(1)
+  expect(selectGbotService).toHaveBeenCalledTimes(1)
+  expect(gbot).toHaveBeenCalledTimes(requestCount)
   fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
   await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 it('selects the service once for same-tick submissions and allows retry after failure', async () => {
@@ -653,10 +667,25 @@ it('selects the service once for same-tick submissions and allows retry after fa
   expect(cancel).not.toHaveBeenCalled()
 
   await act(async () => fail(new Error('Service unavailable')))
-  expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not confirm the Gbot service was selected.'
+  )
+  expect(alert).toHaveTextContent(
+    'Check the selected service, then choose Continue to try again.'
+  )
   expect(screen.getByText('Step 2 · Service')).toBeInTheDocument()
+  expect(screen.getByLabelText('This PC (recommended)')).toBeChecked()
   expect(screen.getByRole('button', { name: 'Back' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  const details = alert.querySelector('details')!
+  expect(details).not.toHaveAttribute('open')
+  fireEvent.click(screen.getByText('Details', { selector: 'summary' }))
+  expect(details).toHaveAttribute('open')
+  expect(alert).toHaveTextContent('Service unavailable')
+  expect(selectGbotService).toHaveBeenCalledTimes(1)
+  expect(save).not.toHaveBeenCalled()
+  expect(cancel).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   await screen.findByText('Step 3 · Computer')
   expect(selectGbotService).toHaveBeenCalledTimes(2)
@@ -1094,11 +1123,25 @@ it('saves the reviewed bot once for same-tick submissions with progress and retr
   expect(cancel).not.toHaveBeenCalled()
 
   await act(async () => fail(new Error('Vault unavailable')))
-  expect(screen.getByRole('alert')).toHaveTextContent('Vault unavailable')
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Could not confirm the bot was saved.')
+  expect(alert).toHaveTextContent(
+    'Review the bot and computer details, then choose Save bot to try again.'
+  )
   expect(screen.getByText('Step 5 · Review')).toBeInTheDocument()
   expect(screen.getByText('bot@bot.local:22')).toBeInTheDocument()
+  expect(screen.getByText('Writer', { selector: 'dd' })).toBeInTheDocument()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Finish later' })).toBeEnabled()
+  const details = alert.querySelector('details')!
+  expect(details).not.toHaveAttribute('open')
+  const requestCount = vi.mocked(gbot).mock.calls.length
+  fireEvent.click(screen.getByText('Details', { selector: 'summary' }))
+  expect(details).toHaveAttribute('open')
+  expect(alert).toHaveTextContent('Vault unavailable')
+  expect(save).toHaveBeenCalledTimes(1)
+  expect(gbot).toHaveBeenCalledTimes(requestCount)
+  expect(cancel).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Save bot' }))
   await waitFor(() => expect(save).toHaveBeenCalledTimes(2))
   expect(save).toHaveBeenLastCalledWith(expected)

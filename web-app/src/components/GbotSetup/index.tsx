@@ -460,9 +460,22 @@ export default function GbotSetup({
         </p>
       )}
       {error && !(step === 1 && error === resources.error) && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>
+            {step === 1
+              ? 'Could not confirm the Gbot service was selected.'
+              : 'Could not confirm the bot was saved.'}
+          </p>
+          <p>
+            {step === 1
+              ? 'Check the selected service, then choose Continue to try again.'
+              : 'Review the bot and computer details, then choose Save bot to try again.'}
+          </p>
+          <details>
+            <summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{error}</p>
+          </details>
+        </div>
       )}
       {continueHint && (
         <p id="gbot-setup-continue-hint" className="text-sm text-muted-foreground">
