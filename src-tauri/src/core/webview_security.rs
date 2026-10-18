@@ -52,17 +52,16 @@ fn app_origin(app: &AppHandle, config: &tauri::utils::config::WindowConfig) -> U
     Url::parse(origin).expect("fixed application origin")
 }
 
-pub fn build_window(
-    app: &AppHandle,
-    config: &tauri::utils::config::WindowConfig,
-) -> tauri::Result<WebviewWindow> {
-    let origin = app_origin(app, config);
-    let initial_url = match &config.url {
+fn initial_url(origin: &Url, url: &tauri::WebviewUrl) -> tauri::Result<Url> {
+    Ok(match url {
+        // Match Tauri's App URL resolution: the default index document maps
+        // to the application root, where the client router starts.
+        tauri::WebviewUrl::App(path) if path.to_str() == Some("index.html") => origin.clone(),
         tauri::WebviewUrl::App(path) => origin
             .join(&path.to_string_lossy())
             .map_err(tauri::Error::InvalidUrl)?,
         tauri::WebviewUrl::External(url) | tauri::WebviewUrl::CustomProtocol(url)
-            if same_origin(url, &origin) =>
+            if same_origin(url, origin) =>
         {
             url.clone()
         }
@@ -73,7 +72,15 @@ pub fn build_window(
             )
             .into())
         }
-    };
+    })
+}
+
+pub fn build_window(
+    app: &AppHandle,
+    config: &tauri::utils::config::WindowConfig,
+) -> tauri::Result<WebviewWindow> {
+    let origin = app_origin(app, config);
+    let initial_url = initial_url(&origin, &config.url)?;
     let cache = app
         .path()
         .app_cache_dir()?
@@ -239,6 +246,30 @@ pub async fn open_auxiliary_window(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resumed_navigation_preserves_application_entry_routes() {
+        for app in [
+            "tauri://localhost/",
+            "http://tauri.localhost/",
+            "http://localhost:1420/",
+        ] {
+            let origin = Url::parse(app).unwrap();
+            assert_eq!(
+                initial_url(&origin, &tauri::WebviewUrl::App("index.html".into())).unwrap(),
+                origin
+            );
+            assert_eq!(
+                initial_url(&origin, &tauri::WebviewUrl::App("logs".into())).unwrap(),
+                origin.join("logs").unwrap()
+            );
+            assert!(initial_url(
+                &origin,
+                &tauri::WebviewUrl::External(Url::parse("https://example.test/").unwrap())
+            )
+            .is_err());
+        }
+    }
 
     #[test]
     fn navigation_keeps_previews_in_frames_and_app_pages_on_their_origin() {
