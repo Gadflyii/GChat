@@ -10,9 +10,18 @@ status check that is no longer shown.
 
 The rendered regression covers Error and native-string failures, explicit
 account refresh without replaying sign-in, and deliberate account selection
-before Cloud PC discovery becomes available. Validation is pending the parent’s
-S1 gates. This is source and mocked-connector scope; no real sign-in, account,
-browser consent or native acceptance is claimed.
+before Cloud PC discovery becomes available. This is source and mocked-connector
+scope; no real sign-in, account, browser consent or native acceptance is claimed.
+
+Validation: both new journeys failed against original production; fixed focus
+passed 198 tests across three files. Lint passed with zero errors and five
+existing warnings. ONE `make verify` (2026-10-18 22:48:38–22:54:51 UTC)
+passed 3,869 app tests (six skipped), 130 extension tests, 1,323 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards. All
+3,481 tracked inputs matched raw bytes and modes before and after verification
+with fresh tracked timestamps. Only this receipt was added afterward.
+Booking3616 returned22:55Z. Evidence:
+`/ai/gchat/out/gchat2-m365-connected-account-refresh-20261018/SUMMARY.md`.
 
 ## Recovering saved computer setup reads — Gchat 2
 
