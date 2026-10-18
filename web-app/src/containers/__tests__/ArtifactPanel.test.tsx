@@ -120,15 +120,14 @@ describe('ArtifactPanel', () => {
   })
 
   it('returns keyboard focus to the message opener when closing the standalone panel', async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    vi.useRealTimers()
+    const user = userEvent.setup()
     render(<Harness content={SETTLED} streaming={false} />)
     const opener = trigger()!
     await user.click(opener)
-    settlePanelAnimation()
     const close = screen.getByRole('button', { name: 'Close' })
     close.focus()
     await user.keyboard('{Enter}')
-    settlePanelAnimation()
 
     expect(useArtifactStore.getState().isOpen).toBe(false)
     expect(opener).toHaveFocus()
