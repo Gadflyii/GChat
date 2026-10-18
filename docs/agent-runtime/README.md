@@ -38,6 +38,21 @@ instead**; the latter changes only this conversation's selection and keeps the
 draft for the user's next submission. Ordinary Chat and `/compact` remain
 available without a resolved saved-agent catalog.
 
+Source `a1eb8fa0a3` passes 90 focused tests, lint and one `make verify`
+(3,742 app, 127 extension and 1,316 Rust tests), plus frontend/native builds.
+The rebuilt private Linux desktop passes actual unreadable-catalog recovery
+on a saved conversation: Send and Enter retain the prompt, Retry restores
+**ZZ Library Visibility**, and **Use Chat instead** preserves the prompt without
+submitting. The explicit Chat choice survives reopening after catalog recovery.
+The draft was cleared and normal window close completed cleanup; definitions,
+runs, chat metadata and messages remained byte-identical, with permissions
+restored. Receipts and viewed screenshots:
+`/ai/gchat/out/gchat-chat-saved-agent-catalog-error-20261018/`.
+Native actions used private HOME, DBus, keyring and X display, with no model,
+message submission or GPU. Rendered regressions cover actual dispatch, deferred
+catalog resolution, other-conversation isolation, ordinary Chat and `/compact`.
+Windows and cold-restart persistence were not tested.
+
 ## Saved-agent choices in Chat drafts — October 18
 
 A private Linux native pass selected a saved agent, typed a task, opened New
