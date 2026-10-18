@@ -1,5 +1,37 @@
 # GInfer host UI
 
+## Passphrase-vault Lock feedback — verified, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-LOCK-FEEDBACK` names the pending Lock and hides the
+ready/continue claims until the request and its follow-up status read finish.
+A rejected Lock shows plain recovery guidance with closed diagnostic details.
+Because native locking can succeed before another step fails, the guidance uses
+the fresh status: an unlocked vault offers Lock again; locked or unknown status
+offers Check again. Checking never replays Lock.
+
+The unchanged base reproduced all four pending, rejection, partial-success and
+failed-read regressions. An existing setup hook implicitly returned the command
+mock as teardown, causing two additional hook timeouts after failed assertions
+left deferred responses unresolved. Its braced callback now returns nothing;
+assertions and default timeouts are unchanged, and the valid baseline was not
+repeated. The frozen candidate passed all **15 credential tests**, lint with
+zero errors and five existing unrelated warnings, and exactly one `make verify`.
+That gate exited 0 at **15:43:38Z**: **3,657 app tests / 6 skipped,
+127 extension tests, all six critical coverage floors and 1,309 native tests /
+0 failed / 28 ignored** across 23 native summaries. Typecheck and quality guards
+passed. The coordinator reviewed the failing and passing logs, terminal state,
+and matching source and eleven catalog input bindings. This verifies rendered
+frontend behavior; installed-desktop and Windows acceptance remain separate.
+
+Candidate: `/ai/gchat-worktrees/gchat3-secure-storage-lock-feedback-20261018`,
+branch `fix/gchat3-secure-storage-lock-feedback-20261018`, base `fe0630a14`.
+S1 CPU112–119 returned **15:46Z**, booking3368 canceled. Scoped cleanup finished
+**15:49:30Z**: the owned SSD test cache, prep log and two exited containers were
+removed, releasing **29,845,885,776 logical bytes**. Their absence was confirmed;
+the inactive RC dependency donor was untouched. Small reviewed results are
+`out/secure-storage-lock-feedback-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the GUI queue.
+
 ## First-run accepted download actions — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-DOWNLOAD-ACTION-RESULT` preserves confirmation when the Host
@@ -6045,3 +6077,32 @@ were removed at 14:52:20 UTC (29,850,680,192 logical bytes); the protected RC
 donor and stable DEV service were untouched. Small input, generated-catalog
 and raw-log evidence remains in the output folder. Ready for reviewed merge;
 the next release refresh consumes the retained eleven-input packet.
+
+## Host name save and refresh results, October 18 (Codex 7)
+
+`GUI-HOST-NAME-SAVE-RESULT` preserves a successful Host rename when the
+following registry refresh fails. The accepted name remains visible and Save
+stays disabled for it, even with a stale snapshot. **Retry status** performs
+only the read. A rejected save retains the draft with persistent plain retry
+guidance and closed technical details. Save and status retry show pending
+feedback and block duplicate submissions.
+
+Both new failure regressions failed against the unchanged base. All eight
+candidate rendered tests passed. Exactly one `make verify` passed lint (zero
+errors, five existing unrelated warnings), TypeScript and quality/contract/asset
+guards, then stopped at an unrelated Agent Studio five-second typing timeout:
+3,659 app tests passed, one failed and six skipped. The unchanged failed case
+passed its targeted continuation. Only the existing coverage prerequisites
+(109 tests) and unexecuted extension (127 tests), six coverage floors and native
+stages continued. Native results: 1,309 passed, zero failed, 28 ignored across
+23 summaries. The original full-gate failure remains recorded; no timeout,
+unrelated source or full gate was changed or repeated.
+
+Candidate: `/ai/gchat-worktrees/c7-host-name-save-result-20261018`, branch
+`fix/c7-host-name-save-result-20261018`, base `fe0630a14`. Source/test bindings
+matched the executed copy after verification. S1 CPUs 104–111 returned
+15:47 UTC, booking 3369 canceled. The owned SSD fixture and three exited
+containers were removed (27,822,125,840 logical bytes); the dependency donor
+was preserved. Small evidence: `out/c7-host-name-save-result-20261018/`.
+No Host protocol, model, inference, native GUI rename or Windows qualification
+is changed or claimed. Next: reviewed merge, then continue the owned GUI queue.

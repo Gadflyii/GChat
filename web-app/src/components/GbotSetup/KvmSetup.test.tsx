@@ -370,6 +370,167 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
+it.each([
+  [
+    'start',
+    'Resume setup',
+    'connecting',
+    'Could not confirm Writer’s computer setup.',
+  ],
+  [
+    'stop',
+    'Stop computer',
+    'ready',
+    'Could not confirm that Writer’s computer stopped.',
+  ],
+  [
+    'remove',
+    'Remove owned computer',
+    'ready',
+    'Could not confirm that Writer’s computer was removed.',
+  ],
+  [
+    'use',
+    'Use this computer',
+    'ready',
+    'Could not connect to Writer’s computer.',
+  ],
+] as const)(
+  'keeps failed %s guidance through prerequisite checks and event reads without replaying it',
+  async (path, label, stage, guidance) => {
+    const saved = { id: 'writer-id', name: 'Writer', stage, issue: null }
+    const diagnostic = `local-vm ${path}: transport closed unexpectedly`
+    let fail = true
+    let failCheck = false
+    let removed = false
+    call.mockImplementation(async (requested) => {
+      if (requested.endsWith('preflight')) {
+        if (failCheck)
+          throw new Error('Prerequisite check could not reach the service.')
+        return { ready: true, issues: [] }
+      }
+      if (requested.endsWith('status')) return removed ? [] : [saved]
+      if (fail) throw diagnostic
+      if (path === 'remove') {
+        removed = true
+        return { ...saved, stage: 'removed' }
+      }
+      return saved
+    })
+    const connected = vi.fn(async () => {
+      if (fail) throw new Error(diagnostic)
+    })
+    render(
+      <KvmSetup name="Other bot" initialId={saved.id} connected={connected} />
+    )
+    const button = await screen.findByRole('button', { name: label })
+    await waitFor(() => expect(button).toBeEnabled())
+    fireEvent.click(button)
+    if (path === 'remove') await act(async () => settleConfirm(true))
+    const warning = await screen.findByRole('alert')
+    expect(warning).toHaveTextContent(guidance)
+    const details = warning.querySelector('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toHaveTextContent(diagnostic)
+    expect(warning).toHaveTextContent('Check prerequisites again')
+    const requests = () =>
+      path === 'use'
+        ? connected.mock.calls.length
+        : call.mock.calls.filter(([requested]) =>
+            requested.endsWith(`/${path}`)
+          ).length
+    expect(requests()).toBe(1)
+    fireEvent.click(screen.getByText('Details'))
+    expect(requests()).toBe(1)
+    failCheck = true
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Check prerequisites again' })
+    )
+    await waitFor(() => expect(screen.getAllByRole('alert')).toHaveLength(2))
+    expect(warning).toHaveTextContent(guidance)
+    expect(requests()).toBe(1)
+    failCheck = false
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Check prerequisites again' })
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Check prerequisites again' })
+      ).toBeEnabled()
+    )
+    await act(async () => events.update?.())
+    expect(screen.getByRole('alert')).toHaveTextContent(guidance)
+    expect(requests()).toBe(1)
+    if (path === 'remove') {
+      fireEvent.click(screen.getByRole('button', { name: label }))
+      await act(async () => settleConfirm(false))
+      expect(screen.getByRole('alert')).toHaveTextContent(guidance)
+      expect(requests()).toBe(1)
+    }
+    fail = false
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    if (path === 'remove') await act(async () => settleConfirm(true))
+    await waitFor(() => expect(requests()).toBe(2))
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    )
+  }
+)
+
+it.each(['kvm', 'hyper_v'])(
+  'offers an explicit retry with the same %s identity when creation fails before saving a record',
+  async (hypervisor) => {
+    let saved: object | undefined
+    let starts = 0
+    const retry = deferred<object>()
+    call.mockImplementation(async (path, body) => {
+      if (path.endsWith('preflight'))
+        return { hypervisor, ready: true, issues: [] }
+      if (path.endsWith('status')) return saved ? [saved] : []
+      if (path.endsWith('start')) {
+        if (++starts === 1)
+          throw new Error('Create failed before the record was saved.')
+        const result = await retry.promise
+        saved = { ...body, ...result }
+        return saved
+      }
+      throw new Error(`Unexpected ${path}`)
+    })
+    render(<KvmSetup name="Writer" connected={vi.fn()} />)
+    const create = screen.getByRole('button', {
+      name: 'Create Writer’s computer',
+    })
+    await waitFor(() => expect(create).toBeEnabled())
+    fireEvent.click(create)
+    await screen.findByRole('alert')
+    const button = screen.getByRole('button', {
+      name: 'Retry Writer’s computer setup',
+    })
+    expect(button).toBeEnabled()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Check prerequisites again' })
+    )
+    await waitFor(() => expect(button).toBeEnabled())
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Could not confirm Writer’s computer setup.'
+    )
+    expect(starts).toBe(1)
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(starts).toBe(2)
+    const mutations = call.mock.calls.filter(([path]) => path.endsWith('/start'))
+    expect(mutations[1][1]).toEqual(mutations[0][1])
+    expect(screen.getByRole('button', { name: 'Starting setup…' })).toBeDisabled()
+    await act(async () => retry.resolve({ stage: 'ready', issue: null }))
+    expect(
+      await screen.findByRole('button', { name: 'Use this computer' })
+    ).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
 it('connects the chosen saved computer once, explains the wait and permits retry after failure', async () => {
   const attempt = deferred<void>()
   const connected = vi

@@ -24,6 +24,8 @@ export function CredentialSetup({
   const [skipped, setSkipped] = useState(false)
   const [guide, setGuide] = useState(false)
   const [message, setMessage] = useState('')
+  const [locking, setLocking] = useState(false)
+  const [lockError, setLockError] = useState<string>()
   const [intent, setIntent] = useState<'create' | 'unlock'>()
   const [passphrase, setPassphrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
@@ -36,6 +38,7 @@ export function CredentialSetup({
           check: interactive,
         })
         setStatus(result)
+        if (interactive) setLockError(undefined)
         onReady?.(result.ready === true)
       } catch (error) {
         setStatus({
@@ -83,6 +86,8 @@ export function CredentialSetup({
     setPassphrase('')
     setConfirmation('')
     setMessage('')
+    setLockError(undefined)
+    setLocking(action === 'lock')
     setBusy(true)
     onReady?.(false)
     try {
@@ -99,9 +104,11 @@ export function CredentialSetup({
       onReady?.(result.ready === true)
       setIntent(undefined)
     } catch (error) {
-      setMessage(String(error))
+      if (action === 'lock') setLockError(String(error))
+      else setMessage(String(error))
       await check()
     } finally {
+      setLocking(false)
       setBusy(false)
     }
   }
@@ -110,7 +117,26 @@ export function CredentialSetup({
     setPassphrase('')
     setConfirmation('')
     setMessage('')
+    setLockError(undefined)
   }
+  const lockFeedback = locking ? (
+    <div className="text-sm" role="status">
+      <p>Locking the passphrase vault…</p>
+      <p>Wait for the result before continuing setup.</p>
+    </div>
+  ) : lockError ? (
+    <div className="text-sm space-y-2" role="alert">
+      <p>
+        {status?.ready && status.tier === 'passphrase'
+          ? 'Could not finish locking the vault. The vault is currently unlocked. Choose Lock vault to try again.'
+          : 'Could not finish locking the vault. Choose Check again to confirm whether the vault is locked before continuing.'}
+      </p>
+      <details className="text-xs">
+        <summary>Lock error details</summary>
+        <p className="break-words">{lockError}</p>
+      </details>
+    </div>
+  ) : null
   if (status?.ready && !intent)
     return (
       <section
@@ -118,13 +144,18 @@ export function CredentialSetup({
         aria-label="Secure storage setup"
       >
         <h3 className="font-medium">Secure storage</h3>
-        <p className="text-sm" role="status">
-          Secure storage is ready.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          GChat can now protect your connected accounts, Gbot access keys and
-          connections to other computers. You can continue setup.
-        </p>
+        {!locking && (
+          <>
+            <p className="text-sm" role="status">
+              Secure storage is ready.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              GChat can now protect your connected accounts, Gbot access keys and
+              connections to other computers. You can continue setup.
+            </p>
+          </>
+        )}
+        {lockFeedback}
         {status.tier === 'passphrase' && (
           <Button
             variant="outline"
@@ -178,7 +209,10 @@ export function CredentialSetup({
         sure these connections can be saved safely. Local models do not need
         this step.
       </p>
-      {busy && <p role="status">Checking or setting up secure storage…</p>}
+      {busy && !locking && (
+        <p role="status">Checking or setting up secure storage…</p>
+      )}
+      {lockFeedback}
       {!busy && status && !status.ready && (
         <p role={status.state === 'unchecked' ? 'status' : 'alert'}>
           {status.state === 'unchecked'
@@ -256,6 +290,7 @@ export function CredentialSetup({
                 setPassphrase('')
                 setConfirmation('')
                 setMessage('')
+                setLockError(undefined)
               }}
             >
               Cancel
