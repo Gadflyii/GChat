@@ -1859,9 +1859,10 @@ retain only result JSON and short summary. Read-only donor remains Claude's.
 `GUI-RESET-STALE-LOCAL-HOST-CONNECTION` passed source gates and native acceptance;
 merge `4514dfc73` contains signed source `63f9e8a49`. Permission-refusal recovery,
 ordinary reset retry and exactly one connected replacement local Host passed.
-The private session stopped and CPU booking3100 returned at 07:01Z. Final
-candidate/profile retirement is with the parent; the separate local donor
-retired after all borrowers released it. Support destination remains
+The private session stopped and CPU booking3100 returned at 07:01Z. Both
+owned S1 roots and eight exited containers retired at 07:06:23Z; concise
+evidence is retained locally. The separate local donor retired after all
+borrowers released it. Support destination remains
 **WAITING ON RON**. This does not qualify prerequisite-dependent operations.
 
 The requested scope was setup, Models, Downloads, Engine/Host settings,
@@ -2055,7 +2056,7 @@ D-Bus and Xvfb stopped and native booking3073 CPU88–95 returned 06:18Z. C7's
 AppDir read-copy ended 06:07Z and tools custody released 06:15Z. C4's
 copies/displays are terminal. The separate reset-regression app, Host, Xvfb,
 guard and inspector forward stopped and booking3100 CPU64–71 returned 07:01Z.
-The parent owns final candidate/profile retirement after the verified merge.
+Final candidate/profile retirement completed at 07:06:23Z after the verified merge.
 
 At 06:12Z, reference/link checks preceded retirement of owned `gchat`,
 `native-target`, `cargo-home`, `yarn-cache`, `status-candidate` and the release
@@ -2065,16 +2066,21 @@ free-space claim across reflinks. Receipt:
 merged candidate exports were retired with concise evidence retained in
 `merged-export-cleanup-0548.json` and `merged-reset-export-cleanup-0601.json`;
 Interface/CLI exports had already retired at 05:34:57Z. No shared build/cache
-stage remains in this broad root. The immutable `current-main-appdir`,
-`runnable`, `tools`, `current-main-home`, `downloads-home` and
-`host-locator-candidate` await the parent's authorized final reference checks
-and retirement. The separate reset build root is
+stage remained after that step. The separate reset build root was
 `/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018`; its source,
-Cargo cache, target and staging inputs were retired at 06:58Z (31,818,774,811
-logical bytes; `out/c3-reset-stale-host-connection-20261018/build-retirement.json`).
-No gate/build/native job remains. Its exported candidate resolves pre-install
-to the broad root's `runnable`; the parent owns their coordinated retirement.
-The external Claude donor is untouched.
+Cargo cache, target and staging inputs retired at 06:58Z (31,818,774,811 logical
+bytes; `out/c3-reset-stale-host-connection-20261018/build-retirement.json`).
+
+Final reference checks found no live process or inbound dependency. At
+07:06:23Z both literal C3 S1 roots were removed, including the immutable AppDir,
+runnable/tools, private profiles and accepted candidate exports. This final
+step retired 21,675,034,149 logical bytes and eight exited C3 containers;
+reflink sharing means this is not a physical free-space claim. The coordinator
+preserved 127 small metadata, failure and native/Host-locator evidence files
+locally. Receipt:
+`out/c3-reset-stale-host-connection-20261018/final-retirement.json`. All paths
+above now identify historical fixtures; no campaign build/native job or S1
+resource remains. External donors and model inputs were untouched.
 
 The separate local donor `out/c3-chat-area-hands-on-20261017/runnable`
 retired at 07:04Z after C6, C7 and Claude Arch returned all loans. Its inbound SC
@@ -2086,8 +2092,9 @@ bytes. SC/C6 trees and their released symlink files were untouched. The existing
 `out/c3-chat-area-hands-on-20261017/rule22-local-cleanup-20261018.json` records
 8,968,724,608 total logical bytes retired across that scoped cleanup.
 
-Next: parent completes merged-candidate/profile retirement and records cleanup. The original duplicate-card evidence
-remains in `out/c3-host-locator-deleted-runtime-20261018/native-model-settings.json`.
+The walk and its owned resource retirement are complete. Support destination
+selection remains with Ron; prerequisite-dependent operations remain excluded.
+The original duplicate-card evidence remains in `out/c3-host-locator-deleted-runtime-20261018/native-model-settings.json`.
 No further native check is required for this completed control walk.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
