@@ -923,7 +923,7 @@ impl HostProcesses {
                 job.configuration(self.profiling_cli(&launch.gpu_uuids), &launch.gpu_uuids)?;
             if !profile.profile_path.is_file() {
                 return Err(
-                    "This computer has no hardware profile for these graphics cards yet. Build one first: on GInfer Hosts, use Set up models on this computer, or Advanced hardware profile options, then Build profile.".into(),
+                    "This computer has no hardware profile for these graphics cards yet. On GInfer Hosts, open Advanced graphics-card setup options if shown. In Graphics-card setup, select the cards you want to use together, then select Measure graphics cards or Measure again.".into(),
                 );
             }
         }
@@ -1461,6 +1461,50 @@ mod tests {
             tp: 1, port: 40121, max_context: 4096, concurrency: 1,
             options: LaunchOptions::default(),
         }
+    }
+
+    #[test]
+    fn missing_hardware_profile_explains_current_setup_controls() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("ginfer-serve");
+        std::fs::write(&executable, b"fixture server").unwrap();
+        std::fs::write(directory.path().join("ginfer"), b"fixture CLI").unwrap();
+        let artifact = directory.path().join("fixture.ginfer");
+        std::fs::write(&artifact, b"fixture artifact").unwrap();
+        let host_directory = directory.path().join("host");
+        let launch = fixture_launch(&artifact, Uuid::new_v4());
+        let mut processes = HostProcesses::new(
+            executable.clone(),
+            BTreeSet::from(["GPU-fixture".to_owned()]),
+            Duration::from_secs(10),
+        )
+        .unwrap();
+        processes
+            .configure_runtimes(
+                BTreeMap::from([("12.0".to_owned(), executable)]),
+                BTreeMap::from([("GPU-fixture".to_owned(), "12.0".to_owned())]),
+            )
+            .unwrap();
+        processes.hardware_profile = Some(
+            crate::hardware_profile::HardwareProfiles::open(
+                host_directory.clone(),
+                Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            )
+            .unwrap(),
+        );
+
+        assert_eq!(
+            processes.validate_launch(&launch, false).unwrap_err(),
+            "This computer has no hardware profile for these graphics cards yet. On GInfer Hosts, open Advanced graphics-card setup options if shown. In Graphics-card setup, select the cards you want to use together, then select Measure graphics cards or Measure again.",
+        );
+        let profile = crate::hardware_profile::group_profile_path(
+            &host_directory,
+            &launch.gpu_uuids,
+        );
+        std::fs::create_dir_all(profile.parent().unwrap()).unwrap();
+        std::fs::write(profile, br#"{"schema_version":2}"#).unwrap();
+        processes.validate_launch(&launch, false).unwrap();
+        assert!(processes.instances.is_empty());
     }
 
     #[tokio::test]
