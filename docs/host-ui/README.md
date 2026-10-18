@@ -1,5 +1,44 @@
 # GInfer host UI
 
+## First-run accepted download actions — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-DOWNLOAD-ACTION-RESULT` preserves confirmation when the Host
+accepts Pause or Discard but the following setup read fails. The accepted
+request stays visible, conflicting download controls stay disabled, and a
+read-only Retry or poll recovers the current state without replaying the
+mutation. A rejected request remains retryable. The displayed job and progress
+remain unchanged until the Host supplies a fresh snapshot; acceptance alone
+does not claim that a download is paused or discarded.
+
+The Host persists Pause as paused or pausing and removes Discard's job before
+acknowledging success, but returns no setup snapshot. The frontend now separates
+that acknowledgement from the subsequent read. Existing request revision,
+pending-command and Host lifetime guards are preserved.
+
+The unchanged base reproduced both accepted-action failures: a generic error
+replaced acceptance and enabled a stale action. Two rejection controls initially
+blocked hydration by awaiting the first button inside `act`; moving only that
+wait outside `act` corrected the fixture. Only those corrected controls continued
+on the base: both passed, with 51 filtered. The valid reproduction was not
+repeated. The frozen candidate passed all **53 rendered tests**, lint with zero
+errors and five existing unrelated warnings, and exactly one `make verify`.
+The full gate exited 0 at **15:11:21Z**: **3,647 app tests / 6 skipped,
+127 extension tests, all six critical coverage floors, and 1,309 native tests /
+0 failed / 28 ignored** across 23 native summaries. Typecheck and quality guards
+passed. The coordinator reviewed the actual failing and passing logs, terminal
+state, and unchanged source and eleven catalog input bindings. No passing gate
+was repeated. This verifies rendered frontend behavior; installed-desktop and
+Windows acceptance remain separate.
+
+Candidate: `/ai/gchat-worktrees/gchat3-first-run-download-action-result-20261018`,
+branch `fix/gchat3-first-run-download-action-result-20261018`, base `8c2734714`.
+S1 CPU96–103 returned **15:11Z**, booking3351 canceled. Scoped cleanup finished
+**15:15:34Z**: the owned SSD fixture, prep log and three exited containers were
+removed, releasing **28,064,389,959 logical bytes**. Their absence was confirmed;
+the inactive RC dependency donor was untouched. Small reviewed results are
+`out/first-run-download-action-result-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the GUI queue.
+
 ## First-run queued model choices — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-CLEAR-MODEL-CHOICES` fixes the case where unchecking the final

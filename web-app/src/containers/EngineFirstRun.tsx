@@ -70,6 +70,7 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
   const [flow, setFlow] = useState<FirstRun>()
   const [error, setError] = useState('')
   const [pollError, setPollError] = useState('')
+  const [acceptedDownloadAction, setAcceptedDownloadAction] = useState<'pause' | 'discard' | null>(null)
   const [busy, setBusy] = useState(false)
   const [checked, setChecked] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
@@ -145,6 +146,7 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
         if (!stopped && !pendingAction.current && requestRevision === revision.current) {
           complete = next.step === 'complete'
           setFlow(next); setPollError('')
+          setAcceptedDownloadAction(null)
         }
       } catch (e) { if (!stopped && !pendingAction.current && requestRevision === revision.current) setPollError(String(e)) }
       if (!stopped && !complete) timer = setTimeout(() => void poll(), 2000)
@@ -168,7 +170,7 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
     // Polls update saved choices and recommendations without replacing edits.
   }, [flow])
   const act = async (args: Record<string, unknown>) => {
-    if (!localId || pendingAction.current) return
+    if (!localId || pendingAction.current || (args.action && acceptedDownloadAction)) return
     revision.current++
     pendingAction.current = true
     setBusy(true); setError('')
@@ -177,9 +179,15 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
       if (!active.current) return
       setFlow(next)
       setPollError('')
+      setAcceptedDownloadAction(null)
       if (next.step === 'complete') await refresh().catch(() => undefined)
       else if (args.action) requestAnimationFrame(showCard)
-    } catch (e) { if (active.current) setError(String(e)) } finally {
+    } catch (e) {
+      if (active.current) {
+        if (args.action) setError(String(e))
+        else setPollError(String(e))
+      }
+    } finally {
       revision.current++
       pendingAction.current = false
       if (active.current) setBusy(false)
@@ -203,17 +211,24 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
     }
   }
   const downloadAction = async (id: string, action: 'pause' | 'discard') => {
-    if (!localId || pendingAction.current) return
+    if (!localId || pendingAction.current || acceptedDownloadAction) return
     revision.current++
     pendingAction.current = true
     setBusy(true); setError('')
     try {
       await engineCommand('download_action', { host_id: localId, body: { id, action } })
       if (!active.current) return
-      const next = await engineCommand<FirstRun>('first_run', { host_id: localId })
-      if (!active.current) return
-      setFlow(next)
+      // The Host accepted the mutation, but did not return a new job state.
+      // Keep its receipt until a current read confirms which controls apply.
+      setAcceptedDownloadAction(action)
       setPollError('')
+      try {
+        const next = await engineCommand<FirstRun>('first_run', { host_id: localId })
+        if (!active.current) return
+        setFlow(next)
+        setPollError('')
+        setAcceptedDownloadAction(null)
+      } catch (e) { if (active.current) setPollError(String(e)) }
     } catch (e) { if (active.current) setError(String(e)) } finally {
       revision.current++
       pendingAction.current = false
@@ -252,10 +267,11 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
     <h2 className="font-medium">Set up models on this computer</h2>
     <p className="text-sm text-muted-foreground">Choose the graphics cards and model folder to use, then choose a model. GInfer, the engine that runs your models, measures this hardware and checks that each model can start. Saving these measurements helps future model loads and switches finish faster.</p>
     {resources.error && <FirstRunError message="Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat." details={resources.error} label="GInfer preparation error details" />}
-    {unavailable && <FirstRunError message="GChat could not read or update setup on this computer. Check that GInfer is running, then select Retry local setup." details={unavailable} label="Connection error details" />}
+    {acceptedDownloadAction && <p role="status" className="text-sm">{acceptedDownloadAction === 'pause' ? 'Pause request accepted.' : 'Discard request accepted.'} Checking the current download status…</p>}
+    {unavailable && <FirstRunError message={acceptedDownloadAction && !error ? 'GChat could not read the current download status. Select Retry local setup to check again.' : 'GChat could not read or update setup on this computer. Check that GInfer is running, then select Retry local setup.'} details={unavailable} label="Connection error details" />}
     {!localId && !resources.error && <p role="status" className="text-sm">{!resourcesReady ? 'Preparing GInfer to run models on this computer… GChat is installing and checking its bundled files. This may take a few minutes.' : checked ? 'GInfer could not connect on this computer. Check that a supported NVIDIA graphics card and the GInfer engine are installed. You can also connect to another computer running GInfer.' : 'Starting GInfer on this computer…'}</p>}
     {localId && !flow && !unavailable && <p role="status">Reading saved setup…</p>}
-    {flow?.maintenance_error && <div className="space-y-2"><p role="alert" className="text-sm text-destructive">Setup could not continue. {flow.maintenance_error} Your saved folder and model choices are kept.</p><Button variant="outline" disabled={busy} onClick={() => void act({ action: 'resume' })}>Retry setup</Button></div>}
+    {flow?.maintenance_error && <div className="space-y-2"><p role="alert" className="text-sm text-destructive">Setup could not continue. {flow.maintenance_error} Your saved folder and model choices are kept.</p><Button variant="outline" disabled={busy || !!acceptedDownloadAction} onClick={() => void act({ action: 'resume' })}>Retry setup</Button></div>}
     {flow?.error && <FirstRunError message="Setup could not finish this step. Check the details below, then try the step again. Your saved folder and model choices are kept." details={flow.error} label="Setup error details" />}
     {step === 'gpu' && !manualOpen && <fieldset disabled={busy} className="space-y-3"><legend className="font-medium">Select graphics cards</legend>
       <p className="text-sm">Select the graphics card you want GInfer to use. You can use 1, 2 or 4 cards of the same model together; each combination needs its own saved settings. If you have one card, select it below, then select Use selected graphics cards to continue.</p>
@@ -298,11 +314,11 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
       </div>
     </fieldset>}
     {step === 'downloads' && <div className="space-y-3"><h3 className="font-medium">Downloading models</h3>{flow?.selected_downloads.map(job => <div key={job.id} className="space-y-1"><p>{plainModelName(job.release.name)} · {downloadStatusLabel(job.status)} · {(100 * job.received / Math.max(1, job.release.bytes)).toFixed(1)}%</p><progress className="w-full" aria-label={`${plainModelName(job.release.name)} download`} max={job.release.bytes} value={job.received} /><p className="text-xs text-muted-foreground">{(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s</p>{job.status === 'failed' && job.error && <FirstRunError message="This model download could not finish. Check your internet connection and free space, then select Try again or Choose a different model." details={job.error} label={`${plainModelName(job.release.name)} download error details`} />}
-      {['queued', 'downloading'].includes(job.status) && <div className="space-y-1"><Button variant="outline" disabled={busy} onClick={() => void downloadAction(job.id, 'pause')}>Pause download</Button><p className="text-sm text-muted-foreground">Pausing keeps the partial file so you can resume later.</p></div>}
-      {['paused', 'failed'].includes(job.status) && <div className="space-y-1"><Button variant="outline" disabled={busy} onClick={() => void downloadAction(job.id, 'discard')}>Discard download</Button><p className="text-sm text-muted-foreground">Discarding removes the partial file. You will need to start this download again.</p></div>}
+      {['queued', 'downloading'].includes(job.status) && <div className="space-y-1"><Button variant="outline" disabled={busy || !!acceptedDownloadAction} onClick={() => void downloadAction(job.id, 'pause')}>Pause download</Button><p className="text-sm text-muted-foreground">Pausing keeps the partial file so you can resume later.</p></div>}
+      {['paused', 'failed'].includes(job.status) && <div className="space-y-1"><Button variant="outline" disabled={busy || !!acceptedDownloadAction} onClick={() => void downloadAction(job.id, 'discard')}>Discard download</Button><p className="text-sm text-muted-foreground">Discarding removes the partial file. You will need to start this download again.</p></div>}
     </div>)}<p className="text-sm text-muted-foreground">You can close this window while downloads continue. GInfer checks the downloaded files, then measures the hardware needed by your selected models.</p>{flow?.selected_downloads.some(job => job.status === 'failed')
-      ? <div className="space-y-2"><p className="text-sm">The download could not finish. You can try again or choose a different model.</p><div className="flex gap-2"><Button disabled={busy} onClick={() => void act({ action: 'resume' })}>Try again</Button><Button variant="outline" disabled={busy} onClick={() => void act({ action: 'reselect' })}>Choose a different model</Button></div></div>
-      : <Button variant="outline" disabled={busy} onClick={() => void act({ action: 'resume' })}>Resume downloads</Button>}</div>}
+      ? <div className="space-y-2"><p className="text-sm">The download could not finish. You can try again or choose a different model.</p><div className="flex gap-2"><Button disabled={busy || !!acceptedDownloadAction} onClick={() => void act({ action: 'resume' })}>Try again</Button><Button variant="outline" disabled={busy || !!acceptedDownloadAction} onClick={() => void act({ action: 'reselect' })}>Choose a different model</Button></div></div>
+      : <Button variant="outline" disabled={busy || !!acceptedDownloadAction} onClick={() => void act({ action: 'resume' })}>Resume downloads</Button>}</div>}
     {step === 'storage_review' && <div className="space-y-3"><h3 className="font-medium">Review model locations</h3>
       <p className="text-sm text-muted-foreground">These models are downloaded and their graphics-card settings are ready. Review their current locations and the measured drive speeds before continuing.</p>
       {flow?.storage.required_bytes != null && <p className="text-sm">Selected models: {formatModelBytes(flow.storage.required_bytes)} total.</p>}
