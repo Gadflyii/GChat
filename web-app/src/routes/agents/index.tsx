@@ -963,7 +963,8 @@ function DefinitionEditor({
                   'rounded-xl border p-3 text-left transition hover:bg-accent',
                   draft.kind === kind && 'border-primary bg-primary/5'
                 )}
-                onClick={() =>
+                onClick={() => {
+                  if (kind === draft.kind) return
                   onChange(
                     withKind(
                       {
@@ -985,7 +986,7 @@ function DefinitionEditor({
                       kind
                     )
                   )
-                }
+                }}
               >
                 <KindIcon className="mb-2 size-4 text-primary" />
                 <div className="text-sm font-medium">{meta.label}</div>

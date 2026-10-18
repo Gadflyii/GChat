@@ -1546,6 +1546,81 @@ describe('AgentStudioPage', () => {
     ))
   })
 
+  it('keeps new Goal Loop settings when activating its selected composition again', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    const composition = screen.getByRole('button', { name: /Goal Loop/i })
+    fireEvent.click(composition)
+    fireEvent.change(screen.getByLabelText('Success criteria'), {
+      target: { value: 'The report cites every source.' },
+    })
+    fireEvent.change(screen.getByLabelText('Evaluator instructions'), {
+      target: { value: 'Verify citations against the source files.' },
+    })
+    fireEvent.change(screen.getByLabelText('Maximum cycles'), { target: { value: '5' } })
+
+    composition.focus()
+    await userEvent.setup().keyboard('{Enter}')
+
+    expect(screen.getByLabelText('Success criteria')).toHaveValue('The report cites every source.')
+    expect(screen.getByLabelText('Evaluator instructions')).toHaveValue('Verify citations against the source files.')
+    expect(screen.getByLabelText('Maximum cycles')).toHaveValue(5)
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'goal_loop', maxCycles: 5,
+        successCriteria: 'The report cites every source.',
+        evaluatorInstructions: 'Verify citations against the source files.',
+      })
+    ))
+  })
+
+  it.each(['coordinator', 'workflow'] as const)(
+    'keeps saved %s roles and edited settings when activating its selected composition',
+    async (kind) => {
+      const roles = [
+        { id: 'research', name: 'Research', instructions: 'Gather sources.', skills: [], maxSteps: 9, modelInstanceId: 'qwen', reasoningEffort: null },
+        { id: 'review', name: 'Review', instructions: 'Check sources.', skills: [], maxSteps: 14, modelInstanceId: 'muse', reasoningEffort: null },
+      ]
+      const definition: AgentDefinition = kind === 'coordinator'
+        ? {
+            ...firstAgent, kind, workers: roles, maxParallel: 2,
+            coordinatorInstructions: 'Assign independent research and review.',
+            synthesisInstructions: 'Keep only verified findings.',
+            synthesisModelInstanceId: 'muse', synthesisReasoningEffort: null,
+          }
+        : {
+            ...firstAgent, kind,
+            nodes: roles.map((role) => ({ ...role, workspace: 'shared' })),
+            edges: [{ from: 'research', to: 'review' }],
+          }
+      definitionState.value.definitions = [definition]
+      definitionState.value.save.mockImplementation(async (value) => value)
+      render(<AgentStudioPage />)
+      await screen.findByDisplayValue(firstAgent.name)
+      fireEvent.change(screen.getAllByLabelText('Display name')[1], {
+        target: { value: 'Final review' },
+      })
+      const composition = screen.getByRole('button', {
+        name: kind === 'coordinator' ? /^Coordinator Team/ : /^Workflow/,
+      })
+      composition.focus()
+      await userEvent.setup().keyboard(' ')
+
+      expect(screen.getAllByLabelText('Display name').map((input) => (input as HTMLInputElement).value))
+        .toEqual(['Research', 'Final review'])
+      fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+      const editedRoles = roles.map((role, index) => ({ ...role, name: index === 1 ? 'Final review' : role.name }))
+      await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+        expect.objectContaining(kind === 'coordinator'
+          ? { ...definition, workers: editedRoles }
+          : { ...definition, nodes: editedRoles.map((role) => ({ ...role, workspace: 'shared' })) })
+      ))
+    }
+  )
+
   it('keeps required tool steps empty while editing and saves typed steps before blur', async () => {
     definitionState.value.save.mockImplementation(async (value) => value)
     await renderSavedAgents()

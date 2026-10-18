@@ -22,6 +22,34 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Agent Studio composition reselection — October 18
+
+A private native pass reproduced silent loss of edited Goal Loop success
+criteria when clicking the already selected **Goal Loop** composition tile.
+The `22b69002b` desktop's Agent Studio source matched main `ec58a89b8`.
+The unsaved draft was closed normally; saved definitions and run history stayed
+byte-identical. Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1212/`.
+
+Selecting the current composition now keeps the draft intact. Selecting a
+different composition still initializes that type's settings. The focused
+regressions cover keyboard reselection of edited Goal Loop criteria and limits,
+and saved team/workflow roles, model overrides and workflow dependencies.
+
+Validation: 104 focused tests and workspace lint PASS; one `make verify`
+PASS (3,581 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `18dafd400`.
+Rebuilt private native acceptance PASS: Enter on Goal Loop preserves edited
+criteria, evaluator instructions and cycle limit; Space on Coordinator Team
+preserves two specialists and their parallel limit; clicking Workflow preserves
+both stages, an edited stage name and its dependency. Selecting another type
+still initializes its settings. The candidate screenshot was viewed. Normal
+close at 12:23:45Z kept original definitions and run history byte-identical;
+CPU booking 3277 was returned at 12:24Z. Receipts:
+`/ai/gchat/out/gchat-agent-composition-reselect-20261018/`.
+This qualifies private Linux source-native editing. No save, delete, run,
+inference or Windows acceptance was performed in the native session.
+
 ## Saved Agent Studio deletion — October 18
 
 An isolated native pass reproduced immediate permanent removal of a saved
