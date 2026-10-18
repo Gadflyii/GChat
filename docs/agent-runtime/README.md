@@ -51,37 +51,45 @@ behavior was not checked.
 
 ## Archive OpenCode provisioning — C7, October 18
 
-`GUI-FIRST-USER-OPENCODE-PROVISIONING` is active from main `d31e328d6` on
-`fix/c7-opencode-private-prefix-20261018`, worktree
-`/ai/gchat-worktrees/c7-opencode-private-prefix-20261018`. C3's clean archive
-walk on `72c76c51a` ran `npm install --global opencode-ai` and failed to create
-`/usr/local/lib/node_modules` with EACCES. Its retained S1 receipt is
-`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/badge-native-launch.json`;
-the exact npm log is under that fixture's
-`downloads-home/.npm/_logs/2026-10-18T04_43_51_190Z-debug-0.log`. The donor
-and all C3 files remain read-only.
+`GUI-FIRST-USER-OPENCODE-PROVISIONING` is implemented on
+`fix/c7-opencode-private-prefix-20261018`, source `13125b2ab` from main
+`d31e328d6`. Clean archive startup previously ran a global npm installation and
+failed with EACCES creating `/usr/local/lib/node_modules`. C3's original npm
+receipt and donor remain read-only. A private native baseline reproduced the
+same failure using a denied global prefix inside disposable app data.
 
-Deliverable: clean archive startup installs OpenCode under the selected GChat
-data folder, without global npm writes. One resolver chooses custom, managed,
+OpenCode now installs with `--global=false`, a prefix at
+`<selected-data>/code/opencode/runtime` and cache at
+`<selected-data>/code/opencode/npm-cache`. One resolver chooses custom, managed,
 then native executables for readiness, embedded/external launch, CLI and offline
-session deletion. Managed updates use that same private prefix/cache; external
-updates show the existing installation's own command and offer explicit use of
-a managed copy. Missing Node/npm must explain how to install Node.js LTS, with
-no automatic system installation. Arch signed this design at 04:58:46Z.
+session deletion. Existing sessions retain their executable. Managed updates
+use the same prefix; external updates show the installation's own command and
+offer explicit **Use managed copy**. Missing or broken Node/npm asks the user to
+install Node.js LTS. GChat does not install system tools for OpenCode. Arch
+[signed this design](../decisions/2026-10-18-install-managed-opencode-in-the-gchat-data-folder.md)
+at 04:58:46Z.
 
-Acceptance: focused resolver/install/update/consumer regressions, Rust check and
-clippy, ONE `make verify`, and a clean private native archive replay with
-screenshots in this source branch. Preserve existing native/custom reuse,
-proxy behavior, selected configuration root, HOME and user work. No model/GPU,
-Windows account, host install, global npm installation or C3 donor mutation.
-The baseline private archive-style startup reproduced the same npm EACCES at
-05:11Z. Its global prefix was redirected to a denied directory inside the
-disposable app data folder, protecting the host while preserving the failing
-global command. Implementation and consumer regressions are ready; the next
-action is focused verification, the single full gate, and native candidate
-acceptance. S1 caches/builds are reused at
-`/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018`; the separate
-baseline HOME/stage are disposable after evidence capture. No GPU is used.
+Frozen source passed 39 focused frontend and 32 focused Rust tests, Rust check
+and strict Clippy. The single `make verify` passed at 05:24:32Z: 3,367 app,
+121 extension and 1,241 Rust tests passed, with six app skips and 28 Rust
+ignores; lint, types, quality guards and coverage floors passed. Frontend and
+desktop builds passed. CLI-only check/Clippy explicitly select the library and
+`gchat-cli`; the desktop builds separately with normal features.
+
+The clean native Linux replay automatically installed real OpenCode 1.19.3
+inside its private data folder while OpenCode was absent from the launch PATH.
+The Code page recognized the installed program and asked for a model to be
+selected. The denied global prefix stayed empty. Screenshots and concise
+receipts are in the [same-branch evidence](../../out/c7-opencode-private-prefix-20261018/result.json).
+This qualifies the Linux debug archive-style provisioning path. Model-backed
+Code sessions, installer packaging and Windows are outside this acceptance;
+no model or GPU was used and no installed user profile was touched.
+
+C7 retains this source worktree and concise evidence. All private fixture
+processes stopped and CPUs were returned at 05:31Z. The 25-GiB S1 build, cache
+and profile root `/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018`
+was removed at 05:33Z after checking for live users and mounts. C3's fixture and
+the retained ed68 resource donor remain unchanged.
 
 ## First-use duplicate agent names — October 17
 
