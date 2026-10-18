@@ -1,5 +1,97 @@
 # GChat installer refresh
 
+## Standalone Linux CLI novice archive — first-run blocked October 18
+
+The current-source standalone archive is **assembled and integrity-checked** on
+S1 (`ron@192.168.1.109`, `AIS-2-8592-L01`):
+
+```text
+/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018/distribution/ginfer-bundle-0.1.0-linux-x86_64.tar.gz
+```
+
+It is **622,160,226 bytes**, SHA256
+`ae903f3f4c397e132a87c8980fef0d313d4124f7d0f447e0dc08d7fe7e6c22c5`.
+Host and bundled `setup.py` are from main
+`36c278f285d1a63f8df9cf813f13d34e1e02cf68`; their inputs are unchanged from
+`548d73ed8`. The separately retained accepted Engine is clean
+`e2282c336d114b7dcebdfa1a179bfb342731a8b8`, **SM120a only**, with its existing
+CUDA 13.3/Linux runtime manifest. This is an explicit two-component assembly,
+not an Engine rebuild or a multi-architecture release.
+
+The Host build/package job passed at **04:05:09Z** using the retained offline
+image, a private copy of dependency/release caches, eight socket-1 CPUs, nice
+10 and the shared compile lock. Cargo used the unmodified release profile and
+finished its current-source build in 1m27s. The old `ed68c7443` Host was only a
+read-only cache donor. The existing `scripts/package-ginfer-host.py` then
+packaged the new Host, current Linux setup/installer and documentation,
+retained runtime and qualified Linux profile catalog. All **178 archive
+members** match their selected inputs, including every one of the runtime's
+171 files and the unchanged values of all 175 catalog profiles. The Host's
+noninteractive `--help` and dependency check passed; it requires glibc 2.39 and
+system OpenSSL 3. No `make verify` ran for this source-unchanged packaging task.
+
+The CPU-only novice walk completed at **04:13:52Z** in a fresh private S1
+HOME/XDG, DBus session and unlocked test keyring, with recorded interactive
+inputs/output. It used the archive's documented setup path and default locations.
+The literal documented `python3.11 setup.py` first failed because S1 has no
+`python3.11` executable (exit 127); the available `python3` is 3.12.3. Continuing
+with `python3 setup.py` copied the runtime, created the launcher and started a
+private Host. Hardware preparation stayed **idle**, with no selected GPU and no
+calibration. Setup then failed (exit 1) before the GPU-choice prompt:
+
+```text
+GChat linux engine runtime set is unavailable: No such file or directory (os error 2)
+```
+
+The installed no-argument `ginfer` menu failed with the same error (exit 1).
+This is a reproduced **GChat Host installed-launcher/runtime ownership defect**,
+not an Engine inference or no-argument-dispatch defect. The combined standalone
+archive deliberately installs one `ginfer-linux-runtime-v1` image in the selected
+runtime directory. `scripts/setup-ginfer-linux.py` writes a `desktop` launcher
+configuration and omits `--runtime-set`, as the Host's prepare-hardware help
+requires for a single-image install. However,
+`InstalledConfiguration::connect_resolving` in
+`src-tauri/ginfer-host/src/launcher.rs` calls `desktop_runtimes(provider)` before
+resolving the already registered owner. That loader requires GChat's separate
+`provider/linux/runtime-set.json` and all four architecture images. Those files
+are not part of this standalone package. The initial prepare-hardware path had
+already registered the correct single-image owner with an empty runtime map.
+
+Installed CLI, hardware-profile, CPU-phase-profile, server, Host, first-run and
+prepare-hardware help all returned 0; server version matched retained clean
+`e2282c336`. A nonexistent model path returned its precise open-path error and
+exit 1 before device setup. A separate private Host invocation using the public
+`--nvidia-smi` option with a nonexistent executable returned a clear inventory
+error and exit 1. This checks unavailable inventory tooling, **not** a physical
+missing-driver/GPU installation. The passive CUDA-order command rejects a set
+`CUDA_VISIBLE_DEVICES` mask by contract (exit 2); that is not missing-GPU
+qualification. No profile measurement, model load or Engine inference ran.
+
+Next: repair explicit single-image versus desktop-runtime-set ownership in the
+GChat Host configuration/setup boundary on its own fix branch, then repeat the
+installed first-run acceptance path with a freshly isolated installation.
+Do not fabricate a four-image runtime set or change GInfer's delegating CLI to
+mask the error. The Python executable wording is a separate observed installer
+documentation issue. GPU selection, calibration, storage/model setup and a
+successful novice launch remain unaccepted. No source fix or verification rerun
+was performed in this evidence branch.
+
+Codex 4 owns branch `test/c4-cli-first-run-20261018` and worktree
+`/ai/gchat-worktrees/c4-cli-first-run-20261018`. Concise local receipts are in
+`out/c4-cli-first-run-20261018/` (`build-command.json`, `build.log`,
+`archive-result.json`, member list and Host help/dependency results), with the
+same terminal and archive receipts in the owned S1 root above. The complete
+novice transcript and concise `walk-result.json` are in that local folder's
+`novice/` child; private Host state/credentials stay outside Git. Its `gchat`,
+`cargo-home`, `native-target`, `bin`, `distribution` and isolated `novice` install
+retain **15.61 GB allocated** pending the observed fix; the exact archive and
+tested Host build remain the candidate. No other session's donor, accepted runtime
+or model was changed. The build wrapper/container are terminal; booking 2955 was
+canceled and CPUs 120–127 returned at 04:06Z. The private novice Host, keyring,
+DBus and PTY are also terminal; exact owned PIDs were checked after normal
+SIGTERM shutdown. Booking 2963 was canceled and **CPUs 120–127 returned at
+04:14Z**. Saved private state has no selected GPUs, models or startup profiles.
+
 ## Windows RC refresh — release installer delivered, October 18
 
 Bubbs's post-merge refresh is **PASS**. The unsigned Windows release installer
