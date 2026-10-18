@@ -1,5 +1,19 @@
 # Gbot design
 
+## Refreshing accounts after Microsoft sign-in — Gchat 2
+
+`GBOT-M365-CONNECTED-ACCOUNT-REFRESH`, based on main `42759aafd`, keeps
+the connected sign-in result when the following account-list read fails. The
+message names the available Refresh Microsoft accounts action, with technical
+diagnostics in initially closed Details, instead of referring to the sign-in
+status check that is no longer shown.
+
+The rendered regression covers Error and native-string failures, explicit
+account refresh without replaying sign-in, and deliberate account selection
+before Cloud PC discovery becomes available. Validation is pending the parent’s
+S1 gates. This is source and mocked-connector scope; no real sign-in, account,
+browser consent or native acceptance is claimed.
+
 ## Recovering a failed Microsoft sign-in result — Gchat 2
 
 `GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names
