@@ -35,6 +35,16 @@ its own skill. A successful send clears the sending conversation's selected
 skill even when its composer has closed, while a different selection or another
 conversation's draft stays intact. Failed sends retain the skill for retry.
 
+Source `0deec944b` passes 75 focused tests, lint and one `make verify`
+(3,712 app, 127 extension and 1,309 Rust tests; six coverage floors), plus
+frontend and native builds. The rebuilt private Linux desktop restores `/pdf`
+and its text after New Chat and Agent Studio navigation. Backspace removes the
+selection, which stays removed on return; starting New Chat clears its own text
+and skill. Normal close completes cleanup, with saved chat and agent files
+unchanged. Pending attachment-send completion after switching or unmounting is
+covered by rendered regressions; the native pass starts no model or inference.
+Receipts: `/ai/gchat/out/gchat-chat-skill-draft-20261018/`.
+
 ## Finding a newly saved agent — October 18
 
 A private Linux native pass saved `Zebraweeklyplanner` in a long Agent Studio
