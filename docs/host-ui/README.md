@@ -275,6 +275,38 @@ service-computer radios; connected Host, signed-in Workspace and disabled
 controls remain unqualified, as does Windows.
 No model, setup, sign-in, Ensure, save or service-computer confirmation was run.
 Evidence: [native-control result](../../out/gchat2-checkbox-native-20261018/result.json).
+## Startup-check result through native polling — C3, closed October 18
+
+`GCHAT-STARTUP-QUOTE-POLL-REVISION-20261017` passes its remaining native Linux
+acceptance. The source fix `a08e2b053` removes ordinary snapshot revision from
+quote identity while retaining the selected Host, boot, artifact, devices and
+launch settings. The retained release `ed68c7443` has the same quote identity
+and lifecycle logic, verified by the affected source diff; it was used read-only.
+
+In the isolated native AppRun on S1 `AIS-2-8592-L01`, real xdotool input selected
+the actual installed Muse groupwise-Q4 TP1 artifact and invoked **Check startup
+settings** once at its full 131,072-token context. The successful result remained
+visible for 25.236 seconds through ordinary five-second polling, including Host
+revision 7 → 8. Four observations retain identical launch inputs and result text,
+unchanged boot ID and zero loaded instances. The real Engine quote reported
+83,446,686,976 bytes GPU KV per instance. The inspector only observed state.
+
+The one completed artifact-scoped native hardware profile passed in 124.508
+seconds on S1 GPU1, Engine `e2282c336`; no model server or inference was started.
+Existing source evidence remains valid: 30 focused cases and lint passed, and
+one `make verify` passed (2,740 frontend, 119 extension, 1,073 native tests; all
+six critical coverage floors). This evidence-only closure uses `git diff --check`.
+Results: `out/c3-startup-quote-poll-native-20261018/{result.json,summary.md}`;
+source gates: `out/c3-startup-quote-poll-revision-20261017/result.json`.
+
+Owned source record is `/ai/gchat-worktrees/c3-startup-quote-poll-native-20261018`,
+branch `test/c3-startup-quote-poll-native-20261018`, base `9d0a61124`.
+The private S1 app, Host, display and keyring stopped; its 3.3GiB private SSD
+root was removed, preserving the retained AppDir, runtime and model donors.
+GPU1 had no compute process and returned to its 10MiB baseline. GPU1/CPUs8–15
+returned02:08Z. Only result JSON and this short summary are retained locally.
+The unchanged Linux startup-check behavior is qualified; Windows is outside
+this acceptance. Next action: coordinator merge of this closure record.
 
 ## Confirmation replacement focus — October 18
 
