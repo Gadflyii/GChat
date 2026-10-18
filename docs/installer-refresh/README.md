@@ -1,5 +1,48 @@
 # GChat installer refresh
 
+## Native Windows Flash qualification — Codex 7, October 18
+
+`WINDOWS-FLASH-CPU-QUALIFICATION` remains **BLOCKED before launch**.
+After C6 returned local5090, fresh native admission at 10:56Z measured
+77,420,777,472 bytes available. The retained 64 GiB Flash planning estimate
+would leave 8,701,300,736 bytes, below the unchanged 17,131,606,528-byte
+emergency floor. No Host, profiler or model started; no model was copied.
+The [preflight receipt](windows-flash-preflight-20261018.json) records this
+unmet admission condition. Booking 1453 and both compile guards were
+returned at 10:56Z; Gchat2 and C4 were notified. No limits were reduced.
+
+The deliverable remains a normal private bundled Host/Engine Flash load
+with native MSVC CPU experts, exact comparison against the retained Linux
+C1 token IDs, and normal session-bound shutdown. Reuse Engine
+`b76ce57a3cc4823f127a1ce718da454ef1f3510f` and Flash Next pure 2-bit, SHA256
+`8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`,
+70,247,086,080 bytes. The protected source is
+`/ai/kernel-agent/run_workdir/local/c4-5090-settled-20261015/models/flash-pure-2bit.ginfer`.
+The matching Linux evidence under
+`/ai/kernel-agent/run_workdir/local/claude-perf-5090-20261017/current-b76-8a73/base/`
+supplies four 500-token lists; do not repeat it. Match TP1, context 8,181,
+capacity eight, INT8 KV, MTP fixed three, greedy, LFU on and 10 GiB host
+headroom. The existing benchmark enforces greedy sampling. C1 uses 2,048
+prompt tokens, 500 outputs, one warmup and one measured round. Report any
+mismatch without retry. This does not qualify SM86/SM89 or claim speed.
+
+The next action requires a native fixture with adequate available RAM.
+The 64 GiB estimate is not a measured bound or admission guarantee. Keep
+the retained Job guard's lease, emergency backstop and complete runtime
+validation; replace its Qwen-specific preflight with this Flash estimate.
+Normal instance creation supplies artifact-scoped Ensure; do not call the
+retained Host's explicit AllFormats preparation path. No elapsed model-load
+cutoff is authorized.
+
+Owned source/evidence worktree:
+`/ai/gchat-worktrees/c7-windows-flash-20261018`. The private native root
+`E:\gchat7-windows-flash-20261018` retains only its small preflight receipt;
+no package/model payload was created. The extraction command used a donor
+path missing its `packages` component and failed before extraction; the
+verified donor is
+`E:\gchat3-windows-multiarch-20261017\accepted\packages\GChat_2.0.42_x64_en-US.msi`.
+Retained donor packages, runtime files and protected model remain untouched.
+
 ## Installed selected-artifact preparation — Gchat 3, October 18
 
 `GCHAT-PREPARE-SELECTED-ARTIFACT` **merged as `d0e107da6`** from
