@@ -143,7 +143,12 @@ copies explicitly selected executables, FFmpeg and CUDA runtime libraries and
 sets relative library paths on the copies with a build-time `patchelf`. It leaves
 build products and installed dependencies untouched. The manifest records remaining
 system-library dependencies and the build's glibc version. The NVIDIA driver is
-never bundled. Successful local relocation does not establish support for an older
+never bundled. Setup checks required NVIDIA driver libraries before installing
+files. If a library is unavailable, install or repair the system driver compatible
+with the archive's CUDA runtime, confirm `nvidia-smi` works, and run setup again.
+Containers need GPU and driver access through the NVIDIA Container Toolkit.
+This check does not qualify driver-version or live-GPU compatibility.
+Successful local relocation does not establish support for an older
 distribution ABI; release builds still need the supported distribution baseline.
 
 ## Linux host

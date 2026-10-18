@@ -1,0 +1,45 @@
+{
+  "status": "PASS",
+  "archive": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/distribution/ginfer-bundle-0.1.0-linux-x86_64.tar.gz",
+  "archive_root": "ginfer-bundle-0.1.0-linux-x86_64",
+  "archive_bytes": 622161059,
+  "archive_sha256": "a0e9c930493b969b2c4e06da74f3de7ff94f5a7615fd1b092166709eaa2212a4",
+  "members": 178,
+  "payload_bytes": 865447862,
+  "selected_members": {
+    "bin/ginfer-host": {
+      "bytes": 5986656,
+      "sha256": "fcb34ca5cbc7869968f14d6d82e19ceb33761b3724cdbed3747257fa1c0d3dd6"
+    },
+    "README.md": {
+      "bytes": 32167,
+      "sha256": "9b9a516a8c4cd772adf760fc67430b16f91e701eac604b978dcb9ee3bef59d68"
+    },
+    "runtime/runtime-manifest.json": {
+      "bytes": 30561,
+      "sha256": "8aff34a6c1a2c77022ee5540674f7b45da03b6b5c7df107e5c9ba040fd41e184"
+    },
+    "setup.py": {
+      "bytes": 9527,
+      "sha256": "fcf0fa0e3a1e0db5ad2093e1ebeaf2dd8cb1c1b05f5be34f95ba2ad904df51e0"
+    },
+    "bin/launch-profiles.json": {
+      "bytes": 366501,
+      "sha256": "3532d3341fc140aaa4b27d10014eefdb6ac2b940a2517bc8a43f7c1bcb746900"
+    }
+  },
+  "profile_count": 175,
+  "runtime_source_commit": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
+  "cuda_toolkit": "13.3",
+  "driver_libraries": [
+    "libcuda.so.1",
+    "libnvidia-ml.so.1"
+  ],
+  "package_start_utc": "2026-10-18T04:55:49Z",
+  "package_end_utc": "2026-10-18T04:57:02Z",
+  "receipt_end_utc": "2026-10-18T04:57:50.612682+00:00",
+  "native_acceptance": "pending parent",
+  "inputs_reused": true,
+  "gpu_used": false,
+  "metadata_correction": "First receipt extraction used source_revision; actual existing manifest field is source_commit. Corrected metadata only; packager and tests ran once."
+}

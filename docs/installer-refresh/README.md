@@ -1,5 +1,64 @@
 # GChat installer refresh
 
+## Linux missing-driver guidance — Codex 4, October 18
+
+`fix/c4-cli-driver-guidance-20261018` implements
+`CLI-INSTALL-MISSING-DRIVER-GUIDANCE`. The novice walk's installed runtime failed
+at the ELF loader with exit 127 when `libnvidia-ml.so.1` was unavailable in a
+driver-free container; evidence is `test/c4-cli-first-run-20261018` at
+`16628ae92`, `out/c4-cli-first-run-20261018/novice/error-cases/error-result.json`.
+
+Linux setup now loads only `libcuda.so.1` and `libnvidia-ml.so.1` declared in the
+selected runtime manifest, after complete payload integrity checks and before
+any installation write. Failure names the library and manifest CUDA version,
+explains system-driver repair and `nvidia-smi`, and gives NVIDIA Container
+Toolkit guidance. Preview remains read-only. Driver installation, Engine
+behavior and runtime ownership are unchanged. Library loading does not qualify
+driver-version or live-GPU compatibility. Arch signed this scope at 04:43:46Z.
+
+Focused setup tests passed all four cases, including both missing-library CLI
+failures with existing registration preserved, successful Host handoff, and
+preview/integrity ordering. Package tests passed five cases; five Windows
+PowerShell cases were skipped on Linux. The **single `make verify` passed at
+04:55:01Z**: 3,478 frontend tests and 1,223 Rust tests, with six frontend skips
+and 28 Rust ignores. Lint had five existing warnings and no errors. Source
+mtimes were refreshed before copied cache reuse; the changed tests executed.
+Concise evidence is in [the result](../../out/c4-cli-driver-guidance-20261018/verification-result.json),
+[verification summary](../../out/c4-cli-driver-guidance-20261018/verify-summary.txt)
+and [command receipt](../../out/c4-cli-driver-guidance-20261018/command.json).
+
+The existing packager completed at 04:57:02Z using the accepted original Host
+`36c278f285d1a63f8df9cf813f13d34e1e02cf68`, e2282c336 SM120a runtime and
+175-profile catalog. This preserves the original Host/configuration pairing;
+the newer launcher Host requiring `runtime_set` was not substituted. No Host or
+Engine release rebuild occurred. The refreshed archive is:
+
+```text
+/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/distribution/ginfer-bundle-0.1.0-linux-x86_64.tar.gz
+```
+
+It is 622,161,059 bytes, SHA256
+`a0e9c930493b969b2c4e06da74f3de7ff94f5a7615fd1b092166709eaa2212a4`, with
+member root `ginfer-bundle-0.1.0-linux-x86_64`. Its setup, original Host, runtime
+manifest and guide match their selected inputs; all 178 members and 175
+profiles are accounted for in [the archive receipt](../../out/c4-cli-driver-guidance-20261018/archive-result.json).
+The first metadata extraction used `source_revision`; the manifest's actual
+field is `source_commit`. That receipt-only correction repeated no gate or
+packaging. Next: the parent's private driver-free refusal with zero writes and
+normal driver-present `--install --no-wizard` acceptance. Native cases remain
+pending; no GPU, model load or profiling belongs to this fix.
+
+Owned inventory: local source worktree
+`/ai/gchat-worktrees/c4-cli-driver-guidance-20261018`; S1 source, archive and
+receipts under `/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018`.
+Booking 2995 was canceled and CPUs112–119 **returned at 04:57:55Z**. Verification
+used nice10, eight Cargo jobs and the shared socket1 compile lock in pinned
+bridge image `sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14`.
+The owned root retains 24,664,739,840 allocated bytes at handoff, including
+private copied Rust/frontend caches pending scoped cleanup after native
+acceptance. Donors, source, archive and concise receipts are preserved. No GPU
+or model inputs were copied.
+
 ## Linux archive install command — Python 3.11 or newer, October 18
 
 The novice archive walk on S1 found that the delivered guide's literal

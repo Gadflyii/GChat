@@ -2,6 +2,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import runpy
 import shutil
 import tempfile
 import unittest
@@ -14,6 +15,88 @@ spec.loader.exec_module(setup)
 
 
 class LinuxSetup(unittest.TestCase):
+    def driver_bundle(self, root):
+        bundle = root / 'bundle'
+        files = []
+        for name in ('runtime/bin/ginfer', 'runtime/bin/ginfer-serve', 'bin/ginfer-host'):
+            member = bundle / name
+            member.parent.mkdir(parents=True, exist_ok=True)
+            member.write_bytes(b'fixture payload; never executed')
+            if name.startswith('runtime/'):
+                files.append({'path': name.removeprefix('runtime/'), 'bytes': member.stat().st_size,
+                              'sha256': hashlib.sha256(member.read_bytes()).hexdigest()})
+        (bundle / 'runtime/runtime-manifest.json').write_text(json.dumps({
+            'schema': 'ginfer-linux-runtime-v1', 'platform': 'linux-x64', 'files': files,
+            'cuda_toolkit': '13.3',
+            'system_dependencies': ['libc.so.6', 'libcuda.so.1', 'libnvidia-ml.so.1']}))
+        shutil.copy2(SCRIPT, bundle / 'setup.py')
+        return bundle
+
+    def test_missing_driver_cli_preserves_installation_and_existing_registration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = self.driver_bundle(root)
+            target, provider, config, links = [root / name for name in ('install', 'provider', 'config', 'links')]
+            locator = config / 'ginfer/local-host.json'
+            locator.parent.mkdir(parents=True)
+            record = b'{"schema":"ginfer-local-host-v1","owner":{"mode":"service"}}'
+            locator.write_bytes(record)
+            for missing in ('libcuda.so.1', 'libnvidia-ml.so.1'):
+                with self.subTest(library=missing):
+                    def load(library):
+                        if library == missing:
+                            raise OSError('cannot open shared object file')
+                        return mock.Mock()
+
+                    with mock.patch.object(setup.ctypes, 'CDLL', side_effect=load) as library, \
+                            mock.patch.object(setup.subprocess, 'run') as run, \
+                            mock.patch.dict(setup.os.environ, {'XDG_CONFIG_HOME': str(config)}), \
+                            mock.patch.object(setup.sys, 'argv', [str(bundle / 'setup.py'), '--install',
+                                '--no-wizard', '--install-directory', str(target),
+                                '--provider-directory', str(provider), '--link-directory', str(links)]):
+                        with self.assertRaises(SystemExit) as stopped:
+                            runpy.run_path(str(bundle / 'setup.py'), run_name='__main__')
+                    message = str(stopped.exception)
+                    for expected in ('Error:', missing, 'system NVIDIA driver', 'CUDA 13.3',
+                                     'nvidia-smi', 'NVIDIA Container Toolkit', 'No installation files were written'):
+                        self.assertIn(expected, message)
+                    run.assert_not_called()
+                    self.assertEqual(library.call_args.args, (missing,))
+                    self.assertFalse(target.exists())
+                    self.assertFalse(provider.exists())
+                    self.assertFalse(links.exists())
+                    self.assertEqual(locator.read_bytes(), record)
+                    self.assertEqual(set(config.rglob('*')), {locator.parent, locator})
+
+    def test_declared_driver_libraries_allow_normal_host_handoff(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = self.driver_bundle(root)
+            with mock.patch.object(setup.ctypes, 'CDLL') as library, \
+                    mock.patch.object(setup.subprocess, 'run', return_value=mock.Mock(
+                        stdout='{"status":"running","gpu_uuids":[]}')) as run:
+                setup.install(bundle, root / 'install', root / 'provider', root / 'config', root / 'links', True)
+            self.assertEqual(library.call_args_list, [mock.call('libcuda.so.1'), mock.call('libnvidia-ml.so.1')])
+            self.assertEqual(run.call_count, 1)
+            self.assertTrue((root / 'install/bin/ginfer').is_file())
+            self.assertEqual((root / 'links/ginfer').resolve(), root / 'install/bin/ginfer')
+
+    def test_preview_and_corrupt_payload_do_not_load_driver_libraries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            bundle = self.driver_bundle(root)
+            paths = [root / name for name in ('install', 'provider', 'config', 'links')]
+            with mock.patch.object(setup.ctypes, 'CDLL') as library, \
+                    mock.patch.object(setup.subprocess, 'run') as run:
+                setup.install(bundle, *paths)
+                (bundle / 'runtime/bin/ginfer').write_bytes(b'corrupted')
+                with self.assertRaisesRegex(ValueError, 'integrity mismatch'):
+                    setup.install(bundle, *paths, apply=True)
+            library.assert_not_called()
+            run.assert_not_called()
+            for path in paths:
+                self.assertFalse(path.exists())
+
     def test_install_reuses_storage_and_rejects_corruption_and_overwrite(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
