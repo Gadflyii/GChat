@@ -6453,12 +6453,17 @@ source is frozen GChat770f3c03d `engine_host.rs:624–634` and
 and `api_impl.h:97–99`. Route the
 Engine/Host quote contract to Bubbs; selection/catalog-only authority does not
 cover changing memory admission or bypassing it. At20:37 UTC Bubbs assigned
-`QUOTE-ADMISSION-EXACT-VRAM` to Codex1: correct the Engine's mandatory graph
-allowance for Qwen and Muse, then C5 retries the laptop Automatic Qwen load
-once the accepted correction lands. Until that source/build handoff, no retry
-or input substitution is authorized. Acceptance includes one corrected real
-Automatic load reaching Ready, followed by the remaining first-use C1/C4
-natural gate.
+`QUOTE-ADMISSION-EXACT-VRAM` to Codex1. Arch's superseding 20:45:46 UTC directive
+requires no catalog field: the first solo dense AUTO load delegates live graph
+sizing to the Engine when the quote is unknown, then the existing Ready receipt
+prices the second same-package launch. Gchat3 owns the Host integration.
+
+C5 app acceptance requires the first Automatic load reaching Ready and a second
+same-package launch using that saved receipt, followed by the remaining 600s C1
+and 600s C4 natural gates, zero serving HTTP 4xx/5xx and no swap. Zero-allowance
+source `9ee3e4c7f` remains unbuilt and unaccepted; no app retry is authorized
+before the accepted Engine/Host source/build handoff. Preserve the frozen app,
+catalog, artifact and settings through that handoff.
 
 The rejection handoff is the two linked laptop JSON files above. Exact app
 and bundled Host source is
