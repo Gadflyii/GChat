@@ -1,5 +1,90 @@
 # GChat installer refresh
 
+## Windows consumer launch profiles — Gchat 3, October 18
+
+`WINDOWS-CONSUMER-LAUNCH-PROFILES` is in preparation. Qualify Qwen 27B
+2-bit mix `483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`
+and Muse 30B 2-bit mix
+`9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c`
+natively on RTX 5090, RTX 4090 and RTX 3080 Ti Laptop, then mirror the
+Arch-signed Windows entries into the launch catalogs. Flash remains excluded
+because of the Windows RAM hardware limit.
+
+Acceptance is GPU-selected packaged Host/runtime dispatch, admitted Windows
+bounds starting from the signed Linux bounds, C1/C4/C8 requests and a short
+natural run, exact generated IDs against the same-card Linux reference,
+300 MiB saved reserve and measured minimum free memory at least that reserve.
+Keep the Linux evidence tiers (`screened-startup` for Qwen,
+`calculated-startup-smoke` for Muse); a capacity gap is not a passing profile.
+Arch requires the Engine to include `32e950b93` and `07c62e1f4`, with its
+revision named in every entry, and Codex 1's residency probe once natively on
+the laptop before its Windows entries. Stop and report any cross-platform
+seeded-ID mismatch before signing.
+
+Owner branch: `feat/gchat3-windows-consumer-launch-profiles-20261018`,
+worktree `/ai/gchat-worktrees/gchat3-windows-consumer-launch-profiles-20261018`,
+base GChat `7bdc60bcf`. Reuse Codex 4's immutable Release Engine `6b85ecf77`
+and packaged Host after packaging booking 1489 returns. The archives are
+`E:\gchat4-windows-rc-250df804a-20261018\engine\source\out\windows\ginfer-windows-x64-sm{86,89,120a}.zip`;
+the unpacked donors are under the same root at `engine\stage-sm{86,89,120a}`.
+Read-copy permission starts after that booking's actual terminal. At 18:41Z
+the CLI had passed and the Host was compiling; continuation 1489 runs through
+19:19Z with an earlier actual return possible. No donor read-copy has started.
+Codex 5 returned both laptop booking408 and Ada booking776 at 18:48Z.
+Ada's C1 gate and the laptop's corrected quotes, Qwen Download and paired
+naturals remain queued; fresh per-host clearance is required before native work.
+
+The signed Linux controls are the `72153af01` auto-arena packet in
+`/ai/kernel-agent/run_workdir/consumer/c5-auto-arena-qualification-20261018/ginfer/docs/consumer-launch-profiles/README.md`.
+At C8 the starting bounds are laptop Qwen 75,776 tokens / automatic arena,
+laptop Muse 8,192 / explicit 1,593,835,520 bytes, Ada Qwen 130,048 /
+automatic arena, and Ada Muse 131,072 / explicit 9,091,153,920 bytes.
+These are starting controls, not Windows qualification. Standard comparisons
+use the matching saved requests at context 8,181, DFlash fixed seven draft
+tokens, INT8 KV, Text, TP1 and 300 MiB headroom; read the exact per-entry
+command before execution. The retained 5090 Linux references admit 131,072 /
+C8 / INT8 / fixed seven draft tokens / 300 MiB: Qwen uses automatic arena on
+`aa1c48016`; Muse uses explicit 15,189,450,752 bytes and prefill 1,024 on
+`eb777ab95`. Those older runs establish same-card Linux controls, not
+qualification of `6b85ecf77`. Their requests, standard responses and natural
+identity JSONL are read-copy granted under
+`/mnt/e/ginfer-c4-consumer-launch-profiles-20261018/results/` at the next
+quiet return. The current Linux authority is
+`/ai/ginfer-worktrees/c4-quote-capacity-result-20261018/docs/consumer-launch-profiles/rtx5090.md`.
+
+Arch approved a **short natural** of 60 seconds at C1 and 60 seconds at C4;
+it is not the 600-second-per-phase soak. Use the existing attached natural
+driver, merged as `3632a24ac`, and an optional native identity-JSONL input. The packaged Host proves
+runtime dispatch and the standard requests. The supplemental direct native
+Engine natural run records request identity and tokens with the same admitted
+settings, under the retained private Job guard. The existing
+`--exit-on-stdin-close` route supplies normal direct Engine shutdown: hold its
+redirected stdin writer open through response drain, then close it and wait
+for normal exit and an empty Job. Complete identity capture is
+required; a short phase with insufficient repeated seeds is not itself a
+failure. Compare saved requests and IDs against the same-card Linux control;
+stop on any actual mismatch. No Host identity-logging feature is needed.
+
+The prepared operation bindings are in
+`out/windows-consumer-launch-profiles-20261018/native-binding-note.md`.
+The coordinator checked the existing API receipts and normal stdin-close route;
+effective standard commands still need their final package path and settings
+checked against the saved controls before execution.
+
+Next unresolved action: bind the existing native Host/Job guard and same-card
+Linux controls to the Release runtime, verify policy ancestry and hardware,
+then book each available native test slot. No qualification launch or model
+copy has started. Codex 6 granted read-only use after 1489 of the immutable
+Muse artifact at
+`E:\ai\tmp-c6-muse-int-batch-invariance-20261018\artifacts\muse_glimmer_30b_smol_df2.ginfer`
+(13,838,508,544 bytes; exact package hash above). Codex 5 has additional
+Ada C1 and laptop corrected-quote/Qwen first-use work queued after the current
+naturals, so fresh per-host clearance is required after packaging returns.
+Native installs on Ada/laptop are authorized; this PC uses
+an owned private folder and never Ron's installed app. No signing, publishing,
+Windows settings, elevation, Engine changes or new runner is authorized.
+
+
 ## Current Linux RC refresh — Codex 3, October 18
 
 `GCHAT-LINUX-RC-PACKAGES` is **PASS**, transferred from Gchat 3 by
