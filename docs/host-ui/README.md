@@ -35,9 +35,27 @@ still adopts files, and the existing single-model lookup/load path is unchanged.
 Direct service, startup and extension regressions now cover these boundaries,
 including read rejection/retry and a legitimately empty registered inventory.
 The Settings external-reference case also preserves its original-file promise
-through dialog removal and read-only recovery. Next: run the focused regressions,
-lint and one `make verify` on this frozen candidate in the independent S1 SSD
-fixture. No native resource hold exists.
+through dialog removal and read-only recovery. Frozen source `e8bed0757` passed
+**103 focused app tests** across five files, **34 focused extension tests**, and
+lint with zero errors and five existing unrelated warnings. Exactly one
+`make verify` passed at **20:54:06Z**: **3,816 app tests / six skipped, 130
+extension tests, 65 Node contract tests and 1,318 native tests / 28 ignored**
+across 23 native summaries, all six critical coverage floors, typecheck and
+quality guards. The coordinator directly reviewed raw stage results and the
+exited-zero container, plus unchanged before/after bindings for 15 source/test
+files, 35 dependencies and eleven catalogs / 48 profiles. These are source
+and Linux gate results; installed-app and native Windows acceptance remain
+separate.
+
+The independent S1 SSD fixture used booking3552 on CPU88–95; those CPUs returned
+**20:57Z** and the booking was canceled. The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-c7-models-delete-refresh-recovery-20261018`
+and its sole exited candidate container were retired at **21:00:24Z**, removing
+**28,879,998,976 allocated fixture bytes** after direct review. Only the result
+JSON and short summary remain; the inactive dependency donor and protected
+inputs are preserved. The verified branch is ready for merge. Evidence:
+`out/c7-models-delete-refresh-recovery-20261018/test-result.json` and
+`test-summary.md`. No native resource hold exists.
 
 ## Models accepted download requests — C7, October 18
 
