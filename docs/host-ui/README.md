@@ -6452,8 +6452,28 @@ source is frozen GChat770f3c03d `engine_host.rs:624–634` and
 `service.rs:1664–1669`, plus GInfer eb777 Qwen `layouts_impl.h:1057–1080`
 and `api_impl.h:97–99`. Route the
 Engine/Host quote contract to Bubbs; selection/catalog-only authority does not
-cover changing memory admission or bypassing it. No retry or input substitution
-is authorized by this finding.
+cover changing memory admission or bypassing it. At20:37 UTC Bubbs assigned
+`QUOTE-ADMISSION-EXACT-VRAM` to Codex1: correct the Engine's mandatory graph
+allowance for Qwen and Muse, then C5 retries the laptop Automatic Qwen load
+once the accepted correction lands. Until that source/build handoff, no retry
+or input substitution is authorized. Acceptance includes one corrected real
+Automatic load reaching Ready, followed by the remaining first-use C1/C4
+natural gate.
+
+The rejection handoff is the two linked laptop JSON files above. Exact app
+and bundled Host source is
+`770f3c03dddef2f528ecd100f25cb37685a12d2b`; exact bundled runtime source is
+`eb777ab9570fad1c8301635617f0923f2b820424`. The selected artifact is package
+`483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`,
+10,667,321,600 bytes, at laptop
+`/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4/model.ginfer`.
+Its completed artifact hardware-profile scope and directory hash are retained
+in the setup JSON. The derived candidate ID above is not an instance-selected
+ID: admission created no instance. Its effective catalog inputs remain
+53248/C8, INT8, fixed DFlash7, prefill0 (runtime resolves1024), graphs enabled,
+Vision off, automatic KV and300MiB headroom. Preserve the frozen private
+catalog `19a1d986` and app settings through the correction; the independent
+72153 resize does not replace this app gate.
 
 Laptop returned20:30 UTC: booking413 canceled, GPU guard released, no Engine
 or quote process, Qwen instance count0 and unchanged swap counters468/775.
@@ -6461,8 +6481,9 @@ The isolated app and Host remain idle for evidence recovery. Ada's separate
 signed72153 native Qwen natural also passed and returned20:30 UTC with783
 canceled; its C1/C4 phases ran602.619/609.291 seconds,202HTTP200 and198 exact
 seeded comparisons, with no swap. These resize results do not replace the
-frozen eb777 app check. Selected small evidence relays wait for Gchat3's
-local5090 native Muse1498 return; C4 then owns three no-load Flash quotes and
+frozen eb777 app check. Gchat3's local5090 native Muse1498 returned20:34 UTC;
+the two selected laptop JSONs returned20:35:11 UTC and the selected Ada raw
+packet returned20:35:35 UTC. No further C5 relay remains. C4 then owns three no-load Flash quotes and
 C5 one live C8 witness per card. C6's direct S1-to-Ada model-free pair may use
 its separately coordinated untimed boundary. No C5 target resource is held.
 
@@ -6689,7 +6710,7 @@ Owned inventory:
 | local5090 | `/ai/gchat-worktrees/c5-consumer-first-use-20261018`, branch `test/c5-consumer-first-use-20261018` | Documentation/evidence integration; no local model or build |
 | S1 | `/media/ron/SSD_RAID/ai/tmp-c5-consumer-first-use-20261018` | Accepted app/Host/runtime builds and 4.65 GB AppDir donor; retain through first-use |
 | Ada | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated AppDir/tools/controls, private HOME/run/tmp, managed Qwen and Muse; Qwen and Muse app natural PASS, both models/API stopped; retain small evidence and fixture through integration |
-| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated app/API settings; ordinary Muse Download and Automatic load passed, C1/C4 app natural COMPLETE with 161 HTTP200; Muse model/API stopped; Qwen Download and artifact setup complete, final Load blocked pre-Ready by quote admission;413 canceled/returned20:30 UTC, app/Host idle; retain failure evidence pending Bubbs |
+| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated app/API settings; ordinary Muse Download and Automatic load passed, C1/C4 app natural COMPLETE with 161 HTTP200; Muse model/API stopped; Qwen Download and artifact setup complete, final Load blocked pre-Ready by quote admission;413 canceled/returned20:30 UTC, app/Host idle; retain through C1's accepted quote correction and C5's corrected Automatic load |
 | Ada | `/tmp/c5x/xkbcomp` | Owned compiler symlink for private Xvfb; remove with fixture |
 
 Both targets use private mode-700 runtime directories, private HOME/XDG,
