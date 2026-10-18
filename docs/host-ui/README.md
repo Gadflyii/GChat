@@ -6509,13 +6509,55 @@ donor is ready on S1 at
 `/media/ron/SSD_RAID/ai/tmp-c1-quote-admission-exact-vram-20261018/build-86/apps/ginfer-serve`,
 317333712B, SHA256
 `885a48f9d2f1cf636efc05193f6e34b2b56f219e786e207ea7051b5c550bee1a`.
-C1's laptop worker coordinates staging after Gchat3's native return; the six
-corrected native first/second Ready controls still precede the app gates.
-Hold both app loads for that accepted Engine donor and physical-control
-clearance. The staged b47
-donor remains historical evidence and is not the next app runtime. No model
-copy or completed control repeat is needed. Bind the combined Host/logging
-handoff before either app load.
+C1's corrected laptop controls reached first and second Ready for Qwen75776
+and Muse8192, native0 with zero requests and receipt gaps0B. They ended
+21:57:18 UTC and returned22:01 UTC,424 canceled. The PRO controls also pass
+with gaps0B. Local5090 Qwen's second device-wide NVML increment is
+68,091,904B larger despite matching CUDA, graph, weight and state ledgers.
+Arch22:01 UTC accepted that retained result on the process-attributable CUDA
+criterion, along with the retained PRO/laptop results; preserve the original
+NVML undercoverage and its reconciliation. Arch22:02 UTC requires emitting
+the greater of CUDA and NVML preattach increments, minus the exact weight
+and resident-state ledger. Source `1209de849` is frozen and pushed; SM120a/SM86
+builds and the focused check passed at22:10:47 UTC. Re-evaluate retained PRO/laptop controls
+without rerunning them; one new-build local Qwen start using the saved maximum
+receipt and one local Muse start must pass before either app load. C1 completed these two Ready-only starts under local1505 at22:16:13 UTC: both
+models reached Ready and exited normally with no requests. The saved-receipt
+conservative gaps are0B; the new emitter covers the maximum physical view within
+the approved2MiB allocation granularity (Qwen0B, Muse2,031,616B). C5 read the
+maintained result and lifecycle terminal once. Arch22:22 UTC accepted Engine1209
+across the six cells and cleared C5's Automatic laptop Qwen53248 first/second
+Ready gate with the staged SM86 donor and e001 Host. C5 bound those donors22:25 UTC in the isolated fixture: corrected Host
+`e001e9ea3` explicitly maps SM86 to accepted Engine `1209de849`, with the
+other three installed runtime images unchanged and full Host/request logging.
+The unchanged app finished preparing22:27 UTC. GPU usage is0MiB and swap
+counters are468/775 before the two once-only loads and the unchanged
+attached600sC1/C4 check. The first native Load action22:27:56 UTC rejected
+before Engine startup: `No native profiling CLI configured for this GPU group`.
+The replacement runtime directory contains only `ginfer-serve`; Host derives
+the profiling CLI from its sibling `ginfer` and returns no configuration when
+that file is absent. This is a fixture binding defect: no Engine, Ready,
+receipt, second load or natural request occurred, and swap counters468/775
+remain unchanged. C5 stopped and reported the failure to Arch/C1 as directed,
+returned22:28 UTC and canceled426. Retain the
+[pre-Engine rejection](evidence/consumer-first-use-20261018/laptop/laptop-qwen-corrected-preengine-rejection.json).
+Recover the exact1209 SM86 sibling CLI donor, validate the complete runtime
+layout before a dependent load, and await Arch direction before any retry. Keep the staged ac536 donor unchanged; it is not the accepted
+app runtime. No model copy or completed laptop control repeat is needed.
+Gchat3 returned the laptop22:11 UTC after native Qwen rejected before Engine
+startup. Arch holds native Qwen/Muse for the corrected Engine and e001 Host;
+there is no bypass. C1 granted staging only22:14 UTC: immutable SM86
+`bin/1209de849/sm86/ginfer-serve` in its S1 root,317338400B,
+SHA256 `505ed0cc73d16c945ec54faa9ff5bdc4157e0921e70a6cb6ab4baa71969181f3`.
+C5 staged it with the copy-granted e001 Host in separate owned laptop
+`bin/1209de849` and `bin/e001e9ea3` directories. The app and idle Host stayed
+unchanged through staging. The parent-mediated copy returned22:16:58 UTC, with both sizes and
+SHA256 values matching the handoffs; both loader checks resolve with no missing
+libraries using the retained SM86 runtime libraries. No model was started. See the
+[staging receipt](evidence/consumer-first-use-20261018/laptop/laptop-qwen-corrected-donors-staged.json).
+The two local starts and Arch/global clearance preceded the22:25 UTC
+binding. The remaining preparation defect is the missing exact1209 sibling
+CLI described above; the corrected Host and server remain idle and bound.
 
 Source review21:38 UTC found that the actual Start discards its quote JSON;
 saved `host.json` receipts prove persistence but not a particular Start's use.
@@ -6528,8 +6570,7 @@ S1 `/media/ron/SSD_RAID/ai/tmp-gchat3-windows-consumer-host-20261018/native-targ
 Its driver-key and actual-Start marker deltas passed focused/check/clippy/build;
 retain the prior single full verify. The ordinary actual-Start log records
 accepted receipt source and bytes, while full child stderr and the existing
-request-log control remain available. This Host is copy-granted but not yet
-installed in C5's idle fixture. Preserve credentials by extracting only the
+request-log control remain available. This Host was staged separately and bound22:25 UTC in C5's isolated fixture. Preserve credentials by extracting only the
 needed receipt fields from private Host state.
 
 Keep the frozen four-image app bundle intact during the accepted Host handoff:
@@ -6541,8 +6582,9 @@ to C1's final accepted donor; preserve the other installed runtime mappings. The
 unchanged app reconnects to that existing owner. Keep the corrected Host alive
 through both loads and retain its effective runtime argv: a later app-owned
 respawn could restore the frozen runtime mapping. The request JSONL must be an
-absolute owned path, alongside the full normal Host log. These are preparation
-instructions; no replacement or physical app retry has run.
+absolute owned path, alongside the full normal Host log. C5 bound the replacement22:25 UTC; the failed22:28 UTC pre-Engine
+action above revealed the missing sibling CLI, which must be checked with
+the complete runtime layout before another app action.
 
 Zero-allowance source `9ee3e4c7f` remains unbuilt and unaccepted; no app retry is authorized
 before the accepted Engine/Host source/build handoff. Preserve the frozen app,
@@ -6798,7 +6840,8 @@ Owned inventory:
 | local5090 | `/ai/gchat-worktrees/c5-consumer-first-use-20261018`, branch `test/c5-consumer-first-use-20261018` | Documentation/evidence integration; no local model or build |
 | S1 | `/media/ron/SSD_RAID/ai/tmp-c5-consumer-first-use-20261018` | Accepted app/Host/runtime builds and 4.65 GB AppDir donor; retain through first-use |
 | Ada | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated AppDir/tools/controls, private HOME/run/tmp, managed Qwen and Muse; Qwen and Muse app natural PASS, both models/API stopped; retain small evidence and fixture through integration |
-| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated app/API settings; ordinary Muse Download and Automatic load passed, C1/C4 app natural COMPLETE with 161 HTTP200; Muse model/API stopped; Qwen Download and artifact setup complete, final Load blocked pre-Ready by quote admission;413 canceled/returned20:30 UTC, app/Host idle; retain through C1's accepted quote correction and C5's corrected Automatic load |
+| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018` | Isolated app/API settings; Muse app natural COMPLETE with161 HTTP200, model/API stopped; Qwen Download and artifact setup complete; corrected first Load rejected pre-Engine for missing sibling profiling CLI;426 canceled/returned22:28 UTC, app/Host idle, no Engine or receipt; retain through the corrected first/second Automatic gate and attached natural |
+| laptop | `/home/ron/tmp-c5-consumer-first-use-20261018/bin/{1209de849,e001e9ea3}` | Engine317338400B and Host57183816B hashes verified22:16:58 UTC, bound22:25 UTC through explicit SM86 mapping; installed runtime bundle unchanged; exact1209 sibling `ginfer` CLI missing and requested from C1; retain through first/second app acceptance |
 | Ada | `/tmp/c5x/xkbcomp` | Owned compiler symlink for private Xvfb; remove with fixture |
 
 Both targets use private mode-700 runtime directories, private HOME/XDG,
