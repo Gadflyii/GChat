@@ -1,13 +1,15 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { HelpRequest } from '@/services/gbot'
 
 export default function GbotHumanHelp({
   request,
+  taskState,
   busy,
   reply,
 }: {
   request: HelpRequest
+  taskState: string
   busy: boolean
   reply: (response: string | null) => Promise<void>
 }) {
@@ -16,6 +18,12 @@ export default function GbotHumanHelp({
   const pendingRef = useRef(false)
   const [error, setError] = useState('')
   const disabled = busy || pending !== null
+
+  useEffect(() => {
+    if (error && request.status !== 'pending' && taskState !== 'interrupted') {
+      setError('')
+    }
+  }, [error, request.status, taskState])
 
   async function respond(response: string | null) {
     if (
@@ -67,11 +75,6 @@ export default function GbotHumanHelp({
               {pending === 'reply' ? 'Sending reply…' : 'Declining request…'}
             </p>
           )}
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
           <div className="flex gap-2">
             <Button disabled={disabled || !answer.trim()}>
               {pending === 'reply' ? 'Sending reply…' : 'Send reply'}
@@ -94,6 +97,17 @@ export default function GbotHumanHelp({
               ? 'Request declined'
               : 'Request cancelled'}
         </p>
+      )}
+      {error && (
+        <div role="alert" className="space-y-1 text-sm text-destructive">
+          {(request.status === 'completed' || request.status === 'declined') && (
+            <p>
+              Your response was saved, but this task could not continue. Check
+              the model and computer connections, then resume the task.
+            </p>
+          )}
+          <p className="whitespace-pre-wrap break-words">{error}</p>
+        </div>
       )}
     </div>
   )

@@ -419,6 +419,107 @@ it('shows the saved interruption cause beside Resume and clears it after complet
 })
 
 it.each([
+  ['Send reply', 'Documents', 'Your reply: Documents'],
+  ['Decline', null, 'Request declined'],
+] as const)(
+  'keeps a saved human-help %s failure visible until explicit resume without resending',
+  async (action, response, outcome) => {
+    const request = {
+      id: 'atlas-help',
+      question: 'Which folder?',
+      status: 'pending' as const,
+      response: null,
+    }
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [],
+        help_requests: [request],
+      },
+    ]
+    let fail!: (cause: Error) => void
+    const reply = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject
+        })
+    )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) => {
+      if (path === 'tasks/help') return reply(body)
+      if (path === 'tasks/resume') {
+        tasks = [{ ...tasks[0], state: 'running' }]
+        return Promise.resolve({})
+      }
+      return fallback(path, body)
+    })
+    await mount()
+    const card = (await screen.findByText(request.question)).closest('article')!
+    fireEvent.change(within(card).getByLabelText('Your reply'), {
+      target: { value: 'Documents' },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: action }))
+    const body = { id: 'atlas-task', request_id: 'atlas-help', response }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(body)
+    tasks = [
+      {
+        ...tasks[0],
+        state: 'interrupted',
+        help_requests: [
+          {
+            ...request,
+            status: response === null ? 'declined' : 'completed',
+            response,
+          },
+        ],
+      },
+    ]
+    await act(async () => fail(new Error('Model connection unavailable')))
+    expect(await within(card).findByText(outcome)).toBeVisible()
+    const guidance =
+      'Your response was saved, but this task could not continue. Check the model and computer connections, then resume the task.'
+    expect(within(card).getByRole('alert')).toHaveTextContent(guidance)
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      'Model connection unavailable'
+    )
+    expect(within(card).queryByLabelText('Your reply')).not.toBeInTheDocument()
+    expect(
+      within(card).queryByRole('button', { name: 'Send reply' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(card).queryByRole('button', { name: 'Decline' })
+    ).not.toBeInTheDocument()
+
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(within(card).getByText(outcome)).toBeVisible()
+    expect(within(card).getByRole('alert')).toHaveTextContent(guidance)
+    expect(reply).toHaveBeenCalledTimes(1)
+    const resume = within(card).getByRole('button', { name: 'Resume task' })
+    expect(resume).toBeEnabled()
+    fireEvent.click(resume)
+    expect(await within(card).findByText('running')).toBeVisible()
+    await waitFor(() =>
+      expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    )
+    expect(within(card).getByText(outcome)).toBeVisible()
+    tasks = [{ ...tasks[0], state: 'interrupted' }]
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(within(card).getByRole('button', { name: 'Resume task' })).toBeEnabled()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    ).toEqual([
+      ['tasks/help', body],
+      ['tasks/resume', { id: 'atlas-task' }],
+    ])
+  }
+)
+
+it.each([
   ['Send reply', 'Sending reply…', 'Documents', 'Your reply: Documents'],
   ['Decline', 'Declining request…', null, 'Request declined'],
 ] as const)(

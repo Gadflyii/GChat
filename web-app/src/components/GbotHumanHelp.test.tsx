@@ -31,7 +31,12 @@ it.each([
     const pending = deferred()
     const reply = vi.fn().mockReturnValue(pending.promise)
     const { container } = render(
-      <GbotHumanHelp request={request} busy={false} reply={reply} />
+      <GbotHumanHelp
+        request={request}
+        taskState="waiting_for_human"
+        busy={false}
+        reply={reply}
+      />
     )
     fireEvent.change(screen.getByLabelText('Your reply'), {
       target: { value: 'Documents' },
@@ -66,7 +71,14 @@ it.each(['Send reply', 'Decline'])(
       .fn()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(retry.promise)
-    render(<GbotHumanHelp request={request} busy={false} reply={reply} />)
+    render(
+      <GbotHumanHelp
+        request={request}
+        taskState="waiting_for_human"
+        busy={false}
+        reply={reply}
+      />
+    )
     fireEvent.change(screen.getByLabelText('Your reply'), {
       target: { value: 'Keep this draft' },
     })
@@ -87,14 +99,26 @@ it.each(['Send reply', 'Decline'])(
 it('does not submit an empty reply or claim to send during unrelated work', () => {
   const reply = vi.fn().mockResolvedValue(undefined)
   const { container, rerender } = render(
-    <GbotHumanHelp request={request} busy={false} reply={reply} />
+    <GbotHumanHelp
+      request={request}
+      taskState="waiting_for_human"
+      busy={false}
+      reply={reply}
+    />
   )
   fireEvent.submit(container.querySelector('form')!)
   expect(reply).not.toHaveBeenCalled()
   fireEvent.change(screen.getByLabelText('Your reply'), {
     target: { value: 'Documents' },
   })
-  rerender(<GbotHumanHelp request={request} busy reply={reply} />)
+  rerender(
+    <GbotHumanHelp
+      request={request}
+      taskState="waiting_for_human"
+      busy
+      reply={reply}
+    />
+  )
   fireEvent.submit(container.querySelector('form')!)
   expect(reply).not.toHaveBeenCalled()
   expect(screen.getByRole('button', { name: 'Send reply' })).toBeDisabled()
@@ -107,6 +131,7 @@ it('shows the confirmed outcome without offering another response', () => {
   const { rerender } = render(
     <GbotHumanHelp
       request={{ ...request, status: 'completed', response: 'Documents' }}
+      taskState="interrupted"
       busy={false}
       reply={reply}
     />
@@ -116,6 +141,7 @@ it('shows the confirmed outcome without offering another response', () => {
   rerender(
     <GbotHumanHelp
       request={{ ...request, status: 'declined' }}
+      taskState="interrupted"
       busy={false}
       reply={reply}
     />

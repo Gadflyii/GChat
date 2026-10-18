@@ -1,5 +1,32 @@
 # Gbot design
 
+## Saved human replies keep recovery errors visible — Gchat 2
+
+`GBOT-HUMAN-HELP-SAVED-REPLY-RECOVERY`, based on main `f15627195`,
+fixes an error disappearing after Send reply or Decline. The service saves
+the response and interrupts the task before resolving its model and desktop
+connections. If reconnection fails, the refreshed request is already
+completed or declined, which hid the pending-only error.
+
+The shared help card now keeps that failure beside the saved outcome and
+explains that the response was saved. It tells users to check model and
+computer connections and resume the task. Both Settings and the companion
+pass the task state so the error clears when the task leaves Interrupted;
+a later interruption cannot resurrect it. The saved response cannot be sent
+again. Existing pending-response draft and retry behavior remains intact.
+
+Rendered regressions cover Send reply and Decline in both views, refresh
+before rejection, an update while interrupted, explicit Resume without a
+second help write, and a later interruption after successful resume. All four
+regressions failed against unchanged code because the saved outcome had no
+recovery alert. All 140 affected tests pass with the fix. One full `make verify`
+passed: lint, type checking, quality guards, 3,523 app tests (6 skipped), 127
+extension tests, six coverage checks and 1,284 Rust tests (28 ignored). FRESH
+and OLD remain off with original
+XML and Gchat 2 custody; inert responses do not qualify live tasks or native
+Windows.
+
+
 ## Stopped schedules identify the service computer — Gchat 2
 
 `GBOT-SCHEDULE-RESTART-COMPUTER-WORDING`, based on main `23d0f3236`,
