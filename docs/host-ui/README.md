@@ -846,12 +846,12 @@ gates/builds serially. No GPU is assigned.
 The following changed-source rows are separate from the fixed release pin:
 
 - `GUI-DOWNLOADS-TRANSFER-COUNT-WORDING`: tested source `72c76c51a`, handoff
-  `1d07d8848`, is **MERGE READY**. Focused/lint/ONE verify/build passed. Native
+  `1d07d8848`, is **MERGED** in main (verified ancestry at `d4ec7abab`). Focused/lint/ONE verify/build passed. Native
   singular “1 download” passed Light wide and Dark narrow; plural “2 downloads”
   passed Dark narrow. All three screenshots were reviewed. Evidence:
   `out/c3-download-count-wording-20261018/result.json`.
 - `GUI-FOLDER-REVEAL-NESTED-RUNTIME`: handoff `ab8d451e9`, tested source
-  `7fd01cf0a`, is **MERGE READY**. The original check-scope and single-verify
+  `7fd01cf0a`, is **MERGED** in main (verified ancestry at `d4ec7abab`). The original check-scope and single-verify
   failures remain retained; the corrected bounded continuation and build passed.
   Native Open Containing Folder used the private FileManager1 handler, opened
   the selected data root with `logs` selected, then ordinary Interface navigation
@@ -875,7 +875,7 @@ The following changed-source rows are separate from the fixed release pin:
   without horizontal overflow. App/Host/session returned05:32Z. Evidence:
   `out/c3-cli-packaged-path-detection-20261018/result.json`.
 - `GUI-LINUX-AUTOSTART-XDG-PATH`: tested source `7e49b9d0d`, handoff
-  `92868d3fd`, is **MERGE READY**. Focused50 frontend/native5, check/Clippy/lint,
+  `92868d3fd`, is **MERGED** in main `d4ec7abab`. Focused50 frontend/native5, check/Clippy/lint,
   ONE verify (3,380 app,127 extension,1,234 native, six floors) and build passed.
   Native enable created the private XDG entry using packaged AppRun while
   HOME/.config remained absent; reopen On/disable/remove/reopen Off passed.
@@ -885,11 +885,14 @@ The following changed-source rows are separate from the fixed release pin:
 - `GUI-RESET-RELOCATED-DATA-RESURRECTION`: source `cb6f5c964` includes a normal
   main merge preserving the four reset regressions and main folder-reveal and
   first-run tests. Focused/check/Clippy/lint, ONE verify/build and private
-  selected-folder acceptance follow serially. Native acceptance will select
-  the already exercised relocated root in this disposable installation, seed
-  selected and old-default log sentinels, use ordinary Reset/confirmation, and
+  selected-folder acceptance follow serially (booking3051 CPU80–87, launched
+  05:43Z). Native acceptance will select the private sibling `reset-selected-data`,
+  seed selected and old-default log sentinels, use ordinary Reset/confirmation, and
   check selected sentinel deletion, old sentinel retention, identical installation
-  config bytes and the selected root after restart. No GPU repeat is planned.
+  config bytes and the selected root after restart. The distinct sibling preserves
+  the old `relocated-data` runtime paths as invalid input for the queued locator
+  regression; restarting at that old root would recreate them. This is fixture
+  preparation, separate from the earlier native Move acceptance. No GPU repeat is planned.
 - `GUI-HOST-LOCATOR-DELETED-RUNTIME`: source `664a3b715` is pushed, self-checked
   and queued after reset. Four added behavioral cases join nine registry tests.
   Native acceptance must recover the retained stale Desktop owner without
