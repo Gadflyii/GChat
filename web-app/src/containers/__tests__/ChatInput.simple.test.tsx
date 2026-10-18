@@ -539,7 +539,8 @@ describe('ChatInput', () => {
     const loaded = catalog.promise.then((value) => {
       agentSkills.value = value
       agentSkills.loading = false
-      view.rerender(<ChatInput onSubmit={onSubmit} />)
+      // The mock catalog is not reactive; change a prop to rerender the memoized composer.
+      view.rerender(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
     })
     const input = screen.getByTestId('chat-input')
     const send = document.querySelector('[data-test-id="send-message-button"]')!
