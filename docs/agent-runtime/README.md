@@ -22,6 +22,41 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Skill dialog keyboard focus — October 18
+
+A private Linux native pass found that dismissing skill Create, Upload, Edit
+or Uninstall left focus on the document body. The next Tab jumped to Downloads.
+Both the Instructions card and skill-row menu lost focus after Edit. The
+affected source is unchanged from retained native `2df319ec8` through main
+`6aad35fc3`. All 17 saved chat/run/definition files and 45 skill files remained
+byte-identical. Baseline receipts and the viewed create-dialog screenshot are
+in `/ai/gchat/out/gchat-skill-dialogs-native-20261018/`.
+
+Skill callers now retain their persistent opening button. Create and Upload
+return to **Create new**; Edit returns to the Instructions card button or the
+same skill-row menu; cancelled Uninstall returns to that skill's menu. The
+dialogs restore focus only while the saved control remains connected.
+Uninstall still initially focuses Cancel, and pending-operation dismissal
+guards stay in place. Twelve real-menu regressions cover Cancel, Escape,
+Upload Close, Enter on Uninstall Cancel, discarded drafts and switching between
+the Edit menu and card.
+
+The selected Create Cancel regression fails against parent production source
+with focus on the document body; all 51 related tests pass on frozen source
+`11ce0355d`. One `make verify` passes: 3,470 web, 127 extension and 1,275 Rust
+tests. The production frontend and Linux native build also pass.
+
+The isolated native candidate (`c1cbae677d8…`) passes all five caller paths:
+Create Cancel/Escape, Upload Escape/Close, Edit card Cancel/Escape, Edit menu
+Escape and Uninstall initial-Cancel Enter/Escape. Keyboard reopening discards
+the Create and Edit drafts; switching from menu Edit to card Edit returns to
+the card. The viewed screenshots show focus on Create new and the same
+skill-row menu. After shutdown, all 17 saved files, 45 skill files and the
+workspace file remain byte-identical, with no added or removed skills. This
+qualifies Linux keyboard cancellation; Windows and submitting these forms
+were outside this pass. Gate and native receipts are in
+`/ai/gchat/out/gchat-skill-dialog-focus-return-20261018/`.
+
 ## Chat dialog keyboard focus — October 18
 
 The private Linux native chat-history pass reproduced focus loss after Rename
