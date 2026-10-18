@@ -15,8 +15,11 @@ also passes incomplete-history discovery and explicitly approved new-run
 continuation. A separate [idle Host termination check](#native-idle-host-termination-and-explicit-new-run-continuation--october-17)
 passes Stop cancellation and explicit new-run recovery. An
 [in-flight Engine-loss check](#native-in-flight-engine-loss-and-new-run-recovery--october-17)
-passes visible failure and explicit restart/new-run recovery. Automatic resume,
-abrupt Host failure, power-loss recovery and Windows remain unqualified;
+passes visible failure and explicit restart/new-run recovery. The
+[October 18 active Host-loss check](#native-active-host-loss-and-explicit-new-run-recovery--october-18)
+also passes visible failure after abrupt Host death during inference, followed
+by explicit same-profile restart and a distinct GUI run. Automatic resume,
+broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
 ## First-use duplicate agent names — October 17
@@ -225,8 +228,9 @@ Standard Agent also read a file and reached shell approval before normal window
 Close. The cancelled record, original task and completed read survived same-data
 relaunch and ordinary Studio Runs reopening; the unapproved command never ran.
 The separate [October 17 desktop-death check](#native-desktop-process-death-and-new-run-continuation--october-17)
-passes its bounded scope, as do the idle Host termination and in-flight Engine-loss
-checks below. Abrupt Host failure and power-loss recovery remain unqualified.
+passes its bounded scope, as do the idle Host termination, in-flight Engine-loss
+and [active Host-loss checks](#native-active-host-loss-and-explicit-new-run-recovery--october-18)
+below. Automatic resume and power-loss recovery remain unqualified.
 [Evidence and remaining scope](remaining-acceptance.md#oi-068-studio-worker-exit-persistence--october-15).
 
 ## Interrupted Studio run history — October 16
@@ -271,9 +275,10 @@ rerun passed. That environment failure and both logs are retained under
 The separate native desktop-death check below passes incomplete-history
 discovery and explicit new-run continuation; the later idle Host termination
 check covers Stop and a fresh run after managed Host replacement. The in-flight
-Engine-loss check below covers visible failure and an explicit new run. Automatic
-resume, abrupt Host failure and power-loss recovery remain unqualified; the
-normal-close acceptance above remains valid.
+Engine-loss and [active Host-loss checks](#native-active-host-loss-and-explicit-new-run-recovery--october-18)
+below cover visible failure and an explicit new run. Automatic resume and
+power-loss recovery remain unqualified; the normal-close acceptance above
+remains valid.
 See the [decision](../decisions/2026-10-16-persist-interrupted-studio-run-history.md).
 
 ## Native desktop process-death and new-run continuation — October 17
@@ -310,8 +315,9 @@ to the cancelled run and claimed no new changes. Recovery is qualified by the
 observed tool outcomes and run identities, not that reply's factual accuracy.
 
 This passes idle Host SIGTERM, Stop and explicit new-run recovery only. The separate
-Engine-loss check below covers an interrupted inference. Abrupt Host failure,
-automatic resume, power loss and Windows remain unqualified; OI-068 remains PARTIAL.
+Engine-loss and [active Host-loss checks](#native-active-host-loss-and-explicit-new-run-recovery--october-18)
+below cover bounded interruptions during inference. Automatic resume, power loss
+and Windows remain unqualified; OI-068 remains PARTIAL.
 [Settings, evidence and limits](remaining-acceptance.md#oi-068-native-idle-host-termination-and-continuation--october-17).
 
 ## Native in-flight Engine loss and new-run recovery — October 17
@@ -326,10 +332,47 @@ its exact contents. Ordinary Runs showed the original FAILED record and the
 distinct FINISHED record. Normal model Stop and desktop exit followed.
 
 This qualifies visible failure and explicit same-profile restart/new-run recovery.
-Automatic resume, abrupt Host failure, power loss and Windows remain unqualified;
-OI-068 remains PARTIAL. Configured context was 131072; the explicit KV arena
-limited the Engine's request context to 77824, so this was a short recovery task.
+The separate [active Host-loss check](#native-active-host-loss-and-explicit-new-run-recovery--october-18)
+below covers abrupt Host death during inference. Automatic resume, power loss
+and Windows remain unqualified; OI-068 remains PARTIAL. Configured context was
+131072; the explicit KV arena limited the Engine's request context to 77824,
+so this was a short recovery task.
 [Settings, evidence and limits](remaining-acceptance.md#oi-068-native-in-flight-engine-loss-and-explicit-restart--october-17).
+
+## Native active Host loss and explicit new-run recovery — October 18
+
+The retained Linux native desktop from source `824042e0a`, its `d8ce59320`
+Host resource and Engine `e2282c336` ran Qwen3.8 27B NVFP4 on physical S1 GPU1
+(PRO 6000, UI GPU2), using a private HOME/XDG/runtime, D-Bus session, keyring
+and Xvfb191. The profile
+used C1, context 32768 (effective 32256), a 5368709120-byte KV arena and no
+speculation. This was a short read-only Standard Agent task, with mutating,
+shell and web tools denied.
+
+After fresh Ready and one active request, only the Host received SIGKILL at
+01:35:40.333228Z. Its Engine, launched with `--exit-on-stdin-close`, was observed
+exited at 01:35:40.584752Z without a direct Engine kill. The original run failed
+with zero steps and unexpected EOF; no automatic retry was observed.
+
+Opening GInfer Hosts replaced the managed Host automatically. Ordinary Refresh
+and Start of the same profile reached Ready, then a distinct **Save & run** read
+`observation.txt` and replied with its exact line in two steps. Ordinary history
+reopening retained the original FAILED record and the new FINISHED record. The
+two original archive files kept their hashes and sizes; the workspace contained
+only the observation fixture.
+
+Normal model Stop reached stopped with no active request or Engine. The Host
+then automatically resumed its complete-remaining-formats profiler. Initial idle
+Host SIGTERM was insufficient: the open desktop recreated the Host and profiler.
+The desktop exited before final replacement cleanup at 01:39:40.251255Z. Returned
+01:40Z corrects the earlier premature return; a two-minute cleanup booking covered
+the final teardown. This qualifier remains part of the result.
+
+This passes bounded active Host-loss reporting and explicit restart/new-run
+recovery. Automatic resume or replay, exactly-once execution, broader crash recovery, power loss,
+literal 262144-token input, Hermes and fresh installation remain unqualified.
+Windows: not built (dev phase). No performance claim; OI-068 remains PARTIAL.
+[Settings, identities, evidence and limits](remaining-acceptance.md#oi-068-native-active-host-loss-and-explicit-restart--october-18).
 
 ## Native attachment chooser uses current tools — October 17
 
