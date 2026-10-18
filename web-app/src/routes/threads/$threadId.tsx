@@ -103,7 +103,6 @@ import { useArtifactStore } from '@/stores/artifact-store'
 import { useAgentRun } from '@/hooks/useAgentRun'
 import { buildAgentUIMessage, chatCapabilityRuns, isTerminalAgentRun, projectChatRunActivity } from '@/lib/agent-run-message'
 import { listAgentRuns } from '@/services/agent/definitions'
-import type { AgentRunRecord } from '@/types/agent'
 import {
   extractAgentAttachmentReferences,
   type AgentFileReference,
@@ -161,10 +160,6 @@ function ThreadDetail() {
   const [restoreFailure, setRestoreFailure] = useState<{ threadId: string; message: string }>()
   const [restoreAttempt, setRestoreAttempt] = useState(0)
   const historyRestoreError = restoreFailure?.threadId === threadId ? restoreFailure.message : undefined
-  const [restoredRuns, setRestoredRuns] = useState<{
-    threadId: string
-    records: AgentRunRecord[]
-  }>()
 
   useTools()
 
@@ -175,6 +170,7 @@ function ThreadDetail() {
   // Session data for tool call tracking
   const getSessionData = useChatSessions((state) => state.getSessionData)
   const sessionData = getSessionData(threadId)
+  const restoredRuns = sessionData.agentRunRecords
 
   // Check if we should follow up with tool calls (respects abort signal)
   const followUpMessage = useCallback(
@@ -512,7 +508,11 @@ function ThreadDetail() {
             ? await listAgentRuns()
             : []
           if (cancelled) return
-          setRestoredRuns({ threadId, records })
+          // Keep durable outcomes with the cached messages: leaving this route
+          // must not turn an interrupted worker back into a running spawn.
+          const referencedRunIds = new Set(uiMessages.flatMap((message) =>
+            chatCapabilityRuns(message).map((run) => run.run_id)))
+          sessionData.agentRunRecords = records.filter((record) => referencedRunIds.has(record.runId))
           setChatMessages(uiMessages)
           currentThread.current = threadId
         }
@@ -1047,9 +1047,8 @@ function ThreadDetail() {
   const inputStatus = requestActive ? CHAT_STATUS.SUBMITTED : status
   const visibleMessages = useMemo(() => chatMessages.filter((message) => !isImportedConversationContext(message)), [chatMessages])
   const runActivity = useMemo(
-    () => projectChatRunActivity(visibleMessages, workerRuns,
-      restoredRuns?.threadId === threadId ? restoredRuns.records : []),
-    [visibleMessages, workerRuns, restoredRuns, threadId]
+    () => projectChatRunActivity(visibleMessages, workerRuns, restoredRuns),
+    [visibleMessages, workerRuns, restoredRuns]
   )
   const cancelWorker = useCallback((runId: string) => {
     void cancelAgentTurn(runId).catch(() => toast.error(t('chat:agentErrors.cancelFailed')))
