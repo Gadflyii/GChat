@@ -251,6 +251,36 @@ Screenshots `11`–`13`, gate logs and candidate receipts are retained in
 `/ai/gchat/out/gchat1-chat-agents-pass-20261017`. This qualifies the Linux debug
 desktop layout; installer and Windows qualification remain separate.
 
+## Studio drafts preserve saved agent identity — October 18
+
+A private native pass saved “Control probe A”, created a new “Control probe B”
+and entered A’s identifier in B’s Identifier field. The unsaved draft incorrectly
+offered Delete, and Save definition silently replaced A. The baseline screenshot
+and ordinary-input transcript are retained in
+`/ai/gchat/out/gchat-chat-agent-controls-20261018/`.
+
+The editor now keeps the saved record identity separate from the editable
+identifier. A new or copied draft remains Discard, and saving an identifier used
+by another saved agent reports a collision before changing any definition or
+opening run setup. Delete on an edited saved agent targets that original record.
+The focused Agent Studio file passes all 44 tests, and one full `make verify`
+passes (3283 web tests, six skipped; 121 extension/core tests; platform Rust
+suites, lint, typecheck, quality guards and coverage floors).
+
+The separate Linux native candidate passes the original collision flow. Both
+Save definition and Save & run show the correction message while preserving A
+and the unsaved B draft; run setup does not open. Changing B to an unused
+identifier saves both agents. Editing saved B to A’s identifier and choosing
+Delete removes original B while preserving A’s identifier and name. The new
+draft offers Discard throughout the collision. Ordinary-input transcripts,
+viewed screenshots and saved definitions are retained in
+`/ai/gchat/out/gchat-agent-identifier-collision-20261018/`.
+
+The desktop was rebuilt from `dd064f1d5` plus this correction; its SHA-256 is
+`2264e2200faf1f341b84ff4009eeae2a17d88f26e9051db8c09dde91b2214a31`.
+Retained sidecars were not rebuilt, so this qualifies the Studio controls only.
+No model requests or GPU use. Windows not built (dev phase).
+
 ## Studio run selection starts at its overview — October 18
 
 In the native 1024 × 740 pass with the sidebar expanded, reading the bottom of a

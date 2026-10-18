@@ -380,12 +380,19 @@ function AgentStudioPage() {
   const { skills } = useAgentSkills()
   const [view, setView] = useState<StudioView>(search.view ?? 'definitions')
   const [draft, setDraftState] = useState<AgentDefinition | null>(null)
+  // The editable identifier does not determine which saved record this draft owns.
+  const [draftSavedId, setDraftSavedId] = useState<string | null>(null)
   const draftRevision = useRef(0)
   const mutatingDraft = useRef(false)
-  const setDraft = useCallback((next: AgentDefinition | null) => {
-    ++draftRevision.current
-    setDraftState(next)
-  }, [])
+  const setDraft = useCallback(
+    (next: AgentDefinition | null, savedId?: string | null) => {
+      ++draftRevision.current
+      setDraftState(next)
+      if (!next) setDraftSavedId(null)
+      else if (savedId !== undefined) setDraftSavedId(savedId)
+    },
+    []
+  )
   const [templates, setTemplates] = useState<AgentTemplate[]>([])
   const [runs, setRuns] = useState<AgentRunRecord[]>([])
   const historyRequest = useRef(0)
@@ -417,7 +424,7 @@ function AgentStudioPage() {
 
   useEffect(() => {
     if (!draft && definitions.length > 0) {
-      setDraft(cloneDefinition(definitions[0]))
+      setDraft(cloneDefinition(definitions[0]), definitions[0].id)
     }
   }, [definitions, draft, setDraft])
 
@@ -487,7 +494,7 @@ function AgentStudioPage() {
     try {
       const created = await createDraft()
       if (revision !== draftRevision.current) return
-      setDraft(created)
+      setDraft(created, null)
       selectView('definitions')
     } catch (reason) {
       toast.error(String(reason))
@@ -498,7 +505,7 @@ function AgentStudioPage() {
   }
 
   const edit = (definition: AgentDefinition) => {
-    setDraft(cloneDefinition(definition))
+    setDraft(cloneDefinition(definition), definition.id)
     selectView('definitions')
   }
 
@@ -507,7 +514,7 @@ function AgentStudioPage() {
     copy.builtIn = false
     copy.id = ''
     copy.name = `${copy.name} Copy`
-    setDraft(copy)
+    setDraft(copy, null)
     selectView('definitions')
   }
 
@@ -525,12 +532,21 @@ function AgentStudioPage() {
       id: draft.id || unusedDefinitionId(draft.name, definitions),
       builtIn: false,
     }
+    if (
+      candidate.id !== draftSavedId &&
+      definitions.some((definition) => definition.id === candidate.id)
+    ) {
+      toast.error(
+        `An agent with identifier "${candidate.id}" already exists. Choose a different identifier.`
+      )
+      return null
+    }
     mutatingDraft.current = true
     setSaving(true)
     try {
       const saved = await save(candidate)
       if (revision !== draftRevision.current) return null
-      setDraft(cloneDefinition(saved))
+      setDraft(cloneDefinition(saved), saved.id)
       if (showToast) toast.success('Agent definition saved')
       return saved
     } catch (reason) {
@@ -544,7 +560,7 @@ function AgentStudioPage() {
 
   const deleteDraft = async () => {
     if (!draft || mutatingDraft.current) return
-    if (!draft.id) {
+    if (!draftSavedId) {
       setDraft(null)
       return
     }
@@ -552,7 +568,7 @@ function AgentStudioPage() {
     const revision = draftRevision.current
     setDeleting(true)
     try {
-      await remove(draft.id)
+      await remove(draftSavedId)
       if (revision === draftRevision.current) setDraft(null)
       toast.success('Agent definition deleted')
     } catch (reason) {
@@ -683,7 +699,7 @@ function AgentStudioPage() {
                     type="button"
                     className={cn(
                       'w-full rounded-xl border p-3 text-left transition hover:bg-accent/60',
-                      draft?.id === definition.id && 'border-primary bg-accent'
+                      draftSavedId === definition.id && 'border-primary bg-accent'
                     )}
                     onClick={() => edit(definition)}
                   >
@@ -728,9 +744,7 @@ function AgentStudioPage() {
                 onSave={() => void saveDraft()}
                 onDelete={() => void deleteDraft()}
                 onTry={() => void tryInChat(draft)}
-                saved={definitions.some(
-                  (definition) => definition.id === draft.id
-                )}
+                saved={draftSavedId !== null}
               />
             )}
           </aside>

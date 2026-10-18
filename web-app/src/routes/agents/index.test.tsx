@@ -694,7 +694,96 @@ describe('AgentStudioPage', () => {
     expect(definitionState.value.save).toHaveBeenLastCalledWith(expect.objectContaining({
       id: 'review-assistant-3', name: 'Renamed agent',
     }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith('review-assistant-3')
   })
+
+  it.each(['new', 'template'] as const)(
+    'rejects a saved identifier in a %s draft and discards without deleting the saved agent', async (source) => {
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template',
+        name: 'Review template',
+        description: 'Start a separate review agent.',
+        definition: firstAgent,
+      }])
+      await renderSavedAgents()
+      if (source === 'new') {
+        fireEvent.click(screen.getByTitle('New agent'))
+        await screen.findByDisplayValue(editableDraft.name)
+      } else {
+        fireEvent.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Use template' }))
+        await screen.findByDisplayValue(`${firstAgent.name} Copy`)
+      }
+      fireEvent.change(screen.getByLabelText('Identifier'), {
+        target: { value: firstAgent.id },
+      })
+
+      expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
+      expect(screen.queryByRole('button', { name: 'Delete', exact: true })).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Save & run' }))
+
+      expect(toast.error).toHaveBeenCalledTimes(2)
+      expect(toast.error).toHaveBeenCalledWith(
+        `An agent with identifier "${firstAgent.id}" already exists. Choose a different identifier.`
+      )
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+      await screen.findByDisplayValue(firstAgent.name)
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+      expect(definitionState.value.definitions).toEqual([firstAgent, secondAgent])
+    }
+  )
+
+  it('rejects another saved identifier during an edit and still saves changes to the selected agent', async () => {
+    definitionState.value.save.mockImplementation(async (definition) => definition)
+    await renderSavedAgents()
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'My edited review agent' },
+    })
+    fireEvent.change(screen.getByLabelText('Identifier'), {
+      target: { value: secondAgent.id },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save & run' }))
+
+    expect(toast.error).toHaveBeenCalledTimes(2)
+    expect(toast.error).toHaveBeenCalledWith(
+      `An agent with identifier "${secondAgent.id}" already exists. Choose a different identifier.`
+    )
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    expect(definitionState.value.definitions).toEqual([firstAgent, secondAgent])
+
+    fireEvent.change(screen.getByLabelText('Identifier'), {
+      target: { value: firstAgent.id },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith({
+      ...firstAgent,
+      name: 'My edited review agent',
+    })
+  })
+
+  it.each([secondAgent.id, ''])(
+    'deletes only the selected saved agent after changing its identifier to %s', async (id) => {
+      await renderSavedAgents()
+      fireEvent.change(screen.getByLabelText('Identifier'), {
+        target: { value: id },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+
+      expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id)
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.definitions[1]).toEqual(secondAgent)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled())
+    }
+  )
 
   it.each([
     ['General', 'general-2'],
