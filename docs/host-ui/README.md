@@ -1,5 +1,35 @@
 # GInfer host UI
 
+## Plain Models error banner — C3, October 18
+
+`GUI-MODELS-ERROR-BANNER` passes its remaining Linux native leaf. The
+original source `15be971ff` (merge `44615416d`) is already delivered. C4's
+retained native Add-file → Load failure shows a readable model-name alert
+and Hosts link in Dark 1200×800, without an `Error:` prefix or the unrelated
+“Saved inventory may be out of date” claim. The metadata-only fixture was
+rejected before Engine startup. [Native screenshot](../../out/c4-journey-native-20261018/load-without-profile-guidance.png)
+is already committed in `5a83d81e7`; no duplicate fixture is needed.
+
+The error normalizer, plain-problem renderer, action error handling and
+separate action/offline alert rendering are unchanged from the native donor
+through current main `e80e4fd11` and tested source `1062ba9f8`. The existing
+plain-failed-load regression matches the passing **51-case Models suite**;
+ONE full gate passes **3,523 app, 127 extension, 1,284 native**, six floors.
+This evidence-only closure reuses those gates and passes `git diff --check`.
+The screenshot's old recovery instructions are superseded by the separate
+Models-without-automatic-settings correction above; this leaf qualifies the
+plain banner only. Generic Technical details expansion and separate offline
+warnings have rendered tests, without fresh native acceptance. Windows and
+additional themes/viewports are unqualified.
+
+[Result](../../out/c3-models-error-banner-20261018/result.json) and
+[source binding](../../out/c3-models-error-banner-20261018/source-binding.json)
+record the reused evidence. Owned worktree
+`/ai/gchat-worktrees/c3-models-error-banner-20261018`, branch
+`docs/c3-models-error-banner-20261018`, base `e80e4fd11`. No new resources,
+copies or private state; C4's prior native root is already retired. Next:
+coordinator integration and canonical row closure.
+
 ## Models without automatic settings — C3, October 18
 
 `GUI-LOAD-NEEDS-PROFILE-MESSAGE` is merge-ready. The original named-model

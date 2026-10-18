@@ -1,0 +1,37 @@
+{
+  "row": "GUI-MODELS-ERROR-BANNER",
+  "status": "LINUX_NATIVE_LEAF_PASS",
+  "source_fix": "15be971ff9b98aea34e7581a7cb66e761252728f",
+  "source_merge": "44615416dc5bb2683cc1776a498325b8d77c0d22",
+  "base": "e80e4fd112b18d68fe273c911b56de3ed0ce72c0",
+  "native": {
+    "screenshot": "../c4-journey-native-20261018/load-without-profile-guidance.png",
+    "evidence_commit": "5a83d81e72ef2b51568423b5024b914b48bc2592",
+    "session_receipt": "../c4-journey-native-20261018/models-host-running-result.json",
+    "observation": "Dark1200x800 Models missing-profile load failure displays readable model-name alert and Hosts link, without Error: prefix or unrelated Saved inventory may be out of date claim. No Engine startup for this metadata-only fixture.",
+    "capture_source": "be69f91907160f5ff1abf779a2004bbbda6c63c4 + f928613b17fbba3434486f6bb4a1d782eae625a4",
+    "session_authority": "docs/host-ui/README.md C4 journey native section explicitly records metadata-only file picker/Load failure; nearby session receipt primarily covers another Models lifecycle leaf.",
+    "input": "native pointer/keyboard; inspector observation only",
+    "limitations": [
+      "Historical recovery message in screenshot was superseded by1062ba9f8; this capture qualifies plain banner only.",
+      "Generic Technical details expansion and separate offline warning have rendered regression coverage, not new native acceptance.",
+      "No Windows or additional theme/viewport acceptance."
+    ]
+  },
+  "reused_verification": {
+    "source": "1062ba9f85653a25f7371d9ea03f807e3d48009b",
+    "receipt": "../c3-load-needs-profile-message-20261018/verify-summary.json",
+    "focused_hub": 51,
+    "make_verify": {
+      "attempts": 1,
+      "frontend": 3523,
+      "extension": 127,
+      "native": 1284,
+      "critical_floors": 6
+    },
+    "generic_error_regression": "shows a failed load as a plain message, without the stale-inventory note"
+  },
+  "source_binding": "source-binding.json",
+  "documentation_check": "git diff --check PASS",
+  "resources": "No new process/build/fixture/booking or copied donor; existing committed screenshot reused. Prior C4 native root already retired."
+}

@@ -1,0 +1,41 @@
+{
+  "row": "GUI-MODELS-ERROR-BANNER",
+  "source_blocks": {
+    "be69f91907160f5ff1abf779a2004bbbda6c63c4": {
+      "normalizer_and_plain_problem": "b226b19037c0ba6b7e05e3690f52d55c8acf478bafdecf6c6a922740a6facd44",
+      "operation_error_state": "e5c47f6927ad0b81a095c01604951f05a6a64af9d0cbf91c868e6047924f0a77",
+      "separate_action_and_offline_alerts": "36a296c90ba78ca5a3c8805e7544d3dba50e7679508dda1a1cd83449a21e3109"
+    },
+    "f928613b17fbba3434486f6bb4a1d782eae625a4": {
+      "normalizer_and_plain_problem": "b226b19037c0ba6b7e05e3690f52d55c8acf478bafdecf6c6a922740a6facd44",
+      "operation_error_state": "e5c47f6927ad0b81a095c01604951f05a6a64af9d0cbf91c868e6047924f0a77",
+      "separate_action_and_offline_alerts": "36a296c90ba78ca5a3c8805e7544d3dba50e7679508dda1a1cd83449a21e3109"
+    },
+    "e6b28e8d495b9fb15441da75484a757b8aff3df2": {
+      "normalizer_and_plain_problem": "b226b19037c0ba6b7e05e3690f52d55c8acf478bafdecf6c6a922740a6facd44",
+      "operation_error_state": "e5c47f6927ad0b81a095c01604951f05a6a64af9d0cbf91c868e6047924f0a77",
+      "separate_action_and_offline_alerts": "36a296c90ba78ca5a3c8805e7544d3dba50e7679508dda1a1cd83449a21e3109"
+    },
+    "1062ba9f85653a25f7371d9ea03f807e3d48009b": {
+      "normalizer_and_plain_problem": "b226b19037c0ba6b7e05e3690f52d55c8acf478bafdecf6c6a922740a6facd44",
+      "operation_error_state": "e5c47f6927ad0b81a095c01604951f05a6a64af9d0cbf91c868e6047924f0a77",
+      "separate_action_and_offline_alerts": "36a296c90ba78ca5a3c8805e7544d3dba50e7679508dda1a1cd83449a21e3109"
+    },
+    "ae5979dbdbb8edcc85ed626ebbf275fcb5890c68": {
+      "normalizer_and_plain_problem": "b226b19037c0ba6b7e05e3690f52d55c8acf478bafdecf6c6a922740a6facd44",
+      "operation_error_state": "e5c47f6927ad0b81a095c01604951f05a6a64af9d0cbf91c868e6047924f0a77",
+      "separate_action_and_offline_alerts": "36a296c90ba78ca5a3c8805e7544d3dba50e7679508dda1a1cd83449a21e3109"
+    },
+    "e80e4fd112b18d68fe273c911b56de3ed0ce72c0": {
+      "normalizer_and_plain_problem": "b226b19037c0ba6b7e05e3690f52d55c8acf478bafdecf6c6a922740a6facd44",
+      "operation_error_state": "e5c47f6927ad0b81a095c01604951f05a6a64af9d0cbf91c868e6047924f0a77",
+      "separate_action_and_offline_alerts": "36a296c90ba78ca5a3c8805e7544d3dba50e7679508dda1a1cd83449a21e3109"
+    }
+  },
+  "all_relevant_blocks_identical": true,
+  "generic_error_regression_matches_passing_1062": true,
+  "native_evidence_commit": "5a83d81e72ef2b51568423b5024b914b48bc2592",
+  "native_screenshot": "out/c4-journey-native-20261018/load-without-profile-guidance.png",
+  "screenshot_sha256": "0d6a6f5b704e90857f3510865b501852e81fd2309bfae1b0bffa4ea330f30693",
+  "scope": "Plain Models action-error banner and separation from offline warning. The NO_SETTINGS message text is excluded; corrected separately by1062ba9f8."
+}
