@@ -35,8 +35,16 @@ The shared Studio header now identifies exactly one current page in its
 navigation. This includes Skills, which uses the same header on its own route.
 Section activation and keyboard focus keep their existing behavior.
 
-Validation pending focused tests, lint, one `make verify`, native rebuild and
-private native acceptance. Candidate receipts:
+Validation: 126 focused tests and workspace lint PASS; one `make verify`
+PASS (3,600 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `014afdc21`. Rebuilt private
+native acceptance PASS: Enter and Space select all five sections, with exactly
+one matching current page throughout. The candidate screenshot was viewed.
+Normal close at 13:14:39Z kept saved thread/messages, agent definitions and run
+history byte-identical; CPU booking 3303 returned 13:15Z. This checks exposed
+section state, without a screen reader session, inference, installed-package or
+Windows acceptance. Cross-route Skills focus loss was observed separately and
+is outside this change. Candidate receipts:
 `/ai/gchat/out/gchat-agent-studio-current-section-20261018/`.
 
 ## Message edit cancellation keyboard focus — October 18
