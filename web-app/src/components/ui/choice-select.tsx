@@ -61,6 +61,15 @@ export function ChoiceSelect({ value, onValueChange, options, className, ...prop
           .filter(field => field.tabIndex >= 0 && !field.matches(':disabled') &&
             !field.closest('[inert], [aria-hidden="true"]') && !content.current?.contains(field) &&
             field.getClientRects().length > 0)
+          .filter(field => {
+            // WebKit can report rectangles for controls in closed details, but
+            // only that section's summary can receive keyboard focus.
+            for (let parent = field.parentElement; parent; parent = parent.parentElement) {
+              if (parent instanceof HTMLDetailsElement && !parent.open &&
+                !parent.querySelector(':scope > summary')?.contains(field)) return false
+            }
+            return true
+          })
         const index = fields.indexOf(trigger.current!)
         tabTarget.current = fields[index + (event.shiftKey ? -1 : 1)] ?? trigger.current
         setOpen(false)

@@ -81,3 +81,19 @@ it('keeps a disabled field out of the tab order and does not open it', async () 
   expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   expect(changed).not.toHaveBeenCalled()
 })
+
+it('moves back past controls inside closed sections, including nested summaries', async () => {
+  // WebKit reports layout rectangles for these hidden controls. They cannot
+  // receive focus; the outer summary is the preceding keyboard destination.
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{ width: 10, height: 10 }] as unknown as DOMRectList)
+  const user = userEvent.setup()
+  render(<><details><summary>Earlier section</summary>
+    <details><summary>Hidden nested section</summary><button>Hidden action</button></details>
+    <input aria-label="Hidden setting" />
+  </details><ChoiceSelect aria-label="Computer" value="one" options={options} onValueChange={vi.fn()} /></>)
+  await user.click(screen.getByRole('button', { name: 'Computer' }))
+  await waitFor(() => expect(screen.getByRole('menuitemradio', { name: 'First computer' })).toHaveFocus())
+  await user.tab({ shift: true })
+  await waitFor(() => expect(screen.getByText('Earlier section')).toHaveFocus())
+  expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+})
