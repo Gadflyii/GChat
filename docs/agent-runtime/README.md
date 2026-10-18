@@ -40,8 +40,18 @@ without a model or GPU. The viewed screenshot `reopened.png` and DOM bounds
 (`setup-layout-rects`) are in
 `/ai/gchat/out/gchat-agent-rerun-cancel-20261018/`.
 
-Focused `AgentRunSetup` tests, one `make verify`, frontend/native builds and
-corrected native replays at 1200×800 and 1024×740 are pending.
+All ten existing focused `AgentRunSetup` tests, one `make verify` and the
+frontend/native builds passed on frozen source `2a3ff696b`. The full gate passed
+3,397 app, 127 extension and 1,258 Rust tests (6 skipped, 28 ignored). The
+corrected native replays at 1200×800 and 1024×740 both have matching 670-pixel
+client and scroll widths. Browse, the assignment and footer controls fit
+horizontally; ordinary vertical scrolling exposes the smaller-window footer.
+The complete unavailable identifier remains in the selected-label title and
+keyboard-opened menu. Cancel returns to history, with all 17 saved definition,
+run/context and thread/session/message files byte-identical. The viewed
+screenshots and receipts are in
+`/ai/gchat/out/gchat-agent-run-setup-overflow-20261018/`. This qualifies the Linux
+debug candidate; Windows not built (dev phase).
 
 ## Chat search query selection — October 18
 
