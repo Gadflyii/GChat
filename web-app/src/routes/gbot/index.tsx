@@ -96,6 +96,8 @@ function GbotPage() {
   const stopped = useRef(false)
   const [error, setError] = useState('')
   const [executorError, setExecutorError] = useState('')
+  const [loadingTasks, setLoadingTasks] = useState(false)
+  const taskHistoryRetry = useRef(false)
   const [adding, setAdding] = useState(false)
   const [resuming, setResuming] = useState<SetupResume>()
   const [setups, setSetups] = useState<KvmSetupRecord[]>()
@@ -211,6 +213,17 @@ function GbotPage() {
         void useGbotCompanion.getState().refresh()
     }
   }, [])
+  const retryTaskHistory = async () => {
+    if (busy || taskHistoryRetry.current) return
+    taskHistoryRetry.current = true
+    setLoadingTasks(true)
+    try {
+      await refresh()
+    } finally {
+      taskHistoryRetry.current = false
+      if (mounted.current) setLoadingTasks(false)
+    }
+  }
   useEffect(() => {
     if (!gbotEnabled || serviceStopped) return
     void refresh()
@@ -611,7 +624,7 @@ function GbotPage() {
         : 'Finish this bot’s setup with Resume setup before running a task.'
     }
     if (executorError)
-      return 'The task runner is unavailable. Resolve the task runner issue above before running a task.'
+      return 'Choose Retry loading tasks above before running a task.'
     if (!identity) return 'Connect this bot’s computer before running a task.'
     if (!botHasControl) {
       const ownsCurrentControl =
@@ -1346,9 +1359,25 @@ function GbotPage() {
                   )}
 
                   {executorError && (
-                    <p role="status" className="rounded-md border p-3 text-sm">
-                      {executorError}
-                    </p>
+                    <div
+                      role="alert"
+                      aria-busy={loadingTasks}
+                      className="space-y-2 rounded-md border p-3 text-sm"
+                    >
+                      <p>Could not load tasks and approval requests. Try again.</p>
+                      <details className="text-muted-foreground">
+                        <summary className="cursor-pointer">Details</summary>
+                        <p className="break-words">{executorError}</p>
+                      </details>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || loadingTasks}
+                        onClick={() => void retryTaskHistory()}
+                      >
+                        {loadingTasks ? 'Loading tasks…' : 'Retry loading tasks'}
+                      </Button>
+                    </div>
                   )}
                   <GbotConnectors key={bot.id} workspaceId={bot.id} />
                   <GbotSchedules
