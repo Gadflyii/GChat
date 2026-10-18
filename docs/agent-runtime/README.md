@@ -22,6 +22,40 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Run setup dialog keyboard focus — October 18
+
+A private Linux native pass on `8f21ab584` reproduced focus loss when
+**Re-run** setup was dismissed with Escape or Cancel and when direct
+**Continue as new run…** setup was dismissed with Escape. Focus moved to the
+document body; the next Tab jumped to Downloads. Product source was identical
+to main `73d9d4b9c`. No run was started, and saved definitions and history
+remained byte-identical after normal shutdown. Baseline receipts and the
+viewed screenshot are in `/ai/gchat/out/gchat-chat-agents-pass-20261018-1045/`.
+
+Run setup now retains its opening button through asynchronous definition
+loading or saving. History-menu actions return to the same run's Actions
+button; direct Continue and Save & run return to their own button. Dismissal
+restores focus only while that control remains connected. Existing task,
+workspace, saved-default and dispatch behavior is unchanged.
+
+Four rendered regressions cover Escape and Cancel across two history rows,
+both history-menu actions, direct Continue Close and keyboard reopening, and
+Save & run after an asynchronous save. The selected Re-run focus assertion
+fails once against parent production source with focus on the body.
+
+Validation: 92 focused tests and workspace lint PASS; one `make verify`
+PASS (3,544 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux desktop builds PASS on source
+`786efdeaf`. Rebuilt private native acceptance PASS: Re-run Escape and
+Cancel return to its history Actions button; history Continue Close returns
+to its own Actions button; direct Continue Escape and Cancel return to the
+overview button. Keyboard reopening restores the original task after a
+cancelled edit. The candidate screenshot was viewed. Normal shutdown at
+11:01Z left saved definitions and history byte-identical; CPU booking 3247
+was returned. Receipts: `/ai/gchat/out/gchat-agent-run-setup-focus-20261018/`.
+This qualifies the Linux keyboard scope only; no run, inference or Windows
+acceptance was performed.
+
 ## Run setup minimum context editing — October 18
 
 A private native Linux pass reproduced a forced zero in **Minimum context**
