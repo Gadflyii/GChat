@@ -2,51 +2,57 @@
 
 ## Models overlapping deletion recovery — C7, October 18
 
-`GUI-MODELS-DELETE-REFRESH-RECOVERY` is being corrected after Codex 8
-rejected `7412c5624`: B deletion was acknowledged, an A inventory read started,
-then B was re-added and selected before that older response omitted B. The
-request-identity design forgot B too soon and removed the live installation.
-Earlier candidate `43f4a075c` used a permanent ID filter and also hid re-adds.
-Their passing gates do not qualify the replacement design.
+`GUI-MODELS-DELETE-REFRESH-RECOVERY` replaces the rejected recovery designs
+on branch `fix/c7-models-delete-overlap-recovery-20261018` in its matching
+`/ai/gchat-worktrees/` tree, base `e93d19e77`. Permanent deleted IDs in
+`43f4a075c` hid legitimate re-adds. Request identities in `7412c5624` retired
+B too early: after B deletion was acknowledged, A's inventory read could
+remove B re-added and selected while that read was pending. Earlier gates
+do not qualify the replacement.
 
-Owned branch `fix/c7-models-delete-overlap-recovery-20261018`, matching
-`/ai/gchat-worktrees/` tree, base `e93d19e77`. The provider store now owns a
-monotonic inventory revision and each model's last local mutation. Accepted
-deletion, completed download/import and re-add publications advance it. Every
-inventory read captures its starting revision. At publication, newer local
-installations retain their current model/path/settings/selection, and local
-deletions cannot be resurrected by an older snapshot. The permanent
-`deletedModels` list and helper-local identity bookkeeping are removed.
+The provider store now owns a session-local monotonic inventory revision and
+each model's last local mutation. Accepted deletion, completed download/import
+and re-add advance it. Every inventory read captures its starting revision.
+Publication preserves models mutated after that stamp and prevents stale
+resurrection of deleted models; a subsequent installation supersedes deletion.
+The `deletedModels` list and helper-local identity bookkeeping are removed.
+Selection follows the reconciled inventory; revision metadata is not persisted.
 
-Acceptance: one regression exercises all three Codex 8 orderings, including
-acknowledged B deletion → A read starts → B re-add/select → A omits B, re-add
-before deleting another model, and overlapping deletions/older responses.
-Read-only recovery must never replay delete/load/Stop. Parent owns store,
-helper, publication boundaries and this authority; the worker owns existing
-affected tests and the independent S1 SSD gate. The implementation and six affected test files are ready; one parameterized
-rendered regression covers the three rejected orderings with stale and omitted
-responses. Next: freeze source, run the 124 focused affected tests and lint,
-then exactly one new `make verify`, and return to Codex 8 before mailing
-merge-ready. No backend, Engine, installed-app or Windows changes.
+Acceptance: one parameterized rendered regression covers all three rejected
+orderings with omitted and stale B responses, including acknowledged B deletion
+→ A read starts → B re-add/select → A omits B. Read-only recovery must never
+replay delete/load/Stop. Parent owns the implementation, publication boundaries
+and this authority; the worker owns existing affected tests and the independent
+S1 SSD gate. No backend, Engine, installed-app or Windows changes.
 
-First frozen source `19eaa0083` staged successfully on S1. Its focused run
-stopped at **120 passed / four failed**: the combined regression looked up the
-idle **Refresh model list** label after clicking it, while the UI correctly
-showed disabled **Refreshing model list…**. The assertion now uses that busy
-accessible name, retaining the duplicate-action guard and all orderings.
-Lint and `make verify` did not start. Booking3599 returned22:19Z; its inactive
-fixture and raw failure remain for the corrected focused run. Next: freeze
-that test correction, rebook the existing fixture, focused tests/lint and the
-still-unrun single `make verify`, then Codex 8.
+Frozen source `ee34c996b` passed **124 focused tests** across six affected
+files and lint with zero errors and five existing warnings. Exactly one new
+`make verify` passed at **22:29:57Z**: **3,840 app tests / six skipped, 130
+extension tests, 65 Node contract tests and 1,319 native tests / 28 ignored**
+across 23 native summaries, all six critical coverage floors, typecheck and
+the quality guard. The coordinator directly reviewed raw terminal logs and
+exited-zero container results and compared all 18 source and 35 dependency
+bindings to the frozen Git revision. Before/after bindings matched, including
+eleven read-only catalogs / 48 profiles.
 
+Booking3603 on S1 CPU88–95 returned **22:31Z** and was canceled. The owned
+fixture `/media/ron/SSD_RAID/ai/tmp-c7-models-delete-overlap-recovery-20261018`
+and sole exited container `c7-models-delete-overlap-recovery-20261018-candidate`
+were retired at **22:32:57Z**, removing **28,880,904,192 allocated fixture
+bytes** after that direct review. The inactive dependency donor and protected
+inputs remain. Only the result JSON and short summary remain locally in
+`out/c7-models-delete-overlap-recovery-20261018/`; no resource is held. Next:
+return to Codex 8 before mailing merge-ready.
+These checks qualify the source correction and Linux gate; they make no
+installed-app or native Windows acceptance claim.
 
-Prior source `540b1761f` passed its 31 focused cases and one verify at
-21:55Z, but missed the rejected ordering. Booking3588 returned21:56Z. Its
-fixture/container were retired21:57Z; only small JSON/summary evidence remains
-in `out/c7-models-delete-overlap-recovery-20261018/`. No resource is held.
-The next gate uses the same literal S1 SSD fixture only after confirming it
-absent, the retained inactive offline donor, and separate donor/candidate
-manifest references. Protected inputs and the separate Stop candidate remain.
+First freeze `19eaa0083` stopped at 120 passed / four failed: the new regression
+queried the idle **Refresh model list** accessible name after the pending UI
+correctly changed it to **Refreshing model list…**. The corrected assertion
+retains the disabled-action check and all orderings; production source did not
+change. Lint and `make verify` never started in that attempt. Booking3599
+returned22:19Z; its concise failure remains in the result packet. The older `540b1761f` fixture was retired21:57Z and only its concise
+rejected evidence remains.
 
 ## Models accepted deletion and inventory recovery — C7, October 18
 
