@@ -280,6 +280,52 @@ it('keeps a paused download informational and resumes its retained progress', as
   ])
 })
 
+it('pauses then discards a first-run download after the Host reports it paused', async () => {
+  vi.useFakeTimers()
+  try {
+    const job = { id: 'download', release, status: 'downloading', received: 297664406, bytes_per_second: 1024 ** 2 }
+    let saved = flow('downloads', {
+      hardware_profile: { status: 'idle' }, selected_release_ids: [release.sha256], selected_downloads: [job],
+    })
+    let resolveDiscard!: () => void
+    const discard = new Promise<void>(resolve => { resolveDiscard = resolve })
+    mocks.command.mockImplementation((operation, args) => {
+      if (operation === 'download_action') {
+        if (args.body.action === 'pause') saved = { ...saved, selected_downloads: [{ ...job, status: 'pausing', bytes_per_second: 0 }] }
+        if (args.body.action === 'discard') return discard.then(() => {
+          saved = flow('models', { selected_release_ids: [], models: [{ release, recommended: false, reason: 'Choose a model to download' }] })
+          return { ok: true }
+        })
+        return Promise.resolve({ ok: true })
+      }
+      return Promise.resolve(saved)
+    })
+    await act(async () => { render(<EngineFirstRun />) })
+    expect(screen.queryByRole('button', { name: 'Discard download' })).not.toBeInTheDocument()
+    expect(screen.getByText('Pausing keeps the partial file so you can resume later.')).toBeVisible()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Pause download' })) })
+    expect(screen.getByText(/Muse · Saving progress before pausing/)).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Discard download' })).not.toBeInTheDocument()
+
+    saved = { ...saved, selected_downloads: [{ ...job, status: 'paused', bytes_per_second: 0 }] }
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(screen.getByText(/Muse · Paused; resume to continue/)).toBeVisible()
+    expect(screen.getByRole('progressbar', { name: 'Muse download' })).toHaveAttribute('value', String(job.received))
+    expect(screen.getByText('Discarding removes the partial file. You will need to start this download again.')).toBeVisible()
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Discard download' })) })
+    expect(screen.getByRole('button', { name: 'Discard download' })).toBeDisabled()
+    expect(screen.getByRole('progressbar', { name: 'Muse download' })).toBeInTheDocument()
+    await act(async () => { resolveDiscard() })
+    expect(screen.getByRole('checkbox', { name: /Muse/ })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Download selected models' })).toBeDisabled()
+    expect(screen.queryByRole('progressbar', { name: 'Muse download' })).not.toBeInTheDocument()
+    expect(mocks.command.mock.calls.filter(([operation]) => operation === 'download_action')).toEqual([
+      ['download_action', { host_id: 'local', body: { id: 'download', action: 'pause' } }],
+      ['download_action', { host_id: 'local', body: { id: 'download', action: 'discard' } }],
+    ])
+  } finally { vi.useRealTimers() }
+})
+
 it('observes verified downloads before selected profiling and retains its retry across reopening', async () => {
   const installed = { id: 'download', release, status: 'installed', received: release.bytes, bytes_per_second: 0 }
   let saved = flow('downloads', {
@@ -646,6 +692,45 @@ it('saves folder and model choices during profiling and restores them after reop
   expect(screen.queryByText('Downloading models')).not.toBeInTheDocument()
 })
 
+it('clears saved model choices before profiling admits downloads and keeps the cleared choice on polling', async () => {
+  vi.useFakeTimers()
+  try {
+    let saved = flow('profiling', {
+      gpu_uuids: ['GPU-one'], catalog_loaded: true,
+      selected_release_ids: [release.sha256],
+      models: [{ release, recommended: true, reason: 'Capacity checks wait for profiling' }],
+    })
+    mocks.command.mockImplementation((_operation, args) => {
+      if (args.action === 'models') saved = { ...saved, selected_release_ids: args.release_ids }
+      return Promise.resolve(saved)
+    })
+    await act(async () => { render(<EngineFirstRun />) })
+    const choice = screen.getByRole('checkbox', { name: /Muse/ })
+    expect(choice).toBeChecked()
+    expect(screen.getByText(/Model choices saved\. Downloads will begin/)).toBeVisible()
+
+    await act(async () => { fireEvent.click(choice) })
+    expect(choice).not.toBeChecked()
+    expect(screen.queryByText(/Model choices saved\. Downloads will begin/)).not.toBeInTheDocument()
+    expect(screen.getByText('Your model choices have changed. Select Clear saved model choices to update the queued downloads.')).toBeVisible()
+    const clear = screen.getByRole('button', { name: 'Clear saved model choices' })
+    expect(clear).toBeEnabled()
+    await act(async () => { fireEvent.click(clear) })
+    expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'models', release_ids: [] })
+    expect(screen.getByText('No models are queued for download. Choose models when you are ready.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save model choices' })).toBeDisabled()
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local' })
+    expect(choice).not.toBeChecked()
+    expect(screen.getByText('Measuring graphics cards…')).toBeVisible()
+    expect(screen.queryByText(/Model choices saved\. Downloads will begin/)).not.toBeInTheDocument()
+    expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([
+      ['first_run', { host_id: 'local', action: 'models', release_ids: [] }],
+    ])
+  } finally { vi.useRealTimers() }
+})
+
 it('keeps edited folder and package choices when a pending profile completes', async () => {
   let reads = 0
   mocks.command.mockImplementation(() => {
@@ -664,11 +749,11 @@ it('keeps edited folder and package choices when a pending profile completes', a
   fireEvent.change(folder, { target: { value: '/my-edited-folder' } })
   fireEvent.click(choice)
   expect(choice).not.toBeChecked()
-  await screen.findByRole('button', { name: 'Download selected models' }, { timeout: 3000 })
+  await screen.findByRole('button', { name: 'Clear saved model choices' }, { timeout: 3000 })
   expect(screen.getByText('Recommended: /new-recommendation')).toBeInTheDocument()
   expect(folder).toHaveValue('/my-edited-folder')
   expect(choice).not.toBeChecked()
-  expect(screen.getByRole('button', { name: 'Download selected models' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Clear saved model choices' })).toBeEnabled()
   expect(mocks.command.mock.calls.every(([, args]) => !args.action)).toBe(true)
 })
 

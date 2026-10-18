@@ -202,6 +202,24 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
       if (active.current) setBusy(false)
     }
   }
+  const downloadAction = async (id: string, action: 'pause' | 'discard') => {
+    if (!localId || pendingAction.current) return
+    revision.current++
+    pendingAction.current = true
+    setBusy(true); setError('')
+    try {
+      await engineCommand('download_action', { host_id: localId, body: { id, action } })
+      if (!active.current) return
+      const next = await engineCommand<FirstRun>('first_run', { host_id: localId })
+      if (!active.current) return
+      setFlow(next)
+      setPollError('')
+    } catch (e) { if (active.current) setError(String(e)) } finally {
+      revision.current++
+      pendingAction.current = false
+      if (active.current) setBusy(false)
+    }
+  }
   if (step === 'complete') return <>{hardwareProfileControls}</>
   const known = snapshot?.gpus.filter(gpu => ['8.0', '8.6', '8.9', '12.0'].includes(gpu.compute_capability ?? '')) ?? []
   const selected = known.filter(gpu => gpus.includes(gpu.uuid))
@@ -212,6 +230,10 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
   const hardware = flow?.hardware_profile
   const selectedScope = hardware?.scope === 'artifact'
   const choosing = step === 'storage' || step === 'models' || (profiling && !selectedScope && !flow?.selected_downloads.length)
+  const savedReleases = flow?.selected_release_ids ?? []
+  const modelChoicesChanged = releases.length !== savedReleases.length || releases.some(id => !savedReleases.includes(id))
+  const clearingSavedChoices = !releases.length && savedReleases.length > 0
+  const modelChoiceAction = clearingSavedChoices ? 'Clear saved model choices' : step === 'models' ? 'Download selected models' : 'Save model choices'
   const selectedReady = selectedScope && hardware?.status === 'completed' && hardware.scope_complete === true
   const storageRoot = flow?.storage.path ?? ''
   const savedStoragePath = flow?.storage.requested_path || storageRoot
@@ -263,18 +285,22 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
       <Button disabled={busy || !path.trim()} onClick={() => void act({ action: 'storage', path })}>{profiling ? 'Save folder choice' : 'Use this folder'}</Button>
     </div>}
     {choosing && <fieldset className="space-y-3" disabled={busy}><legend className="font-medium">Choose models to download</legend>
-      <p className="text-sm text-muted-foreground">Select a model below, then select {step === 'models' ? 'Download selected models' : 'Save model choices'}. {profiling ? 'Downloads start after the hardware measurement finishes. ' : ''}Recommendations consider your graphics cards and free space. GInfer checks the downloaded files, measures the hardware needed by each selected model, and checks memory before it can start.</p>
+      <p className="text-sm text-muted-foreground">{clearingSavedChoices ? 'To leave no models queued, select Clear saved model choices.' : `Select a model below, then select ${modelChoiceAction}.`} {profiling ? 'Downloads start after the hardware measurement finishes. ' : ''}Recommendations consider your graphics cards and free space. GInfer checks the downloaded files, measures the hardware needed by each selected model, and checks memory before it can start.</p>
       {offered.map(model => { const id = model.release_id ?? model.release.sha256; return <label key={id} className="block rounded border p-3 text-sm"><span className="flex items-center gap-2"><input type="checkbox" checked={releases.includes(id)} onChange={() => { releasesEdited.current = true; setReleases(toggle(releases, id)) }} />{plainModelName(model.release.name)} · {formatModelBytes(model.release.bytes)}{model.recommended ? ' · Recommended' : ''}</span><span className="mt-1 block text-muted-foreground">{model.reason}</span></label> })}
       {!offered.length && <p role="status">{flow?.catalog_loaded === false && !flow.error ? 'Loading published model catalog…' : 'No model downloads are available for these graphics cards. Downloads are optional: open Models > This computer > Installed and select Add local model to choose an existing .ginfer file. If you expect a download catalog, select Refresh model catalog.'}</p>}
       {!profiling && (snapshot?.model_management?.downloads ?? []).filter(job => job.status === 'installed' && job.path && !job.path.startsWith(`${flow?.storage.path}/`) && !job.path.startsWith(`${flow?.storage.path}\\`)).map(job => <div key={job.id} className="space-y-2 rounded border p-3 text-sm"><p>{plainModelName(job.release.name)} is already on this computer. Keep it where it is, or move it to your selected model folder.</p><details><summary className="cursor-pointer">Folder details</summary><p>Current folder: {job.path}</p><p>Selected folder: {flow?.storage.path}</p></details><Button variant="outline" onClick={() => void act({ action: 'move', download_id: job.id })}>Move {plainModelName(job.release.name)} to selected folder</Button></div>)}
-      {profiling && !!flow?.selected_release_ids?.length && <p role="status">Model choices saved. Downloads will begin after the hardware measurement and folder check finish.</p>}
+      {profiling && !!savedReleases.length && <p role="status">{modelChoicesChanged ? `Your model choices have changed. Select ${modelChoiceAction} to update the queued downloads.` : 'Model choices saved. Downloads will begin after the hardware measurement and folder check finish.'}</p>}
+      {profiling && !savedReleases.length && <p role="status">No models are queued for download. Choose models when you are ready.</p>}
       {spaceWarning && <p role="alert" className="text-sm text-destructive">{spaceWarning.text}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button disabled={!releases.length || spaceWarning?.block} onClick={() => void act({ action: 'models', release_ids: releases })}>{step === 'models' ? 'Download selected models' : 'Save model choices'}</Button>
+        <Button disabled={(!releases.length && !clearingSavedChoices) || spaceWarning?.block} onClick={() => void act({ action: 'models', release_ids: releases })}>{modelChoiceAction}</Button>
         <Button variant="outline" onClick={() => void act({ action: 'refresh_catalog' })}>Refresh model catalog</Button>
       </div>
     </fieldset>}
-    {step === 'downloads' && <div className="space-y-3"><h3 className="font-medium">Downloading models</h3>{flow?.selected_downloads.map(job => <div key={job.id} className="space-y-1"><p>{plainModelName(job.release.name)} · {downloadStatusLabel(job.status)} · {(100 * job.received / Math.max(1, job.release.bytes)).toFixed(1)}%</p><progress className="w-full" aria-label={`${plainModelName(job.release.name)} download`} max={job.release.bytes} value={job.received} /><p className="text-xs text-muted-foreground">{(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s</p>{job.status === 'failed' && job.error && <FirstRunError message="This model download could not finish. Check your internet connection and free space, then select Try again or Choose a different model." details={job.error} label={`${plainModelName(job.release.name)} download error details`} />}</div>)}<p className="text-sm text-muted-foreground">You can close this window while downloads continue. GInfer checks the downloaded files, then measures the hardware needed by your selected models.</p>{flow?.selected_downloads.some(job => job.status === 'failed')
+    {step === 'downloads' && <div className="space-y-3"><h3 className="font-medium">Downloading models</h3>{flow?.selected_downloads.map(job => <div key={job.id} className="space-y-1"><p>{plainModelName(job.release.name)} · {downloadStatusLabel(job.status)} · {(100 * job.received / Math.max(1, job.release.bytes)).toFixed(1)}%</p><progress className="w-full" aria-label={`${plainModelName(job.release.name)} download`} max={job.release.bytes} value={job.received} /><p className="text-xs text-muted-foreground">{(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s</p>{job.status === 'failed' && job.error && <FirstRunError message="This model download could not finish. Check your internet connection and free space, then select Try again or Choose a different model." details={job.error} label={`${plainModelName(job.release.name)} download error details`} />}
+      {['queued', 'downloading'].includes(job.status) && <div className="space-y-1"><Button variant="outline" disabled={busy} onClick={() => void downloadAction(job.id, 'pause')}>Pause download</Button><p className="text-sm text-muted-foreground">Pausing keeps the partial file so you can resume later.</p></div>}
+      {['paused', 'failed'].includes(job.status) && <div className="space-y-1"><Button variant="outline" disabled={busy} onClick={() => void downloadAction(job.id, 'discard')}>Discard download</Button><p className="text-sm text-muted-foreground">Discarding removes the partial file. You will need to start this download again.</p></div>}
+    </div>)}<p className="text-sm text-muted-foreground">You can close this window while downloads continue. GInfer checks the downloaded files, then measures the hardware needed by your selected models.</p>{flow?.selected_downloads.some(job => job.status === 'failed')
       ? <div className="space-y-2"><p className="text-sm">The download could not finish. You can try again or choose a different model.</p><div className="flex gap-2"><Button disabled={busy} onClick={() => void act({ action: 'resume' })}>Try again</Button><Button variant="outline" disabled={busy} onClick={() => void act({ action: 'reselect' })}>Choose a different model</Button></div></div>
       : <Button variant="outline" disabled={busy} onClick={() => void act({ action: 'resume' })}>Resume downloads</Button>}</div>}
     {step === 'storage_review' && <div className="space-y-3"><h3 className="font-medium">Review model locations</h3>

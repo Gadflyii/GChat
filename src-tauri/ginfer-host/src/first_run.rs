@@ -502,6 +502,19 @@ impl Host {
         }
         let _operation = self.first_run_operation.lock().await;
         let mut progress = self.data.lock().await.first_run.clone();
+        if body["action"] == "models" && body.get("release_ids").is_none() {
+            if progress.gpu_uuids.is_empty()
+                || progress.complete
+                || !progress.download_ids.is_empty()
+            {
+                return Err(
+                    "Choose models after selecting GPUs and before admitting downloads".into(),
+                );
+            }
+            // An omitted choice is a read, not a retry or permission to admit
+            // the saved selection. Keep its errors and durable state intact.
+            return self.first_run_status().await;
+        }
         let jobs = self.downloads.list().await;
         if reconcile(&mut progress, &jobs) {
             self.store_first_run(progress.clone()).await?;
@@ -638,9 +651,6 @@ impl Host {
                 }
                 let ids: BTreeSet<String> = serde_json::from_value(body["release_ids"].clone())
                     .map_err(|e| e.to_string())?;
-                if ids.is_empty() {
-                    return Err("Choose at least one published model".into());
-                }
                 let selected: Vec<_> = progress
                     .releases
                     .iter()
@@ -671,7 +681,10 @@ impl Host {
                 progress.selected_release_ids = ids.into_iter().collect();
                 progress.download_error = None;
                 self.store_first_run(progress.clone()).await?;
-                if progress.storage_accepted && !self.first_run_profile_busy().await {
+                if !progress.selected_release_ids.is_empty()
+                    && progress.storage_accepted
+                    && !self.first_run_profile_busy().await
+                {
                     self.admit_first_run_downloads(&mut progress).await?;
                 }
             }
@@ -1815,6 +1828,11 @@ mod tests {
         assert_eq!(saved["storage"]["accepted"], true);
         assert_eq!(saved["selected_downloads"][0]["id"], json!(jobs[0].id));
         assert!(!host.first_run_profile_busy().await);
+        assert!(host
+            .first_run_action(json!({"action":"models","release_ids":[]}))
+            .await
+            .unwrap_err()
+            .contains("before admitting downloads"));
         drop(host);
         let restored = Host::open(
             directory.path().to_owned(),
@@ -2009,20 +2027,22 @@ mod tests {
         let pending_root = directory.path().join("after-current-run");
         let mut waiting = host.data.lock().await.first_run.clone();
         waiting.requested_storage = Some(pending_root.clone());
-        let lifecycle = host.lifecycle.lock().await;
-        let validation = host.apply_first_run_storage(&mut waiting);
-        tokio::pin!(validation);
-        std::future::poll_fn(|context| {
-            assert!(validation.as_mut().poll(context).is_pending());
-            std::task::Poll::Ready(())
-        })
-        .await;
-        // A profile start that owns lifecycle wins before any queued native
-        // path validation; the waiting choice must recheck after the lock.
-        job.start(HardwareProfileAction::Refresh, Some(cli), vec![gpu().uuid])
-            .unwrap();
-        drop(lifecycle);
-        let validation_result = validation.await;
+        let validation_result = {
+            let lifecycle = host.lifecycle.lock().await;
+            let validation = host.apply_first_run_storage(&mut waiting);
+            tokio::pin!(validation);
+            std::future::poll_fn(|context| {
+                assert!(validation.as_mut().poll(context).is_pending());
+                std::task::Poll::Ready(())
+            })
+            .await;
+            // A profile start that owns lifecycle wins before any queued native
+            // path validation; the waiting choice must recheck after the lock.
+            job.start(HardwareProfileAction::Refresh, Some(cli), vec![gpu().uuid])
+                .unwrap();
+            drop(lifecycle);
+            validation.await
+        };
         let storage = host
             .first_run_action(json!({"action":"storage","path":pending_root}))
             .await;
@@ -2039,6 +2059,19 @@ mod tests {
         let busy = job.busy();
         let final_root = host.downloads.root();
         let current_jobs = host.downloads.list().await;
+        let mut failed_choice = host.data.lock().await.first_run.clone();
+        assert_eq!(
+            failed_choice.selected_release_ids,
+            vec![jobs[0].release.sha256.clone()]
+        );
+        failed_choice.download_error = Some("Previous download admission failed".into());
+        host.store_first_run(failed_choice).await.unwrap();
+        let before_omitted = std::fs::read(directory.path().join("host.json")).unwrap();
+        let omitted = host.first_run_action(json!({"action":"models"})).await;
+        let after_omitted = std::fs::read(directory.path().join("host.json")).unwrap();
+        let cleared = host
+            .first_run_action(json!({"action":"models","release_ids":[]}))
+            .await;
         job.shutdown().await.unwrap();
         assert!(busy);
         validation_result.unwrap();
@@ -2051,6 +2084,50 @@ mod tests {
         assert_eq!(final_root, original_root);
         assert!(!pending_root.exists());
         assert_eq!(current_jobs.len(), 1);
+        let omitted = omitted.unwrap();
+        assert_eq!(omitted["step"], "storage");
+        assert_eq!(
+            omitted["selected_release_ids"],
+            json!([jobs[0].release.sha256])
+        );
+        assert_eq!(omitted["error"], "Previous download admission failed");
+        assert_eq!(before_omitted, after_omitted);
+        let cleared = cleared.unwrap();
+        assert_eq!(cleared["selected_release_ids"], json!([]));
+        assert_eq!(cleared["selected_downloads"], json!([]));
+        assert!(host.data.lock().await.first_run.download_error.is_none());
+
+        // When the current calibration ends, the queued folder can be checked
+        // without admitting a model the user has removed from their choice.
+        host.first_run_maintenance().await.unwrap();
+        assert_eq!(host.first_run_status().await.unwrap()["step"], "models");
+        assert!(host.data.lock().await.first_run.download_ids.is_empty());
+        assert_eq!(host.downloads.list().await.len(), 1);
+        drop(host);
+        let restored = Host::open(
+            directory.path().to_owned(),
+            "Fixture".into(),
+            directory.path().join("ginfer-serve"),
+            vec![],
+            vec![],
+            vec![gpu()],
+        )
+        .await
+        .unwrap();
+        restored.first_run_maintenance().await.unwrap();
+        let saved = restored.data.lock().await.first_run.clone();
+        assert!(saved.selected_release_ids.is_empty());
+        assert!(saved.download_ids.is_empty());
+        assert!(saved.download_error.is_none());
+        assert!(saved.storage_accepted);
+        assert_eq!(saved.gpu_uuids, vec![gpu().uuid]);
+        assert_eq!(
+            saved.requested_storage,
+            Some(pending_root.canonicalize().unwrap())
+        );
+        assert_eq!(restored.first_run_status().await.unwrap()["step"], "models");
+        assert!(!restored.first_run_pending().await);
+        assert_eq!(restored.downloads.list().await.len(), 1);
     }
 
     #[tokio::test]
