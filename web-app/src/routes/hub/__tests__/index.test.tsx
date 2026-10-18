@@ -719,6 +719,7 @@ describe('host-scoped Models', () => {
     expect(screen.getByText('Failed to load Qwen: Not enough graphics memory.')).toBeVisible()
     expect(alert).not.toHaveTextContent(/^Error:/)
     expect(alert).not.toHaveTextContent('Saved inventory may be out of date')
+    expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model could not be loaded. Check the error below before trying again.')
     mocks.switchModel.mockResolvedValue(undefined)
   })
   it('directs a named model without automatic settings to start from GInfer Hosts', async () => {
@@ -1092,6 +1093,7 @@ describe('host-scoped Models', () => {
     await act(async () => { reject(new DOMException('Cancelled', 'AbortError')) })
     expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status', { name: 'Model load status' })).toHaveTextContent('Model startup cancelled.')
     expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_load_cancel')).toHaveLength(1)
   })
 
