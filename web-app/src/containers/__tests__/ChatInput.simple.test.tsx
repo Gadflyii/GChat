@@ -782,7 +782,10 @@ describe('ChatInput', () => {
     }
   })
 
-  it('does not clear the next conversation draft when an earlier submission finishes', async () => {
+  it.each([
+    { pendingDraft: 'Review these notes', restoredDraft: '' },
+    { pendingDraft: 'My next question', restoredDraft: 'My next question' },
+  ])('clears only the sent draft after switching conversations ($pendingDraft)', async ({ pendingDraft, restoredDraft }) => {
     const originalThread = 'original-conversation'
     const nextThread = 'next-conversation'
     const originalAttachment = { ...createDocumentAttachment({ name: 'original.txt', path: '/docs/original.txt' }), id: 'original-file', processed: true }
@@ -796,6 +799,8 @@ describe('ChatInput', () => {
     const input = screen.getByTestId('chat-input')
     fireEvent.change(input, { target: { value: 'Review these notes' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review these notes', undefined, undefined, undefined, [originalAttachment])
+    fireEvent.change(input, { target: { value: pendingDraft } })
 
     act(() => useThreads.setState({ currentThreadId: nextThread }))
     fireEvent.change(input, { target: { value: 'Review these notes' } })
@@ -809,6 +814,12 @@ describe('ChatInput', () => {
     expect(useChatAttachments.getState().getAttachments(nextThread)).toEqual([nextAttachment])
     expect(useChatAttachments.getState().getAttachments(originalThread)).toEqual([])
     expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+
+    act(() => useThreads.setState({ currentThreadId: originalThread }))
+    expect(input).toHaveValue(restoredDraft)
+    act(() => useThreads.setState({ currentThreadId: nextThread }))
+    expect(input).toHaveValue('Review these notes')
+    expect(useChatAttachments.getState().getAttachments(nextThread)).toEqual([nextAttachment])
   })
 
   it('consumes /compact on the home input before model selection or thread creation', async () => {
