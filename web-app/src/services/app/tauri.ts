@@ -10,18 +10,25 @@ import { DefaultAppService } from './default'
 
 export class TauriAppService extends DefaultAppService {
   async factoryReset(): Promise<void> {
-    const { EngineManager } = await import('@gchat/core')
-    for (const [, engine] of EngineManager.instance().engines) {
-      const activeModels = await engine.getLoadedModels()
-      if (activeModels) {
-        await Promise.all(activeModels.map((model: string) => engine.unload(model)))
-      }
-    }
-
-    window.localStorage.clear()
-
+    const previousResetPending = window.localStorage.getItem(
+      localStorageKey.factoryResetPending
+    )
+    // Native reset drains Agent runs before stopping their dependencies. Keep
+    // preferences until the restarted app consumes this flag before stores load.
     window.localStorage.setItem(localStorageKey.factoryResetPending, 'true')
-    await invoke('factory_reset')
+    try {
+      await invoke('factory_reset')
+    } catch (error) {
+      if (previousResetPending === null) {
+        window.localStorage.removeItem(localStorageKey.factoryResetPending)
+      } else {
+        window.localStorage.setItem(
+          localStorageKey.factoryResetPending,
+          previousResetPending
+        )
+      }
+      throw error
+    }
   }
 
   async readLogs(): Promise<LogEntry[]> {

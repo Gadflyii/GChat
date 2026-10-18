@@ -126,6 +126,28 @@ pub async fn factory_reset<R: Runtime>(
         return Ok(());
     }
 
+    reset_app_data(&app_handle, &state, &data_folder).await?;
+
+    // Reset the configuration
+    let default_config = AppConfiguration {
+        data_folder: default_data_folder_path(app_handle.clone()),
+        autostart_preference,
+    };
+    let _ = update_app_configuration(app_handle.clone(), default_config);
+
+    restart_app(&app_handle)
+}
+
+/// Drain every shared Agent turn before tearing down its dependencies or data.
+pub(crate) async fn reset_app_data<R: Runtime>(
+    app_handle: &AppHandle<R>,
+    state: &State<'_, AppState>,
+    data_folder: &Path,
+) -> Result<(), String> {
+    crate::core::agent::commands::shutdown(app_handle)
+        .await
+        .map_err(|error| format!("GChat reset could not finish: {error}. Try resetting again after the Agent runs stop."))?;
+
     // Keep the windows alive until restart: closing the last one exits the app
     // before asynchronous shutdown and data deletion can finish.
     #[cfg(not(any(target_os = "ios", target_os = "android")))]
@@ -139,7 +161,7 @@ pub async fn factory_reset<R: Runtime>(
     }
     log::info!("Factory reset, removing data folder: {data_folder:?}");
 
-    let _ = stop_mcp_servers_with_context(&app_handle, &state, ShutdownContext::FactoryReset).await;
+    let _ = stop_mcp_servers_with_context(app_handle, state, ShutdownContext::FactoryReset).await;
 
     {
         let mut active_servers = state.mcp_active_servers.lock().await;
@@ -147,7 +169,7 @@ pub async fn factory_reset<R: Runtime>(
     }
 
     use crate::core::mcp::lockfile::cleanup_own_locks;
-    if let Err(e) = cleanup_own_locks(&app_handle) {
+    if let Err(e) = cleanup_own_locks(app_handle) {
         log::warn!("Failed to cleanup lock files: {}", e);
     }
     // Clean up the ginfer process map.
@@ -180,7 +202,7 @@ pub async fn factory_reset<R: Runtime>(
             false
         };
 
-        remove_jan_data_contents(&data_folder);
+        remove_jan_data_contents(data_folder);
 
         if bin_preserved {
             let ginfer_dir = data_folder.join("ginfer");
@@ -192,14 +214,7 @@ pub async fn factory_reset<R: Runtime>(
         }
     }
 
-    // Reset the configuration
-    let default_config = AppConfiguration {
-        data_folder: default_data_folder_path(app_handle.clone()),
-        autostart_preference,
-    };
-    let _ = update_app_configuration(app_handle.clone(), default_config);
-
-    restart_app(&app_handle)
+    Ok(())
 }
 
 #[cfg(any(target_os = "linux", test))]

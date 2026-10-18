@@ -4,6 +4,7 @@ import { Route as GeneralRoute } from '../general'
 import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
+import { useHardware } from '@/hooks/useHardware'
 import { toast } from 'sonner'
 
 // Mock all the dependencies
@@ -80,6 +81,7 @@ const mockOpenerOpen = vi.fn()
 const mockRevealItemInDir = vi.fn()
 const mockRelocateDataFolder = vi.fn()
 const mockGetDataFolder = vi.fn()
+const mockFactoryReset = vi.fn()
 const mockStopAllModels = vi.fn()
 const mockEmitEvent = vi.fn()
 const mockOpenDirectory = vi.fn()
@@ -282,9 +284,10 @@ describe('General Settings Route', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useConversationPolicy.getState().setDefaultApprovalMode('manual')
+    useHardware.getState().resumePolling()
     seedServiceHub({
       app: {
-        factoryReset: vi.fn(),
+        factoryReset: mockFactoryReset,
         getGchatDataFolder: mockGetDataFolder,
         relocateGchatDataFolder: mockRelocateDataFolder,
       } as ReturnType<ServiceHub['app']>,
@@ -311,6 +314,7 @@ describe('General Settings Route', () => {
     mockRevealItemInDir.mockResolvedValue(undefined)
     mockRelocateDataFolder.mockResolvedValue(undefined)
     mockGetDataFolder.mockResolvedValue('/test/data/folder')
+    mockFactoryReset.mockResolvedValue(undefined)
     mockOpenDirectory.mockResolvedValue('/test/new-data')
   })
 
@@ -723,6 +727,34 @@ describe('General Settings Route', () => {
     expect(screen.getByTestId('dialog')).toBeInTheDocument()
     expect(screen.getByTestId('dialog-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('dialog-content')).toBeInTheDocument()
+  })
+
+  it.each([
+    'Agent runs did not finish shutting down within 15 seconds',
+    new Error('Agent cleanup failed'),
+  ])('shows a reset refusal and resumes hardware polling: %s', async (failure) => {
+    mockFactoryReset.mockImplementationOnce(() => {
+      expect(useHardware.getState().pollingPaused).toBe(true)
+      return Promise.reject(failure)
+    })
+    const Component = GeneralRoute.component as React.ComponentType
+    await act(async () => {
+      render(<Component />)
+    })
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'settings:general.reset' })
+      )
+    })
+
+    expect(mockFactoryReset).toHaveBeenCalledTimes(1)
+    expect(toast.error).toHaveBeenCalledExactlyOnceWith(
+      failure instanceof Error ? failure.message : failure
+    )
+    expect(useHardware.getState().pollingPaused).toBe(false)
+    expect(screen.getByTitle('/test/data/folder')).toBeInTheDocument()
+    expect(window.core?.api?.relaunch).not.toHaveBeenCalled()
   })
 
   it('should render external links', async () => {

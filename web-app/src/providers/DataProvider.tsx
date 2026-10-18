@@ -114,16 +114,6 @@ export function DataProvider() {
   }, [gbotEnabled])
 
   useEffect(() => {
-    if (localStorage.getItem(localStorageKey.factoryResetPending) === 'true') {
-      localStorage.clear()
-
-      console.log(
-        'Reset to defaults requested — localStorage cleared on startup'
-      )
-    }
-  }, [])
-
-  useEffect(() => {
     if (!IS_TAURI || isDev()) return
     ;(async () => {
       if (

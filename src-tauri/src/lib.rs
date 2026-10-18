@@ -719,7 +719,11 @@ pub fn run() {
                         let worker_shutdown = async {
                             tokio::join!(
                                 biased;
-                                core::agent::commands::shutdown(&app_handle),
+                                async {
+                                    if let Err(error) = core::agent::commands::shutdown(&app_handle).await {
+                                        log::warn!("Agent run shutdown failed: {error}");
+                                    }
+                                },
                                 core::agent::capabilities::shutdown(&app_handle),
                                 async {
                                     #[cfg(not(any(target_os = "ios", target_os = "android")))]
