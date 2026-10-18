@@ -326,6 +326,18 @@ function GbotPage() {
     if (accepted && mounted.current)
       await perform(() => gbot('setup/cloud/remove', { id: review.id }))
   }
+  const removeM365Setup = async (record: M365SetupRecord) => {
+    if (busy) return
+    const accepted = await confirmAction({
+      title: `Remove ${record.name}’s saved Cloud PC setup?`,
+      message:
+        'This removes this saved setup from GChat. Your Microsoft account and Cloud PC are kept. You’ll need to choose them again to restart setup.',
+      confirmLabel: 'Remove saved Cloud PC setup',
+      destructive: true,
+    })
+    if (accepted && mounted.current)
+      await perform(() => gbot('setup/m365/remove', { id: record.id }))
+  }
   const workspaceId = selected || state?.workspaces[0]?.id
   const prompt = prompts[workspaceId || ''] || ''
   const bot = state?.workspaces.find(
@@ -960,11 +972,7 @@ function GbotPage() {
                     <Button
                       variant="ghost"
                       disabled={busy}
-                      onClick={() =>
-                        void perform(() =>
-                          gbot('setup/m365/remove', { id: record.id })
-                        )
-                      }
+                      onClick={() => void removeM365Setup(record)}
                     >
                       Remove saved Cloud PC setup
                     </Button>
