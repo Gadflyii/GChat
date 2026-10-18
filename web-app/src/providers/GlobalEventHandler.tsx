@@ -68,8 +68,9 @@ export function GlobalEventHandler() {
       if (event.key === 'version_backend') {
         try {
           // Refresh providers to get updated settings from the extension
+          const revision = useModelProvider.getState().inventoryRevision
           const updatedProviders = await serviceHub.providers().getProviders()
-          setProviders(updatedProviders)
+          setProviders(updatedProviders, revision)
           console.log('Providers refreshed after version_backend change')
         } catch (error) {
           console.error(

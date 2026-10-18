@@ -727,6 +727,96 @@ it('does not adopt the connector default after a new account completes sign-in',
   expect(gbot).not.toHaveBeenCalled()
 })
 
+it.each([
+  { kind: 'Error', cause: new Error('RPC_E_DISCONNECTED account transport') },
+  { kind: 'native string', cause: 'HRESULT 0x80010108 account transport' },
+])(
+  'recovers the account list after completed Microsoft sign-in and a $kind failure',
+  async ({ cause }) => {
+    vi.mocked(connectorAccounts)
+      .mockResolvedValueOnce({ ...accounts(), accounts: [] })
+      .mockRejectedValueOnce(cause)
+      .mockResolvedValue(accounts())
+    vi.mocked(beginConnectorAuth).mockResolvedValue({
+      flow_id: 'new-flow',
+      provider: 'microsoft',
+      status: 'waiting',
+    })
+    vi.mocked(connectorAuthStatus).mockResolvedValue({
+      flow_id: 'new-flow',
+      provider: 'microsoft',
+      status: 'connected',
+      account_id: 'work-account',
+    })
+    const saved = mount()
+    await screen.findByLabelText('Microsoft account')
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Sign in with Microsoft' })
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Check sign-in status' })
+    )
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      'Microsoft sign-in completed, but the account list could not be refreshed. Choose Refresh Microsoft accounts to try again.'
+    )
+    expect(alert).not.toHaveTextContent('account transport')
+    expect(
+      screen.getByText(
+        'Microsoft account connected. Choose the account and check its assigned PCs.'
+      )
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Check sign-in status' })
+    ).not.toBeInTheDocument()
+    const diagnostic = screen.getByText(String(cause))
+    expect(diagnostic).not.toBeVisible()
+    expect(diagnostic.closest('details')).not.toHaveAttribute('open')
+    expect(
+      screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+    ).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+    ).toBeDisabled()
+
+    const user = userEvent.setup()
+    await user.click(screen.getByText('Details'))
+    expect(diagnostic).toBeVisible()
+    expect(connectorAccounts).toHaveBeenCalledTimes(2)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+    )
+    await screen.findByText(
+      'Microsoft accounts refreshed. 1 connected account is available. Choose an account above.'
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent(
+      'Choose a Microsoft account'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+    ).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Microsoft account' }))
+    const option = screen.getByRole('menuitemradio', { name: 'bot@example.test' })
+    expect(option).not.toBeChecked()
+    await user.click(option)
+    expect(
+      screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+    ).toBeEnabled()
+    expect(connectorAccounts).toHaveBeenCalledTimes(3)
+    expect(beginConnectorAuth).toHaveBeenCalledExactlyOnceWith({
+      provider: 'microsoft',
+      services: ['cloud_pc'],
+      access: 'read_only',
+    })
+    expect(connectorAuthStatus).toHaveBeenCalledExactlyOnceWith('new-flow')
+    expect(gbot).not.toHaveBeenCalled()
+    expect(opener).not.toHaveBeenCalled()
+    expect(saved).not.toHaveBeenCalled()
+  }
+)
+
 it('distinguishes no assignment from a failed permission lookup and allows retry', async () => {
   const permissionMessage =
     'This needs a work or school account with an assigned Windows 365 Cloud PC. Ask your organization’s administrator to approve access and check your license.'
