@@ -13,6 +13,35 @@ Linux registration and Hide work; Open/Exit remain owed to Ron's desktop release
 walkthrough. No application registration failure was established. Documentation and harness fixes reuse
 the accepted binaries.
 
+## C7 native profiling exit 2 — closed October 18
+
+The first C7 native profile failed because a newer Host invoked an obsolete
+Engine CLI. The 00:40Z Host used Engine `5af502f1`; its parser accepts `--model`
+but rejects the Host's next artifact-profile option, `--tp`, with exit 2 before
+calibration, CUDA or model loading. A single CPU-only probe of the same retained
+binary reproduced `Unknown profile-hardware option: --tp` in 14.6 ms. This is a
+deterministic command mismatch, not a demonstrated intermittent same-build bug.
+
+Engine `90efcbbcb` added the artifact-profile arguments. C7's 00:44Z run used
+`e2282c336`, which contains that change, and completed profiling in 128.849 s,
+then reached Ready, served eight tokens and stopped normally. The current
+`current-ed68c7443-e2282c336-release` package already binds the corrected Engine;
+no further product change or retry wrapper is needed. The original failure
+retains HTTP 400/exit 2 only: its private stderr/workspace was deleted. The exact
+diagnostic above comes from the new reproduction, not from the original log.
+
+Evidence: `/ai/gchat/out/c7-models-local-import-20261018/real-host.json` and
+`/ai/gchat/out/c3-native-profile-exit2-20261018/{result,parser-reproduction}.json`.
+The earlier `c7-models-hub-engine-hardware-20261017/result.json` contains no native
+profiling attempt and is not failure evidence.
+
+Inventory: documentation worktree
+`/ai/gchat-worktrees/c3-native-profile-exit2-20261018`, branch
+`fix/c3-native-profile-exit2-20261018`, baseline `d8ce59320`; retained packet above.
+The existing C7 runtime/model were read-only donors. No new build, model copy or
+profile output exists. S1 CPU 104 was returned at 00:57Z after the single parser
+probe; booking 2806 is canceled and no owned remote job remains.
+
 ## Managed Host ownership and ports — October 16
 
 Desktop bootstrap and an installed Manager CLI launcher use their configured Host data root.
