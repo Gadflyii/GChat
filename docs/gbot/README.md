@@ -45,6 +45,13 @@ Hyper-V disk cmdlets. No host converter is installed or required. Use the
 existing `package-gbot-runtime.py --platform windows --guest-assets ...`
 staging path; publication remains Ron-gated.
 
+Bundled guest assets may be read-only. The adapter leaves that source unchanged
+and clears Read-only only on its newly created private guest disk before
+expanding it. Follow-up Linux gates pass 11 focused tests (Hyper-V, asset pins,
+API platform boundaries and shell delivery), service/root checks and strict
+Clippy after a test-module ordering correction. The shell keeps its existing
+MSRV allowance. See `out/gchat2-windows-hyperv-20261018/linux-ready-gates-summary.json`.
+
 Native Windows service all-target checking, test-executable compilation and
 10 focused service tests pass. The compile findings were Linux-only vault
 control routes and a Linux-only KVM example being included on Windows; both
