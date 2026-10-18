@@ -9,8 +9,6 @@ const settings = JSON.parse(
 )
 
 const setting = (key: string) => settings.find((item: any) => item.key === key)
-const values = (key: string) =>
-  setting(key).controllerProps.options.map((option: any) => option.value)
 
 describe('bundled GInfer profile', () => {
   it('preserves explicit profile intent and GPU choice across the native boundary', () => {
@@ -27,21 +25,14 @@ describe('bundled GInfer profile', () => {
     }
   })
 
-  it('starts registered multimodal packages with engine-owned automatic defaults', () => {
-    expect(setting('vision').controllerProps.value).toBe(true)
-    expect(setting('spec').controllerProps.value).toBe('auto')
-    expect(setting('draft_tp').controllerProps.value).toBe('auto')
-    expect(setting('kv_dtype').controllerProps.value).toBe('auto')
-    expect(setting('kv_arena_bytes').controllerProps.value).toBe('auto')
-  })
-
-  it('exposes only current GInfer speculative and KV choices', () => {
-    expect(values('spec')).toEqual(['auto', 'none', 'dflash'])
-    expect(values('draft_tp')).toEqual(['auto', '1', '2', '4'])
-    expect(values('kv_dtype')).toEqual(['auto', 'bf16', 'int8', 'nvfp4'])
-    expect(setting('lm_head_draft')).toBeUndefined()
-    expect(setting('kv_capacity')).toBeUndefined()
-    expect(setting('max_context')).toBeUndefined()
+  it('keeps storage and application behavior settings without global launch overrides', () => {
+    expect(settings.map((item: any) => item.key)).toEqual([
+      'model_path', 'binary_path', 'auto_unload', 'timeout',
+    ])
+    expect(setting('model_path').controllerProps.value).toBe('')
+    expect(setting('binary_path').controllerProps.value).toBe('')
+    expect(setting('auto_unload').controllerProps.value).toBe(true)
+    expect(setting('timeout').controllerProps.value).toBe('600')
   })
 })
 

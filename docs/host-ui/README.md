@@ -105,6 +105,74 @@ The installed AppDir/home, badge candidate, downloads home, runnable resources
 and tools are protected. Evidence:
 `out/c3-current-main-release-20261018/{folder-reveal-crash.json,folder-reveal-panic.txt}`;
 fix result `out/c3-folder-reveal-runtime-20261018/result.json`.
+## GInfer settings ownership — C7, October 18
+
+`GUI-GINFER-PROVIDER-SETTINGS-ADVANCED` is implemented by source commits
+`d3c3f77d6` and `dbb8ee2b9`, based on main `25459ffc2`. Models owns ordinary
+Load/Stop and package management; GInfer Hosts owns custom startup settings
+and saved profiles. Settings retains four application preferences and direct
+links to Models and GInfer Hosts. Chat/API automatic loading selects complete
+tested profiles and preserves explicit GPU constraints. Superseded global
+startup overrides and their extension consumption are removed.
+
+Arch signed at04:46Z. Focused verification passed 57 web, 34 extension and one
+native screened-profile regression. ONE `make verify` passed 3,354 app,
+127 extension and 1,223 Rust tests, lint, types, guards and coverage floors.
+An incomplete focused-test mock was corrected before the full gate. The web
+build and native debug build passed; missing ignored generated icon inputs
+were supplied from a retained donor before continuing only the native build.
+
+The isolated native Linux check displayed exactly four preferences and used
+pointer clicks to reach Models and GInfer Hosts. Screenshots and concise
+receipts are in `out/c7-ginfer-settings-owner-20261018/` in this source branch.
+This qualifies Settings display/navigation; the fresh fixture remained
+Preparing GInfer, so no Host readiness, installed release or model-start claim
+is made. Windows was not built (development phase). No model/GPU was used.
+All private processes stopped and CPUs64–71 returned at05:08Z.
+
+C7 owns worktree `/ai/gchat-worktrees/c7-ginfer-settings-owner-20261018`, branch
+`fix/c7-ginfer-settings-owner-20261018`. The source and native evidence are
+ready for merge. Private S1 build/cache root
+`/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018` is retained only
+for immediate reuse by the assigned OpenCode provisioning fix; disposable GUI
+HOME/stage were removed after evidence capture.
+
+### Architecture decision — signed04:46Z
+
+Approved ownership: Models owns ordinary Load/Stop and package management;
+GInfer Hosts owns custom per-instance startup settings and saved hardware
+profiles. Settings > GInfer keeps application behavior (load timeout and
+automatic unloading), storage discovery and engine-program location, with
+direct links to Models and GInfer Hosts. Remove its global Vision/speculation,
+helper, KV, prefill, concurrency and CUDA-Graph controls and their extension
+configuration consumption rather than leaving invisible persisted overrides.
+The per-model GInfer settings gear is already absent.
+
+The decision also covers ordinary chat/API loading: these currently use
+global settings plus the model's native context, whereas Installed Load asks
+for a complete tested Host profile. Ordinary automatic starts
+use that same tested-profile selection and retain explicit GPU constraints;
+already attached running sessions keep their current saved Host settings.
+Models' explicit tested-profile Load retains its existing matching-resident
+rule. Custom settings remain available through Hosts and its existing
+instance attachment path. Do not silently start an unqualified custom profile
+or change any tested profile's context, concurrency or options.
+
+Relevant paths are `web-app/src/services/models/default.ts:startModel`,
+`extensions/ginfer-extension/src/index.ts:buildGinferConfig`, and
+`src-tauri/plugins/tauri-plugin-ginfer/src/managed.rs:load_on_control`.
+`use_profile_defaults` already discards provider launch options in native
+`options` and chooses an eligible complete profile. HostCard builds independent
+instance settings from its own form/saved profile and consumes no provider
+launch settings. CLI/native explicit `GinferConfig` remains supported; the
+obsolete desktop global configuration is the removed path.
+
+Risks to check: chat/API must not reject a valid non-native tested context;
+explicit GPU/order constraints and missing-profile rejection must survive;
+an existing custom Host session must not restart or change on a Settings save;
+storage/binary/timeout/unload settings must retain their existing behavior.
+Source tests should cover these supported transitions and Settings navigation.
+No HostCard edits are proposed because Gchat 3 owns its sharing-result work.
 
 ## Scheduled tasks brain setup guidance — October 18
 
@@ -1461,9 +1529,11 @@ retains its package context through provider discovery and auto-load.
 The Rust registration/reopen fixture checks the serialized identity. The
 extension regression uses an external UUID entry with Muse identity and a
 misleading Qwen filename/display label; list, get and context lookup all return
-131,072. The provider/model regression calls the real provider discovery and
-`DefaultModelsService.startModel`, asserting `max_context: 131072` reaches load.
-Existing explicit context settings retain their meaning.
+131,072. The original provider/model regression checked that this context
+reached auto-load. The October 18 settings-ownership decision above supersedes
+that startup forwarding: ordinary automatic loads now select a complete tested
+Host profile, whose context may differ from the artifact's native context.
+Manifest identity and native-context discovery remain preserved.
 
 All 81 focused cases pass (24 extension, 49 provider/model, eight Rust), as do
 Rust check and Clippy. One `make verify` exited 0: 3,199 frontend tests and

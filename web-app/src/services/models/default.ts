@@ -390,41 +390,16 @@ export class DefaultModelsService implements ModelsService {
       loadedModels.includes(model)
     ) return undefined
 
-    const modelConfig = provider.models.find((m) => m.id === model)
-
-    // GInfer owns a startup-fixed logical context limit and has no partial
-    // CPU/GPU offload path. Do not translate its settings through the retired
-    // llama.cpp contract.
+    // Ordinary GInfer starts use a complete tested Host profile. Per-model
+    // context metadata must not override that profile's startup settings.
     if (provider.provider === 'ginfer') {
-      const contextProps =
-        modelConfig?.settings?.ctx_len?.controller_props?.value
-      const configuredContext = Number(contextProps)
-      const declaredMaximum = Number(
-        (
-          modelConfig?.settings?.ctx_len?.controller_props as
-            | (ControllerProps & { max?: number })
-            | undefined
-        )?.max
-      )
-      const maxContext =
-        Number.isFinite(configuredContext) && configuredContext > 0
-          ? configuredContext
-          : declaredMaximum
-      const settings = options?.useProfileDefaults
-        ? {
-            use_profile_defaults: true,
-            ...(options.loadOperationId ? { load_operation_id: options.loadOperationId } : {}),
-            ...(gpuUuids === undefined ? {} : { gpu_uuids: [...gpuUuids] }),
-          }
-        : (Number.isFinite(maxContext) && maxContext > 0) || gpuUuids !== undefined || options?.loadOperationId
-          ? {
-              ...(Number.isFinite(maxContext) && maxContext > 0
-                ? { max_context: maxContext }
-                : {}),
-              ...(gpuUuids === undefined ? {} : { gpu_uuids: [...gpuUuids] }),
-              ...(options?.loadOperationId ? { load_operation_id: options.loadOperationId } : {}),
-            }
-          : undefined
+      const settings = {
+        use_profile_defaults: true,
+        ...(gpuUuids === undefined ? {} : { gpu_uuids: [...gpuUuids] }),
+        ...(options?.loadOperationId
+          ? { load_operation_id: options.loadOperationId }
+          : {}),
+      }
 
       return engine
         .load(model, settings, false, bypassAutoUnload)
@@ -436,6 +411,8 @@ export class DefaultModelsService implements ModelsService {
           throw error
         })
     }
+
+    const modelConfig = provider.models.find((m) => m.id === model)
 
     // Key mapping function to transform setting keys for non-GInfer engines.
     const mapSettingKey = (key: string): string => {
