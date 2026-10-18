@@ -1,5 +1,35 @@
 # GInfer host UI
 
+## Select appearance in Light — Gchat 3, October 18
+
+`GUI-NATIVE-SELECT-LOOK` is closed by the later shared dropdown replacement
+and retained Linux native evidence. Original styling `b4bc8692e`, merged as
+`3466b0157`, was superseded by `ChoiceSelect` in merge `01b14d5bd`; its native
+select CSS and chevron assertion were removed. The current Hosts, Benchmark
+and Workspace connections fields use the app-rendered control.
+
+The inspected [Light 1024×800 Hosts capture](../../out/c3-host-locator-deleted-runtime-20261018/native-model-settings-light-narrow.png)
+shows Installed model, Reply speedup and Conversation memory format beside
+readable input fields. The retained [Light open-menu capture](../../out/c7-dropdown-host-selectors-20261018/after-light-medium-serving.png)
+shows readable choices, wrapping and the app palette. These close the remaining
+light-theme visual check. The existing
+[dropdown acceptance](../../out/c7-dropdown-host-selectors-20261018/result.json)
+retains Dark/Light keyboard and popup evidence; no new route-specific native
+claim is made for Benchmark or Workspace connections.
+
+`ChoiceSelect`, its dropdown primitive and theme stylesheet are identical at
+native sources `8f4d0724f` and `82f17a1ac`, later passing full gate `d16521c19`
+and this branch base `a89302f19`. Retain the replacement's **42 focused PASS**
+and later ONE `make verify`: **3,469 app, 127 extension, 1,276 native PASS**,
+six frontend skips, 28 Rust ignores, lint/types/coverage PASS. This evidence-only
+closure uses `git diff --check`, with no repeated tests, app launch or compute.
+
+Owner Gchat 3; branch `docs/gchat3-native-select-look-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-native-select-look-20261018`. Only small evidence is
+retained in [the result](../../out/gchat3-native-select-look-20261018/result.json).
+No new booking, build, private HOME or SSD fixture was allocated. The cited
+fixtures are already stopped and retired. Windows native UI remains unqualified.
+
 ## Empty project direction — C7, October 18
 
 `GUI-PROJECT-EMPTY-ABOVE` passes its remaining Linux native empty-project
@@ -3142,7 +3172,8 @@ were unchanged (package SHA256
 No model start, GPU computation, Fleet authority change, Windows account change
 or release-wide qualification is claimed. Windows native UI remains unqualified.
 The earlier FRESH VM is OFF with original XML and its private stage removed.
-Next: coordinator review and merge of source and native evidence together.
+Source and native evidence merged as `01b14d5bd`. This replacement also closes
+the historical `GUI-NATIVE-SELECT-LOOK` row's remaining Light appearance check.
 
 ## Models tabs installed keyboard acceptance — C7, closed October 18
 
