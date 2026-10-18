@@ -291,6 +291,7 @@ describe('DefaultThreadsService', () => {
         expect.objectContaining({
           id: '1',
           title: 'Updated Thread',
+          created: expect.any(Number),
           assistants: expect.arrayContaining([
             expect.objectContaining({
               model: { id: 'gpt-4', engine: 'openai' },
