@@ -69,6 +69,9 @@ export function SamplerPopover({ disabled }: SamplerPopoverProps) {
   }, [selectedAssistant, threadAssistantId, assistants, defaultAssistantId])
 
   const activeAssistant = effectiveAssistant
+  const fallbackAssistant =
+    assistants.find((assistant) => assistant.id === defaultAssistantId) ??
+    assistants[0]
   const samplingParams = activeAssistant?.parameters ?? {}
 
   const handleSamplingChange = (key: string, value: number | boolean) => {
@@ -159,7 +162,11 @@ export function SamplerPopover({ disabled }: SamplerPopoverProps) {
                   onClick={() => handleSelectAssistant(undefined)}
                 >
                   <span className="text-muted-foreground">—</span>
-                  <span>{t('assistants:none')}</span>
+                  <span>
+                    {fallbackAssistant
+                      ? t('assistants:useDefault', { name: fallbackAssistant.name })
+                      : t('assistants:none')}
+                  </span>
                 </DropdownMenuItem>
                 {assistants.length > 0 ? (
                   assistants.map((assistant) => (
