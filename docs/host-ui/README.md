@@ -4021,6 +4021,19 @@ resources returned at 09:05Z. Evidence:
 The source fix retains its 25 focused cases and ONE `make verify` PASS. Pending
 races retain source qualification; Windows was not exercised.
 
+Linux acceptance (`GUI-AGENT-SKILL-CREATE-RECOVERY-NATIVE-20261018`): a real
+permission error kept the Create dialog open with its name, description and
+instructions unchanged, and re-enabled Create. Restoring the owned directory's
+original permission and retrying in the same dialog saved the exact skill file.
+The disposable skill was then uninstalled; all 17 saved records, 45 original
+`SKILL.md` files, two workspace inputs and disabled-state bytes stayed unchanged.
+Retained build `8f7d18f6f` matches the relevant Create source at `a89302f19`;
+resources returned at 09:16Z. Evidence:
+[`out/gchat-agent-skill-create-recovery-native-20261018/`](../../out/gchat-agent-skill-create-recovery-native-20261018/).
+The source fix retains its four focused cases and corrected ONE `make verify`
+PASS. Pending dismissal and duplicate races retain source-test qualification;
+Windows was not exercised.
+
 ## Removing a custom skill
 
 In **Agent Studio → Skills**, open **Skill actions → Uninstall**. The
