@@ -1,5 +1,79 @@
 # GInfer host UI
 
+## Conversation Rename keyboard — Gchat 3 native acceptance, October 18
+
+`GUI-THREAD-RENAME-KEYBOARD` passes its remaining native Linux leaf. Ordinary
+Enter on unchanged, trimmed-unchanged and whitespace-only titles left Rename
+disabled, the dialog open and saved thread bytes/mtime unchanged. A pointer
+click on disabled Rename also did not save. Valid Enter trimmed the new title;
+valid Rename-button input saved a second title. Both closed the dialog, updated
+the sidebar and private `thread.json`, and showed the success toast. Five Dark
+theme screenshots at 1200×800 app size were visually reviewed.
+
+The retained `ed68c7443` release AppDir ran on verified S1 `AIS-2-8592-L01`.
+Its `RenameThreadDialog.tsx`, `ThreadList.tsx` and `useThreads.ts` match allocated
+main `80424bb41` exactly. Source `c1ead69b2` merged as `8c83d852b`; the accepted
+nine focused cases and full verification were reused without rerun. One synthetic
+thread was seeded in private app data before launch, with no messages or model.
+Native pointer/keyboard drove the controls; WebKit only observed state. This
+observation does not requalify pending/error callbacks, Windows or an installer.
+No product source change, model/request, real user conversation, account or Host
+pairing action occurred. Initial observer focus loss was corrected by explicitly
+focusing and confirming each draft; those invalid later drafts were excluded.
+
+At 03:35Z the app also reloaded the final saved title from the byte-identical
+200-byte `thread.json`. Ancillary private app state was fresh after the first
+cleanup; this checks saved-thread rehydration, not a full profile restart.
+
+Result, concise summary, five screenshots and relevant state/storage receipts:
+`out/thread-rename-native-20261018/{result.json,summary.md}`. Owner worktree
+`/ai/gchat-worktrees/gchat3-thread-rename-native-20261018`, branch
+`test/gchat3-thread-rename-native-20261018`. The private S1 container, HOME,
+runtime/cache, keyring/D-Bus, Xvfb and inspector forward were removed after each
+run, last at 03:35Z; bookings 2923/2930 on CPU 120–127 were canceled, with no GPU
+or build. The exact owned root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-thread-rename-native-20261018` is absent
+(3.45 GB and 3.42 GB of disposable app data released). The retained read-only
+AppDir donor remains in place.
+Docs-only acceptance is recorded; merge is pending.
+## Support issue destination — C3, October 18
+
+`GUI-SETTINGS-SUPPORT-LINK-404` is **WAITING ON RON** for the supported public
+support destination. The private first-user walk opened Settings → Open an
+issue through the native browser at `https://github.com/SectileLabs/gchat/issues`
+and observed GitHub 404. OI110 designates the repository artifacts-only; no
+replacement public issue URL has been supplied. The browser keyring prompt was
+canceled without secrets, then the private browser received normal TERM.
+Evidence: `out/c3-first-user-setup-20261018/private-browser-after-cancel.png`.
+
+The active link now shares one named `GCHAT_ISSUES_URL` constant between its
+`href` and external-opener action. The destination and observable behavior are
+unchanged; the 404 is not fixed. Hidden links and unrelated support targets are
+outside this change. Reuse the existing native 404 observation; no fresh native
+build or GUI run is required for this constant extraction.
+
+Acceptance: existing General route tests, lint and one `make verify`; no test
+for private constant shape. All 26 General cases pass. Lint passes with zero
+errors and five existing warnings. The ONE `make verify` passes 3297 app cases,
+121 extension cases, 1220 native cases and all six coverage floors; six app cases
+are skipped and 28 native cases ignored. No failure, retry or continuation was
+needed. Reuse the existing native 404 evidence; the URL is still unresolved.
+Results: `out/c3-support-url-constant-20261018/{result.json,summary.md}`.
+
+Owner/source:
+`/ai/gchat-worktrees/c3-support-url-constant-20261018`, branch
+`fix/c3-support-url-constant-20261018`, baseline `80424bb41`. Reuse the retained
+S1 root `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`, dependency cache
+and native target under the pinned routed, dependency-offline build fixture.
+All 35 dependency manifests/locks match before reuse. S1 CPUs 88–95 used nice 10
+and the shared socket 1 lock; returned 03:38Z. The container and both disposable
+source archives are removed. The runnable baseline binary is unchanged; the
+coordinator removed the closed older candidates independently. Source,
+dependencies, native target and caches pass to the next owned GUI gate. No new
+build, model, GPU, browser or dependency-install work. This bounded source change
+is merge-ready for coordinator integration. Next: Ron chooses the supported
+public support destination; do not claim that the 404 is fixed.
+
 ## Physical graphics-card inventory — C3, October 18
 
 `GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED`: the fresh private native main
@@ -48,6 +122,69 @@ and private dependency cache; preserve baseline and preparation binaries.
 The tested binary is retained at `hardware-candidate/bin/gchat`. No new GPU
 booking or model process is needed. Build copies retire when this walk and its
 native candidates finish; result JSON and short summary remain.
+## Manual Host address — Gchat 3 focused fix and native acceptance, October 18
+
+`GUI-HOST-MANUAL-ADDRESS-GUIDANCE` passes its focused Linux field-feedback leaf.
+Ordinary native entry on retained release `ed68c7443` reproduced the defect:
+**not-a-host** reached Pair and showed only the disappearing parser toast
+**relative URL without a base**. An HTTP address showed a temporary policy toast.
+Draft/retry survived; empty and whitespace input correctly disabled Pair.
+The relevant manual controls and native validator bind to allocated main
+`394ba2f1f`; unrelated runtime-preparation/Refresh changes are outside this
+baseline visual evidence.
+
+The owning route now gives persistent HTTPS-origin correction guidance, disables
+malformed addresses before pairing, and retains actionable failure feedback with
+the draft and retry control. Technical error details stay closed initially.
+Native validation remains authoritative. Two meaningful regressions protect
+invalid-input correction and failed-pairing draft/feedback/retry through Refresh;
+all 19 route cases pass. Valid endpoints and connection failures were mocked only.
+
+The changed-source custom-protocol debug app passed ordinary native empty,
+whitespace, `not-a-host` and HTTP entry. Pair remained disabled; invalid fields
+had linked guidance and `aria-invalid`. The malformed draft and guidance remained
+visible for 26.7 seconds; whitespace cleared the invalid alert. Pointer/keyboard
+input drove the app; WebKit only observed. Three screenshots were visually
+inspected: `postfix-empty.png`, `postfix-invalid.png`, `postfix-http.png`.
+Baseline reproducers are `malformed-error.png` and `http-error.png`; the existing
+storage prerequisite explanation is retained as `storage-hint.png`.
+No valid endpoint was submitted natively and nearby C7 Pair/Ignore stayed untouched.
+Runtime preparation continued during this field check; no runtime readiness or
+speed claim is made.
+
+ONE `make verify` passed lint/typecheck/quality/critical coverage, 3,288 frontend
+cases (6 skipped), 121 extension cases and the desktop library's 729 cases
+(8 ignored), then exited 2: the supplied empty `CUDA_VISIBLE_DEVICES` masked an
+existing synthetic-GPU fixture. The failed receipt is retained. Leaving the mask
+unset while Docker still exposed no physical GPU, only the failed command and
+five unexecuted native commands ran: 487 passed, 20 ignored. Combined completed
+native coverage is 1,216 passed, 28 ignored; the full verify was not repeated.
+The candidate frontend built. Initial Cargo context generation failed on a
+missing generated icon; its retained Cargo-only retry used the same existing
+`icon.png` bundle override as native tests and passed in 46.02 seconds.
+Prevention: preserve synthetic-device visibility and carry the explicit fixture
+icon override into native candidate builds. Dependency access remained offline;
+bridge routing supported local network tests. Five existing lint warnings remain.
+
+Owner worktree `/ai/gchat-worktrees/gchat3-host-address-native-20261018`, branch
+`test/gchat3-host-address-native-20261018`; only the owning route, its tests and
+this record changed. Canonical `out/host-address-native-20261018` retains
+`result.json`, `SUMMARY.md`, commands, actual focused/full/continuation/build logs,
+DOM observations and screenshots. The baseline private GUI was removed at
+03:15:20Z (3,426,720,790 logical bytes; booking 2909 canceled). After normal
+changed-app shutdown, the exact private Xvfb/display, D-Bus/keyring session,
+relay and exited build containers were cleaned up. No owned processes remained.
+Private S1 GUI and build/cache roots `tmp-gchat3-host-address-native-20261018` and
+`tmp-gchat3-host-address-build-20261018` were removed at 03:34:26Z, reclaiming
+43,116,667,421 logical bytes; CPU80–87 booking 2912 was canceled. Read-only
+`tmp-gchat3-linux-rc-refresh-20261017` donors stayed untouched. The candidate
+binary/cache was disposable; source and concise evidence are retained.
+
+Scope is English, Dark-theme native Linux. Real pairing/account connections,
+Google consent, Windows, screen-reader speech, GPU/model/profiling and performance
+remain unqualified. The private keyring was explicitly unlocked; the existing
+updater's 404 excludes a whole-app offline claim. Parent owns shared row state.
+
 ## Secure-storage Check feedback — Gchat 3 native acceptance, October 18
 
 `GCHAT-SECURE-STORAGE-SETUP-FEEDBACK-20261017` passes its remaining Linux
@@ -216,6 +353,133 @@ dependencies and pinned image are reused. CPU64–71,
 shared socket1 compile lock and nice10; no GPU held. Retain this root until the
 fresh walk, hardware candidate and merge review finish, then remove owned private copies and
 retain only result JSON and short summary. Read-only donor remains Claude's.
+## Fresh first-time-user walk — C3, October 18
+
+The native first-user walk uses main `201f46712` with a private first-run
+profile. Scope: setup, Models, Downloads, Engine/Host settings, Hardware profile,
+Fleet/connections and Settings, in narrow/wide windows and Light/Dark themes.
+Real pointer/keyboard input exercises visible controls and wording. Reproducible
+defects are recorded on `docs/open-work` and fixed in separate source branches.
+Chat/agents belongs to Gchat 1 and Gbot to Gchat 2; existing GUI rows retain
+their owners.
+
+Acceptance: every requested control and sentence is exercised or its concrete
+prerequisite is recorded. Each new source fix needs focused checks, one
+`make verify` and native acceptance using its changed build. The baseline and
+candidates use optimized bundled Vite frontends in debug Rust shells with custom
+protocol. This is Linux source-native evidence; installer/release qualification
+and release performance remain outside this walk. GChat and Manager builds pass.
+No model, hardware profile or GPU workload has run during the walk.
+
+Three reproduced defects now have tested, merged source fixes:
+
+- `GUI-SETUP-RUNTIME-INSTALL-PROGRESS`: Welcome's false connection failure after
+  30 seconds and Hosts' unexplained disabled Refresh now follow native resource
+  preparation state. The changed-source private launch retained preparation
+  beyond 30 seconds, then connected its Host and cleared the message. Focused
+  48 plus 3 resource-state cases and lint passed. The single `make verify`
+  retained its network-none Fleet route failure; all seven original native
+  commands passed in the routed, dependency-offline continuation, followed by
+  the candidate build. Merge `ed40f2579` preserves both first-run suites
+  (31 cases) and landed in main through `a7dadf6c2`.
+- `GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED`: matching model/memory tuples no
+  longer collapse the two physical S1 PRO 6000 cards. PCI identity reconciliation
+  passes rendered/plugin checks and changed-source Hardware/System Monitor
+  acceptance at wide and narrow sizes. The original single verify's stale-label
+  failure and subsequent missing-PCI fixture compile failure remain retained;
+  corrected focused and remaining native/build stages passed. Normal merge
+  `8913bc14f` of main `394ba2f1f` was pushed, mailed and integrated through
+  `ae6f5992f`. All 31 first-run cases pass after the merge; no full verify was
+  repeated.
+- `GUI-GINFER-SETTINGS-TOKEN-UNITS`: `293f49538` was pushed, mailed and merged
+  through `22033ee11`. The two advanced descriptions now explain model tokens.
+  Four focused rendered cases, lint, one complete `make verify` and the native build
+  passed: 3,279 frontend cases, 121 extension cases, all six coverage floors and
+  1,216 native cases (28 ignored). Real pointer input opened Advanced; both
+  descriptions were readable in Light 1500×1000 and Dark 1024×740 with scrolling
+  and no horizontal overflow. No setting values changed. The structural provider
+  redesign remains a separate row.
+
+Fix evidence is retained in
+`out/c3-setup-runtime-progress-20261018/{runtime-progress-result.json,summary.md,merge-focused-result.json}`,
+`out/c3-hardware-card-identity-20261018/{result.json,summary.md,merge-focused-result.json}`
+and `out/c3-ginfer-token-units-20261018/{result.json,summary.md}`. The original
+hardware incident is `out/c3-first-user-setup-20261018/hardware-result.json`.
+Debug preparation duration is not a release speed claim.
+
+Welcome → Choose a model navigated to Models and completed onboarding. Returning
+to New Chat showed the expected unloaded-model composer; no inference was sent.
+The separate retained preparing profile passed Welcome → Continue without
+loading a model and reached the unloaded composer. The alternate Connect network
+onboarding path remains unexercised; its Hosts screen was exercised separately.
+Hosts Refresh returned to connected with its button enabled.
+
+Models Installed/Recommended/Downloads, searches, card selection,
+unavailable-model explanations and the idle Downloads popover were exercised.
+Published releases have no qualified download descriptor, so no live download
+is available. Private secure storage succeeded at 02:33:48Z with an unlocked
+keyring. Settings exercised computer-name Save, data-path Copy, reset-dialog
+Cancel by Enter, language list, empty-token Show/Hide, spellcheck/default-model
+toggles and Interface font sizes/themes. Small, Medium, Large, Extra Large and
+System/Light/Dark selections were readable; Medium was restored. Factory reset
+and OS startup/CLI installation were not invoked.
+
+Workspace connections connected its private account service and displayed the
+Google guide through import/manual registration. Google/Microsoft service
+checkboxes and Read only/Read write selections were restored. Actual account
+import/sign-in requires owned credentials; credential-dependent leaves remain
+with Gchat 3. The proxy remained off. An input-command mistake entered follow-on
+command text into its private address field; that text was cleared, and all
+four fields and proxy/certificate switches were verified empty/off. This was an
+execution error, not a product defect.
+
+The native data-folder and local-model import choosers opened on the verified
+private GTK portal. Cancel preserved the data path and imported no model.
+Installed is readable in Light and Downloads in Dark at 1024×740. Manager's
+private window passed Pair → Check secure storage → Cancel and Secure storage
+→ Check again → Cancel. Fleet and the coordinator dialog are reachable; pool,
+assignment and enrollment actions require a configured instance/coordinator.
+Manager is readable in Dark at 1500×1000 and 800×650 without horizontal overflow.
+Show available downloads refreshed and reported no published package for this
+GPU group. Sharing stayed off; Rename → Cancel preserved the private name.
+Paired clients showed one local administrator and zero active requests. No
+nearby Host was paired or changed. Model-dependent Manager actions remain gated
+by an installed model and prepared hardware.
+
+Settings → Open an issue launched the exact private browser at
+`https://github.com/SectileLabs/gchat/issues`, which rendered GitHub 404. Current
+main uses the same URL; OI110 designates the repository artifacts-only, and no
+supported public issue URL is known. This is tracked separately as
+`GUI-SETTINGS-SUPPORT-LINK-404`, **WAITING ON RON**. Bubbs confirmed that Ron
+selects the public destination; the unchanged URL will use one constant. Evidence:
+`out/c3-first-user-setup-20261018/private-browser-after-cancel.png`. The private
+browser keyring prompt was canceled without secrets, then the browser received
+normal TERM.
+
+The final control/theme/window matrix is retained in
+`out/c3-first-user-setup-20261018/{result.json,summary.md}`. Conditional actions
+requiring a published descriptor, installed model, owned account credentials,
+prepared/booked GPU group or configured Fleet coordinator were not invoked.
+General's OS autostart/CLI installation, destructive reset/relocation and
+file-manager links remain unexercised. Existing reset regression and engine-settings
+acceptance packets are retained under their own rows; this walk does not relabel
+them as fresh execution. The updater 404 remains its existing separate row.
+
+Next action: fix the Downloads popover Manage navigation, which currently opens
+Installed instead of Downloads. The support destination waits on Ron.
+
+Owner: Codex 3. Source `/ai/gchat-worktrees/c3-first-user-setup-20261018`, branch
+`fix/c3-first-user-setup-20261018`; baseline `201f46712`. Private apps, Hosts and
+services stopped; returned03:30Z. Displays and inspector forwards stopped; no
+private mounts remain. Closed candidate binaries, source archives and private homes were removed
+after evidence retention. The S1 root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains `runnable`,
+`gchat`, `native-target`, `cargo-home`, `yarn-cache`, resources and launch profiles
+as the active next-fix stage, used exclusively by the support-constant gate until
+it finishes and then by the Downloads fix. Dependency donor remains owned by
+Claude at `tmp-claude-gchat-finish-20261017/tool-source` and is untouched. No
+model/profile/GPU job ran in this walk.
+
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
@@ -2041,3 +2305,29 @@ One `make verify` passed: lint, type checking, quality checks, 3,288 app tests, 
 1,216 Rust tests and all six coverage floors (six app skips, 28 Rust ignores). Changed source/test
 hashes matched locally and on S1 before and after verification. Private build data was removed
 and CPUs returned at 03:20 UTC.
+
+
+## Confirming deletion of a bot computer, October 18 (Gchat 2)
+
+`GBOT-LOCAL-COMPUTER-REMOVE-CONFIRMATION`: Remove owned computer previously sent the
+removal request immediately. The service then stopped/unregistered the owned VM and
+deleted its disk, saved files and connection. The control now opens the existing app
+confirmation dialog, names the saved bot, explains that all files are permanently
+deleted and requires an explicit Delete computer action. Cancel sends no removal
+request. Leaving setup before accepting also prevents removal.
+
+Both ready-computer and unfinished-setup regressions fail on main baseline `9c3e7603a`
+at the premature removal request. With the fix,
+`yarn test web-app/src/components/GbotSetup/KvmSetup.test.tsx` passes all 15 cases, including
+Cancel, explicit acceptance, exact saved identity, duplicate-action protection, pending
+refreshes, late status replies and acceptance after unmount. The existing shared dialog
+provides initial Cancel focus and Escape cancellation. Backend ownership and in-use
+checks retain their existing behavior. No real VM was deleted during qualification.
+These are rendered React tests using a mocked service; no new native VM or Windows
+acceptance is claimed. Commands and results:
+`/ai/gchat/out/gchat2-computer-remove-confirmation-20261018/result.json`.
+
+One `make verify` passed: lint, type checking, quality checks, 3,294 app tests,
+121 extension tests, 1,220 Rust tests and all six coverage floors (six app skips,
+28 Rust ignores). Changed source/test hashes matched locally and on S1 before
+and after the gate. Private build data was removed and CPUs returned at 03:33 UTC.
