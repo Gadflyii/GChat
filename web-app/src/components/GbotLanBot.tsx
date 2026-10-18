@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { confirmAction } from '@/lib/confirm'
@@ -20,6 +20,11 @@ export default function GbotLanBot({
   perform: (action: () => Promise<unknown>, propagateError?: boolean) => Promise<void>
   removed: () => void
 }) {
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   const [renaming, setRenaming] = useState(false)
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
@@ -111,16 +116,17 @@ export default function GbotLanBot({
                 confirmLabel: 'Remove bot',
                 destructive: true,
               }).then((accepted) => {
-                if (!accepted) return
+                if (!accepted || !mounted.current) return
                 setRemovalError('')
                 void perform(
                   async () => {
                     await gbot('workspaces/ssh/remove', { workspace_id: id })
-                    removed()
+                    if (mounted.current) removed()
                   },
                   true
                 ).catch((cause) => {
-                  setRemovalError(cause instanceof Error ? cause.message : String(cause))
+                  if (mounted.current)
+                    setRemovalError(cause instanceof Error ? cause.message : String(cause))
                 })
               })
             }
