@@ -1,5 +1,42 @@
 # GInfer host UI
 
+## Missing hardware profile recovery guidance — Gchat 3, October 18
+
+`GUI-NO-PROFILE-MESSAGE` now directs a rejected launch to the current controls:
+**Advanced graphics-card setup options** when shown, then **Graphics-card
+setup**, card selection, and **Measure graphics cards** or **Measure again**.
+During unfinished local setup the advanced section contains these controls;
+afterward and on remote Hosts they appear directly. Profile measurement,
+launch policy and model settings are unchanged.
+
+The real `HostProcesses::validate_launch` regression reproduces the old
+message as one expected failure. The candidate reports the current controls;
+a saved profile then permits validation without spawning an Engine. Focused
+Host tests pass **8 / 2 existing ignores**; affected all-targets check and
+clippy pass. ONE `make verify` passed **3,520 app tests / 6 skips**, lint
+(five existing warnings), types and preceding guards, then stopped because
+the isolated dependency copy omitted the extension workspace's Vitest.
+After copying that exact workspace from the untouched donor, only the
+unfinished stages continued: **127 extension tests, six coverage floors,
+1,285 native tests / 28 ignores**, all passing. The original full command
+exited 2; completion is its passing prefix plus this bounded continuation.
+App coverage was preserved and not rerun. Future isolated copies must include
+`extensions/ginfer-extension/node_modules` and check its Vitest entrypoint.
+[Result and limits](../../out/gchat3-missing-profile-guidance-20261018/test-result.json).
+Only isolated Linux automated behavior is claimed; installed GUI and Windows
+acceptance remain outside this wording fix.
+
+Owner Gchat 3; branch `fix/gchat3-missing-profile-guidance-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-missing-profile-guidance-20261018`, base `121977256`.
+Independent S1 test root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-missing-profile-guidance-tests-20261018`
+used the inactive RC donor read-only, CPU104–111/socket1 shared lock,
+nice10/max8 and four explicit approved catalogs. Tests finished 09:35Z;
+booking3214 returned 09:36Z. Parent inspected the raw results; the 38.22GB owned fixture and three terminal
+containers were retired at 09:39Z, retaining only result JSON and short summary.
+No GPU, shared catalog or Ron install was used. Next: merge the patch; native
+Windows SM86/SM89 bundled-Host qualification has priority over catalog mirror.
+
 ## Select appearance in Light — Gchat 3, October 18
 
 `GUI-NATIVE-SELECT-LOOK` is closed by the later shared dropdown replacement
