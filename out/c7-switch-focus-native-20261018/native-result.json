@@ -1,0 +1,626 @@
+{
+  "row": "GUI-SWITCH-FOCUS-RING",
+  "status": "PASS",
+  "scope": "Native Linux x86_64 current desktop; Light and Dark keyboard focus, state changes, and disabled control behavior",
+  "source": "014df18455a657e11fe18a152a4f0f5d6e1df579",
+  "implementation_commit": "cc59fd5db",
+  "native_input": "XTest through xdotool on private Xvfb :87; inspector Runtime.evaluate read-only DOM/computed-style observations only",
+  "build_receipt": "build-result.json",
+  "screenshots": [
+    "dark-keyboard-focus-on.png",
+    "dark-keyboard-focus-off.png",
+    "light-keyboard-focus-on.png",
+    "light-keyboard-focus-off.png",
+    "disabled-switch-tab-skips.png"
+  ],
+  "dark": {
+    "beforeSpace": {
+      "url": "tauri://localhost/settings/general",
+      "theme": "bg-app dark",
+      "active": {
+        "tag": "BUTTON",
+        "role": "switch",
+        "label": null,
+        "labelledby": "_r_t_-title",
+        "name": "Load default model on startup",
+        "checked": "true",
+        "disabled": false,
+        "focusVisible": true,
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.787775 -0.122202 -0.016534 / 0.5) 0px 0px 0px 3px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+        "ring": "0 0 0 calc(3px + 0px)color-mix(in oklab,#3dd3c8/**/50%,transparent)",
+        "ringColor": "color-mix(in oklab,#3dd3c8/**/50%,transparent)",
+        "outline": "5px none oklab(0.787775 -0.122202 -0.016534 / 0.5)",
+        "rect": [
+          1134,
+          532,
+          34,
+          18
+        ]
+      },
+      "switches": [
+        {
+          "label": "Gbot integration",
+          "labelledby": null,
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "label": "OpenCode integration",
+          "labelledby": null,
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "label": "Hermes integration",
+          "labelledby": null,
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_s_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            453.5,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_t_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            532,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_10_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            883,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_11_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            961.5,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_19_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            1600.5,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "afterSpace": {
+      "url": "tauri://localhost/settings/general",
+      "theme": "bg-app dark",
+      "active": {
+        "tag": "BUTTON",
+        "role": "switch",
+        "label": null,
+        "labelledby": "_r_t_-title",
+        "name": "Load default model on startup",
+        "checked": "false",
+        "disabled": false,
+        "focusVisible": true,
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.787775 -0.122202 -0.016534 / 0.5) 0px 0px 0px 3px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+        "ring": "0 0 0 calc(3px + 0px)color-mix(in oklab,#3dd3c8/**/50%,transparent)",
+        "ringColor": "color-mix(in oklab,#3dd3c8/**/50%,transparent)",
+        "outline": "5px none oklab(0.787775 -0.122202 -0.016534 / 0.5)",
+        "rect": [
+          1134,
+          532,
+          34,
+          18
+        ]
+      },
+      "switches": [
+        {
+          "label": "Gbot integration",
+          "labelledby": null,
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "label": "OpenCode integration",
+          "labelledby": null,
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "label": "Hermes integration",
+          "labelledby": null,
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_s_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            453.5,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_t_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            532,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_10_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            883,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_11_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            961.5,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_19_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            1600.5,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "navigation": "Click disposable preference, Tab to following link, Shift-Tab back to switch"
+  },
+  "light": {
+    "beforeSpace": {
+      "url": "tauri://localhost/settings/general",
+      "theme": "bg-app",
+      "active": {
+        "tag": "BUTTON",
+        "role": "switch",
+        "label": null,
+        "labelledby": "_r_24_-title",
+        "name": "Load default model on startup",
+        "checked": "true",
+        "disabled": false,
+        "focusVisible": true,
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.479145 -0.076488 -0.020261 / 0.481469) 0px 0px 0px 2.888813px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+        "ring": "0 0 0 calc(3px + 0px)color-mix(in oklab,#0b6b6b/**/50%,transparent)",
+        "ringColor": "color-mix(in oklab,#0b6b6b/**/50%,transparent)",
+        "outline": "4px none oklab(0.479145 -0.076488 -0.020261 / 0.5)",
+        "rect": [
+          1134,
+          532,
+          34,
+          18
+        ]
+      },
+      "switches": [
+        {
+          "label": "Gbot integration",
+          "labelledby": null,
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "label": "OpenCode integration",
+          "labelledby": null,
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "label": "Hermes integration",
+          "labelledby": null,
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_23_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            453.5,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_24_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            532,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_27_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            883,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_28_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            961.5,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_2g_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            1600.5,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "afterSpace": {
+      "url": "tauri://localhost/settings/general",
+      "theme": "bg-app",
+      "active": {
+        "tag": "BUTTON",
+        "role": "switch",
+        "label": null,
+        "labelledby": "_r_24_-title",
+        "name": "Load default model on startup",
+        "checked": "false",
+        "disabled": false,
+        "focusVisible": true,
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.479145 -0.076488 -0.020261 / 0.5) 0px 0px 0px 3px, rgba(0, 0, 0, 0.05) 0px 1px 2px 0px",
+        "ring": "0 0 0 calc(3px + 0px)color-mix(in oklab,#0b6b6b/**/50%,transparent)",
+        "ringColor": "color-mix(in oklab,#0b6b6b/**/50%,transparent)",
+        "outline": "5px none oklab(0.479145 -0.076488 -0.020261 / 0.5)",
+        "rect": [
+          1134,
+          532,
+          34,
+          18
+        ]
+      },
+      "switches": [
+        {
+          "label": "Gbot integration",
+          "labelledby": null,
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "label": "OpenCode integration",
+          "labelledby": null,
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "label": "Hermes integration",
+          "labelledby": null,
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_23_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            453.5,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_24_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            532,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_27_-title",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            883,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_28_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            961.5,
+            34,
+            18
+          ]
+        },
+        {
+          "label": null,
+          "labelledby": "_r_2g_-title",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            1600.5,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "navigation": "Click disposable preference, Shift-Tab to preceding control, Tab back to switch"
+  },
+  "disabled": {
+    "fixture": "Private agent-skills/c7-disabled-switch/SKILL.md without required frontmatter",
+    "before": {
+      "url": "tauri://localhost/skills",
+      "theme": "bg-app",
+      "active": {
+        "tag": "BUTTON",
+        "role": null,
+        "name": "c7-disabled-switchSKILL.md must start with YAML frontmatter delimited by ---",
+        "focusVisible": false,
+        "rect": [
+          261,
+          566
+        ]
+      },
+      "disabled": {
+        "checked": "false",
+        "disabled": true,
+        "tabIndex": 0,
+        "focused": false,
+        "focusVisible": false,
+        "opacity": "0.5",
+        "rect": [
+          505,
+          588
+        ]
+      }
+    },
+    "afterTab": {
+      "url": "tauri://localhost/skills",
+      "theme": "bg-app",
+      "active": {
+        "tag": "BUTTON",
+        "role": null,
+        "name": "Skill actions",
+        "focusVisible": true,
+        "rect": [
+          547,
+          581
+        ]
+      },
+      "disabled": {
+        "checked": "false",
+        "disabled": true,
+        "tabIndex": 0,
+        "focused": false,
+        "focusVisible": false,
+        "opacity": "0.5",
+        "rect": [
+          505,
+          588
+        ]
+      }
+    },
+    "afterShiftTab": {
+      "url": "tauri://localhost/skills",
+      "theme": "bg-app",
+      "active": {
+        "tag": "BUTTON",
+        "role": null,
+        "name": "c7-disabled-switchSKILL.md must start with YAML frontmatter delimited by ---",
+        "focusVisible": true,
+        "rect": [
+          261,
+          566
+        ]
+      },
+      "disabled": {
+        "checked": "false",
+        "disabled": true,
+        "tabIndex": 0,
+        "focused": false,
+        "focusVisible": false,
+        "opacity": "0.5",
+        "rect": [
+          505,
+          588
+        ]
+      }
+    },
+    "afterClick": {
+      "url": "tauri://localhost/skills",
+      "theme": "bg-app",
+      "active": {
+        "tag": "BODY",
+        "role": null,
+        "name": "Toggle SidebarWorkNew ChatCodeAgent StudioResourcesGInfer HostsMemoryModelsNew ProjectIntegrationsNewDiagnosticsBenchmarkNo local model runningSetting",
+        "focusVisible": false,
+        "rect": [
+          0,
+          0
+        ]
+      },
+      "disabled": {
+        "checked": "false",
+        "disabled": true,
+        "tabIndex": 0,
+        "focused": false,
+        "focusVisible": false,
+        "opacity": "0.5",
+        "rect": [
+          505,
+          588
+        ]
+      }
+    }
+  },
+  "source_changes": false,
+  "verification": "Reuse 71abf1708 passing ONE make verify; relevant Switch/CSS/General/Skills source unchanged. Evidence/docs-only git diff --check.",
+  "exclusions": [
+    "Windows",
+    "GPU/model execution",
+    "inference quality/performance",
+    "Host setup"
+  ],
+  "retention": "Small JSON, logs and PNG only; private S1 source/build/AppDir/HOME/tools retired at terminal; shared catalog retained"
+}
