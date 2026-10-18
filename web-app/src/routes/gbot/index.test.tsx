@@ -13,7 +13,12 @@ import type { ComponentType } from 'react'
 import { toast } from 'sonner'
 import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
 import { settleConfirm } from '@/lib/confirm'
-import type { BotState, CloudReview, KvmSetupRecord } from '@/services/gbot'
+import type {
+  BotState,
+  CloudReview,
+  KvmSetupRecord,
+  M365SetupRecord,
+} from '@/services/gbot'
 import { connectorAccounts } from '@/services/workspace-connectors'
 
 const mocks = vi.hoisted(() => ({
@@ -1463,47 +1468,139 @@ it('does not offer removed KVM setups and permits first-bot setup', async () => 
   )
 })
 
-it('retains a KVM status error instead of assuming no saved setup and discovers it on retry', async () => {
-  let unavailable = true
-  mocks.listen.mockResolvedValue(() => {})
-  mocks.call.mockImplementation(async (path: string) => {
-    if (path === 'state')
-      return {
-        workspaces: [],
-        live_sessions: [],
-        assignments: [],
-        controls: [],
-      }
-    if (path === 'setup/local-vm/status') {
-      if (unavailable) throw new Error('Saved setup status could not be read')
-      return [
-        {
-          id: 'saved-local',
-          name: 'Recovered researcher',
-          stage: 'connecting',
-          issue: null,
+it.each(
+  ([
+    [
+      'setup/local-vm/status',
+      'Local setup Recovered researcher',
+      {
+        id: 'saved-local',
+        name: 'Recovered researcher',
+        stage: 'connecting',
+        issue: null,
+      } satisfies KvmSetupRecord,
+    ],
+    [
+      'setup/cloud/status',
+      'Cloud setup Recovered researcher',
+      {
+        id: 'saved-cloud',
+        name: 'Recovered researcher',
+        provider: 'hetzner',
+        fetched_at: 1,
+        expires_at: 2,
+        confirmed: false,
+        quote: null,
+        catalog: { currency: 'EUR', tax: 'VAT', regions: [], plans: [] },
+      } satisfies CloudReview,
+    ],
+    [
+      'setup/m365/status',
+      'M365 setup Recovered researcher',
+      {
+        id: 'saved-m365',
+        name: 'Recovered researcher',
+        account_id: 'work-account',
+        cloud_pc: {
+          id: 'pc',
+          display_name: 'Dedicated PC',
+          image_name: 'Windows 11',
+          plan_name: '2 vCPU',
         },
-      ]
-    }
-    return []
-  })
-  render(<Page />)
-  await screen.findByText('Error: Saved setup status could not be read')
-  expect(
-    screen.queryByRole('form', { name: 'Set up Gbot' })
-  ).not.toBeInTheDocument()
-  unavailable = false
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-  await screen.findByRole('region', {
-    name: 'Local setup Recovered researcher',
-  })
-  expect(
-    screen.queryByRole('form', { name: 'Set up Gbot' })
-  ).not.toBeInTheDocument()
-  expect(
-    screen.queryByText('Error: Saved setup status could not be read')
-  ).not.toBeInTheDocument()
-})
+        route: 'guest_worker',
+      } satisfies M365SetupRecord,
+    ],
+  ] as const).flatMap(([path, region, record]) => [
+    [path, region, record, new Error('Saved setup status could not be read')],
+    [path, region, record, 'Saved setup status could not be read'],
+  ] as const)
+)(
+  'recovers a saved setup status read from %s without offering first setup (%s)',
+  async (statusPath, region, record, cause) => {
+    let unavailable = true
+    mocks.listen.mockResolvedValue(() => {})
+    mocks.call.mockImplementation(async (path: string) => {
+      if (path === 'state')
+        return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+      if (path === statusPath) {
+        if (unavailable) throw cause
+        return [record]
+      }
+      return []
+    })
+    render(<Page />)
+    const notice = await screen.findByText(
+      'Could not check your saved computer setups. Choose Refresh to try again before starting another setup.'
+    )
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith('tasks/approvals', undefined)
+    )
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+    const alert = notice.closest('[role="alert"]') as HTMLElement
+    const details = within(alert).getByText('Details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    const diagnostic = within(alert).getByText(String(cause))
+    expect(diagnostic).not.toBeVisible()
+    const callsBeforeDetails = mocks.call.mock.calls.length
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(diagnostic).toBeVisible()
+    expect(mocks.call).toHaveBeenCalledTimes(callsBeforeDetails)
+    unavailable = false
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await screen.findByRole('region', { name: region })
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+    expect(notice).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === statusPath)
+    ).toHaveLength(2)
+    expect(
+      mocks.call.mock.calls.some(([path]) =>
+        ['setup/local-vm/start', 'setup/cloud/create', 'setup/m365/save', 'workspaces/ssh'].includes(path)
+      )
+    ).toBe(false)
+  }
+)
+
+it.each(['setup/cloud/status', 'setup/m365/status'])(
+  'keeps saved setup read recovery visible with a selected bot after %s fails',
+  async (statusPath) => {
+    readyTaskBots()
+    const fallback = mocks.call.getMockImplementation()!
+    let unavailable = false
+    mocks.call.mockImplementation(async (path: string, body: Record<string, unknown>) => {
+      if (path === statusPath && unavailable)
+        throw new Error('Saved setup lookup unavailable')
+      return fallback(path, body)
+    })
+    render(<Page />)
+    const prompt = await screen.findByRole('textbox', { name: 'Bot task' })
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith('tasks/approvals', undefined)
+    )
+    fireEvent.change(prompt, { target: { value: 'Keep this unsent task' } })
+    unavailable = true
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    const notice = await screen.findByText(
+      'Could not check your saved computer setups. Choose Refresh to try again before starting another setup.'
+    )
+    expect(prompt).toHaveValue('Keep this unsent task')
+    expect(screen.getByRole('heading', { name: 'Writer' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+    unavailable = false
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(notice).not.toBeInTheDocument())
+    expect(prompt).toHaveValue('Keep this unsent task')
+    expect(
+      mocks.call.mock.calls.some(([path]) => path === 'tasks/start')
+    ).toBe(false)
+  }
+)
 
 it('resumes a saved cloud price review without creating a workspace or offering first setup', async () => {
   mocks.listen.mockResolvedValue(() => {})
@@ -4699,7 +4796,9 @@ it.each([
     render(<Page />)
     await screen.findByText('Computer setup is incomplete')
     if (scenario === 'unknown setup')
-      await screen.findByText('Error: Setup status unavailable')
+      await screen.findByText(
+        'Could not check your saved computer setups. Choose Refresh to try again before starting another setup.'
+      )
     else await screen.findByRole('button', { name: 'Resume setup' })
     for (const button of screen.queryAllByRole('button', {
       name: /^(Hand back|Take over)$/,
