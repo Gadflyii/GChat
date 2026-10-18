@@ -1,0 +1,45 @@
+{
+  "row": "GUI-GINFER-PROVIDER-SETTINGS-ADVANCED",
+  "owner": "Codex 7",
+  "source_commits": [
+    "d3c3f77d6",
+    "dbb8ee2b9"
+  ],
+  "base": "25459ffc2",
+  "arch_signed": "2026-10-18T04:46Z",
+  "host": "AIS-2-8592-L01 (S1)",
+  "cpus": "64-71",
+  "gpu_used": false,
+  "focused": {
+    "web_passed": 57,
+    "extension_passed": 34,
+    "native_screened_profile_passed": 1,
+    "native_test": "installed_profile_defaults_select_the_screened_cap_without_model_overrides",
+    "first_attempt": "Incomplete provider-store mock lacked getState; fixture corrected before the full gate."
+  },
+  "make_verify": {
+    "invocations": 1,
+    "result": "PASS",
+    "finished_at": "2026-10-18T04:59:54.093266+00:00",
+    "app_passed": 3354,
+    "app_skipped": 6,
+    "extension_passed": 127,
+    "rust_passed": 1223,
+    "rust_ignored": 28,
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "quality_guards": "PASS",
+    "coverage_floors": "PASS"
+  },
+  "native_acceptance": {
+    "result": "PASS",
+    "receipt": "native-result.json",
+    "scope": "Native Linux debug Settings display and pointer navigation to Models/GInfer Hosts; no model or Host readiness claim."
+  },
+  "limitations": [
+    "Windows not built (development phase)",
+    "No model or GPU workload run; native acceptance covers Settings navigation and layout."
+  ],
+  "private_build_root": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018",
+  "private_build_root_retention": "Reused immediately by C7 OpenCode provisioning task; disposable native HOME/stage removed, CPU booking canceled at05:09Z."
+}

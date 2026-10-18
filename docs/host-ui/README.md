@@ -2,29 +2,35 @@
 
 ## GInfer settings ownership — C7, October 18
 
-`GUI-GINFER-PROVIDER-SETTINGS-ADVANCED` is active on main `25459ffc2`.
-The earlier plain labels and Start in Models link are already delivered; the
-remaining defect is structural. Settings still stores global launch overrides
-that chat/API loads consume, Installed Load explicitly selects a tested Host
-profile, and GInfer Hosts has an independent instance-settings editor.
+`GUI-GINFER-PROVIDER-SETTINGS-ADVANCED` is implemented by source commits
+`d3c3f77d6` and `dbb8ee2b9`, based on main `25459ffc2`. Models owns ordinary
+Load/Stop and package management; GInfer Hosts owns custom startup settings
+and saved profiles. Settings retains four application preferences and direct
+links to Models and GInfer Hosts. Chat/API automatic loading selects complete
+tested profiles and preserves explicit GPU constraints. Superseded global
+startup overrides and their extension consumption are removed.
 
-Deliverable: one clear owner for custom model startup settings, with useful
-navigation from Settings and Models. Acceptance requires preserving qualified
-automatic loading, explicit GPU selection, saved Host configuration, model
-discovery and application-level timeout/unload behavior; removing superseded
-controls and their project-owned paths; focused behavioral tests and ONE
-`make verify`. No numerical, qualification, GPU or Windows account change is
-authorized by this row.
+Arch signed at04:46Z. Focused verification passed 57 web, 34 extension and one
+native screened-profile regression. ONE `make verify` passed 3,354 app,
+127 extension and 1,223 Rust tests, lint, types, guards and coverage floors.
+An incomplete focused-test mock was corrected before the full gate. The web
+build and native debug build passed; missing ignored generated icon inputs
+were supplied from a retained donor before continuing only the native build.
 
-Arch signed the ownership and automatic-load changes at 04:46Z. Next action:
-implement the provider page, extension and model service together, then check
-profile selection, Settings navigation and the full gate. C7 owns local worktree
-`/ai/gchat-worktrees/c7-ginfer-settings-owner-20261018`, branch
-`fix/c7-ginfer-settings-owner-20261018`. Parallel agents own extension and model-service changes; C7 integrates the
-provider page and gates. Private S1 build/cache path is
-`/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018`; CPUs64–71
-are booked from04:49Z through05:19Z for dependency preparation and gates.
-No model or GPU allocation; disposable copies will be deleted after the gate.
+The isolated native Linux check displayed exactly four preferences and used
+pointer clicks to reach Models and GInfer Hosts. Screenshots and concise
+receipts are in `out/c7-ginfer-settings-owner-20261018/` in this source branch.
+This qualifies Settings display/navigation; the fresh fixture remained
+Preparing GInfer, so no Host readiness, installed release or model-start claim
+is made. Windows was not built (development phase). No model/GPU was used.
+All private processes stopped and CPUs64–71 returned at05:08Z.
+
+C7 owns worktree `/ai/gchat-worktrees/c7-ginfer-settings-owner-20261018`, branch
+`fix/c7-ginfer-settings-owner-20261018`. The source and native evidence are
+ready for merge. Private S1 build/cache root
+`/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018` is retained only
+for immediate reuse by the assigned OpenCode provisioning fix; disposable GUI
+HOME/stage were removed after evidence capture.
 
 ### Architecture decision — signed04:46Z
 

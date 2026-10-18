@@ -1,0 +1,7 @@
+Native Linux Settings navigation: PASS on the current d3c3f77d6 app code (worktree dbb8ee2b9), using a private S1 custom-protocol debug build. The route, labels, extension source and settings matched the worktree; the staged executable matched the just-built artifact. Current GInfer extension packaging was staged over read-only retained resources.
+
+Actual native pointer input opened Settings > GInfer. The page displayed Model folder, Engine program, Unload other models automatically and Model startup time limit, plus Open Models and Open GInfer Hosts. No global engine startup override controls or second Start appeared. Native clicks opened Models (`/hub`, Installed) and GInfer Hosts (`/engines`). All three native X11 PNGs were visually checked.
+
+This qualifies Settings display and navigation only. The fresh fixture remained Preparing GInfer; no installed release, Host readiness or model-start claim is made. No model/profiling action was requested. OpenCode/Hermes were disabled before first launch and remained disabled; the app log showed no such provisioning.
+
+The existing focused tests, ONE make verify and web build passed. The authorized native-only continuation supplied missing generated icons from a retained donor and passed at 05:04:23Z; no gates were repeated. All owned native processes and the inspector forward stopped by exact PID, with no private runtime mounts or processes remaining at 05:08:35Z. CPUs 64–71 returned then. Disposable GUI HOME/stage were removed after evidence copy; the private build/cache root remains for coordinator reuse.
