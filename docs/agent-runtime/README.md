@@ -55,15 +55,23 @@ An isolated native Linux Studio pass found that **New agent** → **Coordinator
 Team** created one `researcher` specialist but set **Maximum parallel workers**
 to 2. Selecting **Save definition** without editing these defaults displayed
 “Coordinator parallelism must be between 1 and the worker count.” The affected
-`withKind` helper is byte-identical from observed role-ID candidate
+`withKind` helper was byte-identical from observed role-ID candidate
 `26608cb72d2f` (base `80424bb41`) through main `ff3361720`.
 
-The correction should start the default one-specialist team at parallelism 1 so
-its generated definition can save untouched. Corrected gates, build and native
-replay are pending. Baseline receipts and source-region equivalence are in
-`/ai/gchat/out/gchat-coordinator-default-parallelism-20261018/`. This baseline
-used a private Linux debug profile, retained sidecars and no GPU or model
-request. Windows: not built (dev phase).
+New Coordinator Teams now start at parallelism 1. Native replay saved the
+untouched definition with one `researcher` and `maxParallel: 1`. Adding a second
+specialist, typing 2 in **Maximum parallel workers**, and saving retained
+`researcher`, `specialist-2`, and `maxParallel: 2`. Existing definitions were
+preserved. The focused suite passed 49 tests; the sole `make verify`, frontend
+build and native build passed. Candidate SHA256 is
+`939d6296703854ade1633f84aa86fd2871f6b15b74eff73685ac10b3932f241c`
+(source `3818d7a2`).
+
+Baseline receipts, native DOM captures, saved-definition snapshots and the
+accepted two-specialist screenshot are in
+`/ai/gchat/out/gchat-coordinator-default-parallelism-20261018/`. This is an
+isolated Linux debug editor check with retained sidecars and no GPU or model
+request. CPU resources were returned at 03:54Z. Windows: not built (dev phase).
 
 ## Role identifiers retain keyboard focus — October 18
 
