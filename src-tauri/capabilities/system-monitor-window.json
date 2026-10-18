@@ -2,7 +2,8 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "system-monitor-window",
   "description": "enables permissions for the system monitor window",
-  "windows": ["system-monitor-window"],
+  "local": true,
+  "webviews": ["system-monitor-window"],
   "platforms": ["linux", "macOS", "windows"],
   "permissions": [
     "core:default",
