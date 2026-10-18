@@ -7,6 +7,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { ComponentType } from 'react'
 import type { BotState, KvmSetupRecord } from '@/services/gbot'
@@ -791,6 +792,7 @@ it('resumes a saved cloud price review without creating a workspace or offering 
 })
 
 it('resumes saved M365 prerequisites without presenting a connected bot workspace', async () => {
+  const user = userEvent.setup()
   mocks.listen.mockResolvedValue(() => {})
   const record = {
     id: 'm365-setup',
@@ -833,16 +835,22 @@ it('resumes saved M365 prerequisites without presenting a connected bot workspac
     screen.queryByRole('form', { name: 'Set up Gbot' })
   ).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument()
-  fireEvent.click(
+  await user.click(
     within(card).getByRole('button', { name: 'Resume Cloud PC setup' })
   )
   await screen.findByRole('region', { name: 'M365 Cloud PC setup' })
   expect(
     screen.getByText('Step 4 · Prepare your Cloud PC connection')
   ).toBeInTheDocument()
-  expect(await screen.findByLabelText('Microsoft account')).toHaveValue(
-    record.account_id
-  )
+  const accountPicker = await screen.findByRole('button', {
+    name: 'Microsoft account',
+  })
+  expect(accountPicker).toHaveTextContent('Disconnected saved account')
+  await user.click(accountPicker)
+  expect(
+    screen.getByRole('menuitemradio', { name: 'Disconnected saved account' })
+  ).toHaveAttribute('aria-checked', 'true')
+  await user.keyboard('{Escape}')
   expect(
     screen.getByLabelText('Worker in the Cloud PC user session')
   ).toBeChecked()

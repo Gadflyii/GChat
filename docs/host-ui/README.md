@@ -498,16 +498,21 @@ existing Radix dropdown primitives, preserving disabled choices and callbacks.
 No dependency, model execution, Fleet authority change or Windows account change
 is needed. The prior Theme/Font Size acceptance remains valid.
 
-S1 CPUs104–111 are booked03:00–03:30Z (line2895); private root
+S1 CPUs104–111 are booked03:23–03:53Z (line2918); private root
 `/media/ron/SSD_RAID/ai/tmp-c7-dropdown-host-selectors-20261018` owns the
 Host bridge container and native app profile. The ed68 AppDir and Flash Next
 pure 2-bit package are read-only donors. No model or GPU execution is permitted.
 Windows and release-wide qualification remain outside this leaf.
 
 The former CSS-only assumption is superseded by the native reproduction above.
-All remaining application native selects are being migrated in this same source
-branch. Focused interaction tests and one full verification gate are pending,
-followed by native candidate screenshots; prior gates do not qualify this fix.
+All production native selects now use the shared app-rendered choice control.
+Focused component tests pass, including a disabled-trigger regression found and
+fixed during this gate. The one full verification invocation found an unsupported
+Radix lifecycle prop; that is fixed and typecheck passes. Its continued frontend
+stage found remaining tests that still used native-select interactions. Those
+tests are being updated without changing their behavior assertions; remaining
+Rust verification and the native build are running. Candidate screenshots follow.
+Prior gates do not qualify this fix.
 The earlier FRESH VM acceptance remains scoped to its shared menus, with the
 VM returned OFF/original XML and its private stage removed. The current live
 S1 fixture and build cache are separate owned paths under the root above.
