@@ -1,5 +1,29 @@
 # Gbot design
 
+## Recovering saved computer setup reads — Gchat 2
+
+`GBOT-SAVED-SETUP-READ-RECOVERY`, based on main `61e4ea300`, requires
+successful local, cloud and Microsoft saved-setup reads before automatically
+offering first-time setup. Previously, a failed cloud or Microsoft read counted
+as an empty list and could hide an unfinished setup behind a new setup form.
+
+A read failure now names the existing Refresh action with its diagnostic in
+closed Details, including when a bot is selected. Saved lists, bot selection
+and unsent task drafts remain available. Refresh discovers the saved setup;
+no setup or task starts automatically. Source/rendered mocked-service scope,
+with no provider, account, VM or native acceptance claim.
+
+Validation: all eight new journeys failed against original production; fixed
+focus passed 157 tests across two files. Lint passed with zero errors and five
+existing warnings. ONE `make verify` (2026-10-18 22:29:57–22:36:03 UTC)
+passed 3,838 app tests (six skipped), 130 extension tests, 1,323 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards.
+All 3,480 tracked inputs matched raw bytes and modes before and after
+verification with fresh tracked timestamps. Only this receipt was added
+afterward. Booking3606 returned22:36Z; private cache and both exports were
+removed by22:37:39Z. Evidence:
+`/ai/gchat/out/gchat2-saved-setup-read-recovery-20261018/SUMMARY.md`.
+
 ## Recovering a failed Microsoft sign-in result — Gchat 2
 
 `GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names

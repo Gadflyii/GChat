@@ -147,8 +147,8 @@ function GbotPage() {
       setState(value)
       setSetupError('')
       let kvm: KvmSetupRecord[] | undefined
-      let cloud: CloudReview[] = []
-      let m365: M365SetupRecord[] = []
+      let cloud: CloudReview[] | undefined
+      let m365: M365SetupRecord[] | undefined
       try {
         const saved = await gbot<CloudReview[]>('setup/cloud/status', {})
         if (stopped.current || version !== refreshVersion.current) return
@@ -180,7 +180,12 @@ function GbotPage() {
         setSetups(undefined)
         setSetupError(String(cause))
       }
-      if (!setupOffered.current && kvm !== undefined) {
+      if (
+        !setupOffered.current &&
+        kvm !== undefined &&
+        cloud !== undefined &&
+        m365 !== undefined
+      ) {
         setupOffered.current = true
         if (
           !value.workspaces.length &&
@@ -910,6 +915,18 @@ function GbotPage() {
                 </details>
               </div>
             )}
+            {setupError && (
+              <div role="alert" className="space-y-2 text-sm text-destructive">
+                <p>
+                  Could not check your saved computer setups. Choose Refresh to
+                  try again before starting another setup.
+                </p>
+                <details className="text-muted-foreground">
+                  <summary>Details</summary>
+                  <p className="whitespace-pre-wrap break-words">{setupError}</p>
+                </details>
+              </div>
+            )}
             {adding && (
               <GbotSetup
                 key={resuming?.id ?? 'new'}
@@ -1092,11 +1109,6 @@ function GbotPage() {
                   </div>
                 </section>
               ))}
-            {!bot && setupError && (
-              <p role="alert" className="text-sm text-destructive">
-                {setupError}
-              </p>
-            )}
             {bot && (
               <>
                 {(setup?.stage === 'ready' ||
@@ -1194,8 +1206,8 @@ function GbotPage() {
                         computer to use it again.
                       </p>
                     )}
-                    {setups === undefined && (
-                      <p>{setupError || 'Checking setup status…'}</p>
+                    {setups === undefined && !setupError && (
+                      <p>Checking setup status…</p>
                     )}
                     {setup?.issue && (
                       <div role="alert">
