@@ -1312,6 +1312,7 @@ mod tests {
         )
         .unwrap();
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(data.join("code/opencode/runtime/.gchat-verified"), "1.2.3").unwrap();
         let agent = integrations::find("opencode").unwrap();
         let resolved = resolve_agent_executable(agent, &data).unwrap().unwrap();
         assert_eq!(resolved, executable);

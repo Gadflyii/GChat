@@ -618,6 +618,7 @@ printf '%s\0' "$1" "$2" "$3" "$HOME" "$XDG_CONFIG_HOME" "$OPENCODE_CONFIG_DIR" "
         std::fs::create_dir_all(managed.parent().unwrap()).unwrap();
         std::fs::write(&managed, "#!/bin/sh\nexit 71\n").unwrap();
         std::fs::set_permissions(&managed, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(data.path().join("code/opencode/runtime/.gchat-verified"), "1.2.3").unwrap();
         let home = std::env::var_os("HOME").unwrap_or_default();
         let row = write_reference(
             data.path(),
@@ -672,6 +673,7 @@ printf '%s\0' "$1" "$2" "$3" "$HOME" "$XDG_CONFIG_HOME" "$OPENCODE_CONFIG_DIR" "
         )
         .unwrap();
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(data.join("code/opencode/runtime/.gchat-verified"), "1.2.3").unwrap();
         let row = write_reference(
             &data,
             &json!({"id":"ses_managed_delete","title":"Managed runtime"}),

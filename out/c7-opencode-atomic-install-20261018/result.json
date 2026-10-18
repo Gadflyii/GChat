@@ -1,0 +1,202 @@
+{
+  "row": "GUI-FIRST-USER-OPENCODE-PROVISIONING",
+  "follow_up": "Codex 8 P2: failed managed setup admitted its leftover shim",
+  "status": "MERGE_READY",
+  "source": {
+    "repository": "GChat",
+    "branch": "fix/c7-opencode-atomic-install-20261018",
+    "revision": "e9a5cac36",
+    "base": "e0a67a528"
+  },
+  "authority": "claude-arch signed 2026-10-18T05:40:41Z",
+  "change": [
+    "Install npm into a unique private sibling directory; verify npm success, runtime version and requested update version before writing the completion marker and publishing by directory rename.",
+    "Require the shim and completion marker for managed resolution; ignore interrupted and older unmarked leftovers and continue to native PATH.",
+    "Clean failed setup, allow explicit reinstall and preserve the last working managed runtime on failed updates.",
+    "Reconcile existing completed-runtime fixtures for managed readiness, embedded/CLI launch and offline deletion."
+  ],
+  "verification": {
+    "host": "S1 AIS-2-8592-L01",
+    "cpu": "64-71",
+    "gpu": false,
+    "container": "gchat-s1-verify:20261015",
+    "baseline_negative": {
+      "runtime_revision": "e0a67a528",
+      "test_revision": "481a3bbd9",
+      "test": "core::system::commands::tests::opencode_failed_setup_stays_missing_until_an_explicit_successful_retry",
+      "result": "REPRODUCED",
+      "exit_code": 101,
+      "assertion": "npm-failure must remain repairable",
+      "meaning": "npm wrote a shim before exiting23; old readiness incorrectly marked it installed"
+    },
+    "focused_rust": {
+      "result": "PASS",
+      "passed": 30,
+      "groups": {
+        "opencode": 23,
+        "code_update": 4,
+        "offline_unbound_session_delete": 1,
+        "offline_session_delete_keeps_its_bound_executable": 1,
+        "cli_launch_uses_the_selected_managed_opencode_and_configuration": 1
+      }
+    },
+    "rust_check": {
+      "result": "PASS",
+      "exit_code": 0,
+      "scope": "--lib --bin gchat-cli --no-default-features --features test-tauri,cli"
+    },
+    "rust_clippy": {
+      "result": "PASS",
+      "exit_code": 0,
+      "scope": "--lib --bin gchat-cli --no-default-features --features test-tauri,cli -- -D warnings"
+    },
+    "make_verify": {
+      "invocations": 1,
+      "result": "STOPPED_ENVIRONMENT",
+      "exit_code": 2,
+      "finished_utc": "2026-10-18T05:52:48Z",
+      "library": {
+        "passed": 752,
+        "failed": 1,
+        "ignored": 8
+      },
+      "failure": {
+        "test": "core::agent::worker_pools::tests::first_local_coordinator_requires_and_publishes_a_reachable_shared_address",
+        "cause": "Docker --network=none supplies no route for the existing UDP LAN-address fixture; worker_pools.rs:887 returned NetworkUnreachable."
+      },
+      "successful_stages": "lint, types, quality/registry/manager/assets checks, frontend/extension tests and all coverage floors",
+      "corrective_action": "Enable private Docker bridge and run only the failed exact test and Rust suites not reached. No repeated make verify, no source changes.",
+      "started_utc": "2026-10-18T05:50:12Z",
+      "frontend": {
+        "passed": 3382,
+        "skipped": 6,
+        "extension_passed": 127
+      },
+      "contract_checks": {
+        "registry": 4,
+        "manager_ui": 54,
+        "tauri_assets": 1
+      },
+      "coverage_floors": {
+        "passed": 6,
+        "failed": 0
+      },
+      "lint": {
+        "errors": 0,
+        "warnings": 5
+      }
+    },
+    "toolchain": {
+      "rust": "1.98.0",
+      "cargo": "1.98.0",
+      "node": "22.22.1",
+      "yarn": "4.5.3"
+    },
+    "remaining_rust": {
+      "result": "STOPPED_ENVIRONMENT",
+      "network": "private Docker bridge",
+      "exact_failed_test": {
+        "result": "PASS",
+        "passed": 1,
+        "exit_code": 0,
+        "finished_utc": "2026-10-18T05:53:55Z"
+      },
+      "finished_utc": "2026-10-18T05:54:45Z",
+      "ginfer_plugin": {
+        "passed": 20,
+        "failed": 1,
+        "exit_code": 101,
+        "test": "managed::tests::desktop_attaches_and_reuses_auto_kv_profiles_and_preserves_explicit_budgets",
+        "cause": "An explicitly empty CUDA_VISIBLE_DEVICES masked the synthetic GPU-test; the container has no device exposure."
+      },
+      "corrective_action": "Unset CUDA_VISIBLE_DEVICES in the private bridge container; run only this exact failed fixture and the downstream suites never reached. No source changes or repeated successful stages.",
+      "not_run_at_that_stop": [
+        "ginfer-host",
+        "ginfer-manager",
+        "gbot-service",
+        "tauri-plugin-hardware",
+        "utils"
+      ]
+    },
+    "final_remaining_rust": {
+      "result": "PASS",
+      "started_utc": "2026-10-18T05:58:03Z",
+      "finished_utc": "2026-10-18T06:01:24Z",
+      "exit_code": 0,
+      "network": "private Docker bridge",
+      "cuda_visible_devices": "unset",
+      "device_exposure": false,
+      "stages": {
+        "exact_failed_plugin_fixture": {
+          "passed": 1,
+          "ignored": 0,
+          "exit_code": 0
+        },
+        "ginfer-host": {
+          "passed": 285,
+          "ignored": 19,
+          "exit_code": 0
+        },
+        "ginfer-manager": {
+          "passed": 4,
+          "ignored": 1,
+          "exit_code": 0
+        },
+        "gbot-service": {
+          "passed": 124,
+          "ignored": 0,
+          "exit_code": 0
+        },
+        "hardware": {
+          "passed": 16,
+          "ignored": 0,
+          "exit_code": 0
+        },
+        "utils": {
+          "passed": 48,
+          "ignored": 0,
+          "exit_code": 0
+        }
+      }
+    },
+    "completed_gate_scope": {
+      "result": "PASS_AFTER_ENVIRONMENT_CORRECTIONS",
+      "rust_passed": 1251,
+      "rust_ignored": 28,
+      "source_and_assertions_unchanged": true,
+      "successful_stages_repeated": false,
+      "original_make_verify_exit_code": 2,
+      "make_verify_invocations": 1
+    }
+  },
+  "limits": [
+    "Linux CPU-only fixture acceptance; Windows filesystem execution not qualified by this follow-up.",
+    "No native GUI replay, model loading, inference or performance claim."
+  ],
+  "inventory": {
+    "source_worktree": "/ai/gchat-worktrees/c7-opencode-atomic-install-20261018",
+    "private_s1_root": "/media/ron/SSD_RAID/ai/tmp-c7-opencode-atomic-install-20261018",
+    "disposable_root_status": "20 GiB owned build/cache removed at 2026-10-18T06:03:39Z after checking terminal containers and live users/mounts; five owned stopped containers removed; donors untouched",
+    "cpu_bookings": {
+      "first": {
+        "line": 3049,
+        "status": "canceled at full-gate terminal"
+      },
+      "corrective": {
+        "line": 3060,
+        "cpu": "64-71",
+        "start_utc": "2026-10-18T05:53Z",
+        "end_utc": "2026-10-18T06:13Z",
+        "status": "canceled at terminal 05:54:45Z"
+      },
+      "final": {
+        "cpu": "64-71",
+        "start_utc": "2026-10-18T05:58Z",
+        "end_utc": "2026-10-18T06:18Z",
+        "status": "canceled after terminal; returned06:01Z",
+        "line": 3065
+      }
+    },
+    "retained": "Source worktree and this concise JSON; supplementary build-result.json in /ai/gchat/out/c7-opencode-atomic-install-20261018; raw logs removed after inspection"
+  }
+}
