@@ -718,6 +718,34 @@ alongside the earlier Cancel result. It does not qualify a fresh install, Gbot
 credential workflow or native Windows. This check used synthetic credentials and
 a private remote Host, with no model or GPU workload.
 
+### Fresh installed final Linux RC — October 18
+
+The fresh installed Linux launch check is **CLOSED/PASS**. Final release
+`2.0.42+rc20261017.release.gchated68c7443.enginee2282c336` was installed with
+ordinary `dpkg -i` into a disposable runtime container where the package was
+previously absent. A fresh HOME and real synthetic login keyring were used; the
+login collection was locked before installation and launch. No dependency stubs
+or force options were used. Package SHA256:
+`4251e175fe83ec3abfe7f3ab33cbc795f8f2bfe07210376403fbbb2ac24bacc5`.
+
+Installed `/usr/bin/gchat` launched at 09:49:02Z, completed bundled runtime setup
+and displayed Welcome. Plain launch and ordinary Hosts navigation through
+09:49:54Z made zero application Secret Service calls and left the login keyring
+locked. Explicit Check secure storage alone opened Unlock Login Keyring; live
+sender `:1.19` mapped to installed desktop PID754543. Native Cancel kept the
+collection locked and offered Check again. A second ordinary Check and one
+native password submission unlocked it; CreateItem/GetSecret/Delete completed
+for the disposable setup probe, and the UI showed Secure storage is ready.
+
+Normal native window close exited 0 at 09:53:15Z. The private session,
+disposable container, installed payload and HOME were retired; returned09:54Z.
+The release's relevant native credential paths match main `ae5979dbd`; this
+qualifies the installed release rather than every later frontend change. No
+source fix was required. The first prelaunch fixture PATH failure is retained
+separately. Native Windows, provider credentials, bot tasks and crash recovery
+remain outside this check. Evidence:
+`/ai/gchat/out/keyring-fresh-installed-20261018/{result.json,summary.md}`.
+
 ### Gbot local service-token follow-up
 
 The same installed d31 executable and isolated known-password keyring pass the
