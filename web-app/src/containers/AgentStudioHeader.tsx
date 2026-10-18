@@ -19,7 +19,7 @@ export type AgentStudioSection =
 type AgentStudioHeaderProps = {
   active: AgentStudioSection
   actions?: ReactNode
-  onSelect: (section: AgentStudioSection) => void
+  onSelect: (section: AgentStudioSection) => void | Promise<void>
 }
 
 const sections = [
@@ -63,7 +63,23 @@ export function AgentStudioHeader({
               aria-current={active === id ? 'page' : undefined}
               size="sm"
               className="shrink-0"
-              onClick={() => onSelect(id)}
+              data-studio-section={id}
+              onClick={async (event) => {
+                const opener = event.currentTarget
+                const hadFocus = document.activeElement === opener
+                await onSelect(id)
+                if (
+                  hadFocus &&
+                  !opener.isConnected &&
+                  document.activeElement === document.body
+                ) {
+                  document
+                    .querySelector<HTMLButtonElement>(
+                      `nav[aria-label="Agent Studio sections"] button[data-studio-section="${id}"][aria-current="page"]`
+                    )
+                    ?.focus({ preventScroll: true })
+                }
+              }}
             >
               <Icon className="size-4" />
               {label}

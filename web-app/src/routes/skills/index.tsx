@@ -165,7 +165,7 @@ export function SkillsPage() {
 
   const selectStudioSection = (section: AgentStudioSection) => {
     if (section === 'skills') return
-    void navigate({
+    return navigate({
       to: route.agents.index,
       search: { view: section },
     })
