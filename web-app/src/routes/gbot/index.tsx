@@ -19,6 +19,7 @@ import GbotSetup, {
 } from '@/components/GbotSetup'
 import { BrainSetup } from '@/components/GbotSetup/BrainSetup'
 import ServiceSetup from '@/components/GbotSetup/ServiceSetup'
+import { CloudDeploymentIssue } from '@/components/GbotSetup/CloudComputer'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
   type DesktopViewHandle,
@@ -750,7 +751,7 @@ function GbotPage() {
               connecting:
                 'Connecting to the Gbot service on your selected LAN computer. Please wait.',
               stopping:
-                'Stopping the Gbot service. Tasks and schedules will resume when you start it again.',
+                'Stopping the Gbot service. Unfinished tasks will stop. After restarting, review them before choosing Resume. Check Scheduled tasks for schedules that need review.',
               disconnecting:
                 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.',
             }[serviceAction]
@@ -779,9 +780,16 @@ function GbotPage() {
             <ServiceSetup target={serviceDraft} change={changeServiceDraft} />
           </fieldset>
           {serviceError && (
-            <p role="alert" className="text-sm text-destructive">
-              {serviceError}
-            </p>
+            <div role="alert" className="space-y-2 text-sm text-destructive">
+              <p>
+                Could not confirm the service computer change. Review your
+                choice, then choose Use this service to try again.
+              </p>
+              <details className="text-muted-foreground">
+                <summary>Details</summary>
+                <p className="whitespace-pre-wrap break-words">{serviceError}</p>
+              </details>
+            </div>
           )}
           <div className="flex gap-2">
             <Button
@@ -805,7 +813,7 @@ function GbotPage() {
           <p>
             {serviceTarget.kind === 'paired_host'
               ? 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
-              : 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'}
+              : 'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'}
           </p>
           <p className="text-sm text-muted-foreground">
             {serviceTarget.kind === 'paired_host'
@@ -888,9 +896,20 @@ function GbotPage() {
               </Button>
             </div>
             {error && !serviceAction && (
-              <p role="alert" className="text-destructive">
-                {error}
-              </p>
+              <div role="alert" className="space-y-2 text-destructive">
+                <p>
+                  Could not load your bots. Choose Refresh to try again. If Gbot
+                  is stopped or disconnected, choose{' '}
+                  {serviceTarget.kind === 'paired_host'
+                    ? 'Connect Gbot service'
+                    : 'Start Gbot service'}{' '}
+                  above.
+                </p>
+                <details className="text-muted-foreground">
+                  <summary>Details</summary>
+                  <p className="whitespace-pre-wrap break-words">{error}</p>
+                </details>
+              </div>
             )}
             {adding && (
               <GbotSetup
@@ -986,7 +1005,7 @@ function GbotPage() {
                         ? 'Cost review saved'
                         : 'Cost review incomplete · No VM created'}
                   </p>
-                  {review.deployment?.issue && <p>{review.deployment.issue}</p>}
+                  <CloudDeploymentIssue deployment={review.deployment} saved />
                   <div className="flex gap-2">
                     <Button
                       variant="outline"

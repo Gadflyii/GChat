@@ -66,6 +66,15 @@ fn parse_runtime(value: &str) -> Result<(String, PathBuf), String> {
     Ok(entry)
 }
 
+fn request_log_destination(value: Option<std::ffi::OsString>) -> Result<Option<PathBuf>, String> {
+    let Some(value) = value else { return Ok(None); };
+    let path = PathBuf::from(value);
+    if !path.is_absolute() {
+        return Err("GINFER_HOST_REQUEST_LOG_JSONL must be a nonempty absolute file path".into());
+    }
+    Ok(Some(path))
+}
+
 #[derive(Parser)]
 #[command(about = "Prepare the current user's shared Host-owned hardware installation")]
 struct PrepareHardware {
@@ -436,6 +445,7 @@ async fn run(
     ready: impl FnOnce() -> Result<(), String>,
     shutdown: impl std::future::Future<Output = ()>,
 ) -> Result<(), String> {
+    let request_log_jsonl = request_log_destination(std::env::var_os("GINFER_HOST_REQUEST_LOG_JSONL"))?;
     if args.menu {
         return match args.data_dir {
             Some(directory) => ginfer_host::launcher::menu(&directory, &args.host_url).await,
@@ -477,7 +487,7 @@ async fn run(
     #[cfg(windows)]
     inventory.creation_flags(0x08000000);
     let output = inventory.args([
-            "--query-gpu=uuid,name,memory.total,compute_cap,pci.device_id,pci.bus_id",
+            "--query-gpu=uuid,name,memory.total,compute_cap,pci.device_id,pci.bus_id,driver_version",
             "--format=csv,noheader,nounits",
         ])
         .output()
@@ -488,12 +498,14 @@ async fn run(
     }
     let mut gpus = Vec::new();
     let mut pci_inventory = Vec::new();
+    let mut driver_versions = std::collections::BTreeSet::new();
     for line in String::from_utf8_lossy(&output.stdout).lines() {
         let values: Vec<_> = line.split(',').map(str::trim).collect();
-        if values.len() != 6 {
+        if values.len() != 7 {
             return Err("unrecognized NVIDIA inventory row".into());
         }
         pci_inventory.push((values[0].to_string(), values[5].to_string()));
+        driver_versions.insert(values[6].to_owned());
         gpus.push(Gpu {
             uuid: values[0].into(),
             name: values[1].into(),
@@ -525,6 +537,18 @@ async fn run(
         args.desktop_provider,
     )
     .await?;
+    if driver_versions.len() == 1 {
+        if let Err(error) = host.processes.lock().await.configure_nvidia_driver_version(
+            driver_versions.first().unwrap(),
+        ) {
+            eprintln!("{error}");
+        }
+    } else {
+        eprintln!("NVIDIA driver version is unavailable or inconsistent; graph-memory receipts cannot be saved or reused");
+    }
+    if let Some(path) = request_log_jsonl {
+        host.processes.lock().await.configure_request_log_jsonl(path);
+    }
     #[cfg(windows)]
     if args.desktop_managed && !args.windows_service { host.enable_normal_stop(); }
     #[cfg(not(windows))]
@@ -748,6 +772,23 @@ fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn request_log_destination_requires_an_explicit_absolute_path() {
+        assert_eq!(super::request_log_destination(None).unwrap(), None);
+        for value in ["", "requests.jsonl"] {
+            assert_eq!(
+                super::request_log_destination(Some(value.into())).unwrap_err(),
+                "GINFER_HOST_REQUEST_LOG_JSONL must be a nonempty absolute file path",
+            );
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("first startup requests.jsonl");
+        assert_eq!(
+            super::request_log_destination(Some(path.clone().into_os_string())).unwrap(),
+            Some(path),
+        );
+    }
+
     #[tokio::test]
     async fn installed_preparation_reports_the_shared_reinstallation_guidance() {
         use clap::Parser;

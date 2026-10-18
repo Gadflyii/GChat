@@ -321,26 +321,36 @@ it('keeps the newer stopped scheduler when an older task-update refresh succeeds
     older.resolve({ schedules: [schedule], stopped: null })
   )
 
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Scheduling has stopped: Journal failure'
-  )
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Scheduling has stopped.')
+  expect(within(alert).getByText('Journal failure')).not.toBeVisible()
   expect(screen.getByRole('button', { name: 'Enable schedule' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
   expect(screen.getByText(/^Disabled ·/)).toBeInTheDocument()
 })
 
-it('shows a stopped scheduler outside the collapsed panel and prevents creating a schedule', async () => {
+it('shows a stopped scheduler outside the collapsed panel with plain recovery and optional technical details', async () => {
+  const reason = 'Schedule journal publication could not be confirmed'
   request.mockResolvedValue({
     schedules: [schedule],
-    stopped: 'Journal failure',
+    stopped: reason,
   })
   render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
   const alert = await screen.findByRole('alert')
-  expect(alert).toHaveTextContent('Scheduling has stopped: Journal failure')
+  expect(alert).toHaveTextContent('Scheduling has stopped.')
   expect(alert).toHaveTextContent(
     'Restart the Gbot service on the computer where it runs before scheduled tasks can run again.'
   )
   expect(alert.closest('details')).toBeNull()
+  expect(within(alert).getByText(reason)).not.toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  fireEvent.click(within(alert).getByText('Details'))
+  expect(within(alert).getByText(reason)).toBeVisible()
+  fireEvent.click(within(alert).getByText('Details'))
+  expect(within(alert).getByText(reason)).not.toBeVisible()
+  expect(request).toHaveBeenCalledTimes(1)
   fireEvent.click(screen.getByText('Scheduled tasks'))
   fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
     target: { value: 'Check task' },
