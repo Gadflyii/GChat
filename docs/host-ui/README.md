@@ -13,9 +13,12 @@ successful status reads.
 Acceptance: reproduce these orderings with deferred responses in the existing
 rendered component tests, implement one Host-owned request lifetime, pass the
 focused suite and ONE `make verify`. No Host/Engine startup, admission, sampling,
-native Windows or GUI screenshot qualification is changed or claimed. Next:
-coordinator final evidence review and commit/push; the focused file passed all
-39 tests, lint passed with five existing warnings and ONE `make verify` passed.
+native Windows or GUI screenshot qualification is changed or claimed.
+Implementation `ad121b656` is committed and pushed after coordinator evidence
+review; the focused file passed all 39 tests, lint passed with five existing
+warnings and ONE `make verify` passed. Gchat2's retained failed placement case
+also passed after the later one-line hydration wait: **1 passed / 35 skipped**,
+11:39:09–11:39:11Z. Merge-ready; no passing suite or full gate was repeated.
 
 | Owner / host | Exact path | Purpose / status |
 | --- | --- | --- |
@@ -42,8 +45,12 @@ both frozen source hashes match after execution. No gate retry or continuation.
 A subsequent Gchat2 gate exposed a separate placement-test hydration race:
 the heading can render before the saved folder initializes. The existing test
 now waits for `/models` before clicking `/fast`, matching its neighboring test.
-The component remains unchanged; Gchat2 will continue only its failed case
-with this one-line fixture correction and its remaining stages. Cleanup removed 38,232,500,574 logical bytes
+The component remains unchanged. Gchat2's retained failed-case continuation
+passed with the one-line fixture correction; terminal log SHA
+`e1e52322bf0868c13d1f795d9838ed1f2d1410eaa8af696b6d9ec2d9b651c401`
+is recorded in `out/gchat2-service-computer-list-retry-20261018/final-remote-evidence.json`.
+The original lifetime full gate and this later test-only continuation remain
+separate verification claims. Cleanup removed 38,232,500,574 logical bytes
 and the owned prep log after confirming no readers; the RC donor remains intact.
 No native fixture is needed for these deterministic response-order regressions.
 
