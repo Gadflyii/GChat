@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type RefObject } from 'react'
 import { IconFolderPlus } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -18,12 +18,14 @@ type AgentSkillUploadDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onUpload: (path: string) => Promise<void>
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export function AgentSkillUploadDialog({
   open,
   onOpenChange,
   onUpload,
+  returnFocusRef,
 }: AgentSkillUploadDialogProps) {
   const { t } = useTranslation()
   const serviceHub = useServiceHub()
@@ -100,7 +102,15 @@ export function AgentSkillUploadDialog({
         }
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        className="max-w-2xl"
+        onCloseAutoFocus={(event) => {
+          if (returnFocusRef?.current?.isConnected) {
+            event.preventDefault()
+            returnFocusRef.current.focus()
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{t('common:uploadSkill')}</DialogTitle>
           <DialogDescription className="sr-only">
