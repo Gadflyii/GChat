@@ -49,6 +49,36 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Uncollected Chat worker history — October 18
+
+A worker dispatched through Chat's `agent_spawn` could disappear from its
+parent conversation after a cold desktop restart if its result had not been
+collected. Saved spawn responses now retain run attribution;
+reopening also recognizes the raw spawn identity saved by earlier versions and
+reconciles that referenced worker with its durable runtime outcome. A saved
+outcome takes precedence over stale live progress, unrelated runs are excluded,
+and collected detailed results remain intact. An incomplete run without a
+recorded finish reason displays **Run interrupted** with an expandable
+explanation, including when no tool or stage completed.
+
+The isolated S1 reproduction used a private profile and a real Chat-dispatched
+Qwen3.8-27B NVFP4 worker (artifact SHA256
+`4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6`)
+paused at an `os.fs.read` folder-access request. X11
+window destruction produced a GDK BadDrawable exit; cold process restart then
+reproduced the missing card. This was not a graceful-close check. GPU1 was
+returned at 01:55Z; candidate history reopening uses the saved fixture without
+inference. No continuation or automatic replay is qualified by this check.
+Evidence: `/ai/gchat/out/gchat-spawn-history-20261018/` (saved baseline history,
+native DOM captures, screenshots and candidate gate/build receipts).
+
+The corrected candidate passed 31 focused tests, `make verify`, and the native
+build. Native reopening displayed one **Run interrupted** card, retained the
+worker ID and parent reply, and expanded to the saved-work explanation. No
+active indicator, Stop worker or stale approval control remained. The first
+candidate exposed only a duration and was rejected before this correction.
+Windows: not built (dev phase).
+
 ## Client tools and native request capability errors — release scope
 
 Inference-server hosted retrieval, `file_search`, `web_search` and MCP are

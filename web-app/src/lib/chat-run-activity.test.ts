@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { UIMessage } from 'ai'
-import type { AgentRunSummary } from '@/types/agent'
+import type { AgentRunRecord, AgentRunSummary } from '@/types/agent'
 import { createAgentRunState } from '@/hooks/useAgentRun'
 import { chatCapabilityRuns, projectChatRunActivity } from './agent-run-message'
 import { buildTraceBlocks } from './tools/message-trace-parts'
-import { convertThreadMessageToUIMessage, extractContentPartsFromUIMessage } from './messages'
+import { convertThreadMessageToUIMessage, convertUIMessageToThreadMessage, extractContentPartsFromUIMessage } from './messages'
 
 const summary = (id: string, status: AgentRunSummary['status'] = 'finished'): AgentRunSummary => ({
   run_id: id, status, stages: [], tools: [], loops: [],
@@ -24,6 +24,30 @@ const agentIds = (ui: UIMessage, runs: readonly AgentRunSummary[]) =>
   buildTraceBlocks(ui, false, { agentRuns: runs })
     .flatMap((block) => block.kind === 'activity' && block.agentSummary ? [block.agentSummary.run_id] : [])
 
+const record = (id: string, status: AgentRunRecord['status'] = 'cancelled'): AgentRunRecord => ({
+  schemaVersion: 3, id: `record-${id}`, runId: id, sessionId: `worker-${id}`,
+  originSessionId: 'parent', parentRunId: 'parent-turn',
+  definitionId: 'general', definitionName: 'General Agent', kind: 'standard',
+  userMessage: 'Read the fixture', status, startedAtMs: 1_000, finishedAtMs: 2_000,
+  totalSteps: 1, finalReply: '', defaultModelInstanceId: 'selected-model', stages: [],
+})
+const restore = (ui: UIMessage): UIMessage => convertThreadMessageToUIMessage(
+  JSON.parse(JSON.stringify(convertUIMessageToThreadMessage(ui, 'parent')))
+)
+const savedNativeSpawn = (runId: string): UIMessage => restore({
+  id: 'spawn', role: 'assistant', parts: [
+    {
+      type: 'tool-agent_spawn', toolCallId: 'spawn-call', state: 'output-available',
+      input: { task: 'Read the fixture' },
+      output: {
+        runId, sessionId: `worker-${runId}`, originSessionId: 'parent',
+        parentRunId: 'parent-turn', status: 'running',
+      },
+    },
+    { type: 'text', text: 'The worker is running.' },
+  ],
+})
+
 describe('Chat worker activity restoration', () => {
   it('restores both workers from production saved history with an empty live store', () => {
     const original = message('saved', [summary('first'), summary('second')])
@@ -34,6 +58,84 @@ describe('Chat worker activity restoration', () => {
     expect(agentIds(restored, projection.byMessageId.get('saved')!)).toEqual(['first', 'second'])
     expect(chatCapabilityRuns(restored)).toEqual([summary('first'), summary('second')])
     expect(restored.parts).toEqual(original.parts)
+  })
+
+  it.each(['cancelled', 'incomplete'] as const)(
+    'restores an uncollected native spawn as %s from runtime history with an empty live store',
+    (status) => {
+      const restored = savedNativeSpawn('uncollected')
+      expect(chatCapabilityRuns(restored)).toEqual([{
+        run_id: 'uncollected', origin_session_id: 'parent', parent_run_id: 'parent-turn',
+        status: 'running', stages: [], tools: [], loops: [],
+      }])
+
+      const projection = projectChatRunActivity([restored], {}, [record('uncollected', status)])
+      const runs = projection.byMessageId.get(restored.id)!
+      expect(runs).toEqual([expect.objectContaining({
+        run_id: 'uncollected', origin_session_id: 'parent', parent_run_id: 'parent-turn', status,
+        definition: {
+          id: 'general', name: 'General Agent', kind: 'standard', model_instance_id: 'selected-model',
+        },
+        step_count: 1, duration_ms: 1_000,
+      })])
+      expect(agentIds(restored, runs)).toEqual(['uncollected'])
+      expect(buildTraceBlocks(restored, false, { agentRuns: runs })).toEqual(expect.arrayContaining([
+        expect.objectContaining({ agentSummary: expect.objectContaining({ run_id: 'uncollected', status }) }),
+      ]))
+      expect([...projection.runIds]).toEqual(['uncollected'])
+    }
+  )
+
+  it.each(['awaiting_approval', 'awaiting_folder_access'] as const)(
+    'prefers the persisted runtime outcome to stale live %s state',
+    (status) => {
+      const worker = createAgentRunState()
+      worker.runId = 'uncollected'
+      worker.originSessionId = 'parent'
+      worker.parentRunId = 'parent-turn'
+      worker.status = status
+      const restored = savedNativeSpawn('uncollected')
+      const projection = projectChatRunActivity([restored], { worker }, [record('uncollected')])
+      expect(projection.byMessageId.get(restored.id)).toEqual([expect.objectContaining({
+        run_id: 'uncollected', origin_session_id: 'parent', parent_run_id: 'parent-turn',
+        status: 'cancelled', duration_ms: 1_000,
+      })])
+      expect(worker.status).toBe(status)
+    }
+  )
+
+  it('only reconciles runs already saved in this Chat, even when other runtime records share its parent', () => {
+    const restored = savedNativeSpawn('visible')
+    const records = [
+      record('unrelated-same-parent'),
+      record('visible'),
+      { ...record('unrelated-other-chat'), originSessionId: 'other-chat' },
+    ]
+    const projection = projectChatRunActivity([restored], {}, records)
+    expect([...projection.runIds]).toEqual(['visible'])
+    expect([...projection.byMessageId.keys()]).toEqual([restored.id])
+    expect(agentIds(restored, projection.byMessageId.get(restored.id)!)).toEqual(['visible'])
+    const empty = projectChatRunActivity([], {}, records)
+    expect(empty.runIds.size).toBe(0)
+    expect(empty.byMessageId.size).toBe(0)
+  })
+
+  it('preserves a collected terminal summary with tool and inference details over a less detailed runtime record', () => {
+    const collected: AgentRunSummary = {
+      ...summary('collected'), origin_session_id: 'parent', parent_run_id: 'parent-turn',
+      finish_reason: 'reply', step_count: 3, duration_ms: 2_000,
+      stages: [{
+        id: 'general', name: 'General Agent', role: 'worker', status: 'finished',
+        model_instance_id: 'selected-model', step_count: 3, duration_ms: 2_000,
+        inference: { prompt_tokens: 120, generated_tokens: 30, prompt_ms: 10, generation_ms: 100 },
+      }],
+      tools: [{ tool: 'os.fs.read', status: 'ok', batch_index: 0, batch_size: 1 }],
+      loops: [{ level: 'warn', detector: 'no_progress', message: 'Repeated read avoided.' }],
+    }
+    const restored = restore(message('collected-result', [collected]))
+    const projection = projectChatRunActivity([restored], {}, [record('collected', 'finished')])
+    expect(projection.byMessageId.get(restored.id)).toEqual([collected])
+    expect(agentIds(restored, projection.byMessageId.get(restored.id)!)).toEqual(['collected'])
   })
 
   it('uses the latest saved observation once across spawn, monitor and wait messages', () => {

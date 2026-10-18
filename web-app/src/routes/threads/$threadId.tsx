@@ -101,7 +101,9 @@ import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { AgentWorkspaceLayout } from '@/containers/AgentWorkspaceLayout'
 import { useArtifactStore } from '@/stores/artifact-store'
 import { useAgentRun } from '@/hooks/useAgentRun'
-import { buildAgentUIMessage, chatCapabilityRuns, projectChatRunActivity } from '@/lib/agent-run-message'
+import { buildAgentUIMessage, chatCapabilityRuns, isTerminalAgentRun, projectChatRunActivity } from '@/lib/agent-run-message'
+import { listAgentRuns } from '@/services/agent/definitions'
+import type { AgentRunRecord } from '@/types/agent'
 import {
   extractAgentAttachmentReferences,
   type AgentFileReference,
@@ -159,6 +161,10 @@ function ThreadDetail() {
   const [restoreFailure, setRestoreFailure] = useState<{ threadId: string; message: string }>()
   const [restoreAttempt, setRestoreAttempt] = useState(0)
   const historyRestoreError = restoreFailure?.threadId === threadId ? restoreFailure.message : undefined
+  const [restoredRuns, setRestoredRuns] = useState<{
+    threadId: string
+    records: AgentRunRecord[]
+  }>()
 
   useTools()
 
@@ -501,6 +507,12 @@ function ThreadDetail() {
 
           // Convert and set messages for AI SDK chat
           const uiMessages = convertThreadMessagesToUIMessages(messagesToSet)
+          const records = uiMessages.some((message) =>
+            chatCapabilityRuns(message).some((run) => !isTerminalAgentRun(run.status)))
+            ? await listAgentRuns()
+            : []
+          if (cancelled) return
+          setRestoredRuns({ threadId, records })
           setChatMessages(uiMessages)
           currentThread.current = threadId
         }
@@ -1035,8 +1047,9 @@ function ThreadDetail() {
   const inputStatus = requestActive ? CHAT_STATUS.SUBMITTED : status
   const visibleMessages = useMemo(() => chatMessages.filter((message) => !isImportedConversationContext(message)), [chatMessages])
   const runActivity = useMemo(
-    () => projectChatRunActivity(visibleMessages, workerRuns),
-    [visibleMessages, workerRuns]
+    () => projectChatRunActivity(visibleMessages, workerRuns,
+      restoredRuns?.threadId === threadId ? restoredRuns.records : []),
+    [visibleMessages, workerRuns, restoredRuns, threadId]
   )
   const cancelWorker = useCallback((runId: string) => {
     void cancelAgentTurn(runId).catch(() => toast.error(t('chat:agentErrors.cancelFailed')))
