@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef } from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -156,8 +156,8 @@ async function waitForRenameInput() {
   const input = await screen.findByRole<HTMLInputElement>('textbox', {
     name: 'common:threadTitle',
   })
-  // The production dialog selects the saved title after opening. Wait for that
-  // real timer before editing so it cannot select an in-progress draft.
+  // Wait for the saved title to be focused and selected. Radix can select it
+  // before the production dialog's delayed selection callback also runs.
   await waitFor(() => {
     expect(input).toHaveFocus()
     expect(input.selectionStart).toBe(0)
@@ -174,7 +174,10 @@ beforeEach(() => {
   })
 })
 
-afterEach(resetServiceHubStore)
+afterEach(() => {
+  cleanup()
+  resetServiceHubStore()
+})
 
 describe('ThreadList dialog caller focus', () => {
   // Exercise real Radix menus/dialogs and sidebar buttons. The selected menu
@@ -201,7 +204,7 @@ describe('ThreadList dialog caller focus', () => {
             const input = await waitForRenameInput()
             expect(input).toHaveValue('Second chat')
             await user.clear(input)
-            await user.type(input, 'Discarded chat draft')
+            await user.paste('Discarded chat draft')
             expect(input).toHaveValue('Discarded chat draft')
           } else {
             await waitFor(() =>
