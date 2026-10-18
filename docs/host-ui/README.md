@@ -1,5 +1,26 @@
 # GInfer host UI
 
+## Scheduled tasks brain setup guidance — October 18
+
+`GBOT-SCHEDULE-BRAIN-SETUP-GUIDANCE`: the disabled schedule form previously
+said “Save this bot’s inference assignment,” although the adjacent setup uses
+**Next: choose a brain** and **Save brain settings**. The hint now says “Choose
+a brain, then click Save brain settings before creating a schedule.” It names
+the visible action needed to enable scheduling.
+
+The existing rendered missing-settings case checks the new wording and retains
+its disabled prompt/Create schedule and blocked submit assertions. All 15
+focused tests pass. ONE full `make verify` passed on S1 CPUs96–103,
+04:15:30–04:23:16Z: lint, typecheck, quality guards, 3,341 app tests (six
+skipped), 121 extension tests, all six coverage floors and 1,220 Rust tests
+(28 ignored). Pre/post source hashes matched. Baseline `d0a8d06bf`; copy and
+its existing expectation changed only. No VM, native Windows, model or live
+scheduled task was run. FRESH/OLD remain OFF/original XML/custody Gchat 2.
+Windows: not built (dev phase); shared frontend copy only.
+
+Result: `out/gchat2-schedule-brain-guidance-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-schedule-brain-guidance-20261018`.
+
 ## Google client ID validation — Gchat 3 native acceptance, October 18
 
 `GUI-GOOGLE-CLIENT-ID-SHAPE` passes its remaining native Linux negative leaf.

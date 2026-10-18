@@ -431,12 +431,12 @@ it('clears a schedule-list connection error when a task update refresh succeeds'
   expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeEnabled()
 })
 
-it('requires a saved bot inference assignment before schedule creation', async () => {
+it('names the brain setup controls and requires saved settings before schedule creation', async () => {
   render(<GbotSchedules workspaceId="bot-one" />)
   fireEvent.click(screen.getByText('Scheduled tasks'))
   expect(
     screen.getByText(
-      'Save this bot’s inference assignment before creating a schedule.'
+      'Choose a brain, then click Save brain settings before creating a schedule.'
     )
   ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
