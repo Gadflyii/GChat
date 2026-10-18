@@ -179,6 +179,89 @@ it('keeps a failed save draft and lets the user retry the same explicit selectio
   ])
 })
 
+it('keeps failed Save feedback through a successful refresh until an explicit Save retry', async () => {
+  const refreshed = deferred<BotConnectors>()
+  const saved = deferred<BotConnectors>()
+  request
+    .mockResolvedValueOnce(connectors())
+    .mockRejectedValueOnce(new Error('Save service unavailable'))
+    .mockReturnValueOnce(refreshed.promise)
+    .mockReturnValueOnce(saved.promise)
+  mount()
+  fireEvent.click(
+    await screen.findByRole('checkbox', { name: /Personal Google/ })
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+  const failure =
+    'Could not save linked accounts. Your selections are kept. Error: Save service unavailable'
+  expect(await screen.findByRole('alert')).toHaveTextContent(failure)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh accounts' }))
+  expect(screen.getByRole('alert')).toHaveTextContent(failure)
+  expect(screen.getByRole('status')).toHaveTextContent('Refreshing accounts…')
+  await act(async () => refreshed.resolve(connectors(['work'])))
+
+  expect(screen.getByRole('alert')).toHaveTextContent(failure)
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Accounts refreshed. Your unsaved selections are unchanged.'
+  )
+  expect(screen.getByRole('checkbox', { name: /Personal Google/ })).toBeChecked()
+  expect(screen.getByRole('checkbox', { name: /Work Microsoft/ })).not.toBeChecked()
+  expect(request.mock.calls).toEqual([
+    ['connectors/get', { workspace_id: 'bot-one' }],
+    ['connectors/save', { workspace_id: 'bot-one', account_ids: ['personal'] }],
+    ['connectors/get', { workspace_id: 'bot-one' }],
+  ])
+
+  fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Saving linked accounts…')
+  await act(async () => saved.resolve(connectors(['personal'])))
+  expect(screen.getByRole('status')).toHaveTextContent('Linked accounts saved.')
+  expect(request).toHaveBeenLastCalledWith('connectors/save', {
+    workspace_id: 'bot-one',
+    account_ids: ['personal'],
+  })
+})
+
+it('keeps failed Save feedback separate from a failed refresh and its read-only retry', async () => {
+  const refreshed = deferred<BotConnectors>()
+  request
+    .mockResolvedValueOnce(connectors())
+    .mockRejectedValueOnce(new Error('Save service unavailable'))
+    .mockRejectedValueOnce(new Error('Account list unavailable'))
+    .mockReturnValueOnce(refreshed.promise)
+  mount()
+  fireEvent.click(
+    await screen.findByRole('checkbox', { name: /Personal Google/ })
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Save linked accounts' }))
+  const failure =
+    'Could not save linked accounts. Your selections are kept. Error: Save service unavailable'
+  expect(await screen.findByRole('alert')).toHaveTextContent(failure)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh accounts' }))
+  await screen.findByText(
+    'Could not refresh linked accounts. Try Refresh accounts again. Error: Account list unavailable'
+  )
+  expect(screen.getAllByRole('alert')).toHaveLength(2)
+  expect(screen.getByText(failure)).toBeVisible()
+  expect(screen.getByRole('checkbox', { name: /Personal Google/ })).toBeChecked()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh accounts' }))
+  expect(screen.getByRole('alert')).toHaveTextContent(failure)
+  await act(async () => refreshed.resolve(connectors()))
+  expect(screen.getByRole('alert')).toHaveTextContent(failure)
+  expect(screen.getByRole('checkbox', { name: /Personal Google/ })).toBeChecked()
+  expect(screen.queryByText('Linked accounts saved.')).not.toBeInTheDocument()
+  expect(request.mock.calls).toEqual([
+    ['connectors/get', { workspace_id: 'bot-one' }],
+    ['connectors/save', { workspace_id: 'bot-one', account_ids: ['personal'] }],
+    ['connectors/get', { workspace_id: 'bot-one' }],
+    ['connectors/get', { workspace_id: 'bot-one' }],
+  ])
+})
+
 it('refreshes account details without overwriting unsaved links or silently dropping a disconnected selection', async () => {
   const refreshed = deferred<BotConnectors>()
   const updatedGoogle = { ...google, display_name: 'Updated Google' }

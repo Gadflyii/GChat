@@ -14,7 +14,8 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
   const [settings, setSettings] = useState<BotConnectors>()
   const [linked, setLinked] = useState<string[]>([])
   const [busy, setBusy] = useState<'refresh' | 'save' | null>('refresh')
-  const [error, setError] = useState('')
+  const [refreshError, setRefreshError] = useState('')
+  const [saveError, setSaveError] = useState('')
   const [status, setStatus] = useState('')
   const setupHelpId = useId()
   const noAccountsId = useId()
@@ -27,7 +28,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     pending.current = true
     const request = ++generation.current
     setBusy('refresh')
-    setError('')
+    setRefreshError('')
     setStatus('')
     try {
       const value = await gbot<BotConnectors>('connectors/get', {
@@ -43,7 +44,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
       )
     } catch (cause) {
       if (request !== generation.current) return
-      setError(
+      setRefreshError(
         `Could not refresh linked accounts. Try Refresh accounts again. ${String(cause)}`
       )
     } finally {
@@ -67,7 +68,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     pending.current = true
     const request = ++generation.current
     setBusy('save')
-    setError('')
+    setSaveError('')
     setStatus('')
     try {
       const value = await gbot<BotConnectors>('connectors/save', {
@@ -81,7 +82,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
       setStatus('Linked accounts saved.')
     } catch (cause) {
       if (request !== generation.current) return
-      setError(
+      setSaveError(
         `Could not save linked accounts. Your selections are kept. ${String(cause)}`
       )
     } finally {
@@ -110,9 +111,9 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
         To add or reconnect an account, open Settings → Workspace connections,
         then refresh this list. Linking an account does not change its permissions.
       </p>
-      {error && (
+      {refreshError && (
         <p role="alert" className="mb-3 text-sm text-destructive">
-          {error}
+          {refreshError}
         </p>
       )}
       {(busy || status) && (
@@ -192,6 +193,11 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
           </div>
         </>
       ) : null}
+      {saveError && (
+        <p role="alert" className="mt-3 text-sm text-destructive">
+          {saveError}
+        </p>
+      )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
           variant="outline"
