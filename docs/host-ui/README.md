@@ -1,5 +1,38 @@
 # GInfer host UI
 
+## Advanced launch-field labels recovery — C3, October 18
+
+`GUI-LAUNCH-FIELD-LABELS` passes its remaining Linux native leaf using the
+retained `native-model-advanced-dark-wide.png`,
+`native-model-advanced-light-narrow.png` and `native-model-settings.json` in
+`out/c3-host-locator-deleted-runtime-20261018/`. At 06:16Z the ordinary
+**Model and memory settings → Choose model settings → Advanced model settings**
+path showed **Draft ahead length (tokens)**, **Drafting graphics cards (TP)**
+and **Input batch size (tokens)**. The inspected dark 1500×1000 and light
+1024×800 screenshots show readable labels without raw keys or horizontal
+overflow. Native controls were exercised and defaults restored.
+
+Original fix `ad5f06640` merged as `f1de0eb2e`; later wording `2ca421a66`
+established these current names. Both are ancestors of native source
+`82f17a1ac` and closure base `9f2e2e81b`. The label map and input-rendering line
+are unchanged between those sources. The entire component has other Host
+feedback and appended Flash-control changes, which this evidence does not
+qualify. The rendered accessible-label regression remains in
+`EngineHostModels.test.tsx`. Original **33 focused PASS** and the later
+`d16521c19` full gate (**3,469 app, 127 extension, 1,276 native / 28 ignored**)
+are retained. `c48538a27` predates the fix and is not attributed to it.
+
+Owner C3; branch `docs/c3-launch-field-labels-20261018`, worktree
+`/ai/gchat-worktrees/c3-launch-field-labels-20261018`. No source/test change,
+new build, native session, dependency copy, compute or large disk allocation.
+The private native app/helpers stopped 06:18Z; its owned S1 root was removed
+07:06Z after borrower returns. Only small evidence remains. C7 released the
+duplicate row claim without running a fixture. This documentation-only
+closure uses `git diff --check`; no repeated gate. Evidence and limitations:
+[`out/c3-launch-field-labels-20261018/result.json`](../../out/c3-launch-field-labels-20261018/result.json).
+Windows, model Check/Start, new Flash controls and GPU execution are outside
+this label leaf. The remaining action is merging this evidence closure.
+
 ## Paused first-run download feedback — C3, October 18
 
 `GUI-FIRST-RUN-PAUSED-ERROR` is fixed. A deliberately paused Host download
