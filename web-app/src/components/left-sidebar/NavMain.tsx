@@ -82,6 +82,7 @@ export function NavMain() {
       }
       useMessages.getState().setMessages(TEMPORARY_CHAT_ID, [])
       usePrompt.getState().resetPrompt(TEMPORARY_CHAT_ID)
+      usePrompt.getState().setDraftSkill(TEMPORARY_CHAT_ID)
       useInitialMessage.getState().clear(TEMPORARY_CHAT_ID)
       useChatAttachments
         .getState()

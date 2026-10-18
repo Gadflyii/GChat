@@ -5,6 +5,8 @@ type PromptStoreState = {
   prompt: string
   activeThreadId: string
   drafts: Record<string, string>
+  draftSkills: Record<string, string | undefined>
+  setDraftSkill: (threadId: string, skillName?: string) => void
   setActiveThread: (threadId: string) => void
   setPrompt: (value: string) => void
   resetPrompt: (threadId?: string) => void
@@ -14,6 +16,10 @@ export const usePrompt = create<PromptStoreState>((set) => ({
   prompt: '',
   activeThreadId: TEMPORARY_CHAT_ID,
   drafts: {},
+  draftSkills: {},
+  setDraftSkill: (threadId, skillName) => set((state) => ({
+    draftSkills: { ...state.draftSkills, [threadId]: skillName },
+  })),
   setActiveThread: (threadId) => set((state) => {
     if (threadId === state.activeThreadId) return state
     return {
