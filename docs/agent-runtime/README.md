@@ -60,8 +60,10 @@ The correction keeps the typed dependency text until blur and updates canonical
 workflow edges on every edit, so saving uses the current dependencies. External
 stage renames, removals and workflow selection refresh the displayed values.
 Rendered regressions cover per-character punctuation and focus, blur formatting,
-exact saved edges, removal and selection. Gates and native candidate replay are
-pending; no acceptance is claimed yet. Baseline and subsequent receipts:
+exact saved edges, removal and selection. The initial focused suite passed 51
+tests; its full coverage run stopped when the new typing test exceeded the
+five-second limit. Test setup is being reduced before the revised gate. Native
+candidate replay is pending; no acceptance is claimed yet. Baseline and subsequent receipts:
 `/ai/gchat/out/gchat-workflow-dependency-keyboard-20261018/`. This is an isolated
 Linux debug editor check with retained sidecars and no GPU/model request.
 Windows: not built (dev phase).
