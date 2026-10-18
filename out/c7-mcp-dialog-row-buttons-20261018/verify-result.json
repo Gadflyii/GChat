@@ -1,0 +1,204 @@
+{
+  "source": "6aad35fc39d6634df25231e62185e2ecd42e20ab",
+  "test_binding": {
+    "baseline": "6aad35fc39d6634df25231e62185e2ecd42e20ab",
+    "component_sha256": "754029b178db7c0980f5de7bc06f28a4aa4ff30f7b5e966b0f9696476437c50b",
+    "test_sha256": "f03f4d4396360eb6ebcf626d7f39a994321feafa2608b37ed877179b7ac71251",
+    "changes": "native reorder button and stable argument row IDs; real KeyboardSensor regression"
+  },
+  "command": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--pull=never",
+    "--name",
+    "gchat-c7-mcp-dialog-verify-20261018",
+    "--cpuset-cpus=88-95",
+    "--user",
+    "1000:1000",
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges",
+    "--network=bridge",
+    "-v",
+    "/media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018:/work",
+    "-w",
+    "/work/gchat",
+    "-e",
+    "HOME=/tmp",
+    "-e",
+    "XDG_CACHE_HOME=/work/build-xdg-cache",
+    "-e",
+    "XDG_DATA_HOME=/work/build-xdg-data",
+    "-e",
+    "COREPACK_ENABLE_NETWORK=0",
+    "-e",
+    "COREPACK_ENABLE_DOWNLOAD_PROMPT=0",
+    "-e",
+    "YARN_ENABLE_GLOBAL_CACHE=false",
+    "-e",
+    "YARN_CACHE_FOLDER=/work/gchat/.yarn/cache",
+    "-e",
+    "YARN_ENABLE_NETWORK=0",
+    "-e",
+    "IS_TAURI=true",
+    "-e",
+    "TAURI_ENV_PLATFORM=linux",
+    "-e",
+    "CARGO_HOME=/work/cargo-home",
+    "-e",
+    "CARGO_TARGET_DIR=/work/native-target",
+    "-e",
+    "CARGO_INCREMENTAL=0",
+    "-e",
+    "CARGO_PROFILE_DEV_DEBUG=0",
+    "-e",
+    "CARGO_PROFILE_TEST_DEBUG=0",
+    "-e",
+    "CARGO_BUILD_JOBS=8",
+    "-e",
+    "CARGO_NET_OFFLINE=true",
+    "-e",
+    "RUSTC_WRAPPER=",
+    "-e",
+    "OPENSSL_NO_VENDOR=1",
+    "-e",
+    "PROTOC=/usr/bin/protoc",
+    "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+    "nice",
+    "-n",
+    "10",
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-c",
+    "\nset -euo pipefail\nulimit -c 0\nunset VITE_MODEL_CATALOG_URL GINFER_MODEL_CATALOG_URL IS_DEV NODE_OPTIONS NODE_ENV FORCE_ONBOARDING FRESH_INSTALL FORCE_HARDWARE_TIER TAURI_CONFIG TAURI_DEV_HOST TAURI_ENV_DEBUG IS_IOS IS_ANDROID IS_CLEAN CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_TARGET RUSTFLAGS GINFER_PROFILE_CATALOGS CUDA_VISIBLE_DEVICES NVIDIA_VISIBLE_DEVICES\nmake verify\n"
+  ],
+  "start": "2026-10-18T07:40:43.172379+00:00",
+  "exit": 0,
+  "end": "2026-10-18T07:48:32.503007+00:00",
+  "status": "VERIFY_PASS",
+  "summary": {
+    "web_app": {
+      "passed": 3459,
+      "skipped": 6,
+      "test_files_passed": 341,
+      "test_files_skipped": 1
+    },
+    "ginfer_extension": {
+      "passed": 127,
+      "test_files_passed": 5
+    },
+    "rust": {
+      "passed": 1275,
+      "failed": 0,
+      "ignored": 28,
+      "target_groups": [
+        {
+          "command": "cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli -- --test-threads=1",
+          "passed": 762,
+          "failed": 0,
+          "ignored": 8,
+          "results": [
+            "test result: ok. 762 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 31.91s"
+          ]
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml",
+          "passed": 21,
+          "failed": 0,
+          "ignored": 0,
+          "results": [
+            "test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ]
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml",
+          "passed": 300,
+          "failed": 0,
+          "ignored": 19,
+          "results": [
+            "test result: ok. 268 passed; 0 failed; 13 ignored; 0 measured; 0 filtered out; finished in 17.80s",
+            "test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 3.74s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.27s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.62s",
+            "test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ]
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/Cargo.toml -p ginfer-manager",
+          "passed": 4,
+          "failed": 0,
+          "ignored": 1,
+          "results": [
+            "test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ]
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/Cargo.toml -p gbot-service",
+          "passed": 124,
+          "failed": 0,
+          "ignored": 0,
+          "results": [
+            "test result: ok. 103 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.68s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s",
+            "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.13s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ]
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/plugins/tauri-plugin-hardware/Cargo.toml",
+          "passed": 16,
+          "failed": 0,
+          "ignored": 0,
+          "results": [
+            "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ]
+        },
+        {
+          "command": "cargo test --manifest-path src-tauri/utils/Cargo.toml",
+          "passed": 48,
+          "failed": 0,
+          "ignored": 0,
+          "results": [
+            "test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.64s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ]
+        }
+      ]
+    },
+    "coverage_floor_output": [
+      "Coverage floor passed (6 critical files)."
+    ]
+  },
+  "bookings": [
+    3125,
+    3133,
+    3143
+  ],
+  "automatic_retry": false,
+  "terminal_source_sha256": {
+    "web-app/src/containers/dialogs/AddEditMCPServer.tsx": "754029b178db7c0980f5de7bc06f28a4aa4ff30f7b5e966b0f9696476437c50b",
+    "web-app/src/containers/__tests__/MCPServerDialogs.test.tsx": "f03f4d4396360eb6ebcf626d7f39a994321feafa2608b37ed877179b7ac71251"
+  },
+  "terminal": {
+    "checked_utc": "2026-10-18T07:49:22.228499+00:00",
+    "known_wrapper_pids": [
+      4067393,
+      4061243,
+      4099699
+    ],
+    "live_known_wrapper_pids": [],
+    "owned_running_containers": [],
+    "root_process_references": [],
+    "scratch_retention": "Retained inactive for coordinator collection and literal-path cleanup; no further child accesses planned after receipt copy"
+  }
+}

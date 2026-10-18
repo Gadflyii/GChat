@@ -1,0 +1,84 @@
+{
+  "row": "GUI-MCP-DIALOG-ROW-BUTTONS",
+  "owner": "Codex 7",
+  "host": "AIS-2-8592-L01",
+  "component_sha256": "754029b178db7c0980f5de7bc06f28a4aa4ff30f7b5e966b0f9696476437c50b",
+  "test_sha256": "f03f4d4396360eb6ebcf626d7f39a994321feafa2608b37ed877179b7ac71251",
+  "binary": {
+    "path": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018/donor-appdir/usr/bin/gchat",
+    "sha256": "a07feabb4997ca91b12977201e3109b94e06d546cb0b14139c16b6b41f671142",
+    "bytes": 256549848,
+    "ldd": "PASS with private AppDir library closure"
+  },
+  "status": "PASS",
+  "isolation": "Private HOME/XDG/runtime700, own dbus-run-session and unlocked keyring, Xvfb :87; Wayland unset; no model/GPU or real connector.",
+  "input": "Native XTest pointer and keyboard; inspector used only for read-only DOM and screenshots.",
+  "checks": {
+    "reorder": {
+      "sequence": "native command input; Tab Tab; Space ArrowDown Space",
+      "options": [
+        "beta",
+        "alpha",
+        "gamma"
+      ],
+      "focus": {
+        "tag": "BUTTON",
+        "label": "Reorder command option",
+        "option": "alpha",
+        "focusVisible": true,
+        "shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, oklab(0.787775 -0.122202 -0.016534 / 0.5) 0px 0px 0px 3px, rgba(0, 0, 0, 0) 0px 0px 0px 0px"
+      },
+      "live": [
+        "",
+        "Draggable item f5aef124-2c1b-47b7-9f22-5fbecb328c6c was dropped over droppable area acb0e33a-ae37-4f0f-a94f-479dbef1d082"
+      ],
+      "dialogOpen": true
+    },
+    "add_remove": "Enter adds command option and header; Space removes them. Space adds extra setting; Enter removes it. Each retains the dialog without saving.",
+    "saved_reopened_order": [
+      "beta",
+      "alpha",
+      "gamma"
+    ],
+    "cancelled_http_draft": {
+      "saved_config": {
+        "active": false,
+        "args": [
+          "beta",
+          "alpha",
+          "gamma"
+        ],
+        "command": "/usr/bin/true",
+        "env": {},
+        "type": "stdio"
+      },
+      "cancel_preserved": true
+    }
+  },
+  "notes": "The existing parent route enables connections on Save. The disposable /usr/bin/true fixture was disabled again through its native switch before header checks; its final config is inactive. No route behavior change is claimed.",
+  "screenshots": [
+    "01-native-handle-focus.png",
+    "02-native-reordered-focus.png",
+    "03-native-add-setting.png",
+    "04-native-add-header.png"
+  ],
+  "native_session": "Application, private Host, keyring/dbus/display helpers and local inspector forward stopped by exact owned PID; no live fixture references remained.",
+  "baseline_finding": "Original div fails native-button regression; first native-button candidate with index IDs reorders but leaves focus on beta. Real KeyboardSensor regression reproduces the native failure.",
+  "baseline_revision": "6aad35fc39d6634df25231e62185e2ecd42e20ab",
+  "verification": {
+    "focused_passed": 11,
+    "make_verify": "PASS once, exit0",
+    "web_passed": 3459,
+    "web_skipped": 6,
+    "extension_passed": 127,
+    "rust_passed": 1275,
+    "rust_ignored": 28
+  },
+  "cleanup": {
+    "ssd_root_removed": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018",
+    "removed_utc": "2026-10-18T07:51:28Z",
+    "previous_disk_usage": "40G",
+    "cpus_returned_utc": "2026-10-18T07:49:22Z",
+    "retained": "Small results, logs and four screenshots only; no donor hold."
+  }
+}

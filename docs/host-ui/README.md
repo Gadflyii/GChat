@@ -1,5 +1,36 @@
 # GInfer host UI
 
+## MCP dialog row buttons — C7, October 18
+
+`GUI-MCP-DIALOG-ROW-BUTTONS`: command-option reorder handles are native named
+buttons with visible keyboard focus. Options have stable drag and React IDs,
+so Space/ArrowDown/Space moves alpha below beta and keeps focus on alpha.
+Previously the index-based identity left focus on beta after the same move.
+Add/remove controls for options, settings and headers also show keyboard focus.
+
+The original baseline `6aad35fc3` fails the native-button regression. The first
+button candidate reproduces the wrong-row focus in both the native app and a
+rendered test using the real keyboard sensor. The final candidate passes all
+11 focused tests and lint (no errors), plus its frontend and desktop builds.
+Private native Linux acceptance passes keyboard reorder, visible focus,
+add/remove without submitting, Save/reopen ordering, and Cancel preserving the
+saved connection. Screenshots and concise results are in
+`out/c7-mcp-dialog-row-buttons-20261018/`. ONE `make verify` passed without
+retry: web3459/6skipped, extension127, Rust1275/28ignored; lint, typecheck,
+quality checks and critical coverage floors passed.
+
+Owner worktree `/ai/gchat-worktrees/c7-mcp-dialog-row-buttons-20261018`, branch
+`fix/c7-mcp-dialog-row-buttons-20261018`. The S1 fixture uses an independent
+AppDir and private HOME/XDG/runtime, dbus, keyring and Xvfb. The inert
+`/usr/bin/true` connection is inactive at final capture; the existing parent
+route enables connections on Save, so it was disabled again natively. No real
+connector, model, GPU, Windows or shared app data is used. Native app/helpers
+are stopped; CPU88–95 returned07:49Z. The inactive40G SSD build/cache root
+`/media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018` was removed
+07:51Z. Only small results, logs and four screenshots remain. Windows is
+unqualified. Source, regression tests and native evidence are merge-ready
+together on the named branch.
+
 ## Recovered W8 chat-send closures — C3, October 18
 
 `GUI-CHAT-STALE-LOAD-ERROR-SEND-20261017` and
