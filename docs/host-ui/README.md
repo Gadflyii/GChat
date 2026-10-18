@@ -1,5 +1,38 @@
 # GInfer host UI
 
+## Pairing saved but Host refresh fails — Gchat 3, October 18
+
+`GUI-HOST-PAIR-REFRESH-RESULT-20261018` fixes false pairing-failure feedback.
+A successful pair command is now reported immediately and its credential-cleanup
+warning is preserved. If the subsequent Host-list read fails, a persistent
+message explains that pairing succeeded and points to Refresh. Both manual and
+nearby pairing use this behavior. A failed Refresh preserves the message;
+a successful Refresh clears it without submitting another pairing request.
+Genuine pairing failures retain the existing error and draft behavior.
+
+Both new rendered cases failed against base `7b17e06da`, reproducing the manual
+false pairing error and missing nearby feedback. The final affected route suite
+passes all 21 cases. Two initial new assertions omitted the displayed `Error:`
+prefix; only those assertions changed, and both failed cases then passed while
+reusing the 19 earlier passes. Lint passed with zero errors and five existing
+warnings. The ONE `make verify` completed at 03:58:42Z: 3,307 app cases,
+121 extension cases, all six critical coverage floors and 1,220 native cases
+passed; six app cases were skipped and 28 native cases ignored. No full rerun
+was needed. Commands and list failures are mocked; native pairing, Windows,
+account sign-in and installer acceptance are outside this result. No Host
+service, credential format, startup or Engine behavior changes.
+
+Owner worktree `/ai/gchat-worktrees/gchat3-host-pair-refresh-result-20261018`,
+branch `fix/gchat3-host-pair-refresh-result-20261018`. Canonical result, concise
+summary, source binding and verification receipts:
+`out/host-pair-refresh-result-20261018/{result.json,summary.md,verification-summary.json}`.
+CPU-only S1 fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-pair-refresh-result-20261018` and its
+three exited containers were removed at 03:59:59Z, releasing 42.31 GB; the
+280 MB disposable source archive was also removed. Read-only donors remain.
+CPU 88–95 booking 2944 was canceled; returned 04:00Z. Next: reviewed branch
+integration; no further test run is required.
+
 ## Conversation Rename keyboard — Gchat 3 native acceptance, October 18
 
 `GUI-THREAD-RENAME-KEYBOARD` passes its remaining native Linux leaf. Ordinary

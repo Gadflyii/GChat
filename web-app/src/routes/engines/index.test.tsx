@@ -8,6 +8,7 @@ import {
   within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toast } from 'sonner'
 import type { ComponentType, ReactNode } from 'react'
 import type {
   EngineInstance,
@@ -463,6 +464,45 @@ describe('Engines host intake and launch controls', () => {
         base_url: 'https://host:7443',
       })
     )
+  })
+
+  it.each(['manual', 'nearby'] as const)('keeps successful %s pairing distinct from a failed refresh and retries only the refresh', async (method) => {
+    if (method === 'nearby') mocks.nearby = [{
+      host_id: 'nearby-host', name: 'Server 2', urls: ['https://host:7444'],
+    }]
+    const original = mocks.command.getMockImplementation()!
+    mocks.command.mockImplementation(async (action: string) => action === 'pair'
+      ? { credential_cleanup_warning: 'Old credential could not be removed' }
+      : original(action))
+    const success = vi.spyOn(toast, 'success')
+    const warning = vi.spyOn(toast, 'warning')
+    const error = vi.spyOn(toast, 'error')
+    render(<Page />)
+    await screen.findByText('Secure storage is ready.')
+    if (method === 'manual') {
+      fireEvent.click(screen.getByText('Enter a host address manually'))
+      fireEvent.change(screen.getByLabelText('Host address'), { target: { value: 'https://host:7444' } })
+    }
+    mocks.refresh.mockRejectedValueOnce(new Error('Host list unavailable'))
+    fireEvent.click(screen.getByRole('button', { name: method === 'manual' ? 'Pair host' : 'Pair', exact: true }))
+    const feedback = await screen.findByRole('alert')
+    expect(feedback).toHaveTextContent('Host paired. Could not refresh the host list. Choose Refresh above to try again.')
+    expect(screen.queryByText(/Could not pair this host/)).not.toBeInTheDocument()
+    expect(success).toHaveBeenCalledWith('Host paired')
+    expect(warning).toHaveBeenCalledWith('Pairing saved; cleanup needs attention: Old credential could not be removed')
+    expect(error).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Host address')).toHaveValue('')
+    expect(screen.getByText('Error: Host list unavailable')).not.toBeVisible()
+    fireEvent.click(screen.getByText('Host refresh error details'))
+    expect(screen.getByText('Error: Host list unavailable')).toBeVisible()
+
+    mocks.refresh.mockRejectedValueOnce(new Error('Still unavailable'))
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(error).toHaveBeenCalledWith('Error: Still unavailable'))
+    expect(feedback).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(feedback).not.toBeInTheDocument())
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'pair')).toHaveLength(1)
   })
 
   it('explains malformed host addresses without attempting pairing and clears the error on correction', async () => {
