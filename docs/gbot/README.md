@@ -80,7 +80,8 @@ shows the assigned model and reported task/tool activity. Hiding the pane or
 leaving Desktop closes its media and input leases without cancelling tasks.
 The companion stays within the window over tall Settings pages; the underlying
 route and each companion tab scroll independently, keeping its controls visible.
-A bot paused for human takeover stays paused until explicit Hand back.
+Hand back returns control after human takeover. Paused tasks still require
+**Resume task** in Conversation, or **Resume** in Gbot settings.
 All seven supplied avatar animations now have activity mappings, with the
 existing light/dark and reduced-motion styles. See the
 [overlay decision](../decisions/2026-10-15-open-gbot-in-a-workspace-overlay.md).

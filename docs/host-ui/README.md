@@ -1,5 +1,27 @@
 # GInfer host UI
 
+## Gbot Hand back and task resume guidance — October 18
+
+`GBOT-HAND-BACK-RESUME-GUIDANCE`: the desktop viewer and companion previously
+implied that **Hand back** continues a paused task. It restores bot control,
+while the task remains paused until explicitly resumed. The viewer now explains
+that distinction, and companion hints name **Hand back** in Desktop followed
+by **Resume task** in Conversation. The service contract and task controls are
+unchanged.
+
+All 100 existing settings and companion cases pass, including input closure
+and the requirement to resume tasks explicitly. ONE `make verify` passed on
+S1 CPUs96–103, 04:43:20–04:51:02Z: lint, typecheck, quality guards, 3,353 app
+tests (six skipped), 121 extension tests, all six coverage floors and 1,222
+Rust tests (28 ignored). Source hashes matched before and after the gate.
+Baseline `fdc7f3a96`; only three UI hints and the matching documentation changed.
+No VM, native Windows, model or live task was run.
+FRESH/OLD remain OFF/original XML/custody Gchat 2.
+Windows: not built (dev phase); shared frontend copy only.
+
+Result: `out/gchat2-hand-back-resume-guidance-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-hand-back-resume-guidance-20261018`.
+
 ## Scheduled tasks brain setup guidance — October 18
 
 `GBOT-SCHEDULE-BRAIN-SETUP-GUIDANCE`: the disabled schedule form previously
