@@ -179,6 +179,10 @@ export function DataProvider() {
           )
         }
       })
+      .catch((error) => {
+        // An unreadable inventory does not establish that saved models vanished.
+        console.error('Failed to read providers at startup:', error)
+      })
     serviceHub
       .mcp()
       .getMCPConfig()

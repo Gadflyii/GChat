@@ -1,5 +1,62 @@
 # GInfer host UI
 
+## Models accepted deletion and inventory recovery — C7, October 18
+
+`GUI-MODELS-DELETE-REFRESH-RECOVERY` fixes the shared local deletion path:
+the backend accepts deletion and local caches remove the model, then an
+inventory read rejects and both entry points incorrectly report deletion
+failure. Preserve accepted deletion separately from that read failure. A
+persistent notification must survive the removed row/dialog, explain the
+accepted result (including original-file preservation for external references),
+keep diagnostics in closed Technical details and offer **Refresh model list**.
+That recovery only reads provider inventory; it never deletes, adopts, loads
+or stops a model. Rejected deletion keeps the existing retryable confirmation.
+
+Owned branch `fix/c7-models-delete-refresh-recovery-20261018`, matching
+`/ai/gchat-worktrees/` tree, base `a69c6ba20`. Parent owns the shared deletion
+helper, shared notification, both callers and inventory service/extension
+corrections; the test worker owns the two existing rendered deletion suites,
+provider/startup/extension read regressions and independent S1 SSD fixture.
+Acceptance:
+ordinary/external accepted-delete/read-failure, notice surviving row removal,
+failed then successful read-only refresh with duplicate-click protection and
+no stale-response resurrection, true rejection and explicit deletion retry,
+focused tests, lint and exactly one `make verify`. The existing Models refresh
+button also adopts files, so it is not a substitute for this read-only retry.
+Accepted deletion also clears a selection of the removed model immediately;
+that must not depend on the inventory read succeeding. No native backend, Engine,
+model run, installed-app or Windows qualification changes.
+The accepted/read split and persistent recovery notice are implemented. The
+real desktop provider service previously swallowed inventory failures as an
+empty list, bypassing recovery; it now rejects and startup retains its cached
+inventory on failure. The extension's `list()` previously adopted loose files
+on each read; it now only reads registered models. Explicit Models refresh
+still adopts files, and the existing single-model lookup/load path is unchanged.
+Direct service, startup and extension regressions now cover these boundaries,
+including read rejection/retry and a legitimately empty registered inventory.
+The Settings external-reference case also preserves its original-file promise
+through dialog removal and read-only recovery. Frozen source `e8bed0757` passed
+**103 focused app tests** across five files, **34 focused extension tests**, and
+lint with zero errors and five existing unrelated warnings. Exactly one
+`make verify` passed at **20:54:06Z**: **3,816 app tests / six skipped, 130
+extension tests, 65 Node contract tests and 1,318 native tests / 28 ignored**
+across 23 native summaries, all six critical coverage floors, typecheck and
+quality guards. The coordinator directly reviewed raw stage results and the
+exited-zero container, plus unchanged before/after bindings for 15 source/test
+files, 35 dependencies and eleven catalogs / 48 profiles. These are source
+and Linux gate results; installed-app and native Windows acceptance remain
+separate.
+
+The independent S1 SSD fixture used booking3552 on CPU88–95; those CPUs returned
+**20:57Z** and the booking was canceled. The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-c7-models-delete-refresh-recovery-20261018`
+and its sole exited candidate container were retired at **21:00:24Z**, removing
+**28,879,998,976 allocated fixture bytes** after direct review. Only the result
+JSON and short summary remain; the inactive dependency donor and protected
+inputs are preserved. The verified branch is ready for merge. Evidence:
+`out/c7-models-delete-refresh-recovery-20261018/test-result.json` and
+`test-summary.md`. No native resource hold exists.
+
 ## Models accepted download requests — C7, October 18
 
 `GUI-MODELS-DOWNLOAD-ACTION-REFRESH` corrects the observed Models path where
@@ -46,8 +103,8 @@ and its sole exited candidate container were retired at **20:28:33Z**, removing
 **28,879,536,128 accounted fixture bytes** after direct review. The inactive
 donor and protected inputs remain unchanged. Small evidence:
 `out/c7-models-download-action-refresh-20261018/test-result.json` and
-`test-summary.md`. Next: merge the verified branch and continue the Models
-queue.
+`test-summary.md`. Merged into `origin/main` as `a69c6ba20`; the next owned
+Models item is deletion/inventory recovery above.
 
 ## Models accepted registration and refresh recovery — verified, C7, October 18
 

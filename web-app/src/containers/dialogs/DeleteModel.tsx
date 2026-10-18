@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { deleteLocalModel } from '@/lib/model-deletion'
+import { notifyModelDeletion } from '@/containers/hub/notifyModelDeletion'
 
 import { IconTrash } from '@tabler/icons-react'
 
@@ -42,18 +43,19 @@ export const DialogDeleteModel = ({
     setError(null)
     // Keep the result bound to the submitted model even if inventory refreshes.
     const deletingModelId = selectedModelId
+    const externalReference = provider.models.find(
+      (model) => model.id === deletingModelId
+    )?.source === 'external'
     try {
-      await deleteLocalModel(serviceHub, deletingModelId, provider.provider)
+      const refreshError = await deleteLocalModel(serviceHub, deletingModelId, provider.provider)
       setOpen(false)
-      toast.success(
-        t('providers:deleteModel.title', { modelId: deletingModelId }),
-        {
-          id: `delete-model-${deletingModelId}`,
-          description: t('providers:deleteModel.success', {
-            modelId: deletingModelId,
-          }),
-        }
-      )
+      notifyModelDeletion({
+        serviceHub,
+        modelId: deletingModelId,
+        title: externalReference ? 'Model removed' : t('providers:deleteModel.title', { modelId: deletingModelId }),
+        description: externalReference ? 'Removed from Models. The original file remains in place.' : t('providers:deleteModel.success', { modelId: deletingModelId }),
+        refreshError,
+      })
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error))
       console.error('[DialogDeleteModel] deleteModel failed:', error)
@@ -94,6 +96,7 @@ export const DialogDeleteModel = ({
   if (!selectedModel) {
     return null
   }
+  const externalReference = selectedModel.source === 'external'
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -103,8 +106,8 @@ export const DialogDeleteModel = ({
           variant="ghost"
           size="icon-xs"
           className="cursor-pointer flex items-center justify-center rounded transition-all duration-200 ease-in-out"
-          title={t('providers:deleteModel.delete')}
-          aria-label={t('providers:deleteModel.delete')}
+          title={externalReference ? 'Remove from Models' : t('providers:deleteModel.delete')}
+          aria-label={externalReference ? 'Remove from Models' : t('providers:deleteModel.delete')}
         >
           <IconTrash size={18} className="text-muted-foreground" />
         </Button>
@@ -125,10 +128,10 @@ export const DialogDeleteModel = ({
       >
         <DialogHeader>
           <DialogTitle>
-            {t('providers:deleteModel.title', { modelId: selectedModel.id })}
+            {externalReference ? `Remove ${selectedModel.displayName ?? selectedModel.name ?? selectedModel.id} from Models?` : t('providers:deleteModel.title', { modelId: selectedModel.id })}
           </DialogTitle>
           <DialogDescription>
-            {t('providers:deleteModel.description')}
+            {externalReference ? 'The original model file will remain in place. Only its Models entry will be removed.' : t('providers:deleteModel.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -155,9 +158,9 @@ export const DialogDeleteModel = ({
             onClick={() => void removeModel()}
             disabled={deleting}
             aria-busy={deleting}
-            aria-label={t('providers:deleteModel.delete')}
+            aria-label={externalReference ? 'Remove from Models' : t('providers:deleteModel.delete')}
           >
-            {deleting ? t('common:loading') : t('providers:deleteModel.delete')}
+            {deleting ? t('common:loading') : externalReference ? 'Remove from Models' : t('providers:deleteModel.delete')}
           </Button>
         </DialogFooter>
       </DialogContent>

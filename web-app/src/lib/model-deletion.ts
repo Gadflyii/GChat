@@ -13,26 +13,38 @@ import { useModelProvider } from '@/hooks/useModelProvider'
 import type { ServiceHub } from '@/services'
 
 /**
- * Delete a local model and reconcile the app state around it. Rejects when the
- * engine refuses (unknown model, missing `model.yml`, no engine registered for
- * the provider); the caller is expected to surface that.
+ * Delete a local model and reconcile the app state around it. A rejected delete
+ * throws. Once accepted, returns null for a refreshed inventory or the refresh
+ * error for a read-only retry; that error must not be reported as delete failure.
  */
 export async function deleteLocalModel(
   serviceHub: ServiceHub,
   modelId: string,
   provider: string
-): Promise<void> {
+): Promise<string | null> {
   await serviceHub.models().deleteModel(modelId, provider)
 
   useFavoriteModel.getState().removeFavorite(modelId)
   useModelProvider.getState().deleteModel(modelId)
 
-  // Refresh provider inventory after deletion.
+  try {
+    await refreshModelProviders(serviceHub, modelId)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
+/** Read inventory without repeating deletion or rediscovering/adopting files. */
+export async function refreshModelProviders(
+  serviceHub: ServiceHub,
+  deletedModelId: string
+): Promise<void> {
   const providers = await serviceHub.providers().getProviders()
   useModelProvider.getState().setProviders(
     providers.map((entry) => ({
       ...entry,
-      models: entry.models.filter((model) => model.id !== modelId),
+      models: entry.models.filter((model) => model.id !== deletedModelId),
     }))
   )
 }

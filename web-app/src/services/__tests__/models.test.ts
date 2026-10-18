@@ -101,6 +101,55 @@ describe('DefaultModelsService', () => {
     })
   })
 
+  describe('Tauri provider inventory reads', () => {
+    beforeEach(() => {
+      vi.mocked(ensureRegistryLoaded).mockResolvedValue([])
+      mockEngine.list.mockResolvedValue([{ id: 'registered-model', name: 'Registered model' }])
+      mockEngine.getSettings.mockResolvedValue([])
+      mockEngine.isToolSupported.mockResolvedValue(false)
+    })
+
+    it.each(['registry', 'list', 'settings'] as const)(
+      'rejects a failed %s read and allows a read-only retry',
+      async (stage) => {
+        const failure = new Error(`${stage} inventory unavailable`)
+        const read = stage === 'registry'
+          ? vi.mocked(ensureRegistryLoaded)
+          : stage === 'list'
+            ? mockEngine.list
+            : mockEngine.getSettings
+        read.mockRejectedValueOnce(failure)
+        const service = new TauriProvidersService()
+
+        await expect(service.getProviders()).rejects.toBe(failure)
+        const providers = await service.getProviders()
+
+        expect(providers).toEqual([
+          expect.objectContaining({
+            provider: 'ginfer',
+            models: [expect.objectContaining({ id: 'registered-model' })],
+          }),
+        ])
+        expect(mockEngine.delete).not.toHaveBeenCalled()
+        expect(mockEngine.import).not.toHaveBeenCalled()
+        expect(mockEngine.load).not.toHaveBeenCalled()
+        expect(mockEngine.update).not.toHaveBeenCalled()
+        expect(mockEngine.updateSettings).not.toHaveBeenCalled()
+      }
+    )
+
+    it('accepts an empty installed inventory without treating it as a read failure', async () => {
+      mockEngine.list.mockResolvedValue([])
+
+      await expect(new TauriProvidersService().getProviders()).resolves.toEqual([
+        expect.objectContaining({ provider: 'ginfer', models: [] }),
+      ])
+
+      expect(mockEngine.list).toHaveBeenCalledOnce()
+      expect(mockEngine.getSettings).toHaveBeenCalledOnce()
+    })
+  })
+
   describe('fetchModelCatalog', () => {
     // `fetchModelCatalog` now delegates to the failure-safe
     // `getCatalogOrFallback()` registry: on success it returns the
