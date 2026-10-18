@@ -22,6 +22,22 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Closing a Chat HTML preview — October 18
+
+A private native pass found that keyboard activation of **Close HTML** lost
+focus; the next Tab jumped to Downloads in the sidebar. Explicit preview close
+now returns focus to the originating message's HTML preview button. This also
+applies to the standalone panel; route and layout closes leave focus alone.
+
+Source `cb61dcf42` passes 16 focused tests, lint and one full `make verify`
+(3646 web, 127 extension and 1309 Rust tests, plus all six coverage floors).
+The rebuilt Linux desktop passes Close HTML with Enter: focus returns to the
+original preview button, then Tab reaches that message's Copy action. Normal
+close preserves all four saved chat/agent fixture files; returned15:06Z, no GPU
+or inference. This qualifies private source-native Linux behavior, without an
+installed-package, Windows or screen-reader claim. Receipts:
+`/ai/gchat/out/gchat-chat-preview-close-focus-20261018/handoff.json`.
+
 ## Agent composition selected state — October 18
 
 An isolated native keyboard pass selected Goal Loop with Tab and Space. Its
