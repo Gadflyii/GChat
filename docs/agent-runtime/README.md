@@ -53,6 +53,32 @@ screenshots and receipts are in
 `/ai/gchat/out/gchat-agent-run-setup-overflow-20261018/`. This qualifies the Linux
 debug candidate; Windows not built (dev phase).
 
+## Chat creation date during history actions — October 18
+
+An isolated native Linux pass found that favoriting a saved chat, adding it to
+a project, removing it and unfavoriting it overwrote its persisted creation
+date with the update time. All messages and the other saved thread files were
+unchanged. The affected service is identical between native source
+`f1c7c73b0` and main `d4ec7abab`.
+
+Thread updates now preserve the existing creation date and refresh only the
+update date. All 23 focused tests passed, including a persisted favorite/project
+roundtrip regression; the unchanged-source negative control failed that
+regression as expected. One `make verify` passed on frozen source `40573bd8a`
+(3,394 app, 127 extension and 1,252 Rust tests), followed by passing frontend
+and native builds.
+
+The corrected native replay favorited the chat, moved it into and out of a
+project, opened its retained HTML preview and unfavorited it. All four updates
+preserved `created` while advancing `updated`. The seven other saved
+thread/message/session files remained byte-identical. The isolated HOME/XDG,
+Xvfb, D-Bus and unlocked test-keyring replay used no model or GPU; CPUs were
+returned at 06:04Z. Baseline evidence is in
+`/ai/gchat/out/gchat-chat-project-membership-20261018/`; the fix packet is
+`/ai/gchat/out/gchat-chat-created-timestamp-20261018/`. This is a Linux debug
+desktop check; Windows was not built (dev phase), and installer behavior was
+not checked.
+
 ## Chat search query selection — October 18
 
 An isolated native Linux pass reproduced a stale keyboard selection when a new
@@ -82,6 +108,32 @@ behavior was not checked.
 
 ## Archive OpenCode provisioning — C7, October 18
 
+Codex 8's failed-setup P2 is corrected on
+`fix/c7-opencode-atomic-install-20261018`, tested source `e9a5cac36` from
+`e0a67a528`. Setup verifies a private temporary installation before publishing
+its runtime and completion marker. Readiness ignores unpublished shims, permits
+reinstall and retains native PATH fallback. Failed updates preserve the last
+working managed copy. Arch signed this correction at 05:40:41Z.
+
+The new readiness regression fails against the old runtime and all 30 candidate
+focused library/CLI tests, Rust check and strict Clippy pass. The one
+`make verify` invocation passed frontend/coverage but stopped on a fixture
+requiring a network route. A continuation also exposed an empty CUDA mask
+excluding a synthetic GPU. Both exact fixtures and every unreached Rust suite
+passed with private bridge networking and CUDA visibility unset. Source and
+assertions were unchanged, successful stages were not repeated, and the
+original `make verify` exit 2 remains recorded. Completed scope: 3,382 frontend,
+127 extension and 1,251 Rust tests passed; six frontend skips and 28 Rust ignores.
+Future private test containers must retain those fixture-compatible settings.
+
+The [result](../../out/c7-opencode-atomic-install-20261018/result.json) records
+both environment corrections and the passing stages. This is Linux CPU-only
+acceptance; Windows filesystem execution and native GUI replay were not run.
+C7 retains the source worktree and concise result. CPUs were returned at 06:01Z;
+the private 20-GiB S1 build/cache and stopped containers were removed at 06:03Z
+after result inspection. Raw logs were discarded; the concise JSON is retained.
+Downloads native acceptance resumes after this priority handoff.
+
 `GUI-FIRST-USER-OPENCODE-PROVISIONING` is implemented on
 `fix/c7-opencode-private-prefix-20261018`, source `13125b2ab` from main
 `d31e328d6`. Clean archive startup previously ran a global npm installation and
@@ -89,12 +141,16 @@ failed with EACCES creating `/usr/local/lib/node_modules`. C3's original npm
 receipt and donor remain read-only. A private native baseline reproduced the
 same failure using a denied global prefix inside disposable app data.
 
-OpenCode now installs with `--global=false`, a prefix at
-`<selected-data>/code/opencode/runtime` and cache at
-`<selected-data>/code/opencode/npm-cache`. One resolver chooses custom, managed,
-then native executables for readiness, embedded/external launch, CLI and offline
-session deletion. Existing sessions retain their executable. Managed updates
-use the same prefix; external updates show the installation's own command and
+OpenCode installs with `--global=false` into a temporary prefix inside
+`<selected-data>/code/opencode/`, with cache at
+`<selected-data>/code/opencode/npm-cache`. After npm and runtime verification,
+the complete directory and its verification marker are renamed to
+`<selected-data>/code/opencode/runtime`. One resolver chooses custom, verified
+managed, then native executables for readiness, embedded/external launch, CLI
+and offline session deletion. Unmarked leftovers remain eligible for repair
+and cannot hide a native PATH installation. Existing sessions retain their
+executable. Managed updates use the same staging and publication path; external
+updates show the installation's own command and
 offer explicit **Use managed copy**. Missing or broken Node/npm asks the user to
 install Node.js LTS. GChat does not install system tools for OpenCode. Arch
 [signed this design](../decisions/2026-10-18-install-managed-opencode-in-the-gchat-data-folder.md)

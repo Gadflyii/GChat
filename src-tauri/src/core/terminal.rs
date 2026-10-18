@@ -1944,6 +1944,7 @@ mod tests {
         )
         .unwrap();
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        std::fs::write(data.join("code/opencode/runtime/.gchat-verified"), "1.2.3").unwrap();
 
         let (resolved, command) = quote_open_code_command(&data, None, &project).unwrap();
         assert_eq!(resolved, executable);
