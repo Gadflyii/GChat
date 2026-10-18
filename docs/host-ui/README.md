@@ -35,8 +35,14 @@ source-complete. The next gate uses CPUs80–87, nice10 and the socket1 shared
 compile lock: desktop and Fleet rendered tests, typed-options and authenticated
 API/child-launch regressions, cargo check/clippy and ONE `make verify`. Keep only
 small results under `out/c3-host-residency-controls-20261018`; retire the private
-SSD build/cache after gate completion. Next: freeze source and run that gate
-in the private offline S1 root.
+SSD build/cache after gate completion. Frozen gate source `d16521c19` includes
+source commit `497840b01` plus a normal merge of main. Gate booking3127 is active;
+desktop61 and Fleet58 rendered tests, typed-options and authenticated API/child
+regressions, cargo check and clippy passed. The single full verify has passed
+frontend and Host/service suites; hardware plugin tests remain. Main's separate
+hardware-feedback fix will be merged normally and the combined Host screen and
+store checked before handoff. Preserve the result and retire the independent
+SSD root after terminal verification.
 
 ## Recovered W8 chat-send closures — C3, October 18
 
