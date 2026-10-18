@@ -1,5 +1,31 @@
 # Gbot design
 
+## Saved bot names stay stable during requests — Gchat 2
+
+`GBOT-LAN-RENAME-FIELD-BUSY`, based on main `f5c78f40a`, fixes the bot
+name field accepting edits during Save name. The request uses the earlier
+name; success closes the form and discards any name typed while it waits.
+
+The name field now follows the existing busy state, alongside Save name and
+Cancel. A rejected save restores editing with the submitted draft intact,
+and a successful explicit retry can be reopened with its confirmed name.
+The backend continues to save only the name supplied by the request.
+
+The deferred regression fails on unchanged main because typing changes the
+pending draft (three cases filtered). All four focused LAN-bot tests pass
+with the fix. They cover request and refresh delays, preserved drafts after
+failure, explicit corrected retry payloads and the saved name after reopening.
+One isolated Linux/S1 `make verify` passes on 18 October, 08:11:40–08:19:23
+UTC: 3,510 app, 127 extension and 1,276 Rust tests pass; six app tests are
+skipped and 28 Rust tests ignored. Lint, type checking, quality guards and all
+six coverage floors pass. The three changed-file hashes match before and
+after the gate; this final receipt was added afterward. Evidence:
+`out/gchat2-lan-rename-field-busy-20261018/{result.json,SUMMARY.md}`.
+The private S1 build/cache was removed and CPUs 96–103 returned at 08:20
+UTC; booking 3153 canceled. The shared donor was not mutated.
+FRESH and OLD remain off with original XML and Gchat 2 custody; this leaf
+uses inert rename responses and does not qualify live SSH or native Windows.
+
 ## SSH key fields stay stable during requests — Gchat 2
 
 `GBOT-LAN-KEY-FIELDS-BUSY`, based on main `1ba852d1e`, fixes advanced
@@ -19,7 +45,7 @@ Both deferred regressions fail on unchanged main (ten cases filtered). All
 fields, preserved drafts after failure, corrected explicit retry payloads,
 secret clearing and fingerprint confirmation recovery.
 
-One isolated Linux/S1 `make verify` passes on 18 October, 07:59:42–08:08
+One isolated Linux/S1 `make verify` passes on 18 October, 07:59:42–08:07:43
 UTC: 3,507 app, 127 extension and 1,276 Rust tests pass; six app tests are
 skipped and 28 Rust tests ignored. Lint, type checking, quality guards and all
 six coverage floors pass. Source, test and documentation hashes match before

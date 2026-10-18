@@ -43,6 +43,7 @@ export default function GbotLanBot({
             Bot name
             <Input
               autoFocus
+              disabled={busy}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />

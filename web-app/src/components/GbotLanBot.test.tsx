@@ -1,4 +1,6 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import { useState } from 'react'
+import userEvent from '@testing-library/user-event'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import GbotLanBot from './GbotLanBot'
 import { settleConfirm, useConfirmStore } from '@/lib/confirm'
@@ -30,6 +32,16 @@ function mount(connected = false) {
   return { perform, removed }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: Error) => void
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
 it('renames a saved LAN bot only with a changed, non-empty name', async () => {
   request.mockResolvedValue({})
   mount()
@@ -49,6 +61,100 @@ it('renames a saved LAN bot only with a changed, non-empty name', async () => {
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Rename bot' })).toBeInTheDocument()
   )
+})
+
+it('keeps the submitted LAN bot name stable through Save and refresh, then permits a corrected retry', async () => {
+  const user = userEvent.setup()
+  const firstRename = deferred<void>()
+  const retryRename = deferred<void>()
+  const firstRefresh = deferred<string>()
+  const retryRefresh = deferred<string>()
+  const refresh = vi.fn()
+    .mockReturnValueOnce(firstRefresh.promise)
+    .mockReturnValueOnce(retryRefresh.promise)
+  const failed = vi.fn()
+  request.mockReturnValueOnce(firstRename.promise).mockReturnValueOnce(retryRename.promise)
+
+  function Parent() {
+    const [busy, setBusy] = useState(false)
+    const [name, setName] = useState('Writer')
+    const perform = async (action: () => Promise<unknown>) => {
+      if (busy) return
+      setBusy(true)
+      try {
+        await action()
+      } catch (cause) {
+        failed(cause)
+      } finally {
+        try {
+          setName(await refresh())
+        } finally {
+          setBusy(false)
+        }
+      }
+    }
+    return (
+      <GbotLanBot
+        id="bot-1"
+        name={name}
+        busy={busy}
+        connected={false}
+        perform={perform}
+        removed={vi.fn()}
+      />
+    )
+  }
+  render(<Parent />)
+  await user.click(screen.getByRole('button', { name: 'Rename bot' }))
+  const input = screen.getByLabelText('Bot name')
+  await user.clear(input)
+  await user.type(input, 'Editor')
+  await user.click(screen.getByRole('button', { name: 'Save name' }))
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+  ])
+  expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+  await user.type(input, ' Reviewer')
+  expect(input).toHaveValue('Editor')
+  expect(input).toBeDisabled()
+
+  const failure = new Error('Saved name unavailable')
+  await act(async () => firstRename.reject(failure))
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+  await user.type(input, ' Reviewer')
+  expect(input).toHaveValue('Editor')
+  expect(input).toBeDisabled()
+  await act(async () => firstRefresh.resolve('Writer'))
+  await waitFor(() => expect(input).toBeEnabled())
+  expect(failed).toHaveBeenCalledExactlyOnceWith(failure)
+  expect(input).toHaveValue('Editor')
+  expect(screen.getByRole('button', { name: 'Save name' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  expect(request).toHaveBeenCalledTimes(1)
+
+  await user.clear(input)
+  await user.type(input, 'Copy editor')
+  await user.click(screen.getByRole('button', { name: 'Save name' }))
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Copy editor' }],
+  ])
+  await user.type(input, ' Reviewer')
+  expect(input).toHaveValue('Copy editor')
+  expect(input).toBeDisabled()
+  await act(async () => retryRename.resolve())
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
+  expect(screen.queryByLabelText('Bot name')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Rename bot' })).toBeDisabled()
+  await act(async () => retryRefresh.resolve('Copy editor'))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Rename bot' })).toBeEnabled()
+  )
+  await user.click(screen.getByRole('button', { name: 'Rename bot' }))
+  expect(screen.getByLabelText('Bot name')).toHaveValue('Copy editor')
+  expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+  expect(request).toHaveBeenCalledTimes(2)
 })
 
 it('removes only after the shared confirm dialog is accepted', async () => {
