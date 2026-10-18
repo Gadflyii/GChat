@@ -1,0 +1,100 @@
+{
+  "observed_utc": "2026-10-18T20:23:31.763248+00:00",
+  "resume_clicked_utc": "2026-10-18T20:18:05Z",
+  "native_control": "GInfer Hosts > Advanced graphics-card setup options > Continue setup",
+  "job": {
+    "view": {
+      "status": "completed",
+      "job_id": "11efdbd3-89b6-466a-9c30-ac560b46c8d6",
+      "pid": 248649,
+      "reprofile": false,
+      "started_unix_ms": 1792354683455,
+      "finished_unix_ms": 1792354686660,
+      "phase": "preparing",
+      "phase_detail": null,
+      "elapsed_ms": 3205,
+      "expected_duration_ms": null,
+      "remaining_ms": null,
+      "duration_source": null,
+      "scope": "artifact",
+      "selected_artifact": {
+        "path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4/model.ginfer",
+        "directory_sha256": "bbc111661f87915f9711ddca1e33e8a4a6f5bf20a63ab9375168e74c6a5636b5",
+        "package_sha256": "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+        "tp": 1,
+        "draft_tp": 1,
+        "spec": "dflash",
+        "draft_tokens": 7
+      },
+      "scope_complete": true,
+      "base_complete": true,
+      "all_formats_complete": false,
+      "profile_path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/host/hardware-profiles/44547f182c5ddf99530e523ef4e6dc1a4ba84f9a7ac2ad7fa8e290d00bc6e59b.json",
+      "checkpoint_available": false,
+      "diagnostic_tail": "{\"all_formats_complete\":false,\"artifact\":{\"directory_sha256\":\"bbc111661f87915f9711ddca1e33e8a4a6f5bf20a63ab9375168e74c6a5636b5\",\"draft_tokens\":7,\"draft_tp\":1,\"model_id\":\"qwen3.8-27b\",\"mtp_loaded\":false,\"path\":\"/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4/model.ginfer\",\"spec\":\"dflash\",\"tp\":1,\"weights_id\":\"smol-q2g64-mix-dflash2-q4\"},\"base_complete\":true,\"complete\":true,\"cpu_expert_format_completeness\":[{\"complete\":false,\"down_format\":\"q2g32-f16s\",\"gate_up_format\":\"q2g32-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"q4g32-f16s\",\"gate_up_format\":\"q4g32-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"q2g64-f16s\",\"gate_up_format\":\"q2g64-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"q4g64-f16s\",\"gate_up_format\":\"q4g64-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"w8g32-f16s\",\"gate_up_format\":\"w8g32-f16s\",\"missing_rows\":384,\"numa_node\":0,\"required_rows\":384},{\"complete\":false,\"down_format\":\"nvfp4\",\"gate_up_format\":\"nvfp4\",\"missing_rows\":192,\"numa_node\":0,\"required_rows\":192},{\"complete\":false,\"down_format\":\"nvfp4-gmul\",\"gate_up_format\":\"nvfp4-gmul\",\"missing_rows\":192,\"numa_node\":0,\"required_rows\":192}],\"elapsed_seconds\":44.768236873,\"hardware_profile\":\"/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/host/hardware-profiles/44547f182c5ddf99530e523ef4e6dc1a4ba84f9a7ac2ad7fa8e290d00bc6e59b.json.install-8bc39660-803a-4a6d-97c8-16a1d291c002.json\",\"missing_rows\":[],\"mode\":\"ensure\",\"optional_gpu_rows_to_refresh\":[],\"required_cpu_expert_formats\":[],\"schema_version\":2,\"scope\":\"artifact\",\"stale_required_cpu_rows\":[],\"state\":\"loaded\",\"warning\":\"\",\"warnings\":[\"GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6: GPU PCI NUMA node unavailable\",\"GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6: shared PCIe traffic path unavailable\",\"disk /usr/lib/wsl/drivers: not an identified native local block filesystem\",\"disk /mnt/c: not an identified native local block filesystem\"]}\n",
+      "error": null,
+      "available": true,
+      "gpu_uuids": [
+        "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+      ],
+      "engine_path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/linux/sm86/bin/ginfer",
+      "pending_gpu_groups": [],
+      "stale_groups": []
+    },
+    "configuration": {
+      "gpu_uuids": [
+        "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+      ],
+      "engine": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/linux/sm86/bin/ginfer",
+      "profile_path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/host/hardware-profiles/44547f182c5ddf99530e523ef4e6dc1a4ba84f9a7ac2ad7fa8e290d00bc6e59b.json"
+    },
+    "output_path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/host/hardware-profiles/44547f182c5ddf99530e523ef4e6dc1a4ba84f9a7ac2ad7fa8e290d00bc6e59b.json.install-8bc39660-803a-4a6d-97c8-16a1d291c002.json",
+    "pending": [],
+    "accepted_durations": {},
+    "native_completed": true,
+    "measured_fresh": false,
+    "measured_work": false,
+    "duration_history_valid": true,
+    "scope": {
+      "Artifact": {
+        "path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4/model.ginfer",
+        "directory_sha256": "bbc111661f87915f9711ddca1e33e8a4a6f5bf20a63ab9375168e74c6a5636b5",
+        "package_sha256": "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+        "tp": 1,
+        "draft_tp": 1,
+        "spec": "dflash",
+        "draft_tokens": 7
+      }
+    },
+    "artifact_receipts": {
+      "44547f182c5ddf99530e523ef4e6dc1a4ba84f9a7ac2ad7fa8e290d00bc6e59b": {
+        "gpu_uuids": [
+          "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6"
+        ],
+        "artifacts": [
+          {
+            "path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c/model.ginfer",
+            "directory_sha256": "9d15909496d8d3b5791f40c7dea92676a7e2e0793385f1808726dd6a28762bcf",
+            "package_sha256": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+            "tp": 1,
+            "draft_tp": 1,
+            "spec": "dflash",
+            "draft_tokens": 7
+          },
+          {
+            "path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4/model.ginfer",
+            "directory_sha256": "bbc111661f87915f9711ddca1e33e8a4a6f5bf20a63ab9375168e74c6a5636b5",
+            "package_sha256": "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+            "tp": 1,
+            "draft_tp": 1,
+            "spec": "dflash",
+            "draft_tokens": 7
+          }
+        ],
+        "all_formats_complete": false,
+        "completion_failed": false
+      }
+    }
+  },
+  "prior_failure": "Second Models Automatic Load failed before Engine construction because the first load was cancelled on Models unmount."
+}
