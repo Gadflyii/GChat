@@ -3241,6 +3241,17 @@ Gchat3's shared GUI list.
 If a workspace image cannot be displayed, GChat shows an error instead of an
 empty preview. Check that the file is still available, then choose **Retry
 preview**. The same file stays selected while GChat tries again.
+
+Linux native acceptance on October 18 used an owned PNG made unreadable before
+its first preview. GChat showed the error, **Retry preview**, and the filename
+in **Details**. Restoring the original permissions and pressing Space on the
+focused retry button loaded that same image tab at 1200×800. This model-free
+pass used retained source `11ce` with the relevant paths identical to main
+`3b449da5f`; no model, GPU or Send was involved. All 17 saved records, 45 skills
+and both workspace files stayed unchanged; the temporary folder reference was
+removed through the GUI and the original image permissions restored. Evidence:
+`/ai/gchat/out/gchat-agent-image-preview-recovery-20261018/`.
+
 is being retired after the final native replay; concise evidence is retained.
 Provider labels remain C6-owned and provider keyboard navigation C7-owned; availability,
 sidebar and attachment labels retain their separate findings in Gchat3's list.
