@@ -27,7 +27,10 @@ export default function ServiceSetup({
   const [checking, setChecking] = useState(
     target.kind === 'paired_host' && !!target.host_id
   )
-  const [error, setError] = useState('')
+  const [error, setError] = useState<{
+    action: 'request' | 'status'
+    message: string
+  } | null>(null)
   const [computerListError, setComputerListError] = useState('')
   const [refreshingComputers, setRefreshingComputers] = useState(false)
   const computerListPending = useRef(false)
@@ -37,6 +40,12 @@ export default function ServiceSetup({
   const busy = pendingAction !== null
   const hostId = target.kind === 'paired_host' ? target.host_id : ''
   const remote = hosts.filter((host) => !host.local)
+  const approvalAction =
+    grant?.status === 'pending' || grant?.status === 'approved'
+      ? 'status'
+      : 'request'
+  const approvalLabel =
+    approvalAction === 'status' ? 'Check approval' : 'Request Gbot control'
   const refreshComputers = useCallback(async () => {
     if (computerListPending.current) return
     computerListPending.current = true
@@ -64,7 +73,7 @@ export default function ServiceSetup({
   useEffect(() => {
     const version = ++requestVersion.current
     setGrant(undefined)
-    setError('')
+    setError(null)
     activeRequest.current = null
     setPendingAction(null)
     setChecking(!!hostId)
@@ -80,7 +89,8 @@ export default function ServiceSetup({
           }
         })
         .catch((cause) => {
-          if (requestVersion.current === version) setError(String(cause))
+          if (requestVersion.current === version)
+            setError({ action: 'status', message: String(cause) })
         })
         .finally(() => {
           if (requestVersion.current === version) setChecking(false)
@@ -95,7 +105,7 @@ export default function ServiceSetup({
     activeRequest.current = version
     setPendingAction(action)
     setChecking(false)
-    setError('')
+    setError(null)
     try {
       const value = await gbotControlGrant(hostId, action)
       if (requestVersion.current !== version) return
@@ -105,7 +115,8 @@ export default function ServiceSetup({
         value.status === 'approved' && value.service_configured === true
       )
     } catch (cause) {
-      if (requestVersion.current === version) setError(String(cause))
+      if (requestVersion.current === version)
+        setError({ action, message: String(cause) })
     } finally {
       if (requestVersion.current === version) {
         activeRequest.current = null
@@ -236,31 +247,32 @@ export default function ServiceSetup({
                 type="button"
                 variant="outline"
                 disabled={busy || !!errors[hostId]}
-                onClick={() =>
-                  void request(
-                    grant?.status === 'pending' || grant?.status === 'approved'
-                      ? 'status'
-                      : 'request'
-                  )
-                }
+                onClick={() => void request(approvalAction)}
               >
                 {pendingAction === 'request'
                   ? 'Requesting control…'
                   : pendingAction === 'status'
                     ? 'Checking approval…'
-                    : grant?.status === 'pending' ||
-                        grant?.status === 'approved'
-                      ? 'Check approval'
-                      : 'Request Gbot control'}
+                    : approvalLabel}
               </Button>
             </>
           )}
         </>
       )}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="space-y-1 text-sm text-destructive">
+          <p>
+            {error.action === 'request'
+              ? 'GChat could not request Gbot control.'
+              : 'GChat could not check Gbot control approval.'}{' '}
+            Check the connection to the service computer, then choose{' '}
+            {approvalLabel} to try again.
+          </p>
+          <details>
+            <summary className="cursor-pointer">Details</summary>
+            <p className="whitespace-pre-wrap break-words">{error.message}</p>
+          </details>
+        </div>
       )}
     </div>
   )

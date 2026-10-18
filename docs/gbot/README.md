@@ -1,5 +1,30 @@
 # Gbot design
 
+## Service approval recovery — Gchat 2
+
+`GBOT-SERVICE-APPROVAL-ERROR-GUIDANCE`, based on main `2aa268c25`,
+gives failed service-control requests and approval checks a plain recovery step.
+It names the failed action, asks the user to check the service computer's
+connection, and names the available Request Gbot control or Check approval
+button. Technical diagnostics are retained in Details, initially closed.
+
+Opening Details or refreshing the computer list does not replay an approval
+action. The selected computer, previous grant, owner-approval instructions and
+explicit retry contract stay in place. This is source/rendered UI scope; it
+claims no live grant, account or native Windows acceptance.
+
+Unchanged production failed four rendered assertions (nine passed). The fixed
+ServiceSetup and wizard suites passed all 39 cases; lint passed with zero errors
+and five existing warnings. ONE `make verify`, 18 October 14:57:13–15:03:04 UTC,
+passed 3,643 app tests (six skipped), 127 extension tests, 1,309 Rust tests
+(28 ignored, 23 summaries), six coverage floors and lint/typecheck/guards.
+All 3,459 tracked raw source bytes and modes matched before and after the gate;
+tracked timestamps were refreshed before checks. This receipt was added after
+the gate with product/test source unchanged. CPU104–111 booking3347 returned.
+Evidence: `out/gchat2-service-approval-error-guidance-20261018/result.json`
+and adjacent raw logs. No retry or whole-gate repeat.
+
+
 ## Tool preparation and check recovery — Gchat 2
 
 `GBOT-TOOLS-CHECK-ERROR-GUIDANCE`, based on main `fe17d90f6`, gives
