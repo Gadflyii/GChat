@@ -1,5 +1,44 @@
 # GInfer host UI
 
+## Secure-storage Check feedback — Gchat 3 native acceptance, October 18
+
+`GCHAT-SECURE-STORAGE-SETUP-FEEDBACK-20261017` passes its remaining Linux
+native visible-feedback leaf. Ordinary **Check secure storage** on Welcome and
+Hosts showed **Secure storage is ready.** as a status with the explanatory
+success panel. Welcome stayed ready through native scrolling and settling;
+Hosts remained ready for 86 seconds. Three accepted screenshots were visually
+inspected. Native pointer/wheel input drove the app; WebKit only observed state.
+
+Retained packaged release `ed68c7443` is bound to allocated main `4b3a70853`:
+the explicit check handler, ready panel, Hosts route and native credential paths
+are unchanged. Current main changes the unchecked hint wording and Welcome card
+order; those changes are outside this retained visual evidence. Persistence
+means while the component is mounted: navigating to Hosts creates an unchecked
+card until another explicit Check. No readiness-across-restart claim is made.
+
+C3's native Check success at 02:33:48Z on `201f46712` is reused; his 03:04:19Z
+handoff lacked a success screenshot and left this visual leaf to Gchat 3. His
+fixture was untouched. Passive launch/status does not probe or unlock storage;
+that claim reuses the accepted installed locked-keyring evidence in
+[agent-runtime acceptance](../agent-runtime/remaining-acceptance.md#installed-linux-locked-keyring-launch-and-explicit-connect--october-17)
+and the [explicit-storage decision](../decisions/2026-10-16-open-secure-storage-only-for-explicit-connections.md),
+without repeating that campaign. This leaf covers English, Dark-theme packaged
+Linux with a private unlocked keyring. Windows and passphrase-vault feedback
+remain unqualified. No account/host connection was attempted; nearby C7
+Pair/Ignore controls were untouched. Startup's existing updater returned 404;
+no whole-app offline claim is made.
+
+Worktree `/ai/gchat-worktrees/gchat3-secure-storage-feedback-native-20261018`,
+branch `test/gchat3-secure-storage-feedback-native-20261018`, retains documentation
+only. Result, summary and three screenshots are retained in canonical GChat
+`out/secure-storage-feedback-native-20261018` and the ignored worktree `out/`.
+The private S1 container, HOME/cache/keyring, D-Bus/display and relay are removed;
+no owned processes remain and 3,451,232,455 bytes were reclaimed. CPUs 80–87
+booking line2901 was canceled at 03:07:29Z; no GPU/model/build was used. The
+read-only donor under
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+remains untouched. The documentation-only gate is `git diff --check`.
+
 ## Google setup credential save/import — Gchat 3 native acceptance, October 18
 
 `GCHAT-GOOGLE-WORKSPACE-SETUP-WIZARD-20261017` passes its remaining Linux
