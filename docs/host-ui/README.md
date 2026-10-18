@@ -3697,18 +3697,32 @@ S1 `AIS-2-8592-L01`, using seven frozen catalog inputs with 41 bundled profiles.
 The exported `native/bin/gchat` uses Tauri's sibling `../lib/GChat/resources`
 layout, with owned copied resources. Effective commands and the exported binary
 hash are in `native-build-command.json` and `native-export-result.json` beside
-the gate evidence. This is source-build evidence; the coordinator's native
-Installed-list retest with the short alias remains pending. No model, GPU or
-Host/service was launched by this fix subtask.
+the gate evidence. Native acceptance then used private HOME `/tmp/c3ym18/home`,
+an alias to the owned SSD fixture, with only the existing external-model
+manifest copied. Models → This computer → Installed shows
+`qwen38_27b_int_df2` before and after the native Refresh installed models action.
+Bundled runtime preparation and Refresh both completed; the refreshed control
+is enabled and the card remains visible. The coordinator inspected the final
+pixels. No model was copied, reimported or loaded, and no inference ran.
+Evidence: `native-acceptance-result.json`, `installed-after-refresh.json` and
+`installed-after-refresh.png` beside the gate evidence.
+
+The initial fixture launch failed because Xvfb was absent from PATH and DISPLAY
+was missing. An explicit copied Xvfb path and `DISPLAY=:175` repaired that
+private launch. The app then exited through native tray Quit, with completed
+cleanup in `native-lifecycle.log`. Refresh had started an idle private Host;
+it stopped through its supported SIGTERM shutdown handler, then the private
+Xvfb stopped. The private HOME and short alias are removed. The installed-DEB
+fixture, primary display, Hosts, GPU workloads and resource donors were not changed.
 
 C3 owns branch `fix/c3-models-symlink-data-root-20261018`, worktree
 `/ai/gchat-worktrees/c3-models-symlink-data-root-20261018`, based on main
 `585a854058ecbdc3e6923d7c5533cdd9778d1fd8`. The private S1 source, caches, build
 and native export are retained at
-`/media/ron/SSD_RAID/ai/tmp-c3-models-symlink-data-root-20261018` for that native
-retest, with no live jobs. CPUs88–95 returned 13:12Z. The installed-DEB walk
-fixture and resource donors remain unchanged. Next: native alias acceptance
-and coordinator merge; remove disposable owned build bytes when the item closes.
+`/media/ron/SSD_RAID/ai/tmp-c3-models-symlink-data-root-20261018` for coordinator
+merge, with no live jobs. CPUs88–95 returned 13:12Z; native acceptance CPUs104–111
+returned 13:24Z. Next: coordinator merge; remove disposable owned build bytes
+when the item closes.
 
 ## Installed dropdown acceptance — C7, October 18
 
