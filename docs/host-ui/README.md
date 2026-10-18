@@ -3451,6 +3451,11 @@ Type `/` in the composer to see available skills. Use the up and down arrow
 keys to choose a skill, then press Enter or Tab to select it. The selected
 skill stays visible as you move through a long list.
 
+In **Agent Studio → Agents & flows**, Tab to a skill and press Space or Enter
+to include or remove it. Each skill announces whether it is selected, including
+skills assigned to a specialist or workflow stage. Choose **Save definition**
+to keep the assignment. Reopening that definition restores its selected skills.
+
 ## Creating and editing skills
 
 After you choose **Create** or **Save**, the button shows **Creating skill…**

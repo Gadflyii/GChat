@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toast } from 'sonner'
 import type { AgentDefinition, AgentRunRecord, AgentTemplate } from '@/types/agent'
+import type { AgentSkill } from '@/services/agent/skills'
 import { Route } from './index'
 import GbotCompanion from '@/containers/GbotCompanion'
 import { useGbotPage } from '@/stores/gbot-page-store'
@@ -20,6 +21,7 @@ const getAgentDefinition = vi.hoisted(() => vi.fn())
 const deleteAgentRun = vi.hoisted(() => vi.fn())
 const studioCommand = vi.hoisted(() => vi.fn())
 const botCall = vi.hoisted(() => vi.fn())
+const skillState = vi.hoisted(() => ({ value: [] as AgentSkill[] }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
 vi.mock('@/services/gbot', async (original) => ({
   ...(await original<object>()),
@@ -56,7 +58,7 @@ vi.mock('@/hooks/useAgentDefinitions', () => ({
 }))
 
 vi.mock('@/hooks/useAgentSkills', () => ({
-  useAgentSkills: () => ({ skills: [] }),
+  useAgentSkills: () => ({ skills: skillState.value }),
 }))
 
 
@@ -101,6 +103,21 @@ const secondAgent: AgentDefinition = {
   id: 'research-assistant',
   name: 'Research assistant',
   instructions: 'Research the selected topic.',
+}
+
+const pdfSkill: AgentSkill = {
+  name: 'pdf',
+  description: 'Read PDF documents.',
+  version: '1.0.0',
+  requiresTools: [],
+  requiresScripts: [],
+  dangerous: false,
+  platforms: null,
+  enabled: true,
+  compatible: true,
+  reserved: false,
+  unavailableReasons: [],
+  error: null,
 }
 
 const firstHistoricalRun: AgentRunRecord = {
@@ -154,6 +171,7 @@ describe('AgentStudioPage', () => {
     useGbotPage.setState({ page: null, sharing: null, requests: {} })
     useGbotCompanion.getState().reset()
     useGeneralSetting.setState({ gbotEnabled: true })
+    skillState.value = []
     botCall.mockReset()
     navigate.mockReset()
     listAgentTemplates.mockReset().mockResolvedValue([])
@@ -222,6 +240,67 @@ describe('AgentStudioPage', () => {
     expect(screen.getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
     return view
   }
+
+  it('announces keyboard skill selection and restores each saved agent assignment', async () => {
+    skillState.value = [pdfSkill]
+    definitionState.value.save.mockImplementation(async (value: AgentDefinition) => {
+      definitionState.value.definitions = definitionState.value.definitions.map(
+        (definition) => definition.id === value.id ? value : definition
+      )
+      return value
+    })
+    await renderSavedAgents()
+    const user = userEvent.setup()
+    const skill = screen.getByRole('button', { name: 'pdf', pressed: false })
+
+    skill.focus()
+    await user.keyboard(' ')
+    expect(screen.getByRole('button', { name: 'pdf', pressed: true })).toBe(skill)
+    expect(skill).toHaveFocus()
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ id: firstAgent.id, skills: ['pdf'] })
+    ))
+
+    await user.click(screen.getByRole('button', { name: /Research assistant/ }))
+    expect(screen.getByRole('button', { name: 'pdf', pressed: false })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Review assistant/ }))
+    const restoredSkill = screen.getByRole('button', { name: 'pdf', pressed: true })
+    restoredSkill.focus()
+    await user.keyboard(' ')
+    expect(screen.getByRole('button', { name: 'pdf', pressed: false })).toBe(restoredSkill)
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: firstAgent.id, skills: [] })
+    ))
+    expect(definitionState.value.definitions[1].skills).toEqual([])
+  })
+
+  it('announces a workflow stage skill selection independently from shared skills', async () => {
+    skillState.value = [pdfSkill]
+    definitionState.value.save.mockImplementation(async (value: AgentDefinition) => value)
+    const { saveButton } = await renderThreeStageWorkflow()
+    const user = userEvent.setup()
+    const skills = screen.getAllByRole('button', { name: 'pdf', pressed: false })
+    expect(skills).toHaveLength(4)
+
+    skills[2].focus()
+    await user.keyboard(' ')
+    expect(screen.getAllByRole('button', { name: 'pdf', pressed: true })).toEqual([skills[2]])
+    expect(screen.getAllByRole('button', { name: 'pdf', pressed: false })).toHaveLength(3)
+    await user.click(saveButton)
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        kind: 'workflow',
+        skills: [],
+        nodes: [
+          expect.objectContaining({ id: 'deliver', skills: [] }),
+          expect.objectContaining({ id: 'stage-2', skills: ['pdf'] }),
+          expect.objectContaining({ id: 'stage-3', skills: [] }),
+        ],
+      })
+    ))
+  })
 
   async function prepareHistoricalRun(action: 'Re-run' | 'Continue as new run…') {
     if (action === 'Re-run') {

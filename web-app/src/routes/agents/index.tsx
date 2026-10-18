@@ -1957,6 +1957,7 @@ function SkillPicker({
               <button
                 key={skill}
                 type="button"
+                aria-pressed={active}
                 disabled={!active && selected.length >= 6}
                 className={cn(
                   'rounded-full border px-3 py-1 text-xs transition',
