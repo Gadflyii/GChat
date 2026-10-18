@@ -35,6 +35,17 @@ section has unique associations; the shared Stream control also has its visible
 label. The slider wrapper forwards accessible names to the interactive thumb.
 Sampling values, bounds and update callbacks keep their existing behavior.
 
+All 44 focused tests and workspace lint PASS. One `make verify` PASS: 3,626
+web tests, 127 extension tests, 1,304 Rust tests and all six coverage floors.
+Frontend and native Linux builds PASS on `98c9fc87a`. The rebuilt private app
+exposes the expected names on all seven numeric fields and slider handles;
+clicking each visible label focuses its own numeric input. Values and all four
+saved Chat/Agents fixture hashes remain unchanged after normal close. The
+candidate screenshot was viewed. Native receipts, including scroll/tooltip
+click corrections, are in `/ai/gchat/out/gchat-chat-sampling-labels-20261018/`.
+This qualifies source-native Linux UI behavior; installed packages, Windows,
+screen readers and inference were outside this check.
+
 ## Skill availability on this computer — October 18
 
 A private native Linux pass selected Apple Calendar and opened its actions.
