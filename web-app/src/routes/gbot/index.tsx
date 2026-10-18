@@ -751,7 +751,7 @@ function GbotPage() {
               connecting:
                 'Connecting to the Gbot service on your selected LAN computer. Please wait.',
               stopping:
-                'Stopping the Gbot service. Tasks and schedules will resume when you start it again.',
+                'Stopping the Gbot service. Unfinished tasks will stop. After restarting, review them before choosing Resume. Check Scheduled tasks for schedules that need review.',
               disconnecting:
                 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.',
             }[serviceAction]
@@ -813,7 +813,7 @@ function GbotPage() {
           <p>
             {serviceTarget.kind === 'paired_host'
               ? 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
-              : 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'}
+              : 'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'}
           </p>
           <p className="text-sm text-muted-foreground">
             {serviceTarget.kind === 'paired_host'

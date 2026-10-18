@@ -1,5 +1,31 @@
 # Gbot design
 
+## Reviewing tasks after a local service restart — Gchat 2
+
+`GBOT-SERVICE-RESTART-RESUME-WORDING`, based on main `61e4ea300`, replaces
+local Quit/Stopped notices that falsely promised automatic task and schedule
+resumption. They now explain that unfinished tasks stop, name Start Gbot
+service and explicit Resume after review, and point to Scheduled tasks for
+schedules that need review. LAN disconnect notices still explain that work
+continues on the other computer.
+
+The existing rendered shutdown journey now follows restart with a saved task
+and a schedule awaiting review. Restart sends no task or schedule mutation;
+the local task requires an explicit Resume. The paired-LAN task stays running.
+Task-runner and scheduler behavior are unchanged. This is source/rendered
+mocked-service scope, with no native, VM, account or model acceptance.
+
+Validation: the local journey failed against the original production code,
+while the paired-LAN control passed. Fixed focus passed 150 tests across three
+files; lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 22:17:26–22:23:30 UTC) passed 3,831 app tests
+(six skipped), 130 extension tests, 1,323 Rust tests (28 ignored), all six
+coverage floors and lint/typecheck/quality guards. All 3,480 tracked inputs
+matched raw bytes and modes before and after verification with fresh tracked
+timestamps. Only this receipt was added afterward. Booking3600 returned22:25Z;
+private cache and both exports were removed by22:25:32Z. Evidence:
+`/ai/gchat/out/gchat2-service-restart-resume-wording-20261018/SUMMARY.md`.
+
 ## Recovering a failed Microsoft sign-in result — Gchat 2
 
 `GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names
