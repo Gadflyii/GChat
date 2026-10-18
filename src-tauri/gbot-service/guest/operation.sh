@@ -7,9 +7,21 @@ export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
 mode=$1; workspace=$2; session=$3; shift 3
 [[ $workspace =~ ^[0-9a-f-]{36}$ && $session =~ ^[0-9a-f-]{36}$ ]] || exit 64
 root=$HOME/.local/state/gbot/$workspace/$session
-live=$(systemctl --user show gbot-desktop.service --property=InvocationID --value)
-[[ $live =~ ^[0-9a-f]{32}$ ]] || exit 69
-systemctl --user is-active --quiet gbot-desktop.service || exit 69
+desktop_ready() {
+  live=$(systemctl --user show gbot-desktop.service --property=InvocationID --value 2>/dev/null) &&
+    [[ $live =~ ^[0-9a-f]{32}$ ]] &&
+    systemctl --user is-active --quiet gbot-desktop.service &&
+    confirmed=$(systemctl --user show gbot-desktop.service --property=InvocationID --value 2>/dev/null) &&
+    [[ $live == "$confirmed" ]]
+}
+# SSH can start before the lingering desktop after a saved guest boots. Only
+# hello may wait, before binding a session or claiming any operation.
+attempts=0
+until desktop_ready; do
+  [[ $mode == hello && $attempts -lt 40 ]] || exit 69
+  attempts=$((attempts + 1))
+  sleep 0.5
+done
 mkdir -p "$root"
 # Bind once to this desktop lifetime; a changed desktop needs a new session.
 if (set -C; printf '%s' "$live" > "$root/desktop") 2>/dev/null; then :; fi

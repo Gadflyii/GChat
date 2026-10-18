@@ -45,7 +45,7 @@ const computers = [
   [
     'local',
     'A separate local VM',
-    'Create a separate Linux desktop inside this computer using KVM. Requires Linux and the prepared setup files; Windows Hyper-V setup is not available yet.',
+    'Create a separate Linux desktop on the service computer using KVM on Linux or Hyper-V on Windows. GChat checks the required virtualization support and prepared setup files before creating it.',
   ],
   [
     'lan',

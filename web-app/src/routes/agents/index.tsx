@@ -10,11 +10,12 @@ import {
 } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { continuationTask } from '@/lib/agent-continuation'
+import { confirmAction } from '@/lib/confirm'
 import { AgentRunSetup } from '@/containers/AgentRunSetup'
 import { AgentWorkerPools } from '@/containers/AgentWorkerPools'
 import { AgentLiveRuns } from '@/containers/AgentLiveRuns'
 import { useStudioRuns } from '@/stores/studio-run-store'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useBlocker, useNavigate } from '@tanstack/react-router'
 import {
   IconAlertTriangle,
   IconBolt,
@@ -391,12 +392,16 @@ function AgentStudioPage() {
   const [draft, setDraftState] = useState<AgentDefinition | null>(null)
   // The editable identifier does not determine which saved record this draft owns.
   const [draftSavedId, setDraftSavedId] = useState<string | null>(null)
+  const draftBaseline = useRef<string | null>(null)
   const draftRevision = useRef(0)
   const mutatingDraft = useRef(false)
   const setDraft = useCallback(
     (next: AgentDefinition | null, savedId?: string | null) => {
       ++draftRevision.current
       setDraftState(next)
+      if (!next || savedId !== undefined) {
+        draftBaseline.current = next ? JSON.stringify(next) : null
+      }
       if (!next) setDraftSavedId(null)
       else if (savedId !== undefined) setDraftSavedId(savedId)
     },
@@ -415,6 +420,24 @@ function AgentStudioPage() {
   const draftBusy = saving || creating || deleting
   const historyRevision = useStudioRuns((s) => s.historyRevision)
   const pageId = useId()
+
+  useBlocker({
+    enableBeforeUnload: false,
+    shouldBlockFn: async ({ next }) => {
+      if (
+        next.routeId === route.agents.index ||
+        !draft || JSON.stringify(draft) === draftBaseline.current
+      ) return false
+      const revision = draftRevision.current
+      const accepted = await confirmAction({
+        title: 'Discard unsaved agent changes?',
+        message: `Your changes to "${draft.name || 'Untitled Agent'}" have not been saved. Discard them to leave Agent Studio.`,
+        confirmLabel: 'Discard changes',
+        destructive: true,
+      })
+      return !accepted || revision !== draftRevision.current
+    },
+  })
 
   useEffect(() => {
     if (view === 'definitions' && draft && !draftBusy && !runSetup) {
@@ -495,27 +518,49 @@ function AgentStudioPage() {
     })
   }
 
-  const createAgent = async () => {
-    if (mutatingDraft.current) return
-    mutatingDraft.current = true
-    const revision = draftRevision.current
-    setCreating(true)
-    try {
-      const created = await createDraft()
-      if (revision !== draftRevision.current) return
-      setDraft(created, null)
-      selectView('definitions')
-    } catch (reason) {
-      toast.error(String(reason))
-    } finally {
-      mutatingDraft.current = false
-      setCreating(false)
+  const replaceDraft = (replace: () => void) => {
+    if (!draft || JSON.stringify(draft) === draftBaseline.current) {
+      replace()
+      return
     }
+    const revision = draftRevision.current
+    void confirmAction({
+      title: 'Discard unsaved agent changes?',
+      message: `Your changes to "${draft.name || 'Untitled Agent'}" have not been saved. Discard them to open another agent draft.`,
+      confirmLabel: 'Discard changes',
+      destructive: true,
+    }).then((accepted) => {
+      if (accepted && revision === draftRevision.current) replace()
+    })
+  }
+
+  const createAgent = () => {
+    if (mutatingDraft.current) return
+    replaceDraft(async () => {
+      if (mutatingDraft.current) return
+      mutatingDraft.current = true
+      const revision = draftRevision.current
+      setCreating(true)
+      try {
+        const created = await createDraft()
+        if (revision !== draftRevision.current) return
+        setDraft(created, null)
+        selectView('definitions')
+      } catch (reason) {
+        toast.error(String(reason))
+      } finally {
+        mutatingDraft.current = false
+        setCreating(false)
+      }
+    })
   }
 
   const edit = (definition: AgentDefinition) => {
-    setDraft(cloneDefinition(definition), definition.id)
-    selectView('definitions')
+    if (definition.id === draftSavedId) return
+    replaceDraft(() => {
+      setDraft(cloneDefinition(definition), definition.id)
+      selectView('definitions')
+    })
   }
 
   const startFrom = (definition: AgentDefinition) => {
@@ -523,8 +568,10 @@ function AgentStudioPage() {
     copy.builtIn = false
     copy.id = ''
     copy.name = `${copy.name} Copy`
-    setDraft(copy, null)
-    selectView('definitions')
+    replaceDraft(() => {
+      setDraft(copy, null)
+      selectView('definitions')
+    })
   }
 
   const saveDraft = async (
@@ -573,11 +620,20 @@ function AgentStudioPage() {
       setDraft(null)
       return
     }
-    mutatingDraft.current = true
+    const savedId = draftSavedId
     const revision = draftRevision.current
+    const savedName = definitions.find((definition) => definition.id === savedId)?.name ?? draft.name
+    const accepted = await confirmAction({
+      title: 'Delete saved agent?',
+      message: `Delete "${savedName}" from your saved agents? This cannot be undone.`,
+      confirmLabel: 'Delete agent',
+      destructive: true,
+    })
+    if (!accepted || revision !== draftRevision.current || mutatingDraft.current) return
+    mutatingDraft.current = true
     setDeleting(true)
     try {
-      await remove(draftSavedId)
+      await remove(savedId)
       if (revision === draftRevision.current) setDraft(null)
       toast.success('Agent definition deleted')
     } catch (reason) {
@@ -654,8 +710,7 @@ function AgentStudioPage() {
         onSelect={(section) => {
           if (section === 'skills') {
             invalidateRunSetup()
-            void navigate({ to: route.skills.index })
-            return
+            return navigate({ to: route.skills.index })
           }
           selectView(section)
           if (section === 'runs') void refreshRuns()
@@ -907,7 +962,8 @@ function DefinitionEditor({
                   'rounded-xl border p-3 text-left transition hover:bg-accent',
                   draft.kind === kind && 'border-primary bg-primary/5'
                 )}
-                onClick={() =>
+                onClick={() => {
+                  if (kind === draft.kind) return
                   onChange(
                     withKind(
                       {
@@ -929,7 +985,7 @@ function DefinitionEditor({
                       kind
                     )
                   )
-                }
+                }}
               >
                 <KindIcon className="mb-2 size-4 text-primary" />
                 <div className="text-sm font-medium">{meta.label}</div>

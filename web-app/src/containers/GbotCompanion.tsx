@@ -96,11 +96,13 @@ export default function GbotCompanion() {
     history.some((t) => t.id === a.task_id)
   )
   const botHasControl = !control || control.state === 'bot'
-  const isKvm =
-    bot?.bot_pc?.kind === 'local_vm' && bot.bot_pc.hypervisor === 'kvm'
+  const isLocalVm =
+    bot?.bot_pc?.kind === 'local_vm' &&
+    ['kvm', 'hyper_v'].includes(bot.bot_pc.hypervisor ?? '')
   const setup = state.setups?.find((record) => record.id === workspaceId)
   const setupBlocked = Boolean(
-    isKvm && (state.setups === undefined || (setup && setup.stage !== 'ready'))
+    isLocalVm &&
+      (state.setups === undefined || (setup && setup.stage !== 'ready'))
   )
   const preparing = resources.ready !== true && !resources.error
   const loading =
@@ -543,12 +545,14 @@ export default function GbotCompanion() {
                 !loading &&
                 !connectionError &&
                 !state.executorError && (
-                <p className="text-sm text-muted-foreground">
-                  {setupBlocked
-                    ? 'Finish this bot’s computer setup in Gbot settings to run tasks.'
-                    : 'Connect this bot and save its model in Gbot settings to run tasks.'}
-                </p>
-              )}
+                  <p className="text-sm text-muted-foreground">
+                    {setupBlocked
+                      ? setup?.stage === 'stopped'
+                        ? 'Start this bot’s computer in Gbot settings to run tasks.'
+                        : 'Finish this bot’s computer setup in Gbot settings to run tasks.'
+                      : 'Connect this bot and save its model in Gbot settings to run tasks.'}
+                  </p>
+                )}
               {!botHasControl && (
                 <p className="text-sm text-muted-foreground">
                   The bot is paused for desktop control. Choose Hand back in
@@ -823,7 +827,9 @@ export default function GbotCompanion() {
               ) : !preparing && !loading && !connectionError ? (
                 <p className="text-sm text-muted-foreground">
                   {setupBlocked
-                    ? 'Finish this bot’s computer setup in Gbot settings to view its desktop.'
+                    ? setup?.stage === 'stopped'
+                      ? 'Start this bot’s computer in Gbot settings to view its desktop.'
+                      : 'Finish this bot’s computer setup in Gbot settings to view its desktop.'
                     : 'Connect this bot in Gbot settings to view its computer.'}
                 </p>
               ) : null}

@@ -245,6 +245,9 @@ const ChatInput = memo(function ChatInput({
 
   const conversationKey = initialMessage ? TEMPORARY_CHAT_ID : (currentThreadId ?? TEMPORARY_CHAT_ID)
   useLayoutEffect(() => {
+    usePrompt.getState().setActiveThread(conversationKey)
+  }, [conversationKey])
+  useLayoutEffect(() => {
     composerLifetimeRef.current = {}
     return () => {
       composerLifetimeRef.current = {}
@@ -651,6 +654,13 @@ const ChatInput = memo(function ChatInput({
   const submitMessage = async (prompt: string) => {
     const submittedDraft = prompt
     const submittedLifetime = composerLifetimeRef.current
+    const clearSubmittedPrompt = () => {
+      const state = usePrompt.getState()
+      const currentDraft = state.activeThreadId === conversationKey
+        ? state.prompt
+        : state.drafts[conversationKey]
+      if (currentDraft === submittedDraft) state.resetPrompt(conversationKey)
+    }
     if (isCompactCommand(prompt)) {
       if (attachments.length) {
         toast.error('Remove attachments before running /compact.')
@@ -658,12 +668,7 @@ const ChatInput = memo(function ChatInput({
       }
       if (onSubmit) await onSubmit(prompt)
       else toast.info('Nothing to compact yet.')
-      if (
-        composerLifetimeRef.current === submittedLifetime &&
-        usePrompt.getState().prompt === submittedDraft
-      ) {
-        setPrompt('')
-      }
+      clearSubmittedPrompt()
       return
     }
     useConversationPolicy.getState().setActiveDefinition(conversationKey, selectedAgentDefinitionId)
@@ -748,8 +753,8 @@ const ChatInput = memo(function ChatInput({
           : selectedAgentDefinitionId,
         attachments.filter((attachment) => attachment.type === 'document')
       )
+      clearSubmittedPrompt()
       if (composerLifetimeRef.current === submittedLifetime) {
-        if (usePrompt.getState().prompt === submittedDraft) setPrompt('')
         setSelectedAgentSkill((current) => current === selectedAgentSkill ? null : current)
       }
       const submittedIds = new Set(attachments.map((attachment) => attachment.id))
@@ -794,8 +799,8 @@ const ChatInput = memo(function ChatInput({
       // Keep the draft until conversation creation succeeds. Newer edits
       // remain available for the next message rather than entering this one.
       const clearSubmittedDraft = () => {
+        clearSubmittedPrompt()
         if (composerLifetimeRef.current === submittedLifetime) {
-          if (usePrompt.getState().prompt === submittedDraft) setPrompt('')
           setSelectedAgentSkill((current) => current === selectedAgentSkill ? null : current)
         }
         const submittedIds = new Set(attachments.map((attachment) => attachment.id))

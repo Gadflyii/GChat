@@ -7,13 +7,17 @@ import type { AgentDefinition, AgentRunRecord, AgentTemplate } from '@/types/age
 import type { AgentSkill } from '@/services/agent/skills'
 import { Route } from './index'
 import GbotCompanion from '@/containers/GbotCompanion'
+import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
+import { settleConfirm } from '@/lib/confirm'
 import { useGbotPage } from '@/stores/gbot-page-store'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import type { Task } from '@/services/gbot'
+import { seedServiceHub } from '@/test/service-hub'
 const AgentStudioPage = Route.options.component!
 
 const navigate = vi.hoisted(() => vi.fn())
+const blockNavigation = vi.hoisted(() => vi.fn())
 const listAgentTemplates = vi.hoisted(() => vi.fn())
 const listAgentRuns = vi.hoisted(() => vi.fn())
 const listAgentModelInstances = vi.hoisted(() => vi.fn())
@@ -40,13 +44,15 @@ const definitionState = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@tanstack/react-router', () => ({
+vi.mock('@tanstack/react-router', async (original) => ({
+  ...(await original<object>()),
   Link: ({ children, to }: { children: ReactNode; to: string }) => <a href={to}>{children}</a>,
   createFileRoute: () => (config: object) => ({
     options: config,
     useSearch: () => ({}),
   }),
   useNavigate: () => navigate,
+  useBlocker: blockNavigation,
 }))
 
 vi.mock('@/containers/HeaderPage', () => ({
@@ -166,6 +172,7 @@ function deferred<T>() {
 }
 
 describe('AgentStudioPage', () => {
+  const navigableHistories: { destroy: () => void }[] = []
   beforeEach(() => {
     vi.spyOn(toast, 'error').mockReturnValue('test-error')
     useGbotPage.setState({ page: null, sharing: null, requests: {} })
@@ -174,6 +181,7 @@ describe('AgentStudioPage', () => {
     skillState.value = []
     botCall.mockReset()
     navigate.mockReset()
+    blockNavigation.mockReset()
     listAgentTemplates.mockReset().mockResolvedValue([])
     listAgentRuns.mockReset().mockResolvedValue([])
     getAgentDefinition.mockReset().mockResolvedValue(firstAgent)
@@ -198,7 +206,9 @@ describe('AgentStudioPage', () => {
   })
 
   afterEach(() => {
+    act(() => settleConfirm(false))
     vi.mocked(toast.error).mockRestore()
+    navigableHistories.splice(0).forEach((history) => history.destroy())
   })
 
   async function renderSavedAgents() {
@@ -206,6 +216,266 @@ describe('AgentStudioPage', () => {
     render(<AgentStudioPage />)
     await screen.findByDisplayValue(firstAgent.name)
   }
+
+  async function renderNavigableStudio() {
+    const api = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
+    blockNavigation.mockImplementation(api.useBlocker)
+    definitionState.value.definitions = [firstAgent, secondAgent]
+    const root = api.createRootRoute({
+      component: () => <>
+        <button onClick={() => void router.navigate({ to: '/' })}>New Chat</button>
+        <api.Outlet />
+      </>,
+    })
+    const agents = api.createRoute({ getParentRoute: () => root, path: '/agents/', component: AgentStudioPage })
+    const chat = api.createRoute({ getParentRoute: () => root, path: '/', component: () => <p>Chat destination</p> })
+    window.history.replaceState({}, '', '/agents/')
+    const history = api.createBrowserHistory()
+    navigableHistories.push(history)
+    const router = api.createRouter({
+      routeTree: root.addChildren([agents, chat]),
+      history,
+    })
+    render(<><api.RouterProvider router={router} /><ConfirmDialogHost /></>)
+    await screen.findByDisplayValue(firstAgent.name)
+    return router
+  }
+
+  it('keeps keyboard focus on the selected section across Skills route replacement', async () => {
+    seedServiceHub()
+    const api = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
+    const { SkillsPage } = await import('../skills')
+    blockNavigation.mockImplementation(api.useBlocker)
+    definitionState.value.definitions = [firstAgent]
+    function useStudioSearch() {
+      return api.useSearch({ strict: false })
+    }
+    const search = vi.spyOn(Route, 'useSearch').mockImplementation(useStudioSearch)
+    const root = api.createRootRoute({ component: api.Outlet })
+    const agents = api.createRoute({ getParentRoute: () => root, path: '/agents', component: AgentStudioPage })
+    const skills = api.createRoute({ getParentRoute: () => root, path: '/skills', component: SkillsPage })
+    window.history.replaceState({}, '', '/agents')
+    const history = api.createBrowserHistory()
+    navigableHistories.push(history)
+    const router = api.createRouter({ routeTree: root.addChildren([agents, skills]), history })
+    navigate.mockImplementation((options) => router.navigate(options))
+    try {
+      render(<api.RouterProvider router={router} />)
+      await screen.findByDisplayValue(firstAgent.name)
+      const user = userEvent.setup()
+      const skillsButton = screen.getByRole('button', { name: 'Skills', exact: true })
+      skillsButton.focus()
+      await user.keyboard('{Enter}')
+      await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Skills', current: 'page' })).toHaveFocus())
+      expect(skillsButton).not.toBeInTheDocument()
+
+      for (const name of ['Worker Pools', 'Templates', 'Runs', 'Agents & flows']) {
+        const target = screen.getByRole('button', { name, exact: true })
+        target.focus()
+        await user.keyboard(' ')
+        await waitFor(() => expect(router.state.location.pathname).toBe('/agents'))
+        await waitFor(() => expect(screen.getByRole('button', { name, current: 'page' })).toHaveFocus())
+        expect(target).not.toBeInTheDocument()
+        screen.getByRole('button', { name: 'Skills', exact: true }).focus()
+        await user.keyboard('{Enter}')
+        await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Skills', current: 'page' })).toHaveFocus())
+      }
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    } finally {
+      search.mockRestore()
+    }
+  })
+
+  it.each(['saved', 'new', 'template'] as const)(
+    'guards navigation away from an edited %s draft until discard is explicit', async (source) => {
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template', name: 'Review template', description: '', definition: firstAgent,
+      }])
+      const router = await renderNavigableStudio()
+      const user = userEvent.setup()
+      if (source === 'new') {
+        await user.click(screen.getByTitle('New agent'))
+        await screen.findByDisplayValue(editableDraft.name)
+      } else if (source === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+        await user.click(await screen.findByRole('button', { name: 'Use template' }))
+        await screen.findByDisplayValue(`${firstAgent.name} Copy`)
+      }
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep my navigation draft' } })
+      fireEvent.change(screen.getByLabelText('Agent role and operating instructions'), {
+        target: { value: 'Keep my instructions too.' },
+      })
+      await user.click(screen.getByRole('button', { name: 'New Chat' }))
+      let dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      expect(dialog).toHaveTextContent('leave Agent Studio')
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      await user.keyboard('{Enter}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(router.state.location.pathname).toBe('/agents/')
+      expect(screen.getByLabelText('Name')).toHaveValue('Keep my navigation draft')
+      await user.click(screen.getByRole('button', { name: 'New Chat' }))
+      await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      await user.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(screen.getByLabelText('Agent role and operating instructions')).toHaveValue('Keep my instructions too.')
+      expect(screen.queryByText('Chat destination')).not.toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'New Chat' }))
+      dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+      await screen.findByText('Chat destination')
+      await act(() => router.navigate({ to: '/agents/' }))
+      await screen.findByDisplayValue(firstAgent.name)
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    }
+  )
+
+  it('keeps a hidden edited draft across Studio routes and permits leaving after saving', async () => {
+    definitionState.value.save.mockImplementation(async (value: AgentDefinition) => value)
+    const router = await renderNavigableStudio()
+    const user = userEvent.setup()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Saved navigation name' } })
+    await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+    await act(() => router.navigate({ to: '/agents/', search: { view: 'templates' } }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'New Chat' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await user.click(screen.getByRole('button', { name: 'Agents & flows', exact: true }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Saved navigation name')
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'New Chat' }))
+    await screen.findByText('Chat destination')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith({ ...firstAgent, name: 'Saved navigation name' })
+  })
+
+  it('blocks a stale navigation approval after the draft changes again', async () => {
+    const router = await renderNavigableStudio()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'First navigation edit' } })
+    fireEvent.click(screen.getByRole('button', { name: 'New Chat' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Newer navigation edit' } })
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    expect(router.state.location.pathname).toBe('/agents/')
+    expect(screen.getByLabelText('Name')).toHaveValue('Newer navigation edit')
+    expect(screen.queryByText('Chat destination')).not.toBeInTheDocument()
+  })
+
+  it.each(['library', 'new', 'template'] as const)(
+    'confirms replacing saved-agent edits from %s and keeps Cancel as the keyboard default', async (destination) => {
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template', name: 'Review template', description: '',
+        definition: firstAgent,
+      }])
+      render(<ConfirmDialogHost />)
+      await renderSavedAgents()
+      const user = userEvent.setup()
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My unsaved agent' } })
+      fireEvent.change(screen.getByLabelText('Agent role and operating instructions'), {
+        target: { value: 'Keep these instructions.' },
+      })
+      if (destination === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      }
+      const trigger = () => destination === 'library'
+        ? screen.getByRole('button', { name: /Research assistant/ })
+        : destination === 'new' ? screen.getByTitle('New agent')
+          : screen.getByRole('button', { name: 'Use template' })
+
+      await user.click(trigger())
+      let dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+      expect(dialog).toHaveTextContent('My unsaved agent')
+      await user.keyboard('{Enter}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(definitionState.value.createDraft).not.toHaveBeenCalled()
+
+      await user.click(trigger())
+      dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      await user.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      if (destination === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Agents & flows', exact: true }))
+      }
+      expect(screen.getByLabelText('Name')).toHaveValue('My unsaved agent')
+      expect(screen.getByLabelText('Agent role and operating instructions')).toHaveValue('Keep these instructions.')
+      if (destination === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+      }
+
+      await user.click(trigger())
+      dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+      await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+      await screen.findByDisplayValue(destination === 'library' ? secondAgent.name
+        : destination === 'new' ? editableDraft.name : `${firstAgent.name} Copy`)
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['new', 'template'] as const)('preserves edits to an unsaved %s draft until discard is confirmed', async (source) => {
+    listAgentTemplates.mockResolvedValue([{
+      id: 'review-template', name: 'Review template', description: '', definition: firstAgent,
+    }])
+    render(<ConfirmDialogHost />)
+    await renderSavedAgents()
+    const user = userEvent.setup()
+    if (source === 'new') {
+      await user.click(screen.getByTitle('New agent'))
+      await screen.findByDisplayValue(editableDraft.name)
+    } else {
+      await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+      await user.click(await screen.findByRole('button', { name: 'Use template' }))
+      await screen.findByDisplayValue(`${firstAgent.name} Copy`)
+    }
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep my draft' } })
+    const other = screen.getByRole('button', { name: /Research assistant/ })
+    await user.click(other)
+    let dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Keep my draft')
+    await user.click(other)
+    dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    await screen.findByDisplayValue(secondAgent.name)
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+  })
+
+  it('keeps edits when the selected library row is clicked and clears the warning after a successful save', async () => {
+    definitionState.value.save.mockImplementation(async (value: AgentDefinition) => value)
+    render(<ConfirmDialogHost />)
+    await renderSavedAgents()
+    const user = userEvent.setup()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Saved new name' } })
+    await user.click(screen.getByRole('button', { name: /Review assistant/ }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Saved new name')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: /Research assistant/ }))
+    expect(screen.getByLabelText('Name')).toHaveValue(secondAgent.name)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith({ ...firstAgent, name: 'Saved new name' })
+  })
+
+  it('does not apply a stale discard decision to newer draft edits', async () => {
+    render(<ConfirmDialogHost />)
+    await renderSavedAgents()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'First edit' } })
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Newer edit' } })
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    expect(screen.getByLabelText('Name')).toHaveValue('Newer edit')
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+  })
 
   async function renderThreeStageWorkflow() {
     const role = {
@@ -877,6 +1147,7 @@ describe('AgentStudioPage', () => {
     ]
     definitionState.value.save.mockImplementation(async (value) => value)
     render(<AgentStudioPage />)
+    render(<ConfirmDialogHost />)
     await screen.findByDisplayValue(firstAgent.name)
     fireEvent.click(screen.getByTitle('New agent'))
     await screen.findByDisplayValue(editableDraft.name)
@@ -901,6 +1172,8 @@ describe('AgentStudioPage', () => {
     }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
     expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith('review-assistant-3')
   })
 
@@ -1011,14 +1284,83 @@ describe('AgentStudioPage', () => {
     })
   })
 
+  it('requires explicit confirmation before deleting a saved agent', async () => {
+    await renderSavedAgents()
+    render(<ConfirmDialogHost />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    let dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    expect(dialog).toHaveTextContent(`Delete "${firstAgent.name}" from your saved agents? This cannot be undone.`)
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByLabelText('Name')).toHaveValue(firstAgent.name)
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByLabelText('Name')).toHaveValue(firstAgent.name)
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Delete agent' }))
+    await waitFor(() => expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id))
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(deleteAgentRun).not.toHaveBeenCalled()
+  })
+
+  it.each(['edit', 'select'] as const)('rejects an older delete approval after a newer draft %s', async (action) => {
+    await renderSavedAgents()
+    render(<ConfirmDialogHost />)
+    const nextAgent = screen.getByRole('button', { name: new RegExp(secondAgent.name) })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    if (action === 'edit') {
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep newer edits' } })
+    } else {
+      fireEvent.click(nextAgent)
+      await screen.findByDisplayValue(secondAgent.name)
+    }
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Name')).toHaveValue(action === 'edit' ? 'Keep newer edits' : secondAgent.name)
+  })
+
+  it('keeps a failed saved-agent deletion available for an explicit retry', async () => {
+    definitionState.value.remove.mockRejectedValueOnce(new Error('Private storage unavailable')).mockResolvedValueOnce(undefined)
+    await renderSavedAgents()
+    render(<ConfirmDialogHost />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    let dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Delete agent' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Error: Private storage unavailable'))
+    expect(screen.getByLabelText('Name')).toHaveValue(firstAgent.name)
+    expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    expect(definitionState.value.remove).toHaveBeenCalledTimes(1)
+    await user.click(within(dialog).getByRole('button', { name: 'Delete agent' }))
+    await waitFor(() => expect(definitionState.value.remove).toHaveBeenCalledTimes(2))
+    expect(definitionState.value.remove.mock.calls).toEqual([[firstAgent.id], [firstAgent.id]])
+  })
+
   it.each([secondAgent.id, ''])(
     'deletes only the selected saved agent after changing its identifier to %s', async (id) => {
       await renderSavedAgents()
+      render(<ConfirmDialogHost />)
       fireEvent.change(screen.getByLabelText('Identifier'), {
         target: { value: id },
       })
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Unsaved replacement name' } })
       fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
-
+      const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+      expect(dialog).toHaveTextContent(`Delete "${firstAgent.name}"`)
+      expect(dialog).not.toHaveTextContent('Unsaved replacement name')
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+      await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
       expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id)
       expect(definitionState.value.save).not.toHaveBeenCalled()
       expect(definitionState.value.definitions[1]).toEqual(secondAgent)
@@ -1107,12 +1449,16 @@ describe('AgentStudioPage', () => {
       const pending = deferred<void>()
       definitionState.value.remove.mockReturnValue(pending.promise)
       await renderSavedAgents()
+      render(<ConfirmDialogHost />)
 
       const deleteButton = screen.getByRole('button', { name: 'Delete', exact: true })
       act(() => {
         fireEvent.click(deleteButton)
         fireEvent.click(deleteButton)
       })
+      const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+      await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
       expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id)
       expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Save definition' })).toBeDisabled()
@@ -1249,6 +1595,81 @@ describe('AgentStudioPage', () => {
     ))
   })
 
+  it('keeps new Goal Loop settings when activating its selected composition again', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    const composition = screen.getByRole('button', { name: /Goal Loop/i })
+    fireEvent.click(composition)
+    fireEvent.change(screen.getByLabelText('Success criteria'), {
+      target: { value: 'The report cites every source.' },
+    })
+    fireEvent.change(screen.getByLabelText('Evaluator instructions'), {
+      target: { value: 'Verify citations against the source files.' },
+    })
+    fireEvent.change(screen.getByLabelText('Maximum cycles'), { target: { value: '5' } })
+
+    composition.focus()
+    await userEvent.setup().keyboard('{Enter}')
+
+    expect(screen.getByLabelText('Success criteria')).toHaveValue('The report cites every source.')
+    expect(screen.getByLabelText('Evaluator instructions')).toHaveValue('Verify citations against the source files.')
+    expect(screen.getByLabelText('Maximum cycles')).toHaveValue(5)
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'goal_loop', maxCycles: 5,
+        successCriteria: 'The report cites every source.',
+        evaluatorInstructions: 'Verify citations against the source files.',
+      })
+    ))
+  })
+
+  it.each(['coordinator', 'workflow'] as const)(
+    'keeps saved %s roles and edited settings when activating its selected composition',
+    async (kind) => {
+      const roles = [
+        { id: 'research', name: 'Research', instructions: 'Gather sources.', skills: [], maxSteps: 9, modelInstanceId: 'qwen', reasoningEffort: null },
+        { id: 'review', name: 'Review', instructions: 'Check sources.', skills: [], maxSteps: 14, modelInstanceId: 'muse', reasoningEffort: null },
+      ]
+      const definition: AgentDefinition = kind === 'coordinator'
+        ? {
+            ...firstAgent, kind, workers: roles, maxParallel: 2,
+            coordinatorInstructions: 'Assign independent research and review.',
+            synthesisInstructions: 'Keep only verified findings.',
+            synthesisModelInstanceId: 'muse', synthesisReasoningEffort: null,
+          }
+        : {
+            ...firstAgent, kind,
+            nodes: roles.map((role) => ({ ...role, workspace: 'shared' })),
+            edges: [{ from: 'research', to: 'review' }],
+          }
+      definitionState.value.definitions = [definition]
+      definitionState.value.save.mockImplementation(async (value) => value)
+      render(<AgentStudioPage />)
+      await screen.findByDisplayValue(firstAgent.name)
+      fireEvent.change(screen.getAllByLabelText('Display name')[1], {
+        target: { value: 'Final review' },
+      })
+      const composition = screen.getByRole('button', {
+        name: kind === 'coordinator' ? /^Coordinator Team/ : /^Workflow/,
+      })
+      composition.focus()
+      await userEvent.setup().keyboard(' ')
+
+      expect(screen.getAllByLabelText('Display name').map((input) => (input as HTMLInputElement).value))
+        .toEqual(['Research', 'Final review'])
+      fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+      const editedRoles = roles.map((role, index) => ({ ...role, name: index === 1 ? 'Final review' : role.name }))
+      await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+        expect.objectContaining(kind === 'coordinator'
+          ? { ...definition, workers: editedRoles }
+          : { ...definition, nodes: editedRoles.map((role) => ({ ...role, workspace: 'shared' })) })
+      ))
+    }
+  )
+
   it('keeps required tool steps empty while editing and saves typed steps before blur', async () => {
     definitionState.value.save.mockImplementation(async (value) => value)
     await renderSavedAgents()
@@ -1374,7 +1795,7 @@ describe('AgentStudioPage', () => {
 
   it('resets temporary numeric text when selecting another saved agent with the same limit', async () => {
     definitionState.value.definitions = [firstAgent, { ...secondAgent, maxSteps: 12 }]
-    render(<AgentStudioPage />)
+    render(<><AgentStudioPage /><ConfirmDialogHost /></>)
     await screen.findByDisplayValue(firstAgent.name)
     const user = userEvent.setup()
     const steps = screen.getByLabelText('Maximum tool steps')
@@ -1382,8 +1803,9 @@ describe('AgentStudioPage', () => {
     await user.clear(steps)
     fireEvent.change(steps, { target: { value: '012' } })
     expect(steps).toHaveProperty('value', '012')
-    // Selection replaces the draft even if its numeric value has not changed.
+    // Confirm replacement even if the two drafts have the same numeric value.
     fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }))
     expect(screen.getByLabelText('Maximum tool steps')).toHaveProperty('value', '12')
     fireEvent.click(screen.getByRole('button', { name: /Review assistant/ }))
     expect(screen.getByLabelText('Maximum tool steps')).toHaveProperty('value', '25')
@@ -1691,7 +2113,7 @@ describe('AgentStudioPage', () => {
       edges: [{ from: 'research', to: 'deliver' }],
     }
     definitionState.value.definitions = [workflow, otherWorkflow]
-    render(<AgentStudioPage />)
+    render(<><AgentStudioPage /><ConfirmDialogHost /></>)
     await screen.findByDisplayValue(workflow.name)
 
     const dependencies = screen.getAllByLabelText('Depends on stage IDs')[2]
@@ -1709,6 +2131,7 @@ describe('AgentStudioPage', () => {
       .toEqual(['', 'review-stage'])
 
     fireEvent.click(screen.getByRole('button', { name: /Second dependency workflow/ }))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Discard changes' }))
     expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
       .toEqual(['', '', 'research'])
     fireEvent.click(screen.getByRole('button', { name: /First dependency workflow/ }))

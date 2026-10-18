@@ -22,6 +22,312 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Skill availability on this computer — October 18
+
+A private native Linux pass selected Apple Calendar and opened its actions.
+The skill's enabled preference was on, but Try in chat was disabled with no
+platform explanation. Its Skills UI and registry source matched main
+`ef64363fb`. Baseline DOM receipts and viewed screenshots are in
+`/ai/gchat/out/gchat-skill-platform-availability-20261018/`.
+
+Incompatible skills now say “Unavailable on this computer” in the list and
+selected details. The details name the supported systems from the skill's
+metadata. Missing-tool guidance remains visible alongside that notice. Saved
+enable preferences and execution eligibility keep their existing behavior.
+
+Focused regressions cover macOS-only and Linux/Windows skills, absent platform
+metadata, missing-tool guidance, and compatible skills with either enabled
+preference. All 35 focused tests and workspace lint PASS. One `make verify`
+PASS (3,610 web-app, 127 extension and 1,290 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `c76948305`. Two initial
+exact-text test assertions were corrected before the full gate.
+
+Rebuilt private native acceptance PASS: Apple Calendar shows the list notice
+and “Supported systems: macOS” in its selected details. Its saved preference
+remains enabled and Try in chat remains disabled. Selecting compatible Agent
+Builder shows no platform notice. The candidate screenshot was viewed. Normal
+close at 13:46:27Z preserved saved thread/messages, agent definitions and run
+history byte-for-byte; returned13:46Z. This is private Linux source-native UI
+acceptance, without inference, installed-package or Windows claims.
+
+## Agent Studio navigation across Skills — October 18
+
+A private native keyboard pass on `014afdc21` (the header and routing match main
+`e96d97b02`) selected Skills with Space and then Worker Pools with Enter. Both
+routes changed and the current-section state was correct, but each route
+replacement dropped keyboard focus to the page body. Baseline DOM receipts and
+the viewed screenshot are in
+`/ai/gchat/out/gchat-agent-studio-current-section-20261018/`.
+
+Section navigation now returns its completion promise to the shared header.
+When navigation replaces the focused button, the header restores focus to the
+new selected section button after completion. A cancelled transition or a user
+who has moved focus to another control keeps that focus. Direct page entry and
+navigation within the Agents route keep their existing behavior.
+
+Validation: 128 focused tests and workspace lint PASS; one `make verify`
+PASS (3,605 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `27453176e`. The new actual-route
+regression covers Skills and all four Agents views; the pending-navigation
+regression preserves focus moved independently to another control. Its initial
+missing test-service setup was corrected before the full gate.
+
+Rebuilt private native acceptance PASS: Enter selects Skills, Space selects each
+of the four Agents sections from Skills, and Enter returns to Skills. Every
+route replacement preserves focus on its selected current-section button. The
+candidate screenshot was viewed. Normal close at 13:31:26Z kept saved
+thread/messages, agent definitions and run history byte-identical; CPU booking
+3307 returned 13:31Z. This is private Linux source-native keyboard acceptance,
+without screen reader, inference, installed-package or Windows claims. Receipts:
+`/ai/gchat/out/gchat-agent-studio-route-focus-20261018/`.
+
+## Agent Studio current section — October 18
+
+A private native pass selected Templates with Enter. The section changed and
+kept keyboard focus, but all five navigation buttons omitted a current-section
+state. Only styling identified the active section, leaving assistive technology
+without that information. The `cf9124a1e` desktop's header source matched main
+`71ee50ce7`. Baseline DOM receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1303/`.
+
+The shared Studio header now identifies exactly one current page in its
+navigation. This includes Skills, which uses the same header on its own route.
+Section activation and keyboard focus keep their existing behavior.
+
+Validation: 126 focused tests and workspace lint PASS; one `make verify`
+PASS (3,600 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `014afdc21`. Rebuilt private
+native acceptance PASS: Enter and Space select all five sections, with exactly
+one matching current page throughout. The candidate screenshot was viewed.
+Normal close at 13:14:39Z kept saved thread/messages, agent definitions and run
+history byte-identical; CPU booking 3303 returned 13:15Z. This checks exposed
+section state, without a screen reader session, inference, installed-package or
+Windows acceptance. Cross-route Skills focus loss was observed separately and
+is outside this change. Candidate receipts:
+`/ai/gchat/out/gchat-agent-studio-current-section-20261018/`.
+
+## Message edit cancellation keyboard focus — October 18
+
+A private native Chat pass reproduced focus moving to the page body after
+Escape or Cancel closed an inline message editor. The original text remained,
+but Space could not reopen the same message. The accepted `54cde40b7` desktop's
+message editor source matched main `585a85405`. Baseline DOM receipts and the
+viewed screenshot are in `/ai/gchat/out/gchat-chat-agents-pass-20261018-1240/`.
+
+Cancelling now returns focus to that message's Edit button after its action row
+returns. Escape, Cancel and Enter on unchanged text share this behavior. User
+and assistant messages retain their original text; saving still follows its
+existing callback and inference behavior.
+
+Validation: 22 focused tests and workspace lint PASS; one `make verify`
+PASS (3,598 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `cf9124a1e`. Rebuilt private
+native acceptance PASS: Escape, keyboard Cancel and unchanged Enter each return
+focus to the same assistant message's Edit button. Space and Enter reopen its
+original text. The candidate screenshot was viewed. Normal close at 13:00:11Z
+kept saved thread/messages, agent definitions and run history byte-identical;
+CPU booking 3289 returned 13:00Z. User-message behavior is covered in rendered
+regressions. No native send, save, inference, installed-package or Windows
+acceptance was performed. Candidate receipts:
+`/ai/gchat/out/gchat-chat-edit-cancel-focus-20261018/`.
+
+## Attachment send completion after switching conversations — October 18
+
+Codex 8 found that switching from conversation A to B during an attachment
+submission left A's successfully sent text in its cached draft. The cleanup
+was guarded by the visible composer's lifetime, so returning to A restored
+text already sent.
+
+Successful completion now clears the sending conversation's own draft by ID,
+only if it still matches the submitted text. B's draft stays intact even when
+its text is identical, and newer edits in A remain available. Submitted
+attachments keep their existing per-conversation cleanup. Failed sends retain
+their drafts and attachments for retry.
+
+The extended rendered regression fails on the original cleanup: returning to A
+restores already-sent text. Both navigation cases pass with the fix. Validation:
+53 focused tests and workspace lint PASS; one `make verify` PASS (3,597
+web-app, 127 extension and 1,288 Rust tests, plus six coverage floors) on
+`40e51840b`. No native, inference, installed-package or Windows acceptance is
+claimed for this follow-up. Receipts:
+`/ai/gchat/out/gchat-chat-attachment-sent-draft-20261018/`.
+
+## Conversation draft isolation — October 18
+
+A private native Chat pass reproduced a New Chat draft appearing in an existing
+conversation. Editing that reply also overwrote the original New Chat draft on
+Back. The `18dafd400` desktop's Chat source matched main `545a18fc1`.
+Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-first-user-20261018-1227/`.
+
+Unsent text now stays with its conversation during this app session. Opening a
+different conversation restores its own draft or an empty composer; returning
+restores the earlier draft. **New Chat** clears only the new-conversation draft,
+preserving replies left in saved conversations. Drafts remain in memory and are
+not restored after exiting the app.
+
+Validation: 67 focused tests and workspace lint PASS; one `make verify`
+PASS (3,587 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `54cde40b7`. Rebuilt private
+native acceptance PASS: the saved conversation opens empty, keeps its reply
+through Agent Studio and Back, and New Chat restores its earlier draft on Back.
+Clicking **New Chat** empties only that draft; reopening the saved conversation
+restores its reply. The candidate screenshot was viewed. Normal close at
+12:38:55Z kept saved thread/messages, agent definitions and run history
+byte-identical; CPU booking 3283 returned 12:39Z. No send, save, delete, run,
+inference, installed-package or Windows acceptance was performed. Receipts:
+`/ai/gchat/out/gchat-chat-draft-isolation-20261018/`.
+
+## Agent Studio composition reselection — October 18
+
+A private native pass reproduced silent loss of edited Goal Loop success
+criteria when clicking the already selected **Goal Loop** composition tile.
+The `22b69002b` desktop's Agent Studio source matched main `ec58a89b8`.
+The unsaved draft was closed normally; saved definitions and run history stayed
+byte-identical. Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1212/`.
+
+Selecting the current composition now keeps the draft intact. Selecting a
+different composition still initializes that type's settings. The focused
+regressions cover keyboard reselection of edited Goal Loop criteria and limits,
+and saved team/workflow roles, model overrides and workflow dependencies.
+
+Validation: 104 focused tests and workspace lint PASS; one `make verify`
+PASS (3,581 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `18dafd400`.
+Rebuilt private native acceptance PASS: Enter on Goal Loop preserves edited
+criteria, evaluator instructions and cycle limit; Space on Coordinator Team
+preserves two specialists and their parallel limit; clicking Workflow preserves
+both stages, an edited stage name and its dependency. Selecting another type
+still initializes its settings. The candidate screenshot was viewed. Normal
+close at 12:23:45Z kept original definitions and run history byte-identical;
+CPU booking 3277 was returned at 12:24Z. Receipts:
+`/ai/gchat/out/gchat-agent-composition-reselect-20261018/`.
+This qualifies private Linux source-native editing. No save, delete, run,
+inference or Windows acceptance was performed in the native session.
+
+## Saved Agent Studio deletion — October 18
+
+An isolated native pass reproduced immediate permanent removal of a saved
+agent after one keyboard activation of **Delete**, with no confirmation or
+Undo. The `ae95203a2` desktop's Agent Studio source matched main `7727db673`.
+Only a disposable definition was deleted; original definitions and run history
+remained byte-identical. Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1155/`.
+
+Deleting a saved agent now asks **Delete saved agent?**, names the saved
+definition and explains that deletion cannot be undone. Cancel is the keyboard
+default; Enter on Cancel and Escape keep the draft. Only **Delete agent**
+approves removal. An edited Identifier or Name cannot redirect the deletion or
+change the name shown in the confirmation. Approval for an older draft cannot
+delete after a newer edit or selection. A failed deletion keeps the draft and
+requires fresh confirmation to retry. New unsaved drafts retain **Discard**.
+
+Validation: 101 focused tests and workspace lint PASS; one `make verify`
+PASS (3,573 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `22b69002b`.
+Rebuilt private native acceptance PASS: Cancel starts focused, Enter and
+Escape retain the draft and return focus to Delete, and edited Name and
+Identifier do not change the saved name in the dialog. Explicit **Delete agent**
+removes only the original disposable definition; new unsaved **Discard** remains
+local. The candidate screenshot was viewed. Normal close at 12:08:56Z kept
+original definitions and run history byte-identical; CPU booking 3271 was
+returned at 12:09Z. Receipts:
+`/ai/gchat/out/gchat-agent-delete-confirmation-20261018/`.
+This qualifies private Linux source-native deletion; Windows, agent execution
+and inference are outside this check. Only a disposable definition was saved
+and deleted.
+
+## Unsaved Agent Studio navigation — October 18
+
+An isolated native pass on main `f48c551e2` reproduced silent loss of an
+edited agent Name when opening **New Chat** and returning to Agent Studio.
+The source-compatible `8b5e2cd0c` desktop showed no confirmation; normal
+shutdown kept saved definitions and history byte-identical. Baseline receipts
+and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1134/`.
+
+Leaving Agent Studio with an edited draft now asks **Discard unsaved agent
+changes?**. Cancel is the keyboard default; Cancel and Escape keep the draft
+and current page. **Discard changes** permits the requested navigation without
+saving or deleting definitions. Studio tab/search changes keep the draft
+without a prompt. A successful save clears the warning, and approval for an
+older draft cannot discard newer edits. Native app closing and page reloads
+remain outside this route-navigation change.
+
+Validation: 97 focused tests and workspace lint PASS; one `make verify`
+PASS (3,562 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `ae95203a2`.
+Rebuilt private native acceptance PASS for saved, new and template drafts:
+Cancel is initially focused, Enter and Escape retain edits, and explicit
+discard reaches Chat or Models. A hidden draft on Templates remains protected;
+clean drafts and Studio tabs do not prompt. The candidate screenshot was viewed.
+Normal shutdown at 11:52Z kept saved definitions and history byte-identical;
+CPU booking 3265 was returned. Receipts:
+`/ai/gchat/out/gchat-agent-unsaved-navigation-20261018/`.
+This qualifies Linux route navigation; native closing/reload protection and
+Windows are outside this check. No save, delete, run or inference was performed.
+
+## Shared confirmation keyboard return — October 18
+
+Private native Agent Studio on main `0f604653e` reproduced focus loss after
+opening a draft-discard confirmation from a library row with Enter and
+dismissing it with Escape: focus fell to the body, and the next Tab jumped to
+Downloads. The dialog source matched main; the private desktop used the
+preceding source-compatible `84a0027b3` build. Normal shutdown kept saved
+definitions and history byte-identical. Baseline receipts and the viewed
+screenshot are in `/ai/gchat/out/gchat-confirm-dialog-focus-20261018/`.
+
+Shared confirmations now retain their opening control at request time and
+restore focus on dismissal or confirmation when it is still connected.
+Replacing an open request keeps the original opener; an exiting dialog does
+not take focus from a newer request. Cancel remains the initial keyboard
+default. No confirmation action or decision is changed.
+
+Validation: 92 focused tests and workspace lint PASS; one `make verify`
+PASS (3,557 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux desktop builds PASS on `8b5e2cd0c`.
+Rebuilt private native acceptance PASS: Escape, default Cancel and explicit
+discard return to the opening library row; the next Tab moves to the adjacent
+library row. Cancel also returns to the opening New agent and Use template
+buttons while retaining the draft. The candidate screenshot was viewed.
+Normal shutdown at 11:33Z kept saved definitions and history byte-identical;
+CPU booking 3260 was returned. Receipts:
+`/ai/gchat/out/gchat-confirm-dialog-focus-20261018/`.
+This qualifies the Linux keyboard scope; no save, delete, run, inference or
+Windows acceptance was performed.
+
+## Unsaved Agent Studio draft replacement — October 18
+
+An isolated native pass on main `de74862d6` reproduced silent loss of edits
+when selecting another library agent, for both a template copy and a saved
+agent. No run was started; saved definitions and run history stayed
+byte-identical after normal shutdown. Baseline receipts and the viewed
+screenshot are in `/ai/gchat/out/gchat-chat-agents-pass-20261018-1102/`.
+
+Replacing an edited draft from the library, **New agent**, or **Use template**
+now asks **Discard unsaved agent changes?**. Cancel is the keyboard default;
+Cancel and Escape keep the draft. **Discard changes** explicitly opens the
+requested replacement without saving or deleting a definition. Selecting the
+current library row keeps its edits. A successful save resets the comparison
+baseline even before the saved library refreshes. A stale confirmation cannot
+replace newer edits. Switching Studio tabs preserves the draft without a prompt;
+leaving Studio or closing the application is outside this change.
+
+Validation: 99 focused tests and workspace lint PASS; one `make verify`
+PASS (3,551 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux desktop builds PASS on `84a0027b3`.
+Rebuilt private native acceptance PASS for saved, new and template drafts:
+Cancel has initial keyboard focus, Enter and Escape retain edits, and explicit
+discard opens the requested library agent, new draft or template. Selecting
+the current library row and switching Studio tabs retain edits; an untouched
+draft can be replaced without a prompt. The candidate screenshot was viewed.
+Normal shutdown at 11:21Z left saved definitions and history byte-identical;
+CPU booking 3254 was returned. Receipts:
+`/ai/gchat/out/gchat-agent-draft-discard-confirmation-20261018/`.
+This qualifies the Linux draft-replacement scope; no save, delete, run,
+inference or Windows acceptance was performed.
+
 ## Run setup dialog keyboard focus — October 18
 
 A private Linux native pass on `8f21ab584` reproduced focus loss when

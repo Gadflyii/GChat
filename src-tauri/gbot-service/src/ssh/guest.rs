@@ -315,6 +315,7 @@ pub(super) async fn check_session(
         return Err(SshError::Contract(ContractError::SessionMismatch));
     }
     if code != 0 {
+        eprintln!("Gbot guest session check exited with status {code}");
         return Err(SshError::Protocol);
     }
     if bytes

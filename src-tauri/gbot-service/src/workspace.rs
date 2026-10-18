@@ -8,7 +8,7 @@ use std::{
     },
 };
 use tokio::sync::Mutex;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 use tokio::sync::OwnedMutexGuard;
 use uuid::Uuid;
 
@@ -128,13 +128,13 @@ pub struct WorkspaceRuntime {
     cloud_setup: std::sync::OnceLock<Arc<crate::cloud::CloudSetup>>,
     m365_setup: std::sync::OnceLock<Arc<crate::m365::M365Setup>>,
     guest_assets: std::sync::OnceLock<std::path::PathBuf>,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     kvm_setup: std::sync::OnceLock<Arc<crate::kvm_setup::KvmSetup>>,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     task_runner: std::sync::OnceLock<std::sync::Weak<crate::tasks::TaskRunner>>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) struct WorkspaceRemoval<'a> {
     runtime: &'a WorkspaceRuntime,
     _guard: OwnedMutexGuard<()>,
@@ -142,7 +142,7 @@ pub(crate) struct WorkspaceRemoval<'a> {
     session: Option<SessionIdentity>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 impl WorkspaceRemoval<'_> {
     pub(crate) fn session(&self) -> Option<SessionIdentity> {
         self.session
@@ -165,7 +165,7 @@ impl WorkspaceRemoval<'_> {
 }
 
 /// A setup renewal retains both lifecycle and durable control fences until connected.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) struct SetupSessionRenewal<'a> {
     runtime: &'a WorkspaceRuntime,
     _guard: OwnedMutexGuard<()>,
@@ -174,7 +174,7 @@ pub(crate) struct SetupSessionRenewal<'a> {
     connection: SshConnection,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 impl SetupSessionRenewal<'_> {
     pub(crate) async fn connect(
         self,
@@ -229,9 +229,9 @@ impl WorkspaceRuntime {
             cloud_setup: std::sync::OnceLock::new(),
             m365_setup: std::sync::OnceLock::new(),
             guest_assets: std::sync::OnceLock::new(),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             kvm_setup: std::sync::OnceLock::new(),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             task_runner: std::sync::OnceLock::new(),
         }
     }
@@ -289,7 +289,7 @@ impl WorkspaceRuntime {
         self.m365_setup.get().cloned()
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub async fn configure_kvm_setup(
         self: &Arc<Self>,
         root: std::path::PathBuf,
@@ -323,7 +323,7 @@ impl WorkspaceRuntime {
         Ok(())
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) fn configure_task_runner(
         &self,
         runner: std::sync::Weak<crate::tasks::TaskRunner>,
@@ -332,7 +332,7 @@ impl WorkspaceRuntime {
             .set(runner)
             .map_err(|_| WorkspaceError::GuestSetup("The task runner is already configured".into()))
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub fn kvm_setup(&self) -> Option<Arc<crate::kvm_setup::KvmSetup>> {
         self.kvm_setup.get().cloned()
     }
@@ -685,7 +685,10 @@ impl WorkspaceRuntime {
     }
 
     /// Removes a saved LAN bot and its saved connection key. The computer itself is untouched.
-    pub async fn remove_lan_workspace(self: &Arc<Self>, id: WorkspaceId) -> Result<(), WorkspaceError> {
+    pub async fn remove_lan_workspace(
+        self: &Arc<Self>,
+        id: WorkspaceId,
+    ) -> Result<(), WorkspaceError> {
         self.accepting()?;
         let owner = self.clone();
         tokio::spawn(async move {
@@ -1054,7 +1057,7 @@ impl WorkspaceRuntime {
         self.connect_session(identity, false).await
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) async fn connect_for_setup(
         &self,
         identity: SessionIdentity,
@@ -1062,7 +1065,7 @@ impl WorkspaceRuntime {
         self.connect_session(identity, true).await
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) async fn lock_for_setup_renewal(
         &self,
         previous: SessionIdentity,
@@ -1126,7 +1129,7 @@ impl WorkspaceRuntime {
     }
 
     async fn ensure_workspace_ready(&self, workspace: WorkspaceId) -> Result<(), WorkspaceError> {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         if let Some(setup) = self.kvm_setup.get() {
             setup.ensure_ready(workspace).await?;
         }
@@ -1272,7 +1275,7 @@ impl WorkspaceRuntime {
         self.execute_request(request, owner).await
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) async fn request_for_setup(
         &self,
         request: GuestRequest,
@@ -1492,7 +1495,7 @@ impl WorkspaceRuntime {
         self.open_session_view(request).await
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) async fn open_view_for_setup(
         self: &Arc<Self>,
         request: OpenView,
@@ -1620,7 +1623,7 @@ impl WorkspaceRuntime {
         self.disconnect_locked(identity.workspace_id).await
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) async fn lock_for_removal(
         &self,
         identity: SessionIdentity,
@@ -1671,7 +1674,7 @@ impl WorkspaceRuntime {
         if let Some(connectors) = &self.connectors {
             let _ = connectors.close().await;
         }
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         if let Some(setup) = self.kvm_setup() {
             setup.close().await;
         }

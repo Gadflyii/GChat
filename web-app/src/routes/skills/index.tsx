@@ -44,6 +44,8 @@ import { useTranslation } from '@/i18n/react-i18next-compat'
 import { cn } from '@/lib/utils'
 import type { AgentSkill, AgentSkillDetail } from '@/services/agent/skills'
 
+const skillPlatformLabels = { darwin: 'macOS', win32: 'Windows', linux: 'Linux' }
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.skills.index as any)({
   component: SkillsPage,
@@ -165,7 +167,7 @@ export function SkillsPage() {
 
   const selectStudioSection = (section: AgentStudioSection) => {
     if (section === 'skills') return
-    void navigate({
+    return navigate({
       to: route.agents.index,
       search: { view: section },
     })
@@ -266,6 +268,11 @@ export function SkillsPage() {
                   <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
                     {skill.error || skill.description}
                   </p>
+                  {!skill.compatible && (
+                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                      {t('common:skillUnavailableOnComputer')}
+                    </p>
+                  )}
                   {toggling && (
                     <span
                       role="status"
@@ -335,11 +342,26 @@ export function SkillsPage() {
           </p>
         ) : (
           <div className="flex min-h-full flex-col gap-2">
-            {selected.unavailableReasons.length > 0 && (
+            {(!selected.compatible || selected.unavailableReasons.length > 0) && (
               <section className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
                 <h2 className="mb-2 font-medium">
                   {t('common:skillUnavailable')}
                 </h2>
+                {!selected.compatible && (
+                  <p className="mb-2">
+                    {t('common:skillUnavailableOnComputer')}
+                    {Boolean(selected.platforms?.length) && (
+                      <>
+                        {' '}
+                        {t('common:skillSupportedSystems', {
+                          platforms: selected.platforms
+                            ?.map((platform) => skillPlatformLabels[platform])
+                            .join(', '),
+                        })}
+                      </>
+                    )}
+                  </p>
+                )}
                 {selected.unavailableReasons.join('\n')}
               </section>
             )}

@@ -17,12 +17,16 @@ export default function GbotLanBot({
   name: string
   busy: boolean
   connected: boolean
-  perform: (action: () => Promise<unknown>) => Promise<void>
+  perform: (action: () => Promise<unknown>, propagateError?: boolean) => Promise<void>
   removed: () => void
 }) {
   const [renaming, setRenaming] = useState(false)
   const [draft, setDraft] = useState(name)
+  const [error, setError] = useState('')
+  const [removalError, setRemovalError] = useState('')
   const reasonId = useId()
+  const errorId = useId()
+  const removalErrorId = useId()
   const trimmed = draft.trim()
   return (
     <div className="space-y-2">
@@ -33,9 +37,15 @@ export default function GbotLanBot({
           onSubmit={(event) => {
             event.preventDefault()
             if (!trimmed || trimmed === name) return
-            void perform(async () => {
-              await gbot('workspaces/ssh/rename', { workspace_id: id, name: trimmed })
-              setRenaming(false)
+            setError('')
+            void perform(
+              async () => {
+                await gbot('workspaces/ssh/rename', { workspace_id: id, name: trimmed })
+                setRenaming(false)
+              },
+              true
+            ).catch((cause) => {
+              setError(cause instanceof Error ? cause.message : String(cause))
             })
           }}
         >
@@ -44,6 +54,7 @@ export default function GbotLanBot({
             <Input
               autoFocus
               disabled={busy}
+              aria-describedby={error ? errorId : undefined}
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
             />
@@ -53,7 +64,10 @@ export default function GbotLanBot({
             type="button"
             variant="ghost"
             disabled={busy}
-            onClick={() => setRenaming(false)}
+            onClick={() => {
+              setError('')
+              setRenaming(false)
+            }}
           >
             Cancel
           </Button>
@@ -73,7 +87,7 @@ export default function GbotLanBot({
           <Button
             variant="outline"
             disabled={busy || connected}
-            aria-describedby={connected ? reasonId : undefined}
+            aria-describedby={connected ? reasonId : removalError ? removalErrorId : undefined}
             onClick={() =>
               void confirmAction({
                 title: `Remove ${name}?`,
@@ -82,15 +96,43 @@ export default function GbotLanBot({
                 destructive: true,
               }).then((accepted) => {
                 if (!accepted) return
-                void perform(async () => {
-                  await gbot('workspaces/ssh/remove', { workspace_id: id })
-                  removed()
+                setRemovalError('')
+                void perform(
+                  async () => {
+                    await gbot('workspaces/ssh/remove', { workspace_id: id })
+                    removed()
+                  },
+                  true
+                ).catch((cause) => {
+                  setRemovalError(cause instanceof Error ? cause.message : String(cause))
                 })
               })
             }
           >
             Remove bot
           </Button>
+        </div>
+      )}
+      {error && (
+        <div id={errorId} role="alert" className="space-y-1 text-sm">
+          <p>Could not save this bot’s name. Try Save name again.</p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{error}</p>
+          </details>
+        </div>
+      )}
+      {removalError && (
+        <div id={removalErrorId} role="alert" className="space-y-1 text-sm">
+          <p>
+            Could not confirm this bot was removed. If it is still listed, finish its
+            tasks, turn off its schedules, unlink its accounts and disconnect it,
+            then try Remove bot again.
+          </p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{removalError}</p>
+          </details>
         </div>
       )}
       {connected && (

@@ -39,6 +39,7 @@ export default function CloudComputer({
   const [action, setAction] = useState<keyof typeof actionLabels>()
   const pending = useRef(false)
   const [error, setError] = useState('')
+  const [accessError, setAccessError] = useState('')
   const [identity, setIdentity] = useState<SshIdentity>()
   const [verified, setVerified] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
@@ -54,10 +55,13 @@ export default function CloudComputer({
     setWorking(true)
     busy(true)
     setError('')
+    if (kind === 'access') setAccessError('')
     try {
       await operation()
     } catch (cause) {
-      setError(String(cause instanceof Error ? cause.message : cause))
+      const message = cause instanceof Error ? cause.message : String(cause)
+      if (kind === 'access') setAccessError(message)
+      else setError(message)
     } finally {
       pending.current = false
       setAction(undefined)
@@ -68,6 +72,7 @@ export default function CloudComputer({
   const update = (result: CloudReview) => {
     updated(result)
     if (result.deployment?.phase !== 'running') {
+      setAccessError('')
       setIdentity(undefined)
       setVerified(false)
       setAuthenticated(false)
@@ -180,6 +185,7 @@ export default function CloudComputer({
                 disabled={blocked}
                 onClick={() =>
                   void run('identity', async () => {
+                    setAccessError('')
                     setAuthenticated(false)
                     setTools(false)
                     setVerified(false)
@@ -241,6 +247,18 @@ export default function CloudComputer({
                       ? actionLabels.access
                       : 'Verify SSH access'}
                   </Button>
+                  {accessError && (
+                    <div role="alert" className="space-y-2 text-destructive">
+                      <p>
+                        Could not verify SSH access. Try Verify SSH access
+                        again before continuing.
+                      </p>
+                      <details className="text-xs">
+                        <summary>Details</summary>
+                        <p className="break-words">{accessError}</p>
+                      </details>
+                    </div>
+                  )}
                 </>
               )}
               {authenticated && (

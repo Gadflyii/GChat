@@ -1,5 +1,177 @@
 # Gbot design
 
+## Independent-service paired-model sessions — Codex 3
+
+`GUI-GBOT-PAIRED-MODELS-SESSION-20261018`, based on main `ef64363fb`,
+corrects the installed Linux RC's empty brain-model picker when Chat already
+has a ready Qwen instance. The independent Gbot process previously polled saved
+Hosts without attaching its local owner or opening its own authorized saved-Host
+sessions, then discarded every poll error. Desktop sessions are process-local.
+
+The candidate attaches through Client's existing local-owner API and explicitly
+connects saved Hosts when discovering brain models. It also connects the saved
+target before dispatch so a persisted brain works after service restart without
+opening the picker first. The existing certificate pin, credential store,
+instance identity and exact session rejection remain authoritative; a restarted
+instance cannot replace the saved session. Successful ready models survive an
+unavailable second Host; failure with no ready model returns the Host diagnostic
+instead of a misleading empty list. A healthy Host with no ready instance still
+returns an empty list.
+
+Four focused CPU-only native TLS/Host regressions passed for cold saved sessions,
+late model availability, local-owner attachment, partial success, credential/poll
+errors and dispatch without discovery. Rust check and Clippy passed. Installed
+native brain selection and execution remain with the release owner. No Host
+server, Engine, GPU, frontend or passive Client authorization changes.
+
+Owned source: `fix/c3-gbot-paired-model-session-20261018` at
+`/ai/gchat-worktrees/c3-gbot-paired-model-session-20261018`. S1 disposable source,
+read-copied caches and check output remain inactive at
+`/media/ron/SSD_RAID/ai/tmp-c3-gbot-paired-model-session-20261018` pending release
+integration; remove the owned copy after merge. Small retained evidence is
+`out/c3-gbot-paired-model-session-20261018/` in the main checkout. Discovery also
+checks that a credential failure cannot
+advertise a previous ready snapshot; only Hosts connected successfully in the
+current operation contribute models.
+
+The single `make verify` invocation passed lint, typecheck, guards and all 3,605
+application tests (6 skipped), then stopped before extension coverage because the
+private cache copy omitted `extensions/ginfer-extension/node_modules`. This is
+a fixture preparation failure, not a source-test failure. The missing nested
+cache has been read-copied under the existing grant. Before continuation, its
+actual `vitest/vitest.mjs` entry was checked; future cache preparations must check
+each workspace's executable entry rather than assuming a root cache is complete.
+Only the unreached extension coverage, coverage-floor check and `make test-rust`
+continued once, 13:56:28–14:01:23Z: 127 extension tests, six critical coverage
+floors and 1,294 Rust tests passed (28 ignored across 23 summaries). The gate is
+complete by continuation; the failed full invocation and each completed stage
+have separate receipts in `verification-result.json` and the adjacent logs.
+Production/test source stayed unchanged throughout. CPU88–95 booking3314 was
+returned after all jobs exited. Next: release-owner installed native brain
+selection and execution from the integrated candidate.
+
+## Failed cloud SSH checks keep retry guidance — Gchat 2
+
+`GBOT-CLOUD-SSH-ERROR-PERSISTENCE`, based on main `5e371d36e`, keeps
+failed Verify SSH access feedback beside that action when Check progress succeeds.
+The warning gives a plain retry step and keeps the technical diagnostic in closed
+Details. Progress refreshes do not retry SSH or enable the desktop; an accepted
+explicit SSH retry clears its warning. Checking a new identity or leaving the
+running-computer stage invalidates the old warning with its identity.
+
+Rendered Error and native-string regressions confirm the fingerprint, attach the
+computer, reject its SSH check, refresh progress and explicitly retry. Unchanged
+production reproduced both failures (13 filtered). Focused suite: 15 PASS
+(`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotSetup/CloudCosts.test.tsx`);
+lint: 0 errors / 5 existing warnings. One `make verify`, 2026-10-18
+12:37:51–12:41:23Z: PASS, 3,588 app / 6 skipped, 127 extension, 1,288 Rust /
+28 ignored across 23 summaries, all six critical coverage floors,
+lint/typecheck/guards. All 3,452 tracked source hashes and modes stayed unchanged;
+this final receipt was added afterward. CPU112–119 booking3284 returned 12:41Z;
+the private cache was retained idle for the coordinator.
+Evidence: `out/gchat2-cloud-ssh-error-persistence-20261018/result.json`.
+This source/rendered scope does not qualify live provider, SSH or native actions.
+
+## Failed LAN bot removals keep recovery guidance — Gchat 2
+
+`GBOT-LAN-REMOVE-INLINE-ERROR`, based on main `fbebb98b7`, keeps a
+failed or uncertain Remove bot result beside the saved bot, with plain guidance
+and technical Details initially closed. It does not claim the bot or saved key
+was retained: service cleanup can fail after removal was saved. Refresh does
+not replay removal. An explicit retry requires the shared confirmation again;
+canceling that confirmation keeps the warning and makes no request. Rename
+feedback remains separate.
+
+The warning names the recovery steps outside Details: finish the bot’s tasks,
+turn off its schedules, unlink its accounts and disconnect it before retrying.
+Rendered Error and native-string regressions cover persistent feedback, closed
+Details, no automatic replay, Cancel and an explicitly reconfirmed retry.
+Original-source baseline: 2 FAIL / 7 filtered; fixed focused suite: 9 PASS
+(`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotLanBot.test.tsx`);
+lint: 0 errors / 5 existing warnings. One `make verify`, 2026-10-18
+12:24:59–12:29:59Z: PASS, 3,583 app / 6 skipped, 127 extension, 1,288 Rust /
+28 ignored across 23 summaries, all six coverage floors, lint/typecheck/guards.
+All 3,452 tracked source hashes stayed unchanged through the gate; this final
+receipt was added afterward. CPU64–71 booking3280 returned 12:30Z.
+Evidence: `out/gchat2-lan-remove-inline-error-20261018/result.json`.
+This rendered/source scope does not qualify native, Windows or live SSH.
+
+## Failed saved-bot renames keep recovery guidance — Gchat 2
+
+`GBOT-LAN-RENAME-INLINE-ERROR`, based on main `e16adae7d`, replaces
+Save name's temporary raw-error toast with persistent plain guidance and closed
+Details. The submitted name stays editable after failure and survives refreshed
+saved-bot data. Only explicit Save name retries the write; retry, successful Save
+and Cancel clear the warning. Existing pending-field protection is retained.
+
+Rendered Error and native-string regressions cover failure, refresh, retained
+draft, exact retry payload, confirmed saved name and Cancel. Original-source baseline:
+3 FAIL / 4 filtered; the old direct-rejection Cancel fixture also reports one
+unhandled rejection, retained in the baseline receipt. Fixed focused suite: 7 PASS
+(`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotLanBot.test.tsx`);
+lint: 0 errors / 5 existing warnings. One `make verify`, 2026-10-18
+12:13:45–12:17:28Z: PASS, 3,577 app / 6 skipped, 127 extension, 1,288 Rust /
+28 ignored across 23 summaries, all six coverage floors, lint/typecheck/guards.
+All 3,452 tracked source hashes stayed unchanged through the gate; this final
+receipt was added afterward. CPU64–71 booking3276 returned 12:18Z.
+Evidence: `out/gchat2-lan-rename-inline-error-20261018/result.json`.
+This source/rendered scope does not qualify live SSH, guests or native Windows.
+
+## Refreshing accounts preserves failed link saves — Gchat 2
+
+`GBOT-LINKED-ACCOUNTS-REFRESH-SAVE-ERROR`, based on main `0f604653e`,
+fixes Refresh accounts hiding a failed Save linked accounts warning while
+the same unsaved selections remain checked. Reading the available accounts
+does not save which accounts the bot may use.
+
+Refresh and Save now keep separate errors beside their controls. A refresh
+clears only its own error; the failed Save warning survives a successful
+refresh, a failed refresh and its read-only retry. An explicit Save retry
+clears its own warning and uses the retained selection. Account permissions
+and service behavior are unchanged.
+
+Rendered regressions cover both refresh outcomes, pending feedback, retained
+selections and no automatic Save. Unchanged production failed both new cases
+(12 filtered); the fixed suite passed all 14 with
+`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotConnectors.test.tsx`.
+ONE isolated S1 `make verify` passed 18 October 11:49:07–11:52:32 UTC:
+3,555 application tests / 6 skipped, 127 extension tests, 1,288 Rust tests /
+28 ignored, six coverage floors, lint, typecheck and guards. All 3,451 tracked
+source hashes matched before and after the gate. The remote gate included
+only Gchat 3's `ad121b656` initial `/models` hydration wait for an unrelated
+placement fixture, still absent from main `d306935f2`; no owner production or
+additional tests were copied. This final receipt was added afterward;
+production and test hashes stayed unchanged.
+Evidence: `out/gchat2-linked-accounts-refresh-save-error-20261018/result.json`.
+Booking 3266 was returned and the private cache retained idle. FRESH and OLD
+are untouched; rendered responses do not qualify live connector actions or
+native Windows.
+## Microsoft setup explains failed actions — Gchat 2
+
+`GBOT-M365-SETUP-ERROR-GUIDANCE`, based on main `d306935f2`, replaces
+raw service and native-opener errors with plain guidance for the failed step.
+Initial account loading, Refresh, sign-in actions, Cloud PC discovery, Save and
+client opening name the next action; technical diagnostics remain in closed
+Details. An accepted Save followed by a failed computer-list refresh still
+reports that the setup was saved. No request is retried automatically.
+
+Rendered regressions cover initial and explicit account reads, an unconfirmed
+Save, accepted Save with failed list refresh, and native-client failure/retry.
+Acceptance: unchanged production failed all five new cases (29 filtered);
+the full M365Setup suite passed all 34 with
+`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotSetup/M365Setup.test.tsx`.
+Workspace lint passed with zero errors and five existing warnings. ONE isolated
+S1 `make verify` passed 18 October 11:57:21–12:00:48 UTC: 3,564 application tests /
+6 skipped, 127 extension tests, 1,288 Rust tests / 28 ignored, six coverage floors,
+lint, typecheck and guards. All 3,451 tracked source hashes matched before and
+after the gate. The remote fixture included only the initial `/models` hydration
+wait from owner `ad121b656`, now merged in main `7727db673`; the pinned branch
+predates that prerequisite. No owner production or additional tests were copied.
+This final receipt was added afterward; production and test hashes stayed
+unchanged. Evidence: `out/gchat2-m365-setup-error-guidance-20261018/result.json`.
+FRESH and OLD are untouched; rendered service and opener responses do not
+qualify native Microsoft sign-in, Cloud PC control or Windows execution.
+
 ## Refreshing Hosts preserves failed brain saves — Gchat 2
 
 `GBOT-BRAIN-HOST-REFRESH-SAVE-ERROR`, based on main `73d9d4b9c`,
@@ -24,6 +196,39 @@ added afterward; production and test hashes stayed unchanged.
 Evidence: `out/gchat2-brain-refresh-save-error-20261018/result.json`.
 FRESH and OLD are untouched; rendered service responses do not qualify native
 Windows or live Host execution.
+## Service computer lists can be refreshed without repeating approval — Gchat 2
+
+`GBOT-SERVICE-COMPUTER-LIST-RETRY`, based on main `f414a35bc`, fixes
+an empty paired-computer picker with no recovery after its initial read fails.
+A late list failure could also replace an unrelated control-approval error.
+
+The service setup step now offers **Refresh computers**, with pending feedback
+and a synchronous duplicate guard. List errors have plain recovery guidance
+and closed diagnostic Details. Refresh preserves the selected computer and
+approval error; it reads the computer list without repeating a control request.
+
+Deferred rendered regressions cover an empty-list failure, repeated clicks,
+another read failure, recovery with a selectable computer, and a late list
+failure after rejected approval. Only an explicit approval retry requests
+access again. Both new regressions fail against the old source; all 13 affected
+tests pass. The first focused run retained one assertion failure, corrected to
+match the existing `Error:` diagnostic prefix before its passing continuation.
+
+One `make verify` began at 11:28:16 UTC on 18 October. Lint, type checking and
+quality guards passed; the app run had 3,545 passes, 6 skips and one unrelated
+first-run fixture failure. Its owner supplied an initial-folder hydration wait;
+only that wait was applied to the gate source, and the exact failed case passed.
+The remaining stages passed by continuation: 127 extension tests and 1,288 Rust
+tests (28 ignored). Because the failed app run produced no coverage report,
+six existing critical-flow test files regenerated coverage (87 passes). Two
+existing provider-store consumer files added the missing paths (22 passes);
+their separate Istanbul reports were merged and all six unchanged coverage
+floors passed at 11:42:14 UTC. No whole-app or full-gate run was repeated.
+All 3,451 tracked gate-source files match the final manifest, including the
+owner's isolated test wait; this final receipt was added afterward. Commands,
+failures, selected files and report hashes are recorded in
+`out/gchat2-service-computer-list-retry-20261018/result.json`.
+FRESH and OLD remain untouched; no native Windows or live grant is qualified.
 
 ## Task controls discard errors after confirmed progress — Gchat 2
 
@@ -52,6 +257,70 @@ and 1,284 Rust tests (28 ignored). All five frozen file hashes match the
 tested source; this receipt was added afterward. FRESH and
 OLD remain off with original XML and Gchat 2 custody; these inert responses
 do not qualify live task execution or native Windows.
+## Windows Hyper-V local computer adapter — Gchat 2
+
+`GBOT-WINDOWS-HYPERV-ADAPTER` implements the Windows side of the shared
+local-computer lifecycle. Preflight reads edition, firmware virtualization,
+Hyper-V availability, permissions, restart requirements, RAM and free space.
+Missing features show a plain Windows Features and restart step. GChat never
+enables features, elevates, changes host networking or installs host tools.
+
+The separate persistent Debian guest uses the same worker, pinned SSH,
+desktop tools and readiness checks as KVM. The guest root prefers a suitable
+non-system drive and is saved for retries. Ron explicitly selected C: for the
+native .143 acceptance; its WSL root was not used for images or builds.
+
+The API is `/v1/setup/local-vm/{preflight,status,start,stop,remove}`; existing
+`/v1/setup/kvm` routes remain compatible. Stop fences tasks, schedules and human
+control, waits for graceful shutdown and keeps the disk, brain, key and account
+links. Start reuses that guest. Remove verifies the Hyper-V VM ID, ownership
+note and exact disk, seed and COM paths before retiring it. Foreign or ambiguous
+registrations are refused. The adapter uses the existing Default Switch, a
+trusted COM console for SSH host-key capture, and a loopback-only SSH relay.
+
+Windows receives a ready VHDX with its own pinned SHA256 and byte count, derived
+from the accepted Debian source. Arch approved this delivery choice at 10:28 UTC.
+Existing release tooling performs conversion once and records provenance;
+`package-gbot-runtime.py --platform windows --guest-assets ...` stages the assets.
+Users need no qemu installation. The immutable source image stays read-only;
+only the new private guest disk is made writable. Asset publication remains
+Ron-gated. See the [adapter decision](../decisions/2026-10-18-own-windows-hyperv-bot-computers.md).
+
+Native acceptance **passes** on Ron's Windows 11 Pro .143 host, source
+`1922e7567`, 18 October 13:45:03–13:47:27 UTC. A fresh 2-CPU, 4-GiB guest
+completed detection, creation, bootstrap, pinned SSH, worker commands/files,
+desktop capture, keyboard input saved to a guest file, and a view handshake.
+Graceful Stop preserved the disk. Start reached Ready again, retained the same
+VM/storage/SSH identity and read the saved sentinel. Production retirement
+confirmed that the registration, guest directory and fixture credential were
+absent; task/runtime shutdown passed. The credential vault was an isolated
+in-memory fixture. No model or account was used. The source VHDX stayed read-only.
+The executable SHA256 was
+`dc6d6e934d2c1dfeb3d99402b2d3274e98e5bd24e5fe62dd8b18cefb452707b4`.
+
+Native findings fixed in this branch: real COM1 objects use `Name`, guest IP
+reporting needs `hyperv-daemons`, and SSH may start before the desktop service.
+The initial read-only hello now waits at most 20 seconds for a stable active
+desktop; authenticated commands/files never wait or replay. Desktop restarts
+still require pinned-SSH proof and guarded session renewal. The native fixture
+now loads the production task runner before exercising those guards.
+
+Verification passes: 234 Windows PowerShell-module fake assertions, native
+Windows service checks and compilation, focused adapter/relay tests, all-target
+service checking and strict Clippy. The readiness regression fails with the old
+script and passes with the fix; three existing renewal/binding cases also pass.
+ONE Linux `make verify`, 13:39:43–13:43:57 UTC, passes lint, types, guards,
+3,537 app tests (6 skipped), 127 extension tests, 1,302 Rust tests (28 ignored)
+and six coverage floors. All 3,405 frozen tracked source hashes are stable.
+The later Windows-only acceptance fixture is covered by the native compile/run.
+
+Receipts: `out/gchat2-windows-hyperv-20261018/result.json`,
+`native-lifecycle-r5-result.json`, its raw stdout/stderr, `restart-result.json`,
+and `native-fixture-build-result.json` (13 adapter/guest source hashes).
+Earlier failed native attempts remain recorded beside them. The final guest
+and Ada image/binary copies are retired; no guest or compute booking remains.
+This qualifies the adapter lifecycle; installed Windows UI and outward release
+publication retain their own acceptance gates.
 
 ## Saved human replies keep recovery errors visible — Gchat 2
 
@@ -906,7 +1175,7 @@ processes passed at 01:09:06 UTC on October 13, freeing 30.47 GB on S1 and
 and concise evidence; no guest, job or reservation remains.
 
 Remaining setup acceptance includes sleep recovery, scheduled
-dispatch after client exit, Windows/Hyper-V, cloud/M365 creation, remote service
+dispatch after client exit, cloud/M365 creation, remote service
 selection and installer opt-in. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates these from accepted setup evidence. The CPU-only installed guest also
 exposed unguarded local Host hardware preparation; its owning native gate now rejects unsupported local hardware before Host
@@ -1827,7 +2096,8 @@ source tree, current tested desktop artifact and evidence; no live job or
 reservation remains. The accepted baseline package was preserved.
 
 This setup candidate is merged to main `bb4cde410`; reuse its installed evidence.
-Remaining setup acceptance: Windows/Hyper-V, cloud/M365,
+Native Windows/Hyper-V adapter lifecycle passes on .143 (18 October; see above).
+Remaining setup acceptance: cloud/M365,
 remote service selection, installer choice, sleep recovery and scheduled
 dispatch after client exit. Gbot's explicit brain assignment must select a
 persistent Host or other inference endpoint for client-exit continuity. Hardware preparation is a

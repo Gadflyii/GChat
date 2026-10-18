@@ -558,3 +558,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-18** — [Declare installed launcher runtime ownership](2026-10-18-declare-installed-launcher-runtime-ownership.md)
 
 - [Shared private development model catalog](2026-10-18-private-development-model-catalog.md) — development/debug-only shared S1 LAN fixture; production admission unchanged.
+- **2026-10-18** — [Own Windows Hyper-V Bot computers](2026-10-18-own-windows-hyperv-bot-computers.md)

@@ -216,7 +216,7 @@ async fn serve(
             super::inference::NativeInferenceHost::open().await?,
         ))
         .map_err(api_startup_error)?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
         api = api
             .with_kvm_setup(directory.clone())

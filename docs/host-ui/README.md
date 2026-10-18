@@ -1,5 +1,149 @@
 # GInfer host UI
 
+## First-run refresh feedback — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-REFRESH-LIFETIME` extends the existing setup request lifetime
+to Host discovery errors. An initial or Retry refresh can finish after a newer
+setup command has accepted the current state, restoring an obsolete connection
+warning. Discovery started before that command must not replace its feedback.
+Current discovery errors without a newer command, and rejected setup commands,
+must remain visible. This follows the existing status-read ordering contract;
+it does not treat a successful setup read as proof of a successful Host-list
+refresh or change the shared refresh store.
+
+Acceptance: deferred rendered tests reproduce the initial-refresh and Retry
+orderings, retain current failures, then focused tests and ONE `make verify`
+pass. The unchanged base with only the new tests reproduced **2 expected
+failures / 1 passed / 44 skipped** at 12:53:20Z: both older discovery failures
+restored the warning after Retry accepted the folder setup. Current discovery
+failures remained visible. The coordinator inspected the actual failing log.
+The candidate applies the existing setup revision and pending-command guards
+to both refresh catches; obsolete and unmounted requests cannot publish.
+Candidate focused tests pass **47/47** (12:53Z, 10.48s). ONE `make verify`
+passed at 13:01:37Z: **3,599 app / 6 skipped, 127 extension, all six coverage
+floors, 1,288 native / 28 ignored** across 23 native summaries. Lint has zero
+errors and five existing unrelated warnings; typecheck and quality guards
+pass. The coordinator inspected the actual baseline, focused and full-gate
+logs, terminal exit0/noOOM and unchanged tested source/catalog bindings. No
+gate was repeated. The independent fixture is retired; next: coordinator
+integration. No Host, Engine, GPU, native GUI or Windows qualification changes
+are claimed.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-first-run-refresh-lifetime-20261018`, branch `fix/gchat3-first-run-refresh-lifetime-20261018`, base `585a85405` | Candidate component/tests and current authority; independent of main |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-refresh-lifetime-tests-20261018` | Independent inactive RC dependency read-copy, CPU96–103 booking3291 returned 13:02Z, nice10/max8 jobs and socket-1 shared compile lock; preparation passed all 35 dependency and seven frozen catalog bindings at 12:51:42Z; no GPU; owned fixture, prep log and two exited containers removed 13:04Z after raw-log review and no-reader check; donor preserved |
+
+The [result](../../out/first-run-refresh-lifetime-20261018/test-result.json)
+and [summary](../../out/first-run-refresh-lifetime-20261018/test-summary.md)
+retain the commands, bindings and outcomes. Cleanup removed 28,050,273,434
+logical bytes from the owned fixture; only these two small evidence files
+remain locally. This is deterministic rendered-control verification; it does
+not require a native desktop fixture.
+
+## First-run edited startup settings — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-UNCHECKED-SETTINGS` fixes a confirmed first-run control defect:
+editing Advanced settings leaves the prior “Ready” message and Finish local
+setup enabled, so finishing silently uses different settings from those shown.
+Each model's displayed values must match the Host's checked settings before
+Finish is enabled. A newer edit must survive an older check response, status
+poll or rejected check. Restoring the checked values may reuse their check.
+
+Acceptance: reproduce the unchecked-edit and in-flight-check cases in the
+existing rendered tests, preserve separate model drafts, pass focused tests
+and ONE `make verify`. This changes frontend readiness only; Host/Engine
+startup, admission and physical qualification are unchanged. The candidate
+keeps controlled drafts by download ID, compares their numeric values with the
+Host's saved settings, and labels the summary as saved settings. Host startup
+already clears its old quote when accepting changed settings; no Host repair
+is needed. The unchanged base with only the new tests reproduced **5 expected
+failures / 39 skipped** at 12:27Z: Finish stayed enabled for unchecked edits,
+including after a rejected check or an older accepted check; both models kept
+their Ready messages after one model was edited. The newer input itself was
+preserved in the baseline; its incorrect readiness was the observed race.
+Candidate focused tests pass **44/44** (12:27Z, 10.44s). ONE `make verify`
+passed at 12:35:38Z: **3,586 app / 6 skipped, 127 extension, all six coverage
+floors, 1,288 native / 28 ignored**, with no failures across 23 native
+summaries. Lint has zero errors and five existing unrelated warnings;
+typecheck and quality guards pass. The coordinator inspected the actual logs,
+terminal exit0 and unchanged tested source bindings. No gate was repeated.
+Gchat2 and C3 confirm no component/test ownership overlap. Next: coordinator
+integration of the verified branch.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-first-run-unchecked-settings-20261018`, branch `fix/gchat3-first-run-unchecked-settings-20261018`, base `fbebb98b7` | Candidate component/tests and current authority; independent of main |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-unchecked-settings-tests-20261018` | Independent inactive RC dependency read-copy; CPU96–103 booking3278 returned 12:35Z, socket-1 shared compile lock, nice10/max8 jobs, no GPU; owned fixture and two exited containers removed 12:37Z, donor preserved |
+
+The [result](../../out/first-run-unchecked-settings-20261018/test-result.json)
+and [summary](../../out/first-run-unchecked-settings-20261018/test-summary.md)
+retain the commands, source bindings and outcomes after raw-log review. All 35
+dependency inputs and seven frozen catalog inputs match the prior accepted
+offline recipe. The baseline and candidate containers both exited without
+OOM; only the baseline has its expected regression exit1. Cleanup removed
+28,050,102,588 logical bytes from the owned S1 fixture. This is deterministic
+rendered-control verification; no native GUI or physical qualification is
+claimed.
+
+## First-run request lifetime — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-REQUEST-LIFETIME` fixes confirmed response-order races in
+`EngineFirstRun`: status reads can snapshot the old state before an action,
+then finish after its accepted response. The accepted step must remain visible.
+An invalidated completed poll must not stop future polling, and replacing the
+local Host in Welcome must discard the former Host's pending responses and
+draft/busy state. Existing rejected-action errors must remain visible across
+successful status reads.
+
+Acceptance: reproduce these orderings with deferred responses in the existing
+rendered component tests, implement one Host-owned request lifetime, pass the
+focused suite and ONE `make verify`. No Host/Engine startup, admission, sampling,
+native Windows or GUI screenshot qualification is changed or claimed.
+Implementation `ad121b656` is committed and pushed after coordinator evidence
+review; the focused file passed all 39 tests, lint passed with five existing
+warnings and ONE `make verify` passed. Gchat2's retained failed placement case
+also passed after the later one-line hydration wait: **1 passed / 35 skipped**,
+11:39:09–11:39:11Z. Merge-ready; no passing suite or full gate was repeated.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-first-run-request-lifetime-20261018`, branch `fix/gchat3-first-run-request-lifetime-20261018`, base `f414a35bc` | Candidate component/tests and this authority; no main mutation |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-request-lifetime-tests-20261018` | Independent inactive RC donor read-copy; CPU104–111 booked 11:16–11:41Z, returned 11:30:25Z after terminal PASS; socket-1 shared compile lock, nice10/max8 jobs; owned fixture and two exited containers removed 11:32Z; no GPU or model work |
+
+Both Gchat 2 and C3 confirmed no component/test ownership overlap. The exact
+base plus only the new tests reproduced **3 expected failures / 36 skipped**:
+a late status replaced accepted Stop, an invalidated completed read prevented
+the next poll, and a former Host response restored its folder after replacement.
+The coordinator reviewed the actual failing log. The candidate keys setup state
+to its Host, prevents pending-command reads from publishing and invalidates
+them again when the command settles. Only accepted completed reads stop polling;
+action errors remain separate from status errors.
+
+All 35 dependency inputs match the retained offline donor recipe. The four
+explicit catalog inputs match accepted `5825c2e39` objects and the prior 38-profile
+receipt. Independent preparation passed 11:17:42Z. Candidate commands use the
+existing offline image, protected inputs and copied caches. Small gate receipts
+live in `out/first-run-request-lifetime-20261018/`. The single full gate passed:
+**3,547 app / 6 skipped, 127 extension, all six coverage floors, 1,288 native /
+28 ignored** across 23 native summaries. Container exit0/noOOM at 11:30:10Z;
+both frozen source hashes match after execution. No gate retry or continuation.
+A subsequent Gchat2 gate exposed a separate placement-test hydration race:
+the heading can render before the saved folder initializes. The existing test
+now waits for `/models` before clicking `/fast`, matching its neighboring test.
+The component remains unchanged. Gchat2's retained failed-case continuation
+passed with the one-line fixture correction; terminal log SHA
+`e1e52322bf0868c13d1f795d9838ed1f2d1410eaa8af696b6d9ec2d9b651c401`
+is recorded in `out/gchat2-service-computer-list-retry-20261018/final-remote-evidence.json`.
+The original lifetime full gate and this later test-only continuation remain
+separate verification claims. Cleanup removed 38,232,500,574 logical bytes
+and the owned prep log after confirming no readers; the RC donor remains intact.
+No native fixture is needed for these deterministic response-order regressions.
+
+The Windows SM86/SM89 qualification remains the lane priority and is recorded
+in [installer refresh](../installer-refresh/README.md). This bounded GUI repair
+uses its resource wait; it does not replace either pending Linux comparison.
+
 ## Completed graphics-card setup note — C7, October 18
 
 `GUI-PROFILE-READY-NOTES` passes its remaining Linux completed-state
@@ -3562,6 +3706,65 @@ are removed; the existing C7 private-catalog donor remains unchanged for its
 retained campaign. Only the result JSON and short summary are newly retained.
 No app, model, GPU, installer, Windows account or shared app data was involved.
 CPUs returned 01:15Z. Next: Codex 8 review and coordinator merge.
+## Local models under a symlinked data folder — C3, October 18
+
+`GUI-MODELS-SYMLINK-DATA-ROOT-20261018` fixes the empty Installed list after a
+successful external-model registration when the configured data folder uses a
+symlink. The installed-DEB walk used a short HOME alias for Gbot's libvirt socket
+path limit. Registration wrote `model.yml`, and catalog discovery returned its
+canonical SSD path; YAML reads compared that path against the lexical data root
+and failed, so provider discovery returned no models.
+
+YAML reads and writes now resolve the configured root and requested path before
+checking containment. Legitimate canonical, lexical and relative rooted paths
+remain usable. Existing dangling links fail resolution; outside paths and
+symlink escapes remain rejected. The regression uses actual model enumeration
+through a symlinked data folder, reads and updates the discovered manifest, and
+creates a new rooted YAML file. The containment fixture also verifies that
+outside files remain unchanged and outside destinations are not created.
+
+Eight focused filesystem tests, Rust check and library Clippy pass. One full
+`make verify` passes: 3,596 frontend tests, 127 extension tests and 1,290 native
+tests; six frontend skips and 28 native ignores. All six critical coverage
+floors pass; lint has zero errors and five existing warnings. An initial Clippy
+invocation selected unsupported desktop binary tests alongside CLI-only
+features and hit an existing unrelated test lint; the corrected library target
+passes without source changes or lint waivers. The full gate was not repeated.
+Evidence: `out/c3-models-symlink-data-root-20261018/{verification-result.json,
+summary.md,verify.log,focused.log,check.log,clippy-lib.log,clippy.log}`.
+
+The fresh Vite frontend and normal default-feature debug desktop build pass on
+S1 `AIS-2-8592-L01`, using seven frozen catalog inputs with 41 bundled profiles.
+The exported `native/bin/gchat` uses Tauri's sibling `../lib/GChat/resources`
+layout, with owned copied resources. Effective commands and the exported binary
+hash are in `native-build-command.json` and `native-export-result.json` beside
+the gate evidence. Native acceptance then used private HOME `/tmp/c3ym18/home`,
+an alias to the owned SSD fixture, with only the existing external-model
+manifest copied. Models → This computer → Installed shows
+`qwen38_27b_int_df2` before and after the native Refresh installed models action.
+Bundled runtime preparation and Refresh both completed; the refreshed control
+is enabled and the card remains visible. The coordinator inspected the final
+pixels. No model was copied, reimported or loaded, and no inference ran.
+Evidence: `native-acceptance-result.json`, `installed-after-refresh.json` and
+`installed-after-refresh.png` beside the gate evidence.
+
+The initial fixture launch failed because Xvfb was absent from PATH and DISPLAY
+was missing. An explicit copied Xvfb path and `DISPLAY=:175` repaired that
+private launch. The app then exited through native tray Quit, with completed
+cleanup in `native-lifecycle.log`. Refresh had started an idle private Host;
+it stopped through its supported SIGTERM shutdown handler, then the private
+Xvfb stopped. The private HOME and short alias are removed. The installed-DEB
+fixture, primary display, Hosts, GPU workloads and resource donors were not changed.
+
+C3 owns branch `fix/c3-models-symlink-data-root-20261018`, worktree
+`/ai/gchat-worktrees/c3-models-symlink-data-root-20261018`, based on main
+`585a854058ecbdc3e6923d7c5533cdd9778d1fd8`. The private S1 source, caches, build
+and native export are retained at
+`/media/ron/SSD_RAID/ai/tmp-c3-models-symlink-data-root-20261018` for coordinator
+merge, with no live jobs. CPUs88–95 returned 13:12Z; native acceptance CPUs104–111
+returned 13:24Z. Next: coordinator merge; remove disposable owned build bytes
+when the item closes.
+
 ## Installed dropdown acceptance — C7, October 18
 
 `GUI-DROPDOWN-THEME-CONSISTENCY-20261017` now replaces native select popups
@@ -4712,14 +4915,23 @@ scope, translations and success notification remain the contract.
 Acceptance: rendered keyboard, repeated activation, pending, success and retry
 tests, then one full `make verify`; commit and push an isolated merge-ready
 branch. No real conversation deletion, Engine, model or GPU operation.
-Installed confirmation belongs to Gchat 3's parent GUI qualification. Windows
-host-port collision remains pending Gchat 2's installed-app handoff.
+Gchat 3 completed the remaining Linux native keyboard/Cancel leaf on
+October 18. The ordinary project Conversation menu opens the
+confirmation with Cancel focused; Enter and Escape preserve the private dummy
+conversations; explicitly activating Delete all removes only that project's
+conversations and preserves an unrelated dummy conversation and the project.
+The existing rendered evidence covers pending/rejected operations; a fast
+native filesystem operation cannot establish those cases. No Windows or
+installed-package qualification is claimed by this source-native check.
+Windows host-port collision remains pending Gchat 2's installed-app handoff.
 
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
 | C7 / local | `/ai/gchat-worktrees/c7-project-threads-delete-single-submit-20261017`, branch `fix/c7-project-threads-delete-single-submit-20261017` | From main `a08e2b053`; dialog implementation and six dedicated regression cases frozen at `79b06e217` |
 | C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-project-threads-delete-single-submit-20261017/` | Private source/dependency/native cache retired after verification; booking 2563 canceled, returned 14:12Z |
 | C7 / evidence | `/ai/gchat/out/project-threads-delete-single-submit-20261017/{result.json,summary.md}` | Passing focused and full verification result retained here |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-project-delete-native-20261018`, branch `docs/gchat3-project-delete-native-20261018`, base `ec6d2ba1f` | Evidence-only native acceptance; no implementation changes |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-project-delete-native-20261018` | Native input acceptance PASS13:18Z; private runnable/HOME retired (8.52GB), returned13:19Z; no GPU/model |
 
 The six focused rendered regression cases pass. The single full `make verify`
 exited 0 at 14:10:39Z on S1 in pinned image `ad7f9bf020d7`: lint, frontend
@@ -4728,8 +4940,28 @@ types, contracts and critical coverage floors passed, with 2,796 frontend tests,
 27 Rust tests ignored. The gate used private offline caches and 22 retained
 profile catalogs; generated local-core archive references changed only inside
 the disposable copy. Source dependency files and the read-only donor are
-unchanged. The private build copy is retired. Next: coordinator merge of the
-isolated branch; installed confirmation remains with Gchat 3.
+unchanged. The private build copy is retired and the implementation is merged.
+The granted inactive desktop donor was built from `cf9124a1e`, binary SHA256
+`ce13ab7f462504eaf031448503e8332bd35164366acaaaae618bbd00cc11ee6b`.
+Its dialog, button/dialog/dropdown primitives, project route, thread hook,
+project/thread services, conversational extension and native thread storage
+match `ec6d2ba1f` (18 source files). The independent copy ran with private
+HOME, unlocked keyring, D-Bus and Xvfb `:202`, software rendering and no GPU.
+Through the ordinary project Conversation menu, native XTest input opened
+the confirmation with Cancel focused. Enter canceled and Escape dismissed a
+reopened confirmation; both times all three dummy thread files were unchanged.
+Tab moved focus from Cancel to Delete All; Enter removed the two project thread
+directories. The project remained in storage and the unrelated conversation
+retained its original file hash. Screenshots, DOM observations and filesystem
+receipts are retained in
+`/ai/gchat/out/project-delete-native-20261018/`. An initial X11 authorization
+failure stopped before app startup; the private Xauthority entry was corrected
+for the container hostname before this successful execution. The private fixture
+was retired and CPU booking3305 canceled at13:19Z; the donor is unchanged.
+
+The accepted focused/full gates above were reused. This evidence-only branch
+adds no implementation change and uses `git diff --check` only. Windows and
+installed-release package acceptance remain outside this source-native result.
 
 ## Disable OpenCode workspaces — C7
 
@@ -5505,3 +5737,134 @@ at 07:15 UTC. The owned S1 source/build/AppDir/HOME/tools root
 `/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018` is retired.
 The shared development catalog remains live. Next: coordinator integration and
 canonical Linux leaf closure.
+
+## Consumer Qwen 27B 2-bit mix launch catalog — GChat integration
+
+`CONSUMER-LAUNCH-PROFILES` mirrors the signed Linux RTX 5090, RTX 4090 and
+RTX 3080 Ti Laptop settings for package `483343c2` (full SHA-256
+`483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`,
+10,667,321,600 bytes). The exact source catalogs come from GInfer `7d275e026`
+(RTX 5090) and merged `7792f3ac3` (RTX 4090/laptop). Each remains
+**screened-startup**: TP1, C8, Text, fixed DFlash7, INT8 KV, automatic KV arena,
+300 MiB reserve, CUDA graphs/prefix defaults, zero full-context requests.
+The admitted contexts are 131,072 for RTX 5090/4090 and 53,248 for the laptop.
+The evidence and qualification revision stay bound to Engine `aa1c48016`;
+these entries do not qualify a different Engine revision or promise a
+simultaneous full-length cohort. See the existing
+[screened-profile decision](../decisions/2026-10-16-label-screened-startup-launch-profiles.md).
+
+The Host's existing supplied-release-catalog test now checks all three exact
+artifact identities, device/memory/context bounds, launch options and startup
+qualification records. The runtime/parser and frontend need no change. The
+release builder already consumes `GINFER_PROFILE_CATALOGS`; its generated
+`resources/bin/launch-profiles.json` is a build output, not a tracked source
+catalog. Acceptance uses seven explicit, nonempty frozen inputs: the three
+signed files plus the four previously corrected Text/Vision catalogs. Their
+ordered merge must equal all 41 merged profile objects (old 38 plus new 3)
+exactly, retaining the four prior context lowerings. The existing screened-profile frontend
+regression runs within ONE `make verify`.
+
+Candidate: `/ai/gchat-worktrees/gchat3-consumer-launch-profiles-20261018`, branch
+`fix/gchat3-consumer-launch-profiles-20261018`, base `7727db673`.
+The small source/input bindings and test evidence are in
+[`out/consumer-launch-profiles-20261018/`](../../out/consumer-launch-profiles-20261018/).
+The focused supplied-catalog test passes (one test); Host check and clippy
+also pass. ONE `make verify` completed at 12:11:54 UTC with 3,569 app tests
+(six skipped), 127 extension tests, 1,288 native tests (28 ignored across 23
+summaries), and all six coverage floors passing. Lint has zero errors and five
+existing warnings. The actual generated catalog is 86,734 bytes, 41 profiles,
+and exactly equals the seven inputs' ordered JSON merge, preserving every
+profile field. Its SHA-256 is
+`2093fb22efc904555e42be272d4a6ebdf9c07987510441ecf890b30b9197a3a3`.
+The tested Host source is unchanged after execution.
+
+The S1 gate used CPUs 96–103, a shared socket-1 compile lock, nice 10 and max
+eight jobs, with no GPU. Booking 3272 was returned at 12:12 UTC. The terminal
+container and owned fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-consumer-launch-profiles-tests-20261018`
+were retired at 12:14 UTC after retaining the small result, summary and raw
+logs and verifying no readers or live jobs. This removed 29.11 GB of allocated
+owned source/dependency/build copies. The inactive RC donor
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app`
+remains protected and was used only for independent read-copy.
+The coordinator owns private DEV publication and Linux RC input handoff; no
+live catalog mutation is part of this source/test fixture. Its independent
+private DEV generation completed at 11:58:04 UTC with eight packages and 115
+selected profiles: all prior seven packages/112 selected profiles are unchanged.
+The 272,545-byte catalog is bound in `private-dev-deployment-result.json`.
+Coordinator HTTP acceptance passed at 12:03:39 UTC: the live catalog equals
+that generated output, all three new profiles equal the frozen signed sources,
+and all eight payload routes pass exact-length HEAD and one-byte Range checks.
+See `private-dev-http-acceptance.json`; no payload, option, qualification label
+or existing profile was changed. The seven frozen inputs and
+`gchat-catalog-binding.json` were handed to Codex3 at 12:04 UTC for inclusion
+with the other current Linux catalogs in the next RC. Codex3 owns that release
+build; this gate does not claim that an RC has already been rebuilt. Source
+and private DEV integration are complete and ready for coordinator merge.
+
+
+### Consumer Flash pure 2-bit RTX 5090 mirror — Gchat 3
+
+Current assignment: mirror the completed signed GInfer `9bfcec0bb` Flash
+profile into the GChat release catalog inputs and shared private DEV catalog,
+while preserving the three accepted Qwen profiles and four context lowerings.
+The exact Flash package is `8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`
+(70,247,086,080 bytes). Its RTX 5090 profile remains screened-startup,
+262,144 context/C8, TP1, fixed MTP3, INT8 KV, automatic placement/KV,
+300 MiB KV reserve, 10 GiB Host headroom, graphs/prefix/LFU on, Text with
+Vision and structured outputs off; zero full-context requests and eight smoke requests.
+Engine qualification remains bound to `aa1c48016`; this mirror makes no
+new hardware or full-context qualification claim.
+
+Acceptance: extend the existing supplied-catalog Host regression, focused
+test plus Host check/clippy and ONE `make verify` with eight explicit inputs;
+require the generated release catalog to preserve all 41 existing profiles
+and add the exact signed Flash object. Coordinate C7's idle/zero-GET service
+boundary, preserve old generator/inputs/www/receipts, run the existing DEV
+generator once, restart the unchanged service and accept exact catalog plus
+payload HEAD/Range routes. No payload mutation or numerical change.
+
+Candidate: `/ai/gchat-worktrees/gchat3-consumer-flash-profile-20261018`,
+branch `fix/gchat3-consumer-flash-profile-20261018`, base `e15807324`.
+Small evidence: `/ai/gchat/out/consumer-flash-profile-20261018/`.
+The independent test fixture launched at 13:27 UTC on S1 SSD at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-consumer-flash-profile-tests-20261018`,
+using eight booked socket-1 CPUs and the protected inactive RC read-copy
+donor; no GPU/model. The shared DEV root remains
+`/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1`; parent owns the
+bounded generator/input update and acceptance, C7 owns service stop/start.
+C3, C4 and Gchat2 confirmed consumer idle. C7 stopped the service at
+13:29 UTC after a fresh zero-GET check. The existing generator ran once at
+13:31 UTC, producing eight packages/116 profiles (277,094 bytes, SHA-256
+`2262186803e08a65d4fee4b99a8ba1f5e0ccbe87ef66b02a22c2bb5382a4931c`).
+All 115 existing profile objects, the other seven release records and all
+payload symlink targets are unchanged. The Flash release adds the signed
+profile, derives its 32,606 MiB minimum and uses the pure 2-bit package label.
+The prior generator, inputs, www and receipts are retained under the shared
+root at `mirror-before-flash5090-20261018T133140Z`; no payload was copied or
+rehashed. See `private-dev-deployment-result.json`. C7 restarted the unchanged
+service at 13:32 UTC. HTTP acceptance passed at 13:32:43 UTC: exact generated
+catalog, the signed Flash object and all 115 prior profiles; all eight payload
+routes passed exact-length HEAD and one-byte Range (206). Only eight payload
+bytes were read. See `private-dev-http-acceptance.json`. Consumers may resume.
+The frozen eighth input/source binding was handed to Codex3 for its pending
+Linux RC build, preserving the prior seven inputs and Engine. The accepted
+42-profile build binding followed at 13:39 UTC; Codex3 owns RC assembly.
+
+The focused supplied-catalog regression passed one test; Host check and final
+all-target clippy passed. ONE `make verify` completed at 13:35:35 UTC with
+3,603 app tests (six skipped), 127 extension tests and 1,288 native tests
+(28 ignored across 23 summaries); all six coverage floors passed. Lint has
+zero errors and five existing warnings. The final explicit Flash assertion
+removed a redundant default struct update before the native verification
+phase; final clippy was the only follow-up gate. The actual generated release
+catalog is 90,917 bytes with 42 profiles, exactly the ordered eight-input
+merge, preserving all 41 prior objects and the signed Flash object. SHA-256:
+`2da2c9adb6d2bf034e4b4e0a35a14a26eeeb0728f9119ab513ac3202142e0598`.
+See `catalog-staged-proof.json`, `terminal-result.json` and the retained raw
+logs. CPUs 112–119 booking 3310 returned at 13:38 UTC. The owned S1 fixture,
+prep log and both exited containers were retired at 13:39 UTC, removing
+28.05 GB of logical file bytes; the inactive RC donor remains protected.
+The retained generated JSON was reconstructed after cleanup from the eight
+frozen inputs and matches the original staged SHA-256 exactly. Source,
+private DEV publication and the Linux RC input handoff are complete.

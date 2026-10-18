@@ -84,6 +84,8 @@
   "editSkillDescription": "Update the description and instructions. The skill name cannot be changed.",
   "uninstallSkill": "Uninstall",
   "skillUnavailable": "Unavailable",
+  "skillUnavailableOnComputer": "Unavailable on this computer",
+  "skillSupportedSystems": "Supported systems: {{platforms}}.",
   "skillError": "Skill error",
   "skillInstructions": "Instructions",
   "deleteSkill": "Delete skill",

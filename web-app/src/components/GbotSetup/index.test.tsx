@@ -119,6 +119,24 @@ function fillConnection() {
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
 }
 
+it('offers a separate Linux desktop using the service computer’s Linux or Windows virtualization', async () => {
+  render(<GbotSetup save={vi.fn()} localReady={vi.fn()} cancel={vi.fn()} />)
+  fireEvent.change(screen.getByLabelText('Bot name'), {
+    target: { value: 'Writer' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+  const local = await screen.findByLabelText(/A separate local VM/)
+  expect(local.closest('label')).toHaveTextContent(
+    'KVM on Linux or Hyper-V on Windows'
+  )
+  expect(local.closest('label')).toHaveTextContent('service computer')
+  expect(vi.mocked(gbot).mock.calls).toEqual([])
+})
+
 it.each([
   ['azure', 'Azure (guided)'],
   ['aws', 'AWS (guided)'],

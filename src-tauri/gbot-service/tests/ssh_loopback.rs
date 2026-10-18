@@ -1721,6 +1721,7 @@ async fn hand_back_recovers_paused_control_while_setup_is_incomplete() {
         let setup_root = fixture.directory.path().join("computer");
         tokio::fs::create_dir_all(&setup_root).await.unwrap();
         let record = SetupRecord {
+            vm_root: None,
             id: identity.workspace_id,
             name: "Paused saved computer".into(),
             service_id: service.snapshot().await.service_id,

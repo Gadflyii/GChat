@@ -805,7 +805,7 @@ it('shows account refresh progress, prevents duplicates, and clears a rejected r
   await waitFor(() => expect(connectorAccounts).toHaveBeenCalledTimes(2))
   await act(async () => rejectRefresh(new Error('Account list unavailable')))
   expect(screen.getByRole('alert')).toHaveTextContent(
-    'Account list unavailable'
+    'Could not refresh your Microsoft accounts. Choose Refresh Microsoft accounts to try again.'
   )
   expect(
     screen.queryByText(
@@ -824,6 +824,137 @@ it('shows account refresh progress, prevents duplicates, and clears a rejected r
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
   expect(beginConnectorAuth).not.toHaveBeenCalled()
+})
+
+it.each(['load', 'refresh'] as const)(
+  'shows plain Microsoft setup failure guidance for account %s and keeps diagnostics closed',
+  async (action) => {
+    const diagnostic = 'Error: RPC_E_DISCONNECTED account transport'
+    if (action === 'load') {
+      vi.mocked(connectorAccounts).mockRejectedValueOnce(
+        new Error('RPC_E_DISCONNECTED account transport')
+      )
+    } else {
+      vi.mocked(connectorAccounts)
+        .mockResolvedValueOnce(accounts())
+        .mockRejectedValueOnce(new Error('RPC_E_DISCONNECTED account transport'))
+    }
+    mount()
+    if (action === 'refresh') {
+      await screen.findByLabelText('Microsoft account')
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+      )
+    }
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      action === 'load'
+        ? 'Could not load your Microsoft accounts. Choose Refresh Microsoft accounts to try again.'
+        : 'Could not refresh your Microsoft accounts. Choose Refresh Microsoft accounts to try again.'
+    )
+    expect(alert).not.toHaveTextContent('RPC_E_DISCONNECTED')
+    expect(screen.getByText(diagnostic).closest('details')).not.toHaveAttribute(
+      'open'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+    ).toBeEnabled()
+    expect(beginConnectorAuth).not.toHaveBeenCalled()
+    expect(gbot).not.toHaveBeenCalled()
+    vi.mocked(connectorAccounts).mockResolvedValueOnce(accounts())
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Refresh Microsoft accounts' })
+    )
+    await screen.findByText(
+      'Microsoft accounts refreshed. 1 connected account is available. Choose an account above.'
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
+it('shows plain Microsoft setup failure guidance when Save is not confirmed', async () => {
+  vi.mocked(gbot)
+    .mockResolvedValueOnce([cloudPc])
+    .mockRejectedValueOnce(new Error('EACCES setup.json'))
+  const saved = mount(initial)
+  await screen.findByLabelText('Microsoft account')
+  await checkAssignments()
+  fireEvent.click(screen.getByLabelText(/dedicated to the bot/))
+  fireEvent.click(screen.getByRole('button', { name: 'Save Cloud PC setup' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not confirm your Cloud PC setup was saved. Choose Save Cloud PC setup to try again.'
+  )
+  expect(alert).not.toHaveTextContent('EACCES')
+  expect(
+    screen.getByText('Error: EACCES setup.json').closest('details')
+  ).not.toHaveAttribute('open')
+  expect(saved).not.toHaveBeenCalled()
+  expect(
+    vi.mocked(gbot).mock.calls.filter(([path]) => path === 'setup/m365/save')
+  ).toHaveLength(1)
+})
+
+it('shows plain Microsoft setup failure guidance after an accepted Save cannot refresh computers', async () => {
+  vi.mocked(gbot).mockResolvedValueOnce([cloudPc]).mockResolvedValueOnce(initial)
+  const saved = mount(initial)
+  saved.mockRejectedValueOnce(new Error('RPC_E_DISCONNECTED computer list'))
+  await screen.findByLabelText('Microsoft account')
+  await checkAssignments()
+  fireEvent.click(screen.getByLabelText(/dedicated to the bot/))
+  fireEvent.click(screen.getByRole('button', { name: 'Save Cloud PC setup' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Your Cloud PC setup was saved, but the computer list could not be refreshed. Close setup to try refreshing the list again.'
+  )
+  expect(alert).not.toHaveTextContent('RPC_E_DISCONNECTED')
+  expect(
+    screen.getByText('Cloud PC setup saved. Desktop control is not connected yet.')
+  ).toHaveAttribute('role', 'status')
+  expect(
+    screen.getByText('Error: RPC_E_DISCONNECTED computer list').closest('details')
+  ).not.toHaveAttribute('open')
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Open Microsoft client' })
+    ).toBeEnabled()
+  )
+  expect(saved).toHaveBeenCalledOnce()
+  expect(
+    vi.mocked(gbot).mock.calls.filter(([path]) => path === 'setup/m365/save')
+  ).toHaveLength(1)
+  expect(opener).not.toHaveBeenCalled()
+})
+
+it('shows plain Microsoft setup failure guidance for a failed native client opener and permits retry', async () => {
+  vi.mocked(gbot).mockResolvedValue({ url: 'ms-windows365://private-launch' })
+  opener.mockRejectedValueOnce(new Error('HRESULT 0x80070002'))
+  mount(initial)
+  await screen.findByLabelText('Microsoft account')
+  fireEvent.click(screen.getByRole('button', { name: 'Open Microsoft client' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not open Microsoft’s client. Choose Open Microsoft client to try again.'
+  )
+  expect(alert).not.toHaveTextContent('HRESULT')
+  expect(
+    screen.getByText('Error: HRESULT 0x80070002').closest('details')
+  ).not.toHaveAttribute('open')
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Open Microsoft client' })
+    ).toBeEnabled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Open Microsoft client' }))
+  await screen.findByText(
+    'Microsoft client opened. Desktop control is not connected yet.'
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(opener).toHaveBeenCalledTimes(2)
+  expect(vi.mocked(gbot).mock.calls.map(([path]) => path)).toEqual([
+    'setup/m365/launch',
+    'setup/m365/launch',
+  ])
 })
 
 it('shows browser sign-in launch progress without choosing an account or allowing duplicate launch', async () => {

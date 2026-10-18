@@ -21,6 +21,22 @@ type FirstRun = {
   maintenance_error?: string | null
 }
 
+type StartupProfile = FirstRun['startup_profiles'][number]
+type StartupDraft = { concurrency: string; max_context: string; instance_count: string; kv_arena_bytes: string }
+
+const startupDraft = (profile: StartupProfile): StartupDraft => ({
+  concurrency: String(profile.concurrency),
+  max_context: String(profile.max_context),
+  instance_count: String(profile.instance_count),
+  kv_arena_bytes: profile.kv_arena_bytes == null ? '' : String(profile.kv_arena_bytes),
+})
+
+const startupSettingsMatch = (profile: StartupProfile, draft: StartupDraft) =>
+  Number(draft.concurrency) === profile.concurrency &&
+  Number(draft.max_context) === profile.max_context &&
+  Number(draft.instance_count) === profile.instance_count &&
+  (draft.kv_arena_bytes ? Number(draft.kv_arena_bytes) : null) === profile.kv_arena_bytes
+
 /** All progress and long-running work belongs to the shared local Host. */
 /** Allow the local Host to connect after bundled resource preparation finishes. */
 const LOCAL_HOST_START_GRACE_MS = 30_000
@@ -32,16 +48,24 @@ function FirstRunError({ message, details, label }: { message: string; details: 
   </div>
 }
 
-export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: {
+type EngineFirstRunProps = {
   hostId?: string; onComplete?: () => void; hardwareProfileControls?: ReactNode
-}) {
+}
+
+export function EngineFirstRun(props: EngineFirstRunProps) {
   const hosts = useEngineHosts(s => s.hosts)
+  const localId = props.hostId ?? hosts.find(host => host.local)?.host_id
+  // Welcome can discover a replacement local Host without unmounting its setup
+  // screen. Drafts and pending commands belong to the selected Host alone.
+  return <HostFirstRun key={localId} {...props} hostId={localId} />
+}
+
+function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: EngineFirstRunProps) {
   const snapshots = useEngineHosts(s => s.snapshots)
   const errors = useEngineHosts(s => s.errors)
   const refresh = useEngineHosts(s => s.refresh)
   const resources = useBundledResources()
   const resourcesReady = resources.ready === true && !resources.error
-  const localId = hostId ?? hosts.find(host => host.local)?.host_id
   const snapshot = localId ? snapshots[localId] : undefined
   const [flow, setFlow] = useState<FirstRun>()
   const [error, setError] = useState('')
@@ -52,7 +76,24 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const [gpus, setGpus] = useState<string[]>([])
   const [path, setPath] = useState('')
   const [releases, setReleases] = useState<string[]>([])
+  const [startupDrafts, setStartupDrafts] = useState<Record<string, StartupDraft>>({})
+  // A check can finish after another edit. Keep each model's draft separate
+  // from Host responses and compare it with the settings their quote covers.
+  const displayedStartup = (profile: StartupProfile) => startupDrafts[profile.download_id] ?? startupDraft(profile)
+  const startupChanged = (profile: StartupProfile) => !startupSettingsMatch(profile, displayedStartup(profile))
+  const editStartup = (profile: StartupProfile, field: keyof StartupDraft, value: string) => {
+    setStartupDrafts(drafts => ({
+      ...drafts,
+      [profile.download_id]: { ...(drafts[profile.download_id] ?? startupDraft(profile)), [field]: value },
+    }))
+  }
   const revision = useRef(0)
+  const active = useRef(true)
+  const pendingAction = useRef(false)
+  useEffect(() => {
+    active.current = true
+    return () => { active.current = false }
+  }, [])
   const completed = useRef(false)
   const initializedGroup = useRef<string | undefined>(undefined)
   const pathEdited = useRef(false)
@@ -80,7 +121,11 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     if (!resourcesReady) return
     let stopped = false
     let grace: ReturnType<typeof setTimeout> | undefined
-    void refresh().catch(e => setPollError(String(e))).finally(() => {
+    const requestRevision = revision.current
+    void refresh().catch(e => {
+      // A newer setup command owns the feedback even if discovery finishes last.
+      if (!stopped && !pendingAction.current && requestRevision === revision.current) setPollError(String(e))
+    }).finally(() => {
       if (!stopped) grace = setTimeout(() => setChecked(true), LOCAL_HOST_START_GRACE_MS)
     })
     return () => { stopped = true; clearTimeout(grace) }
@@ -94,10 +139,14 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       let complete = false
       try {
         const next = await engineCommand<FirstRun>('first_run', { host_id: localId })
-        complete = next.step === 'complete'
         // Reading status again does not mean a rejected user action succeeded.
-        if (!stopped && requestRevision === revision.current) { setFlow(next); setPollError('') }
-      } catch (e) { if (!stopped && requestRevision === revision.current) setPollError(String(e)) }
+        // Only an accepted read can end polling. Reads made during a command
+        // may describe its old state even if they finish after its response.
+        if (!stopped && !pendingAction.current && requestRevision === revision.current) {
+          complete = next.step === 'complete'
+          setFlow(next); setPollError('')
+        }
+      } catch (e) { if (!stopped && !pendingAction.current && requestRevision === revision.current) setPollError(String(e)) }
       if (!stopped && !complete) timer = setTimeout(() => void poll(), 2000)
     }
     void poll()
@@ -119,27 +168,39 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     // Polls update saved choices and recommendations without replacing edits.
   }, [flow])
   const act = async (args: Record<string, unknown>) => {
-    if (!localId) return
+    if (!localId || pendingAction.current) return
     revision.current++
+    pendingAction.current = true
     setBusy(true); setError('')
     try {
       const next = await engineCommand<FirstRun>('first_run', { host_id: localId, ...args })
+      if (!active.current) return
       setFlow(next)
       setPollError('')
       if (next.step === 'complete') await refresh().catch(() => undefined)
       else if (args.action) requestAnimationFrame(showCard)
-    } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    } catch (e) { if (active.current) setError(String(e)) } finally {
+      revision.current++
+      pendingAction.current = false
+      if (active.current) setBusy(false)
+    }
   }
   const profileAction = async (action: 'cancel' | 'resume') => {
-    if (!localId) return
+    if (!localId || pendingAction.current) return
     revision.current++
+    pendingAction.current = true
     setBusy(true); setError('')
     try {
       const hardware = await engineCommand<EngineHardwareProfile>('hardware_profile', { host_id: localId, body: { action } })
+      if (!active.current) return
       setFlow(current => current ? { ...current, hardware_profile: hardware } : current)
       setPollError('')
       await refresh().catch(() => undefined)
-    } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    } catch (e) { if (active.current) setError(String(e)) } finally {
+      revision.current++
+      pendingAction.current = false
+      if (active.current) setBusy(false)
+    }
   }
   if (step === 'complete') return <>{hardwareProfileControls}</>
   const known = snapshot?.gpus.filter(gpu => ['8.0', '8.6', '8.9', '12.0'].includes(gpu.compute_capability ?? '')) ?? []
@@ -230,16 +291,22 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       {path.trim() !== savedStoragePath.trim() && <p className="text-sm">Select Use this folder to save the changed destination before continuing.</p>}
       <Button disabled={busy || !flow?.storage.review_key || path.trim() !== savedStoragePath.trim()} onClick={() => void act({ action: 'accept_storage', review_key: flow?.storage.review_key })}>Keep these locations and continue</Button>
     </div>}
-    {step === 'startup' && <div className="space-y-3"><h3 className="font-medium">Review model startup settings</h3><p className="text-sm text-muted-foreground">The recommended settings are filled in for you. Wait for the memory check, then select Finish local setup. Open Advanced settings only if you want to change how much conversation a model remembers or how many requests it can answer together.</p>{!flow?.startup_profiles.length && <p role="status">Preparing settings and checking that each model has enough memory…</p>}{flow?.startup_profiles.map(profile => <div key={profile.download_id} className="space-y-3 rounded border p-3 text-sm"><p className="font-medium">{plainStartupModelName(profile.model_id)}</p>{!profile.quote && !profile.error && <p role="status">Checking that this model has enough memory to start…</p>}{profile.quote != null && !profile.error && <p role="status">Ready to start with these settings.</p>}{profile.error && <FirstRunError message="GInfer could not confirm that this model can start. Check the details and Advanced settings, then select Check startup settings. A shorter conversation limit or fewer simultaneous requests may help if memory is short." details={profile.error} label={`${plainStartupModelName(profile.model_id)} startup error details`} />}<details><summary className="cursor-pointer">Advanced settings and memory details</summary><p>{profile.instance_count} model copies · {profile.concurrency} replies at once · {profile.max_context.toLocaleString()} conversation tokens · {profile.kv_arena_bytes == null ? 'Automatic graphics-card conversation memory' : `${formatModelBytes(profile.kv_arena_bytes)} graphics-card conversation memory`}</p>
+    {step === 'startup' && <div className="space-y-3"><h3 className="font-medium">Review model startup settings</h3><p className="text-sm text-muted-foreground">The recommended settings are filled in for you. Wait for the memory check, then select Finish local setup. Open Advanced settings only if you want to change how much conversation a model remembers or how many requests it can answer together.</p>{!flow?.startup_profiles.length && <p role="status">Preparing settings and checking that each model has enough memory…</p>}{flow?.startup_profiles.map(profile => <div key={profile.download_id} className="space-y-3 rounded border p-3 text-sm"><p className="font-medium">{plainStartupModelName(profile.model_id)}</p>{startupChanged(profile) && <p role="status">Settings changed. Select Check startup settings before finishing setup.</p>}{!startupChanged(profile) && !profile.quote && !profile.error && <p role="status">Checking that this model has enough memory to start…</p>}{!startupChanged(profile) && profile.quote != null && !profile.error && <p role="status">Ready to start with these settings.</p>}{profile.error && <FirstRunError message="GInfer could not confirm that this model can start. Check the details and Advanced settings, then select Check startup settings. A shorter conversation limit or fewer simultaneous requests may help if memory is short." details={profile.error} label={`${plainStartupModelName(profile.model_id)} startup error details`} />}<details><summary className="cursor-pointer">Advanced settings and memory details</summary><p>Saved settings: {profile.instance_count} model copies · {profile.concurrency} replies at once · {profile.max_context.toLocaleString()} conversation tokens · {profile.kv_arena_bytes == null ? 'Automatic graphics-card conversation memory' : `${formatModelBytes(profile.kv_arena_bytes)} graphics-card conversation memory`}</p>
       <form className="space-y-2" onSubmit={event => { event.preventDefault(); const fields = new FormData(event.currentTarget); void act({ action: 'startup', download_id: profile.download_id, concurrency: Number(fields.get('concurrency')), max_context: Number(fields.get('max_context')), instance_count: Number(fields.get('instance_count')), kv_arena_bytes: fields.get('kv_arena_bytes') ? Number(fields.get('kv_arena_bytes')) : null }) }}>
-        <p>Simultaneous requests controls how many messages this model can answer at once. A larger value uses more memory.</p><label className="block">Simultaneous requests<Input name="concurrency" aria-label={`${plainStartupModelName(profile.model_id)} simultaneous requests`} type="number" min={1} max={8} required defaultValue={profile.concurrency} /></label>
-        <p>Conversation limit is the amount of text the model can remember, measured in tokens (small pieces of text). Larger limits need more memory.</p><label className="block">Conversation limit (tokens)<Input name="max_context" aria-label={`${plainStartupModelName(profile.model_id)} conversation limit in tokens`} type="number" min={1} required defaultValue={profile.max_context} /></label>
-        <p>Model copies lets you run more than one copy at once. Keep one unless you need to serve several users.</p><label className="block">Model copies<Input name="instance_count" aria-label={`${plainStartupModelName(profile.model_id)} model copies`} type="number" min={1} required defaultValue={profile.instance_count} /></label>
-        <p>Conversation memory on the graphics card (KV cache) is chosen automatically. Leave this blank unless you need an exact memory budget.</p><label className="block">Conversation memory in bytes (blank for automatic)<Input name="kv_arena_bytes" aria-label={`${plainStartupModelName(profile.model_id)} graphics-card conversation memory in bytes`} type="number" min={1} defaultValue={profile.kv_arena_bytes ?? ''} /></label>
+        <p>Simultaneous requests controls how many messages this model can answer at once. A larger value uses more memory.</p><label className="block">Simultaneous requests<Input name="concurrency" aria-label={`${plainStartupModelName(profile.model_id)} simultaneous requests`} type="number" min={1} max={8} required value={displayedStartup(profile).concurrency} onChange={event => editStartup(profile, 'concurrency', event.target.value)} /></label>
+        <p>Conversation limit is the amount of text the model can remember, measured in tokens (small pieces of text). Larger limits need more memory.</p><label className="block">Conversation limit (tokens)<Input name="max_context" aria-label={`${plainStartupModelName(profile.model_id)} conversation limit in tokens`} type="number" min={1} required value={displayedStartup(profile).max_context} onChange={event => editStartup(profile, 'max_context', event.target.value)} /></label>
+        <p>Model copies lets you run more than one copy at once. Keep one unless you need to serve several users.</p><label className="block">Model copies<Input name="instance_count" aria-label={`${plainStartupModelName(profile.model_id)} model copies`} type="number" min={1} required value={displayedStartup(profile).instance_count} onChange={event => editStartup(profile, 'instance_count', event.target.value)} /></label>
+        <p>Conversation memory on the graphics card (KV cache) is chosen automatically. Leave this blank unless you need an exact memory budget.</p><label className="block">Conversation memory in bytes (blank for automatic)<Input name="kv_arena_bytes" aria-label={`${plainStartupModelName(profile.model_id)} graphics-card conversation memory in bytes`} type="number" min={1} value={displayedStartup(profile).kv_arena_bytes} onChange={event => editStartup(profile, 'kv_arena_bytes', event.target.value)} /></label>
         <Button type="submit" variant="outline" disabled={busy}>Check startup settings</Button>
       </form></details>
-    </div>)}<p className="text-sm text-muted-foreground">GInfer checks that these settings fit in memory. Finish setup when all checks pass, then load a model when you are ready to chat.</p><Button disabled={busy || !flow?.startup_profiles.length || flow.startup_profiles.some(profile => profile.error || !profile.quote)} onClick={() => void act({ action: 'complete' })}>Finish local setup</Button></div>}
-    {unavailable && <Button variant="outline" disabled={busy} onClick={() => { void refresh().catch(e => setPollError(String(e))); if (localId) void act({}) }}>Retry local setup</Button>}
+    </div>)}<p className="text-sm text-muted-foreground">GInfer checks that these settings fit in memory. Finish setup when all checks pass, then load a model when you are ready to chat.</p><Button disabled={busy || !flow?.startup_profiles.length || flow.startup_profiles.some(profile => profile.error || !profile.quote || startupChanged(profile))} onClick={() => void act({ action: 'complete' })}>Finish local setup</Button></div>}
+    {unavailable && <Button variant="outline" disabled={busy} onClick={() => {
+      const requestRevision = revision.current
+      void refresh().catch(e => {
+        if (active.current && !pendingAction.current && requestRevision === revision.current) setPollError(String(e))
+      })
+      if (localId) void act({})
+    }}>Retry local setup</Button>}
     {hardwareProfileControls && <details open={manualOpen} onToggle={event => setManualOpen(event.currentTarget.open)} className="space-y-3">
       <summary className="cursor-pointer font-medium">Advanced graphics-card setup options</summary>
       <p className="text-sm text-muted-foreground">Measure graphics cards again or continue unfinished setup without downloading a model. Your folder and model choices are kept. Close these options to return to guided setup.</p>

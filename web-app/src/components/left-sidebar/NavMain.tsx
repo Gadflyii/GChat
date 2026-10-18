@@ -81,7 +81,7 @@ export function NavMain() {
         await resetAgentSession(TEMPORARY_CHAT_ID)
       }
       useMessages.getState().setMessages(TEMPORARY_CHAT_ID, [])
-      usePrompt.getState().resetPrompt()
+      usePrompt.getState().resetPrompt(TEMPORARY_CHAT_ID)
       useInitialMessage.getState().clear(TEMPORARY_CHAT_ID)
       useChatAttachments
         .getState()

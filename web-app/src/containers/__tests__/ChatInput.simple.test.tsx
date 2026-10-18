@@ -172,7 +172,7 @@ describe('ChatInput', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     seedServiceHub()
-    usePrompt.setState({ prompt: '' })
+    usePrompt.setState(usePrompt.getInitialState())
     useChatAttachments.setState({ attachmentsByThread: {} })
     useThreads.setState({ threads: {}, currentThreadId: undefined })
     useInitialMessage.setState({ byThread: {} })
@@ -420,6 +420,48 @@ describe('ChatInput', () => {
       fileStat.mockRestore()
       showPrompt.mockRestore()
     }
+  })
+
+  it('keeps New Chat and two saved conversation drafts separate across navigation and reopening', () => {
+    const view = render(<ChatInput initialMessage />)
+    const input = () => screen.getByTestId('chat-input')
+    fireEvent.change(input(), { target: { value: 'Unsent new conversation' } })
+
+    act(() => useThreads.setState({ currentThreadId: 'draft-a' }))
+    view.rerender(<ChatInput />)
+    expect(input()).toHaveValue('')
+    fireEvent.change(input(), { target: { value: 'Reply to conversation A' } })
+
+    act(() => useThreads.setState({ currentThreadId: 'draft-b' }))
+    expect(input()).toHaveValue('')
+    fireEvent.change(input(), { target: { value: 'Reply to conversation B' } })
+
+    act(() => useThreads.setState({ currentThreadId: 'draft-a' }))
+    expect(input()).toHaveValue('Reply to conversation A')
+    view.unmount()
+
+    const reopened = render(<ChatInput initialMessage />)
+    expect(input()).toHaveValue('Unsent new conversation')
+    reopened.rerender(<ChatInput />)
+    expect(input()).toHaveValue('Reply to conversation A')
+    act(() => useThreads.setState({ currentThreadId: 'draft-b' }))
+    expect(input()).toHaveValue('Reply to conversation B')
+  })
+
+  it('clears only the submitted conversation draft after a successful send', async () => {
+    usePrompt.getState().setPrompt('Unsent home draft')
+    useThreads.setState({ currentThreadId: 'sent-conversation' })
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const view = render(<ChatInput onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Send this reply' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(screen.getByTestId('chat-input')).toHaveValue(''))
+    expect(onSubmit).toHaveBeenCalledWith('Send this reply', undefined, undefined, undefined, [])
+
+    view.rerender(<ChatInput initialMessage />)
+    expect(screen.getByTestId('chat-input')).toHaveValue('Unsent home draft')
+    view.rerender(<ChatInput />)
+    expect(screen.getByTestId('chat-input')).toHaveValue('')
   })
 
   it('renders the production input with its translated placeholder', () => {
@@ -740,7 +782,10 @@ describe('ChatInput', () => {
     }
   })
 
-  it('does not clear the next conversation draft when an earlier submission finishes', async () => {
+  it.each([
+    { pendingDraft: 'Review these notes', restoredDraft: '' },
+    { pendingDraft: 'My next question', restoredDraft: 'My next question' },
+  ])('clears only the sent draft after switching conversations ($pendingDraft)', async ({ pendingDraft, restoredDraft }) => {
     const originalThread = 'original-conversation'
     const nextThread = 'next-conversation'
     const originalAttachment = { ...createDocumentAttachment({ name: 'original.txt', path: '/docs/original.txt' }), id: 'original-file', processed: true }
@@ -754,6 +799,8 @@ describe('ChatInput', () => {
     const input = screen.getByTestId('chat-input')
     fireEvent.change(input, { target: { value: 'Review these notes' } })
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review these notes', undefined, undefined, undefined, [originalAttachment])
+    fireEvent.change(input, { target: { value: pendingDraft } })
 
     act(() => useThreads.setState({ currentThreadId: nextThread }))
     fireEvent.change(input, { target: { value: 'Review these notes' } })
@@ -767,6 +814,12 @@ describe('ChatInput', () => {
     expect(useChatAttachments.getState().getAttachments(nextThread)).toEqual([nextAttachment])
     expect(useChatAttachments.getState().getAttachments(originalThread)).toEqual([])
     expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+
+    act(() => useThreads.setState({ currentThreadId: originalThread }))
+    expect(input).toHaveValue(restoredDraft)
+    act(() => useThreads.setState({ currentThreadId: nextThread }))
+    expect(input).toHaveValue('Review these notes')
+    expect(useChatAttachments.getState().getAttachments(nextThread)).toEqual([nextAttachment])
   })
 
   it('consumes /compact on the home input before model selection or thread creation', async () => {

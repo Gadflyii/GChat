@@ -1,6 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
-import { AgentStudioHeader } from '../AgentStudioHeader'
+import { AgentStudioHeader, type AgentStudioSection } from '../AgentStudioHeader'
 
 vi.mock('@/containers/HeaderPage', () => ({
   default: ({ children }: { children: React.ReactNode }) => <header>{children}</header>,
@@ -24,4 +26,43 @@ it('lists the sections in their own left-aligned row under the title, with page 
   expect(screen.getByRole('button', { name: 'Create agent' }).closest('nav')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Runs' }))
   expect(onSelect).toHaveBeenCalledWith('runs')
+})
+
+it('exposes the current section as keyboard navigation changes the Studio view', async () => {
+  const user = userEvent.setup()
+  function StudioNavigation() {
+    const [active, setActive] = useState<AgentStudioSection>('definitions')
+    return <AgentStudioHeader active={active} onSelect={setActive} />
+  }
+  render(<StudioNavigation />)
+  const nav = within(screen.getByRole('navigation', { name: 'Agent Studio sections' }))
+  expect(nav.getByRole('button', { current: 'page' })).toHaveTextContent('Agents & flows')
+
+  for (const name of ['Templates', 'Skills', 'Worker Pools', 'Runs', 'Agents & flows']) {
+    const section = nav.getByRole('button', { name })
+    section.focus()
+    await user.keyboard('{Enter}')
+    expect(nav.getAllByRole('button', { current: 'page' })).toEqual([section])
+    expect(section).toHaveFocus()
+  }
+})
+
+it('leaves focus on a control chosen while section navigation is pending', async () => {
+  const user = userEvent.setup()
+  let finish!: () => void
+  const pending = new Promise<void>((resolve) => { finish = resolve })
+  const onSelect = vi.fn(() => pending)
+  const view = render(<>
+    <AgentStudioHeader active="definitions" onSelect={onSelect} />
+    <button>Keep working</button>
+  </>)
+  screen.getByRole('button', { name: 'Skills', exact: true }).focus()
+  await user.keyboard('{Enter}')
+  view.rerender(<>
+    <AgentStudioHeader key="skills-route" active="skills" onSelect={onSelect} />
+    <button>Keep working</button>
+  </>)
+  screen.getByRole('button', { name: 'Keep working' }).focus()
+  await act(async () => finish())
+  expect(screen.getByRole('button', { name: 'Keep working' })).toHaveFocus()
 })

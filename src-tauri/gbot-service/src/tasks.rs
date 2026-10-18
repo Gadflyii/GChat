@@ -295,7 +295,7 @@ impl TaskStateMutex {
         .await
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     fn try_lock(
         &self,
         operation: &'static str,
@@ -319,7 +319,7 @@ impl TaskStateMutex {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) struct SetupTaskGuard {
     _state: TaskStateGuard,
 }
@@ -391,7 +391,7 @@ impl TaskRunner {
         })
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) fn guard_setup_session_renewal(
         &self,
         workspace: crate::contract::WorkspaceId,
@@ -628,27 +628,46 @@ impl TaskRunner {
             .collect())
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) async fn remove_computer(
         self: &Arc<Self>,
         setup: Arc<crate::kvm_setup::KvmSetup>,
         id: crate::contract::WorkspaceId,
     ) -> std::result::Result<crate::kvm_setup::SetupRecord, crate::kvm_setup::SetupIssue> {
+        self.computer_lifecycle(setup, id, true).await
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    pub(crate) async fn stop_computer(
+        self: &Arc<Self>,
+        setup: Arc<crate::kvm_setup::KvmSetup>,
+        id: crate::contract::WorkspaceId,
+    ) -> std::result::Result<crate::kvm_setup::SetupRecord, crate::kvm_setup::SetupIssue> {
+        self.computer_lifecycle(setup, id, false).await
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    async fn computer_lifecycle(
+        self: &Arc<Self>,
+        setup: Arc<crate::kvm_setup::KvmSetup>,
+        id: crate::contract::WorkspaceId,
+        removing: bool,
+    ) -> std::result::Result<crate::kvm_setup::SetupRecord, crate::kvm_setup::SetupIssue> {
         let owner = self.clone();
         tokio::spawn(async move {
-            let state = owner.state.lock("remove_computer", Some(id), None).await;
+            let state = owner.state.lock("computer_lifecycle", Some(id), None).await;
             if state.records.iter().any(|(task_id, saved)| {
                 let record = state.actors.get(task_id)
                     .map_or_else(|| saved.clone(), |actor| actor.record.borrow().clone());
                 record.identity.workspace_id == id
                     && !matches!(record.state, crate::executor::TaskState::Completed | crate::executor::TaskState::Cancelled)
             }) {
-                return Err(crate::kvm_setup::SetupIssue::new("workspace_in_use", "This bot has unfinished tasks.", "Finish or cancel its tasks before removing this computer."));
+                return Err(crate::kvm_setup::SetupIssue::new("workspace_in_use", "This bot has unfinished tasks.", "Finish or cancel its tasks before stopping or removing this computer."));
             }
             let _schedules = owner.schedules.guard_workspace_removal(id).await
-                .map_err(|error| crate::kvm_setup::SetupIssue::new("workspace_in_use", error.to_string(), "Disable its schedules and resolve pending runs before removing this computer."))?;
-            setup.remove(id).await
-        }).await.map_err(|error| crate::kvm_setup::SetupIssue::new("removal_failed", error.to_string(), "Retry removal of this same computer."))?
+                .map_err(|error| crate::kvm_setup::SetupIssue::new("workspace_in_use", error.to_string(), "Disable its schedules and resolve pending runs before stopping or removing this computer."))?;
+            if removing { setup.remove(id).await } else { setup.stop(id).await }
+        }).await.map_err(|error| crate::kvm_setup::SetupIssue::new("computer_action_failed", error.to_string(), "Retry the action on this same computer."))?
     }
 
     /// Unfinished tasks and active schedules keep a LAN bot; removal holds both guards.
@@ -660,18 +679,29 @@ impl TaskRunner {
         use crate::{service::ServiceError, workspace::WorkspaceError};
         let owner = self.clone();
         tokio::spawn(async move {
-            let state = owner.state.lock("remove_lan_workspace", Some(id), None).await;
+            let state = owner
+                .state
+                .lock("remove_lan_workspace", Some(id), None)
+                .await;
             if state.records.iter().any(|(task_id, saved)| {
-                let record = state.actors.get(task_id)
+                let record = state
+                    .actors
+                    .get(task_id)
                     .map_or_else(|| saved.clone(), |actor| actor.record.borrow().clone());
                 record.identity.workspace_id == id
-                    && !matches!(record.state, crate::executor::TaskState::Completed | crate::executor::TaskState::Cancelled)
+                    && !matches!(
+                        record.state,
+                        crate::executor::TaskState::Completed
+                            | crate::executor::TaskState::Cancelled
+                    )
             }) {
                 return Err(WorkspaceError::State(ServiceError::WorkspaceInUse));
             }
             let _schedules = owner.schedules.guard_workspace_removal(id).await?;
             runtime.remove_lan_workspace(id).await
-        }).await.map_err(|_| WorkspaceError::Vault(crate::vault::VaultError::WorkerFailure))?
+        })
+        .await
+        .map_err(|_| WorkspaceError::Vault(crate::vault::VaultError::WorkerFailure))?
     }
 
     pub async fn snapshot(&self, id: Uuid) -> Result<TaskRecord> {
@@ -1098,7 +1128,7 @@ mod tests {
         assert!(state.lock("readback", None, None).await.closed);
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[tokio::test]
     async fn computer_removal_requires_finished_tasks() {
         let dir = tempfile::tempdir().unwrap();
@@ -1168,6 +1198,18 @@ mod tests {
                 .insert(id, record);
             let issue = runner
                 .remove_computer(setup.clone(), identity.workspace_id)
+                .await
+                .unwrap_err();
+            assert_eq!(
+                issue.code,
+                if matches!(state, TaskState::Completed | TaskState::Cancelled) {
+                    "setup_missing"
+                } else {
+                    "workspace_in_use"
+                }
+            );
+            let issue = runner
+                .stop_computer(setup.clone(), identity.workspace_id)
                 .await
                 .unwrap_err();
             assert_eq!(
