@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
+import { settleConfirm } from '@/lib/confirm'
 import type { AgentSkillDetail } from '@/services/agent/skills'
 import type { DialogService } from '@/services/dialog/types'
 import { resetServiceHubStore, seedServiceHub } from '@/test/service-hub'
@@ -137,6 +139,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  settleConfirm(false)
   resetServiceHubStore()
 })
 
@@ -158,9 +161,11 @@ describe('Skills dialog caller focus', () => {
           <>
             <button>Downloads</button>
             <SkillsPage />
+            <ConfirmDialogHost />
           </>
         )
         const trigger = await openDialog(user, caller)
+        let draftInput: HTMLElement | undefined
 
         if (caller === 'uninstall') {
           await waitFor(() =>
@@ -174,6 +179,7 @@ describe('Skills dialog caller focus', () => {
           })
           await user.clear(input)
           await user.type(input, 'Discarded draft')
+          draftInput = input
         }
 
         if (dismissal === 'Cancel' || dismissal === 'Close') {
@@ -184,6 +190,35 @@ describe('Skills dialog caller focus', () => {
           )
         } else {
           await user.keyboard(`{${dismissal}}`)
+        }
+        if (caller === 'edit card' || caller === 'edit menu') {
+          let confirmation = await screen.findByRole('dialog', {
+            name: 'Discard unsaved skill changes?',
+          })
+          await waitFor(() =>
+            expect(
+              within(confirmation).getByRole('button', { name: 'Keep editing' })
+            ).toHaveFocus()
+          )
+          expectNoMutation()
+          if (dismissal === 'Escape') {
+            await user.click(
+              within(confirmation).getByRole('button', { name: 'Keep editing' })
+            )
+            await waitFor(() => expect(draftInput).toHaveFocus())
+            expect(draftInput).toHaveValue('Discarded draft')
+            expect(
+              screen.getByRole('textbox', { name: 'common:description' })
+            ).toBe(draftInput)
+            expectNoMutation()
+            await user.keyboard('{Escape}')
+            confirmation = await screen.findByRole('dialog', {
+              name: 'Discard unsaved skill changes?',
+            })
+          }
+          await user.click(
+            within(confirmation).getByRole('button', { name: 'Discard changes' })
+          )
         }
         await waitFor(() => expect(trigger).toHaveFocus())
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -213,7 +248,12 @@ describe('Skills dialog caller focus', () => {
 
   it('uses the card opener after editing another skill through its menu', async () => {
     const user = userEvent.setup()
-    render(<SkillsPage />)
+    render(
+      <>
+        <SkillsPage />
+        <ConfirmDialogHost />
+      </>
+    )
     const menuTrigger = await openDialog(user, 'edit menu')
     await user.keyboard('{Escape}')
     await waitFor(() => expect(menuTrigger).toHaveFocus())
