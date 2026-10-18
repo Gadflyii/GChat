@@ -1,0 +1,25 @@
+{
+  "command": [
+    "taskset",
+    "-c",
+    "88-95",
+    "nice",
+    "-n",
+    "10",
+    "dbus-run-session",
+    "--",
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-c",
+    "printf '\\n' | gnome-keyring-daemon --unlock --components=secrets; exec /media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/donor-appdir/AppRun"
+  ],
+  "home": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/native-home",
+  "source": "cf670bced700183738370658f591a5704be56579",
+  "catalog_env_absent": true,
+  "display": ":87",
+  "initial_preparation_pid": 3901922,
+  "accepted_session_pid": 3914031,
+  "accepted_app_pid": 3914033,
+  "relaunch_correction": "See fixture-preparation.json"
+}

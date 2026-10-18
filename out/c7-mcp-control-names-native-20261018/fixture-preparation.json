@@ -1,0 +1,21 @@
+{
+  "correction": "system Python -I ignores AppDir PYTHONHOME/PYTHONPATH; migration-added exa removed after store version3 persisted",
+  "first_start": "local fixture failed before initialize due inherited AppDir PYTHONHOME; incidental default Exa initialized without tool calls",
+  "stopped_pids": [
+    3901922,
+    3901925,
+    3901926,
+    3901929,
+    3901944,
+    3901951,
+    3901957,
+    3901968,
+    3901989,
+    3901996,
+    3902006,
+    3902022,
+    3902031,
+    3902412,
+    3902416
+  ]
+}
