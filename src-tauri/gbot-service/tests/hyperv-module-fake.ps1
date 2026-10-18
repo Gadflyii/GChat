@@ -196,7 +196,7 @@ function New-VM {
     $vm.Disks = @($VHDPath)
     $vm.Notes = ''
     $vm.Dvds = @()
-    $vm.Ports = @()
+    foreach ($port in $vm.Ports) { $port.Path = '' }
     $script:Vms = @($vm)
     $vm
 }
@@ -215,7 +215,9 @@ function Add-VMDvdDrive {
 function Set-VMComPort {
     param($VM, $Number, $Path)
     Record-Mutation 'Set-VMComPort' @{ number=$Number; path=$Path }
-    $VM.Ports = @([pscustomobject]@{ Number=$Number; Path=$Path })
+    $ports = @($VM.Ports | Where-Object { $_.Name -ceq ('COM ' + $Number) })
+    if ($ports.Count -ne 1) { throw 'The requested fake COM port does not exist.' }
+    $ports[0].Path = $Path
 }
 function Start-VM {
     param($VM, [switch]$Confirm)
@@ -259,7 +261,11 @@ function New-FakeVm {
         Disks=@($script:Directory + '\disk.vhdx')
         Dvds=@($script:Directory + '\seed.iso')
         Adapters=@([pscustomobject]@{ SwitchId=$script:SwitchId; IPAddresses=@('172.28.0.2', 'fe80::1', 'invalid') })
-        Ports=@([pscustomobject]@{ Number=1; Path=('\\.\pipe\GChat-Gbot-' + $script:Id) })
+        # Get-VMComPort exposes Name/Id/Path, not the setter's Number argument.
+        Ports=@(
+            [pscustomobject]@{ Name='COM 1'; Id='Microsoft:22222222-2222-4222-8222-222222222222\8E3A359F-559A-4B6A-98A9-1690A6100ED7\0'; Path=('\\.\pipe\GChat-Gbot-' + $script:Id) },
+            [pscustomobject]@{ Name='COM 2'; Id='Microsoft:22222222-2222-4222-8222-222222222222\8E3A359F-559A-4B6A-98A9-1690A6100ED7\1'; Path='' }
+        )
     }
 }
 function Save-Claim($registeredId) {
@@ -506,7 +512,7 @@ try {
     Assert-True (-not (Invoke-Operation 'inspect').registered) 'The removed VM still appeared registered.'
     Assert-True ($script:Files.ContainsKey($script:Directory + '\disk.vhdx')) 'Unregister must not delete disk files itself.'
 
-    foreach ($case in @('name','id','tag','configuration','generation','disk','dvd','switch','serial','duplicate')) {
+    foreach ($case in @('name','id','tag','configuration','generation','disk','dvd','switch','serial','extra_serial','misplaced_serial','duplicate')) {
         Reset-Fake -Owned
         $vm = $script:Vms[0]
         $reason = 'exact GChat ownership tag'
@@ -520,6 +526,8 @@ try {
             'dvd' { $vm.Dvds = @('F:\foreign\seed.iso'); $reason='foreign or unexpected setup disc' }
             'switch' { $vm.Adapters[0].SwitchId = [guid]::NewGuid(); $reason='existing Default Switch' }
             'serial' { $vm.Ports[0].Path = '\\.\pipe\foreign'; $reason='foreign serial pipe' }
+            'extra_serial' { $vm.Ports[1].Path = '\\.\pipe\foreign'; $reason='foreign serial pipe' }
+            'misplaced_serial' { $vm.Ports[1].Path = $vm.Ports[0].Path; $vm.Ports[0].Path = ''; $reason='foreign serial pipe' }
             'duplicate' { $script:Vms += New-FakeVm; $reason='different Hyper-V guest' }
         }
         Assert-Refused { Invoke-Operation 'stop' } "Foreign $case resources were accepted." $reason

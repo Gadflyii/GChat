@@ -184,11 +184,11 @@ function OwnedVm($context, [bool]$incomplete = $false) {
     }
     $ports = @(Get-VMComPort -VM $vm)
     foreach ($port in $ports) {
-        if (-not [string]::IsNullOrEmpty([string]$port.Path) -and ([int]$port.Number -ne 1 -or [string]$port.Path -cne $context.pipe)) {
+        if (-not [string]::IsNullOrEmpty([string]$port.Path) -and ([string]$port.Name -cne 'COM 1' -or [string]$port.Path -cne $context.pipe)) {
             throw 'The Hyper-V guest has a foreign serial pipe. Its resources were left unchanged.'
         }
     }
-    if (-not $incomplete -and @($ports | Where-Object { $_.Number -eq 1 -and $_.Path -ceq $context.pipe }).Count -ne 1) {
+    if (-not $incomplete -and @($ports | Where-Object { $_.Name -ceq 'COM 1' -and $_.Path -ceq $context.pipe }).Count -ne 1) {
         throw 'The owned Hyper-V serial channel is missing.'
     }
     $vm
