@@ -108,7 +108,7 @@ function WorkspaceSchedules({
 
   async function perform(
     label: string,
-    action: () => Promise<unknown>,
+    action: () => Promise<Schedule>,
     scheduleId?: string
   ) {
     if (pendingRef.current) return
@@ -116,7 +116,14 @@ function WorkspaceSchedules({
     setPending({ label, scheduleId })
     setError('')
     try {
-      await action()
+      const saved = await action()
+      setSchedules((current) =>
+        current.some((schedule) => schedule.id === saved.id)
+          ? current.map((schedule) =>
+              schedule.id === saved.id ? saved : schedule
+            )
+          : [...current, saved]
+      )
       await refresh()
     } catch (cause) {
       setError(String(cause))
@@ -205,7 +212,7 @@ function WorkspaceSchedules({
                     ? 'Disabling schedule…'
                     : 'Enabling schedule…',
                   () =>
-                    gbot('schedules/enabled', {
+                    gbot<Schedule>('schedules/enabled', {
                       id: schedule.id,
                       enabled: !schedule.enabled,
                     }),
@@ -264,7 +271,7 @@ function WorkspaceSchedules({
               return
             }
             void perform('Creating schedule…', async () => {
-              await gbot('schedules/create', {
+              const saved = await gbot<Schedule>('schedules/create', {
                 workspace_id: workspaceId,
                 prompt,
                 timing:
@@ -278,6 +285,7 @@ function WorkspaceSchedules({
                 missed_run_policy: policy,
               })
               setPrompt('')
+              return saved
             })
           }}
         >
