@@ -44,6 +44,7 @@ use std::{
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{Notify, mpsc, oneshot},
+    task::{JoinHandle, JoinSet},
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::body::Body;
@@ -381,13 +382,14 @@ pub struct MockServer {
     /// State.
     pub state: Arc<MockState>,
     shutdown: Option<oneshot::Sender<()>>,
+    front_shutdown: Option<oneshot::Sender<()>>,
+    front: Option<JoinHandle<std::io::Result<()>>>,
+    server: Option<JoinHandle<std::io::Result<()>>>,
 }
 
 impl Drop for MockServer {
     fn drop(&mut self) {
-        if let Some(tx) = self.shutdown.take() {
-            let _ = tx.send(());
-        }
+        self.request_shutdown();
     }
 }
 
@@ -404,23 +406,38 @@ impl MockServer {
         let addr = listener.local_addr().unwrap();
         let svc = Svc(state.clone());
         let (tx, rx) = oneshot::channel();
+        let (front_tx, mut front_rx) = oneshot::channel();
         let layer_state = state.clone();
         // A front on the same port: `/tunnel` WebSocket upgrades are served
         // here, everything else goes to tonic.
         let (conn_tx, conn_rx) = mpsc::channel::<std::io::Result<TcpStream>>(64);
         let front_state = state.clone();
-        tokio::spawn(async move {
+        let front = tokio::spawn(async move {
+            let mut connections = JoinSet::new();
+            let mut result = Ok(());
             loop {
                 let stream = tokio::select! {
+                    biased;
+                    _ = &mut front_rx => break,
                     r = listener.accept() => match r {
                         Ok((s, _)) => s,
-                        Err(_) => return,
+                        Err(error) => {
+                            result = Err(error);
+                            break;
+                        },
                     },
-                    _ = conn_tx.closed() => return,
+                    joined = connections.join_next(), if !connections.is_empty() => {
+                        if let Some(Err(error)) = joined {
+                            result = Err(std::io::Error::other(error));
+                            break;
+                        }
+                        continue;
+                    },
+                    _ = conn_tx.closed() => break,
                 };
                 let conn_tx = conn_tx.clone();
                 let state = front_state.clone();
-                tokio::spawn(async move {
+                connections.spawn(async move {
                     if is_tunnel_upgrade(&stream).await {
                         serve_tunnel(stream, state).await;
                     } else {
@@ -428,8 +445,19 @@ impl MockServer {
                     }
                 });
             }
+            drop(listener);
+            connections.abort_all();
+            while let Some(joined) = connections.join_next().await {
+                if let Err(error) = joined
+                    && !error.is_cancelled()
+                    && result.is_ok()
+                {
+                    result = Err(std::io::Error::other(error));
+                }
+            }
+            result
         });
-        tokio::spawn(async move {
+        let server = tokio::spawn(async move {
             tonic::transport::Server::builder()
                 .accept_http1(true)
                 .layer(tonic_web::GrpcWebLayer::new())
@@ -463,12 +491,38 @@ impl MockServer {
                     let _ = rx.await;
                 })
                 .await
-                .unwrap();
+                .map_err(std::io::Error::other)
         });
         Self {
             addr,
             state,
             shutdown: Some(tx),
+            front_shutdown: Some(front_tx),
+            front: Some(front),
+            server: Some(server),
+        }
+    }
+
+    /// Stops ingress and joins the server and its classifier/tunnel tasks.
+    /// Drop clients and response streams first so tonic can drain gracefully.
+    /// Unlike dropping the mock, completion guarantees its owned tasks exited.
+    pub async fn shutdown(mut self) -> std::io::Result<()> {
+        self.request_shutdown();
+        let (front, server) = tokio::join!(
+            self.front.take().expect("mock front task"),
+            self.server.take().expect("mock server task"),
+        );
+        let front = front.map_err(std::io::Error::other)?;
+        let server = server.map_err(std::io::Error::other)?;
+        front.and(server)
+    }
+
+    fn request_shutdown(&mut self) {
+        if let Some(tx) = self.front_shutdown.take() {
+            let _ = tx.send(());
+        }
+        if let Some(tx) = self.shutdown.take() {
+            let _ = tx.send(());
         }
     }
 
