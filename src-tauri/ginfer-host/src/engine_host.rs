@@ -781,6 +781,9 @@ impl HostProcesses {
         request: crate::hardware_profile::HardwareProfileRequest,
     ) -> Result<crate::hardware_profile::HardwareProfileStatus, String> {
         use crate::hardware_profile::HardwareProfileAction;
+        if request.artifact.is_some() {
+            return Err("Selected profiling requires Host artifact validation".into());
+        }
         let job = self
             .hardware_profile
             .as_ref()
@@ -807,6 +810,30 @@ impl HostProcesses {
         }
         let cli = self.profiling_cli(&gpus);
         job.start(request.action, cli.clone(), gpus)?;
+        Ok(job.status(cli))
+    }
+    pub(crate) fn selected_hardware_profile_action(
+        &self,
+        gpus: Vec<String>,
+        intent: crate::hardware_profile::ArtifactProfileIntent,
+    ) -> Result<crate::hardware_profile::HardwareProfileStatus, String> {
+        use crate::hardware_profile::HardwareProfileAction;
+        crate::hardware_profile::validate_gpu_group(&gpus, &self.gpu_architectures)?;
+        let job = self.hardware_profile.as_ref().ok_or("Hardware profiling is not configured")?;
+        if self.has_children() {
+            return Err("Stop active model instances before profiling hardware".into());
+        }
+        let cli = self.profiling_cli(&gpus);
+        if job.busy() {
+            let status = job.status(cli.clone());
+            if job.group() != gpus || status.scope != "artifact"
+                || status.selected_artifact.as_ref() != Some(&intent)
+            {
+                return Err("Another hardware profiling job reserves this host; wait for it or cancel it before preparing this artifact".into());
+            }
+            return Ok(status);
+        }
+        job.start_scoped(HardwareProfileAction::Ensure, cli.clone(), gpus, intent)?;
         Ok(job.status(cli))
     }
     pub(crate) fn ensure_hardware_if_idle(

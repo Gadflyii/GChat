@@ -1,5 +1,47 @@
 # GChat installer refresh
 
+## Installed selected-artifact preparation — Gchat 3, October 18
+
+`GCHAT-PREPARE-SELECTED-ARTIFACT` is active on
+`fix/gchat3-prepare-selected-artifact-20261018`, based on `bd10e0e66`.
+The installed `gchat-cli prepare-hardware` currently installs resources and
+requests all-format Ensure. It must also accept a selected local artifact and
+its startup TP/speculation intent, letting Host validate the actual payload and
+run artifact-scoped Ensure without starting a model. Explicit all-format
+preparation remains available. The existing
+[selected-artifact decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md)
+governs validation and native acceptance; callers cannot supply trusted artifact
+identities or bypass native validation.
+
+Acceptance is the real installed CLI request reaching a validated Host
+artifact-scoped native command, with ordered GPUs and matching TP/speculation,
+plus rejected missing/invalid artifacts and preserved all-format behavior.
+Use focused regressions and one `make verify`; no Engine change or GPU
+qualification is claimed. C4 owns `first_run.rs`, `launcher.rs`, Host `main.rs`
+and `model_storage.rs`; preserve artifact Ensure followed by durable
+`storage_review` before startup.
+
+Arch signed the optional selected-payload request and asynchronous Host job at
+07:36Z. Implementation is in progress in the CLI/setup adapter and Host request
+validation. Host derives the directory identity and any existing verified
+package identity; an identical active Ensure is idempotent, while another busy
+scope or resident model prevents replacement. A stale retained seed must still
+pass fresh native selected-artifact acceptance.
+
+Acceptance also requires one short physical Engine run that accepts the
+installed request's native arguments and writes an artifact-scoped profile;
+the recording fixture alone proves argument forwarding. Coordinate the next
+available GPU boundary, with no idle hold or Engine rebuild.
+
+Owned inventory: source worktree
+`/ai/gchat-worktrees/gchat3-prepare-selected-artifact-20261018`; independent S1
+SSD fixture `/media/ron/SSD_RAID/ai/tmp-gchat3-prepare-selected-artifact-tests-20261018`.
+Independent dependency copying finished under booking 3135, CPUs120–127;
+returned 07:40Z. Source staging and gates wait for the frozen implementation.
+The inactive RC read-copy donor remains unchanged. C5 forecasts the next
+local5090 boundary around 08:10Z after priority work; no GPU is reserved.
+No installed user app is in use.
+
 ## Linux missing-driver guidance — Codex 4, October 18
 
 `fix/c4-cli-driver-guidance-20261018` implements
