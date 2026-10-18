@@ -16,12 +16,16 @@ export default function CloudComputer({
   review,
   updated,
   canCreate,
+  disabled = false,
+  canStart,
   busy,
   connected,
 }: {
   review: CloudReview
   updated: (review: CloudReview) => void
   canCreate: boolean
+  disabled?: boolean
+  canStart?: () => boolean
   busy: (value: boolean) => void
   connected: (id: string) => Promise<void>
 }) {
@@ -31,6 +35,7 @@ export default function CloudComputer({
   const [billing, setBilling] = useState(false)
   const [remove, setRemove] = useState(false)
   const [working, setWorking] = useState(false)
+  const blocked = working || disabled
   const [action, setAction] = useState<keyof typeof actionLabels>()
   const pending = useRef(false)
   const [error, setError] = useState('')
@@ -43,7 +48,7 @@ export default function CloudComputer({
     kind: keyof typeof actionLabels,
     operation: () => Promise<void>
   ) => {
-    if (pending.current) return
+    if (pending.current || disabled || (canStart && !canStart())) return
     pending.current = true
     setAction(kind)
     setWorking(true)
@@ -81,7 +86,7 @@ export default function CloudComputer({
             <textarea
               className="min-h-16 w-full rounded-md border bg-background p-2"
               value={sources}
-              disabled={working}
+              disabled={blocked}
               onChange={(event) => setSources(event.target.value)}
               placeholder="203.0.113.10/32"
             />
@@ -98,7 +103,7 @@ export default function CloudComputer({
               type="checkbox"
               className="mt-0.5 size-4 shrink-0 accent-primary"
               checked={billing}
-              disabled={working}
+              disabled={blocked}
               onChange={(event) => setBilling(event.target.checked)}
             />
             I authorize creating this computer and its provider charges at the
@@ -106,7 +111,7 @@ export default function CloudComputer({
           </label>
           <Button
             type="button"
-            disabled={working || !canCreate || !billing || !sources.trim()}
+            disabled={blocked || !canCreate || !billing || !sources.trim()}
             onClick={() =>
               void run('create', async () => {
                 update(
@@ -154,7 +159,7 @@ export default function CloudComputer({
           <Button
             type="button"
             variant="outline"
-            disabled={working}
+            disabled={blocked}
             onClick={() =>
               void run('check', async () => {
                 update(
@@ -172,7 +177,7 @@ export default function CloudComputer({
               <Button
                 type="button"
                 variant="outline"
-                disabled={working}
+                disabled={blocked}
                 onClick={() =>
                   void run('identity', async () => {
                     setAuthenticated(false)
@@ -209,7 +214,7 @@ export default function CloudComputer({
                       type="checkbox"
                       className="mt-0.5 size-4 shrink-0 accent-primary"
                       checked={verified}
-                      disabled={working || authenticated}
+                      disabled={blocked || authenticated}
                       onChange={(event) => setVerified(event.target.checked)}
                     />
                     The fingerprint matches the computer’s console.
@@ -217,7 +222,7 @@ export default function CloudComputer({
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={working || !verified || authenticated}
+                    disabled={blocked || !verified || authenticated}
                     onClick={() =>
                       void run('access', async () => {
                         await gbot('setup/cloud/attach', {
@@ -242,8 +247,10 @@ export default function CloudComputer({
                 <LanTools
                   workspaceId={review.id}
                   cloud
-                  disabled={working}
-                  canStart={() => !pending.current}
+                  disabled={blocked}
+                  canStart={() =>
+                    !pending.current && (!canStart || canStart())
+                  }
                   ready={setTools}
                   busy={(value) => {
                     pending.current = value
@@ -254,7 +261,7 @@ export default function CloudComputer({
               )}
               <Button
                 type="button"
-                disabled={working || !tools}
+                disabled={blocked || !tools}
                 onClick={() =>
                   void run('connect', async () => {
                     await gbot('connect', {
@@ -277,7 +284,7 @@ export default function CloudComputer({
                 type="checkbox"
                 className="mt-0.5 size-4 shrink-0 accent-primary"
                 checked={remove}
-                disabled={working}
+                disabled={blocked}
                 onChange={(event) => setRemove(event.target.checked)}
               />
               Delete this setup’s cloud computer and owned resources, including
@@ -286,7 +293,7 @@ export default function CloudComputer({
             <Button
               type="button"
               variant="outline"
-              disabled={working || !remove}
+              disabled={blocked || !remove}
               onClick={() =>
                 void run('delete', async () => {
                   update(
