@@ -254,11 +254,17 @@ const ChatInput = memo(function ChatInput({
     error: agentSkillsError,
     load: loadAgentSkills,
   } = useAgentSkills()
-  const { definitions: agentDefinitions, loading: agentDefinitionsLoading } =
-    useAgentDefinitions()
+  const {
+    definitions: agentDefinitions,
+    loading: agentDefinitionsLoading,
+    error: agentDefinitionsError,
+    load: loadAgentDefinitions,
+  } = useAgentDefinitions()
   const [selectedAgentDefinitionId, setSelectedAgentDefinitionId] = useState(
     preselectedAgentDefinitionId ?? activeDefinition ?? 'general'
   )
+  const isSelectedAgentUnresolved = selectedAgentDefinitionId !== 'general' &&
+    (agentDefinitionsLoading || Boolean(agentDefinitionsError))
   const draftSkillName = usePrompt((state) => state.draftSkills[conversationKey])
   const selectedAgentSkill = draftSkillName
     ? findAvailableAgentSkill(agentSkills, draftSkillName)
@@ -309,7 +315,8 @@ const ChatInput = memo(function ChatInput({
   }, [conversationKey, preselectedAgentDefinitionId, activeDefinition])
 
   useEffect(() => {
-    if (agentDefinitionsLoading) return
+    // A failed read cannot tell us whether the selected definition still exists.
+    if (agentDefinitionsLoading || agentDefinitionsError) return
     if (selectedAgentDefinitionId !== 'general' &&
       !agentDefinitions.some((definition) => definition.id === selectedAgentDefinitionId)) {
       setSelectedAgentDefinitionId('general')
@@ -317,6 +324,7 @@ const ChatInput = memo(function ChatInput({
   }, [
     agentDefinitions,
     agentDefinitionsLoading,
+    agentDefinitionsError,
     selectedAgentDefinitionId,
   ])
 
@@ -1018,7 +1026,9 @@ const ChatInput = memo(function ChatInput({
     if (
       !submissionReady ||
       submittingMessageRef.current ||
-      (!isCompactCommand(draft) && isDraftSkillUnresolved && !sendWithoutSkill)
+      (!isCompactCommand(draft) && (
+        isSelectedAgentUnresolved || (isDraftSkillUnresolved && !sendWithoutSkill)
+      ))
     ) return
     // A ref also blocks repeated Enter/click events before React renders.
     submittingMessageRef.current = true
@@ -2544,6 +2554,40 @@ const ChatInput = memo(function ChatInput({
                   )}
                 </div>
               )}
+              {isSelectedAgentUnresolved && (
+                <div
+                  role={agentDefinitionsLoading ? 'status' : 'alert'}
+                  className="mx-4 mt-3 flex flex-wrap items-center gap-2 text-xs"
+                >
+                  <span>
+                    {agentDefinitionsLoading
+                      ? 'Loading your selected saved agent…'
+                      : "Couldn't load saved agents. Retry to use your selected agent, or choose Chat instead."}
+                  </span>
+                  {!agentDefinitionsLoading && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label="Retry saved agents"
+                      onClick={() => void loadAgentDefinitions()}
+                    >
+                      Retry
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isSubmittingMessage || isStreaming}
+                    onClick={() => {
+                      setSelectedAgentDefinitionId('general')
+                      useConversationPolicy.getState().setActiveDefinition(conversationKey, 'general')
+                      requestAnimationFrame(() => textareaRef.current?.focus())
+                    }}
+                  >
+                    Use Chat instead
+                  </Button>
+                </div>
+              )}
               {isDraftSkillUnresolved && !agentSkillsLoading && (
                 <div role="alert" className="mx-4 mt-3 flex flex-wrap items-center gap-2 text-xs">
                   <span>
@@ -2559,7 +2603,8 @@ const ChatInput = memo(function ChatInput({
                     size="sm"
                     disabled={
                       !submissionReady || isSubmittingMessage || isStreaming ||
-                      !prompt.trim() || isAttachmentPipelineBusy || blockSendUntilModelReady
+                      !prompt.trim() || isAttachmentPipelineBusy || blockSendUntilModelReady ||
+                      isSelectedAgentUnresolved
                     }
                     onClick={() => handleSendMessage(prompt, true)}
                   >
@@ -2665,7 +2710,7 @@ const ChatInput = memo(function ChatInput({
                         !isSubmittingMessage &&
                         (isCompactCommand(prompt) || !isStreaming) &&
                         prompt.trim() &&
-                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady && !isDraftSkillUnresolved))
+                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady && !isDraftSkillUnresolved && !isSelectedAgentUnresolved))
                       ) {
                         handleSendMessage(prompt)
                       }
@@ -3034,7 +3079,7 @@ const ChatInput = memo(function ChatInput({
                       isSubmittingMessage ||
                       !prompt.trim() ||
                       (!isCompactCommand(prompt) &&
-                        (isAttachmentPipelineBusy || blockSendUntilModelReady || isDraftSkillUnresolved))
+                        (isAttachmentPipelineBusy || blockSendUntilModelReady || isDraftSkillUnresolved || isSelectedAgentUnresolved))
                     }
                     data-test-id="send-message-button"
                     aria-label={
@@ -3045,7 +3090,7 @@ const ChatInput = memo(function ChatInput({
                             ? 'Resolve selected skill before sending'
                             : 'Send message'
                     }
-                    aria-busy={isSubmittingMessage || (isRestoringDraftSkill && !isCompactCommand(prompt))}
+                    aria-busy={isSubmittingMessage || ((isRestoringDraftSkill || (isSelectedAgentUnresolved && agentDefinitionsLoading)) && !isCompactCommand(prompt))}
                     onClick={() => handleSendMessage(prompt)}
                     className="rounded-full mr-1 mb-1"
                   >

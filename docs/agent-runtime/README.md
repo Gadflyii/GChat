@@ -22,6 +22,22 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Saved-agent catalog failures in Chat — October 18
+
+A private Linux native pass on main `5b48adfd9` selected a saved agent,
+temporarily made its private definition file unreadable and visited Agent
+Studio. Studio showed the read failure, but returning to Chat hid the chooser
+and enabled Send with the selected agent silently discarded. The original
+file permissions were restored and no message was sent. Baseline observations
+and the viewed screenshot are retained in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1800/`.
+
+Chat now retains that selected agent while its catalog is loading or has failed.
+Send and Enter wait for resolution. A failed read offers **Retry** or **Use Chat
+instead**; the latter changes only this conversation's selection and keeps the
+draft for the user's next submission. Ordinary Chat and `/compact` remain
+available without a resolved saved-agent catalog.
+
 ## Saved-agent choices in Chat drafts — October 18
 
 A private Linux native pass selected a saved agent, typed a task, opened New
