@@ -22,6 +22,35 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Limit settings in narrow editor panels — October 18
+
+A native Linux pass at 1,024 × 740 also found composition settings extending
+past the editor border. In the 324-pixel editor, Goal Loop’s fixed-width
+cycle input left too little room for its adjacent guidance; the section
+scrolled 28 pixels horizontally. Coordinator and Workflow sections also
+extended horizontally. Baseline screenshots and geometry are retained in
+`/ai/gchat/out/gchat-agent-settings-panel-layout-20261018/baseline.json`.
+
+Limit inputs and their guidance now stack when their containing panel is
+narrower than 32 rem. Wider panels retain the side-by-side layout. Specialist
+and workflow-stage identity rows also stack within narrow role cards, keeping
+the Remove control accessible. This changes layout only.
+
+Native Linux acceptance of frozen source `f317f0b5d` passed at 1,024 × 740:
+all four composition sections fit without horizontal overflow, including
+256-pixel specialist and 222-pixel workflow-stage identity and budget rows.
+The limit input retained its value and Tab advanced to Permissions. At
+1,600 × 900, the general and composition limits returned to two columns,
+and role identity rows restored ID, display name and Remove side by side.
+Unsaved composition changes were explicitly discarded; saved definitions,
+run history and chat fixture files remained byte-identical. Normal Close
+completed app cleanup. No model or run was used.
+
+Focused Agents tests (112), lint, one `make verify` (3,751 app, 127 extension
+and 1,316 Rust tests), frontend and native builds passed. Six app tests were
+skipped and 28 Rust tests ignored. Receipts:
+`/ai/gchat/out/gchat-agent-settings-panel-layout-20261018/`.
+
 ## Execution guides in narrow editor panels — October 18
 
 A native Linux pass at a 1,024 × 740 window reproduced execution-guide
@@ -42,8 +71,8 @@ completed cleanup. No model or run was used.
 
 Focused Agents tests (112), lint, one `make verify` (3,751 app, 127 extension
 and 1,316 Rust tests), frontend and native builds passed. Six app tests were
-skipped and 28 Rust tests ignored. Other narrow composition settings rows
-still overflow separately; this acceptance covers the execution-guide grids.
+skipped and 28 Rust tests ignored. The separate settings-row overflow found
+during that pass is covered by the limit-settings acceptance above.
 Baseline, screenshots, geometry and gates:
 `/ai/gchat/out/gchat-agent-execution-guide-layout-20261018/`.
 
