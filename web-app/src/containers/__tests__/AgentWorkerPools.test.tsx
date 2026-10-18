@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { spyConfirm } from '@/test/confirm'
 import {
   act,
@@ -113,9 +114,8 @@ it('requires an explicit paired coordinator choice for a first pool', async () =
   render(<AgentWorkerPools />)
   expect(screen.getByRole('button', { name: 'Create pool' })).toBeDisabled()
   expect(mocks.command).not.toHaveBeenCalled()
-  fireEvent.change(screen.getByLabelText('Fleet coordinator'), {
-    target: { value: 'server' },
-  })
+  await userEvent.click(screen.getByLabelText('Fleet coordinator'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: 'Server' }))
   fireEvent.click(
     screen.getByRole('button', { name: 'Use selected coordinator' })
   )
@@ -161,9 +161,8 @@ it('requires a reachable address when this computer has no advertised shared ori
     { id: 'local', name: 'This computer', origins: [] },
   ]
   render(<AgentWorkerPools />)
-  fireEvent.change(screen.getByLabelText('Fleet coordinator'), {
-    target: { value: 'local' },
-  })
+  await userEvent.click(screen.getByLabelText('Fleet coordinator'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: 'This computer' }))
   const use = screen.getByRole('button', { name: 'Use selected coordinator' })
   expect(use).toBeDisabled()
   expect(mocks.command).not.toHaveBeenCalled()

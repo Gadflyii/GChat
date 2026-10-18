@@ -1,4 +1,5 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { confirmAction } from '@/lib/confirm'
 import { Button } from '@/components/ui/button'
 import { hardwareProfileBlocksLaunch, type EngineSnapshot } from '@/services/engines'
@@ -6,16 +7,6 @@ import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 import { profileOptionLabel, profilePresentation } from '../../../src-tauri/ginfer-manager/ui/profile-presentation.js'
 
 const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', stopping: 'Stopping', stopped: 'Stopped', failed: 'Could not start' } as const
-
-const selectStyle: CSSProperties = {
-  appearance: 'none',
-  WebkitAppearance: 'none',
-  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='none' stroke='%238a9098' stroke-width='1.5' d='m4 6 4 4 4-4'/%3E%3C/svg%3E")`,
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'right 0.5rem center',
-  backgroundSize: '1rem',
-  paddingRight: '2rem',
-}
 
 export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: controlledInstanceId, labelPrefix, hostSelector, currentSettings = false, hideHeading = false, onPendingChange }: {
   snapshot: EngineSnapshot
@@ -80,36 +71,28 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
     <div className={`grid min-w-0 gap-3 ${hostSelector || controlledInstanceId === undefined ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'}`}>
     {hostSelector}
     {controlledInstanceId === undefined && <label className="min-w-0 text-sm">Model server
-      <select style={selectStyle} className="mt-1 w-full rounded border bg-background p-2" disabled={controlsDisabled} value={instanceId}
-        onChange={e => { setInstanceId(e.target.value); setModelChoice(null); setGpuChoice(null); setChoice(''); setShowAllProfiles(false) }}>
-        <option value="">{snapshot.display_name} · Start another model</option>
-        {snapshot.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{snapshot.display_name} · {hostInstanceLabel(i, snapshot)} · {instanceStatusLabels[i.status]}</option>)}
-      </select>
+      <ChoiceSelect aria-label="Model server" className="mt-1 w-full" disabled={controlsDisabled} value={instanceId}
+        onValueChange={value => { setInstanceId(value); setModelChoice(null); setGpuChoice(null); setChoice(''); setShowAllProfiles(false) }}
+        options={[{ value: '', label: `${snapshot.display_name} · Start another model` },
+          ...snapshot.instances.map(i => ({ value: i.instance_id, label: `${snapshot.display_name} · ${hostInstanceLabel(i, snapshot)} · ${instanceStatusLabels[i.status]}` }))]} />
     </label>}
     <label className="min-w-0 text-sm">Model
-      <select style={selectStyle} aria-label={labelPrefix ? `${labelPrefix} model` : undefined} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled} value={modelId}
-        onChange={e => { setModelChoice({ instanceId, modelId: e.target.value }); setChoice(''); setShowAllProfiles(false) }}>
-        {!snapshot.models.some(model => model.id === modelId) && <option value={modelId}>{modelId ? 'Saved model unavailable' : 'Choose an installed model'}</option>}
-        {snapshot.models.map(model => <option key={model.id} value={model.id}>{hostModelLabel(model)}</option>)}
-      </select>
+      <ChoiceSelect aria-label={labelPrefix ? `${labelPrefix} model` : 'Model'} className="mt-1 w-full" disabled={controlsDisabled} value={modelId}
+        onValueChange={value => { setModelChoice({ instanceId, modelId: value }); setChoice(''); setShowAllProfiles(false) }}
+        options={[...(!snapshot.models.some(model => model.id === modelId) ? [{ value: modelId, label: modelId ? 'Saved model unavailable' : 'Choose an installed model' }] : []),
+          ...snapshot.models.map(model => ({ value: model.id, label: hostModelLabel(model) }))]} />
     </label>
     <label className="min-w-0 text-sm">Graphics cards
-      <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !!instance || !groups.length} value={gpuKey ?? ''}
-        onChange={e => { setGpuChoice({ instanceId, key: e.target.value }); setChoice(''); setShowAllProfiles(false) }}>
-        {!gpuKey && <option value="">No available graphics cards</option>}
-        {groups.map(group => <option key={groupKey(group)} value={groupKey(group)} disabled={group.some(gpu => occupied.has(gpu))}>
-          {group.map(id => { const index = snapshot.gpus.findIndex(gpu => gpu.uuid === id); const gpu = snapshot.gpus[index]; return gpu ? `Graphics card ${index + 1}: ${gpu.display_name ?? gpu.name} · ${(gpu.memory_mib / 1024).toFixed(0)} GiB` : 'Graphics card unavailable' }).join(' + ')}
-          {group.some(gpu => occupied.has(gpu)) ? ' · In use' : ''}
-        </option>)}
-      </select>
+      <ChoiceSelect aria-label="Graphics cards" className="mt-1 w-full" disabled={controlsDisabled || !!instance || !groups.length} value={gpuKey ?? ''}
+        onValueChange={value => { setGpuChoice({ instanceId, key: value }); setChoice(''); setShowAllProfiles(false) }}
+        options={[...(!gpuKey ? [{ value: '', label: 'No available graphics cards' }] : []),
+          ...groups.map(group => ({ value: groupKey(group), disabled: group.some(gpu => occupied.has(gpu)),
+            label: group.map(id => { const index = snapshot.gpus.findIndex(gpu => gpu.uuid === id); const gpu = snapshot.gpus[index]; return gpu ? `Graphics card ${index + 1}: ${gpu.display_name ?? gpu.name} · ${(gpu.memory_mib / 1024).toFixed(0)} GiB` : 'Graphics card unavailable' }).join(' + ') + (group.some(gpu => occupied.has(gpu)) ? ' · In use' : '') }))]} />
     </label>
     <div className="min-w-0 text-sm"><label>Saved model settings
-      <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !choices.length} value={selected?.key ?? ''} onChange={e => setChoice(e.target.value)}>
-        <option value="">{currentSettings && !pending ? `Current settings · ${instance?.configuration.concurrency ?? 1} replies at once · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} tokens` : 'Choose saved settings'}</option>
-        {visibleIndices.map(index => { const { entry, key } = choices[index]; return <option key={key} value={key}>
-          {profileOptionLabel(entry.profile, index === recommendedIndex)}
-        </option> })}
-      </select>
+      <ChoiceSelect aria-label="Saved model settings" className="mt-1 w-full" disabled={controlsDisabled || !choices.length} value={selected?.key ?? ''} onValueChange={setChoice}
+        options={[{ value: '', label: currentSettings && !pending ? `Current settings · ${instance?.configuration.concurrency ?? 1} replies at once · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} tokens` : 'Choose saved settings' },
+          ...visibleIndices.map(index => { const { entry, key } = choices[index]; return { value: key, label: profileOptionLabel(entry.profile, index === recommendedIndex) } })]} />
     </label>
     {(choices.length > visibleIndices.length || showAllProfiles) && <button type="button" className="mt-1 text-muted-foreground underline" disabled={controlsDisabled}
       aria-expanded={showAllProfiles} onClick={() => setShowAllProfiles(value => !value)}>{showAllProfiles ? 'Show fewer settings' : 'Show all settings'}</button>}

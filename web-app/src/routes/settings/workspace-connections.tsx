@@ -5,6 +5,7 @@ import HeaderPage from '@/containers/HeaderPage'
 import SettingsMenu from '@/containers/SettingsMenu'
 import { Card } from '@/containers/Card'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { Input } from '@/components/ui/input'
 import {
   Dialog,
@@ -906,16 +907,18 @@ function ProviderCard({
           )}
         <label className="flex items-center gap-3 text-sm">
           Access
-          <select
+          <ChoiceSelect
+            aria-label="Access"
             className="rounded border border-border bg-background px-2 py-1 text-foreground"
             value={access}
-            onChange={(event) =>
-              setAccess(event.target.value as ConnectorAccess)
+            onValueChange={(value) =>
+              setAccess(value as ConnectorAccess)
             }
-          >
-            <option value="read_only">Read only</option>
-            <option value="read_write">Read and write</option>
-          </select>
+            options={[
+              { value: 'read_only', label: 'Read only' },
+              { value: 'read_write', label: 'Read and write' },
+            ]}
+          />
         </label>
         <p className="text-xs">
           Choose Read only to let GChat look up information without changing it,

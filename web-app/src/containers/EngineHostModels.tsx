@@ -3,6 +3,7 @@ import { confirmAction } from '@/lib/confirm'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { engineCommand, hardwareProfileBlocksLaunch, type EngineHost, type EngineSnapshot, type EngineLaunchOptions, type EngineStartupQuote } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { EngineHostSharing } from '@/containers/EngineHostSharing'
@@ -40,7 +41,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   useEffect(() => {
     if (editing && settingsOpen) {
       editor.current?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' })
-      editor.current?.querySelector('select')?.focus()
+      editor.current?.querySelector<HTMLButtonElement>('[data-choice-select]')?.focus()
     }
   }, [editing, settingsOpen])
   const [editingSession, setEditingSession] = useState<string | null>(null)
@@ -107,9 +108,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       {active && snapshot && <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
         {snapshot.instances.length > 1 ? <label className="min-w-0 text-xs font-medium">Model server
-        <select aria-label={`${host.name} serving instance`} className="mt-1 block w-full min-w-0 rounded border bg-background p-2 text-sm font-normal" value={active.instance_id} onChange={e => setActiveId(e.target.value)}>
-          {snapshot.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{hostInstanceLabel(i, snapshot)} · {instanceStatusLabels[i.status]}</option>)}
-        </select></label> : <p className="text-sm">{hostInstanceLabel(active, snapshot)} · {instanceStatusLabels[active.status]}</p>}
+        <ChoiceSelect aria-label={`${host.name} serving instance`} className="mt-1 w-full" value={active.instance_id} onValueChange={setActiveId}
+          options={snapshot.instances.map(i => ({ value: i.instance_id, label: `${hostInstanceLabel(i, snapshot)} · ${instanceStatusLabels[i.status]}` }))} /></label> : <p className="text-sm">{hostInstanceLabel(active, snapshot)} · {instanceStatusLabels[active.status]}</p>}
         </div>
         <div className="flex items-center gap-2">
         <Button variant="outline" disabled={busy || profiling || !!error || !active.profile || !['stopped', 'failed'].includes(active.status)} onClick={() => void act('start', { instance_id: active.instance_id, body: {} })}>Start model</Button>
@@ -180,19 +180,16 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       <h3 className="font-medium">Installed models</h3>
       {!!snapshot.inventory_errors?.length && <div role="alert" className="rounded border border-destructive/40 p-3 text-sm"><p className="font-medium">Some model files could not be read. Check that the files are available, then refresh the model list.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary>{snapshot.inventory_errors.map((item, index) => <p key={`${item.path}-${index}`} className="mt-1 break-all">{item.path}: {item.error}</p>)}</details><Button variant="outline" disabled={busy || !!error} onClick={() => void act('scan')}>Refresh model list</Button></div>}
       <p className="text-sm text-muted-foreground">Choose an installed model and the graphics cards it will use. Check these settings to confirm which model file will be used and how much memory it needs before starting it.</p>
-      <label className="block text-sm">Installed model<select className="mt-1 w-full rounded border bg-background p-2" value={modelId} onChange={(e) => {
-        setModelId(e.target.value)
-        const model = snapshot.models.find(m => m.id === e.target.value)
+      <label className="block text-sm">Installed model<ChoiceSelect aria-label="Installed model" className="mt-1 w-full" value={modelId} onValueChange={(value) => {
+        setModelId(value)
+        const model = snapshot.models.find(m => m.id === value)
         const target = model?.metadata.identity.model_id
         setContext(target === 'qwen3.8-27b' || target === 'qwen3.8-flash-next' ? 262144
           : target === 'muse-glimmer-30b' ? 131072 : 0)
         const occupied = new Set(snapshot.instances.filter(i => ['ready', 'starting', 'stopping'].includes(i.status) && i.instance_id !== editing).flatMap(i => i.configuration.gpu_uuids))
         const available = snapshot.gpus.filter(g => !occupied.has(g.uuid))
         setGpus(model?.metadata.tp_size === 1 && available.length === 1 ? [available[0].uuid] : [])
-      }}>
-        <option value="">Choose an installed model</option>
-        {snapshot.models.map((m) => <option key={m.id} value={m.id} title={weightsDrafterDetail(m.metadata.identity.weights_id)}>{hostModelLabel(m)} · {m.metadata.tp_size} {m.metadata.tp_size === 1 ? 'graphics card' : 'graphics cards'} · {(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GiB{m.artifact_set ? ' · multi-file model' : ''}</option>)}
-      </select></label>
+      }} options={[{ value: '', label: 'Choose an installed model' }, ...snapshot.models.map(m => ({ value: m.id, title: weightsDrafterDetail(m.metadata.identity.weights_id), label: `${hostModelLabel(m)} · ${m.metadata.tp_size} ${m.metadata.tp_size === 1 ? 'graphics card' : 'graphics cards'} · ${(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GiB${m.artifact_set ? ' · multi-file model' : ''}` }))]} /></label>
       <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />Graphics card {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
       <div className="flex flex-wrap gap-4">
         <label className="text-sm">Conversation length (tokens)<Input type="number" min={1} value={context || ''} onChange={(e) => setContext(Number(e.target.value))} /></label>
@@ -204,8 +201,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       <div className="flex flex-wrap gap-4">
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.vision} onChange={(e) => setOptions({ ...options, vision: e.target.checked })} />Read images</label>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.structured_outputs} onChange={(e) => setOptions({ ...options, structured_outputs: e.target.checked })} />Follow a response format</label>
-        <label className="text-sm">Reply speedup<select className="ml-2 rounded border bg-background p-2" value={options.spec} onChange={(e) => setOptions({ ...options, spec: e.target.value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })}><option value="none">Off</option><option value="auto">Automatic</option><option value="dflash">DFlash</option></select></label>
-        <label className="text-sm">Conversation memory format<select className="ml-2 rounded border bg-background p-2" value={options.kv_dtype} onChange={(e) => setOptions({ ...options, kv_dtype: e.target.value as EngineLaunchOptions['kv_dtype'] })}>{['auto', 'bf16', 'int8', 'nvfp4'].map((v) => <option key={v} value={v}>{v === 'auto' ? 'Automatic' : v.toUpperCase()}</option>)}</select></label>
+        <label className="text-sm">Reply speedup<ChoiceSelect aria-label="Reply speedup" className="ml-2" value={options.spec} onValueChange={value => setOptions({ ...options, spec: value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })} options={[{ value: 'none', label: 'Off' }, { value: 'auto', label: 'Automatic' }, { value: 'dflash', label: 'DFlash' }]} /></label>
+        <label className="text-sm">Conversation memory format<ChoiceSelect aria-label="Conversation memory format" className="ml-2" value={options.kv_dtype} onValueChange={value => setOptions({ ...options, kv_dtype: value as EngineLaunchOptions['kv_dtype'] })} options={['auto', 'bf16', 'int8', 'nvfp4'].map(value => ({ value, label: value === 'auto' ? 'Automatic' : value.toUpperCase() }))} /></label>
       </div>
       <p className="text-sm text-muted-foreground">Read images lets the model understand pictures when supported. Follow a response format lets apps request replies in a set format, such as JSON. Reply speedup drafts text ahead for the model to check; DFlash is one method. Conversation memory stores earlier text; its format affects memory use.</p>
       {launchError && selected && <p role="alert" className="text-sm text-destructive">{launchError}</p>}

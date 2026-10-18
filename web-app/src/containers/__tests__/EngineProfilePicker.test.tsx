@@ -1,12 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { spyConfirm } from '@/test/confirm'
 import { afterEach, expect, it, vi } from 'vitest'
 import { EngineProfilePicker } from '../EngineProfilePicker'
 import type { EngineSnapshot } from '@/services/engines'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
-const visibleProfileIds = () => Array.from((screen.getByLabelText('Saved model settings') as HTMLSelectElement).options)
-  .filter(option => option.value).map(option => JSON.parse(option.value)[1])
 const snapshot = (): EngineSnapshot => ({
   host_id: 'host', display_name: 'Host', revision: 1,
   gpus: [{ uuid: 'GPU-one', name: 'Fixture GPU', memory_mib: 32607, compute_capability: '12.0' }],
@@ -18,15 +17,17 @@ const snapshot = (): EngineSnapshot => ({
 })
 
 it('reserves other instances GPUs and requires confirmation before switching their profile', async () => {
+  const user = userEvent.setup()
   const launch = vi.fn().mockResolvedValue(undefined)
   render(<EngineProfilePicker snapshot={snapshot()} disabled={false} launch={launch} />)
   expect(screen.getByLabelText('Saved model settings')).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Start model' })).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Model server'), { target: { value: 'existing' } })
+  await user.click(screen.getByRole('button', { name: 'Model server', exact: true }))
+  await user.click(screen.getByRole('menuitemradio', { name: /Muse.*Ready to chat/ }))
   expect(screen.getByLabelText('Saved model settings')).toBeEnabled()
   expect(screen.getByLabelText('Graphics cards')).toBeDisabled()
-  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }))
   const confirm = spyConfirm().mockReturnValue(false)
   fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   expect(launch).not.toHaveBeenCalled()
@@ -34,7 +35,7 @@ it('reserves other instances GPUs and requires confirmation before switching the
   fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith({ profile_id: 'fixture-c4', model_id: 'model',
     gpu_uuids: ['GPU-one'], instance_id: 'existing', force: false, structured_outputs: true, expected_session_id: 'session' }))
-  expect(screen.getByLabelText('Model server')).toHaveValue('existing')
+  expect(screen.getByRole('button', { name: 'Model server', exact: true })).toHaveTextContent(/Muse.*Ready to chat/)
 })
 
 it('keeps offline snapshots read-only and does not invent missing profiles', () => {
@@ -48,6 +49,7 @@ it('keeps offline snapshots read-only and does not invent missing profiles', () 
 })
 
 it('preserves saved structured-output OFF when applying a qualified profile', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances[0].profile = {
     model_id: 'model', gpu_uuids: ['GPU-one'], max_context: 8192, concurrency: 1,
@@ -59,8 +61,8 @@ it('preserves saved structured-output OFF when applying a qualified profile', as
   render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
   const structured = screen.getByRole('checkbox', { name: 'Follow a response format' })
   expect(structured).not.toBeChecked()
-  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }))
   fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ structured_outputs: false })))
   fireEvent.click(structured)
@@ -84,25 +86,27 @@ it('defaults a new profile launch to ON and distinguishes recorded structured-ou
   }
 })
 
-it('distinguishes calculated smoke evidence from full-context testing', () => {
+it('distinguishes calculated smoke evidence from full-context testing', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   data.launch_profiles![0].profile.qualification.tier = 'calculated-startup-smoke'
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
   expect(screen.getByText('No settings with full-length conversation tests are available for these cards.')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Show all settings' }))
-  const option = screen.getByRole('option', { name: /Memory estimated/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  await user.click(screen.getByRole('menuitemradio', { name: /Memory estimated/ }))
   expect(screen.getByText(/Full-length conversations have not been tested/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start model' })).toBeEnabled()
 })
 
-it('identifies the Engine recorded by full-context evidence without claiming a newer runtime passed', () => {
+it('identifies the Engine recorded by full-context evidence without claiming a newer runtime passed', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
-  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }))
   expect(screen.getByText(/Changed settings or another GInfer version need their own tests/)).toBeVisible()
   const revision = screen.getByText('GInfer revision used for testing: 922e5a87')
   expect(revision).not.toBeVisible()
@@ -110,7 +114,8 @@ it('identifies the Engine recorded by full-context evidence without claiming a n
   expect(revision).toBeVisible()
 })
 
-it('defaults new instances to an available Vision profile without starting it', () => {
+it('defaults new instances to an available Vision profile without starting it', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   const vision = structuredClone(data.launch_profiles![0])
@@ -119,16 +124,18 @@ it('defaults new instances to an available Vision profile without starting it', 
   data.launch_profiles!.push(vision)
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  const selected = screen.getByRole('option', { name: /Images and text$/ }) as HTMLOptionElement
-  expect(screen.getByLabelText('Saved model settings')).toHaveValue(selected.value)
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getByRole('menuitemradio', { name: /Images and text$/ })).toHaveAttribute('aria-checked', 'true')
+  await user.keyboard('{Escape}')
   expect(launch).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Show all settings' }))
-  const text = screen.getByRole('option', { name: /Text only/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: text.value } })
-  expect(screen.getByLabelText('Saved model settings')).toHaveValue(text.value)
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  await user.click(screen.getByRole('menuitemradio', { name: /Text only/ }))
+  expect(screen.getByRole('button', { name: 'Saved model settings' })).toHaveTextContent('Text only')
 })
 
-it('keeps pending Vision profiles selectable and warns about unverified startup', () => {
+it('keeps pending Vision profiles selectable and warns about unverified startup', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   data.launch_profiles![0].profile.options.vision = true
@@ -136,11 +143,14 @@ it('keeps pending Vision profiles selectable and warns about unverified startup'
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={vi.fn()} />)
   expect(screen.getByText(/Starting the model, available memory and replies have not been tested/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start model' })).toBeEnabled()
-  expect(screen.getByRole('option', { name: /Not yet tested/ })).toBeInTheDocument()
-  expect(screen.queryByRole('option', { name: /Recommended/ })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getByRole('menuitemradio', { name: /Not yet tested/ })).toHaveAttribute('aria-checked', 'true')
+  expect(screen.queryByRole('menuitemradio', { name: /Recommended/ })).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
 })
 
-it('keeps the existing untested Vision default alongside a tested text recommendation', () => {
+it('keeps the existing untested Vision default alongside a tested text recommendation', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   const vision = structuredClone(data.launch_profiles![0])
@@ -151,13 +161,15 @@ it('keeps the existing untested Vision default alongside a tested text recommend
   data.launch_profiles!.push(vision)
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  const selected = screen.getByRole('option', { name: 'Not yet tested · 4 replies at once · 32K tokens · Images and text' }) as HTMLOptionElement
-  expect(screen.getByLabelText('Saved model settings')).toHaveValue(selected.value)
-  expect(screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getByRole('menuitemradio', { name: 'Not yet tested · 4 replies at once · 32K tokens · Images and text' })).toHaveAttribute('aria-checked', 'true')
+  expect(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' })).toBeInTheDocument()
+  await user.keyboard('{Escape}')
   expect(launch).not.toHaveBeenCalled()
 })
 
 it('shows one tested recommendation and preserves an alternate selection when collapsing', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   const template = data.launch_profiles![0]
@@ -180,16 +192,21 @@ it('shows one tested recommendation and preserves an alternate selection when co
   data.launch_profiles!.push(otherTested, estimated, untested)
   const launch = vi.fn().mockResolvedValue(undefined)
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  expect(screen.getAllByRole('option', { name: /Recommended/ })).toHaveLength(1)
-  expect(screen.queryByRole('option', { name: /^(Full conversations tested · 4|Memory estimated; short conversations tested · 2|Not yet tested · 8)/ })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getAllByRole('menuitemradio', { name: /Recommended/ })).toHaveLength(1)
+  expect(screen.queryByRole('menuitemradio', { name: /^(Full conversations tested · 4|Memory estimated; short conversations tested · 2|Not yet tested · 8)/ })).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
   fireEvent.click(screen.getByRole('button', { name: 'Show all settings' }))
-  expect(screen.getByRole('option', { name: 'Full conversations tested · 4 replies at once · 32K tokens · Images and text' })).toBeInTheDocument()
-  expect(screen.getByRole('option', { name: 'Memory estimated; short conversations tested · 2 replies at once · 32K tokens · Images and text' })).toBeInTheDocument()
-  const alternate = screen.getByRole('option', { name: 'Not yet tested · 8 replies at once · 32K tokens · Images and text' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: alternate.value } })
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getByRole('menuitemradio', { name: 'Full conversations tested · 4 replies at once · 32K tokens · Images and text' })).toBeInTheDocument()
+  expect(screen.getByRole('menuitemradio', { name: 'Memory estimated; short conversations tested · 2 replies at once · 32K tokens · Images and text' })).toBeInTheDocument()
+  await user.click(screen.getByRole('menuitemradio', { name: 'Not yet tested · 8 replies at once · 32K tokens · Images and text' }))
   fireEvent.click(screen.getByRole('button', { name: 'Show fewer settings' }))
-  expect(screen.getByLabelText('Saved model settings')).toHaveValue(alternate.value)
-  expect(screen.queryByRole('option', { name: /^(Full conversations tested · 4|Memory estimated; short conversations tested · 2)/ })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Saved model settings' })).toHaveTextContent('Not yet tested · 8 replies at once · 32K tokens · Images and text')
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getByRole('menuitemradio', { name: 'Not yet tested · 8 replies at once · 32K tokens · Images and text' })).toHaveAttribute('aria-checked', 'true')
+  expect(screen.queryByRole('menuitemradio', { name: /^(Full conversations tested · 4|Memory estimated; short conversations tested · 2)/ })).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
   expect(screen.getByText(/Starting the model, available memory and replies have not been tested/)).toBeInTheDocument()
   expect(launch).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
@@ -197,7 +214,8 @@ it('shows one tested recommendation and preserves an alternate selection when co
     instance_id: null, force: false, structured_outputs: true }))
 })
 
-it('filters profiles by model and assigned hardware and clears a previous model choice', () => {
+it('filters profiles by model and assigned hardware and clears a previous model choice', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.models.push({ ...data.models[0], id: 'qwen', metadata: { ...data.models[0].metadata,
     identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' } } })
@@ -205,55 +223,68 @@ it('filters profiles by model and assigned hardware and clears a previous model 
   const qwen = structuredClone(data.launch_profiles![0])
   qwen.model_id = 'qwen'
   qwen.profile.id = 'qwen-c4'
-  qwen.profile.name = 'Qwen C4'
+  qwen.profile.name = 'Qwen C2'
+  qwen.profile.concurrency = 2
   const otherGpu = structuredClone(qwen)
   otherGpu.profile.id = 'other-gpu'
   otherGpu.profile.name = 'Other GPU profile'
+  otherGpu.profile.concurrency = 3
   otherGpu.compatible_gpu_groups = [['GPU-two']]
   const unsupported = structuredClone(qwen)
   unsupported.profile.name = 'Unsupported hardware'
+  unsupported.profile.concurrency = 8
   unsupported.compatible_gpu_groups = []
   data.launch_profiles!.push(qwen, otherGpu, unsupported)
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} instanceId="existing" disabled={false} launch={launch} />)
-  const profile = screen.getByLabelText('Saved model settings')
-  const initial = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
-  fireEvent.change(profile, { target: { value: initial.value } })
-  expect(visibleProfileIds()).toEqual(['fixture-c4'])
-  fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'qwen' } })
-  expect(profile).toHaveValue('')
-  expect(visibleProfileIds()).toEqual(['qwen-c4'])
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getAllByRole('menuitemradio')).toHaveLength(2)
+  await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }))
+  await user.click(screen.getByRole('button', { name: 'Model', exact: true }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Qwen 3.8 27B — NVFP4' }))
+  expect(screen.getByRole('button', { name: 'Saved model settings' })).toHaveTextContent('Choose saved settings')
+  expect(screen.queryByRole('button', { name: 'Show all settings' })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getAllByRole('menuitemradio')).toHaveLength(2)
+  expect(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 2 replies at once · 32K tokens · Text only' })).toBeInTheDocument()
+  expect(screen.queryByRole('menuitemradio', { name: /[348] replies at once/ })).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
   expect(screen.getByRole('button', { name: 'Apply settings and restart' })).toBeDisabled()
   expect(launch).not.toHaveBeenCalled()
 })
 
 it('selects physical GPUs separately and filters profiles before launching', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   data.gpus.push({ uuid: 'GPU-two', name: 'NVIDIA Graphics Device', display_name: 'NVIDIA CMP 170HX', memory_mib: 65536 })
   const second = structuredClone(data.launch_profiles![0])
   second.profile.id = 'second'
   second.profile.name = 'Second GPU profile'
+  second.profile.concurrency = 8
   second.compatible_gpu_groups = [['GPU-two']]
   data.launch_profiles!.push(second)
   const launch = vi.fn().mockResolvedValue(undefined)
   render(<EngineProfilePicker snapshot={data} instanceId="" disabled={false} launch={launch} />)
-  const gpu = screen.getByLabelText('Graphics cards')
-  expect(gpu).toHaveValue(JSON.stringify(['GPU-one']))
-  expect(screen.getByRole('option', { name: 'Graphics card 2: NVIDIA CMP 170HX · 64 GiB' })).toHaveValue(JSON.stringify(['GPU-two']))
-  expect(visibleProfileIds()).toEqual(['fixture-c4'])
-  const first = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: first.value } })
-  fireEvent.change(gpu, { target: { value: JSON.stringify(['GPU-two']) } })
+  expect(screen.getByRole('button', { name: 'Graphics cards' })).toHaveTextContent('Graphics card 1: Fixture GPU · 32 GiB')
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getAllByRole('menuitemradio')).toHaveLength(2)
+  await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }))
+  await user.click(screen.getByRole('button', { name: 'Graphics cards' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Graphics card 2: NVIDIA CMP 170HX · 64 GiB' }))
+  expect(screen.getByRole('button', { name: 'Graphics cards' })).toHaveTextContent('Graphics card 2: NVIDIA CMP 170HX · 64 GiB')
   expect(screen.getByRole('button', { name: 'Start model' })).toBeDisabled()
-  expect(visibleProfileIds()).toEqual(['second'])
-  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  expect(screen.queryByRole('button', { name: 'Show all settings' })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getAllByRole('menuitemradio')).toHaveLength(2)
+  expect(screen.queryByRole('menuitemradio', { name: /4 replies at once/ })).not.toBeInTheDocument()
+  await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 8 replies at once · 32K tokens · Text only' }))
   fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
   await waitFor(() => expect(launch).toHaveBeenCalledWith(expect.objectContaining({ gpu_uuids: ['GPU-two'], profile_id: 'second' })))
 })
 
-it('offers declared TP groups and explains cards without a matching profile', () => {
+it('offers declared TP groups and explains cards without a matching profile', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   data.gpus.push({ ...data.gpus[0], uuid: 'GPU-two' }, { uuid: 'GPU-three', name: 'Different GPU', memory_mib: 24576 })
@@ -261,9 +292,9 @@ it('offers declared TP groups and explains cards without a matching profile', ()
   data.launch_profiles![0].compatible_gpu_groups = [['GPU-one', 'GPU-two']]
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  const gpu = screen.getByLabelText('Graphics cards')
-  expect(gpu).toHaveValue(JSON.stringify(['GPU-one', 'GPU-two']))
-  fireEvent.change(gpu, { target: { value: JSON.stringify(['GPU-three']) } })
+  expect(screen.getByRole('button', { name: 'Graphics cards' })).toHaveTextContent('Graphics card 1: Fixture GPU · 32 GiB + Graphics card 2: Fixture GPU · 32 GiB')
+  await user.click(screen.getByRole('button', { name: 'Graphics cards' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Graphics card 3: Different GPU · 24 GiB' }))
   expect(screen.getByLabelText('Saved model settings')).toBeDisabled()
   expect(screen.getByText(/No saved settings fit this model on the selected graphics cards/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Start model' })).toBeDisabled()
@@ -286,6 +317,7 @@ it('holds profile launches when the Host reports hardware profiling in progress'
 })
 
 it.each(['running', 'cancelling'] as const)('launches a selected profile during %s optional completion', async (status) => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   data.hardware_profile = { status, scope: 'complete_remaining_formats', base_complete: true,
@@ -300,16 +332,19 @@ it.each(['running', 'cancelling'] as const)('launches a selected profile during 
   })
   const view = render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
   expect(screen.getByLabelText('Saved model settings')).toBeEnabled()
-  const option = screen.getByRole('option', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Recommended · Full conversations tested · 4 replies at once · 32K tokens · Text only' }))
   expect(screen.getByRole('button', { name: 'Start model' })).toBeEnabled()
   fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
-  expect(await screen.findByRole('option', { name: /Muse.*Ready to chat/ })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Model server', exact: true }))
+  expect(await screen.findByRole('menuitemradio', { name: /Muse.*Ready to chat/ })).toBeInTheDocument()
+  await user.keyboard('{Escape}')
   expect(launch).toHaveBeenCalledWith({ profile_id: 'fixture-c4', model_id: 'model', gpu_uuids: ['GPU-one'],
     instance_id: null, force: false, structured_outputs: true })
 })
 
-it('labels screened PRO settings without recommending or increasing their witnessed context', () => {
+it('labels screened PRO settings without recommending or increasing their witnessed context', async () => {
+  const user = userEvent.setup()
   const data = snapshot()
   data.instances = []
   const entry = data.launch_profiles![0]
@@ -319,9 +354,11 @@ it('labels screened PRO settings without recommending or increasing their witnes
   entry.profile.qualification.tier = 'screened-startup'
   const launch = vi.fn()
   render(<EngineProfilePicker snapshot={data} disabled={false} launch={launch} />)
-  expect(screen.getByRole('option', { name: 'Short conversations tested · 8 replies at once · 128K tokens · Images and text' })).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Saved model settings' }))
+  expect(screen.getByRole('menuitemradio', { name: 'Short conversations tested · 8 replies at once · 128K tokens · Images and text' })).toHaveAttribute('aria-checked', 'true')
+  expect(screen.queryByRole('menuitemradio', { name: /Recommended/ })).not.toBeInTheDocument()
+  await user.keyboard('{Escape}')
   expect(screen.getByText(/Starting the model and short conversations were tested. Full-length conversations and whether they fit in memory have not been tested/)).toBeInTheDocument()
-  expect(screen.queryByRole('option', { name: /Recommended/ })).not.toBeInTheDocument()
   expect(launch).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Start model' }))
   expect(launch).toHaveBeenCalledWith(expect.objectContaining({ profile_id: 'fixture-c4', gpu_uuids: ['GPU-one'] }))

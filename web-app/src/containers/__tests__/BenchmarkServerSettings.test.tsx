@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { spyConfirm } from '@/test/confirm'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -56,13 +57,15 @@ it('offers Max Perf separately and applies only after selection and confirmation
   const applyGuidance = screen.getByText('Choose a Max Perf profile, then select Apply Max Perf & Restart Server. Wait for the server to be ready before selecting Run benchmark.')
   expect(applyGuidance.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   fireEvent.click(screen.getByRole('button', { name: 'Show all settings' }))
-  expect(screen.getByRole('option', {
+  await userEvent.click(screen.getByLabelText('Saved model settings'))
+  expect(screen.getByRole('menuitemradio', {
     name: 'Not yet tested · 1 replies at once · 128K tokens · Images and text',
   })).toBeInTheDocument()
+  await userEvent.keyboard('{Escape}')
   expect(screen.getByText(/does not claim hardware qualification/)).toBeInTheDocument()
   expect(mocks.command).not.toHaveBeenCalled()
-  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash pure 2-bit/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Max Perf profile'), { target: { value: choice.value } })
+  await userEvent.click(screen.getByLabelText('Max Perf profile'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash pure 2-bit/ }))
   expect(pending).toHaveBeenLastCalledWith(true)
   expect(mocks.command).not.toHaveBeenCalled()
   expect(screen.getByRole('alert')).toHaveTextContent('Applying this profile waits for current requests to finish, then restarts this server. Chats and other clients using it are affected. Wait for the server to be ready before selecting Run benchmark.')
@@ -83,27 +86,28 @@ it('offers Max Perf separately and applies only after selection and confirmation
 it('explains how to load and refresh a server when none are running', () => {
   render(<BenchmarkServerSettings sessions={[]} select={vi.fn()} disabled={false} refresh={vi.fn()} onPendingChange={vi.fn()} />)
   expect(screen.getByRole('heading', { name: 'Choose a running server' })).toBeInTheDocument()
-  expect(screen.getByLabelText('Host / Instance')).toHaveValue('')
+  expect(screen.getByLabelText('Host / Instance')).toHaveTextContent('Choose a running server')
   expect(screen.getByText('Open Models, load a model, then select Refresh server to update this list.')).toBeInTheDocument()
   expect(mocks.command).not.toHaveBeenCalled()
 })
 
-it('clears the pending profile when selecting another server without restarting either server', () => {
+it('clears the pending profile when selecting another server without restarting either server', async () => {
   const current = session()
   const other = { ...current, target_id: 'remote/server', session_id: 'other-session', display_name: 'Other running server' }
   const select = vi.fn()
   const pending = vi.fn()
   const props = { sessions: [current, other], selected: current, select, disabled: false, refresh: vi.fn(), onPendingChange: pending }
   const view = render(<BenchmarkServerSettings {...props} />)
-  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash pure 2-bit/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Max Perf profile'), { target: { value: choice.value } })
+  await userEvent.click(screen.getByLabelText('Max Perf profile'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash pure 2-bit/ }))
   expect(pending).toHaveBeenLastCalledWith(true)
-  fireEvent.change(screen.getByLabelText('Host / Instance'), { target: { value: other.target_id } })
+  await userEvent.click(screen.getByLabelText('Host / Instance'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: 'Other running server' }))
   expect(select).toHaveBeenCalledWith(other.target_id)
   expect(pending).toHaveBeenLastCalledWith(false)
   view.rerender(<BenchmarkServerSettings {...props} selected={other} />)
   view.rerender(<BenchmarkServerSettings {...props} />)
-  expect(screen.getByLabelText('Max Perf profile')).toHaveValue('')
+  expect(screen.getByLabelText('Max Perf profile')).toHaveTextContent('Choose a Max Perf profile')
   expect(screen.getByRole('button', { name: 'Apply Max Perf & Restart Server' })).toBeDisabled()
   expect(pending).toHaveBeenLastCalledWith(false)
   expect(mocks.command).not.toHaveBeenCalled()
@@ -125,14 +129,14 @@ it('does not offer missing artifacts, other occupied GPUs or a different GPU gro
   }
 })
 
-it('refuses to apply from a stale session selection and clears a choice when its session changes', () => {
+it('refuses to apply from a stale session selection and clears a choice when its session changes', async () => {
   const current = session()
   const props = { sessions: [current], selected: current, select: vi.fn(), disabled: false, refresh: vi.fn(), onPendingChange: vi.fn() }
   const view = render(<BenchmarkServerSettings {...props} />)
-  const choice = screen.getByRole('option', { name: /GBench Max Perf · Flash pure 2-bit/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Max Perf profile'), { target: { value: choice.value } })
+  await userEvent.click(screen.getByLabelText('Max Perf profile'))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: /GBench Max Perf · Flash pure 2-bit/ }))
   view.rerender(<BenchmarkServerSettings {...props} selected={{ ...current, session_id: 'old-session' }} />)
-  expect(screen.getByLabelText('Max Perf profile')).toHaveValue('')
+  expect(screen.getByLabelText('Max Perf profile')).toHaveTextContent('Choose a Max Perf profile')
   expect(screen.getByLabelText('Max Perf profile')).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Apply Max Perf & Restart Server' })).toBeDisabled()
   expect(mocks.command).not.toHaveBeenCalled()

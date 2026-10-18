@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ChatInput from '../ChatInput'
 import { NEW_THREAD_ATTACHMENT_KEY, useChatAttachments } from '@/hooks/useChatAttachments'
@@ -206,6 +207,7 @@ describe('ChatInput', () => {
   })
 
   it('carries an unprocessed home Excel attachment into the selected saved-agent conversation without embedding preflight', async () => {
+    const user = userEvent.setup()
     const createThread = vi.fn(async (thread: Thread) => thread)
     const ingestFileAttachment = vi.fn().mockRejectedValue(new Error('GInfer embeddings unavailable'))
     const parseDocumentMock = vi.fn().mockRejectedValue(new Error('Native read owns folder approval'))
@@ -215,7 +217,8 @@ describe('ChatInput', () => {
     const workbookAttachment = createDocumentAttachment({ name: 'Budget.xlsx', path: 'C:\\Users\\Ron\\Desktop\\Budget.xlsx', fileType: 'xlsx', parseMode: 'auto' })
     useChatAttachments.getState().setAttachments(NEW_THREAD_ATTACHMENT_KEY, [workbookAttachment])
     render(<ChatInput initialMessage />)
-    fireEvent.change(screen.getByLabelText('Invoke saved agent'), { target: { value: 'reviewer' } })
+    await user.click(screen.getByRole('button', { name: 'Invoke saved agent' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Reviewer' }))
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Review the attached spreadsheet' } })
     fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalled())
@@ -561,7 +564,7 @@ describe('ChatInput', () => {
 
     expect(screen.getByTestId('approval-mode-control')).toHaveAttribute('data-mode', 'skip')
     expect(screen.getByTestId('external-folder-control')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Invoke saved agent' })).toHaveValue('general')
+    expect(screen.getByRole('button', { name: 'Invoke saved agent' })).toHaveTextContent('Chat')
   })
 
   it('submits entered text and clears the controlled prompt', async () => {
@@ -906,6 +909,7 @@ describe('ChatInput', () => {
   })
 
   it('keeps skill invocation on the default agent unless a saved workflow is explicitly selected', async () => {
+    const user = userEvent.setup()
     const model = {
       id: 'agent-model',
       capabilities: [],
@@ -950,14 +954,18 @@ describe('ChatInput', () => {
     const onSubmit = vi.fn()
     const view = render(<ChatInput initialMessage onSubmit={onSubmit} preselectedAgentSkillName="agent-builder" />)
 
-    expect(screen.getByLabelText('Invoke saved agent')).toHaveValue('general')
-    expect(screen.queryByRole('option', { name: 'General Agent' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Invoke saved agent' })).toHaveTextContent('Chat')
+    await user.click(screen.getByRole('button', { name: 'Invoke saved agent' }))
+    expect(screen.getByRole('menuitemradio', { name: 'Chat' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByRole('menuitemradio', { name: 'General Agent' })).not.toBeInTheDocument()
+    await user.keyboard('{Escape}')
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Build a model inventory agent' } })
     fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
     expect(onSubmit).toHaveBeenLastCalledWith('Build a model inventory agent', undefined, 'agent-builder', undefined, [])
     await waitFor(() => expect(screen.getByTestId('chat-input')).toHaveValue(''))
 
-    fireEvent.change(screen.getByLabelText('Invoke saved agent'), { target: { value: 'researcher' } })
+    await user.click(screen.getByRole('button', { name: 'Invoke saved agent' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Researcher' }))
     fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Run my saved workflow' } })
     fireEvent.click(document.querySelector('[data-test-id="send-message-button"]')!)
     expect(onSubmit).toHaveBeenLastCalledWith('Run my saved workflow', undefined, undefined, 'researcher', [])

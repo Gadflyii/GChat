@@ -504,22 +504,13 @@ Host bridge container and native app profile. The ed68 AppDir and Flash Next
 pure 2-bit package are read-only donors. No model or GPU execution is permitted.
 Windows and release-wide qualification remain outside this leaf.
 
-The shared menu, Interface and CSS source is unchanged at main `29c301aeb`;
-the affected Host/Fleet selectors retain the same styling and handlers. Source
-fix `05669cea1` / merge `7ad61917c` and existing focused/full and CSS-render
-gates are reused. This documentation-only result uses `git diff --check`.
-Evidence is retained at
-`out/c7-dropdown-installed-20261018/{result.json,summary.md}`.
-
-S1 FRESH returned OFF with its original XML restored and verified. CPUs40–47
-returned01:28Z. All private app/session and forwarding processes stopped by
-recorded PID; the private guest copy/profile and S1 runtime root were removed.
-The original fixture data and read-only release donor were preserved. No live
-job or booking remains. C7 retains source worktree
-`/ai/gchat-worktrees/c7-dropdown-installed-20261018`, branch
-`test/c7-dropdown-installed-20261018`, and only the result JSON and short
-summary as new local artifacts. The row stays open for the missing Host/Fleet
-selector acceptance.
+The former CSS-only assumption is superseded by the native reproduction above.
+All remaining application native selects are being migrated in this same source
+branch. Focused interaction tests and one full verification gate are pending,
+followed by native candidate screenshots; prior gates do not qualify this fix.
+The earlier FRESH VM acceptance remains scoped to its shared menus, with the
+VM returned OFF/original XML and its private stage removed. The current live
+S1 fixture and build cache are separate owned paths under the root above.
 
 ## Models tabs installed keyboard acceptance — C7, closed October 18
 

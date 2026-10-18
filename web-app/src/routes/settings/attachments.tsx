@@ -12,6 +12,7 @@ import { DynamicControllerSetting } from '@/containers/dynamicControllerSetting'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 
 // Longest-edge presets (px) offered for the image downscale setting. `0`
 // keeps the original resolution (no limit).
@@ -290,31 +291,22 @@ function AttachmentsSettings() {
                     actions={
                       d.key === 'parse_mode' ? (
                         <div className="space-y-2">
-                          <select
+                          <ChoiceSelect
                             aria-label={title}
                             className="border-input bg-background rounded-md border px-2 py-1 text-sm"
                             value={String(normalizedValue)}
-                            onChange={(event) =>
-                              debouncedSet(d.key, event.target.value, d)
+                            onValueChange={(value) =>
+                              debouncedSet(d.key, value, d)
                             }
-                          >
-                            {normalizedValue === 'embeddings' && (
-                              <option value="embeddings" disabled>
-                                {t(
-                                  'settings:attachments.savedDocumentSearchUnavailable'
-                                )}
-                              </option>
-                            )}
-                            <option value="auto">
-                              {t('settings:attachments.parseModeAuto')}
-                            </option>
-                            <option value="inline">
-                              {t('settings:attachments.parseModeInline')}
-                            </option>
-                            <option value="prompt">
-                              {t('settings:attachments.parseModePrompt')}
-                            </option>
-                          </select>
+                            options={[
+                              ...(normalizedValue === 'embeddings'
+                                ? [{ value: 'embeddings', label: t('settings:attachments.savedDocumentSearchUnavailable'), disabled: true }]
+                                : []),
+                              { value: 'auto', label: t('settings:attachments.parseModeAuto') },
+                              { value: 'inline', label: t('settings:attachments.parseModeInline') },
+                              { value: 'prompt', label: t('settings:attachments.parseModePrompt') },
+                            ]}
+                          />
                           {normalizedValue === 'embeddings' && (
                             <p className="text-sm text-muted-foreground">
                               {t(
@@ -342,20 +334,18 @@ function AttachmentsSettings() {
                 title={t('settings:attachments.maxImageSize')}
                 description={t('settings:attachments.maxImageSizeDesc')}
                 actions={
-                  <select
+                  <ChoiceSelect
                     aria-label={t('settings:attachments.maxImageSize')}
                     className="border-input bg-background rounded-md border px-2 py-1 text-sm"
-                    value={maxImageSizePx}
-                    onChange={(e) => setMaxImageSizePx(Number(e.target.value))}
-                  >
-                    {IMAGE_SIZE_PRESETS.map((px) => (
-                      <option key={px} value={px}>
-                        {px === 0
+                    value={String(maxImageSizePx)}
+                    onValueChange={(value) => setMaxImageSizePx(Number(value))}
+                    options={IMAGE_SIZE_PRESETS.map((px) => ({
+                      value: String(px),
+                      label: px === 0
                           ? t('settings:attachments.original')
-                          : `${px} px`}
-                      </option>
-                    ))}
-                  </select>
+                          : `${px} px`,
+                    }))}
+                  />
                 }
               />
             </Card>

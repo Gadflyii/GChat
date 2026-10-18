@@ -689,10 +689,8 @@ describe('Workspace connections', () => {
     await ready()
     const user = userEvent.setup()
     await user.click(googleCard().getByLabelText('Gmail'))
-    await user.selectOptions(
-      googleCard().getByLabelText('Access'),
-      'read_write'
-    )
+    await user.click(googleCard().getByRole('button', { name: 'Access' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Read and write' }))
     api.beginConnectorAuth.mockResolvedValue(waiting)
     await user.click(
       screen.getByRole('button', { name: 'Connect Google Workspace' })

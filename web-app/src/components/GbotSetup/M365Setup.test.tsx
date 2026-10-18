@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import {
   act,
   cleanup,
@@ -111,10 +112,9 @@ function mount(resume?: M365SetupRecord) {
   return saved
 }
 async function chooseAccount() {
-  await screen.findByLabelText('Microsoft account')
-  fireEvent.change(screen.getByLabelText('Microsoft account'), {
-    target: { value: 'work-account' },
-  })
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Microsoft account' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'bot@example.test' }))
 }
 async function checkAssignments() {
   fireEvent.click(
@@ -297,11 +297,13 @@ it('reports only connected Microsoft accounts on refresh without choosing one', 
       'Microsoft accounts refreshed. 2 connected accounts are available. Choose an account above.'
     )
   ).toHaveAttribute('role', 'status')
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
-  expect(
-    screen.getByRole('option', { name: 'second@example.test' })
-  ).toBeInTheDocument()
-  expect(screen.getAllByRole('option')).toHaveLength(3)
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: 'Microsoft account' }))
+  expect(screen.getByRole('menuitemradio', { name: 'second@example.test' })).toBeInTheDocument()
+  expect(screen.getAllByRole('menuitemradio')).toHaveLength(3)
+  expect(screen.getByRole('menuitemradio', { name: 'Choose a Microsoft account' })).toBeChecked()
+  await user.keyboard('{Escape}')
   expect(
     screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
   ).toBeDisabled()
@@ -361,7 +363,7 @@ it('keeps Cloud PC discovery unavailable when browser sign-in cannot be saved', 
   expect(
     screen.queryByText(/Microsoft account connected\./)
   ).not.toBeInTheDocument()
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
   expect(
     screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
   ).toBeDisabled()
@@ -375,19 +377,19 @@ it('requires explicit account, assigned PC, route and dedicated desktop confirma
   )
   const saved = mount()
   await screen.findByLabelText('Microsoft account')
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
   expect(
     screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
   ).toBeDisabled()
   expect(gbot).not.toHaveBeenCalled()
   await chooseAccount()
   await checkAssignments()
-  expect(screen.getByLabelText('Assigned Cloud PC')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Assigned Cloud PC' })).toHaveTextContent('Choose an assigned Cloud PC')
   const save = screen.getByRole('button', { name: 'Save Cloud PC setup' })
   expect(save).toBeDisabled()
-  fireEvent.change(screen.getByLabelText('Assigned Cloud PC'), {
-    target: { value: cloudPc.id },
-  })
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: 'Assigned Cloud PC' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Dedicated bot PC · 2 vCPU / 8 GB' }))
   fireEvent.click(screen.getByLabelText('Supported Microsoft client'))
   expect(save).toBeDisabled()
   fireEvent.click(screen.getByLabelText(/dedicated to the bot/))
@@ -576,7 +578,7 @@ it('keeps a newly signed-in account unselected and supports manual cancellation'
   })
   expect(cancelConnectorAuth).toHaveBeenCalledExactlyOnceWith('new-flow')
   expect(connectorAuthStatus).not.toHaveBeenCalled()
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
 })
 
 it('does not adopt the connector default after a new account completes sign-in', async () => {
@@ -605,8 +607,11 @@ it('does not adopt the connector default after a new account completes sign-in',
   await screen.findByText(
     'Microsoft account connected. Choose the account and check its assigned PCs.'
   )
-  await screen.findByRole('option', { name: 'bot@example.test' })
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: 'Microsoft account' }))
+  expect(screen.getByRole('menuitemradio', { name: 'bot@example.test' })).not.toBeChecked()
+  await user.keyboard('{Escape}')
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
   expect(
     screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
   ).toBeDisabled()
@@ -641,9 +646,7 @@ it('resumes the exact saved selection and reports its removed assignment without
   vi.mocked(gbot).mockResolvedValue([])
   mount(initial)
   await screen.findByLabelText('Microsoft account')
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue(
-    initial.account_id
-  )
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('bot@example.test')
   expect(screen.getByLabelText('Supported Microsoft client')).toBeChecked()
   expect(screen.getByLabelText(/dedicated to the bot/)).not.toBeChecked()
   expect(
@@ -704,7 +707,7 @@ it('keeps the same setup ID and exact route through a failed save retry', async 
   const saved = mount(initial)
   await screen.findByLabelText('Microsoft account')
   await checkAssignments()
-  expect(screen.getByLabelText('Assigned Cloud PC')).toHaveValue(cloudPc.id)
+  expect(screen.getByRole('button', { name: 'Assigned Cloud PC' })).toHaveTextContent('Dedicated bot PC · 2 vCPU / 8 GB')
   fireEvent.click(screen.getByLabelText('Worker in the Cloud PC user session'))
   expect(
     screen.getByRole('button', { name: 'Open Microsoft client' })
@@ -819,7 +822,7 @@ it('shows account refresh progress, prevents duplicates, and clears a rejected r
     'Microsoft accounts refreshed. 1 connected account is available. Choose an account above.'
   )
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
   expect(beginConnectorAuth).not.toHaveBeenCalled()
 })
 
@@ -859,7 +862,7 @@ it('shows browser sign-in launch progress without choosing an account or allowin
       'Opening Microsoft sign-in in your browser. Please wait.'
     )
   ).not.toBeInTheDocument()
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
   expect(connectorAuthStatus).not.toHaveBeenCalled()
 })
 
@@ -916,7 +919,7 @@ it.each([
     )
     expect(screen.getByText(terminal)).toBeInTheDocument()
     expect(screen.queryByText(message)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Microsoft account')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
     expect(
       screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
     ).toBeDisabled()
@@ -949,7 +952,7 @@ it('shows assigned-PC progress until the selected account lookup finishes', asyn
     account_id: 'work-account',
   })
   await act(async () => resolvePcs([cloudPc]))
-  expect(screen.getByLabelText('Assigned Cloud PC')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Assigned Cloud PC' })).toHaveTextContent('Choose an assigned Cloud PC')
   expect(
     screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
   ).toBeEnabled()
@@ -992,9 +995,7 @@ it('keeps save progress visible until the saved setup callback completes', async
   expect(
     screen.queryByText('Saving your Cloud PC setup. Please wait.')
   ).not.toBeInTheDocument()
-  expect(screen.getByLabelText('Microsoft account')).toHaveValue(
-    initial.account_id
-  )
+  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('bot@example.test')
 })
 
 it('keeps client-opening progress visible through the native opener response', async () => {

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { MemoryLibrary } from '../MemoryLibrary'
 import { memoryCommand, type SavedMemory } from '@/lib/memory'
@@ -77,6 +78,40 @@ it('keeps edits visible when a concurrent revision prevents saving', async () =>
     'refresh before editing'
   )
   expect(screen.getByLabelText('Title')).toHaveValue('Preference')
+})
+
+it('filters personal and workspace memories through the scope menu', async () => {
+  const user = userEvent.setup()
+  saved = [
+    {
+      id: 'personal', title: 'Personal preference', content: 'Keep answers concise.',
+      workspace: null, pinned: false, enabled: true, revision: 1,
+      createdAt: 1, updatedAt: 1, source: 'user',
+    },
+    {
+      id: 'workspace', title: 'Workspace command', content: 'Run pnpm test.',
+      workspace: '/workspace', pinned: false, enabled: true, revision: 1,
+      createdAt: 1, updatedAt: 1, source: 'user',
+    },
+  ]
+  render(<MemoryLibrary />)
+  await screen.findByRole('heading', { name: 'Personal preference' })
+  expect(screen.getByRole('heading', { name: 'Workspace command' })).toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Memory scope' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Personal' }))
+  expect(screen.getByRole('heading', { name: 'Personal preference' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Workspace command' })).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Memory scope' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'Workspaces' }))
+  expect(screen.getByRole('heading', { name: 'Workspace command' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: 'Personal preference' })).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Memory scope' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'All scopes' }))
+  expect(screen.getByRole('heading', { name: 'Personal preference' })).toBeInTheDocument()
+  expect(screen.getByRole('heading', { name: 'Workspace command' })).toBeInTheDocument()
 })
 
 it('puts Refresh and New memory in the page header slot and does not repeat the page title', async () => {

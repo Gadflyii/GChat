@@ -1,3 +1,4 @@
+import userEvent from '@testing-library/user-event'
 import type { ComponentType, ReactNode } from 'react'
 import {
   afterEach,
@@ -176,15 +177,16 @@ describe('Attachment settings availability', () => {
   it('offers supported document choices and explains the unavailable search fallback', async () => {
     await openSettings()
 
-    const parseMode = screen.getByRole('combobox', { name: text.parseMode })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const parseMode = screen.getByRole('button', { name: text.parseMode })
+    await user.click(parseMode)
+    expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
+      text.parseModeAuto, text.parseModeInline, text.parseModePrompt,
+    ])
     expect(
-      within(parseMode)
-        .getAllByRole('option')
-        .map((option) => (option as HTMLOptionElement).value)
-    ).toEqual(['auto', 'inline', 'prompt'])
-    expect(
-      screen.queryByRole('option', { name: text.parseModeEmbeddings })
+      screen.queryByRole('menuitemradio', { name: text.parseModeEmbeddings })
     ).toBeNull()
+    await user.keyboard('{Escape}')
     expect(
       screen.getByText(text.documentSearchUnavailableDesc)
     ).toBeInTheDocument()
@@ -209,9 +211,7 @@ describe('Attachment settings availability', () => {
 
     expect(input('maxFile')).toHaveValue('20')
     expect(input('autoInlineThreshold')).toHaveValue('0.75')
-    expect(screen.getByRole('combobox', { name: text.maxImageSize })).toHaveValue(
-      '0'
-    )
+    expect(screen.getByRole('button', { name: text.maxImageSize })).toHaveTextContent(text.original)
     expect(updateSettings).not.toHaveBeenCalled()
   })
 
@@ -228,29 +228,31 @@ describe('Attachment settings availability', () => {
     updateSettings.mockClear()
 
     const page = await openSettings()
-    const parseMode = screen.getByRole('combobox', { name: text.parseMode })
-    expect(parseMode).toHaveValue('embeddings')
-    expect(
-      screen.getByRole('option', { name: text.savedDocumentSearchUnavailable })
-    ).toBeDisabled()
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const parseMode = screen.getByRole('button', { name: text.parseMode })
+    expect(parseMode).toHaveTextContent(text.savedDocumentSearchUnavailable)
+    await user.click(parseMode)
+    expect(screen.getByRole('menuitemradio', { name: text.savedDocumentSearchUnavailable })).toHaveAttribute('aria-disabled', 'true')
+    await user.keyboard('{Escape}')
     expect(
       screen.getByText(text.savedDocumentSearchUnavailableDesc)
     ).toBeInTheDocument()
     expect(updateSettings).not.toHaveBeenCalled()
     expect(useAttachments.getState()).toMatchObject(saved)
 
-    fireEvent.change(parseMode, { target: { value: 'inline' } })
+    await user.click(parseMode)
+    await user.click(screen.getByRole('menuitemradio', { name: text.parseModeInline }))
     fireEvent.change(input('maxFile'), { target: { value: '21' } })
     page.unmount()
     await drainSettingsQueue()
     await openSettings()
 
-    expect(screen.getByRole('combobox', { name: text.parseMode })).toHaveValue(
-      'inline'
-    )
+    expect(screen.getByRole('button', { name: text.parseMode })).toHaveTextContent(text.parseModeInline)
+    await user.click(screen.getByRole('button', { name: text.parseMode }))
     expect(
-      screen.queryByRole('option', { name: text.savedDocumentSearchUnavailable })
+      screen.queryByRole('menuitemradio', { name: text.savedDocumentSearchUnavailable })
     ).toBeNull()
+    await user.keyboard('{Escape}')
     expect(screen.queryByText(text.savedDocumentSearchUnavailableDesc)).toBeNull()
     expect(storedValues()).toMatchObject({
       parse_mode: 'inline',

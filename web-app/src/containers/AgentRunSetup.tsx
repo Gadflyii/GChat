@@ -6,6 +6,7 @@ import { AgentWorkerPools } from '@/containers/AgentWorkerPools'
 import { WorkspacePicker } from '@/containers/WorkspacePicker'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { Input } from '@/components/ui/input'
 import {
   Dialog,
@@ -157,6 +158,60 @@ export function AgentRunSetup({
               'id' in assignment.target
                 ? `${assignment.target.kind}:${assignment.target.id}`
                 : assignment.target.kind
+            const targetOptions = [
+              {
+                value: 'current',
+                label: `Current model${current ? ` · ${current}` : ' · none selected'}`,
+              },
+              {
+                value: 'fleet',
+                label: 'Use client fleet assignment',
+                disabled:
+                  !catalog.fleet?.connected || !catalog.fleetTargets?.length,
+              },
+              ...(assignment.target.kind === 'instance' &&
+              catalog.aliases?.[assignment.target.id]
+                ? [
+                    {
+                      value: targetValue,
+                      label: `Saved local instance · ${assignment.target.id}`,
+                    },
+                  ]
+                : []),
+              ...catalog.pools.map((pool) => ({
+                value: `pool:${pool.id}`,
+                label: `${pool.name} · ${pool.members.length} members${
+                  catalog.availablePoolIds &&
+                  !catalog.availablePoolIds.includes(pool.id)
+                    ? ' · not assigned'
+                    : ''
+                }`,
+                disabled:
+                  !!catalog.availablePoolIds &&
+                  !catalog.availablePoolIds.includes(pool.id),
+                group: 'Worker pools',
+              })),
+              ...[
+                ...new Set(catalog.instances.map((i) => i.hostName ?? 'Host')),
+              ].flatMap((host) =>
+                catalog.instances
+                  .filter((i) => (i.hostName ?? 'Host') === host)
+                  .map((i) => ({
+                    value: `instance:${i.id}`,
+                    label: `${i.modelId} · C${i.concurrency ?? '?'}${i.vision ? ' · Vision' : ''}`,
+                    group: host,
+                  }))
+              ),
+              ...(targetValue !== 'current' &&
+              targetValue !== 'fleet' &&
+              !(assignment.target.kind === 'pool'
+                ? catalog.pools.some((p) => `pool:${p.id}` === targetValue)
+                : catalog.instances.some((i) => `instance:${i.id}` === targetValue) ||
+                  (assignment.target.kind === 'instance' &&
+                    !!catalog.aliases?.[assignment.target.id]))
+                ? [{ value: targetValue, label: `Unavailable · ${targetValue}` }]
+                : []),
+            ]
             return (
               <section
                 key={role.id}
@@ -164,12 +219,12 @@ export function AgentRunSetup({
               >
                 <label className="text-sm font-medium">
                   {role.name}
-                  <select
+                  <ChoiceSelect
                     aria-label={`${role.name} assignment`}
                     className={selectClass}
                     value={targetValue}
-                    onChange={(e) => {
-                      const [kind, ...rest] = e.target.value.split(':')
+                    onValueChange={(value) => {
+                      const [kind, ...rest] = value.split(':')
                       change(role.id, {
                         target:
                           kind === 'current' || kind === 'fleet'
@@ -180,76 +235,8 @@ export function AgentRunSetup({
                               },
                       })
                     }}
-                  >
-                    <option value="current">
-                      Current model
-                      {current ? ` · ${current}` : ' · none selected'}
-                    </option>
-                    <option
-                      value="fleet"
-                      disabled={
-                        !catalog.fleet?.connected ||
-                        !catalog.fleetTargets?.length
-                      }
-                    >
-                      Use client fleet assignment
-                    </option>
-                    {assignment.target.kind === 'instance' &&
-                      catalog.aliases?.[assignment.target.id] && (
-                        <option value={targetValue}>
-                          Saved local instance · {assignment.target.id}
-                        </option>
-                      )}
-                    <optgroup label="Worker pools">
-                      {catalog.pools.map((pool) => (
-                        <option
-                          key={pool.id}
-                          value={`pool:${pool.id}`}
-                          disabled={
-                            !!catalog.availablePoolIds &&
-                            !catalog.availablePoolIds.includes(pool.id)
-                          }
-                        >
-                          {pool.name} · {pool.members.length} members
-                          {catalog.availablePoolIds &&
-                          !catalog.availablePoolIds.includes(pool.id)
-                            ? ' · not assigned'
-                            : ''}
-                        </option>
-                      ))}
-                    </optgroup>
-                    {[
-                      ...new Set(
-                        catalog.instances.map((i) => i.hostName ?? 'Host')
-                      ),
-                    ].map((host) => (
-                      <optgroup label={host} key={host}>
-                        {catalog.instances
-                          .filter((i) => (i.hostName ?? 'Host') === host)
-                          .map((i) => (
-                            <option key={i.id} value={`instance:${i.id}`}>
-                              {i.modelId} · C{i.concurrency ?? '?'}
-                              {i.vision ? ' · Vision' : ''}
-                            </option>
-                          ))}
-                      </optgroup>
-                    ))}
-                    {targetValue !== 'current' &&
-                      targetValue !== 'fleet' &&
-                      !(assignment.target.kind === 'pool'
-                        ? catalog.pools.some(
-                            (p) => `pool:${p.id}` === targetValue
-                          )
-                        : catalog.instances.some(
-                            (i) => `instance:${i.id}` === targetValue
-                          ) ||
-                          (assignment.target.kind === 'instance' &&
-                            !!catalog.aliases?.[assignment.target.id])) && (
-                        <option value={targetValue}>
-                          Unavailable · {targetValue}
-                        </option>
-                      )}
-                  </select>
+                    options={targetOptions}
+                  />
                 </label>
                 <div className="flex flex-wrap items-center gap-4 text-sm">
                   <label>
