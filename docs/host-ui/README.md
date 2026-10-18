@@ -35,18 +35,61 @@ that old registration; connected refresh succeeds without taking over another
 owner or reverting a newer same-root seed. Regression cases also preserve
 retained old-root data, strict schema/service checks and rejection of an invalid
 replacement seed.
-Nine registry tests are prepared, including four new behavioral regressions.
-**Tests/build/native acceptance have not run for this candidate.** The next
-action is the parent's booked serial focused/check/Clippy and ONE verification
-gate after the reset candidate, then changed-source native acceptance.
+All nine registry cases now pass, including all four new behavioral regressions.
+Frozen normal merge `82f17a1ac` includes main `d4ec7abab`; the registry source
+is unchanged from the original candidate. Host check/Clippy and lint pass.
+ONE `make verify` ran 05:54:34–05:58:50Z: its frontend results are valid
+(3,393 app tests, six skipped; 127 extension tests; all six coverage floors).
 
-Owner Codex 3; source/docs worktree
-`/ai/gchat-worktrees/c3-host-locator-deleted-runtime-20261018`, branch
-`fix/c3-host-locator-deleted-runtime-20261018`, fetched main base `4ead3f88f`.
-Only `src-tauri/ginfer-host/src/local_host_registry.rs` and this branch's
-subject/decision records change. No new runtime fixture, build tree, process,
-resource booking, dependency or GPU/model work was created; the parent retains
-the installed AppDir and native fixture in its existing release packet.
+The initial Rust result and native export were invalid: Cargo reused a cached
+five-test registry executable despite the correct nine-test source. Git archive
+had restored the 05:47:20 commit timestamp, older than the retained 05:49 Cargo
+fingerprint. The original zero-exit outcome remains recorded in
+`out/c3-host-locator-deleted-runtime-20261018/cargo-cache-mismatch.json`.
+After that build ended, all 3,232 regular archived tracked inputs received fresh
+mtimes without content changes; all 44 source bindings still matched. Future
+archive staging must normalize tracked-input mtimes before retained target
+reuse and confirm the changed regression names in focused output.
+
+The bounded continuation ran 06:01:23–06:05:51Z: the nine focused registry tests,
+Host check/Clippy, the original seven `make test-rust` suites and desktop/Host
+native rebuild all pass. Corrected native verification reports 1,256 passes and
+28 existing ignores, including the four cases absent from the stale result.
+No second full verification ran; the valid frontend and Vite results were
+retained. Changed-source native acceptance passed06:11–06:18Z.
+
+Owner Codex 3; worktree `/ai/gchat-worktrees/c3-host-locator-deleted-runtime-20261018`,
+branch `fix/c3-host-locator-deleted-runtime-20261018`, frozen source `82f17a1ac`.
+Only the registry source and subject/decision records change. The private S1 root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` reused source,
+dependencies and debug target; all 35 dependency manifests and 44 source bindings
+matched. Booking 3062 used CPUs 80–87, socket1 shared lock, nice10/max8 jobs,
+pinned container and routed offline dependencies. Both exited containers and
+local/remote source archives are removed; returned 06:07Z.
+
+Immutable exports are `host-locator-candidate/bin/gchat` (256,470,416 bytes)
+and `host-locator-candidate/bin/ginfer-host` (56,649,776 bytes) beneath that root.
+Both are checked ELF files with private pre-install and retained runnable
+resource linkage. Packet `out/c3-host-locator-deleted-runtime-20261018/` holds
+`result.json`, `terminal.json`, `summary.md`, the first outcome and corrected
+logs. The whole shared source/target/cache stage is handed back to parent;
+exports remain pending merge; the inactive source/debug/dependency cache stage
+was retired06:12Z (34.7GiB allocated). C4 and C7 donor copies are terminal.
+No GPU, model or new dependency ran in these gates.
+
+Native acceptance used the same private HOME with its untouched stale locator.
+A candidate-only resource overlay supplied the corrected Host to the ordinary
+startup installer. The saved Desktop registration now names the selected root,
+all four selected runtime executables exist, and the running Host uses them;
+the old four deleted runtime paths remain absent. Models and Downloads refresh
+complete without alerts. Connect account service succeeds and shows the Google
+and Microsoft setup cards with no connected accounts; no OAuth sign-in ran.
+The no-model Host settings and advanced controls were exercised and restored.
+Dark1500×1000 and Light1024×800 screenshots were visually reviewed: readable,
+without horizontal overflow. Model Check/Start stay disabled without a model.
+The unoptimized debug resource hashing delay is not release timing evidence.
+Native3073 returned06:18Z. Receipts and screenshots are in the same packet;
+next is the architecture/merge handoff and retirement of the remaining fixture.
 
 ## Gbot permission decision failure recovery — October 18
 
