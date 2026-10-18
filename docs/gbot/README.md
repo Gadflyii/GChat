@@ -1,5 +1,22 @@
 # Gbot design
 
+## Refreshing accounts preserves failed link saves — Gchat 2
+
+`GBOT-LINKED-ACCOUNTS-REFRESH-SAVE-ERROR`, based on main `0f604653e`,
+fixes Refresh accounts hiding a failed Save linked accounts warning while
+the same unsaved selections remain checked. Reading the available accounts
+does not save which accounts the bot may use.
+
+Refresh and Save now keep separate errors beside their controls. A refresh
+clears only its own error; the failed Save warning survives a successful
+refresh, a failed refresh and its read-only retry. An explicit Save retry
+clears its own warning and uses the retained selection. Account permissions
+and service behavior are unchanged.
+
+Rendered regressions cover both refresh outcomes, pending feedback, retained
+selections and no automatic Save. Focused and full verification are pending;
+this source change does not qualify live connector actions or native Windows.
+
 ## Refreshing Hosts preserves failed brain saves — Gchat 2
 
 `GBOT-BRAIN-HOST-REFRESH-SAVE-ERROR`, based on main `73d9d4b9c`,
