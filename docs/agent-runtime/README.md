@@ -36,8 +36,16 @@ restores the earlier draft. **New Chat** clears only the new-conversation draft,
 preserving replies left in saved conversations. Drafts remain in memory and are
 not restored after exiting the app.
 
-Validation is pending focused tests, lint, one `make verify` and a rebuilt
-private native check. Candidate receipts:
+Validation: 67 focused tests and workspace lint PASS; one `make verify`
+PASS (3,587 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `54cde40b7`. Rebuilt private
+native acceptance PASS: the saved conversation opens empty, keeps its reply
+through Agent Studio and Back, and New Chat restores its earlier draft on Back.
+Clicking **New Chat** empties only that draft; reopening the saved conversation
+restores its reply. The candidate screenshot was viewed. Normal close at
+12:38:55Z kept saved thread/messages, agent definitions and run history
+byte-identical; CPU booking 3283 returned 12:39Z. No send, save, delete, run,
+inference, installed-package or Windows acceptance was performed. Receipts:
 `/ai/gchat/out/gchat-chat-draft-isolation-20261018/`.
 
 ## Agent Studio composition reselection — October 18
