@@ -65,6 +65,10 @@ export default function GbotCompanion() {
     {}
   )
   const taskSubmission = useRef(false)
+  const controlChange = useRef(false)
+  const [controlErrors, setControlErrors] = useState<
+    Record<string, { returning: boolean; details: string } | undefined>
+  >({})
   const desktop = useRef<DesktopViewHandle>(null)
   const panel = useRef<HTMLElement>(null)
   const wasVisible = useRef(false)
@@ -120,6 +124,12 @@ export default function GbotCompanion() {
   const draft = state.drafts[workspaceId] ?? ''
   const taskErrorKey = JSON.stringify([state.target, workspaceId])
   const taskError = taskErrors[taskErrorKey]
+  const controlErrorKey = JSON.stringify([
+    state.target,
+    identity?.workspace_id,
+    identity?.session_id,
+  ])
+  const controlError = controlErrors[controlErrorKey]
 
   useEffect(() => {
     const sharing = useGbotPage.getState().sharing
@@ -214,6 +224,34 @@ export default function GbotCompanion() {
   const hide = () => {
     desktop.current?.stopInput()
     state.setMode('hidden')
+  }
+  const changeControl = () => {
+    if (busy || controlChange.current || !identity || setupBlocked) return
+    controlChange.current = true
+    const key = controlErrorKey
+    const returning = control?.state === 'human' || control?.state === 'paused'
+    setControlErrors((previous) => ({ ...previous, [key]: undefined }))
+    if (returning) desktop.current?.stopInput()
+    void perform(
+      () =>
+        gbot(returning ? 'control/hand-back' : 'control/take-over', {
+          identity,
+          owner,
+        }),
+      true
+    )
+      .catch((cause) =>
+        setControlErrors((previous) => ({
+          ...previous,
+          [key]: {
+            returning,
+            details: cause instanceof Error ? cause.message : String(cause),
+          },
+        }))
+      )
+      .finally(() => {
+        controlChange.current = false
+      })
   }
 
   if (!enabled) return null
@@ -725,30 +763,37 @@ export default function GbotCompanion() {
                     </p>
                     <Button
                       variant="outline"
+                      aria-describedby={
+                        controlError ? 'gbot-companion-control-error' : undefined
+                      }
                       disabled={
                         busy ||
                         Boolean(control?.owner && control.owner !== owner)
                       }
-                      onClick={() =>
-                        void perform(() => {
-                          const returning =
-                            control?.state === 'human' ||
-                            control?.state === 'paused'
-                          if (returning) desktop.current?.stopInput()
-                          return gbot(
-                            returning
-                              ? 'control/hand-back'
-                              : 'control/take-over',
-                            { identity, owner }
-                          )
-                        })
-                      }
+                      onClick={changeControl}
                     >
                       {control?.state === 'human' || control?.state === 'paused'
                         ? 'Hand back'
                         : 'Take over'}
                     </Button>
                   </div>
+                  {controlError && (
+                    <div
+                      id="gbot-companion-control-error"
+                      role="alert"
+                      className="space-y-1 text-sm"
+                    >
+                      <p>
+                        {controlError.returning
+                          ? 'Could not hand back control. Try again.'
+                          : 'Could not take over this desktop. Try again.'}
+                      </p>
+                      <details className="text-muted-foreground">
+                        <summary className="cursor-pointer">Details</summary>
+                        <p className="break-words">{controlError.details}</p>
+                      </details>
+                    </div>
+                  )}
                   <GbotDesktopView
                     key={`${identity.workspace_id}:${identity.session_id}`}
                     ref={desktop}

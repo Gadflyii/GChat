@@ -1,5 +1,38 @@
 # Gbot design
 
+## Desktop control failure recovery — Gchat 2
+
+`GBOT-DESKTOP-CONTROL-INLINE-ERRORS`, based on main `3d8008245`, fixes
+failed **Take over** and **Hand back** requests in settings and the companion.
+Previously only a temporary diagnostic toast explained the failure. Both
+views now keep plain guidance beside the control, with diagnostic Details
+closed until requested. Errors belong to the original service, bot and live
+session, survive status refreshes and clear on an explicit retry.
+
+Ownership still comes from the service. Hand back stops desktop input before
+its request, including a rejected request; retry never resumes input or a task
+automatically. A synchronous guard holds duplicate requests through refresh.
+The incomplete-setup hand-back path uses the same feedback.
+
+All four rendered regressions fail on the unchanged baseline: rapid same-turn
+clicks send each control RPC twice (116 tests filtered). The complete settings
+and companion suites pass all 120 tests after the fix. Cases also cover Error
+and native string failures, closed Details, status refresh, separate services,
+bots and sessions, identical retry payloads, and service-confirmed ownership.
+
+One Linux/S1 `make verify` passes on 18 October, 06:10:46–06:18:27 UTC:
+3,405 app, 127 extension and 1,262 Rust tests pass; six app tests are skipped
+and 28 Rust tests ignored. Lint, type checking, quality guards and all six
+coverage floors pass. Source, test and documentation hashes match before and
+after the gate. No VM, native Windows, live control, model or GPU acceptance
+is claimed. FRESH and OLD remain off with original XML and Gchat 2 custody.
+
+Evidence: `out/gchat2-desktop-control-inline-errors-20261018/{result.json,SUMMARY.md}`.
+Owned source: `/ai/gchat-worktrees/gchat2-desktop-control-inline-errors-20261018`.
+The private S1 build/cache was removed after the gate; the shared donor was
+preserved. CPUs 96–103 returned at 06:19 UTC, booking 3071 canceled. Next:
+bubbs merges the fix and its evidence.
+
 ## Task submission recovery — Gchat 2
 
 `GBOT-TASK-SUBMIT-INLINE-ERRORS`, based on main `d4ec7abab`, fixes failed
