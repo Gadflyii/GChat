@@ -37,8 +37,20 @@ new selected section button after completion. A cancelled transition or a user
 who has moved focus to another control keeps that focus. Direct page entry and
 navigation within the Agents route keep their existing behavior.
 
-Validation pending focused tests, lint, one `make verify`, native rebuild and
-private native keyboard acceptance. Candidate receipts:
+Validation: 128 focused tests and workspace lint PASS; one `make verify`
+PASS (3,605 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `27453176e`. The new actual-route
+regression covers Skills and all four Agents views; the pending-navigation
+regression preserves focus moved independently to another control. Its initial
+missing test-service setup was corrected before the full gate.
+
+Rebuilt private native acceptance PASS: Enter selects Skills, Space selects each
+of the four Agents sections from Skills, and Enter returns to Skills. Every
+route replacement preserves focus on its selected current-section button. The
+candidate screenshot was viewed. Normal close at 13:31:26Z kept saved
+thread/messages, agent definitions and run history byte-identical; CPU booking
+3307 returned 13:31Z. This is private Linux source-native keyboard acceptance,
+without screen reader, inference, installed-package or Windows claims. Receipts:
 `/ai/gchat/out/gchat-agent-studio-route-focus-20261018/`.
 
 ## Agent Studio current section — October 18
