@@ -1,0 +1,184 @@
+{
+  "owner": "Codex 4",
+  "host": "AIS-2-8592-L01",
+  "root": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018",
+  "scope": "Previously approved copied Rust/frontend caches only; native acceptance terminal. Source/archive/extracted native copies and receipts preserved until merge. No local worktree edits.",
+  "started_utc": "2026-10-18T05:01:33.233185+00:00",
+  "preflight": {
+    "process_references": [],
+    "active_container_mounts": []
+  },
+  "root_allocated_before_bytes": 26397278208,
+  "targets": [
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/cargo-home",
+      "existed": true,
+      "allocated_before_bytes": 2372460544,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/cargo-home",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native-target",
+      "existed": true,
+      "allocated_before_bytes": 18272583680,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native-target",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/yarn-cache",
+      "existed": true,
+      "allocated_before_bytes": 780599296,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/yarn-cache",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/build-xdg-data",
+      "existed": true,
+      "allocated_before_bytes": 28672,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/build-xdg-data",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/build-xdg-cache",
+      "existed": false,
+      "allocated_before_bytes": 0,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/build-xdg-cache",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/.yarn",
+      "existed": true,
+      "allocated_before_bytes": 1937408,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/.yarn",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/core/dist",
+      "existed": true,
+      "allocated_before_bytes": 1036288,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/core/dist",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/web-app/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 172408832,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/web-app/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 1227681792,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/core/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 57270272,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/core/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/vector-db-extension/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 77398016,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/vector-db-extension/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 106496,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/assistant-extension/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 77422592,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/assistant-extension/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/conversational-extension/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 77398016,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/conversational-extension/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/download-extension/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 102879232,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/download-extension/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/ginfer-extension/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 118390784,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/ginfer-extension/node_modules",
+      "absent_after": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/rag-extension/node_modules",
+      "existed": true,
+      "allocated_before_bytes": 77398016,
+      "resolved": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat/extensions/rag-extension/node_modules",
+      "absent_after": true
+    }
+  ],
+  "preserved": [
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/gchat",
+      "exists": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/distribution",
+      "exists": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native",
+      "exists": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/archive-result.json",
+      "exists": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/verification-result.json",
+      "exists": false
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/verify.log",
+      "exists": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/job.log",
+      "exists": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/archive.log",
+      "exists": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/c4-cli-driver-guidance-20261018-source.tar",
+      "exists": true
+    },
+    {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/c4-cli-driver-guidance-20261018-source.patch",
+      "exists": true
+    }
+  ],
+  "archive": {
+    "path": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/distribution/ginfer-bundle-0.1.0-linux-x86_64.tar.gz",
+    "bytes": 622161059,
+    "sha256_from_frozen_receipt": "a0e9c930493b969b2c4e06da74f3de7ff94f5a7615fd1b092166709eaa2212a4"
+  },
+  "setup_source_sha256": "fcf0fa0e3a1e0db5ad2093e1ebeaf2dd8cb1c1b05f5be34f95ba2ad904df51e0",
+  "root_allocated_after_bytes": 2980278272,
+  "allocated_freed_bytes": 23416999936,
+  "finished_utc": "2026-10-18T05:01:42.063118+00:00"
+}
