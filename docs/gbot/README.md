@@ -1,5 +1,19 @@
 # Gbot design
 
+## SSH connection setup error guidance — Gchat 2
+
+`GBOT-LAN-SETUP-ERROR-GUIDANCE`, based on main `250df804a`, gives
+failed computer-identity checks, key import and creation, public-key reads and
+SSH access checks plain recovery guidance naming the existing retry control.
+Technical diagnostics remain in Details, initially closed. Automatic and
+explicit public-key reads share the same guidance.
+
+Opening Details sends no request. Entries and fingerprint confirmation survive
+failed actions; explicit retries retain the existing pending guards. Changing
+key mode clears advice for the now-hidden action. Fingerprint verification,
+host-key pinning, key storage and SSH access checks keep their existing contract.
+This is source/rendered UI scope.
+
 ## Human-help response error recovery — Gchat 2
 
 `GBOT-HUMAN-HELP-ERROR-GUIDANCE`, based on main `3b967a5bc`, gives failed
