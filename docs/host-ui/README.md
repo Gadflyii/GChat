@@ -6460,8 +6460,91 @@ prices the second same-package launch. Gchat3 owns the Host integration.
 
 C5 app acceptance requires the first Automatic load reaching Ready and a second
 same-package launch using that saved receipt, followed by the remaining 600s C1
-and 600s C4 natural gates, zero serving HTTP 4xx/5xx and no swap. Zero-allowance
-source `9ee3e4c7f` remains unbuilt and unaccepted; no app retry is authorized
+and 600s C4 natural gates, zero serving HTTP 4xx/5xx and no swap. Those same two
+Automatic Qwen53248/C8 loads also supply C1's physical quote/live cell; do not
+add a duplicate startup for that evidence. Retain the first load's full Engine
+stderr and request-log `server_start`, alongside its Ready receipt and the
+second same-package launch's saved-receipt use. The existing normal Host log is
+`/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/host/host.log`;
+Engine stdout/stderr are forwarded there, while the in-memory diagnostics retain
+only a bounded tail. Preserve the full log. The frozen770f Host does not pass
+`--request-log-jsonl`, and prior app guard receipts record `request_log: null`;
+the accepted Engine/Host handoff must identify the normal request-log destination
+before the first retry so its `server_start` is retained without another load.
+Gchat3's Host request-log handoff arrived21:24 UTC: reviewed source
+`470196671`, S1 donor57174168B SHA256
+`de3231e12351da13eef6b51a93b2777dce232c724748a67354f7bc4fd366521c`,
+with focused/check/clippy/317 Rust checks passing and the prior single verify
+retained. The read-copy receipt is
+`/ai/gchat/out/windows-consumer-launch-profiles-20261018/host-request-log-result.json`.
+Set `GINFER_HOST_REQUEST_LOG_JSONL` to an absolute owned path before the idle
+app-owned Host is restarted normally; retain full `host.log`. The normal
+fixture replacement/restart and request-log destination are being bound before
+the first physical retry; no new app load has run. Arch21:25 UTC made source
+acceptance conditional on adding NVML driver version to the saved-receipt key
+and one driver-change regression. Hold this handed Host binary until Gchat3
+provides the corrected focused delta/build; the request-log control is unchanged.
+
+C1's frozen Engine source `b47c4b7253d50c4cd3ae92f4a3c567e84344dc97`
+has passed its two focused checks and sole Engine CTest. Its SM86 donor is
+317328904B, SHA256
+`90c3681808c60020375073f8e7710e0aa164052e22739a12ce364eb47472994a`;
+the archive build's unknown version is bound by C1's
+`bench/reports/quote-admission-exact-vram-20261018/guided-build/source-identity.json`
+and SM86 receipts. C1 staged that same donor on laptop at
+`/home/ron/tmp-c1-quote-admission-exact-vram-20261018/bin/b47c4b725/ginfer-serve`
+and attempted the Qwen75776/Muse8192 Ready-only controls21:18 UTC. C1 returned
+21:22 UTC without loading a model: the quote CLI rejected an identity flag
+without its request-log option. C5's corrected Flash67584/C8 witness rejected
+before Ready21:23:18 UTC; laptop returned21:29 UTC with421 canceled and no
+requests or sampled swap growth. The Flash sequence is stopped for Arch; no
+stepdown or Ada launch is scheduled; Arch21:32:31 UTC explicitly confirmed
+the hold pending C4's corrected bound. C1's corrected Ready-only pair returned
+21:35 UTC with Qwen75776 and Muse8192 both Ready/native0,422 canceled. C1
+reported unresolved physical residuals. Arch21:36 UTC approved charging the
+total preattach physical increment minus the weight/resident ledger through
+the existing Ready receipt, with graph-only telemetry retained as diagnostic.
+C1 pushed total-physical receipt source `ac53611e0` at21:44 UTC. Its SM86
+donor is ready on S1 at
+`/media/ron/SSD_RAID/ai/tmp-c1-quote-admission-exact-vram-20261018/build-86/apps/ginfer-serve`,
+317333712B, SHA256
+`885a48f9d2f1cf636efc05193f6e34b2b56f219e786e207ea7051b5c550bee1a`.
+C1's laptop worker coordinates staging after Gchat3's native return; the six
+corrected native first/second Ready controls still precede the app gates.
+Hold both app loads for that accepted Engine donor and physical-control
+clearance. The staged b47
+donor remains historical evidence and is not the next app runtime. No model
+copy or completed control repeat is needed. Bind the combined Host/logging
+handoff before either app load.
+
+Source review21:38 UTC found that the actual Start discards its quote JSON;
+saved `host.json` receipts prove persistence but not a particular Start's use.
+The quote preview's `graph_allowance_source=receipt` proves that preview only.
+C5 requested an ordinary Host-log receipt-source/bytes marker from Gchat3 on
+the actual Start before the corrected handoff, without a diagnostic route or
+extra model launch. Gchat3's corrected Host `e001e9ea3` handoff arrived21:47 UTC:
+S1 `/media/ron/SSD_RAID/ai/tmp-gchat3-windows-consumer-host-20261018/native-target/debug/ginfer-host`,
+57183816B, SHA256 `48e9040ade587e720f2d255895a19ac0946e6f4d2f4ec09b781bf0c3f78d344a`.
+Its driver-key and actual-Start marker deltas passed focused/check/clippy/build;
+retain the prior single full verify. The ordinary actual-Start log records
+accepted receipt source and bytes, while full child stderr and the existing
+request-log control remain available. This Host is copy-granted but not yet
+installed in C5's idle fixture. Preserve credentials by extracting only the
+needed receipt fields from private Host state.
+
+Keep the frozen four-image app bundle intact during the accepted Host handoff:
+startup validation restores individually replaced installed images. Quit the
+isolated app after ordinary model/API Stop, then gracefully terminate its exact
+idle Host (Linux Quit leaves Host running). Start the accepted corrected Host
+with the same desktop-provider/data state and an explicit SM86 runtime mapping
+to C1's final accepted donor; preserve the other installed runtime mappings. The
+unchanged app reconnects to that existing owner. Keep the corrected Host alive
+through both loads and retain its effective runtime argv: a later app-owned
+respawn could restore the frozen runtime mapping. The request JSONL must be an
+absolute owned path, alongside the full normal Host log. These are preparation
+instructions; no replacement or physical app retry has run.
+
+Zero-allowance source `9ee3e4c7f` remains unbuilt and unaccepted; no app retry is authorized
 before the accepted Engine/Host source/build handoff. Preserve the frozen app,
 catalog, artifact and settings through that handoff.
 
