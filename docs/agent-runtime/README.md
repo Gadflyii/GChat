@@ -22,6 +22,34 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Skill availability on this computer — October 18
+
+A private native Linux pass selected Apple Calendar and opened its actions.
+The skill's enabled preference was on, but Try in chat was disabled with no
+platform explanation. Its Skills UI and registry source matched main
+`ef64363fb`. Baseline DOM receipts and viewed screenshots are in
+`/ai/gchat/out/gchat-skill-platform-availability-20261018/`.
+
+Incompatible skills now say “Unavailable on this computer” in the list and
+selected details. The details name the supported systems from the skill's
+metadata. Missing-tool guidance remains visible alongside that notice. Saved
+enable preferences and execution eligibility keep their existing behavior.
+
+Focused regressions cover macOS-only and Linux/Windows skills, absent platform
+metadata, missing-tool guidance, and compatible skills with either enabled
+preference. All 35 focused tests and workspace lint PASS. One `make verify`
+PASS (3,610 web-app, 127 extension and 1,290 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `c76948305`. Two initial
+exact-text test assertions were corrected before the full gate.
+
+Rebuilt private native acceptance PASS: Apple Calendar shows the list notice
+and “Supported systems: macOS” in its selected details. Its saved preference
+remains enabled and Try in chat remains disabled. Selecting compatible Agent
+Builder shows no platform notice. The candidate screenshot was viewed. Normal
+close at 13:46:27Z preserved saved thread/messages, agent definitions and run
+history byte-for-byte; returned13:46Z. This is private Linux source-native UI
+acceptance, without inference, installed-package or Windows claims.
+
 ## Agent Studio navigation across Skills — October 18
 
 A private native keyboard pass on `014afdc21` (the header and routing match main
