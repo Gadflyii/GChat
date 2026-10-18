@@ -1,5 +1,31 @@
 # Gbot design
 
+## Keep setup open during local computer actions — Gchat 2
+
+`GBOT-LOCAL-VM-NAVIGATION-PENDING`, based on main `aec8f8710`, keeps
+Back and Cancel unavailable while creating, starting, stopping, removing or
+connecting to a local computer. The pending state lasts through the follow-up
+status read and releases after success or failure, leaving existing action
+feedback available. Navigation and form submission also check pending state
+before React has rendered the disabled controls.
+
+Prerequisite reads and an unanswered removal confirmation leave navigation
+available. Removal still requires explicit confirmation; no request is sent if
+the user leaves before answering it. Rendered regressions cover all five actions
+with successful and failed responses, delayed status reads and same-turn
+navigation. This is source/rendered UI scope.
+
+All ten new cases failed on unchanged production. The fixed local setup and
+wizard suites passed all 62 cases; lint passed with zero errors and five existing
+warnings. ONE `make verify`, 18 October 15:56:57–16:02:58 UTC, passed 3,678 app
+tests (six skipped), 127 extension tests, 1,309 Rust tests (28 ignored,
+23 summaries), six coverage floors and lint/typecheck/guards. All 3,459 tracked
+raw source bytes and modes matched before and after the gate; tracked timestamps
+were refreshed before checks. This receipt was added afterward with product
+and test source unchanged. CPU112–119 booking3390 returned 16:03Z. Evidence:
+`out/gchat2-local-vm-navigation-pending-20261018/result.json` and adjacent raw
+logs. No retry or whole-gate repeat.
+
 ## Local computer action recovery — Gchat 2
 
 `GBOT-LOCAL-VM-ACTION-ERROR-PERSISTENCE`, based on main `fe0630a14`, keeps

@@ -24,10 +24,12 @@ export default function KvmSetup({
   name,
   connected,
   initialId,
+  busy: reportBusy,
 }: {
   name: string
   initialId?: string
   connected: (id: string) => Promise<void>
+  busy?: (value: boolean) => void
 }) {
   const [preflight, setPreflight] = useState<LocalVmPreflight | null>(null)
   const [records, setRecords] = useState<KvmSetupRecord[]>([])
@@ -105,6 +107,7 @@ export default function KvmSetup({
   ) => {
     if (actionPending.current || checkPending.current) return
     actionPending.current = true
+    reportBusy?.(true)
     const id = saved?.id ?? newId.current
     const botName = saved?.name ?? name.trim()
     setAction({
@@ -152,6 +155,7 @@ export default function KvmSetup({
     } finally {
       actionPending.current = false
       setAction(undefined)
+      reportBusy?.(false)
     }
   }
   const removeComputer = async (saved: KvmSetupRecord) => {
