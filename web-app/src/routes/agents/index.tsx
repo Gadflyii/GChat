@@ -390,6 +390,7 @@ function AgentStudioPage() {
   const { skills } = useAgentSkills()
   const [view, setView] = useState<StudioView>(search.view ?? 'definitions')
   const [draft, setDraftState] = useState<AgentDefinition | null>(null)
+  const outputBudgetInput = useRef<HTMLInputElement>(null)
   // The editable identifier does not determine which saved record this draft owns.
   const [draftSavedId, setDraftSavedId] = useState<string | null>(null)
   const draftBaseline = useRef<string | null>(null)
@@ -581,6 +582,15 @@ function AgentStudioPage() {
     const revision = draftRevision.current
     if (!draft.name.trim()) {
       toast.error('Give the agent a name before saving.')
+      return null
+    }
+    const budgetInput = outputBudgetInput.current
+    if (budgetInput && !budgetInput.checkValidity()) {
+      budgetInput.closest('details')?.setAttribute('open', '')
+      budgetInput.focus()
+      toast.error(
+        'Output budget must be Auto or a whole number from 256 to 262,144 tokens.'
+      )
       return null
     }
     const candidate = {
@@ -799,6 +809,7 @@ function AgentStudioPage() {
               <DefinitionEditor
                 key={draftSavedId === null ? 'unsaved' : `saved:${draftSavedId}`}
                 draft={draft}
+                outputBudgetRef={outputBudgetInput}
                 modelInstances={modelInstances}
                 skills={skills
                   .filter((skill) => skill.enabled && skill.compatible)
@@ -904,11 +915,13 @@ function AgentStudioPage() {
 
 function DefinitionEditor({
   draft,
+  outputBudgetRef,
   skills,
   modelInstances,
   onChange,
 }: {
   draft: AgentDefinition
+  outputBudgetRef: React.Ref<HTMLInputElement>
   skills: string[]
   modelInstances: AgentModelInstance[]
   onChange: (definition: AgentDefinition) => void
@@ -1069,12 +1082,14 @@ function DefinitionEditor({
           <div className="mt-3">
             <Field
               label="Output budget per model call"
-              help="Auto balances reasoning effort and available context. This includes thinking and the answer/tool call, not the number of tool steps. An explicit limit is never automatically increased."
+              help="Leave blank for Auto, or enter a whole number from 256 to 262,144 tokens. Auto balances reasoning effort and available context. This includes thinking and the answer/tool call, not the number of tool steps. An explicit limit is never automatically increased."
             >
               <Input
+                ref={outputBudgetRef}
                 type="number"
                 min={256}
                 max={262144}
+                step={1}
                 placeholder="Auto"
                 value={draft.maxOutputTokens ?? ''}
                 onChange={(event) =>

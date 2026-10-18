@@ -22,6 +22,27 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Validating the agent output budget — October 18
+
+A private native pass entered `256.5` as the output budget and saved a new
+agent. The editor sent that value to Rust and displayed a raw integer parse
+error. Save definition and Save & run now check the field before saving,
+open Advanced generation settings and focus the invalid value with a readable
+correction. The guidance names Auto and the existing 256–262,144 whole-token
+range. Auto, valid integers and the backend limits keep their existing meaning.
+
+Source `26e221cdc` passes all 108 Agent Studio tests, lint and one full
+`make verify` (3659 web, 127 extension and 1309 Rust tests, plus all six
+coverage floors). The rebuilt Linux desktop passes native Tab/Enter on both
+Save actions while Advanced settings is collapsed: the invalid value remains,
+the section opens, focus returns to the budget and no run setup opens.
+Replacing the value with `4096` restores validity. Focused regressions also
+verify saving after correction and preserving Auto and both valid bounds.
+Normal close preserves all four saved chat/agent fixture files; returned
+15:34Z, without inference. This qualifies private source-native Linux behavior;
+installed packages and Windows were not exercised. Receipts:
+`/ai/gchat/out/gchat-agent-output-budget-validation-20261018/handoff.json`.
+
 ## Closing a Chat HTML preview — October 18
 
 A private native pass found that keyboard activation of **Close HTML** lost
