@@ -1,5 +1,40 @@
 # GInfer host UI
 
+## Connect service-selection hint — Gchat 2 native acceptance, October 18
+
+`GUI-CONNECT-NEEDS-SERVICE-HINT` passes its Linux native check in the
+OLD VM. Settings → Workspace connections first showed the cold account-service
+prompt. After explicitly connecting the local service in a private profile,
+Microsoft 365 had no selected services and showed **Select at least one service
+above to continue.** The disabled **Sign in with Microsoft** button referenced
+that hint through `aria-describedby`. Selecting Outlook mail removed the hint
+and enabled sign-in; trusted native Space input cleared the checkbox and
+restored both the hint and disabled state. The screenshot is readable. Both
+providers retained Read only and no connected accounts.
+
+The retained release `ed68c7443` contains source fix `c632d22d3`, merged in
+`9564df2af`. The provider card, service fieldset and relevant controls match
+through baseline main `800e07fef`; later startup-error formatting is outside
+this acceptance. The recorded 29 focused cases and subsequent single
+`make verify` at `dbec106e4` passed (3,102 frontend,119 extension and Rust;
+exit0). This evidence-only change uses `git diff --check`, with no repeated
+source gate. Result and summary:
+`out/gchat2-connect-service-hint-native-20261018/{result.json,SUMMARY.md}`.
+
+This covers English, Dark-theme native Linux. Google was unconfigured; no
+Google setup, configuration Save, browser sign-in, OAuth consent, account
+connection or model action was performed. Windows, screen-reader speech and
+startup-error formatting remain unqualified. WebKit observed state and
+screenshots; pointer and keyboard actions used the native window.
+
+Worktree `/ai/gchat-worktrees/gchat2-connect-service-hint-native-20261018`,
+branch `test/gchat2-connect-service-hint-native-20261018`, retains documentation
+only. All 15 private session/service processes, the private guest AppDir,
+HOME/runtime and S1 scratch are removed. OLD is OFF with original XML restored;
+FRESH was untouched. Relay ended and booking was canceled: returned02:11Z.
+Only result JSON and short summary remain; the read-only donor stays with
+Gchat 3.
+
 ## Downloads button — Gchat 2 native acceptance, October 18
 
 `GUI-DOWNLOADS-BUTTON-LABEL` passes the remaining Linux native check in the
