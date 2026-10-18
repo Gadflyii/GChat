@@ -307,6 +307,7 @@ it.each([
         stopped: null,
       })
       .mockReturnValueOnce(change.promise)
+      .mockResolvedValueOnce({ schedules: [current], stopped: null })
       .mockReturnValueOnce(retry.promise)
       .mockResolvedValueOnce({
         schedules: [{ ...current, enabled: !enabled }],
@@ -338,6 +339,12 @@ it.each([
     expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: label })).toBeEnabled()
+    await act(async () => taskUpdate())
+    expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
+    expect(screen.getByRole('button', { name: label })).toBeEnabled()
+    expect(
+      request.mock.calls.filter(([route]) => route === 'schedules/enabled')
+    ).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: label }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(progress)
@@ -362,6 +369,7 @@ it('retains a failed schedule draft and lets the user retry creating it', async 
   request
     .mockResolvedValueOnce({ schedules: [], stopped: null })
     .mockReturnValueOnce(create.promise)
+    .mockResolvedValueOnce({ schedules: [], stopped: null })
     .mockResolvedValueOnce(undefined)
     .mockResolvedValueOnce({ schedules: [], stopped: null })
   render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
@@ -383,6 +391,18 @@ it('retains a failed schedule draft and lets the user retry creating it', async 
     '2030-01-02T09:00'
   )
   expect(screen.getByRole('button', { name: 'Create schedule' })).toBeEnabled()
+  await act(async () => taskUpdate())
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not save schedule')
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Check task'
+  )
+  expect(screen.getByLabelText('Schedule start time')).toHaveValue(
+    '2030-01-02T09:00'
+  )
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeEnabled()
+  expect(
+    request.mock.calls.filter(([route]) => route === 'schedules/create')
+  ).toHaveLength(1)
   fireEvent.click(screen.getByRole('button', { name: 'Create schedule' }))
   await waitFor(() =>
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
@@ -393,6 +413,22 @@ it('retains a failed schedule draft and lets the user retry creating it', async 
   expect(calls).toHaveLength(2)
   expect(calls[1]).toEqual(calls[0])
   expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
+})
+
+it('clears a schedule-list connection error when a task update refresh succeeds', async () => {
+  request
+    .mockRejectedValueOnce(new Error('Schedule list unavailable'))
+    .mockResolvedValue({ schedules: [schedule], stopped: null })
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Schedule list unavailable'
+  )
+
+  await act(async () => taskUpdate())
+  expect(await screen.findByText('Check the calendar')).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeEnabled()
 })
 
 it('requires a saved bot inference assignment before schedule creation', async () => {

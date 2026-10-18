@@ -33,6 +33,12 @@ then showed graphics-card setup with no false error. This passes the changed-sou
 Linux native check (English/Dark); installation-error rendering is covered by tests. The
 independent fresh walk continues in `c3-first-user-setup-20261018`.
 
+Merged `origin/main` at `b56d94faa` without rebasing after the conflict with
+Gchat 2’s setup-error persistence test (`ae9c3bed2`). The resolution keeps the
+runtime-preparation cases and the actionable alert plus expanded diagnostics
+through status polls. All31 focused first-run cases pass; neither affected
+product source file changed during this merge, so native acceptance is retained.
+
 Owner/source `/ai/gchat-worktrees/c3-setup-runtime-progress-20261018`, branch
 `fix/c3-setup-runtime-progress-20261018`, base `4ce2a2615`. S1 private root
 `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains baseline native201
@@ -1792,3 +1798,38 @@ lint, type checking, quality checks, 3,220 app tests, 121 extension tests, 1,212
 floors (six app tests skipped, 28 Rust tests ignored). The two changed source/test hashes matched locally and
 on S1 before and after verification. These are rendered React tests with mocked Host responses; this change
 makes no new native VM or Windows acceptance claim.
+
+## Schedule action errors, October 18 (Gchat 2)
+
+`GBOT-SCHEDULE-ACTION-ERROR-PERSISTENCE`: successful background list reads used to erase errors from rejected
+Create, Enable and Disable actions. Any bot task or approval can trigger that refresh; a list read does not
+acknowledge a failed action. Scheduled tasks now keeps action errors visible until the user tries again,
+while temporary list errors clear when reads recover. Failed creation keeps the prompt and start time.
+
+On main baseline `ae9c3bed2`, all three action-error regressions failed after a task-update refresh and the
+connection-recovery control passed. With separate action and refresh errors, all 15 rendered schedule tests
+pass, including successful retries and existing stale-response guards. One `make verify` passed: lint, type
+checking, quality checks, 3,221 app tests, 121 extension tests, 1,212 Rust tests and all six coverage
+floors (six app tests skipped, 28 Rust tests ignored). Changed source/test hashes matched locally and on S1
+before and after the gate. These are rendered React tests with mocked service responses; there is no new
+native VM or Windows acceptance claim.
+
+## Removing the last disconnected bot account, October 18 (Gchat 2)
+
+`GBOT-LINKED-ACCOUNTS-UNLINK-LAST-DISCONNECTED`: clearing the last disconnected account checkbox disabled
+Save linked accounts before the change could be saved. The bot kept its old saved account reference. Save now
+remains available while saved references need removal, including an empty selection. After a successful save,
+the existing empty-account explanation and disabled Save state return.
+
+The rendered regression follows the checkbox through saving an empty account list and receiving the saved
+response. On baseline `08e49496d`, removal failed at the disabled Save button while the empty-account control
+passed. The fix passes all 12 account tests.
+
+One `make verify` passed lint, type checking and quality checks, then stopped on a stale setup regression
+after an independent wording change. That existing test now uses Stop setup and checks the plain error plus
+expandable details through polling and retry; all 28 setup tests pass. Only the failed coverage and remaining
+Rust stages were continued: 3,272 app tests, 121 extension tests, 1,216 Rust tests and all six coverage floors
+pass (six app skips, 28 Rust ignores). The first failure remains recorded; no second full gate was run.
+Changed source/test hashes matched locally and on S1 before and after the continuation. Private build data
+was removed and CPUs returned at 02:54 UTC. These are mocked-service React checks, with no new native VM,
+Windows or live sign-in acceptance claim.

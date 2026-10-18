@@ -496,11 +496,14 @@ it('keeps a rejected Cancel visible through status polls until the user retries'
     })
     await act(async () => { render(<EngineFirstRun />) })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop setup' })) })
-    expect(screen.getByRole('alert')).toHaveTextContent('Host could not stop profiling')
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    fireEvent.click(screen.getByText('Connection error details'))
+    expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
 
     await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
     expect(mocks.command.mock.calls.filter(([operation]) => operation === 'first_run')).toHaveLength(3)
-    expect(screen.getByRole('alert')).toHaveTextContent('Host could not stop profiling')
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Stop setup' })).toBeEnabled()
     expect(attempts).toBe(1)
 
