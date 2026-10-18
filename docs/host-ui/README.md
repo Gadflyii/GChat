@@ -3831,6 +3831,13 @@ source; the original failure and bounded resume are recorded separately in
 This covers Linux keyboard and DOM semantics; spoken assistive output and
 Windows were not exercised.
 
+## Enabling and disabling skills
+
+In **Agent Studio → Skills**, focus a skill's switch and press Space to enable
+or disable it. Focus stays on that switch while GChat saves the change; repeated
+activation waits for the current save. If saving fails, the switch keeps its
+saved state and you can press Space again to retry. Other skills remain usable.
+
 ## Creating and editing skills
 
 After you choose **Create** or **Save**, the button shows **Creating skill…**

@@ -371,7 +371,8 @@ describe('SkillsPage', () => {
     )
   })
 
-  it('shows a pending skill toggle and submits rapid duplicate activation only once', async () => {
+  it('keeps a pending skill switch focused and submits rapid duplicate activation only once', async () => {
+    const user = userEvent.setup()
     const change = deferred<void>()
     hookState.value.setEnabled.mockReturnValue(change.promise)
     render(<SkillsPage />)
@@ -379,6 +380,7 @@ describe('SkillsPage', () => {
       name: 'common:enableSkill: custom-skill',
     })
 
+    toggle.focus()
     act(() => {
       toggle.click()
       toggle.click()
@@ -388,21 +390,34 @@ describe('SkillsPage', () => {
       customSkill.name,
       false
     )
-    expect(toggle).toBeDisabled()
+    expect(toggle).toBeEnabled()
+    expect(toggle).toHaveFocus()
+    expect(toggle).toBeChecked()
+    expect(toggle).toHaveAttribute('aria-disabled', 'true')
     expect(toggle).toHaveAttribute('aria-busy', 'true')
     expect(screen.getByRole('status')).toHaveTextContent(
       'Disabling custom-skill…'
     )
 
+    await user.keyboard(' ')
+    expect(hookState.value.setEnabled).toHaveBeenCalledOnce()
+    expect(toggle).toHaveFocus()
+    expect(toggle).toBeChecked()
+
+    hookState.value.skills = [{ ...customSkill, enabled: false }]
     await act(async () => change.resolve(undefined))
 
     expect(toggle).toBeEnabled()
+    expect(toggle).toHaveFocus()
+    expect(toggle).not.toBeChecked()
+    expect(toggle).not.toHaveAttribute('aria-disabled', 'true')
     expect(toggle).not.toHaveAttribute('aria-busy', 'true')
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(hookState.value.setEnabled).toHaveBeenCalledOnce()
   })
 
   it('lets another skill finish its toggle while the first skill is still pending', async () => {
+    const user = userEvent.setup()
     const first = deferred<void>()
     const second = deferred<void>()
     hookState.value.skills = [customSkill, { ...otherSkill, enabled: false }]
@@ -417,34 +432,52 @@ describe('SkillsPage', () => {
       name: 'common:enableSkill: other-skill',
     })
 
-    fireEvent.click(firstToggle)
+    await user.click(firstToggle)
 
-    expect(firstToggle).toBeDisabled()
+    expect(firstToggle).toBeEnabled()
+    expect(firstToggle).toHaveFocus()
+    expect(firstToggle).toHaveAttribute('aria-disabled', 'true')
     expect(secondToggle).toBeEnabled()
-    fireEvent.click(secondToggle)
+    expect(secondToggle).not.toHaveAttribute('aria-disabled', 'true')
+    await user.click(secondToggle)
     expect(hookState.value.setEnabled.mock.calls).toEqual([
       [customSkill.name, false],
       [otherSkill.name, true],
     ])
-    expect(secondToggle).toBeDisabled()
+    expect(secondToggle).toBeEnabled()
+    expect(secondToggle).toHaveFocus()
+    expect(secondToggle).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getAllByRole('status').map((status) => status.textContent)).toEqual(
       ['Disabling custom-skill…', 'Enabling other-skill…']
     )
 
+    hookState.value.skills = [customSkill, { ...otherSkill, enabled: true }]
     await act(async () => second.resolve(undefined))
 
     expect(secondToggle).toBeEnabled()
-    expect(firstToggle).toBeDisabled()
+    expect(secondToggle).toHaveFocus()
+    expect(secondToggle).toBeChecked()
+    expect(secondToggle).not.toHaveAttribute('aria-disabled', 'true')
+    expect(firstToggle).toBeEnabled()
+    expect(firstToggle).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('status')).toHaveTextContent('Disabling custom-skill…')
 
+    hookState.value.skills = [
+      { ...customSkill, enabled: false },
+      { ...otherSkill, enabled: true },
+    ]
     await act(async () => first.resolve(undefined))
 
     expect(firstToggle).toBeEnabled()
+    expect(firstToggle).not.toBeChecked()
+    expect(firstToggle).not.toHaveAttribute('aria-disabled', 'true')
     expect(secondToggle).toBeEnabled()
+    expect(secondToggle).toHaveFocus()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
-  it('keeps the persisted skill state after a toggle fails and allows the same change to be retried', async () => {
+  it('keeps keyboard focus and persisted state after a skill toggle fails, then retries successfully', async () => {
+    const user = userEvent.setup()
     const failed = deferred<void>()
     const retry = deferred<void>()
     hookState.value.setEnabled
@@ -458,31 +491,48 @@ describe('SkillsPage', () => {
         name: 'common:enableSkill: custom-skill',
       })
 
+      toggle.focus()
       expect(toggle).toBeChecked()
-      fireEvent.click(toggle)
+      await user.keyboard(' ')
       expect(toggle).toBeChecked()
-      expect(toggle).toBeDisabled()
+      expect(toggle).toBeEnabled()
+      expect(toggle).toHaveFocus()
+      expect(toggle).toHaveAttribute('aria-disabled', 'true')
+      expect(toggle).toHaveAttribute('aria-busy', 'true')
 
       await act(async () => failed.reject(new Error('Could not disable custom-skill')))
 
       expect(toggle).toBeChecked()
       expect(toggle).toBeEnabled()
+      expect(toggle).toHaveFocus()
+      expect(toggle).not.toHaveAttribute('aria-disabled', 'true')
       expect(toggle).not.toHaveAttribute('aria-busy', 'true')
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
       expect(errorToast).toHaveBeenCalledExactlyOnceWith(
         'Error: Could not disable custom-skill'
       )
-      fireEvent.click(toggle)
+      await user.keyboard(' ')
       expect(hookState.value.setEnabled.mock.calls).toEqual([
         [customSkill.name, false],
         [customSkill.name, false],
       ])
-      expect(toggle).toBeDisabled()
+      expect(toggle).toBeEnabled()
+      expect(toggle).toHaveFocus()
+      expect(toggle).toBeChecked()
+      expect(toggle).toHaveAttribute('aria-disabled', 'true')
+      expect(toggle).toHaveAttribute('aria-busy', 'true')
 
+      hookState.value.skills = [{ ...customSkill, enabled: false }]
       await act(async () => retry.resolve(undefined))
 
       expect(toggle).toBeEnabled()
+      expect(toggle).toHaveFocus()
+      expect(toggle).not.toBeChecked()
+      expect(toggle).not.toHaveAttribute('aria-disabled', 'true')
+      expect(toggle).not.toHaveAttribute('aria-busy', 'true')
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
+      expect(hookState.value.setEnabled).toHaveBeenCalledTimes(2)
+      expect(errorToast).toHaveBeenCalledOnce()
     } finally {
       errorToast.mockRestore()
     }
