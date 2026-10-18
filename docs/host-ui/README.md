@@ -3484,7 +3484,7 @@ error, another failed retry, permission restoration and keyboard activation of
 external-folder reference was removed through **Remove from Agent**; its files
 were retained. All 17 saved records, 45 Skills and two existing workspace inputs
 remained byte unchanged. The app stopped at 08:15Z. Evidence:
-\`/ai/gchat/out/gchat-agent-nested-folder-read-native-20261018/summary.json\`.
+`/ai/gchat/out/gchat-agent-nested-folder-read-native-20261018/summary.json`.
 
 ## Choosing image or audio attachments
 
