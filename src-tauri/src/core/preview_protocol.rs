@@ -35,7 +35,7 @@ pub fn install(
 ) -> Result<(), String> {
     use std::cell::RefCell;
 
-    use soup3::{MessageHeaders, MessageHeadersType};
+    use soup::{MessageHeaders, MessageHeadersType};
     use webkit2gtk::{
         gio::MemoryInputStream, glib::Bytes, SecurityManagerExt, URISchemeRequestExt,
         URISchemeResponse, URISchemeResponseExt, WebContext, WebContextExt, WebViewExt,

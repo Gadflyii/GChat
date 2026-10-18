@@ -78,7 +78,6 @@ fn invoke_request(command: &str, args: Value) -> InvokeRequest {
 mod capability_scope {
     use super::*;
     use tauri::ipc::Origin;
-    use tauri::Manager;
 
     #[tauri::command]
     fn unlisted_command() {}
@@ -104,7 +103,7 @@ mod capability_scope {
         let logs = WebviewWindowBuilder::new(&app, "logs-app-window", Default::default())
             .build()
             .unwrap();
-        let local = app.get_webview("main").unwrap().url().unwrap();
+        let local = main.url().unwrap();
         let calls = [
             (
                 "join_path",
