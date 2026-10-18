@@ -1,5 +1,34 @@
 # GInfer host UI
 
+## Folder reveal runtime crash — C3, October 18
+
+`GUI-FOLDER-REVEAL-NESTED-RUNTIME`: the pinned current-main release
+`d0a8d06bf` crashed at 04:38:54Z when General → Diagnostic logs →
+**Open Containing Folder** was clicked. The retained native panic identifies
+Tokio's nested-runtime guard. Opener 2.5.3 executes synchronous Linux
+`zbus::blocking` inside its async command; its blocking runtime cannot enter
+from a Tokio worker. The app now owns a native reveal command that calls the
+same cross-platform opener from `spawn_blocking`, and the frontend uses that
+command. Folder selection semantics and file-manager errors are preserved.
+
+Acceptance: the real private folder handler receives the logs folder, GChat
+stays responsive, and an unavailable handler returns an error without panic.
+The Linux regression calls the real opener on a Tokio worker with an isolated
+unreachable D-Bus address. Frontend IPC cases cover the literal path and error
+propagation. Source is prepared; focused checks, lint, ONE `make verify`, build
+and changed-source native acceptance are pending. This crash takes priority
+after the in-flight download-count candidate; Interface and CLI fixes follow.
+No model, profile or GPU workload is needed.
+
+Owner/source: Codex 3,
+`/ai/gchat-worktrees/c3-folder-reveal-runtime-20261018`, branch
+`fix/c3-folder-reveal-runtime-20261018`, baseline `bbc81c2ec`.
+The shared S1 stage remains exclusively with the download-count build until
+its handoff. The immutable release AppDir and private profile are retained;
+its app exited on the crash, while Xvfb :79 remains private. Evidence:
+`out/c3-current-main-release-20261018/{folder-reveal-crash.json,folder-reveal-panic.txt}`;
+fix result `out/c3-folder-reveal-runtime-20261018/result.json`.
+
 ## Scheduled tasks brain setup guidance — October 18
 
 `GBOT-SCHEDULE-BRAIN-SETUP-GUIDANCE`: the disabled schedule form previously
