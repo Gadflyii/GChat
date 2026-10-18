@@ -34,6 +34,16 @@ Each composition button now exposes whether it is pressed. The state follows
 the current draft, including saved definitions and keyboard changes. Selection,
 draft contents and saving keep their existing behavior.
 
+Source `6fe30ffe4` passes all 99 Agent Studio tests, lint and one full
+`make verify` (3637 web tests, 127 extension tests and every supported Rust
+suite). The rebuilt Linux desktop passes native Tab/Space/Enter selection of
+all four compositions: exactly one button reports pressed and the activated
+card retains focus. Normal close preserves the two saved agent files and the
+two saved chat files. This checks DOM accessibility state, without claiming a
+live screen-reader or Windows run. Main `cbc1816d8` was merged afterward;
+its Gbot guidance changes leave these agent sources and tests identical.
+Receipts: `/ai/gchat/out/gchat-agent-composition-state-20261018/handoff.json`.
+
 ## Sampling assistant fallback wording — October 18
 
 An isolated native pass opened Sampling, selected the assistant menu's “None”
