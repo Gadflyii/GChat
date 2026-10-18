@@ -22,6 +22,33 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Project dialog keyboard focus — October 18
+
+A private native Linux pass found that cancelling project Edit or Delete left
+keyboard focus on the document body. The next Tab jumped to Downloads instead
+of continuing from the project. The same failure occurred from the project
+page's menu and its direct Edit button. The project dialogs and callers are
+unchanged between retained native source `5dee3689887e` and main `494c561ab`.
+Baseline receipts are in `/ai/gchat/out/gchat-project-dialog-cancel-20261018/`.
+
+Project callers now retain their opening button, and the dialogs return focus
+to that button when it remains connected. Delete still opens with Cancel
+focused. Ten rendered regressions exercise the real menus and dialogs, covering
+Edit cancellation, Delete Escape/Enter cancellation and switching from a menu
+to the direct Edit button. No shared dialog behavior changes. The sidebar
+Edit/Escape regression fails against the parent production files because focus
+lands on the body, then all 28 related tests pass with frozen source `d7de423c2`.
+
+The single `make verify` passes: 3,426 frontend tests, 127 extension tests and
+1,266 Rust tests. The frontend production and offline locked native builds also
+pass. The private Linux native replay of frozen source `d7de423c2` passes all ten
+focus-return cases, including switching from the page menu to direct Edit.
+Cancelled drafts reopen with the original name; Delete opens on Cancel. All 17
+retained data files and the raw project record remain unchanged after shutdown.
+Receipts and the two viewed focus screenshots are in
+`/ai/gchat/out/gchat-project-dialog-focus-return-20261018/`. Windows was not built
+(dev phase).
+
 ## Saved-run continuation guidance — October 18
 
 A private native Linux history pass found that finished results described
