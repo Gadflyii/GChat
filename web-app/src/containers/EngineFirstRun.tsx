@@ -14,7 +14,7 @@ type FirstRun = {
   storage: { path: string; requested_path?: string | null; accepted?: boolean; available_bytes: number | null; recommended_path?: string; required_bytes?: number; review_key?: string | null; selected_models?: { download_id: string; name: string; path: string; bytes: number }[]; error?: string; candidates?: { path: string; available_bytes: number | null; required_bytes?: number; eligible?: boolean; reason?: string; measured_read_bytes_per_second?: number }[] }
   models: { release_id?: string; release: ModelRelease; recommended: boolean; reason: string }[]
   selected_downloads: ModelDownload[]
-  selected_release_ids?: string[]
+  selected_release_ids?: string[] | null
   startup_profiles: { download_id: string; model_id: string; gpu_uuids: string[]; concurrency: number; max_context: number; kv_arena_bytes: number | null; instance_count: number; quote?: unknown; error?: string }[]
   catalog_loaded?: boolean
   error?: string | null
@@ -166,7 +166,7 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
     if (flow.step === 'storage_review' && previousStorageStep.current !== 'storage_review') pathEdited.current = false
     previousStorageStep.current = flow.step
     if (!pathEdited.current) setPath(flow.storage.requested_path || (flow.step === 'storage_review' ? flow.storage.path || flow.storage.recommended_path : flow.storage.recommended_path || flow.storage.path) || '')
-    if (!releasesEdited.current) setReleases(flow.selected_release_ids?.length ? flow.selected_release_ids : flow.models.filter(model => model.recommended && releaseVerified(model.release)).map(model => model.release_id ?? model.release.sha256))
+    if (!releasesEdited.current) setReleases(flow.selected_release_ids ?? flow.models.filter(model => model.recommended && releaseVerified(model.release)).map(model => model.release_id ?? model.release.sha256))
     // Polls update saved choices and recommendations without replacing edits.
   }, [flow])
   const act = async (args: Record<string, unknown>) => {
@@ -247,7 +247,7 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
   const choosing = step === 'storage' || step === 'models' || (profiling && !selectedScope && !flow?.selected_downloads.length)
   const savedReleases = flow?.selected_release_ids ?? []
   const modelChoicesChanged = releases.length !== savedReleases.length || releases.some(id => !savedReleases.includes(id))
-  const clearingSavedChoices = !releases.length && savedReleases.length > 0
+  const clearingSavedChoices = !releases.length && (savedReleases.length > 0 || (flow?.selected_release_ids == null && releasesEdited.current))
   const modelChoiceAction = clearingSavedChoices ? 'Clear saved model choices' : step === 'models' ? 'Download selected models' : 'Save model choices'
   const selectedReady = selectedScope && hardware?.status === 'completed' && hardware.scope_complete === true
   const storageRoot = flow?.storage.path ?? ''
@@ -268,7 +268,7 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
     <p className="text-sm text-muted-foreground">Choose the graphics cards and model folder to use, then choose a model. GInfer, the engine that runs your models, measures this hardware and checks that each model can start. Saving these measurements helps future model loads and switches finish faster.</p>
     {resources.error && <FirstRunError message="Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat." details={resources.error} label="GInfer preparation error details" />}
     {acceptedDownloadAction && <p role="status" className="text-sm">{acceptedDownloadAction === 'pause' ? 'Pause request accepted.' : 'Discard request accepted.'} Checking the current download status…</p>}
-    {unavailable && <FirstRunError message={acceptedDownloadAction && !error ? 'GChat could not read the current download status. Select Retry local setup to check again.' : 'GChat could not read or update setup on this computer. Check that GInfer is running, then select Retry local setup.'} details={unavailable} label="Connection error details" />}
+    {unavailable && <FirstRunError message={error ? 'GChat could not finish this setup action. Select Retry local setup to check the current status before trying the action again.' : acceptedDownloadAction ? 'GChat could not read the current download status. Select Retry local setup to check again.' : 'GChat could not read or update setup on this computer. Check that GInfer is running, then select Retry local setup.'} details={unavailable} label={error ? 'Setup action error details' : 'Connection error details'} />}
     {!localId && !resources.error && <p role="status" className="text-sm">{!resourcesReady ? 'Preparing GInfer to run models on this computer… GChat is installing and checking its bundled files. This may take a few minutes.' : checked ? 'GInfer could not connect on this computer. Check that a supported NVIDIA graphics card and the GInfer engine are installed. You can also connect to another computer running GInfer.' : 'Starting GInfer on this computer…'}</p>}
     {localId && !flow && !unavailable && <p role="status">Reading saved setup…</p>}
     {flow?.maintenance_error && <div className="space-y-2"><p role="alert" className="text-sm text-destructive">Setup could not continue. {flow.maintenance_error} Your saved folder and model choices are kept.</p><Button variant="outline" disabled={busy || !!acceptedDownloadAction} onClick={() => void act({ action: 'resume' })}>Retry setup</Button></div>}

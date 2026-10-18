@@ -1,4 +1,11 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import CloudCosts from './CloudCosts'
 import { gbot, type CloudReview, type SshIdentity } from '@/services/gbot'
@@ -118,6 +125,68 @@ it('requires explicit cost consent and confirms the exact saved quote without cr
   )
 })
 
+it.each(['hetzner', 'digital_ocean'] as const)(
+  'explains an initial %s price failure and requires an explicit token retry',
+  async (provider) => {
+    const prices = deferred<CloudReview>()
+    const busy = vi.fn()
+    vi.mocked(gbot).mockReturnValueOnce(prices.promise)
+    render(
+      <CloudCosts
+        name="Research bot"
+        provider={provider}
+        busy={busy}
+        reviewed={vi.fn()}
+      />
+    )
+    const token = screen.getByLabelText('Provider API token (access key)')
+    fireEvent.change(token, { target: { value: 'synthetic-original-token' } })
+    const load = screen.getByRole('button', { name: 'Load live prices' })
+    fireEvent.click(load)
+    fireEvent.click(load)
+    expect(token).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Loading prices…' })
+    ).toBeDisabled()
+    expect(gbot).toHaveBeenCalledTimes(1)
+    await act(async () => prices.reject(new Error('Catalog request refused')))
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Could not load current prices.')
+    expect(alert).toHaveTextContent(
+      'Enter your provider API token again, then choose Load live prices to retry.'
+    )
+    const details = within(alert).getByText('Details')
+    expect(details.closest('details')).not.toHaveAttribute('open')
+    expect(within(alert).getByText('Catalog request refused')).not.toBeVisible()
+    fireEvent.click(details)
+    expect(within(alert).getByText('Catalog request refused')).toBeVisible()
+    expect(token).toHaveValue('')
+    expect(token).toBeEnabled()
+    expect(load).toBeDisabled()
+    expect(busy.mock.calls).toEqual([[true], [false]])
+    expect(gbot).toHaveBeenCalledTimes(1)
+    const next = { ...review(), provider, quote: null }
+    vi.mocked(gbot).mockResolvedValueOnce(next)
+    fireEvent.change(token, { target: { value: 'synthetic-corrected-token' } })
+    expect(gbot).toHaveBeenCalledTimes(1)
+    fireEvent.click(load)
+    await screen.findByRole('button', { name: 'Refresh prices' })
+    expect(gbot).toHaveBeenLastCalledWith('setup/cloud/catalog', {
+      id: expect.any(String),
+      name: 'Research bot',
+      provider,
+      api_token: 'synthetic-corrected-token',
+    })
+    expect(gbot).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(token).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Review cost' })).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'Save cost review' })
+    ).not.toBeInTheDocument()
+  }
+)
+
 it('clears entered tokens and withholds an old quote after a failed price refresh', async () => {
   const prices = deferred<CloudReview>()
   vi.mocked(gbot).mockReturnValueOnce(prices.promise)
@@ -142,9 +211,18 @@ it('clears entered tokens and withholds an old quote after a failed price refres
   expect(screen.getByRole('button', { name: 'Review cost' })).toBeDisabled()
   fireEvent.click(refresh)
   await act(async () => prices.reject(new Error('Provider rate limit reached')))
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Provider rate limit reached'
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Could not refresh current prices.')
+  expect(alert).toHaveTextContent(
+    'Review Details, then choose Refresh prices to try again. Enter the API token again if it needs to be replaced.'
   )
+  const details = within(alert).getByText('Details')
+  expect(details.closest('details')).not.toHaveAttribute('open')
+  expect(
+    within(alert).getByText('Provider rate limit reached')
+  ).not.toBeVisible()
+  fireEvent.click(details)
+  expect(within(alert).getByText('Provider rate limit reached')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeEnabled()
   expect(
     screen.queryByText('Loading prices…', { selector: '[role="status"]' })
@@ -163,6 +241,16 @@ it('clears entered tokens and withholds an old quote after a failed price refres
     provider: 'hetzner',
     api_token: 'fixture-secret',
   })
+  vi.mocked(gbot).mockResolvedValueOnce({ ...review(), quote: null })
+  fireEvent.click(refresh)
+  await screen.findByText('Choose region')
+  expect(gbot).toHaveBeenLastCalledWith('setup/cloud/catalog', {
+    id: 'review',
+    name: 'Research bot',
+    provider: 'hetzner',
+  })
+  expect(gbot).toHaveBeenCalledTimes(2)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
 it('explains cost calculation and allows a failed calculation to be retried', async () => {
@@ -195,9 +283,27 @@ it('explains cost calculation and allows a failed calculation to be retried', as
   await act(async () =>
     quote.reject(new Error('Prices are temporarily unavailable'))
   )
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Prices are temporarily unavailable'
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not calculate the cost. Your region and plan are still selected. Choose Review cost to try again.'
   )
+  const details = within(alert).getByText('Details')
+  expect(details.closest('details')).not.toHaveAttribute('open')
+  expect(
+    within(alert).getByText('Prices are temporarily unavailable')
+  ).not.toBeVisible()
+  fireEvent.click(details)
+  expect(
+    within(alert).getByText('Prices are temporarily unavailable')
+  ).toBeVisible()
+  expect(gbot).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('button', { name: 'Region' })).toHaveTextContent(
+    'Falkenstein'
+  )
+  expect(screen.getByRole('button', { name: 'Plan' })).toHaveTextContent(
+    'cpx11'
+  )
+  expect(screen.getByRole('checkbox')).not.toBeChecked()
   expect(calculate).toBeEnabled()
   expect(
     screen.queryByText('Calculating cost…', { selector: '[role="status"]' })
@@ -225,7 +331,24 @@ it('allows cost confirmation to be retried after saving fails', async () => {
   )
   fireEvent.click(screen.getByRole('checkbox'))
   fireEvent.click(screen.getByRole('button', { name: 'Save cost review' }))
-  await screen.findByRole('alert')
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not confirm the cost review was saved. Your cost consent is still selected. Choose Save cost review to try again.'
+  )
+  const details = within(alert).getByText('Details')
+  expect(details.closest('details')).not.toHaveAttribute('open')
+  expect(
+    within(alert).getByText('Cost review could not be saved')
+  ).not.toBeVisible()
+  fireEvent.click(details)
+  expect(
+    within(alert).getByText('Cost review could not be saved')
+  ).toBeVisible()
+  expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/cloud/confirm', {
+    id: 'review',
+    quote_id: 'quote',
+  })
+  expect(screen.getByRole('checkbox')).toBeChecked()
   expect(reviewed).not.toHaveBeenCalled()
   expect(screen.getByRole('button', { name: 'Save cost review' })).toBeEnabled()
   expect(
@@ -235,6 +358,54 @@ it('allows cost confirmation to be retried after saving fails', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Save cost review' }))
   await screen.findByText('Cost review saved. No VM has been created.')
   expect(gbot).toHaveBeenCalledTimes(2)
+  expect(reviewed).toHaveBeenCalledOnce()
+})
+
+it('keeps a confirmed cost review when refreshing the computer list fails', async () => {
+  const initial = review()
+  const refresh = deferred<void>()
+  const reviewed = vi.fn().mockReturnValue(refresh.promise)
+  vi.mocked(gbot).mockResolvedValueOnce({ ...initial, confirmed: true })
+  render(
+    <CloudCosts
+      name="Research bot"
+      initial={initial}
+      busy={vi.fn()}
+      reviewed={reviewed}
+    />
+  )
+  fireEvent.click(screen.getByRole('checkbox'))
+  fireEvent.click(screen.getByRole('button', { name: 'Save cost review' }))
+  await screen.findByText('Cost review saved. No VM has been created.')
+  expect(
+    screen.queryByRole('button', { name: 'Save cost review' })
+  ).not.toBeInTheDocument()
+  await act(async () => refresh.reject(new Error('Computer list unavailable')))
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Your cost review was saved, but the computer list could not be refreshed. Close setup to try refreshing the list again.'
+  )
+  expect(alert).not.toHaveTextContent('Choose Save cost review')
+  const details = within(alert).getByText('Details')
+  expect(details.closest('details')).not.toHaveAttribute('open')
+  expect(within(alert).getByText('Computer list unavailable')).not.toBeVisible()
+  fireEvent.click(details)
+  expect(within(alert).getByText('Computer list unavailable')).toBeVisible()
+  expect(
+    screen.getByText('Cost review saved. No VM has been created.')
+  ).toBeInTheDocument()
+  expect(
+    screen.getByRole('checkbox', {
+      name: /I authorize creating this computer/,
+    })
+  ).not.toBeChecked()
+  expect(
+    screen.getByRole('button', { name: 'Create cloud computer' })
+  ).toBeDisabled()
+  expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/cloud/confirm', {
+    id: 'review',
+    quote_id: 'quote',
+  })
   expect(reviewed).toHaveBeenCalledOnce()
 })
 
@@ -338,7 +509,9 @@ it.each([
     )
     fireEvent.click(screen.getByRole('button', { name: 'Check SSH identity' }))
     await screen.findByText(identity.fingerprint)
-    fireEvent.click(screen.getByRole('checkbox', { name: /fingerprint matches/ }))
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /fingerprint matches/ })
+    )
     vi.mocked(gbot).mockResolvedValueOnce({}).mockRejectedValueOnce(failure)
     fireEvent.click(screen.getByRole('button', { name: 'Verify SSH access' }))
     await screen.findByText('SSH authentication failed')
@@ -351,13 +524,17 @@ it.each([
       workspace_id: 'review',
     })
     const sshCalls = () =>
-      vi.mocked(gbot).mock.calls.filter(([path]) =>
-        ['setup/cloud/attach', 'workspaces/ssh/check'].includes(path)
-      )
+      vi
+        .mocked(gbot)
+        .mock.calls.filter(([path]) =>
+          ['setup/cloud/attach', 'workspaces/ssh/check'].includes(path)
+        )
     expect(sshCalls()).toHaveLength(2)
 
     fireEvent.click(screen.getByRole('button', { name: 'Check progress' }))
-    expect(screen.getByRole('button', { name: 'Verify SSH access' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Verify SSH access' })
+    ).toBeDisabled()
     await act(async () => progress.resolve(initial))
     const guidance = screen.getByRole('alert')
     expect(guidance).toHaveTextContent(
@@ -366,7 +543,9 @@ it.each([
     expect(
       screen.getByText('SSH authentication failed').closest('details')
     ).not.toHaveAttribute('open')
-    expect(screen.getByRole('button', { name: 'Connect bot desktop' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Connect bot desktop' })
+    ).toBeDisabled()
     expect(
       screen.queryByRole('button', { name: 'Check tools' })
     ).not.toBeInTheDocument()
@@ -378,7 +557,9 @@ it.each([
     expect(
       screen.getByRole('button', { name: 'Verifying SSH access…' })
     ).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Connect bot desktop' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Connect bot desktop' })
+    ).toBeDisabled()
     await act(async () => retry.resolve({}))
     expect(screen.getByRole('button', { name: 'Check tools' })).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -448,6 +629,135 @@ it('creates only after separate billing consent with the reviewed quote and expl
     })
   ).not.toBeInTheDocument()
 })
+
+it.each(['delete response', 'progress check'] as const)(
+  'requires fresh billing consent after a %s confirms deletion of a created computer',
+  async (confirmation) => {
+    const initial = { ...review(), confirmed: true }
+    const sources = '203.0.113.10/32\n2001:db8::1/128'
+    const running = deployment(initial, 'running')
+    running.deployment!.source_cidrs = sources.split('\n')
+    const deleted: CloudReview = {
+      ...running,
+      deployment: {
+        ...running.deployment!,
+        phase: 'deleted',
+        resources: [],
+      },
+    }
+    const deleting: CloudReview = {
+      ...running,
+      deployment: {
+        ...running.deployment!,
+        phase: 'deleting',
+        pending: {
+          kind: 'server',
+          name: 'owned-bot',
+          deleting: running.deployment!.resources[0],
+        },
+      },
+    }
+    const creation = deferred<CloudReview>()
+    const deletion = deferred<CloudReview>()
+    const check = deferred<CloudReview>()
+    const recreation = deferred<CloudReview>()
+    vi.mocked(gbot)
+      .mockReturnValueOnce(creation.promise)
+      .mockReturnValueOnce(deletion.promise)
+    render(
+      <CloudCosts
+        name="Research bot"
+        initial={initial}
+        busy={vi.fn()}
+        reviewed={vi.fn()}
+      />
+    )
+    fireEvent.change(screen.getByLabelText('Allowed SSH source networks'), {
+      target: { value: sources },
+    })
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /authorize creating/ })
+    )
+    const firstCreate = screen.getByRole('button', {
+      name: 'Create cloud computer',
+    })
+    fireEvent.click(firstCreate)
+    fireEvent.click(firstCreate)
+    expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/cloud/create', {
+      id: 'review',
+      quote_id: 'quote',
+      consent: true,
+      source_cidrs: ['203.0.113.10/32', '2001:db8::1/128'],
+    })
+    await act(async () => creation.resolve(running))
+    const remove = screen.getByRole('button', {
+      name: 'Delete cloud computer',
+    })
+    expect(remove).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: /Delete this setup/ }))
+    fireEvent.click(remove)
+    fireEvent.click(remove)
+    expect(gbot).toHaveBeenCalledTimes(2)
+    expect(gbot).toHaveBeenLastCalledWith('setup/cloud/delete', {
+      id: 'review',
+      consent: true,
+    })
+    await act(async () =>
+      deletion.resolve(confirmation === 'delete response' ? deleted : deleting)
+    )
+    if (confirmation === 'progress check') {
+      expect(
+        screen.queryByRole('button', { name: 'Create cloud computer' })
+      ).not.toBeInTheDocument()
+      vi.mocked(gbot).mockReturnValueOnce(check.promise)
+      const progress = screen.getByRole('button', { name: 'Check progress' })
+      fireEvent.click(progress)
+      fireEvent.click(progress)
+      expect(gbot).toHaveBeenCalledTimes(3)
+      expect(gbot).toHaveBeenLastCalledWith('setup/cloud/check', {
+        id: 'review',
+      })
+      expect(
+        screen.getByRole('button', { name: 'Checking cloud computer…' })
+      ).toBeDisabled()
+      await act(async () => check.resolve(deleted))
+    }
+    expect(
+      screen.getByText('Computer and owned provider resources deleted.')
+    ).toBeInTheDocument()
+    const billing = screen.getByRole('checkbox', { name: /authorize creating/ })
+    const nextCreate = screen.getByRole('button', {
+      name: 'Create cloud computer',
+    })
+    expect(billing).not.toBeChecked()
+    expect(nextCreate).toBeDisabled()
+    expect(screen.getByLabelText('Allowed SSH source networks')).toHaveValue(
+      sources
+    )
+    const beforeRecreation = confirmation === 'delete response' ? 2 : 3
+    fireEvent.click(nextCreate)
+    expect(gbot).toHaveBeenCalledTimes(beforeRecreation)
+    fireEvent.click(billing)
+    expect(nextCreate).toBeEnabled()
+    expect(gbot).toHaveBeenCalledTimes(beforeRecreation)
+    vi.mocked(gbot).mockReturnValueOnce(recreation.promise)
+    fireEvent.click(nextCreate)
+    fireEvent.click(nextCreate)
+    expect(
+      screen.getByRole('button', { name: 'Creating cloud computer…' })
+    ).toBeDisabled()
+    expect(gbot).toHaveBeenCalledTimes(beforeRecreation + 1)
+    expect(gbot).toHaveBeenLastCalledWith('setup/cloud/create', {
+      id: 'review',
+      quote_id: 'quote',
+      consent: true,
+      source_cidrs: ['203.0.113.10/32', '2001:db8::1/128'],
+    })
+    await act(async () => recreation.resolve(deployment(initial)))
+    expect(screen.getByText(/Computer creating/)).toBeInTheDocument()
+    expect(gbot).toHaveBeenCalledTimes(beforeRecreation + 1)
+  }
+)
 
 it('keeps recovery and consented deletion available after quote expiry', async () => {
   const initial = deployment(review(), 'check_required')
@@ -589,6 +899,23 @@ it('requires verified SSH, installed tools and a successful desktop connection b
   await screen.findByText('Desktop not ready')
   expect(connected).not.toHaveBeenCalled()
   expect(connect).toBeEnabled()
+  const guidance = screen.getByRole('alert')
+  expect(guidance).toHaveTextContent(
+    'Could not connect the bot desktop. Choose Check progress to check the computer, then choose Connect bot desktop when the SSH and tool checks are complete.'
+  )
+  expect(
+    within(guidance).getByText('Desktop not ready').closest('details')
+  ).not.toHaveAttribute('open')
+  const progress = deferred<CloudReview>()
+  vi.mocked(gbot).mockReturnValueOnce(progress.promise)
+  fireEvent.click(screen.getByRole('button', { name: 'Check progress' }))
+  expect(screen.getByText('Desktop not ready')).toBeInTheDocument()
+  expect(connect).toBeDisabled()
+  expect(gbot).toHaveBeenLastCalledWith('setup/cloud/check', { id: 'review' })
+  await act(async () => progress.resolve(initial))
+  expect(screen.getByText('Desktop not ready')).toBeInTheDocument()
+  expect(connect).toBeEnabled()
+  expect(connected).not.toHaveBeenCalled()
   expect(
     screen.queryByText('Connecting bot desktop…', {
       selector: '[role="status"]',
@@ -597,6 +924,7 @@ it('requires verified SSH, installed tools and a successful desktop connection b
   vi.mocked(gbot).mockResolvedValueOnce({})
   fireEvent.click(connect)
   await vi.waitFor(() => expect(connected).toHaveBeenCalledWith('review'))
+  expect(screen.queryByText('Desktop not ready')).not.toBeInTheDocument()
   expect(gbot).toHaveBeenLastCalledWith('connect', {
     workspace_id: 'review',
     session_id: expect.any(String),
@@ -651,9 +979,13 @@ it.each([
     )
     fireEvent.click(screen.getByRole('button', { name: 'Check SSH identity' }))
     await screen.findByText('SHA256:fixture')
-    fireEvent.click(screen.getByRole('checkbox', { name: /fingerprint matches/ }))
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /fingerprint matches/ })
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Verify SSH access' }))
-    const checkTools = await screen.findByRole('button', { name: 'Check tools' })
+    const checkTools = await screen.findByRole('button', {
+      name: 'Check tools',
+    })
     const consent = screen.getByRole('checkbox', { name: /dedicated to Gbot/ })
     fireEvent.click(consent)
     fireEvent.click(screen.getByRole('checkbox', { name: /Delete this setup/ }))
@@ -662,9 +994,11 @@ it.each([
     expect(checkTools).toBeEnabled()
     expect(prepareTools).toBeEnabled()
     const toolCalls = () =>
-      vi.mocked(gbot).mock.calls.filter(([request]) =>
-        ['workspaces/ssh/tools', 'workspaces/ssh/prepare'].includes(request)
-      )
+      vi
+        .mocked(gbot)
+        .mock.calls.filter(([request]) =>
+          ['workspaces/ssh/tools', 'workspaces/ssh/prepare'].includes(request)
+        )
     const parentCalls = () =>
       vi.mocked(gbot).mock.calls.filter(([request]) => request === path)
 
@@ -678,7 +1012,10 @@ it.each([
     expect(parentCalls()).toEqual([
       [
         path,
-        { id: 'review', ...(path.endsWith('/delete') ? { consent: true } : {}) },
+        {
+          id: 'review',
+          ...(path.endsWith('/delete') ? { consent: true } : {}),
+        },
       ],
     ])
     expect(screen.getByRole('button', { name: progress })).toBeDisabled()
@@ -689,15 +1026,17 @@ it.each([
     expect(prepareTools).toBeDisabled()
     expect(consent).toBeDisabled()
     expect(consent).toBeChecked()
-    expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Refresh prices' })
+    ).toBeDisabled()
     expect(busy).toHaveBeenLastCalledWith(true)
 
     await act(async () =>
       parentAction.reject(new Error('Cloud provider unavailable'))
     )
-    await screen.findByText('Cloud provider unavailable', {
-      selector: '[role="alert"]',
-    })
+    await within(screen.getByRole('alert')).findByText(
+      'Cloud provider unavailable'
+    )
     expect(toolCalls()).toHaveLength(0)
     expect(parentCalls()).toHaveLength(1)
     expect(screen.getByRole('button', { name: label })).toBeEnabled()
@@ -718,11 +1057,15 @@ it.each([
       ],
     ])
     expect(screen.getByRole('button', { name: toolProgress })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Check progress' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Check progress' })
+    ).toBeDisabled()
     expect(
       screen.getByRole('button', { name: 'Delete cloud computer' })
     ).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Refresh prices' })
+    ).toBeDisabled()
     expect(consent).toBeDisabled()
     expect(busy).toHaveBeenLastCalledWith(true)
     await act(async () =>
@@ -860,9 +1203,11 @@ it('blocks child actions while cloud prices refresh, then permits explicit authe
   const prepare = screen.getByRole('button', { name: 'Prepare tools' })
   const refresh = screen.getByRole('button', { name: 'Refresh prices' })
   const toolCalls = () =>
-    vi.mocked(gbot).mock.calls.filter(([path]) =>
-      ['workspaces/ssh/tools', 'workspaces/ssh/prepare'].includes(path)
-    )
+    vi
+      .mocked(gbot)
+      .mock.calls.filter(([path]) =>
+        ['workspaces/ssh/tools', 'workspaces/ssh/prepare'].includes(path)
+      )
   expect(prepare).toBeEnabled()
   act(() => {
     refresh.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -914,7 +1259,9 @@ it('blocks child actions while cloud prices refresh, then permits explicit authe
   expect(toolCalls()).toEqual([
     ['workspaces/ssh/prepare', { workspace_id: 'review', consent: true }],
   ])
-  expect(screen.getByRole('button', { name: 'Preparing tools…' })).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Preparing tools…' })
+  ).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Check progress' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeDisabled()
   expect(consent).toBeDisabled()
@@ -932,3 +1279,264 @@ it('blocks child actions while cloud prices refresh, then permits explicit authe
   expect(toolCalls()).toHaveLength(1)
   expect(gbot).toHaveBeenCalledTimes(5)
 })
+
+it.each(['successful', 'failed'] as const)(
+  'keeps failed deletion guidance through a %s progress check',
+  async (outcome) => {
+    const initial = deployment(review(), 'running')
+    const progress = deferred<CloudReview>()
+    const retry = deferred<CloudReview>()
+    const busy = vi.fn()
+    vi.mocked(gbot)
+      .mockRejectedValueOnce(new Error('Deletion result unavailable'))
+      .mockReturnValueOnce(progress.promise)
+    render(
+      <CloudCosts
+        name="Research bot"
+        initial={initial}
+        busy={busy}
+        reviewed={vi.fn()}
+      />
+    )
+    const consent = screen.getByRole('checkbox', { name: /Delete this setup/ })
+    fireEvent.click(consent)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Delete cloud computer' })
+    )
+    await screen.findByText('Deletion result unavailable')
+    fireEvent.click(screen.getByRole('button', { name: 'Check progress' }))
+    expect(screen.getByText('Deletion result unavailable')).toBeInTheDocument()
+    const warning = screen
+      .getByText(
+        'Could not confirm the cloud computer was deleted. Provider charges may continue. Choose Check progress to check its state before trying Delete cloud computer again.'
+      )
+      .closest('[role="alert"]')!
+    expect(
+      within(warning as HTMLElement)
+        .getByText('Deletion result unavailable')
+        .closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      screen.queryByText('Deletion result unavailable', {
+        selector: 'details[open] p',
+      })
+    ).not.toBeInTheDocument()
+    fireEvent.click(
+      within(warning as HTMLElement).getByText('Details', {
+        selector: 'summary',
+      })
+    )
+    expect(screen.getByText('Deletion result unavailable')).toBeVisible()
+    expect(gbot).toHaveBeenCalledTimes(2)
+    expect(consent).toBeChecked()
+    expect(consent).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Delete cloud computer' })
+    ).toBeDisabled()
+    expect(busy).toHaveBeenLastCalledWith(true)
+    if (outcome === 'failed') {
+      await act(async () =>
+        progress.reject(new Error('Progress status unavailable'))
+      )
+      const checkWarning = screen
+        .getByText(
+          'Could not check the cloud computer. Choose Check progress to try again.'
+        )
+        .closest('[role="alert"]')!
+      expect(
+        within(checkWarning as HTMLElement)
+          .getByText('Progress status unavailable')
+          .closest('details')
+      ).not.toHaveAttribute('open')
+      expect(
+        screen.getByText('Deletion result unavailable')
+      ).toBeInTheDocument()
+      vi.mocked(gbot).mockResolvedValueOnce(initial)
+      fireEvent.click(screen.getByRole('button', { name: 'Check progress' }))
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: 'Check progress' })
+        ).toBeEnabled()
+      )
+      expect(
+        screen.queryByText('Progress status unavailable')
+      ).not.toBeInTheDocument()
+    } else {
+      await act(async () => progress.resolve(initial))
+    }
+    expect(screen.getByText('Deletion result unavailable')).toBeInTheDocument()
+    expect(consent).toBeChecked()
+    expect(busy).toHaveBeenLastCalledWith(false)
+    expect(
+      vi
+        .mocked(gbot)
+        .mock.calls.filter(([path]) => path === 'setup/cloud/delete')
+    ).toEqual([['setup/cloud/delete', { id: 'review', consent: true }]])
+    vi.mocked(gbot).mockReturnValueOnce(retry.promise)
+    const remove = screen.getByRole('button', { name: 'Delete cloud computer' })
+    fireEvent.click(remove)
+    fireEvent.click(remove)
+    expect(
+      screen.queryByText('Deletion result unavailable')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Deleting cloud computer…' })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Check progress' })
+    ).toBeDisabled()
+    expect(
+      vi
+        .mocked(gbot)
+        .mock.calls.filter(([path]) => path === 'setup/cloud/delete')
+    ).toEqual([
+      ['setup/cloud/delete', { id: 'review', consent: true }],
+      ['setup/cloud/delete', { id: 'review', consent: true }],
+    ])
+    await act(async () =>
+      retry.resolve({
+        ...initial,
+        deployment: { ...initial.deployment!, phase: 'deleted', resources: [] },
+      })
+    )
+    await screen.findByText('Computer and owned provider resources deleted.')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
+it('clears an uncertain deletion warning only when progress confirms deletion', async () => {
+  const initial = deployment(review(), 'running')
+  const progress = deferred<CloudReview>()
+  vi.mocked(gbot)
+    .mockRejectedValueOnce('Deletion reply interrupted')
+    .mockReturnValueOnce(progress.promise)
+  render(
+    <CloudCosts
+      name="Research bot"
+      initial={initial}
+      busy={vi.fn()}
+      reviewed={vi.fn()}
+    />
+  )
+  fireEvent.click(screen.getByRole('checkbox', { name: /Delete this setup/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'Delete cloud computer' }))
+  await screen.findByText('Deletion reply interrupted')
+  fireEvent.click(screen.getByRole('button', { name: 'Check progress' }))
+  expect(screen.getByText('Deletion reply interrupted')).toBeInTheDocument()
+  await act(async () =>
+    progress.resolve({
+      ...initial,
+      deployment: { ...initial.deployment!, phase: 'deleted', resources: [] },
+    })
+  )
+  await screen.findByText('Computer and owned provider resources deleted.')
+  expect(
+    screen.queryByText('Deletion reply interrupted')
+  ).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Delete cloud computer' })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('checkbox', { name: /I authorize creating this computer/ })
+  ).not.toBeChecked()
+  expect(
+    screen.getByRole('button', { name: 'Create cloud computer' })
+  ).toBeDisabled()
+  expect(vi.mocked(gbot).mock.calls).toEqual([
+    ['setup/cloud/delete', { id: 'review', consent: true }],
+    ['setup/cloud/check', { id: 'review' }],
+  ])
+})
+
+it.each(['create', 'identity'] as const)(
+  'gives plain cloud %s recovery and preserves entries for an explicit retry',
+  async (kind) => {
+    const initial =
+      kind === 'create'
+        ? { ...review(), confirmed: true }
+        : deployment(review(), 'running')
+    const retry = deferred<unknown>()
+    const label =
+      kind === 'create' ? 'Create cloud computer' : 'Check SSH identity'
+    const guidance =
+      kind === 'create'
+        ? 'Could not confirm the cloud computer was created. Cancel setup, then use Resume setup in the computer list to check its saved state before trying to create it again.'
+        : 'Could not check the SSH identity. Choose Check SSH identity to try again.'
+    vi.mocked(gbot).mockRejectedValueOnce('Cloud action unavailable')
+    render(
+      <CloudCosts
+        name="Research bot"
+        initial={initial}
+        busy={vi.fn()}
+        reviewed={vi.fn()}
+      />
+    )
+    if (kind === 'create') {
+      fireEvent.change(screen.getByLabelText('Allowed SSH source networks'), {
+        target: { value: '203.0.113.9/32' },
+      })
+      fireEvent.click(
+        screen.getByRole('checkbox', {
+          name: /I authorize creating this computer/,
+        })
+      )
+    }
+    fireEvent.click(screen.getByRole('button', { name: label }))
+    await screen.findByText(guidance)
+    const warning = screen.getByRole('alert')
+    expect(
+      within(warning).getByText('Cloud action unavailable').closest('details')
+    ).not.toHaveAttribute('open')
+    fireEvent.click(
+      within(warning).getByText('Details', { selector: 'summary' })
+    )
+    expect(screen.getByText('Cloud action unavailable')).toBeVisible()
+    expect(gbot).toHaveBeenCalledTimes(1)
+    if (kind === 'create') {
+      expect(screen.getByLabelText('Allowed SSH source networks')).toHaveValue(
+        '203.0.113.9/32'
+      )
+      expect(
+        screen.getByRole('checkbox', {
+          name: /I authorize creating this computer/,
+        })
+      ).toBeChecked()
+    } else {
+      expect(
+        screen.queryByRole('button', { name: 'Verify SSH access' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Connect bot desktop' })
+      ).toBeDisabled()
+    }
+    vi.mocked(gbot).mockReturnValueOnce(retry.promise)
+    const action = screen.getByRole('button', { name: label })
+    fireEvent.click(action)
+    fireEvent.click(action)
+    expect(
+      screen.queryByText('Cloud action unavailable')
+    ).not.toBeInTheDocument()
+    expect(gbot).toHaveBeenCalledTimes(2)
+    expect(gbot).toHaveBeenLastCalledWith(`setup/cloud/${kind}`, {
+      id: 'review',
+      ...(kind === 'create'
+        ? { quote_id: 'quote', consent: true, source_cidrs: ['203.0.113.9/32'] }
+        : {}),
+    })
+    await act(async () =>
+      retry.resolve(
+        kind === 'create'
+          ? deployment(initial)
+          : {
+              public_key: {
+                algorithm: 'ssh-ed25519',
+                public_key: 'fixture-key',
+              },
+              fingerprint: 'SHA256:fixture',
+            }
+      )
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)

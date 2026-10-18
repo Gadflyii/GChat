@@ -12,6 +12,19 @@ const actionLabels = {
   delete: 'Deleting cloud computer…',
 } as const
 
+const failureMessages = {
+  create:
+    'Could not confirm the cloud computer was created. Cancel setup, then use Resume setup in the computer list to check its saved state before trying to create it again.',
+  check:
+    'Could not check the cloud computer. Choose Check progress to try again.',
+  identity:
+    'Could not check the SSH identity. Choose Check SSH identity to try again.',
+  connect:
+    'Could not connect the bot desktop. Choose Check progress to check the computer, then choose Connect bot desktop when the SSH and tool checks are complete.',
+  delete:
+    'Could not confirm the cloud computer was deleted. Provider charges may continue. Choose Check progress to check its state before trying Delete cloud computer again.',
+}
+
 export default function CloudComputer({
   review,
   updated,
@@ -38,7 +51,11 @@ export default function CloudComputer({
   const blocked = working || disabled
   const [action, setAction] = useState<keyof typeof actionLabels>()
   const pending = useRef(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<{
+    action: keyof typeof failureMessages
+    details: string
+  }>()
+  const [checkError, setCheckError] = useState('')
   const [accessError, setAccessError] = useState('')
   const [identity, setIdentity] = useState<SshIdentity>()
   const [verified, setVerified] = useState(false)
@@ -54,14 +71,16 @@ export default function CloudComputer({
     setAction(kind)
     setWorking(true)
     busy(true)
-    setError('')
+    if (kind === 'check') setCheckError('')
+    else setError((current) => (current?.action === kind ? undefined : current))
     if (kind === 'access') setAccessError('')
     try {
       await operation()
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause)
       if (kind === 'access') setAccessError(message)
-      else setError(message)
+      else if (kind === 'check') setCheckError(message)
+      else setError({ action: kind, details: message })
     } finally {
       pending.current = false
       setAction(undefined)
@@ -71,7 +90,18 @@ export default function CloudComputer({
   }
   const update = (result: CloudReview) => {
     updated(result)
+    if (result.deployment?.phase === 'deleted') {
+      setBilling(false)
+      setError(undefined)
+      setCheckError('')
+      setRemove(false)
+    }
     if (result.deployment?.phase !== 'running') {
+      setError((current) =>
+        current?.action === 'identity' || current?.action === 'connect'
+          ? undefined
+          : current
+      )
       setAccessError('')
       setIdentity(undefined)
       setVerified(false)
@@ -250,8 +280,8 @@ export default function CloudComputer({
                   {accessError && (
                     <div role="alert" className="space-y-2 text-destructive">
                       <p>
-                        Could not verify SSH access. Try Verify SSH access
-                        again before continuing.
+                        Could not verify SSH access. Try Verify SSH access again
+                        before continuing.
                       </p>
                       <details className="text-xs">
                         <summary>Details</summary>
@@ -266,9 +296,7 @@ export default function CloudComputer({
                   workspaceId={review.id}
                   cloud
                   disabled={blocked}
-                  canStart={() =>
-                    !pending.current && (!canStart || canStart())
-                  }
+                  canStart={() => !pending.current && (!canStart || canStart())}
                   ready={setTools}
                   busy={(value) => {
                     pending.current = value
@@ -339,10 +367,27 @@ export default function CloudComputer({
           {actionLabels[action]}
         </p>
       )}
-      {error && (
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
+      {[
+        error,
+        checkError
+          ? { action: 'check' as const, details: checkError }
+          : undefined,
+      ].map((failure) =>
+        failure ? (
+          <div
+            key={failure.action}
+            role="alert"
+            className="space-y-2 text-destructive"
+          >
+            <p>{failureMessages[failure.action]}</p>
+            <details className="text-xs">
+              <summary>Details</summary>
+              <p className="whitespace-pre-wrap break-words">
+                {failure.details}
+              </p>
+            </details>
+          </div>
+        ) : null
       )}
     </section>
   )

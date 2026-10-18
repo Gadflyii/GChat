@@ -248,18 +248,31 @@ const ChatInput = memo(function ChatInput({
   }, [conversationKey])
   const activeSkill = useConversationPolicy((state) => state.activeSkills[conversationKey])
   const activeDefinition = useConversationPolicy((state) => state.activeDefinitions[conversationKey])
-  const { skills: agentSkills, loading: agentSkillsLoading } =
-    useAgentSkills()
-  const { definitions: agentDefinitions, loading: agentDefinitionsLoading } =
-    useAgentDefinitions()
+  const {
+    skills: agentSkills,
+    loading: agentSkillsLoading,
+    error: agentSkillsError,
+    load: loadAgentSkills,
+  } = useAgentSkills()
+  const {
+    definitions: agentDefinitions,
+    loading: agentDefinitionsLoading,
+    error: agentDefinitionsError,
+    load: loadAgentDefinitions,
+  } = useAgentDefinitions()
   const [selectedAgentDefinitionId, setSelectedAgentDefinitionId] = useState(
     preselectedAgentDefinitionId ?? activeDefinition ?? 'general'
   )
+  const isSelectedAgentUnresolved = selectedAgentDefinitionId !== 'general' &&
+    (agentDefinitionsLoading || Boolean(agentDefinitionsError))
   const draftSkillName = usePrompt((state) => state.draftSkills[conversationKey])
   const selectedAgentSkill = draftSkillName
     ? findAvailableAgentSkill(agentSkills, draftSkillName)
     : null
   const isRestoringDraftSkill = Boolean(draftSkillName && agentSkillsLoading)
+  const isDraftSkillUnresolved = Boolean(
+    draftSkillName && (agentSkillsLoading || !selectedAgentSkill)
+  )
   const setDraftSkill = usePrompt((state) => state.setDraftSkill)
   const preselectedAgentSkillAppliedRef = useRef<string | null>(null)
   const [agentSkillSlashQuery, setAgentSkillSlashQuery] =
@@ -302,7 +315,8 @@ const ChatInput = memo(function ChatInput({
   }, [conversationKey, preselectedAgentDefinitionId, activeDefinition])
 
   useEffect(() => {
-    if (agentDefinitionsLoading) return
+    // A failed read cannot tell us whether the selected definition still exists.
+    if (agentDefinitionsLoading || agentDefinitionsError) return
     if (selectedAgentDefinitionId !== 'general' &&
       !agentDefinitions.some((definition) => definition.id === selectedAgentDefinitionId)) {
       setSelectedAgentDefinitionId('general')
@@ -310,6 +324,7 @@ const ChatInput = memo(function ChatInput({
   }, [
     agentDefinitions,
     agentDefinitionsLoading,
+    agentDefinitionsError,
     selectedAgentDefinitionId,
   ])
 
@@ -668,7 +683,7 @@ const ChatInput = memo(function ChatInput({
     })
   }
 
-  const submitMessage = async (prompt: string) => {
+  const submitMessage = async (prompt: string, sendWithoutSkill = false) => {
     const submittedDraft = prompt
     const clearSubmittedPrompt = () => {
       const state = usePrompt.getState()
@@ -694,9 +709,15 @@ const ChatInput = memo(function ChatInput({
       return
     }
     useConversationPolicy.getState().setActiveDefinition(conversationKey, selectedAgentDefinitionId)
+    if (sendWithoutSkill) {
+      setDraftSkill(conversationKey)
+      useConversationPolicy.getState().setActiveSkill(conversationKey)
+    }
     const explicitSkill = prompt.match(/^\/([a-z0-9-]+)(?:\s|$)/)?.[1]
-    const skillName = selectedAgentSkill?.name ??
-      (agentSkills.some((skill) => skill.name === explicitSkill) ? explicitSkill : undefined) ?? activeSkill
+    const skillName = sendWithoutSkill
+      ? undefined
+      : selectedAgentSkill?.name ??
+        (agentSkills.some((skill) => skill.name === explicitSkill) ? explicitSkill : undefined) ?? activeSkill
     if (skillName) {
       useConversationPolicy.getState().setActiveSkill(conversationKey, skillName)
       if (explicitSkill === skillName) prompt = prompt.replace(/^\/[^\s]+\s*/, '')
@@ -1001,17 +1022,19 @@ const ChatInput = memo(function ChatInput({
     }
   }
 
-  const handleSendMessage = async (draft: string) => {
+  const handleSendMessage = async (draft: string, sendWithoutSkill = false) => {
     if (
       !submissionReady ||
       submittingMessageRef.current ||
-      (!isCompactCommand(draft) && isRestoringDraftSkill)
+      (!isCompactCommand(draft) && (
+        isSelectedAgentUnresolved || (isDraftSkillUnresolved && !sendWithoutSkill)
+      ))
     ) return
     // A ref also blocks repeated Enter/click events before React renders.
     submittingMessageRef.current = true
     setIsSubmittingMessage(true)
     try {
-      await submitMessage(draft)
+      await submitMessage(draft, sendWithoutSkill)
     } catch (error) {
       toast.error('Could not send message. Your draft is still here.', {
         description: error instanceof Error ? error.message : String(error),
@@ -2531,6 +2554,64 @@ const ChatInput = memo(function ChatInput({
                   )}
                 </div>
               )}
+              {isSelectedAgentUnresolved && (
+                <div
+                  role={agentDefinitionsLoading ? 'status' : 'alert'}
+                  className="mx-4 mt-3 flex flex-wrap items-center gap-2 text-xs"
+                >
+                  <span>
+                    {agentDefinitionsLoading
+                      ? 'Loading your selected saved agent…'
+                      : "Couldn't load saved agents. Retry to use your selected agent, or choose Chat instead."}
+                  </span>
+                  {!agentDefinitionsLoading && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-label="Retry saved agents"
+                      onClick={() => void loadAgentDefinitions()}
+                    >
+                      Retry
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isSubmittingMessage || isStreaming}
+                    onClick={() => {
+                      setSelectedAgentDefinitionId('general')
+                      useConversationPolicy.getState().setActiveDefinition(conversationKey, 'general')
+                      requestAnimationFrame(() => textareaRef.current?.focus())
+                    }}
+                  >
+                    Use Chat instead
+                  </Button>
+                </div>
+              )}
+              {isDraftSkillUnresolved && !agentSkillsLoading && (
+                <div role="alert" className="mx-4 mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  <span>
+                    {agentSkillsError
+                      ? `Couldn't load skills. Retry to restore /${draftSkillName}, or send without a skill.`
+                      : `Skill /${draftSkillName} isn't available. Retry, or send without a skill.`}
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => void loadAgentSkills()}>
+                    Retry
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      !submissionReady || isSubmittingMessage || isStreaming ||
+                      !prompt.trim() || isAttachmentPipelineBusy || blockSendUntilModelReady ||
+                      isSelectedAgentUnresolved
+                    }
+                    onClick={() => handleSendMessage(prompt, true)}
+                  >
+                    Send without skill
+                  </Button>
+                </div>
+              )}
               <AgentSkillSlashMenu
                   skills={eligibleAgentSkills}
                   activeIndex={agentSkillActiveIndex}
@@ -2540,7 +2621,7 @@ const ChatInput = memo(function ChatInput({
                   onActiveIndexChange={setAgentSkillActiveIndex}
               />
               <div className="relative min-w-0 w-full px-4 pt-3">
-                {activeSkill && !selectedAgentSkill && (
+                {activeSkill && !draftSkillName && (
                   <div className="mb-2 flex items-center gap-2 text-xs text-primary">
                     <span>Skill: /{activeSkill}</span>
                     <button type="button" onClick={() => useConversationPolicy.getState().setActiveSkill(conversationKey)}>Exit skill</button>
@@ -2629,7 +2710,7 @@ const ChatInput = memo(function ChatInput({
                         !isSubmittingMessage &&
                         (isCompactCommand(prompt) || !isStreaming) &&
                         prompt.trim() &&
-                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady && !isRestoringDraftSkill))
+                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady && !isDraftSkillUnresolved && !isSelectedAgentUnresolved))
                       ) {
                         handleSendMessage(prompt)
                       }
@@ -2998,16 +3079,18 @@ const ChatInput = memo(function ChatInput({
                       isSubmittingMessage ||
                       !prompt.trim() ||
                       (!isCompactCommand(prompt) &&
-                        (isAttachmentPipelineBusy || blockSendUntilModelReady || isRestoringDraftSkill))
+                        (isAttachmentPipelineBusy || blockSendUntilModelReady || isDraftSkillUnresolved || isSelectedAgentUnresolved))
                     }
                     data-test-id="send-message-button"
                     aria-label={
                       isSubmittingMessage ? 'Preparing message' :
                         isRestoringDraftSkill && !isCompactCommand(prompt)
                           ? 'Restoring selected skill'
-                          : 'Send message'
+                          : isDraftSkillUnresolved && !isCompactCommand(prompt)
+                            ? 'Resolve selected skill before sending'
+                            : 'Send message'
                     }
-                    aria-busy={isSubmittingMessage || (isRestoringDraftSkill && !isCompactCommand(prompt))}
+                    aria-busy={isSubmittingMessage || ((isRestoringDraftSkill || (isSelectedAgentUnresolved && agentDefinitionsLoading)) && !isCompactCommand(prompt))}
                     onClick={() => handleSendMessage(prompt)}
                     className="rounded-full mr-1 mb-1"
                   >

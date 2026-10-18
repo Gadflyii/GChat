@@ -202,6 +202,31 @@ strict Clippy and full verification receipts are retained in
 
 ## Acceptance and next action
 
+The installed Linux Google Desktop registration-secret leaf passed on October 18
+using accepted DEB `3e32ad0c9` / Engine `b26ec5b8f`. Its Workspace form, account
+owner and credential-store sources match main `9d68908b9`. Native input saved a
+synthetic registration through the Google guide. After normal desktop close, the
+private background account service was stopped explicitly to prepare a cold
+service boundary; desktop close alone did not stop it. The existing private
+keyring collection was then locked.
+
+Relaunch and passive Settings/Workspace browsing made no product Secret Service
+calls and left the collection locked. **Connect account service** owned the OS
+unlock prompt and read the existing Gbot service credential; it then displayed
+the saved Google setup without connecting an account. An explicit Google
+registration save read the retained `google:registration` item and updated that
+same item (`GetSecret` + `SetSecret`, no new item), then confirmed **Google setup
+is saved**. Header-only D-Bus evidence and native screenshots are retained in
+`/ai/gchat/out/c3-google-registration-keyring-20261018/`.
+
+This bounded check used a fresh S1 SSD private HOME/runtime/D-Bus/keyring/display,
+with no browser sign-in, provider request, account, model, task, GPU or source
+change. It qualifies registration-secret storage and its explicit access boundary;
+OAuth token storage/refresh and installed Windows acceptance remain open below.
+The private fixture and container were deleted; the protected RC package remains
+on S1. CPU booking 3505 was cancelled, returned 19:17Z. The next gate requires
+Ron's approved live account and consent.
+
 The source scope is complete against the local mock OAuth provider, together with
 the existing provider adapter, permission, receipt and UI fixtures. This evidence
 does not claim live sign-in, provider API acceptance or installed Windows OAuth.

@@ -104,6 +104,10 @@ export default function GbotSetup({
   }, [])
   const [service, setService] = useState<ServiceTarget>({ kind: 'local' })
   const [serviceReady, setServiceReady] = useState(false)
+  const [serviceReadError, setServiceReadError] = useState('')
+  const [serviceReadAttempt, setServiceReadAttempt] = useState(0)
+  const [readingService, setReadingService] = useState(true)
+  const serviceReadPending = useRef(false)
   const serviceChoiceVersion = useRef(0)
   const hosts = useEngineHosts((state) => state.hosts)
   const serviceName =
@@ -116,6 +120,9 @@ export default function GbotSetup({
   useEffect(() => {
     let current = true
     const version = serviceChoiceVersion.current
+    serviceReadPending.current = true
+    setReadingService(true)
+    setServiceReadError('')
     void getGbotServiceTarget()
       .then((target) => {
         if (current && serviceChoiceVersion.current === version) {
@@ -125,15 +132,23 @@ export default function GbotSetup({
       })
       .catch((cause) => {
         if (current && serviceChoiceVersion.current === version)
-          setError(String(cause))
+          setServiceReadError(String(cause))
+      })
+      .finally(() => {
+        if (current) {
+          serviceReadPending.current = false
+          setReadingService(false)
+        }
       })
     return () => {
       current = false
     }
-  }, [])
+  }, [serviceReadAttempt])
   const changeService = useCallback((target: ServiceTarget, ready: boolean) => {
     if (submissionPending.current) return
     ++serviceChoiceVersion.current
+    setServiceReadError('')
+    setReadingService(false)
     setService(target)
     setServiceReady(ready)
   }, [])
@@ -257,6 +272,47 @@ export default function GbotSetup({
           </label>
         </div>
       )}
+      {step === 1 && readingService && (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading your saved Gbot service…
+        </p>
+      )}
+      {step === 1 &&
+        (serviceReadError || (serviceReadAttempt > 0 && readingService)) && (
+          <div
+            role={serviceReadError ? 'alert' : undefined}
+            className="space-y-2 text-sm"
+          >
+            {serviceReadError && (
+              <>
+                <p>Could not read your saved Gbot service.</p>
+                <p>
+                  Retry loading the saved service, or choose a service below.
+                </p>
+                <details>
+                  <summary>Details</summary>
+                  <p className="break-words">{serviceReadError}</p>
+                </details>
+              </>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={readingService || saving}
+              onClick={() => {
+                if (serviceReadPending.current || submissionPending.current)
+                  return
+                serviceReadPending.current = true
+                setReadingService(true)
+                setServiceReadAttempt((attempt) => attempt + 1)
+              }}
+            >
+              {readingService
+                ? 'Loading saved service…'
+                : 'Retry loading saved service'}
+            </Button>
+          </div>
+        )}
       {step === 1 && (
         <fieldset disabled={saving} aria-label="Gbot service selection">
           <ServiceSetup
@@ -404,9 +460,22 @@ export default function GbotSetup({
         </p>
       )}
       {error && !(step === 1 && error === resources.error) && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>
+            {step === 1
+              ? 'Could not confirm the Gbot service was selected.'
+              : 'Could not confirm the bot was saved.'}
+          </p>
+          <p>
+            {step === 1
+              ? 'Check the selected service, then choose Continue to try again.'
+              : 'Review the bot and computer details, then choose Save bot to try again.'}
+          </p>
+          <details>
+            <summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{error}</p>
+          </details>
+        </div>
       )}
       {continueHint && (
         <p id="gbot-setup-continue-hint" className="text-sm text-muted-foreground">

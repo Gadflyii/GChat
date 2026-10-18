@@ -1,5 +1,169 @@
 # GInfer host UI
 
+## First-run cleared choices — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-CLEARED-CHOICE-REMOUNT` follows Bubbs's approved unset/empty
+design: new users retain the recommended preselection until an explicit
+choice; saving an empty selection persists `[]` and remains unchecked after
+polling, reopening the screen and restarting the Host. Recommendations stay
+visible as suggestions. Status reads and maintenance must not save an empty
+choice for a user who has never chosen.
+
+Owned branch `fix/gchat3-first-run-cleared-choice-remount-20261018`, base
+`15dbad1e6`, uses the matching `/ai/gchat-worktrees/` source tree. Acceptance
+is rendered new-user/clear/remount behavior, durable Host null/empty behavior,
+focused tests and one `make verify`. No GPU, installed-app or Windows claim is
+made. The independent S1 SSD fixture uses the inactive RC donor. The initial
+focused run passed 54 cases, including clear/remount, and stopped on the
+existing pending-profile test: Clear now appears while profiling, so waiting
+for that button no longer waits for the completed poll. The test now waits
+for the changed recommendation before checking that edits survived. No
+production change was needed for this failure. Frozen source `58100466d`
+then passed only that failed case, 21 native first-run tests / one ignored,
+Rust check/clippy and lint (zero errors, five existing unrelated warnings).
+Exactly one `make verify` passed at **18:57:36Z**: **3,753 app tests / six
+skipped, 127 extension tests, all six coverage floors and 1,317 native tests /
+28 ignored** across 23 summaries. Typecheck and quality guards passed. The
+coordinator reviewed raw results, terminal state and unchanged source,
+dependency and eleven-catalog bindings before cleanup.
+
+CPU88–95 returned **18:58Z**; bookings3499/3500 are canceled. The independent
+`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-cleared-choice-remount-tests-20261018`
+fixture and two exited containers were retired at **19:05:58Z**, removing
+**28,312,764,003 logical bytes**. The inactive RC donor remains unchanged.
+Small evidence is retained in
+`out/first-run-cleared-choice-remount-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the owned GUI queue.
+
+## First-run action recovery — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-ACTION-ERROR-GUIDANCE` stops describing every rejected setup
+action as a connection failure. A rejected folder change or Stop request now
+directs the user to **Retry local setup** to read current status before an
+explicit action retry. Diagnostics remain in closed **Setup action error
+details**. Successful polls do not imply the action succeeded; edited choices
+and existing retry behavior are preserved. Connection-read and actionable
+disk-full maintenance guidance remain unchanged.
+
+Frozen source `fc5a0b026` on
+`fix/gchat3-first-run-action-error-guidance-20261018` passed the existing
+rendered Stop/folder regressions, including status-only recovery without
+folder mutation replay. The initial focused run passed 52 cases and stopped
+on the existing replacement-Host test: it edited the folder before initial
+`/fast` hydration settled. Waiting for that value before entering the draft
+corrected the fixture; the failed case then passed without repeating the 52
+passing cases or changing the replacement-Host assertions.
+
+Lint passed with zero errors and five existing unrelated warnings. Exactly
+one `make verify` passed at **18:14:39Z**: **3,735 app tests / 6 skipped,
+127 extension tests, 1,316 native tests / 28 ignored**, all six critical
+coverage floors, typecheck and quality guards. The coordinator reviewed the
+actual raw results, terminal state, matching source bytes/modes, dependencies
+and all eleven frozen catalog inputs. These are rendered regressions and a
+Linux source gate; installed desktop, live Host and Windows acceptance remain
+separate.
+
+Candidate base is `73fac6573`, in the matching `/ai/gchat-worktrees/`
+directory. S1 CPU80–87 returned **18:16Z**, booking3478 canceled. The independent
+`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-maintenance-guidance-tests-20261018`
+fixture and two exited containers were retired at **18:19:46Z** after direct
+review, removing **30,090,876,987 logical bytes**. The inactive RC donor and
+protected inputs remain untouched. Small evidence:
+`out/first-run-action-error-guidance-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the owned GUI queue.
+
+## Locked-vault next action — verified, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-LOCKED-STATE-GUIDANCE` gives a confirmed locked passphrase
+vault its actual state and next action. Before opening the form, it directs
+the user to choose Unlock vault; the open form then asks for the passphrase
+and explicit Unlock. Locked storage remains unready and passive status reads
+remain passive. Other unavailable providers retain their existing guidance.
+
+Frozen source `f1c224c5c` on
+`fix/gchat3-secure-storage-locked-guidance-20261018` passed **27 focused
+credential tests** and lint (zero errors, five existing unrelated warnings).
+Exactly one `make verify` passed at **17:41:43Z**: **3,722 app tests / 6
+skipped, 127 extension tests, 1,316 native tests / 28 ignored**, six critical
+coverage floors, typecheck and quality guards. Before/after source bindings
+match. This establishes rendered state transitions and the Linux source gate;
+live keyring, installed-app and Windows qualification remain separate.
+
+The first archive preflight stopped before tests because its two tracked
+`100644` files had mode `0664`. Normalizing those owned files to `0644` and
+using extraction umask `022` corrected staging without changing their bytes.
+No test stage or full gate was repeated. S1 CPU80–87 returned **17:43Z**,
+booking3454 canceled. The owned SSD fixture and two exited containers were
+retired at **17:46:18Z**, removing **28,309,240,082 logical bytes**. The
+protected RC donor is unchanged. Only
+[the result](../../out/secure-storage-locked-guidance-20261018/test-result.json)
+and [short summary](../../out/secure-storage-locked-guidance-20261018/test-summary.md)
+are retained. Merged as `73fac6573`; continue the next owned GUI row without
+repeating these accepted checks.
+## GPU memory reserve setting — merged, C3, October 18
+
+`KV-HEADROOM-USER-SETTING` delivers Ron’s per-launch setting in each Host’s
+model editor under Advanced: **GPU memory to keep free (MB)**. New custom
+launches default to 300 MB (314572800 bytes); editing inherits the saved
+profile’s value. The same `kv_arena_headroom_bytes` must reach quote and launch
+unchanged. Saving changes uses the existing confirmed instance reload, so
+editing alone never changes a running model. Signed profile recipes retain
+all recorded values and qualification checks.
+
+Acceptance: validate representable nonnegative MB input before quote/start/save;
+cover conversion, profile inheritance, restart and Host argument forwarding;
+show the Engine’s reserve-related startup failure with an actionable explanation;
+run focused tests, exactly one `make verify`, and capture the real native editor
+in an isolated S1 session. No Engine arithmetic/admission change, new release
+package, GPU benchmark, global preference map, or CredentialSetup/EngineFirstRun
+edit belongs to this item. Arch confirmed this launch/profile ownership at
+17:40Z; C1 owns GInfer config/profile support and no GChat files.
+
+Owner/worktree: C3, `fix/c3-gpu-memory-reserve`,
+`/ai/gchat-worktrees/c3-gpu-memory-reserve-20261018`, baseline `5b48adfd9`.
+The private S1 build fixture used independent read copies of the inactive granted
+Gchat 3 dependencies; no GPU claim. Small evidence is under
+`out/c3-gpu-memory-reserve-20261018`. New launches explicitly send
+300 MB; editing preserves saved bytes, including zero and fractional MB; invalid
+values block quote/start/save. The Engine has no dedicated error code for strict
+post-attach reserve failure: C1 confirmed the exact `final KV arena violates
+physical headroom on rank …; free_bytes=…; headroom_bytes=…` diagnostic. Quote,
+action rejection and asynchronous instance failure show it visibly with recovery
+guidance while retaining the full log in closed Technical details. See the
+[decision](../decisions/2026-10-18-expose-per-launch-gpu-memory-reserve.md).
+Focused verification passed: **85 rendered UI tests**, the exact Host arena
+argument test, the existing quote/saved-launch pipeline test, lint, Rust check
+and strict clippy. Three initial full-log assertions needed an exact-whitespace
+matcher because Testing Library normalized multiline text; the corrected 85-test
+run passed. The one unmodified `make verify` passed 3,750 app tests / 6 skipped,
+127 extension tests and all six critical coverage floors, then reached the main
+Rust suite, where 774 tests passed and two unrelated agent-tool
+tests failed. Both were caused by the private `src-tauri/target` symlink:
+the shell returned a canonical working directory and the diff labels could not
+strip the lexical workspace prefix. The fixture now uses a physical
+`src-tauri/target`, a matching `CARGO_TARGET_DIR` and a reverse convenience alias;
+no product or test source changed. Both exact failed tests now pass, and all six
+remaining Rust suites pass: 1,316 tests passed across the original run and
+targeted continuation, with 28 ignored. There was no second full verify.
+
+Normal Release sidecars and desktop passed at **18:26Z**. The coordinator
+reviewed the actual build output and frozen source hashes, then paired the native
+desktop with a real empty private Host. A private S1 HOME, Xvfb display, D-Bus
+session and unlocked keyring isolated it from Ron’s session. Ordinary input
+showed default **300 MB**, changed it to **600 MB**, and restored **300 MB**;
+all three unmodified screenshots were viewed. The setting and full help text
+fit the native window. No GPU or model execution was used for this editor check;
+focused tests cover forwarding and confirmed restart.
+
+The app closed normally, private services stopped, and CPUs40–47 returned
+**18:32Z**. The owned 63 GiB S1 build/private-HOME fixture is retired; accepted
+RC packages, dependency donors and protected inputs remain intact. See
+`out/c3-gpu-memory-reserve-20261018/result.json`, `native-result.json`,
+`terminal-summary.json` and `reserve-default-300.png`. Source `26a0f4e97` merged
+as `e97f30aa0`; EngineHostModels.tsx and its rendered tests are released to
+Gchat 3. Continue the remaining owned GUI acceptance without repeating these
+checks.
+
 ## Check-again locked-vault recovery — verified, Gchat 3, October 18
 
 `GUI-SECURE-STORAGE-LOCKED-RECOVERY` fixes Codex 8's P2 after passphrase

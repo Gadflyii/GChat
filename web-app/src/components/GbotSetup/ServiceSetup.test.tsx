@@ -72,6 +72,126 @@ const approvedGrant = {
   service_configured: true,
 } satisfies GbotControlGrant
 
+it('clears previous readiness while rechecking approval and after a failed check', async () => {
+  const check = pendingGrant()
+  const retry = pendingGrant()
+  vi.mocked(gbotControlGrant)
+    .mockResolvedValueOnce(approvedGrant)
+    .mockReturnValueOnce(check.promise)
+    .mockReturnValueOnce(retry.promise)
+  const change = vi.fn()
+  render(
+    <ServiceSetup
+      target={{ kind: 'paired_host', host_id: 'online' }}
+      change={change}
+    />
+  )
+  await screen.findByText('Gbot control approved for this device.')
+  expect(change).toHaveBeenLastCalledWith(
+    { kind: 'paired_host', host_id: 'online' },
+    true
+  )
+  change.mockClear()
+  const button = screen.getByRole('button', { name: 'Check approval' })
+  act(() => {
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  })
+  expect(change).toHaveBeenCalledExactlyOnceWith(
+    { kind: 'paired_host', host_id: 'online' },
+    false
+  )
+  expect(gbotControlGrant).toHaveBeenCalledTimes(2)
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Checking Gbot control approval…'
+  )
+  expect(screen.getByRole('button', { name: 'Checking approval…' })).toBeDisabled()
+  await act(async () => check.reject(new Error('Service connection closed')))
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Could not confirm Gbot control approval. Try again.'
+  )
+  expect(change).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Check the connection to the service computer, then choose Check approval to try again.'
+  )
+  const details = screen
+    .getByText('Error: Service connection closed')
+    .closest('details')!
+  expect(details).not.toHaveAttribute('open')
+  fireEvent.click(screen.getByText('Details'))
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh computers' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Refresh computers' })).toBeEnabled()
+  )
+  expect(gbotControlGrant).toHaveBeenCalledTimes(2)
+  expect(change).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Could not confirm Gbot control approval. Try again.'
+  )
+  expect(screen.getByRole('button', { name: 'Paired service computer' })).toHaveTextContent('Service PC')
+  fireEvent.click(screen.getByRole('button', { name: 'Check approval' }))
+  expect(gbotControlGrant).toHaveBeenCalledTimes(3)
+  expect(vi.mocked(gbotControlGrant).mock.calls).toEqual([
+    ['online', 'status'],
+    ['online', 'status'],
+    ['online', 'status'],
+  ])
+  expect(change).not.toHaveBeenCalledWith(
+    { kind: 'paired_host', host_id: 'online' },
+    true
+  )
+  await act(async () => retry.resolve(approvedGrant))
+  expect(change).toHaveBeenLastCalledWith(
+    { kind: 'paired_host', host_id: 'online' },
+    true
+  )
+  expect(screen.getByRole('status')).toHaveTextContent(
+    'Gbot control approved for this device.'
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+it.each([
+  { status: 'revoked' as const, service_configured: true },
+  { status: 'approved' as const, service_configured: false },
+])('keeps previous readiness cleared when a fresh check returns $status/$service_configured', async (value) => {
+  const check = pendingGrant()
+  vi.mocked(gbotControlGrant)
+    .mockResolvedValueOnce(approvedGrant)
+    .mockReturnValueOnce(check.promise)
+  const change = vi.fn()
+  render(
+    <ServiceSetup
+      target={{ kind: 'paired_host', host_id: 'online' }}
+      change={change}
+    />
+  )
+  await screen.findByText('Gbot control approved for this device.')
+  change.mockClear()
+  fireEvent.click(screen.getByRole('button', { name: 'Check approval' }))
+  expect(change).toHaveBeenCalledExactlyOnceWith(
+    { kind: 'paired_host', host_id: 'online' },
+    false
+  )
+  await act(async () => check.resolve(value))
+  expect(change).toHaveBeenLastCalledWith(
+    { kind: 'paired_host', host_id: 'online' },
+    false
+  )
+  expect(change).not.toHaveBeenCalledWith(
+    { kind: 'paired_host', host_id: 'online' },
+    true
+  )
+  expect(screen.getByRole('status')).toHaveTextContent(
+    value.status === 'revoked'
+      ? 'Gbot control was revoked. Request access again.'
+      : 'Gbot control approved for this device.'
+  )
+  if (!value.service_configured)
+    expect(screen.getByText(/Enable and open Gbot once/)).toBeVisible()
+  expect(gbotControlGrant).toHaveBeenCalledTimes(2)
+})
+
 it('retries loading service computers without replaying a control request', async () => {
   registry.hosts = []
   const firstRetry = pendingRefresh()

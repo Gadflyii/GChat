@@ -83,7 +83,8 @@ it('starts a new first-run request lifetime when Welcome discovers a replacement
     storage: { path: '/models', recommended_path: args.host_id === 'replacement' ? '/new-host-models' : '/fast', available_bytes: 1024 ** 4 },
   })))
   const view = render(<EngineFirstRun />)
-  fireEvent.change(await screen.findByLabelText('Model download folder'), { target: { value: '/former-host-draft' } })
+  await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast'))
+  fireEvent.change(screen.getByLabelText('Model download folder'), { target: { value: '/former-host-draft' } })
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use this folder' })) })
   expect(screen.getByRole('button', { name: 'Use this folder' })).toBeDisabled()
   mocks.state = { ...mocks.state, hosts: [{ host_id: 'replacement', local: true }], snapshots: { replacement: { gpus: [] } } }
@@ -762,7 +763,37 @@ it('saves folder and model choices during profiling and restores them after reop
   expect(screen.queryByText('Downloading models')).not.toBeInTheDocument()
 })
 
-it('clears saved model choices before profiling admits downloads and keeps the cleared choice on polling', async () => {
+it.each([null, undefined])('preselects recommendations only before the first choice (%s) and saves an explicit clear', async selected => {
+  let saved = flow('profiling', {
+    gpu_uuids: ['GPU-one'], catalog_loaded: true, selected_release_ids: selected as string[] | null | undefined,
+    models: [{ release, recommended: true, reason: 'Capacity checks wait for profiling' }],
+  })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'models') saved = { ...saved, selected_release_ids: args.release_ids }
+    return Promise.resolve(saved)
+  })
+  const view = render(<EngineFirstRun />)
+  const choice = await screen.findByRole('checkbox', { name: /Muse/ })
+  await waitFor(() => expect(choice).toBeChecked())
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([])
+  fireEvent.click(choice)
+  const clear = screen.getByRole('button', { name: 'Clear saved model choices' })
+  expect(clear).toBeEnabled()
+  fireEvent.click(clear)
+  await waitFor(() => expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'models', release_ids: [] }))
+  await screen.findByRole('button', { name: 'Save model choices' })
+  view.unmount()
+  render(<EngineFirstRun />)
+  await waitFor(() => expect(screen.getByRole('checkbox', { name: /Muse/ })).not.toBeChecked())
+  expect(screen.getByText(/Muse.*Recommended/)).toBeVisible()
+  expect(screen.getByText('No models are queued for download. Choose models when you are ready.')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Save model choices' })).toBeDisabled()
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([
+    ['first_run', { host_id: 'local', action: 'models', release_ids: [] }],
+  ])
+})
+
+it('clears saved model choices before profiling admits downloads and keeps the cleared choice on polling and reopening', async () => {
   vi.useFakeTimers()
   try {
     let saved = flow('profiling', {
@@ -774,7 +805,8 @@ it('clears saved model choices before profiling admits downloads and keeps the c
       if (args.action === 'models') saved = { ...saved, selected_release_ids: args.release_ids }
       return Promise.resolve(saved)
     })
-    await act(async () => { render(<EngineFirstRun />) })
+    let view!: ReturnType<typeof render>
+    await act(async () => { view = render(<EngineFirstRun />) })
     const choice = screen.getByRole('checkbox', { name: /Muse/ })
     expect(choice).toBeChecked()
     expect(screen.getByText(/Model choices saved\. Downloads will begin/)).toBeVisible()
@@ -795,6 +827,11 @@ it('clears saved model choices before profiling admits downloads and keeps the c
     expect(choice).not.toBeChecked()
     expect(screen.getByText('Measuring graphics cards…')).toBeVisible()
     expect(screen.queryByText(/Model choices saved\. Downloads will begin/)).not.toBeInTheDocument()
+    view.unmount()
+    await act(async () => { render(<EngineFirstRun />) })
+    expect(screen.getByRole('checkbox', { name: /Muse/ })).not.toBeChecked()
+    expect(screen.getByText(/Muse.*Recommended/)).toBeVisible()
+    expect(screen.getByText('No models are queued for download. Choose models when you are ready.')).toBeVisible()
     expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([
       ['first_run', { host_id: 'local', action: 'models', release_ids: [] }],
     ])
@@ -808,7 +845,7 @@ it('keeps edited folder and package choices when a pending profile completes', a
     return Promise.resolve(flow(ready ? 'models' : 'profiling', {
       gpu_uuids: ['GPU-one'],
       storage: { path: '/accepted', recommended_path: ready ? '/new-recommendation' : '/fast', available_bytes: ready ? 1024 ** 4 : null },
-      selected_release_ids: ready ? [release.sha256] : [],
+      selected_release_ids: ready ? [release.sha256] : null,
       models: [{ release, recommended: true, reason: ready ? 'Fits measured memory' : 'Capacity checks wait for profiling' }],
     }))
   })
@@ -819,8 +856,7 @@ it('keeps edited folder and package choices when a pending profile completes', a
   fireEvent.change(folder, { target: { value: '/my-edited-folder' } })
   fireEvent.click(choice)
   expect(choice).not.toBeChecked()
-  await screen.findByRole('button', { name: 'Clear saved model choices' }, { timeout: 3000 })
-  expect(screen.getByText('Recommended: /new-recommendation')).toBeInTheDocument()
+  expect(await screen.findByText('Recommended: /new-recommendation', {}, { timeout: 3000 })).toBeInTheDocument()
   expect(folder).toHaveValue('/my-edited-folder')
   expect(choice).not.toBeChecked()
   expect(screen.getByRole('button', { name: 'Clear saved model choices' })).toBeEnabled()
@@ -1059,9 +1095,9 @@ it('shows a failed Cancel and keeps its retry available while disabling offline 
     : Promise.resolve(flow('profiling', { hardware_profile: hardwareStatus('running') })))
   const view = render(<EngineFirstRun />)
   fireEvent.click(await screen.findByRole('button', { name: 'Stop setup' }))
-  expect(await screen.findByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+  expect(await screen.findByRole('alert')).toHaveTextContent('GChat could not finish this setup action. Select Retry local setup to check the current status before trying the action again.')
   expect(screen.getByText('Error: Host could not stop profiling')).not.toBeVisible()
-  fireEvent.click(screen.getByText('Connection error details'))
+  fireEvent.click(screen.getByText('Setup action error details'))
   expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Stop setup' })).toBeEnabled()
   mocks.state = { ...mocks.state, errors: { local: 'GInfer offline' } }
@@ -1081,14 +1117,14 @@ it('keeps a rejected stop request visible through status polls until the user re
     })
     await act(async () => { render(<EngineFirstRun />) })
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop setup' })) })
-    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not finish this setup action.')
     expect(screen.getByText('Error: Host could not stop profiling')).not.toBeVisible()
-    fireEvent.click(screen.getByText('Connection error details'))
+    fireEvent.click(screen.getByText('Setup action error details'))
     expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
 
     await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
     expect(mocks.command.mock.calls.filter(([operation]) => operation === 'first_run')).toHaveLength(3)
-    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not finish this setup action.')
     expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Stop setup' })).toBeEnabled()
     expect(attempts).toBe(1)
@@ -1118,10 +1154,20 @@ it('keeps a rejected folder change and the edited path through status polls unti
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use this folder' })) })
     await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('This folder is not writable. Choose another folder.')
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not finish this setup action. Select Retry local setup to check the current status before trying the action again.')
+    expect(screen.getByText('Error: This folder is not writable. Choose another folder.')).not.toBeVisible()
+    fireEvent.click(screen.getByText('Setup action error details'))
+    expect(screen.getByText('Error: This folder is not writable. Choose another folder.')).toBeVisible()
     expect(screen.getByLabelText('Model download folder')).toHaveValue('/chosen-models')
     expect(screen.getByRole('button', { name: 'Use this folder' })).toBeEnabled()
     expect(attempts).toBe(1)
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry local setup' })) })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local' })
+    expect(screen.getByLabelText('Model download folder')).toHaveValue('/chosen-models')
+    expect(attempts).toBe(1)
+
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use this folder' })) })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Download selected models' })).toBeVisible()

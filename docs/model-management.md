@@ -144,6 +144,15 @@ Multiple GPU groups have separate instance controls; additional servers require
 selecting another GPU group. Stopped instances retain their last settings, not
 every prior configuration.
 
+In each GInfer Host, open **Model and memory settings → Choose model settings →
+Advanced model settings** for **GPU memory to keep free (MB)**. New custom
+launches default to 300 MB, where one MB is 1,048,576 bytes. The amount applies to
+each selected GPU. Raise it if desktop apps or games on that GPU cause slowdowns.
+Editing an existing model retains its saved reserve; use **Save and restart model**
+to apply a change. Automatic conversation memory adjusts to the reserve. A fixed
+conversation-memory limit may prevent startup if it leaves too little memory free;
+GChat shows the Engine's reason and recovery steps.
+
 Custom startup settings in GInfer Hosts also control **Flash main-memory headroom**
 and **Expert LFU updates**. Blank headroom inherits the Engine's 4 GiB default;
 an explicit whole-GiB value is forwarded to the Engine for validation. Zero
@@ -217,7 +226,8 @@ Each profile requires:
 Maximum-capacity profiles target 300 MiB headroom, increased to 500 MiB when
 execution validation shows problems. Qualification must record at least the
 profile's selected headroom free on every GPU during the declared test;
-settings below 300 MiB are rejected. Manual/auto launch defaults remain 1 GiB. A smaller context
+settings below 300 MiB are rejected. GChat's new custom launches explicitly use
+300 MiB; omitted Host API options retain the existing 1 GiB default. A smaller context
 than the model maximum is ordinary profile behavior, not a warning. These metadata
 checks do not create qualification: producers must retain the actual physical evidence.
 Prebuilt entries accept omitted or null `options.kv_arena_bytes` for dynamic sizing

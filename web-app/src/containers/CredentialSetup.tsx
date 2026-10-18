@@ -300,7 +300,11 @@ export function CredentialSetup({
         <p role={status.state === 'unchecked' ? 'status' : 'alert'}>
           {status.state === 'unchecked'
             ? 'Select the Check secure storage button below to confirm it is ready. Your computer may ask you to unlock its password storage. GChat only opens this storage when you ask to check it or connect an account or computer.'
-            : 'Secure storage is unavailable. Set it up or unlock it before connecting accounts or computers.'}
+            : status.tier === 'passphrase' && status.state === 'locked'
+              ? intent === 'unlock'
+                ? 'The passphrase vault is locked. Enter your passphrase, then choose Unlock vault.'
+                : 'The passphrase vault is locked. Choose Unlock vault below, then enter your passphrase.'
+              : 'Secure storage is unavailable. Set it up or unlock it before connecting accounts or computers.'}
         </p>
       )}
       {(status?.tier === 'passphrase' ||

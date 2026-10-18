@@ -22,6 +22,120 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Unsaved skill instructions — October 18
+
+A private native Linux pass found that Escape silently discarded edited skill
+instructions. Reopening the editor restored the saved body and lost the new
+sentence. The close button and Cancel used the same unguarded dismissal path.
+Baseline observations are retained in
+`/ai/gchat/out/gchat-skill-edit-unsaved-changes-20261018/baseline.json`.
+
+Closing an edited skill now asks whether to discard the unsaved changes.
+**Keep editing** is the default keyboard action and preserves both fields;
+**Discard changes** closes without saving. An unchanged editor closes directly,
+and a successful Save still closes after the update completes. Saving retains
+the existing single-submit and dismissal guards.
+
+Native Linux acceptance of frozen source `67db72755` passed at 1,024 × 740.
+Escape, Close and Cancel each opened the confirmation. Enter chose **Keep
+editing**, preserved the complete instructions and restored textarea focus;
+Escape from the confirmation also preserved the draft. Explicit discard
+closed the editor and reopening showed the original saved body. Save closed
+without a discard prompt and reopening showed the intended new sentence.
+An unchanged editor closed directly with Escape. The private skill was then
+restored through Save, protected agent/run/chat files remained byte-identical,
+and normal Close completed cleanup. No model or inference was used.
+
+Focused skill tests (53), lint, one `make verify` (3,772 app, 127 extension
+and 1,316 Rust tests), frontend and native builds passed. Six app tests were
+skipped and 28 Rust tests ignored. Receipts and screenshots:
+`/ai/gchat/out/gchat-skill-edit-unsaved-changes-20261018/`.
+
+## Limit settings in narrow editor panels — October 18
+
+A native Linux pass at 1,024 × 740 also found composition settings extending
+past the editor border. In the 324-pixel editor, Goal Loop’s fixed-width
+cycle input left too little room for its adjacent guidance; the section
+scrolled 28 pixels horizontally. Coordinator and Workflow sections also
+extended horizontally. Baseline screenshots and geometry are retained in
+`/ai/gchat/out/gchat-agent-settings-panel-layout-20261018/baseline.json`.
+
+Limit inputs and their guidance now stack when their containing panel is
+narrower than 32 rem. Wider panels retain the side-by-side layout. Specialist
+and workflow-stage identity rows also stack within narrow role cards, keeping
+the Remove control accessible. This changes layout only.
+
+Native Linux acceptance of frozen source `f317f0b5d` passed at 1,024 × 740:
+all four composition sections fit without horizontal overflow, including
+256-pixel specialist and 222-pixel workflow-stage identity and budget rows.
+The limit input retained its value and Tab advanced to Permissions. At
+1,600 × 900, the general and composition limits returned to two columns,
+and role identity rows restored ID, display name and Remove side by side.
+Unsaved composition changes were explicitly discarded; saved definitions,
+run history and chat fixture files remained byte-identical. Normal Close
+completed app cleanup. No model or run was used.
+
+Focused Agents tests (112), lint, one `make verify` (3,751 app, 127 extension
+and 1,316 Rust tests), frontend and native builds passed. Six app tests were
+skipped and 28 Rust tests ignored. Receipts:
+`/ai/gchat/out/gchat-agent-settings-panel-layout-20261018/`.
+
+## Execution guides in narrow editor panels — October 18
+
+A native Linux pass at a 1,024 × 740 window reproduced execution-guide
+cards crossing the Agent Studio editor border. The editor was 324 pixels wide,
+but the guides used the window's small-screen breakpoint to arrange all three
+steps horizontally. The final Reply card extended 19 pixels past the border.
+
+The Standard Agent, Goal Loop, Coordinator and Workflow guides now choose
+their layout from the editor section's width. Steps stack below 32 rem of
+available content width; wider panels retain three steps and connecting arrows.
+Grid tracks can shrink within the panel. Execution, definitions and budgets
+are unchanged. Native source `ebcff436c` acceptance passed for all four stacked guides at
+1,024 × 740; all three cards fit the guide grid with no internal overflow. At
+1,600 × 900, Standard Agent retained three equal-width columns and both
+arrows. Unsaved composition changes were explicitly discarded; saved agents,
+run history and chat fixture files remained byte-identical. Normal Close
+completed cleanup. No model or run was used.
+
+Focused Agents tests (112), lint, one `make verify` (3,751 app, 127 extension
+and 1,316 Rust tests), frontend and native builds passed. Six app tests were
+skipped and 28 Rust tests ignored. The separate settings-row overflow found
+during that pass is covered by the limit-settings acceptance above.
+Baseline, screenshots, geometry and gates:
+`/ai/gchat/out/gchat-agent-execution-guide-layout-20261018/`.
+
+## Saved-agent catalog failures in Chat — October 18
+
+A private Linux native pass on main `5b48adfd9` selected a saved agent,
+temporarily made its private definition file unreadable and visited Agent
+Studio. Studio showed the read failure, but returning to Chat hid the chooser
+and enabled Send with the selected agent silently discarded. The original
+file permissions were restored and no message was sent. Baseline observations
+and the viewed screenshot are retained in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1800/`.
+
+Chat now retains that selected agent while its catalog is loading or has failed.
+Send and Enter wait for resolution. A failed read offers **Retry** or **Use Chat
+instead**; the latter changes only this conversation's selection and keeps the
+draft for the user's next submission. Ordinary Chat and `/compact` remain
+available without a resolved saved-agent catalog.
+
+Source `a1eb8fa0a3` passes 90 focused tests, lint and one `make verify`
+(3,742 app, 127 extension and 1,316 Rust tests), plus frontend/native builds.
+The rebuilt private Linux desktop passes actual unreadable-catalog recovery
+on a saved conversation: Send and Enter retain the prompt, Retry restores
+**ZZ Library Visibility**, and **Use Chat instead** preserves the prompt without
+submitting. The explicit Chat choice survives reopening after catalog recovery.
+The draft was cleared and normal window close completed cleanup; definitions,
+runs, chat metadata and messages remained byte-identical, with permissions
+restored. Receipts and viewed screenshots:
+`/ai/gchat/out/gchat-chat-saved-agent-catalog-error-20261018/`.
+Native actions used private HOME, DBus, keyring and X display, with no model,
+message submission or GPU. Rendered regressions cover actual dispatch, deferred
+catalog resolution, other-conversation isolation, ordinary Chat and `/compact`.
+Windows and cold-restart persistence were not tested.
+
 ## Saved-agent choices in Chat drafts — October 18
 
 A private Linux native pass selected a saved agent, typed a task, opened New
@@ -83,6 +197,20 @@ lint and one `make verify` (3,719 app, 127 extension and 1,311 Rust tests),
 plus frontend and native builds. The deferred response is exercised by rendered
 tests; this follow-up makes no additional native race or model-execution claim.
 Follow-up receipts: `/ai/gchat/out/gchat-chat-skill-draft-loading-20261018/`.
+
+A failed catalog read keeps the stored draft skill unresolved. Send and Enter
+remain blocked, with a visible Retry action. Retry restores the selected skill
+before submission. An explicit **Send without skill** action sends the draft
+without either its stored skill or the conversation's previous active skill;
+that choice also clears both selections for later messages. A missing or
+unavailable skill follows the same explicit recovery choices. Other conversation
+drafts stay intact, and ordinary Chat without a stored skill remains usable.
+
+Source `d8ab682c6` passes 77 focused tests, lint and one `make verify`,
+including all supported Rust suites. Rejected-load recovery and the explicit
+no-skill choice are covered by rendered regressions; this change makes no
+additional native catalog-failure, Windows or model-execution claim. Receipts:
+`/ai/gchat/out/gchat-chat-skill-draft-load-error-20261018/`.
 
 ## Finding a newly saved agent — October 18
 

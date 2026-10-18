@@ -1,5 +1,192 @@
 # Gbot design
 
+## Fresh readiness when rechecking service approval — Gchat 2
+
+`GBOT-SERVICE-APPROVAL-RECHECK-READINESS`, based on main `e97f30aa0`,
+clears previously confirmed readiness while Check approval asks the service
+computer for current approval. A failed check keeps Continue unavailable and
+reports that approval could not be confirmed. Previously, both readiness and
+the approved message survived a failed recheck.
+
+The selected computer and Check approval retry remain; retry reads status
+without submitting another control request. Only a fresh approved and configured
+response restores readiness. Revoked or unconfigured responses keep it cleared.
+Opening Details and refreshing the computer list cannot restore readiness.
+Rendered regressions cover failure, explicit retry, duplicate clicks and both
+non-ready responses. This is source/rendered UI scope with no service or native
+approval contract change.
+
+
+Validation: all three original-production regressions failed; fixed service/setup
+focus passed 52 cases. Lint had zero errors and five existing warnings. ONE
+`make verify`, 18 October 18:56:30–19:02:33 UTC, passed 3,772 app tests (six
+skipped), 127 extension tests, 1,316 Rust tests (28 ignored, 23 summaries),
+six coverage floors and lint/typecheck/guards. All 3,460 tracked raw source
+bytes and modes matched before and after testing, with tracked timestamps
+refreshed beforehand. Product and test source are unchanged by this receipt.
+CPU80–87 booking3502 returned19:03Z; private cache retired19:04Z.
+Evidence: `out/gchat2-service-approval-recheck-readiness-20261018/result.json`
+and adjacent raw logs. Native acceptance remains separate.
+## Setup action error recovery — Gchat 2
+
+`GBOT-SETUP-ACTION-ERROR-GUIDANCE`, based on main `d63edda08`, gives failed
+service selection and Save bot actions plain guidance naming the existing
+Continue or Save bot control. The wording describes an unconfirmed outcome;
+technical Details start closed. The selected service and reviewed bot/computer
+details remain available, and opening Details sends no request.
+
+Existing pending guards still prevent duplicate submissions. Three rendered
+journeys cover selection failure and retry, immediate save failure and retry,
+and a delayed save failure after same-tick submissions, including unchanged
+reviewed values. This is source/rendered UI wording scope with no service or
+native behavior change.
+
+Validation: all three original-production regressions failed. Fixed wizard/service
+focus passed 53 tests; lint had zero errors and five existing warnings. ONE
+`make verify`, 18 October 19:09:48–19:15:46 UTC, passed 3,773 app tests
+(six skipped), 127 extension tests, 1,316 Rust tests (28 ignored, 23 summaries),
+six coverage floors and lint/typecheck/guards. All 3,460 tracked raw bytes/modes
+matched before and after verification, with tracked timestamps refreshed first.
+This receipt was added afterward with product and test source unchanged.
+CPU80–87 booking3508 returned19:17Z. Evidence:
+`out/gchat2-setup-action-error-guidance-20261018/result.json` and adjacent raw
+logs. Native acceptance remains separate.
+
+## Fresh billing consent after cloud computer deletion — Gchat 2
+
+`GBOT-CLOUD-RECREATION-BILLING-CONSENT`, based on main `78078ddae`,
+clears the creation billing checkbox when the service confirms deletion.
+Previously, creating and deleting a computer in the same setup kept its old
+authorization checked when the creation form returned. A second computer now
+requires fresh billing consent followed by an explicit Create cloud computer
+action, even while its saved cost review is still valid.
+
+The same reset applies when Check progress confirms a pending deletion.
+Unconfirmed deletion and failed creation retries retain their existing recovery;
+SSH source entries, quote checks, expiry and duplicate-action guards remain.
+Rendered tests follow both complete creation/deletion journeys, check that old
+consent cannot create another computer and verify the explicit newly consented
+request. This is source/rendered UI scope with no provider or service change.
+
+
+Validation: both original-production regressions failed because billing consent
+remained checked after deletion. Fixed CloudCosts/wizard focus passed 61 tests;
+lint had zero errors and five existing warnings. ONE `make verify`, 18 October
+18:23:46–18:29:44 UTC, passed 3,753 app tests (six skipped), 127 extension
+tests, 1,316 Rust tests (28 ignored, 23 summaries), six coverage floors and
+lint/typecheck/guards. All 3,459 tracked raw bytes/modes matched before and after
+verification with fresh build timestamps. This receipt was added afterward,
+with product and test source unchanged. CPU80–87 booking3485 returned18:30Z.
+Evidence: `out/gchat2-cloud-recreation-billing-consent-20261018/result.json`
+and adjacent raw logs. Native and provider acceptance remain separate.
+## Retry a saved Gbot service lookup — Gchat 2
+
+`GBOT-SETUP-SERVICE-READ-RETRY`, based on main `78078ddae`, adds an explicit
+read-only retry when setup cannot load the saved service. Previously This PC
+appeared selected while Continue stayed disabled, with no named recovery.
+The error now explains the failed read and offers Retry loading saved service;
+technical Details start closed. Loading feedback and a synchronous pending guard
+prevent duplicate reads. The bot name survives repeated failures.
+
+A recovered paired service still needs its existing control-approval check.
+Choosing a service explicitly clears obsolete read feedback, and late lookup
+results or failures cannot replace that choice. Retry never selects a service,
+saves a bot or starts a computer; Continue retains explicit service selection.
+This change is source/rendered UI scope with no service or native behavior change.
+
+Validation: all four original-production regressions failed; fixed wizard/service
+focus passed 53 cases. Lint had zero errors and five existing warnings. ONE
+`make verify`, 18 October 18:35:38–18:38:00 UTC, stopped at the unrelated
+first-run folder-hydration fixture (3,754 passed, one failed, six skipped).
+Gchat 3’s already merged `fc5a0b026` correction was applied only to the retained
+export. Its exact case passed; the failed coverage stage continued once because
+the original failure emitted no report, followed by unreached checks. Final
+stages passed 3,755 app tests (six skipped), 127 extension tests, 1,316 Rust
+tests (28 ignored, 23 summaries) and six coverage floors, ending 18:49:13 UTC.
+No full verification or previously passing stage was repeated. Both 3,459-file
+raw-byte/mode manifests matched after testing; tracked timestamps were refreshed
+before testing. Product and test source remain unchanged by this receipt.
+CPU80–87 bookings3493/3498 returned. Evidence:
+`out/gchat2-setup-service-read-retry-20261018/result.json` and adjacent raw logs.
+Native acceptance remains separate.
+
+## Cloud computer action recovery across progress checks — Gchat 2
+
+`GBOT-CLOUD-COMPUTER-ACTION-ERROR-PERSISTENCE`, based on main `21bfcb946`,
+keeps failed cloud-computer action feedback visible during progress checks and
+after successful or failed checks that do not resolve the action. A failed
+progress check has its own guidance. Creation, identity, connection and deletion
+failures name the existing recovery control; technical Details start closed.
+
+Deletion feedback describes its unconfirmed outcome and possible continuing
+provider charges. Confirmed deletion clears obsolete warnings and consent;
+otherwise, deletion consent survives and retry remains explicit. Connection
+and identity warnings clear when the computer leaves its running state. The
+existing Check progress contract can reconcile pending creation or deletion;
+opening Details adds no request. Source/rendered scope only, with no service or
+provider contract change.
+
+Validation: all six selected regressions failed on unchanged production. The
+fixed CloudCosts/wizard focus passed 59 cases; lint had zero errors and five
+existing warnings. ONE `make verify`, 18 October 18:01:17–18:07:15 UTC,
+passed 3,743 app tests (six skipped), 127 extension tests, 1,316 Rust tests
+(28 ignored, 23 summaries), six coverage floors and lint/typecheck/guards.
+All 3,459 tracked raw source bytes and modes matched before and after the gate,
+with tracked timestamps refreshed beforehand. This receipt was added afterward
+with product and test source unchanged. CPU120–127 booking3476 returned
+18:08Z. Evidence: `out/gchat2-cloud-computer-action-error-persistence-20261018/result.json`
+and adjacent raw logs. No retry or whole-gate repeat; native acceptance remains
+separate.
+
+## Cloud cost review error recovery — Gchat 2
+
+`GBOT-CLOUD-COST-ERROR-GUIDANCE`, based on main `3693f932e`, gives
+price loading/refresh, cost calculation and review-save failures plain recovery
+steps naming the existing control. Technical diagnostics remain in Details,
+initially closed; opening them sends no request. Initial price failures explain
+that the cleared API token must be entered again; refresh can reuse its saved
+token. Region/plan selection and cost consent survive the corresponding failed
+actions, and retries remain explicit with the existing pending guards.
+
+A saved review stays confirmed if the follow-up computer-list refresh rejects.
+Its guidance asks the user to close setup and refresh the list, rather than save
+again. Token clearing, price expiry, current quote checks and separate billing
+consent keep their existing contract. This is source/rendered UI scope.
+
+Validation: the unchanged-source baseline failed all six recovery regressions.
+The fixed CloudCosts/wizard focus passed 54 unique cases, including the single
+failed-case continuation after correcting an assertion's capitalization; passing
+cases were not repeated. Lint had zero errors and five existing warnings.
+ONE `make verify`, 18 October 17:44:34–17:50:32 UTC, passed 3,731 app tests
+(six skipped), 127 extension tests, 1,316 Rust tests (28 ignored) and six coverage
+floors. All 3,459 tracked raw input bytes/modes matched before and after the gate,
+with fresh build timestamps. CPUs returned at 17:51 UTC. This receipt was added
+afterward with product/test source unchanged. Evidence:
+`/ai/gchat/out/gchat2-cloud-cost-error-guidance-20261018/result.json`.
+
+## SSH connection setup error guidance — Gchat 2
+
+`GBOT-LAN-SETUP-ERROR-GUIDANCE`, based on main `250df804a`, gives
+failed computer-identity checks, key import and creation, public-key reads and
+SSH access checks plain recovery guidance naming the existing retry control.
+Technical diagnostics remain in Details, initially closed. Automatic and
+explicit public-key reads share the same guidance.
+
+Opening Details sends no request. Entries and fingerprint confirmation survive
+failed actions; explicit retries retain the existing pending guards. Changing
+key mode clears advice for the now-hidden action. Fingerprint verification,
+host-key pinning, key storage and SSH access checks keep their existing contract.
+This is source/rendered UI scope.
+
+Validation: the unchanged-source baseline failed eight regressions. Fixed
+LanSetup/wizard focus passed 50 cases; lint had zero errors and five existing
+warnings. ONE `make verify` passed at 17:32:48 UTC: 3,722 app tests (6 skipped),
+127 extension tests, 1,316 Rust tests (28 ignored) and six coverage floors.
+All 3,459 tracked input bytes/modes matched before and after verification, with
+fresh build timestamps. CPUs returned at 17:33 UTC; the private 20.19 GB cache
+was retired at 17:34 UTC. Protected inputs remain. Logs and source bindings:
+`/ai/gchat/out/gchat2-lan-setup-error-guidance-20261018/result.json`.
+
 ## Human-help response error recovery — Gchat 2
 
 `GBOT-HUMAN-HELP-ERROR-GUIDANCE`, based on main `3b967a5bc`, gives failed
