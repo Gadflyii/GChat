@@ -64,6 +64,134 @@ it('renames a saved LAN bot only with a changed, non-empty name', async () => {
   )
 })
 
+it('restores LAN rename keyboard focus after Cancel without sending a request', async () => {
+  const user = userEvent.setup()
+  const perform = vi.fn(async (action: () => Promise<unknown>) => { await action() })
+  const removed = vi.fn()
+  render(
+    <>
+      <input aria-label="Another setting" autoFocus />
+      <GbotLanBot
+        id="bot-1"
+        name="Writer"
+        busy={false}
+        connected={false}
+        perform={perform}
+        removed={removed}
+      />
+    </>
+  )
+  expect(screen.getByRole('textbox', { name: 'Another setting' })).toHaveFocus()
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Rename bot' })).toHaveFocus()
+  await user.keyboard('{Enter}')
+  const input = screen.getByLabelText('Bot name')
+  expect(input).toHaveFocus()
+  await user.clear(input)
+  await user.keyboard('Discard this name')
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Save name' })).toHaveFocus()
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  await user.keyboard('{Enter}')
+  expect(screen.queryByRole('form', { name: 'Rename bot' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Rename bot' })).toHaveFocus()
+  expect(request).not.toHaveBeenCalled()
+  expect(perform).not.toHaveBeenCalled()
+  expect(removed).not.toHaveBeenCalled()
+
+  await user.keyboard('{Enter}')
+  expect(screen.getByLabelText('Bot name')).toHaveFocus()
+  expect(screen.getByLabelText('Bot name')).toHaveValue('Writer')
+  expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+  expect(request).not.toHaveBeenCalled()
+})
+
+it.each([false, true])('settles LAN rename keyboard focus after refresh (focus moved: %s)', async (moveFocus) => {
+  const user = userEvent.setup()
+  const rename = deferred<void>()
+  const refreshedName = deferred<string>()
+  const refresh = vi.fn(() => refreshedName.promise)
+  const removed = vi.fn()
+  request.mockReturnValueOnce(rename.promise)
+  function Parent() {
+    const [busy, setBusy] = useState(false)
+    const [name, setName] = useState('Writer')
+    return (
+      <>
+        <input aria-label="Another setting" autoFocus />
+        <p>Saved bot: {name}</p>
+        <GbotLanBot
+          id="bot-1"
+          name={name}
+          busy={busy}
+          connected={false}
+          perform={async (action) => {
+            setBusy(true)
+            try {
+              await action()
+            } finally {
+              try {
+                setName(await refresh())
+              } finally {
+                setBusy(false)
+              }
+            }
+          }}
+          removed={removed}
+        />
+      </>
+    )
+  }
+  render(<Parent />)
+  const other = screen.getByRole('textbox', { name: 'Another setting' })
+  expect(other).toHaveFocus()
+  await user.tab()
+  await user.keyboard('{Enter}')
+  const input = screen.getByLabelText('Bot name')
+  expect(input).toHaveFocus()
+  await user.clear(input)
+  await user.keyboard('Editor')
+  await user.tab()
+  expect(screen.getByRole('button', { name: 'Save name' })).toHaveFocus()
+  await user.keyboard('{Enter}')
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+  ])
+  expect(input).toBeDisabled()
+  await act(async () => rename.resolve())
+  expect(refresh).toHaveBeenCalledTimes(1)
+  expect(screen.queryByRole('form', { name: 'Rename bot' })).not.toBeInTheDocument()
+  const opener = screen.getByRole('button', { name: 'Rename bot' })
+  expect(opener).toBeDisabled()
+  expect(opener).not.toHaveFocus()
+  expect(screen.getByRole('status')).toHaveTextContent('Saving bot name…')
+  if (moveFocus) {
+    await user.tab()
+    expect(other).toHaveFocus()
+    await user.keyboard('Keep editing this setting')
+  }
+  await act(async () => refreshedName.resolve('Editor'))
+  expect(opener).toBeEnabled()
+  expect(screen.getByText('Saved bot: Editor')).toBeVisible()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.queryByRole('form', { name: 'Rename bot' })).not.toBeInTheDocument()
+  expect(request).toHaveBeenCalledTimes(1)
+  expect(refresh).toHaveBeenCalledTimes(1)
+  expect(removed).not.toHaveBeenCalled()
+  if (moveFocus) {
+    expect(other).toHaveFocus()
+    expect(other).toHaveValue('Keep editing this setting')
+  } else {
+    expect(opener).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(screen.getByLabelText('Bot name')).toHaveFocus()
+    expect(screen.getByLabelText('Bot name')).toHaveValue('Editor')
+    expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+    expect(request).toHaveBeenCalledTimes(1)
+  }
+})
+
 it('keeps the submitted LAN bot name stable through Save and refresh, then permits a corrected retry', async () => {
   const user = userEvent.setup()
   const firstRename = deferred<void>()
