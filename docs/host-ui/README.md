@@ -89,6 +89,35 @@ Installed current-main AppDir/home, folder/badge candidates and runnable
 resources were preserved. This debug build does not refresh installer qualification.
 No dependencies, model/profile, GPU or native settings service change. Next:
 merge integration; no further test or build is needed.
+## Discovered-host pairing failure guidance — Gchat 3, October 18
+
+`GUI-HOST-NEARBY-PAIR-ERROR-GUIDANCE-20261018`: a rejected Pair for a discovered
+host now leaves recovery guidance beside that host. It names sharing on the
+other computer and explicit Pair retry, keeps the diagnostic in closed details,
+and describes the Pair button accessibly. Refresh and actions on another host
+preserve the failure; explicit retry clears only that host's message. Existing
+pending protection and accepted-pair/read-failure behavior remain intact.
+No native or protocol behavior changes.
+
+The allocated base `072655126` reproduces both rendered defects (two failed,
+23 skipped), each at its host card's missing alert. The fixed route passes all
+25 focused cases. Lint passes with zero errors and five existing warnings.
+ONE `make verify` passes: 3,365 app tests (six skipped), 121 extension tests,
+all six critical coverage floors and 1,228 Rust tests (28 ignored). The candidate
+chain ran 05:06:30–05:14:36Z, exit zero. Source/test hashes match before and after
+the gate. The coordinator reviewed the actual logs, effective commands and
+source/test diffs. Main `5c00b46ea` has no intervening change to either owned file.
+
+Owner: `/ai/gchat-worktrees/gchat3-host-nearby-pair-error-guidance-20261018`,
+branch `fix/gchat3-host-nearby-pair-error-guidance-20261018`, base `072655126`.
+Retained evidence: `out/host-nearby-pair-error-guidance-20261018/test-result.json`
+and adjacent `test-summary.md`. S1 AIS-2-8592-L01 CPUs104–111, booking 3009,
+used independent offline dependency/cache copies from the unchanged RC donor.
+The owned SSD fixture (42.33 GB), two exited containers and local source
+archive were removed; returned 05:15Z and booking canceled. Only the concise
+result and summary remain. Rendered mocked-command behavior and the Linux
+source gate are qualified; live native pairing/network, installed GUI, account,
+Engine/GPU, Windows and installer qualification remain separate.
 
 ## Gbot Hand back and task resume guidance — October 18
 
@@ -140,7 +169,7 @@ used independent offline dependency/cache copies from the unchanged RC donor.
 The owned root `/media/ron/SSD_RAID/ai/tmp-gchat3-host-sharing-refresh-tests-20261018`
 (42.32 GB), two containers and local source archive were removed; returned
 04:59Z and booking canceled. Only concise result/summary evidence remains.
-Next: commit/push and merge review. Rendered mocked behavior and the Linux
+Source `0f91c1dd2` merged as `072655126`. Rendered mocked behavior and the Linux
 source gate are qualified; live sharing/network, installed GUI, account/pairing,
 Engine/GPU, Windows and installer qualification remain separate.
 ## Folder reveal runtime crash — C3, October 18
