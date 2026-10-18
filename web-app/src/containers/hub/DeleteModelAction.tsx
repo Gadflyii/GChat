@@ -21,7 +21,9 @@ export type DeleteModelActionProps = {
   provider: string
   /** Readable name for the dialog and messages; the id is a package hash for local GInfer models. */
   label?: string
-  /** Called after the files are gone, before the provider list is refreshed. */
+  /** The catalog refers to a file outside app-managed storage. */
+  externalReference?: boolean
+  /** Called after removal, before the provider list is refreshed. */
   onDeleted?: () => void
 }
 
@@ -36,6 +38,7 @@ export function DeleteModelAction({
   modelId,
   provider,
   label,
+  externalReference = false,
   onDeleted,
 }: DeleteModelActionProps) {
   const { t } = useTranslation()
@@ -49,9 +52,9 @@ export function DeleteModelAction({
     try {
       await deleteLocalModel(serviceHub, modelId, provider)
       onDeleted?.()
-      toast.success(t('common:deleteModel.title', { modelId: label ?? modelId }), {
+      toast.success(externalReference ? 'Model removed' : t('common:deleteModel.title', { modelId: label ?? modelId }), {
         id: `delete-model-${modelId}`,
-        description: t('common:deleteModel.success', { modelId: label ?? modelId }),
+        description: externalReference ? 'Removed from Models. The original file remains in place.' : t('common:deleteModel.success', { modelId: label ?? modelId }),
       })
       setOpen(false)
     } catch (error) {
@@ -63,7 +66,7 @@ export function DeleteModelAction({
     } finally {
       setDeleting(false)
     }
-  }, [label, modelId, onDeleted, provider, serviceHub, t])
+  }, [externalReference, label, modelId, onDeleted, provider, serviceHub, t])
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -72,8 +75,8 @@ export function DeleteModelAction({
         variant="ghost"
         size="icon-sm"
         onClick={() => setOpen(true)}
-        title={t('common:deleteModel.delete')}
-        aria-label={t('common:deleteModel.delete')}
+        title={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
+        aria-label={externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
         className="shrink-0 text-muted-foreground hover:text-destructive"
       >
         <IconTrash size={16} />
@@ -81,10 +84,10 @@ export function DeleteModelAction({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
-            {t('common:deleteModel.title', { modelId: label ?? modelId })}
+            {externalReference ? `Remove ${label ?? modelId} from Models?` : t('common:deleteModel.title', { modelId: label ?? modelId })}
           </DialogTitle>
           <DialogDescription>
-            {t('common:deleteModel.description')}
+            {externalReference ? 'The original model file will remain in place. Only its Models entry will be removed.' : t('common:deleteModel.description')}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="mt-2">
@@ -103,7 +106,7 @@ export function DeleteModelAction({
             disabled={deleting}
             onClick={handleDelete}
           >
-            {t('common:deleteModel.delete')}
+            {externalReference ? 'Remove from Models' : t('common:deleteModel.delete')}
           </Button>
         </DialogFooter>
       </DialogContent>

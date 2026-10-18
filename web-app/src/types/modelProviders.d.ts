@@ -42,6 +42,7 @@ type Model = {
     | 'lmstudio'
     | 'unsloth'
     | 'local'
+    | 'external'
     | 'huggingface-cache'
   // Runtime-computed: weights file (or Ollama symlink target) is gone — a "broken link".
   missing?: boolean

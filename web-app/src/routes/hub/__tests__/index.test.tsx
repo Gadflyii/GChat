@@ -6,15 +6,23 @@ import { ModelManagement } from '@/containers/ModelManagement'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
 import type { ModelRelease } from '@/lib/model-release'
 import type { LocalModelLoadProgress } from '@/services/engines'
+import type { DialogOpenOptions } from '@/services/dialog/types'
+type TestProvider = { provider: string; settings?: ProviderSetting[]; models: { id: string; displayName: string; path: string; source?: string }[] }
 const mocks = vi.hoisted(() => ({
   command: vi.fn<(action: string, args?: Record<string, unknown>) => Promise<unknown>>(async () => []), refresh: vi.fn(async () => {}),
   switchModel: vi.fn<(params: { options?: { loadOperationId?: string }; signal?: AbortSignal }) => Promise<void>>(async () => {}),
   selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
-  providers: [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally', path: '/models/local.ginfer' }] }],
-  catalog: [] as unknown[], errors: {} as Record<string, string>,
+  providers: [] as TestProvider[],
+  getProviders: vi.fn<() => Promise<TestProvider[]>>(), setProviders: vi.fn<(providers: TestProvider[]) => void>(),
+  open: vi.fn<(options?: DialogOpenOptions) => Promise<string | string[] | null>>(),
+  joinPath: vi.fn<(parts: string[]) => Promise<string>>(),
+  catalog: [] as unknown[], catalogError: null as string | null, errors: {} as Record<string, string>,
   resources: { ready: true as boolean | null, error: '' },
   localSnapshot: null as null | Record<string, unknown>,
   controlHost: vi.fn(async () => {}),
+}))
+vi.mock('@gchat/core', async importOriginal => ({
+  ...await importOriginal<typeof import('@gchat/core')>(), joinPath: mocks.joinPath,
 }))
 vi.mock('@/utils/localHostModel', () => ({ controlLocalHostModel: mocks.controlHost }))
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: React.ReactNode }) => <header>{children}</header> }))
@@ -23,10 +31,14 @@ vi.mock('@/containers/hub/DeleteModelAction', () => ({ DeleteModelAction: () => 
 vi.mock('@tanstack/react-router', () => ({ Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a> }))
 vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
 vi.mock('@/services/engines', () => ({ engineCommand: mocks.command, engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}` }))
-vi.mock('@/hooks/useServiceHub', () => ({ useServiceHub: () => ({ models: () => ({ getActiveModels: async () => ['another-model'] }) }) }))
+vi.mock('@/hooks/useServiceHub', () => ({ useServiceHub: () => ({
+  models: () => ({ getActiveModels: async () => ['another-model'] }),
+  providers: () => ({ getProviders: mocks.getProviders }),
+  dialog: () => ({ open: mocks.open }),
+}) }))
 vi.mock('@/hooks/useBundledResources', () => ({ useBundledResources: (enabled = true) => enabled ? mocks.resources : { ready: true, error: '' } }))
 vi.mock('@/hooks/useModelProvider', () => {
-  const state = { providers: mocks.providers, selectModelProvider: vi.fn() }
+  const state = { get providers() { return mocks.providers }, selectModelProvider: vi.fn(), setProviders: mocks.setProviders }
   const hook = (selector: (s: typeof state) => unknown) => selector(state)
   hook.getState = () => state
   return { useModelProvider: hook }
@@ -35,7 +47,7 @@ vi.mock('@/hooks/useHardware', () => ({ useHardware: (selector: (s: unknown) => 
   selectedGpuUuids: mocks.selectedGpuUuids, setSelectedGpuUuids: mocks.setSelectedGpuUuids,
   hardwareReady: true, hardwareData: { gpus: [{ uuid: 'local-gpu', name: 'Local GPU', total_memory: 16384, nvidia_info: { compute_capability: '8.6' } }] },
 }) }))
-vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog }) }))
+vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog, error: mocks.catalogError }) }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (s: unknown) => unknown) => selector({
   hosts: [{ host_id: 'remote', name: 'Lab server' }, ...(mocks.localSnapshot ? [{ host_id: 'local-host', name: 'This computer', local: true }] : [])], errors: mocks.errors, refresh: mocks.refresh,
   snapshots: { ...(mocks.localSnapshot ? { 'local-host': mocks.localSnapshot } : {}), remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: [] } } },
@@ -49,9 +61,138 @@ describe('host-scoped Models', () => {
     mocks.resources = { ready: true, error: '' }
     mocks.command.mockResolvedValue([])
     mocks.switchModel.mockResolvedValue(undefined)
+    mocks.providers = [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally', path: '/models/local.ginfer' }] }]
+    mocks.getProviders.mockImplementation(async () => mocks.providers)
+    mocks.setProviders.mockImplementation(providers => { mocks.providers = providers })
+    mocks.open.mockResolvedValue(null)
+    mocks.joinPath.mockImplementation(async parts => parts.join('/'))
+    mocks.catalogError = null
     mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [release] }]
   })
   afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
+  it.each([null, 'Catalog is unavailable'])('adds an existing file with empty Installed and no release catalog (%s)', async catalogError => {
+    mocks.providers = [{ provider: 'ginfer', models: [] }]
+    mocks.catalog = []
+    mocks.catalogError = catalogError
+    const path = '/external/My model.ginfer'
+    const registered = [{ provider: 'ginfer', models: [{ id: 'host-model-id', displayName: 'My local model', path, source: 'external' }] }]
+    mocks.open.mockResolvedValue(path)
+    mocks.getProviders.mockResolvedValue(registered)
+    render(<ModelManagement />)
+    expect(screen.getByText('No installed models found.')).toBeVisible()
+    expect(screen.getByText('Add an existing .ginfer file. The file stays in its current location.')).toBeVisible()
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+    mocks.refresh.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
+    expect(await screen.findByText('My local model')).toBeVisible()
+    expect(mocks.open).toHaveBeenCalledExactlyOnceWith({
+      multiple: false, directory: false, filters: [{ name: 'GInfer model', extensions: ['ginfer'] }],
+    })
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_register')).toEqual([
+      ['local_model_register', { path }],
+    ])
+    expect(mocks.getProviders).toHaveBeenCalledOnce()
+    expect(mocks.setProviders).toHaveBeenCalledExactlyOnceWith(registered)
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+    expect(mocks.controlHost).not.toHaveBeenCalled()
+    expect(screen.getByRole('tab', { name: 'Installed' })).toHaveAttribute('aria-selected', 'true')
+  })
+  it('leaves inventory alone when the file chooser is cancelled', async () => {
+    render(<ModelManagement />)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+    mocks.refresh.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled())
+    expect(mocks.open).toHaveBeenCalledOnce()
+    expect(mocks.command.mock.calls.some(([action]) => action === 'local_model_register')).toBe(false)
+    expect(mocks.getProviders).not.toHaveBeenCalled()
+    expect(mocks.setProviders).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+  it('passes the configured GInfer catalog when checking duplicate registration', async () => {
+    mocks.providers[0].settings = [{
+      key: 'model_path', title: 'Model folder', description: '', controller_type: 'input',
+      controller_props: { value: '  D:\\GInfer library  ' },
+    }]
+    const path = 'E:\\Existing models\\muse.ginfer'
+    const modelsRoot = 'D:\\GInfer library\\models'
+    mocks.open.mockResolvedValue(path)
+    mocks.joinPath.mockResolvedValue(modelsRoot)
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled())
+    expect(mocks.joinPath).toHaveBeenCalledExactlyOnceWith(['D:\\GInfer library', 'models'])
+    expect(mocks.command).toHaveBeenCalledWith('local_model_register', { path, modelsRoot })
+    expect(mocks.getProviders).toHaveBeenCalledOnce()
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+  })
+  it('shows a rejected registration and lets the user choose another file', async () => {
+    mocks.open.mockResolvedValue('/external/broken.ginfer')
+    mocks.command.mockImplementation(async action => {
+      if (action === 'local_model_register') throw new Error('This file is not a valid .ginfer model.')
+      return []
+    })
+    render(<ModelManagement />)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+    mocks.refresh.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('This file is not a valid .ginfer model.')
+    expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled()
+    expect(mocks.getProviders).not.toHaveBeenCalled()
+    expect(mocks.setProviders).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+    mocks.open.mockResolvedValue(null)
+    fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled())
+    expect(mocks.open).toHaveBeenCalledTimes(2)
+    expect(screen.getByRole('alert')).toHaveTextContent('This file is not a valid .ginfer model.')
+  })
+  it('guards repeated clicks before the chooser, registration and inventory refresh finish', async () => {
+    let choose!: (path: string) => void
+    let register!: (result: unknown) => void
+    let inventory!: (providers: TestProvider[]) => void
+    mocks.open.mockImplementationOnce(() => new Promise(resolve => { choose = resolve }))
+    mocks.command.mockImplementation(action => action === 'local_model_register'
+      ? new Promise(resolve => { register = resolve }) : Promise.resolve([]))
+    mocks.getProviders.mockImplementationOnce(() => new Promise(resolve => { inventory = resolve }))
+    render(<ModelManagement />)
+    const add = screen.getByRole('button', { name: 'Add local model' })
+    act(() => { fireEvent.click(add); fireEvent.click(add) })
+    expect(mocks.open).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Choosing local model…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Model destination' })).toBeDisabled()
+    await act(async () => { choose('/external/model.ginfer') })
+    expect(screen.getByRole('button', { name: 'Adding local model…' })).toBeDisabled()
+    fireEvent.click(add)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_register')).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Refresh installed models' })).toBeDisabled()
+    await act(async () => { register({}) })
+    expect(mocks.getProviders).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'Adding local model…' })).toBeDisabled()
+    await act(async () => { inventory(mocks.providers) })
+    expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled()
+    expect(mocks.open).toHaveBeenCalledOnce()
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+  })
+  it('offers local registration only on This computer > Installed', async () => {
+    const user = userEvent.setup()
+    render(<ModelManagement />)
+    expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.queryByRole('button', { name: 'Add local model' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    expect(screen.queryByRole('button', { name: 'Add local model' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Installed' }))
+    await user.click(screen.getByRole('button', { name: 'Model destination' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Lab server' }))
+    expect(screen.getByText('Installed on Lab server')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Add local model' })).not.toBeInTheDocument()
+    expect(mocks.open).not.toHaveBeenCalled()
+  })
   it('uses local inventory and never offers the remote GPU package locally', async () => {
     render(<ModelManagement />)
     expect(screen.getByText('Installed locally')).toBeInTheDocument()

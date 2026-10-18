@@ -320,7 +320,7 @@ it('honors setup already completed in Manager without starting new work', async 
 it('keeps existing model guidance available when there is no download catalog', async () => {
   mocks.command.mockResolvedValue(flow('models', { catalog_loaded: true }))
   render(<EngineFirstRun />)
-  expect(await screen.findByText(/Downloads are optional: use an existing .ginfer model from Installed models, or add its folder there/)).toBeVisible()
+  expect(await screen.findByText(/Downloads are optional: open Models > This computer > Installed and select Add local model to choose an existing \.ginfer file/)).toBeVisible()
   expect(screen.getByRole('button', { name: 'Download selected models' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Refresh model catalog' })).toBeEnabled()
   expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
@@ -352,7 +352,7 @@ it('shows one GPU selection surface and preserves the guided choice across manua
 it('keeps manual profile recovery accessible with an empty catalog and setup errors', async () => {
   mocks.command.mockResolvedValue(flow('models', { catalog_loaded: true, hardware_profile: hardwareStatus('cancelled') }))
   const view = render(<EngineFirstRun hardwareProfileControls={manualControls('cancelled')} />)
-  expect(await screen.findByText(/Downloads are optional: use an existing .ginfer model/)).toBeVisible()
+  expect(await screen.findByText(/Downloads are optional: open Models > This computer > Installed and select Add local model/)).toBeVisible()
   fireEvent.click(screen.getByText('Advanced hardware profile options'))
   expect(await screen.findByRole('button', { name: 'Resume profiling' })).toBeEnabled()
   expect(screen.getByText(/without downloading a model/)).toBeVisible()
