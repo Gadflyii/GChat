@@ -1,5 +1,33 @@
 # Gbot design
 
+## Service action failure guidance — Gchat 2
+
+`GBOT-SERVICE-ACTION-INLINE-ERRORS`, based on main `3399f6768`, fixes
+failed **Start/Quit Gbot service** and LAN **Connect/Disconnect Gbot service**
+requests. The error stays beside the service controls with plain retry guidance
+and diagnostic Details closed until requested. Errors belong to the selected
+service computer, survive status refreshes and clear on an explicit retry.
+
+A synchronous guard prevents repeated clicks from sending multiple requests
+and holds through startup status refresh. Service state still changes only
+after the request succeeds. Local Quit stops the service; LAN Disconnect leaves
+tasks running on that computer. Neither refresh nor failure retries an action.
+
+All four new cases fail on unchanged main because repeated clicks send two
+requests (92 tests filtered). Focused checks pass after correcting test queries
+and expected background reads; all 96 settings cases pass in the full gate.
+One Linux/S1 `make verify` passes on 18 October, 06:52:16–06:59:53 UTC:
+3,431 app, 127 extension and 1,271 Rust tests pass; six app tests are skipped
+and 28 Rust tests ignored. Lint, type checking, quality guards and all six
+coverage floors pass. Source, test and documentation hashes match before and
+after the gate; this final receipt was added afterward. Evidence:
+`out/gchat2-service-action-inline-errors-20261018/{result.json,SUMMARY.md}`.
+This leaf uses inert service responses; no native Windows or live service
+start/stop acceptance is claimed. FRESH and OLD remain off with original XML
+and Gchat 2 custody. The private S1 build/cache was removed, the shared donor
+preserved, and CPUs 96–103 returned at 07:00 UTC; booking 3104 canceled.
+Next: bubbs merges the fix and its evidence.
+
 ## Recover control failure guidance — Gchat 2
 
 `GBOT-RECOVERY-INLINE-ERRORS`, based on main `e097635db`, fixes failed
