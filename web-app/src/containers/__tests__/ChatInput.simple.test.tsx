@@ -1182,7 +1182,7 @@ describe('ChatInput', () => {
     })
     useAppState.setState({ activeModels: [], intentionallyStoppedModels: new Set(['ginfer::test-model']) })
     seedServiceHub({ models: { getActiveModels: vi.fn().mockResolvedValue([]) } as unknown as ModelsService })
-    usePrompt.getState().setDraftSkill(NEW_THREAD_ATTACHMENT_KEY, 'pdf')
+    usePrompt.getState().setDraftSkill(usePrompt.getState().activeThreadId, 'pdf')
     agentSkills.loading = status === 'loading'
     agentSkills.error = status === 'failed' ? 'catalog read failed' : null
     const start = vi.spyOn(switchModel, 'switchToModel').mockResolvedValue()
