@@ -812,7 +812,7 @@ it('verifies the fingerprint, saves a vault key and requires SSH authentication 
   )
   expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Continue' })).toHaveAccessibleDescription(
-    'Continue turns on once Check SSH access succeeds. Add the public key to the bot computer first.'
+    'Add the public key to the bot computer, then choose Check SSH access and Check tools. Continue turns on when the tools are installed.'
   )
   await checkTools()
   expect(screen.getByRole('button', { name: 'Continue' })).not.toHaveAccessibleDescription()
@@ -873,12 +873,16 @@ it('keeps SSH and tools checks separate before enabling Continue', async () => {
     failSsh = reject
   })
   let checks = 0
+  let toolChecks = 0
   const api = vi.mocked(gbot).mockImplementation(async (route) => {
     if (route === 'workspaces/ssh/key')
       return { algorithm: 'ssh-ed25519', public_key: 'saved-public-key' }
     if (route === 'workspaces/ssh/check')
       return ++checks === 1 ? { authenticated: true } : recheck
-    if (route === 'workspaces/ssh/tools') return tools
+    if (route === 'workspaces/ssh/tools')
+      return ++toolChecks === 1
+        ? { installed: false, command: null, issue: 'Tools are not installed yet.' }
+        : tools
     throw new Error(`Unexpected ${route}`)
   })
   render(
@@ -899,7 +903,19 @@ it('keeps SSH and tools checks separate before enabling Continue', async () => {
   )
   await screen.findByDisplayValue('ssh-ed25519 saved-public-key')
   fireEvent.click(screen.getByRole('button', { name: 'Check SSH access' }))
-  fireEvent.click(await screen.findByRole('button', { name: 'Check tools' }))
+  const check = await screen.findByRole('button', { name: 'Check tools' })
+  const next = screen.getByRole('button', { name: 'Continue' })
+  const hint =
+    'Add the public key to the bot computer, then choose Check SSH access and Check tools. Continue turns on when the tools are installed.'
+  expect(next).toBeDisabled()
+  expect(next).toHaveAccessibleDescription(hint)
+  fireEvent.click(check)
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Tools are not installed yet.'
+  )
+  expect(next).toBeDisabled()
+  expect(next).toHaveAccessibleDescription(hint)
+  fireEvent.click(check)
   const ssh = screen.getByRole('button', { name: 'Check SSH access' })
   expect(ssh).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
@@ -909,7 +925,8 @@ it('keeps SSH and tools checks separate before enabling Continue', async () => {
   ).toHaveLength(1)
   await act(async () => finishTools({ installed: true }))
   expect(ssh).toBeEnabled()
-  expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  expect(next).toBeEnabled()
+  expect(next).not.toHaveAccessibleDescription()
   fireEvent.click(ssh)
   expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
   await act(async () => failSsh(new Error('The SSH host identity changed')))

@@ -165,7 +165,7 @@ export default function GbotSetup({
             : true
   const continueHint =
     step === 3 && computer === 'lan' && connection.workspaceId && !lanReady && !saving && !connecting
-      ? 'Continue turns on once Check SSH access succeeds. Add the public key to the bot computer first.'
+      ? 'Add the public key to the bot computer, then choose Check SSH access and Check tools. Continue turns on when the tools are installed.'
       : ''
   const submit = async () => {
     if (submissionPending.current || saving || connecting || !canContinue)
