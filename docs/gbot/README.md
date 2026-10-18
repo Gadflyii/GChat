@@ -1,5 +1,33 @@
 # Gbot design
 
+## Stopped schedules identify the service computer — Gchat 2
+
+`GBOT-SCHEDULE-RESTART-COMPUTER-WORDING`, based on main `23d0f3236`,
+fixes recovery guidance that says to quit and start Gbot service even for a
+paired computer. GChat disconnects and reconnects a paired service; those
+controls do not restart the remote process or its stopped scheduler.
+
+The alert now says to restart the Gbot service on the computer where it
+runs before scheduled tasks can run again. The existing regression checks
+this instruction outside the collapsed panel and retains its disabled
+Create schedule and no-write checks. Scheduling and service controls are
+unchanged.
+
+The targeted assertion fails on unchanged main (16 cases filtered). All 17
+focused schedule cases pass with the fix, including stopped-scheduler safety
+and explicit load/save retries. One isolated S1 `make verify` passes on
+18 October, 09:07:49–09:15:50 UTC: 3,520 app, 127 extension and 1,284
+Rust tests pass; six app tests are skipped and 28 Rust tests ignored.
+Lint (zero errors, five existing warnings), type checking, quality guards
+and all six coverage floors pass. All three changed-file hashes match
+before and after the gate; this final receipt was added afterward.
+The private SSD build/cache was removed and CPUs 112–119 returned at
+09:16 UTC; booking 3190 canceled. The shared donor was unchanged.
+Evidence: `out/gchat2-schedule-restart-computer-wording-20261018/{result.json,SUMMARY.md}`.
+FRESH and OLD remain off with original XML and Gchat 2 custody. Inert
+responses cover this wording leaf; it does not qualify live scheduling or
+native Windows.
+
 ## Uncertain tool results explain the stopped task — Gchat 2
 
 `GBOT-UNCERTAIN-TOOL-RESULT-WORDING`, based on main `3425c5317`,
