@@ -1,5 +1,39 @@
 # GInfer host UI
 
+## Readable installed model names — C7 native acceptance, closed October 18
+
+`GUI-MODEL-READABLE-NAME` passes its remaining Linux installed leaf in retained
+release `ed68c7443`. A private manifest points read-only to the genuine Qwen 27B
+**2-bit mix** package
+`ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61` at
+`/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer`.
+Models Installed, GInfer provider settings and the Hermes runtime-model picker
+all show **Qwen 27B 2-bit mix**. Real pointer and typing input searched and
+selected that name; the closed picker retained it. The package hash remains
+its internal ID/title rather than the visible label. WebKit inspection only
+observed DOM state and screenshots; native click events were trusted.
+
+Source fix `f0f511b92`, 55 focused cases and combined full gate `c48538a27`
+are reused. Manifest enumeration, runtime display-name mapping and the Hermes
+route/hook/store match current `0b370ec2a` for this manifest. The newer plain-name
+suffix cleanup does not change this plain label. This documentation-only leaf
+uses `git diff --check`. Evidence:
+`out/c7-model-readable-name-installed-20261018/{result.json,summary.md}`.
+
+This qualifies Installed, the provider list and the actual Hermes model picker
+on Linux. No catalog download, Save connection or model load was performed.
+The chat picker filters unloaded GInfer models and was not exercised; Windows
+and release-wide acceptance are outside this observation.
+
+C7 retains worktree `/ai/gchat-worktrees/c7-model-readable-name-installed-20261018`,
+branch `test/c7-model-readable-name-installed-20261018`, baseline `07bbd912b`.
+S1 CPUs40–47 returned01:45Z. All private app/Host/session and forwarding processes
+stopped by verified PID, the 7.80GB runtime root
+`/media/ron/SSD_RAID/ai/tmp-c7-model-readable-name-installed-20261018` was removed,
+and the booking was canceled. The read-only release donor and external package
+were preserved. Only result JSON and short summary are newly retained; no live
+job or booking remains. No GPU workload or shared profile was used.
+
 ## Launch form initial error — C7 installed acceptance, closed October 18
 
 `GUI-LAUNCH-ERROR-EARLY` passes its native Linux installed recheck. In retained
