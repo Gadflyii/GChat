@@ -977,7 +977,8 @@ and MSI packaging passed18:54:25Z. Final acceptance passed19:08:41Z: complete
 Job exit0 with no remaining owned processes. Delivery preserved the previous
 RC and verified the new unsigned NSIS. Durable WSL parents held both canonical
 locks through native Job exit. The final booking1490 was canceled at19:14Z;
-local5090 returned to Gchat3. No installer or model has run for this walk.
+local5090 returned to Gchat3. The subsequent target installation and walk are
+recorded below.
 The existing publisher, packager and Job/memory guard were reused. Canonical
 small receipts are under
 `/ai/gchat/out/c4-windows-rc-refresh-20261018/{engine-release,app-installer,package-acceptance}`;
@@ -1031,29 +1032,71 @@ targets until the corrected bound. GInfer diagnostic25a62767c exposes the final
 Host requirement/capacity after probe retirement without changing budgets;
 its retained SM86 Release build passed21:49:08Z and returned21:52Z. The
 matched67584 quote/Ready-only controls are prepared in GInfer `f098846f1`,
-with Arch's diagnostic direction pending. Flash target runs remain held;
-physical equality and final Arch sign remain pending. Bubbs separately resumed
-the Windows RC walks at22:07Z. No RC desktop or model has
-launched. Ada's Gchat3 Qwen returned22:03Z and its private Host stopped; Gchat3
-handed the free Ada boundary to this installed walk. The laptop's native Qwen
-standard425 returned22:11Z with its private Host stopped, opening the shared
-untimed transfer boundary. C4's accepted1,484,393,816-byte installer transfer returned22:14:14Z with
-matching SHA256. Ada booking791 covers22:14–22:44Z; the durable build→GPU
-flock parent launched the inherited native Job at22:16Z. The bound ordinary
-NSIS PID5824 opened its genuine Welcome page. Its Next/Cancel Win32 Button
-controls appear as UIA Pane with no supported patterns, so no installer action,
-installation, desktop or model launch has occurred. The bound tree and pattern
-receipts are `ada-native-walk/installer-uia-{01,patterns}.json`. C4 reported
-this blocker to Bubbs and Gchat3 at22:17Z and retains Job/guard custody pending
-supported GUI continuation or normal retirement direction. No coordinate,
-SendKeys, CDP or guessed-control fallback is authorized. The requested installed
-first-user walk, Ada Automatic INT chat and normal Stop remain incomplete. Gchat3 relays Arch22:11Z's newer
-laptop Qwen/Muse hold for corrected Engine plus e001 Host. C4 asked Arch to
-resolve its scope against Bubbs's resumed pinned-RC hand-picked laptop chat;
-no laptop action is taken pending that decision. This
-Windows authorization does not release either card for Flash experiments. Gchat3's separate packaged-resource copies returned21:08:55Z;
-those are qualification copies, not an RC installation. Recheck each actual
-shared boundary before staging or launch; no earlier return grants a future hold.
+and Arch21:57Z/22:03Z authorized that one matched diagnostic. Bubbs's22:07Z
+Windows RC priority deferred its execution; no diagnostic rerun has occurred.
+Flash physical equality and final Arch sign remain pending. Bubbs separately resumed
+the Windows RC walks at22:07Z. Ada's accepted installer transfer returned22:14Z
+with matching SHA256. Booking791 covers22:14–22:44Z. The genuine NSIS
+Welcome controls exposed no usable UIA patterns; Bubbs22:17Z authorized normal
+Cancel followed by `/S`. Welcome closed normally, and the accepted package's
+silent install exited0 at22:23:23Z, preserving the ordinary per-user destination.
+The installed app is `C:\Users\Ron\AppData\Local\GChat\gchat.exe`, version2.0.42.
+Its SHA256 `9ef66e8aec3ed66a3e967109e1ae7c2ab43ca42a76fc6599350f12afc3d62d1f`
+is the packaged executable with Tauri's three-byte bundle marker changed from
+`UNK` to `NSS`; the retained donor and installed bytes otherwise match.
+
+A launch-helper identity race ended before desktop capture. The corrected
+bound helper reuses the completed installation and launched the installed app
+at22:27:31Z under the inherited guarded Job. Genuine Welcome appeared. The
+Windows Firewall prompt was dismissed by its verified normal close without
+Allow or settings changes. Fresh UIA traversal then exposed named WebView
+controls without a focus workaround, restart or accessibility flag. Models
+shows this computer's RTX4090, no registered model and Automatic selection.
+The retained INT import completed22:35:43Z. The native file dialog lacked
+UIA patterns; Bubbs22:34Z approved identity-bound WM_SETTEXT and BM_CLICK
+for that Ada dialog only. Recorded handles bind its filename Edit132348 and
+Open button197844 to app14764/dialog1770820. Automatic was selected
+(ToggleState On22:37Z), and Load model was invoked once at22:37:50Z. The
+artifact check completed, but native hardware profiling failed before Engine
+startup: its retained-buffer GPU probe could not fit inside the actual RAM/node
+floors. `hardware-profile-job.json` records native exit1, the correct SM89 CLI,
+GPU UUID and retained INT artifact. No Ready or chat occurred; Load was not
+retried and no profile was substituted. Normal Close at22:41:15Z stopped the
+app and its Host; the inherited Job exited0 and empty at22:41:16Z. Booking791
+was canceled and Ada returned22:41Z. The Automatic chat remains blocked on
+this concrete profiling failure. Small native receipts are under
+`ada-native-walk/installed-desktop/`; installer and helper failures remain
+under the preceding `silent-install/` evidence.
+
+Arch22:42Z assigned the read-only **WINDOWS-RC-ADA-PROFILE-RAM-FLOOR** diagnosis
+before any profiling retry. The pinned Engine's
+`src/product/hardware_profile/gpu.cpp:58` reads live global and NUMA-node
+availability, but reserves `max(8GiB, totalPhysical/4)` in global RAM before
+admitting each incremental retained buffer. Ada's51,376,914,432B physical RAM
+therefore produces a12,844,228,608B reserve. The retained guard samples around
+the22:38:55–22:39:00Z profiling failure show11,638,579,200B available at22:38:51Z
+and10,477,039,616B at22:39:01Z, both below that reserve. They establish low
+native availability around the failure; the generic exception records neither
+the rejected allocation size, exact availability, NUMA node nor node availability.
+The first GPU transfer gate normally requests536,870,912B, but the failing
+caller's identity is not retained. Historical vmmem commit was not sampled.
+A separate22:44Z read found vmmemWSL private33,205,932,032B; that later value
+does not prove its size or cause at failure time. The small source/telemetry
+packet is `ada-native-walk/installed-desktop/profile-ram-floor-readonly.json`.
+Next: obtain Arch's disposition of the total-derived floor and implement the
+required actionable RAM-needed/free message. No floor is lowered and no walk
+is retried without that direction; Gchat3 owns Ada's next benchmark boundary.
+
+C5's corrected1209/e001 laptop app gate returned22:28Z after a pre-Engine
+fixture CLI rejection, with no C5 hold. C4 has neither staged nor launched there. Arch
+22:14Z clarified that its qualification hold permits the pinned6b85 manual
+C1 text-only RC chat without explicit arena or bypass. Any pre-Engine
+rejection is an RC finding under QUOTE-ADMISSION-EXACT-VRAM. No coordinate,
+SendKeys, CDP or guessed-control fallback is authorized. The installed
+first-user walks and both new chats remain incomplete. This Windows
+authorization does not release either card for held Flash experiments.
+Recheck each shared boundary before staging or launch; earlier returns grant
+no future resource hold.
 C7's local-model acceptance can share the
 laptop walk before its single Start: retain the visible empty/unset download
 catalog and registered local model without a download dependency, then the
@@ -1071,9 +1114,9 @@ and the retained candidate-bound UIAutomation recipe govern execution.
 | --- | --- | --- |
 | C4 local WSL | `/ai/gchat-worktrees/c4-windows-rc-refresh-20261018` | Branch `build/c4-windows-rc-refresh-20261018`, current record |
 | C4 local WSL | `/ai/gchat/out/c4-windows-rc-refresh-20261018` | Small command, result and target metadata receipts; no binaries |
-| C4 local WSL | `/ai/ginfer-worktrees/c4-windows-rc-engine-20261018` | Read-only pinned Engine donor |
+| C4 local WSL | Engine `6b85ecf77` in `/ai/ginfer` Git objects | Pinned source retained; former `/ai/ginfer-worktrees/c4-windows-rc-engine-20261018` source tree is absent |
 | C4 local Windows | `E:\gchat4-windows-rc-250df804a-20261018` | Accepted images/packages; retain through both target walks, then retire disposable builds. Gchat3's read-copy returned19:05Z |
-| C4 Ada Windows | `C:\Users\Ron\AppData\Local\Temp\gchat4-windows-rc-250df804a-20261018` | Accepted NSIS and small Job/UIA receipts; installer Welcome active under791, no installed desktop/model yet. Retire staged package after walk |
+| C4 Ada Windows | `C:\Users\Ron\AppData\Local\Temp\gchat4-windows-rc-250df804a-20261018` | Accepted NSIS and small Job/UIA receipts; installed RC/import complete, Automatic blocked by profiling before Engine. App/Host stopped and791 returned22:41Z. Retire staged package after walk |
 
 ## Windows RC refresh — release installer delivered, October 18 morning
 
