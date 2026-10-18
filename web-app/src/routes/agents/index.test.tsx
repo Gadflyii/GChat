@@ -26,6 +26,17 @@ const deleteAgentRun = vi.hoisted(() => vi.fn())
 const studioCommand = vi.hoisted(() => vi.fn())
 const botCall = vi.hoisted(() => vi.fn())
 const skillState = vi.hoisted(() => ({ value: [] as AgentSkill[] }))
+const nativeWindow = vi.hoisted(() => ({
+  isTauri: vi.fn(() => false),
+  onCloseRequested: vi.fn(),
+  unlisten: vi.fn(),
+  handler: null as null | ((event: { preventDefault: () => void }) => Promise<void>),
+}))
+vi.mock('@tauri-apps/api/core', async (original) => ({
+  ...(await original<object>()),
+  isTauri: nativeWindow.isTauri,
+}))
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => nativeWindow }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
 vi.mock('@/services/gbot', async (original) => ({
   ...(await original<object>()),
@@ -179,6 +190,13 @@ describe('AgentStudioPage', () => {
     useGbotCompanion.getState().reset()
     useGeneralSetting.setState({ gbotEnabled: true })
     skillState.value = []
+    nativeWindow.isTauri.mockReturnValue(false)
+    nativeWindow.unlisten.mockReset()
+    nativeWindow.handler = null
+    nativeWindow.onCloseRequested.mockReset().mockImplementation((handler) => {
+      nativeWindow.handler = handler
+      return Promise.resolve(nativeWindow.unlisten)
+    })
     botCall.mockReset()
     navigate.mockReset()
     blockNavigation.mockReset()
@@ -216,6 +234,117 @@ describe('AgentStudioPage', () => {
     render(<AgentStudioPage />)
     await screen.findByDisplayValue(firstAgent.name)
   }
+
+  async function requestNativeClose() {
+    const event = { preventDefault: vi.fn(), finished: false }
+    await act(async () => {
+      void nativeWindow.handler!(event).then(() => { event.finished = true })
+    })
+    return event
+  }
+
+  it.each(['saved', 'new', 'template'] as const)(
+    'protects an edited %s agent on native close until discard is explicit', async (source) => {
+      nativeWindow.isTauri.mockReturnValue(true)
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template', name: 'Review template', description: '', definition: firstAgent,
+      }])
+      await renderSavedAgents()
+      render(<ConfirmDialogHost />)
+      const user = userEvent.setup()
+      if (source === 'new') {
+        await user.click(screen.getByTitle('New agent'))
+        await screen.findByDisplayValue(editableDraft.name)
+      } else if (source === 'template') {
+        await user.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+        await user.click(await screen.findByRole('button', { name: 'Use template' }))
+        await screen.findByDisplayValue(`${firstAgent.name} Copy`)
+      }
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep my closing draft' } })
+      for (const dismissal of ['Enter', 'Escape', 'Cancel']) {
+        const request = await requestNativeClose()
+        expect(request.finished).toBe(false)
+        const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved agent changes?' })
+        expect(dialog).toHaveTextContent('Keep my closing draft')
+        expect(dialog).toHaveTextContent('close GChat')
+        expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+        // Repeated window-close gestures keep the original confirmation open.
+        expect((await requestNativeClose()).preventDefault).toHaveBeenCalledOnce()
+        if (dismissal === 'Cancel') await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+        else await user.keyboard(`{${dismissal}}`)
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+        expect(screen.getByLabelText('Name')).toHaveValue('Keep my closing draft')
+        expect(request.preventDefault).toHaveBeenCalledOnce()
+        expect(request.finished).toBe(true)
+      }
+      const acceptedClose = await requestNativeClose()
+      await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Discard changes' }))
+      await waitFor(() => expect(acceptedClose.finished).toBe(true))
+      expect(acceptedClose.preventDefault).not.toHaveBeenCalled()
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    }
+  )
+
+  it('protects a hidden agent draft and rejects stale native-close approval', async () => {
+    nativeWindow.isTauri.mockReturnValue(true)
+    await renderSavedAgents()
+    render(<ConfirmDialogHost />)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'First closing edit' } })
+    const staleClose = await requestNativeClose()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Newer closing edit' } })
+    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Discard changes' }))
+    expect(staleClose.preventDefault).toHaveBeenCalledOnce()
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Templates', exact: true }))
+    const hiddenClose = await requestNativeClose()
+    expect(hiddenClose.finished).toBe(false)
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Newer closing edit')
+  })
+
+  it('allows native close without a warning for unchanged and successfully saved agents', async () => {
+    nativeWindow.isTauri.mockReturnValue(true)
+    definitionState.value.definitions = [firstAgent]
+    definitionState.value.save.mockImplementation(async (value: AgentDefinition) => value)
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue(firstAgent.name)
+    expect((await requestNativeClose()).preventDefault).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Saved before closing' } })
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    expect((await requestNativeClose()).preventDefault).not.toHaveBeenCalled()
+    expect(useConfirmStore.getState().pending).toBeNull()
+  })
+
+  it('warns when native draft protection cannot be registered', async () => {
+    nativeWindow.isTauri.mockReturnValue(true)
+    nativeWindow.onCloseRequested.mockRejectedValueOnce(new Error('native listener failed'))
+    await renderSavedAgents()
+    expect(toast.error).toHaveBeenCalledWith('Could not protect unsaved agent changes when closing GChat. Save your changes before closing.')
+  })
+
+  it('retires a late native close subscription when Agent Studio unmounts', async () => {
+    nativeWindow.isTauri.mockReturnValue(true)
+    const registration = deferred<() => void>()
+    nativeWindow.onCloseRequested.mockReturnValueOnce(registration.promise)
+    const page = render(<AgentStudioPage />)
+    page.unmount()
+    await act(async () => registration.resolve(nativeWindow.unlisten))
+    expect(nativeWindow.unlisten).toHaveBeenCalledOnce()
+  })
+
+  it('rejects pending close approval after Agent Studio unmounts', async () => {
+    nativeWindow.isTauri.mockReturnValue(true)
+    definitionState.value.definitions = [firstAgent]
+    const page = render(<AgentStudioPage />)
+    await screen.findByDisplayValue(firstAgent.name)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Retired closing draft' } })
+    const request = await requestNativeClose()
+    expect(request.finished).toBe(false)
+    page.unmount()
+    await act(async () => settleConfirm(true))
+    expect(request.preventDefault).toHaveBeenCalledOnce()
+    expect(nativeWindow.unlisten).toHaveBeenCalledOnce()
+  })
 
   async function renderNavigableStudio() {
     const api = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')

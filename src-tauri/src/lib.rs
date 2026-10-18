@@ -668,13 +668,15 @@ pub fn run() {
                 ..
             } => match window_event {
                 tauri::WindowEvent::CloseRequested { .. } => {
+                    log::info!("Window close requested: {label}");
+                }
+                tauri::WindowEvent::Destroyed => {
+                    // A close request can be cancelled by the unsaved-draft
+                    // dialog. Fence turns only after the window really closes.
                     #[cfg(any(target_os = "linux", target_os = "windows"))]
                     if label == "main" {
                         app.state::<AppState>().agent_runs.close_admission();
                     }
-                    log::info!("Window close requested: {label}");
-                }
-                tauri::WindowEvent::Destroyed => {
                     log::info!("Window destroyed: {label}");
                 }
                 _ => {}
