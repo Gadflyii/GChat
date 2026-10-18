@@ -1,5 +1,34 @@
 # Gbot design
 
+## Saved Cloud PC setup removal confirmation — Gchat 2
+
+`GBOT-M365-SAVED-SETUP-CONFIRMATION`, based on main `232317655`,
+fixes a one-click removal of saved Microsoft 365 setup choices. Removal now
+opens the existing in-app confirmation, names the setup and starts on Cancel.
+The message explains that the Microsoft account and Cloud PC are kept and
+that restarting setup requires choosing them again. Only explicit acceptance
+removes the selected local setup; leaving the page cancels the pending action.
+A failed removal keeps both setup choices available for a confirmed retry.
+
+All three regressions fail on unchanged main because no confirmation appears
+before removal (95 tests filtered). All 98 settings cases pass with the fix.
+The rendered cases cover Cancel focus and Enter cancellation, deferred removal
+of only the selected record, unchanged other setups, failure and freshly
+confirmed retry, and leaving the page before acceptance. The only mutation is
+removing the selected local setup.
+
+One isolated Linux/S1 `make verify` passes on 18 October, 07:05:11–07:12:58 UTC:
+3,443 app, 127 extension and 1,275 Rust tests pass; six app tests are skipped
+and 28 Rust tests ignored. Lint, type checking, quality guards and all six
+coverage floors pass. Source, test and documentation hashes match before and
+after the gate; this final receipt was added afterward. Evidence:
+`out/gchat2-m365-saved-setup-confirmation-20261018/{result.json,SUMMARY.md}`.
+No native Windows, VM, account unlink, Cloud PC deletion, model or GPU run
+is part of this leaf. FRESH and OLD remain off with original XML and Gchat 2
+custody. The private S1 build/cache was removed, the shared donor preserved,
+and CPUs 96–103 returned at 07:13 UTC; booking 3114 canceled. Next: bubbs
+merges the fix and its evidence.
+
 ## Service action failure guidance — Gchat 2
 
 `GBOT-SERVICE-ACTION-INLINE-ERRORS`, based on main `3399f6768`, fixes

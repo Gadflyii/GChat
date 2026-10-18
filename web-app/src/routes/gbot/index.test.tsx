@@ -1431,7 +1431,7 @@ it('resumes saved M365 prerequisites without presenting a connected bot workspac
   ).toBe(true)
 })
 
-it('removes only the saved M365 setup and preserves the Cloud PC and Microsoft account', async () => {
+function savedM365Setups(remove: (id: string) => Promise<void> = async () => {}) {
   mocks.listen.mockResolvedValue(() => {})
   let records = [
     {
@@ -1446,48 +1446,131 @@ it('removes only the saved M365 setup and preserves the Cloud PC and Microsoft a
       },
       route: 'brokered_client',
     },
+    {
+      id: 'other-m365-setup',
+      name: 'Cloud PC writer',
+      account_id: 'other-work-account',
+      cloud_pc: {
+        id: 'other-cloud-pc',
+        display_name: 'Writer PC',
+        image_name: 'Windows 11',
+        plan_name: '2 vCPU',
+      },
+      route: 'guest_worker',
+    },
   ]
-  mocks.call.mockImplementation(async (path: string) => {
+  mocks.call.mockImplementation(async (path: string, body: { id: string }) => {
     if (path === 'state')
-      return {
-        workspaces: [],
-        live_sessions: [],
-        assignments: [],
-        controls: [],
-      }
+      return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
     if (path === 'setup/m365/status') return records
     if (path === 'setup/m365/remove') {
-      records = []
+      await remove(body.id)
+      records = records.filter((record) => record.id !== body.id)
       return {}
     }
     return []
   })
-  render(<Page />)
+}
+
+it('removes only the confirmed saved M365 setup and defaults to keyboard cancellation', async () => {
+  const user = userEvent.setup()
+  let finish!: () => void
+  savedM365Setups(() => new Promise<void>((resolve) => {
+    finish = resolve
+  }))
+  render(<><Page /><ConfirmDialogHost /></>)
   const card = await screen.findByRole('region', {
     name: 'M365 setup Cloud PC researcher',
   })
-  expect(
-    within(card).getByText(
-      /Removing it keeps your Microsoft account and Cloud PC/
-    )
-  ).toBeInTheDocument()
-  fireEvent.click(
-    within(card).getByRole('button', { name: 'Remove saved Cloud PC setup' })
-  )
-  await waitFor(() =>
-    expect(
-      screen.queryByRole('region', { name: 'M365 setup Cloud PC researcher' })
-    ).not.toBeInTheDocument()
-  )
-  expect(mocks.call).toHaveBeenCalledWith('setup/m365/remove', {
-    id: 'm365-setup',
+  const other = screen.getByRole('region', { name: 'M365 setup Cloud PC writer' })
+  expect(within(card).getByText(/Removing it keeps your Microsoft account and Cloud PC/)).toBeVisible()
+  const remove = within(card).getByRole('button', { name: 'Remove saved Cloud PC setup' })
+  fireEvent.click(remove)
+  const dialog = await screen.findByRole('dialog', {
+    name: 'Remove Cloud PC researcher’s saved Cloud PC setup?',
   })
-  expect(
-    mocks.call.mock.calls.every(
-      ([path]) =>
-        !['workspaces/remove', 'connect', 'setup/cloud/delete'].includes(path)
-    )
-  ).toBe(true)
+  expect(dialog).toHaveTextContent('This removes this saved setup from GChat. Your Microsoft account and Cloud PC are kept. You’ll need to choose them again to restart setup.')
+  expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  expect(mocks.call.mock.calls.filter(([path]) => path === 'setup/m365/remove')).toEqual([])
+  await user.keyboard('{Enter}')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(card).toBeVisible()
+  expect(other).toBeVisible()
+  expect(mocks.call.mock.calls.filter(([path]) => path === 'setup/m365/remove')).toEqual([])
+  fireEvent.click(remove)
+  fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', {
+    name: 'Remove saved Cloud PC setup',
+  }))
+  await waitFor(() => expect(remove).toBeDisabled())
+  fireEvent.click(remove)
+  expect(mocks.call.mock.calls.filter(([path]) => path === 'setup/m365/remove')).toEqual([
+    ['setup/m365/remove', { id: 'm365-setup' }],
+  ])
+  expect(card).toBeInTheDocument()
+  expect(other).toBeInTheDocument()
+  await act(async () => finish())
+  await waitFor(() => expect(card).not.toBeInTheDocument())
+  expect(other).toBeVisible()
+  expect(mocks.call.mock.calls.filter(([path]) => ![
+    'state', 'setup/cloud/status', 'setup/m365/status', 'setup/kvm/status',
+    'tasks', 'tasks/approvals',
+  ].includes(path))).toEqual([
+    ['setup/m365/remove', { id: 'm365-setup' }],
+  ])
+})
+
+it('keeps a rejected saved M365 setup removal available for an explicitly confirmed retry', async () => {
+  const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+  try {
+    let attempts = 0
+    let fail!: (cause: Error) => void
+    savedM365Setups(() => ++attempts === 1
+      ? new Promise<void>((_, reject) => { fail = reject })
+      : Promise.resolve())
+    render(<><Page /><ConfirmDialogHost /></>)
+    const card = await screen.findByRole('region', {
+      name: 'M365 setup Cloud PC researcher',
+    })
+    const other = screen.getByRole('region', { name: 'M365 setup Cloud PC writer' })
+    const remove = within(card).getByRole('button', { name: 'Remove saved Cloud PC setup' })
+    fireEvent.click(remove)
+    expect(attempts).toBe(0)
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', {
+      name: 'Remove saved Cloud PC setup',
+    }))
+    await waitFor(() => expect(remove).toBeDisabled())
+    await act(async () => fail(new Error('Saved Cloud PC setup could not be removed')))
+    await waitFor(() => expect(errorToast).toHaveBeenCalledWith('Error: Saved Cloud PC setup could not be removed'))
+    await waitFor(() => expect(remove).toBeEnabled())
+    expect(card).toBeVisible()
+    expect(other).toBeVisible()
+    fireEvent.click(remove)
+    expect(attempts).toBe(1)
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', {
+      name: 'Remove saved Cloud PC setup',
+    }))
+    await waitFor(() => expect(card).not.toBeInTheDocument())
+    expect(other).toBeVisible()
+    expect(mocks.call.mock.calls.filter(([path]) => path === 'setup/m365/remove')).toEqual([
+      ['setup/m365/remove', { id: 'm365-setup' }],
+      ['setup/m365/remove', { id: 'm365-setup' }],
+    ])
+  } finally {
+    errorToast.mockRestore()
+  }
+})
+
+it('does not remove a saved M365 setup after leaving its page during confirmation', async () => {
+  savedM365Setups()
+  const page = render(<><Page /><ConfirmDialogHost /></>)
+  const card = await screen.findByRole('region', {
+    name: 'M365 setup Cloud PC researcher',
+  })
+  fireEvent.click(within(card).getByRole('button', { name: 'Remove saved Cloud PC setup' }))
+  await screen.findByRole('dialog')
+  page.unmount()
+  await act(async () => settleConfirm(true))
+  expect(mocks.call.mock.calls.filter(([path]) => path === 'setup/m365/remove')).toEqual([])
 })
 
 it('imports an SSH workspace and preserves setup identity on retry', async () => {
