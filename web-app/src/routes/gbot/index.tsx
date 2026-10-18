@@ -102,6 +102,10 @@ function GbotPage() {
     {}
   )
   const taskSubmission = useRef(false)
+  const controlChange = useRef(false)
+  const [controlErrors, setControlErrors] = useState<
+    Record<string, { returning: boolean; details: string } | undefined>
+  >({})
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
   const setGbotEnabled = useGeneralSetting((state) => state.setGbotEnabled)
@@ -367,6 +371,12 @@ function GbotPage() {
   const recoveryKey = recoverableControl
     ? `${recoverableControl.identity.workspace_id}:${recoverableControl.identity.session_id}:${recoverableControl.owner}`
     : ''
+  const controlErrorKey = JSON.stringify([
+    serviceTarget,
+    identity?.workspace_id,
+    identity?.session_id,
+  ])
+  const controlError = controlErrors[controlErrorKey]
   const recoverControl = () => {
     if (!recoverableControl || recoveryConfirmation !== recoveryKey) return
     void perform(async () => {
@@ -379,16 +389,38 @@ function GbotPage() {
     })
   }
   const changeControl = () => {
-    if (!identity || (setupBlocked && !canHandBackDuringSetup)) return
-    void perform(() => {
-      const returning =
-        control?.state === 'human' || control?.state === 'paused'
-      if (returning) desktop.current?.stopInput()
-      return gbot(returning ? 'control/hand-back' : 'control/take-over', {
-        identity,
-        owner,
+    if (
+      busy ||
+      controlChange.current ||
+      !identity ||
+      (setupBlocked && !canHandBackDuringSetup)
+    )
+      return
+    controlChange.current = true
+    const key = controlErrorKey
+    const returning = control?.state === 'human' || control?.state === 'paused'
+    setControlErrors((previous) => ({ ...previous, [key]: undefined }))
+    if (returning) desktop.current?.stopInput()
+    void perform(
+      () =>
+        gbot(returning ? 'control/hand-back' : 'control/take-over', {
+          identity,
+          owner,
+        }),
+      true
+    )
+      .catch((cause) =>
+        setControlErrors((previous) => ({
+          ...previous,
+          [key]: {
+            returning,
+            details: cause instanceof Error ? cause.message : String(cause),
+          },
+        }))
+      )
+      .finally(() => {
+        controlChange.current = false
       })
-    })
   }
   const botHasControl = !control || control.state === 'bot'
   const ready = Boolean(
@@ -898,12 +930,32 @@ function GbotPage() {
                         <Button
                           variant="outline"
                           disabled={busy}
+                          aria-describedby={
+                            controlError ? 'gbot-settings-control-error' : undefined
+                          }
                           onClick={changeControl}
                         >
                           Hand back
                         </Button>
                       </div>
                     )}
+                  </div>
+                )}
+                {controlError && (
+                  <div
+                    id="gbot-settings-control-error"
+                    role="alert"
+                    className="space-y-1 text-sm"
+                  >
+                    <p>
+                      {controlError.returning
+                        ? 'Could not hand back control. Try again.'
+                        : 'Could not take over this desktop. Try again.'}
+                    </p>
+                    <details className="text-muted-foreground">
+                      <summary className="cursor-pointer">Details</summary>
+                      <p className="break-words">{controlError.details}</p>
+                    </details>
                   </div>
                 )}
                 <fieldset disabled={setupBlocked} className="min-w-0 space-y-4">
@@ -965,6 +1017,9 @@ function GbotPage() {
                     {identity && !canHandBackDuringSetup && (
                       <Button
                         variant="outline"
+                        aria-describedby={
+                          controlError ? 'gbot-settings-control-error' : undefined
+                        }
                         disabled={
                           busy || (!!control?.owner && control.owner !== owner)
                         }

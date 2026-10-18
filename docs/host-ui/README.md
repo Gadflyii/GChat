@@ -1,5 +1,53 @@
 # GInfer host UI
 
+## Host model controls and host-list read feedback — Gchat 3, October 18
+
+`GUI-HOST-MODEL-CONTROL-RESULT-20261018`: the shared action handler discarded
+successful lifecycle snapshots, caught subsequent host-list read failures as
+command failures, and stopped multi-copy launches after an accepted copy when
+only the read failed. Accepted command feedback now stays separate from
+list-read recovery. Start/Stop/Restart/Save-and-restart return snapshots;
+new-copy and saved-profile launches return acceptance receipts and must never
+be published as snapshots. Acceptance means a request was accepted, not Ready.
+
+Acceptance: baseline rendered regression; publish lifecycle snapshots before
+reading; accepted model-control feedback survives failed reads; read-only retry
+never repeats a command; new-copy batches continue after read failure; genuine
+rejection remains actionable and pending actions cannot duplicate. Run focused
+rendered tests, lint and ONE `make verify`. No native, live protocol, GPU,
+Engine, installed GUI or Windows qualification. Native behavior is unchanged.
+
+Owner `/ai/gchat-worktrees/gchat3-host-model-control-result-20261018`, branch
+`fix/gchat3-host-model-control-result-20261018`, base `dc1ba5028`.
+Disposable S1 fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-model-control-tests-20261018`
+used independent copies of the inactive RC caches on verified `AIS-2-8592-L01`.
+All 35 dependency inputs match the retained recipe. CPUs120–127, the shared
+socket1 compile lock, nice10/max8 jobs and no GPU devices were used. Retain only
+`out/host-model-control-result-20261018/test-result.json` and adjacent summary
+after coordinator raw review and cleanup. The six rendered regressions cover Start, Stop, Restart, actual
+Save-and-restart confirmation, two-copy launch receipts and rejected Start with
+explicit retry. All six regressions fail on the exact baseline: four lifecycle
+cases lack snapshot publication, the second copy never launches after the first
+read fails, and the accepted retry lacks feedback. The 42 existing cases were
+skipped in that baseline screen. All 48 fixed focused cases and lint pass
+(zero errors, five existing warnings). The one full gate stopped at coverage:
+3,404 passed, one route test failed, six skipped, with three uncaught errors.
+Existing engines route lifecycle mocks returned incomplete snapshots; immediate
+publication exposed the invalid fixture at HostCard models.find. Native lifecycle
+responses are complete snapshots. Corrected only those route mocks, then ran
+the focused route file/lint, failed coverage stage and remaining Rust stage;
+the full gate was not restarted. All 25 route tests, lint, 3,405 app tests
+(six skipped), 127 extension tests, all six floors and 1,258 Rust tests
+(28 ignored) pass. Earlier gate stages, including typecheck and quality checks,
+passed. Frozen source/test hashes match before and after verification. The
+coordinator reviewed the raw results, including the original failure. S1 CPUs
+returned06:20Z and booking3077 was canceled. The owned 42.33GB S1 fixture,
+three terminal containers and 286MB disposable local archive/raw files were
+removed after review; only the concise result and summary remain. Ready for
+reviewed merge. The inactive RC source/node/cargo/debug donor was separately
+granted to C7 for independent read-copy and is retained unchanged.
+
 ## Gbot task-control failure recovery — October 18
 
 `GBOT-TASK-ACTION-INLINE-ERRORS`: rejected **Stop** and **Resume** requests
@@ -117,6 +165,97 @@ returned 05:54Z. The owned SSD fixture (42.33 GB), two exited containers and
 only `out/host-scan-refresh-result-20261018/test-result.json` and adjacent
 `test-summary.md` remain. Current main has no intervening changes to either
 owned source/test file. Status: MERGE READY; next unresolved action is Bubbs’s merge.
+## Refresh desktop registration after runtime replacement — C3, October 18
+
+`GUI-HOST-LOCATOR-DELETED-RUNTIME`: the private installed `d0a8d06bf` walk
+found Models/Downloads failing with **Runtime for 12.0 must be an existing
+absolute executable path**. The saved desktop locator still named the
+reset-deleted relocated runtime set. The current default-folder runtime files
+existed and the running Host used those valid paths. At 05:21Z, retained path
+and process evidence distinguished a stale registration from a deleted live
+executable, an incomplete installer or a merely stale UI error:
+`out/c3-current-main-release-20261018/remainder-runtime-locator-diagnosis.json`.
+
+The candidate separates strict locator JSON/schema decoding from validation
+of saved runtime files. An explicit, fully validated desktop seed replaces
+obsolete desktop paths under the existing registration lock. Matching roots
+retain their saved management port; the resulting seed is validated again.
+A changed configured root registers its own paths without opening, copying,
+deleting or stopping the previous root. Discovery without a desktop seed still
+rejects unusable saved runtimes. Service registration validation and first-owner
+behavior remain intact.
+
+After a successful desktop connection, refresh updates identity/endpoint metadata
+only while the locked registration still names the same root. It keeps the
+latest registered paths so an older connected client cannot undo a newer
+same-root seed, and does not revalidate obsolete files from the saved record.
+A concurrently registered different desktop root or a service entry is
+preserved. Corrupt JSON, unknown fields and unsupported schemas remain errors,
+never silent replacement.
+Decision: [Refresh desktop Host registration from current runtime](../decisions/2026-10-18-refresh-desktop-host-registration-from-current-runtime.md).
+
+Acceptance: same-root runtime upgrades and changed-root reset/relocation recover
+through a valid seed after the old runtime is deleted; discovery alone refuses
+that old registration; connected refresh succeeds without taking over another
+owner or reverting a newer same-root seed. Regression cases also preserve
+retained old-root data, strict schema/service checks and rejection of an invalid
+replacement seed.
+All nine registry cases now pass, including all four new behavioral regressions.
+Frozen normal merge `82f17a1ac` includes main `d4ec7abab`; the registry source
+is unchanged from the original candidate. Host check/Clippy and lint pass.
+ONE `make verify` ran 05:54:34–05:58:50Z: its frontend results are valid
+(3,393 app tests, six skipped; 127 extension tests; all six coverage floors).
+
+The initial Rust result and native export were invalid: Cargo reused a cached
+five-test registry executable despite the correct nine-test source. Git archive
+had restored the 05:47:20 commit timestamp, older than the retained 05:49 Cargo
+fingerprint. The original zero-exit outcome remains recorded in
+`out/c3-host-locator-deleted-runtime-20261018/cargo-cache-mismatch.json`.
+After that build ended, all 3,232 regular archived tracked inputs received fresh
+mtimes without content changes; all 44 source bindings still matched. Future
+archive staging must normalize tracked-input mtimes before retained target
+reuse and confirm the changed regression names in focused output.
+
+The bounded continuation ran 06:01:23–06:05:51Z: the nine focused registry tests,
+Host check/Clippy, the original seven `make test-rust` suites and desktop/Host
+native rebuild all pass. Corrected native verification reports 1,256 passes and
+28 existing ignores, including the four cases absent from the stale result.
+No second full verification ran; the valid frontend and Vite results were
+retained. Changed-source native acceptance passed06:11–06:18Z.
+
+Owner Codex 3; worktree `/ai/gchat-worktrees/c3-host-locator-deleted-runtime-20261018`,
+branch `fix/c3-host-locator-deleted-runtime-20261018`, frozen source `82f17a1ac`.
+Only the registry source and subject/decision records change. The private S1 root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` reused source,
+dependencies and debug target; all 35 dependency manifests and 44 source bindings
+matched. Booking 3062 used CPUs 80–87, socket1 shared lock, nice10/max8 jobs,
+pinned container and routed offline dependencies. Both exited containers and
+local/remote source archives are removed; returned 06:07Z.
+
+Immutable exports are `host-locator-candidate/bin/gchat` (256,470,416 bytes)
+and `host-locator-candidate/bin/ginfer-host` (56,649,776 bytes) beneath that root.
+Both are checked ELF files with private pre-install and retained runnable
+resource linkage. Packet `out/c3-host-locator-deleted-runtime-20261018/` holds
+`result.json`, `terminal.json`, `summary.md`, the first outcome and corrected
+logs. The whole shared source/target/cache stage is handed back to parent;
+exports remain pending merge; the inactive source/debug/dependency cache stage
+was retired06:12Z (34.7GiB allocated). C4 and C7 donor copies are terminal.
+No GPU, model or new dependency ran in these gates.
+
+Native acceptance used the same private HOME with its untouched stale locator.
+A candidate-only resource overlay supplied the corrected Host to the ordinary
+startup installer. The saved Desktop registration now names the selected root,
+all four selected runtime executables exist, and the running Host uses them;
+the old four deleted runtime paths remain absent. Models and Downloads refresh
+complete without alerts. Connect account service succeeds and shows the Google
+and Microsoft setup cards with no connected accounts; no OAuth sign-in ran.
+The no-model Host settings and advanced controls were exercised and restored.
+Dark1500×1000 and Light1024×800 screenshots were visually reviewed: readable,
+without horizontal overflow. Model Check/Start stay disabled without a model.
+The unoptimized debug resource hashing delay is not release timing evidence.
+Native3073 returned06:18Z. Receipts and screenshots are in the same packet;
+next is the architecture/merge handoff and retirement of the remaining fixture.
+owned source/test file. Status: CLOSED scoped source row; source c2bd37df0 merged as dc1ba5028, ancestry verified.
 
 ## Gbot permission decision failure recovery — October 18
 
