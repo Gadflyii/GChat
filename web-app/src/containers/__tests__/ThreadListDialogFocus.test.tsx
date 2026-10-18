@@ -1,5 +1,5 @@
 import type { ComponentPropsWithoutRef } from 'react'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
@@ -180,6 +180,89 @@ afterEach(() => {
 })
 
 describe('ThreadList dialog caller focus', () => {
+  it('preserves typed rename text and caret when the opening menu finishes its exit animation', async () => {
+    const originalGetComputedStyle = window.getComputedStyle
+    const computedStyle = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudoElement) => {
+        const styles = originalGetComputedStyle.call(
+          window,
+          element,
+          pseudoElement
+        )
+        if (element.getAttribute('role') === 'menu') {
+          // JSDOM does not animate or expose live computed styles. Let real
+          // Radix Presence retain this closing menu until animationend below.
+          Object.defineProperty(styles, 'animationName', {
+            get: () =>
+              element.getAttribute('data-state') === 'closed'
+                ? 'thread-menu-exit'
+                : 'thread-menu-enter',
+          })
+        }
+        return styles
+      })
+    const needsCssEscape = !globalThis.CSS?.escape
+    if (needsCssEscape) {
+      // Both test animation names are already valid CSS identifiers.
+      vi.stubGlobal('CSS', {
+        ...globalThis.CSS,
+        escape: (identifier: string) => identifier,
+      })
+    }
+
+    try {
+      const user = userEvent.setup()
+      renderCaller('sidebar')
+      const trigger = screen.getByRole('button', {
+        name: 'More actions for Second chat',
+      })
+      trigger.focus()
+      await user.keyboard('{Enter}')
+      const menu = await screen.findByRole('menu')
+      await user.click(screen.getByRole('menuitem', { name: 'common:rename' }))
+      const input = await waitForRenameInput()
+      expect(menu).toBeInTheDocument()
+      expect(menu).toHaveAttribute('data-state', 'closed')
+
+      await user.keyboard('Ty')
+      expect(input).toHaveValue('Ty')
+      expect(input.selectionStart).toBe(2)
+      expect(input.selectionEnd).toBe(2)
+
+      const menuAutoFocus = vi.fn()
+      menu.addEventListener('focusScope.autoFocusOnUnmount', menuAutoFocus, {
+        once: true,
+      })
+      fireEvent(
+        menu,
+        Object.assign(new Event('animationend', { bubbles: true }), {
+          animationName: 'thread-menu-exit',
+        })
+      )
+      await waitFor(() => expect(menu).not.toBeInTheDocument())
+      // Wait for Radix's real deferred focus restoration, not just removal.
+      await waitFor(() =>
+        expect(menuAutoFocus).toHaveBeenCalledExactlyOnceWith(expect.any(Event))
+      )
+      expect(input).toHaveFocus()
+      expect(input.selectionStart).toBe(2)
+      expect(input.selectionEnd).toBe(2)
+
+      await user.keyboard('pingPreservesPrefix')
+      expect(input).toHaveValue('TypingPreservesPrefix')
+      await user.click(screen.getByRole('button', { name: 'common:cancel' }))
+      await waitFor(() => expect(trigger).toHaveFocus())
+      expect(mocks.threads.renameThread).not.toHaveBeenCalled()
+      expect(mocks.threads.deleteThread).not.toHaveBeenCalled()
+      expect(mocks.threads.updateThread).not.toHaveBeenCalled()
+    } finally {
+      cleanup()
+      computedStyle.mockRestore()
+      if (needsCssEscape) vi.unstubAllGlobals()
+    }
+  })
+
   // Exercise real Radix menus/dialogs and sidebar buttons. The selected menu
   // item unmounts before dismissal; the second row's actions button persists.
   for (const caller of callers) {
