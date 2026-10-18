@@ -728,7 +728,14 @@ impl TaskRunner {
         let ids: Vec<_> = state
             .records
             .iter()
-            .filter(|(_, record)| record.identity == identity)
+            .filter(|(_, record)| {
+                record.identity == identity
+                    && !matches!(
+                        record.state,
+                        crate::executor::TaskState::Completed
+                            | crate::executor::TaskState::Cancelled
+                    )
+            })
             .map(|(id, _)| *id)
             .collect();
         for id in ids {
@@ -1290,6 +1297,92 @@ mod tests {
                 .as_deref(),
             Some("Documents")
         );
+        runner.close().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn takeover_preserves_terminal_history_and_pauses_interrupted_tasks() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("tasks");
+        let identity = SessionIdentity {
+            workspace_id: WorkspaceId::new(),
+            session_id: SessionId::new(),
+        };
+        let mut before = BTreeMap::new();
+        for (state, replan) in [
+            (TaskState::Completed, false),
+            (TaskState::Completed, true),
+            (TaskState::Cancelled, false),
+            (TaskState::Cancelled, true),
+            (TaskState::Interrupted, false),
+        ] {
+            let id = Uuid::new_v4();
+            let path = root.join(format!("{id}.json"));
+            let task = CuaTask::create_with_id(
+                path.clone(),
+                id,
+                identity,
+                vec![json!({"role":"user","content":"saved task"})],
+                vec![],
+            )
+            .await
+            .unwrap();
+            let mut record = task.snapshot().clone();
+            drop(task);
+            record.state = state;
+            record.replan_after_takeover = replan;
+            record.history.push(crate::executor::TaskEvent {
+                state,
+                reason: "saved result".into(),
+                at: 1,
+            });
+            let store = Arc::new(crate::store::Store::open(path.clone()).await.unwrap());
+            store.save(&record).await.unwrap();
+            before.insert(id, (record, tokio::fs::read(path).await.unwrap()));
+        }
+        let service = Arc::new(
+            Service::open(dir.path().join("service.json"))
+                .await
+                .unwrap(),
+        );
+        let runtime = Arc::new(WorkspaceRuntime::new(service, Arc::new(NativeVault)));
+        let unused = ProcessSpec {
+            program: "/bin/false".into(),
+            args: vec![],
+        };
+        let runner = TaskRunner::new(
+            root,
+            runtime,
+            ExecutorProcesses {
+                python: unused.clone(),
+                context: unused,
+            },
+        )
+        .await
+        .unwrap();
+        runner.pause(identity).await.unwrap();
+        for (id, (saved, bytes)) in before {
+            let record = runner.snapshot(id).await.unwrap();
+            let restored = CuaTask::open(runner.path(id)).await.unwrap();
+            if saved.state == TaskState::Interrupted {
+                assert_eq!(record.state, TaskState::Paused);
+                assert!(record.replan_after_takeover);
+                assert_eq!(record.history.len(), saved.history.len() + 1);
+                assert_eq!(record.history.last().unwrap().reason, "human take-over");
+                assert_eq!(restored.snapshot().state, TaskState::Paused);
+                assert!(restored.snapshot().replan_after_takeover);
+            } else {
+                assert_eq!(
+                    serde_json::to_value(&record).unwrap(),
+                    serde_json::to_value(&saved).unwrap()
+                );
+                assert_eq!(
+                    serde_json::to_value(restored.snapshot()).unwrap(),
+                    serde_json::to_value(&saved).unwrap()
+                );
+                assert_eq!(tokio::fs::read(runner.path(id)).await.unwrap(), bytes);
+            }
+        }
         runner.close().await.unwrap();
     }
 
