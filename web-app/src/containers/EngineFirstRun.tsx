@@ -34,6 +34,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const snapshot = localId ? snapshots[localId] : undefined
   const [flow, setFlow] = useState<FirstRun>()
   const [error, setError] = useState('')
+  const [pollError, setPollError] = useState('')
   const [busy, setBusy] = useState(false)
   const [checked, setChecked] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
@@ -67,7 +68,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     // broken, so keep reporting progress for a short grace period.
     let stopped = false
     let grace: ReturnType<typeof setTimeout> | undefined
-    void refresh().catch(e => setError(String(e))).finally(() => {
+    void refresh().catch(e => setPollError(String(e))).finally(() => {
       if (!stopped) grace = setTimeout(() => setChecked(true), LOCAL_HOST_START_GRACE_MS)
     })
     return () => { stopped = true; clearTimeout(grace) }
@@ -82,8 +83,9 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       try {
         const next = await engineCommand<FirstRun>('first_run', { host_id: localId })
         complete = next.step === 'complete'
-        if (!stopped && requestRevision === revision.current) { setFlow(next); setError('') }
-      } catch (e) { if (!stopped && requestRevision === revision.current) setError(String(e)) }
+        // Reading status again does not mean a rejected user action succeeded.
+        if (!stopped && requestRevision === revision.current) { setFlow(next); setPollError('') }
+      } catch (e) { if (!stopped && requestRevision === revision.current) setPollError(String(e)) }
       if (!stopped && !complete) timer = setTimeout(() => void poll(), 2000)
     }
     void poll()
@@ -109,6 +111,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     try {
       const next = await engineCommand<FirstRun>('first_run', { host_id: localId, ...args })
       setFlow(next)
+      setPollError('')
       if (next.step === 'complete') await refresh().catch(() => undefined)
       else if (args.action) requestAnimationFrame(showCard)
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
@@ -120,6 +123,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     try {
       const hardware = await engineCommand<EngineHardwareProfile>('hardware_profile', { host_id: localId, body: { action } })
       setFlow(current => current ? { ...current, hardware_profile: hardware } : current)
+      setPollError('')
       await refresh().catch(() => undefined)
     } catch (e) { setError(String(e)) } finally { setBusy(false) }
   }
@@ -127,7 +131,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const known = snapshot?.gpus.filter(gpu => ['8.0', '8.6', '8.9', '12.0'].includes(gpu.compute_capability ?? '')) ?? []
   const selected = known.filter(gpu => gpus.includes(gpu.uuid))
   const validGroup = [1, 2, 4].includes(gpus.length) && selected.length === gpus.length && selected.every(gpu => gpu.name === selected[0].name && gpu.compute_capability === selected[0].compute_capability)
-  const unavailable = error || (localId && errors[localId])
+  const unavailable = error || pollError || (localId && errors[localId])
   const offered = (flow?.models ?? []).filter(model => releaseVerified(model.release))
   const profiling = step === 'profiling'
   const hardware = flow?.hardware_profile
@@ -199,7 +203,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
         <Button type="submit" variant="outline" disabled={busy}>Check startup settings</Button>
       </form></details>
     </div>)}<p className="text-sm text-muted-foreground">GInfer checks that these settings fit in memory. Finish setup when all checks pass, then load a model when you are ready to chat.</p><Button disabled={busy || !flow?.startup_profiles.length || flow.startup_profiles.some(profile => profile.error || !profile.quote)} onClick={() => void act({ action: 'complete' })}>Finish local setup</Button></div>}
-    {unavailable && <Button variant="outline" disabled={busy} onClick={() => { void refresh().catch(e => setError(String(e))); if (localId) void act({}) }}>Retry local setup</Button>}
+    {unavailable && <Button variant="outline" disabled={busy} onClick={() => { void refresh().catch(e => setPollError(String(e))); if (localId) void act({}) }}>Retry local setup</Button>}
     {hardwareProfileControls && <details open={manualOpen} onToggle={event => setManualOpen(event.currentTarget.open)} className="space-y-3">
       <summary className="cursor-pointer font-medium">Advanced hardware profile options</summary>
       <p className="text-sm text-muted-foreground">Build, rebuild or resume a hardware profile without downloading a model. Your folder and model choices are kept. Close these options to return to guided setup.</p>
