@@ -1,5 +1,68 @@
 # GInfer host UI
 
+## Manual Host address — Gchat 3 focused fix and native acceptance, October 18
+
+`GUI-HOST-MANUAL-ADDRESS-GUIDANCE` passes its focused Linux field-feedback leaf.
+Ordinary native entry on retained release `ed68c7443` reproduced the defect:
+**not-a-host** reached Pair and showed only the disappearing parser toast
+**relative URL without a base**. An HTTP address showed a temporary policy toast.
+Draft/retry survived; empty and whitespace input correctly disabled Pair.
+The relevant manual controls and native validator bind to allocated main
+`394ba2f1f`; unrelated runtime-preparation/Refresh changes are outside this
+baseline visual evidence.
+
+The owning route now gives persistent HTTPS-origin correction guidance, disables
+malformed addresses before pairing, and retains actionable failure feedback with
+the draft and retry control. Technical error details stay closed initially.
+Native validation remains authoritative. Two meaningful regressions protect
+invalid-input correction and failed-pairing draft/feedback/retry through Refresh;
+all 19 route cases pass. Valid endpoints and connection failures were mocked only.
+
+The changed-source custom-protocol debug app passed ordinary native empty,
+whitespace, `not-a-host` and HTTP entry. Pair remained disabled; invalid fields
+had linked guidance and `aria-invalid`. The malformed draft and guidance remained
+visible for 26.7 seconds; whitespace cleared the invalid alert. Pointer/keyboard
+input drove the app; WebKit only observed. Three screenshots were visually
+inspected: `postfix-empty.png`, `postfix-invalid.png`, `postfix-http.png`.
+Baseline reproducers are `malformed-error.png` and `http-error.png`; the existing
+storage prerequisite explanation is retained as `storage-hint.png`.
+No valid endpoint was submitted natively and nearby C7 Pair/Ignore stayed untouched.
+Runtime preparation continued during this field check; no runtime readiness or
+speed claim is made.
+
+ONE `make verify` passed lint/typecheck/quality/critical coverage, 3,288 frontend
+cases (6 skipped), 121 extension cases and the desktop library's 729 cases
+(8 ignored), then exited 2: the supplied empty `CUDA_VISIBLE_DEVICES` masked an
+existing synthetic-GPU fixture. The failed receipt is retained. Leaving the mask
+unset while Docker still exposed no physical GPU, only the failed command and
+five unexecuted native commands ran: 487 passed, 20 ignored. Combined completed
+native coverage is 1,216 passed, 28 ignored; the full verify was not repeated.
+The candidate frontend built. Initial Cargo context generation failed on a
+missing generated icon; its retained Cargo-only retry used the same existing
+`icon.png` bundle override as native tests and passed in 46.02 seconds.
+Prevention: preserve synthetic-device visibility and carry the explicit fixture
+icon override into native candidate builds. Dependency access remained offline;
+bridge routing supported local network tests. Five existing lint warnings remain.
+
+Owner worktree `/ai/gchat-worktrees/gchat3-host-address-native-20261018`, branch
+`test/gchat3-host-address-native-20261018`; only the owning route, its tests and
+this record changed. Canonical `out/host-address-native-20261018` retains
+`result.json`, `SUMMARY.md`, commands, actual focused/full/continuation/build logs,
+DOM observations and screenshots. The baseline private GUI was removed at
+03:15:20Z (3,426,720,790 logical bytes; booking 2909 canceled). After normal
+changed-app shutdown, the exact private Xvfb/display, D-Bus/keyring session,
+relay and exited build containers were cleaned up. No owned processes remained.
+Private S1 GUI and build/cache roots `tmp-gchat3-host-address-native-20261018` and
+`tmp-gchat3-host-address-build-20261018` were removed at 03:34:26Z, reclaiming
+43,116,667,421 logical bytes; CPU80–87 booking 2912 was canceled. Read-only
+`tmp-gchat3-linux-rc-refresh-20261017` donors stayed untouched. The candidate
+binary/cache was disposable; source and concise evidence are retained.
+
+Scope is English, Dark-theme native Linux. Real pairing/account connections,
+Google consent, Windows, screen-reader speech, GPU/model/profiling and performance
+remain unqualified. The private keyring was explicitly unlocked; the existing
+updater's 404 excludes a whole-app offline claim. Parent owns shared row state.
+
 ## Secure-storage Check feedback — Gchat 3 native acceptance, October 18
 
 `GCHAT-SECURE-STORAGE-SETUP-FEEDBACK-20261017` passes its remaining Linux
