@@ -5910,3 +5910,99 @@ prep log and both exited containers were retired at 13:39 UTC, removing
 The retained generated JSON was reconstructed after cleanup from the eight
 frozen inputs and matches the original staged SHA-256 exactly. Source,
 private DEV publication and the Linux RC input handoff are complete.
+
+
+### Consumer Muse 30B 2-bit mix mirror — Gchat 3
+
+Result: mirrored the six signed Muse launch profiles from GInfer
+`7560e24d0` (RTX 5090, accepted as `bdd282447`) and `09e4a8871`
+(RTX 4090/laptop, accepted as `d1ac9e391`) into release inputs and private DEV.
+Package SHA-256 is
+`9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c`,
+13,838,508,544 bytes. These remain calculated-startup-smoke profiles bound to
+Engine `eb777ab9570fad1c8301635617f0923f2b820424`, with zero full-context
+requests. RTX 5090/4090 admit 131,072 context/C8. Laptop points are
+131,072/C1, 117,760/C2, 31,744/C4 and 4,096/C7; laptop C8 remains a gap.
+The laptop natural gate covers only the C4 configuration. Exact explicit
+arenas, fixed DFlash7, INT8 KV, Text, graphs and 300 MiB reserve are preserved.
+
+Acceptance: the existing supplied-catalog Host regression checks the signed
+settings; focused tests, Host check/clippy and ONE `make verify` consume eleven
+explicit inputs, producing exactly 48 profiles while preserving the prior 42
+objects and four context lowerings. For private DEV, coordinate C7's idle and
+zero-GET stop boundary, preserve generator/inputs/www/receipts, run the existing
+generator once and restart unchanged srv.py. Require exact signed additions,
+all 116 prior profiles and eight release records preserved, plus payload HEAD
+and one-byte Range acceptance before C5's first-use download. No Engine gate,
+payload mutation or new hardware qualification is assigned.
+
+Candidate: `/ai/gchat-worktrees/gchat3-consumer-muse-profiles-20261018`, branch
+`fix/gchat3-consumer-muse-profiles-20261018`, base `770f3c03d`. Small frozen
+inputs and evidence: `/ai/gchat/out/consumer-muse-profiles-20261018/`.
+The source change extends only the supplied-catalog regression in
+`ginfer-host/src/launch_profiles.rs`; execution used independent S1 SSD copies under
+`/media/ron/SSD_RAID/ai/tmp-gchat3-consumer-muse-profiles-tests-20261018`.
+The inactive RC donor remains protected. Independent preparation started at
+14:28:42 UTC, booking 3333 on CPUs 96–103 with the shared socket-1 compile
+lock; the effective focused/check/clippy/ONE-verify command and eleven frozen
+inputs were reviewed before launch. The focused supplied-catalog regression,
+Host check and all-target clippy passed. The sole `make verify` stopped at
+14:34 UTC after 3,630 app tests passed, six skipped and one unrelated Agent
+Studio stage-ID typing test exceeded its existing five-second timeout
+(5,361 ms); no assertion failure or OOM was reported. Booking 3333 returned
+at 14:36 UTC. Source and eleven inputs remain frozen. Vitest emitted no
+coverage reports after the failure. The bounded continuation passed that same
+failed case unchanged (1,504 ms), regenerated missing critical coverage with
+the six existing critical-flow test files and their two provider-store
+consumers (109 passes), and passed the previously unrun extension coverage
+(127), all six unchanged floors and Rust (1,308 passes, 28 ignored across
+23 summaries). This gives 3,631 unique passing app tests and six skips; the
+109 repeated coverage cases are not added to that total. No second full app
+suite or `make verify`, timeout increase or source edit occurred. The original
+command remains recorded as failed in `test-verify.log` and
+`test-terminal-failure.json`; `test-result.json` records the successful bounded
+continuation separately. Coordinator review checked the retained stage logs
+and actual Rust summaries.
+Parent owns DEV generator/input replacement and acceptance; C7 owns service
+stop/start. Shared root is `/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1`.
+C7 stopped PID 1558479 at 14:29:52 UTC after all consumer-idle confirmations,
+base hashes and a fresh zero-GET check, verifying PID and listener absent. The
+prepared bounded generator/input replacement is staged at
+`mirror-ready-muse-20261018`; its preserved base is the eight-package,
+116-profile catalog (277,094 bytes, SHA-256
+`2262186803e08a65d4fee4b99a8ba1f5e0ccbe87ef66b02a22c2bb5382a4931c`).
+The existing generator ran once at 14:30:48 UTC, producing nine packages and
+122 profiles (298,602 bytes, SHA-256
+`19a1d986fc6ec1510ea78b9d340e006ff8179a16f8e6b0acc69c8e4af6154309`).
+All 116 existing profile objects, eight release records and eight payload
+symlink targets match the preserved base. All six new profiles exactly match
+the signed source objects. The base is retained at
+`mirror-before-muse-20261018T143048Z`; payloads were neither copied nor
+rehashed and srv.py is unchanged. See `private-dev-deployment-result.json`.
+C7 restarted unchanged srv.py at 14:31:22 UTC as PID 1854374. HTTP acceptance
+passed at 14:31:45 UTC: catalog bytes match the generated output, all nine
+payload routes return exact-length HEAD and one-byte Range (206), with nine
+payload bytes read in total. See `private-dev-http-acceptance.json`. C5/C4/C7
+received the stable acceptance and frozen eleven-input binding; consumers may
+resume. There is no retained current DEV native app/inspector/XTest donor in
+this lane or C7; the inactive RC dependency donor remains read-copy-safe.
+C5's first-use DEV build is pinned to `770f3c03d`; the bound Muse gate uses
+the `eb777` Engine requirement rather than the retained `e228` bootstrap.
+C3's already assembled Linux RC remains frozen at `3e32`/`b26` with eight
+inputs/42 profiles for its final installed defect acceptance. The Muse packet
+is retained for its next refreshed consumer build, not retroactively included.
+The actual staged release catalog is 109,527 bytes, SHA-256
+`3db18a5713f3d66876c2951a49aeee27d8d7f1f83a54ac41af27c5e93ad308a0`.
+Independent review confirmed the exact ordered eleven-input merge, all 42
+prior profile objects unchanged and exactly six signed additions. The bounded
+continuation terminated successfully at 14:46:34 UTC; booking 3342 returned
+at 14:47 UTC. Source, all eleven input hashes and the staged output remained
+unchanged after execution. See `catalog-staged-proof.json`,
+`test-continuation-terminal.json` and `test-result.json`. The accepted frozen
+inputs remain available to the next release build; no model or GPU gate was
+run for this catalog-only change.
+The owned S1 test root, its preparation log and both exited test containers
+were removed at 14:52:20 UTC (29,850,680,192 logical bytes); the protected RC
+donor and stable DEV service were untouched. Small input, generated-catalog
+and raw-log evidence remains in the output folder. Ready for reviewed merge;
+the next release refresh consumes the retained eleven-input packet.
