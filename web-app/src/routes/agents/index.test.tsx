@@ -1135,6 +1135,113 @@ describe('AgentStudioPage', () => {
     ))
   })
 
+  it('retains dependency punctuation and focus while typing and saves both incoming edges', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add stage' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add stage' }))
+    fireEvent.change(screen.getAllByLabelText('Workspace')[0], {
+      target: { value: 'isolated' },
+    })
+    fireEvent.change(screen.getAllByLabelText('Workspace')[2], {
+      target: { value: 'shared' },
+    })
+
+    const dependencies = screen.getAllByLabelText('Depends on stage IDs')[2]
+    const text = 'deliver, stage-2'
+    dependencies.focus()
+    for (let length = 1; length <= text.length; length++) {
+      const value = text.slice(0, length)
+      fireEvent.change(dependencies, { target: { value } })
+      expect(screen.getAllByLabelText('Depends on stage IDs')[2]).toBe(dependencies)
+      expect(dependencies).toHaveFocus()
+      expect(dependencies).toHaveValue(value)
+    }
+
+    // Saving must use the current parsed edges even before a blur commits formatting.
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    const edges = [
+      { from: 'deliver', to: 'stage-3' },
+      { from: 'stage-2', to: 'stage-3' },
+    ]
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ kind: 'workflow', edges })
+    ))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+
+    fireEvent.change(dependencies, { target: { value: `${text}-` } })
+    expect(dependencies).toHaveValue(`${text}-`)
+    expect(dependencies).toHaveFocus()
+    fireEvent.blur(dependencies)
+    expect(dependencies).toHaveValue(text)
+    fireEvent.focus(dependencies)
+    fireEvent.change(dependencies, { target: { value: `${text}, ` } })
+    expect(dependencies).toHaveValue(`${text}, `)
+    fireEvent.blur(dependencies)
+    expect(dependencies).toHaveValue(text)
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledTimes(2))
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ edges })
+    )
+  })
+
+  it('refreshes dependency text after removing a stage and selecting another workflow', async () => {
+    const role = {
+      instructions: '', skills: [], maxSteps: 12,
+      modelInstanceId: null, reasoningEffort: null,
+    }
+    const workflow: AgentDefinition = {
+      ...editableDraft,
+      id: 'first-dependency-workflow',
+      name: 'First dependency workflow',
+      kind: 'workflow',
+      nodes: [
+        { ...role, id: 'research', name: 'Research', workspace: 'isolated' },
+        { ...role, id: 'review-stage', name: 'Review', workspace: 'isolated' },
+        { ...role, id: 'deliver', name: 'Deliver', workspace: 'shared' },
+      ],
+      edges: [
+        { from: 'research', to: 'deliver' },
+        { from: 'review-stage', to: 'deliver' },
+      ],
+    }
+    const otherWorkflow: AgentDefinition = {
+      ...workflow,
+      id: 'second-dependency-workflow',
+      name: 'Second dependency workflow',
+      edges: [{ from: 'research', to: 'deliver' }],
+    }
+    definitionState.value.definitions = [workflow, otherWorkflow]
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue(workflow.name)
+
+    const dependencies = screen.getAllByLabelText('Depends on stage IDs')[2]
+    dependencies.focus()
+    fireEvent.change(dependencies, {
+      target: { value: 'research, review-stage, ' },
+    })
+    expect(dependencies).toHaveValue('research, review-stage, ')
+    fireEvent.blur(dependencies)
+    fireEvent.click(screen.getAllByTitle('Remove stage')[0])
+
+    expect(screen.getAllByLabelText('Stage ID').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['review-stage', 'deliver'])
+    expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['', 'review-stage'])
+
+    fireEvent.click(screen.getByRole('button', { name: /Second dependency workflow/ }))
+    expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['', '', 'research'])
+    fireEvent.click(screen.getByRole('button', { name: /First dependency workflow/ }))
+    expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['', '', 'research, review-stage'])
+  })
+
   it('routes a swarm worker and synthesizer independently', async () => {
     definitionState.value.createDraft.mockResolvedValue({
       ...editableDraft,

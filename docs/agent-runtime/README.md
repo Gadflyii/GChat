@@ -49,6 +49,23 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Workflow dependency keyboard entry — October 18
+
+An isolated native Linux Studio pass reproduced a dependency editor that removed
+commas and separators during typing: entering `deliver, stage-2` produced
+`deliverstage2`. The affected Workflow editor is byte-identical between observed
+candidate source `3818d7a2` and main `548d73ed8`.
+
+The correction keeps the typed dependency text until blur and updates canonical
+workflow edges on every edit, so saving uses the current dependencies. External
+stage renames, removals and workflow selection refresh the displayed values.
+Rendered regressions cover per-character punctuation and focus, blur formatting,
+exact saved edges, removal and selection. Gates and native candidate replay are
+pending; no acceptance is claimed yet. Baseline and subsequent receipts:
+`/ai/gchat/out/gchat-workflow-dependency-keyboard-20261018/`. This is an isolated
+Linux debug editor check with retained sidecars and no GPU/model request.
+Windows: not built (dev phase).
+
 ## Untouched Coordinator Team defaults — October 18
 
 An isolated native Linux Studio pass found that **New agent** → **Coordinator
