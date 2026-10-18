@@ -23,6 +23,382 @@ const GCHAT_OPENCODE_STARTUP: &str = include_str!("../../resources/opencode/gcha
 const GCHAT_HERMES_DARK_SKIN: &str = include_str!("../../resources/hermes/gchat-dark.yaml");
 const GCHAT_HERMES_LIGHT_SKIN: &str = include_str!("../../resources/hermes/gchat-light.yaml");
 
+#[cfg(target_os = "linux")]
+struct LinuxReaderCancellation {
+    stopped: std::sync::atomic::AtomicBool,
+    wake: std::os::unix::net::UnixStream,
+    finished: Mutex<bool>,
+    finished_changed: Condvar,
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxReaderCancellation {
+    fn cancel(&self) {
+        if !self.stopped.swap(true, std::sync::atomic::Ordering::AcqRel) {
+            // One byte wakes poll even when no child writes to the terminal.
+            // Repeated Stop and waiter completion share this idempotent wakeup.
+            let _ = (&self.wake).write_all(&[1]);
+        }
+    }
+
+    fn wait_finished(&self) -> std::io::Result<()> {
+        let finished = self
+            .finished
+            .lock()
+            .map_err(|_| std::io::Error::other("Linux terminal reader state is unavailable"))?;
+        let (finished, _) = self
+            .finished_changed
+            .wait_timeout_while(finished, std::time::Duration::from_secs(2), |done| !*done)
+            .map_err(|_| std::io::Error::other("Linux terminal reader state is unavailable"))?;
+        if !*finished {
+            // Normal exit drains the PTY to EOF. An escaped slave handle or a
+            // broken reader must still have a bounded, retryable cancellation.
+            self.cancel();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "Linux terminal output did not drain before the deadline",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct LinuxPtyReader {
+    pty: std::fs::File,
+    wake: std::os::unix::net::UnixStream,
+    cancellation: Arc<LinuxReaderCancellation>,
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxPtyReader {
+    fn new(master: &dyn MasterPty) -> std::io::Result<(Self, Arc<LinuxReaderCancellation>)> {
+        use std::os::fd::BorrowedFd;
+        let fd = master
+            .as_raw_fd()
+            .ok_or_else(|| std::io::Error::other("The Linux terminal has no PTY descriptor"))?;
+        // The master remains alive while its descriptor is duplicated.
+        let pty = unsafe { BorrowedFd::borrow_raw(fd) }.try_clone_to_owned()?;
+        let (wake, signal) = std::os::unix::net::UnixStream::pair()?;
+        signal.set_nonblocking(true)?;
+        let cancellation = Arc::new(LinuxReaderCancellation {
+            stopped: std::sync::atomic::AtomicBool::new(false),
+            wake: signal,
+            finished: Mutex::new(false),
+            finished_changed: Condvar::new(),
+        });
+        // File owns the duplicate, independently of the writer/master handles.
+        Ok((
+            Self {
+                pty: std::fs::File::from(pty),
+                wake,
+                cancellation: cancellation.clone(),
+            },
+            cancellation,
+        ))
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Read for LinuxPtyReader {
+    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
+        use nix::libc;
+        use std::os::fd::AsRawFd;
+        if buffer.is_empty() {
+            return Ok(0);
+        }
+        loop {
+            if self
+                .cancellation
+                .stopped
+                .load(std::sync::atomic::Ordering::Acquire)
+            {
+                return Ok(0);
+            }
+            let mut fds = [
+                libc::pollfd {
+                    fd: self.pty.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: self.wake.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            if unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as _, -1) } < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.kind() == std::io::ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+            if fds[1].revents != 0 {
+                return Ok(0);
+            }
+            if fds[0].revents != 0 {
+                // This is the sole reader of this PTY. Match portable-pty's
+                // Linux EIO-as-EOF behavior after the final slave closes.
+                return match self.pty.read(buffer) {
+                    Err(error) if error.raw_os_error() == Some(libc::EIO) => Ok(0),
+                    result => result,
+                };
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for LinuxPtyReader {
+    fn drop(&mut self) {
+        if let Ok(mut finished) = self.cancellation.finished.lock() {
+            // The reader thread has already published every byte it consumed.
+            *finished = true;
+            self.cancellation.finished_changed.notify_all();
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+struct LinuxSessionChild {
+    child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
+    status: Option<portable_pty::ExitStatus>,
+}
+
+#[cfg(target_os = "linux")]
+struct LinuxPtySession {
+    sid: nix::libc::pid_t,
+    child: Mutex<LinuxSessionChild>,
+    reader: Arc<LinuxReaderCancellation>,
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxPtySession {
+    fn new(
+        child: Box<dyn portable_pty::Child + Send + Sync>,
+        reader: Arc<LinuxReaderCancellation>,
+    ) -> Self {
+        // portable-pty calls setsid before exec and its Unix child always has a PID.
+        let sid = child
+            .process_id()
+            .expect("Linux PTY child has a process ID") as _;
+        Self {
+            sid,
+            child: Mutex::new(LinuxSessionChild {
+                child: Some(child),
+                status: None,
+            }),
+            reader,
+        }
+    }
+
+    fn members(&self) -> std::io::Result<Vec<std::os::fd::OwnedFd>> {
+        use nix::libc;
+        use std::os::fd::{AsRawFd, FromRawFd};
+        let mut members = Vec::new();
+        for entry in std::fs::read_dir("/proc")? {
+            let entry = entry?;
+            let Some(pid) = entry
+                .file_name()
+                .to_str()
+                .and_then(|name| name.parse::<libc::pid_t>().ok())
+            else {
+                continue;
+            };
+            if unsafe { libc::getsid(pid) } != self.sid {
+                continue;
+            }
+            let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid, 0) };
+            if fd < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() == Some(libc::ESRCH) {
+                    continue;
+                }
+                return Err(error);
+            }
+            let fd = unsafe { std::os::fd::OwnedFd::from_raw_fd(fd as _) };
+            // Recheck membership after pinning. Signals always target the pinned
+            // process, never a numeric PID that could have been reused meanwhile.
+            if unsafe { libc::getsid(pid) } != self.sid {
+                continue;
+            }
+            let mut exited = libc::pollfd {
+                fd: fd.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            if unsafe { libc::poll(&mut exited, 1, 0) } < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if exited.revents == 0 {
+                members.push(fd);
+            }
+        }
+        Ok(members)
+    }
+
+    fn signal(members: &[std::os::fd::OwnedFd], signal: i32) -> std::io::Result<()> {
+        use nix::libc;
+        use std::os::fd::AsRawFd;
+        for member in members {
+            if unsafe {
+                libc::syscall(
+                    libc::SYS_pidfd_send_signal,
+                    member.as_raw_fd(),
+                    signal,
+                    std::ptr::null::<libc::siginfo_t>(),
+                    0,
+                )
+            } < 0
+            {
+                let error = std::io::Error::last_os_error();
+                if error.raw_os_error() != Some(libc::ESRCH) {
+                    return Err(error);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn request_stop(&self) -> std::io::Result<()> {
+        use nix::libc;
+        let owned = self
+            .child
+            .lock()
+            .map_err(|_| std::io::Error::other("Linux terminal ownership is unavailable"))?;
+        if owned.status.is_none() {
+            let members = self.members()?;
+            Self::signal(&members, libc::SIGCONT)?;
+            Self::signal(&members, libc::SIGHUP)?;
+        }
+        self.reader.cancel();
+        Ok(())
+    }
+
+    fn terminate(&self) -> std::io::Result<portable_pty::ExitStatus> {
+        self.reader.cancel();
+        self.drain()
+    }
+
+    fn drain(&self) -> std::io::Result<portable_pty::ExitStatus> {
+        use nix::libc;
+        use std::time::{Duration, Instant};
+        let mut owned = self
+            .child
+            .lock()
+            .map_err(|_| std::io::Error::other("Linux terminal ownership is unavailable"))?;
+        if let Some(status) = owned.status.as_ref() {
+            return Ok(status.clone());
+        }
+        // The leader stays live or unreaped throughout this scan/escalation. Its
+        // reserved PID therefore cannot become an unrelated session's ID, even
+        // after its descendants have been reparented to init.
+        for (signal, grace) in [
+            (libc::SIGHUP, Duration::from_millis(200)),
+            (libc::SIGTERM, Duration::from_millis(200)),
+            (libc::SIGKILL, Duration::from_secs(1)),
+        ] {
+            let deadline = Instant::now() + grace;
+            loop {
+                let members = self.members()?;
+                if members.is_empty() {
+                    let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+                    if unsafe {
+                        libc::waitid(
+                            libc::P_PID,
+                            self.sid as _,
+                            info.as_mut_ptr(),
+                            libc::WEXITED | libc::WNOWAIT | libc::WNOHANG,
+                        )
+                    } < 0
+                    {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                    if unsafe { info.assume_init().si_pid() } != self.sid {
+                        return Err(std::io::Error::other(
+                            "Linux terminal leader has not exited",
+                        ));
+                    }
+                    // A pidfd reports zombies as exited; wait() is now a reap,
+                    // not a wait for a live shell. Only here release the SID.
+                    let status = owned
+                        .child
+                        .as_mut()
+                        .expect("unreaped Linux PTY child")
+                        .wait()?;
+                    owned.child = None;
+                    owned.status = Some(status.clone());
+                    return Ok(status);
+                }
+                // A job-control stopped foreground group cannot act on TERM
+                // until continued. KILL also covers HUP/TERM-resistant jobs.
+                Self::signal(&members, libc::SIGCONT)?;
+                Self::signal(&members, signal)?;
+                if Instant::now() >= deadline {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!(
+                "Linux terminal session {} did not exit after SIGKILL",
+                self.sid
+            ),
+        ))
+    }
+
+    fn wait_for_exit(&self) -> std::io::Result<()> {
+        use nix::libc;
+        use std::os::fd::{AsRawFd, FromRawFd};
+        let leader = {
+            let owned = self
+                .child
+                .lock()
+                .map_err(|_| std::io::Error::other("Linux terminal ownership is unavailable"))?;
+            if owned.status.is_some() {
+                return Ok(());
+            }
+            // Pin while the unreaped child still reserves the numeric PID.
+            // A concurrent stop can subsequently reap it; waiting on this fd
+            // must never attach to a later child that reuses the number.
+            let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, self.sid, 0) };
+            if fd < 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            unsafe { std::os::fd::OwnedFd::from_raw_fd(fd as _) }
+        };
+        // Observe shell exit without reaping it: a shell may exit while an
+        // orphaned foreground job still owns the slave and a different PGID.
+        loop {
+            let mut info = std::mem::MaybeUninit::<libc::siginfo_t>::zeroed();
+            if unsafe {
+                libc::waitid(
+                    libc::P_PIDFD,
+                    leader.as_raw_fd() as _,
+                    info.as_mut_ptr(),
+                    libc::WEXITED | libc::WNOWAIT,
+                )
+            } == 0
+            {
+                break;
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() == std::io::ErrorKind::Interrupted {
+                continue;
+            }
+            // A concurrent stop may already have drained and reaped this child.
+            if error.raw_os_error() == Some(libc::ECHILD) {
+                break;
+            }
+            return Err(error);
+        }
+        Ok(())
+    }
+}
+
 #[cfg(windows)]
 #[derive(Debug, Clone)]
 struct WindowsTerminalKiller {
@@ -71,6 +447,7 @@ impl ChildKiller for WindowsTerminalKiller {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn terminal_child_killer(
     child: &(dyn portable_pty::Child + Send + Sync),
 ) -> std::io::Result<Box<dyn ChildKiller + Send + Sync>> {
@@ -346,6 +723,8 @@ struct Session {
     master: Option<Box<dyn MasterPty + Send>>,
     writer: Option<Box<dyn Write + Send>>,
     killer: Option<Box<dyn ChildKiller + Send + Sync>>,
+    #[cfg(target_os = "linux")]
+    linux_session: Option<Arc<LinuxPtySession>>,
     #[cfg(windows)]
     startup_child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
     channel: Option<Channel<TerminalEvent>>,
@@ -367,6 +746,8 @@ impl Default for Session {
             master: None,
             writer: None,
             killer: None,
+            #[cfg(target_os = "linux")]
+            linux_session: None,
             #[cfg(windows)]
             startup_child: None,
             channel: None,
@@ -490,12 +871,32 @@ impl TerminalSlot {
         Ok(())
     }
 
-    fn stop(&self) -> Result<TerminalStatus, String> {
+    fn request_stop(&self) -> Result<TerminalStatus, String> {
         // A stop must also own a launch that is still constructing its child.
         let _spawn_guard = self
             .spawn_gate
             .lock()
             .map_err(|_| format!("{} terminal spawn state is unavailable", self.id.label()))?;
+        #[cfg(target_os = "linux")]
+        {
+            let owner = self.session()?.linux_session.clone();
+            if let Some(owner) = owner {
+                // Never hold Session while waiting for processes: output and the
+                // waiter must remain able to make progress during escalation.
+                owner.request_stop().map_err(|error| {
+                    format!("Could not stop {} terminal: {error}", self.id.label())
+                })?;
+                let mut session = self.session()?;
+                session.flow_paused = false;
+                self.shared.flow_changed.notify_all();
+                if session.phase == TerminalPhase::Running {
+                    session.phase = TerminalPhase::Stopping;
+                    session.next_sequence();
+                }
+                session.bridge = None;
+                return Ok(session.status());
+            }
+        }
         #[cfg(windows)]
         let startup_child;
         let (status, killer, writer, master) = {
@@ -547,11 +948,83 @@ impl TerminalSlot {
         Ok(status)
     }
 
+    fn finish_stop(&self, generation: u64) -> Result<(), String> {
+        #[cfg(not(target_os = "linux"))]
+        let _ = generation;
+        #[cfg(target_os = "linux")]
+        {
+            let owner = {
+                let session = self.session()?;
+                if session.generation != generation {
+                    return Ok(());
+                }
+                session.linux_session.clone()
+            };
+            if let Some(owner) = owner {
+                let waited = owner.terminate().and_then(|status| {
+                    owner.reader.wait_finished()?;
+                    Ok(status)
+                });
+                let error = waited
+                    .as_ref()
+                    .err()
+                    .map(|error| format!("Could not stop {} terminal: {error}", self.id.label()));
+                // Also complete retries whose first waiter reported a failure
+                // and returned. No second worker or detached join is needed.
+                publish_wait_result(&self.shared, generation, waited);
+                if let Some(error) = error {
+                    return Err(error);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn stop(&self) -> Result<TerminalStatus, String> {
+        let status = self.request_stop()?;
+        self.finish_stop(status.generation)?;
+        Ok(status)
+    }
+
     fn join_threads(&self) -> Result<(), String> {
         let threads =
             std::mem::take(&mut *self.threads.lock().map_err(|_| {
                 format!("{} terminal thread state is unavailable", self.id.label())
             })?);
+        #[cfg(target_os = "linux")]
+        let threads = {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            let mut pending = threads;
+            let mut finished = Vec::new();
+            loop {
+                let (done, running): (Vec<_>, Vec<_>) =
+                    pending.into_iter().partition(JoinHandle::is_finished);
+                finished.extend(done);
+                pending = running;
+                if pending.is_empty() || std::time::Instant::now() >= deadline {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            if !pending.is_empty() {
+                // Keep unfinished workers owned for a retry; a timeout must not
+                // turn a blocked reader into a detached thread.
+                self.threads
+                    .lock()
+                    .map_err(|_| {
+                        format!("{} terminal thread state is unavailable", self.id.label())
+                    })?
+                    .extend(pending);
+                for thread in finished {
+                    let _ = thread.join();
+                }
+                return Err(format!(
+                    "{} terminal workers did not stop before the deadline",
+                    self.id.label()
+                ));
+            }
+            finished
+        };
         let mut panicked = false;
         for thread in threads {
             panicked |= thread.join().is_err();
@@ -566,6 +1039,7 @@ impl TerminalSlot {
         }
     }
 
+    #[cfg(not(target_os = "linux"))]
     fn shutdown(&self) {
         #[cfg(windows)]
         let mut startup_child;
@@ -685,14 +1159,17 @@ impl TerminalState {
         let mut errors = Vec::new();
         let mut stopped = Vec::new();
         for slot in slots {
-            match slot.stop() {
-                Ok(_) => stopped.push(slot),
+            match slot.request_stop() {
+                Ok(status) => stopped.push((slot, status.generation)),
                 Err(error) => errors.push(format!("{}: {error}", slot.id.key())),
             }
         }
         // Request every stop before waiting; one refused child must not leave
         // unrelated Code workspaces running. Success means owned workers reaped.
-        for slot in stopped {
+        for (slot, generation) in stopped {
+            if let Err(error) = slot.finish_stop(generation) {
+                errors.push(format!("{}: {error}", slot.id.key()));
+            }
             if let Err(error) = slot.join_threads() {
                 errors.push(format!("{}: {error}", slot.id.key()));
             }
@@ -722,13 +1199,50 @@ impl TerminalState {
     }
 
     pub fn shutdown(&self) {
-        self.code.shutdown();
-        if let Ok(workspaces) = self.code_workspaces.lock() {
-            for workspace in workspaces.values() {
-                workspace.shutdown();
+        #[cfg(target_os = "linux")]
+        {
+            let _code_guard = match self.code_lifecycle.lock() {
+                Ok(guard) => guard,
+                Err(error) => {
+                    log::warn!("Code terminal launch state is unavailable: {error}");
+                    return;
+                }
+            };
+            let mut slots = vec![self.code.clone(), self.hermes.clone()];
+            match self.code_workspaces.lock() {
+                Ok(workspaces) => slots.extend(workspaces.values().cloned()),
+                Err(error) => log::warn!("Code workspace registry is unavailable: {error}"),
+            }
+            // Include hidden and previously exited workspace shells; their
+            // foreground jobs can still own the PTY after the shell has exited.
+            let mut stopped = Vec::new();
+            for slot in &slots {
+                match slot.request_stop() {
+                    Ok(status) => stopped.push((slot, status.generation)),
+                    Err(error) => log::warn!("{error}"),
+                }
+            }
+            for (slot, generation) in stopped {
+                if let Err(error) = slot.finish_stop(generation) {
+                    log::warn!("{error}");
+                }
+            }
+            for slot in slots {
+                if let Err(error) = slot.join_threads() {
+                    log::warn!("{error}");
+                }
             }
         }
-        self.hermes.shutdown();
+        #[cfg(not(target_os = "linux"))]
+        {
+            self.code.shutdown();
+            if let Ok(workspaces) = self.code_workspaces.lock() {
+                for workspace in workspaces.values() {
+                    workspace.shutdown();
+                }
+            }
+            self.hermes.shutdown();
+        }
     }
 }
 
@@ -997,6 +1511,7 @@ fn start_reader(
         .expect("failed to spawn embedded terminal reader")
 }
 
+#[cfg(any(not(target_os = "linux"), test))]
 fn start_waiter(
     terminal_id: TerminalId,
     shared: Arc<SharedTerminal>,
@@ -1010,51 +1525,129 @@ fn start_waiter(
         ))
         .spawn(move || {
             let waited = child.wait();
-            let Ok(mut session) = shared.session.lock() else {
-                return;
-            };
-            if session.generation != generation {
-                return;
-            }
-
-            session.master = None;
-            session.writer = None;
-            session.killer = None;
-            session.bridge = None;
-            session.flow_paused = false;
-            shared.flow_changed.notify_all();
-
-            match waited {
-                Ok(status) => {
-                    let exit_code = status.exit_code();
-                    let signal = status.signal().map(str::to_string);
-                    session.phase = TerminalPhase::Exited;
-                    session.exit_code = Some(exit_code);
-                    session.signal.clone_from(&signal);
-                    let sequence = session.next_sequence();
-                    let status = session.status();
-                    session.publish(TerminalEvent::Exited {
-                        generation,
-                        sequence,
-                        status,
-                    });
-                }
-                Err(error) => {
-                    session.phase = TerminalPhase::Exited;
-                    session.exit_code = None;
-                    session.signal = None;
-                    let sequence = session.next_sequence();
-                    let status = session.status();
-                    session.publish(TerminalEvent::Error {
-                        generation,
-                        sequence,
-                        message: format!("Could not wait for terminal process: {error}"),
-                        status,
-                    });
-                }
-            }
+            publish_wait_result(&shared, generation, waited);
         })
         .expect("failed to spawn embedded terminal waiter")
+}
+
+#[cfg(target_os = "linux")]
+fn start_linux_waiter(
+    terminal_id: TerminalId,
+    shared: Arc<SharedTerminal>,
+    generation: u64,
+    owner: Arc<LinuxPtySession>,
+) -> JoinHandle<()> {
+    std::thread::Builder::new()
+        .name(format!(
+            "{}-terminal-waiter-{generation}",
+            terminal_id.label().to_ascii_lowercase()
+        ))
+        .spawn(move || {
+            let waited = owner.wait_for_exit().and_then(|()| {
+                {
+                    let mut session = shared.session.lock().map_err(|_| {
+                        std::io::Error::other("Linux terminal state is unavailable")
+                    })?;
+                    if session.generation == generation && session.linux_session.is_some() {
+                        if session.phase == TerminalPhase::Running {
+                            session.phase = TerminalPhase::Stopping;
+                            session.next_sequence();
+                        }
+                        // Natural shell exit must also release frontend flow
+                        // control, and Stopping rejects any later pause request.
+                        session.flow_paused = false;
+                        shared.flow_changed.notify_all();
+                    }
+                }
+                let status = owner.drain()?;
+                // No cancellation on natural exit: deliver buffered final
+                // output before the Exited event can end the generation.
+                owner.reader.wait_finished()?;
+                Ok(status)
+            });
+            publish_wait_result(&shared, generation, waited);
+        })
+        .expect("failed to spawn embedded terminal waiter")
+}
+
+fn publish_wait_result(
+    shared: &SharedTerminal,
+    generation: u64,
+    waited: std::io::Result<portable_pty::ExitStatus>,
+) {
+    let Ok(mut session) = shared.session.lock() else {
+        return;
+    };
+    if session.generation != generation {
+        return;
+    }
+
+    #[cfg(target_os = "linux")]
+    if session.phase == TerminalPhase::Exited && session.linux_session.is_none() {
+        return;
+    }
+
+    #[cfg(target_os = "linux")]
+    if let Err(error) = waited.as_ref() {
+        if session.linux_session.is_some() {
+            // Retain session ownership, including any unreaped leader, for
+            // retry after a failed process/output drain. Do not claim exit.
+            session.phase = TerminalPhase::Stopping;
+            session.flow_paused = false;
+            shared.flow_changed.notify_all();
+            let sequence = session.next_sequence();
+            let status = session.status();
+            session.publish(TerminalEvent::Error {
+                generation,
+                sequence,
+                message: format!("Could not stop terminal session: {error}"),
+                status,
+            });
+            return;
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        session.linux_session = None;
+    }
+
+    session.master = None;
+    session.writer = None;
+    session.killer = None;
+    session.bridge = None;
+    session.flow_paused = false;
+    shared.flow_changed.notify_all();
+
+    match waited {
+        Ok(status) => {
+            let exit_code = status.exit_code();
+            let signal = status.signal().map(str::to_string);
+            session.phase = TerminalPhase::Exited;
+            session.exit_code = Some(exit_code);
+            session.signal.clone_from(&signal);
+            let sequence = session.next_sequence();
+            let status = session.status();
+            session.publish(TerminalEvent::Exited {
+                generation,
+                sequence,
+                status,
+            });
+        }
+        Err(error) => {
+            session.phase = TerminalPhase::Exited;
+            session.exit_code = None;
+            session.signal = None;
+            let sequence = session.next_sequence();
+            let status = session.status();
+            session.publish(TerminalEvent::Error {
+                generation,
+                sequence,
+                message: format!("Could not wait for terminal process: {error}"),
+                status,
+            });
+        }
+    }
 }
 
 #[tauri::command]
@@ -1195,12 +1788,23 @@ pub fn terminal_spawn<R: Runtime>(
             pixel_height: 0,
         })
         .map_err(|error| format!("Could not create {} terminal: {error}", terminal_id.label()))?;
+    #[cfg(not(target_os = "linux"))]
     let reader = pair.master.try_clone_reader().map_err(|error| {
         format!(
             "Could not open {} terminal output: {error}",
             terminal_id.label()
         )
     })?;
+    #[cfg(target_os = "linux")]
+    let (reader, reader_cancellation) =
+        LinuxPtyReader::new(pair.master.as_ref()).map_err(|error| {
+            format!(
+                "Could not open {} terminal output: {error}",
+                terminal_id.label()
+            )
+        })?;
+    #[cfg(target_os = "linux")]
+    let reader: Box<dyn Read + Send> = Box::new(reader);
     let mut writer = pair.master.take_writer().map_err(|error| {
         format!(
             "Could not open {} terminal input: {error}",
@@ -1269,6 +1873,7 @@ pub fn terminal_spawn<R: Runtime>(
         command.env("OPENCODE_CONFIG_CONTENT", config);
         command.env("GCHAT_BRIDGE_TOKEN", connection.token);
     }
+    #[allow(unused_mut)]
     let mut child = pair.slave.spawn_command(command).map_err(|error| {
         format!(
             "Could not start {} terminal shell: {error}",
@@ -1276,6 +1881,9 @@ pub fn terminal_spawn<R: Runtime>(
         )
     })?;
     drop(pair.slave);
+    #[cfg(target_os = "linux")]
+    let linux_session = Arc::new(LinuxPtySession::new(child, reader_cancellation));
+    #[cfg(not(target_os = "linux"))]
     let mut killer = match terminal_child_killer(child.as_ref()) {
         Ok(killer) => killer,
         Err(error) => {
@@ -1314,6 +1922,28 @@ pub fn terminal_spawn<R: Runtime>(
         }
     };
 
+    #[cfg(target_os = "linux")]
+    let launch_failure = if let Some(command) = launch_command {
+        match writer.write_all(&command).and_then(|_| writer.flush()) {
+            Ok(()) => None,
+            Err(error) => match linux_session.terminate() {
+                Ok(_) => {
+                    return Err(format!(
+                        "Could not launch {} terminal: {error}",
+                        terminal_id.label()
+                    ))
+                }
+                Err(cleanup_error) => Some(format!(
+                    "Could not launch {} terminal: {error}; child cleanup failed: {cleanup_error}",
+                    terminal_id.label()
+                )),
+            },
+        }
+    } else {
+        None
+    };
+
+    #[cfg(not(target_os = "linux"))]
     if let Some(command) = launch_command {
         if let Err(error) = writer.write_all(&command).and_then(|_| writer.flush()) {
             #[cfg(windows)]
@@ -1367,7 +1997,17 @@ pub fn terminal_spawn<R: Runtime>(
         session.launch = Some(request.launch);
         session.master = Some(pair.master);
         session.writer = Some(writer);
-        session.killer = Some(killer);
+        #[cfg(not(target_os = "linux"))]
+        {
+            session.killer = Some(killer);
+        }
+        #[cfg(target_os = "linux")]
+        {
+            session.linux_session = Some(linux_session.clone());
+            if launch_failure.is_some() {
+                session.phase = TerminalPhase::Stopping;
+            }
+        }
         session.bridge = bridge;
 
         let sequence = session.next_sequence();
@@ -1385,12 +2025,24 @@ pub fn terminal_spawn<R: Runtime>(
         generation,
         reader,
     ))?;
+    #[cfg(not(target_os = "linux"))]
     slot.push_thread(start_waiter(
         terminal_id,
         slot.shared.clone(),
         generation,
         child,
     ))?;
+    #[cfg(target_os = "linux")]
+    slot.push_thread(start_linux_waiter(
+        terminal_id,
+        slot.shared.clone(),
+        generation,
+        linux_session,
+    ))?;
+    #[cfg(target_os = "linux")]
+    if let Some(error) = launch_failure {
+        return Err(error);
+    }
     let status = slot.session()?.status();
     Ok(status)
 }
@@ -2249,6 +2901,319 @@ mod tests {
         assert!(premature.is_none(), "stop passed an unfinished launch");
         stopped.unwrap().unwrap();
         assert!(child.0.state.lock().unwrap().waited);
+    }
+
+    #[cfg(target_os = "linux")]
+    struct LinuxTerminalFixture {
+        state: TerminalState,
+        directory: tempfile::TempDir,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl LinuxTerminalFixture {
+        fn new() -> Self {
+            Self {
+                state: TerminalState::default(),
+                directory: tempfile::tempdir().unwrap(),
+            }
+        }
+
+        fn spawn(
+            &self,
+            id: TerminalId,
+            name: &str,
+            exit_on_release: bool,
+        ) -> (Arc<TerminalSlot>, i32, std::os::fd::OwnedFd) {
+            use std::os::fd::FromRawFd;
+            let pid_file = self.directory.path().join(format!("{name}.pid"));
+            let release = self.directory.path().join(format!("{name}.release"));
+            let mut command = CommandBuilder::new("/bin/bash");
+            command.args([
+                "--noprofile",
+                "--norc",
+                "-c",
+                r#"
+set -m
+trap '' HUP TERM
+bash --noprofile --norc -c '
+    trap "" HUP TERM
+    printf "%s\n" "$$" > "$GCHAT_TEST_PID"
+    while :; do sleep 1; done
+' &
+if [ "$GCHAT_TEST_ORPHAN" = 1 ]; then
+    while [ ! -e "$GCHAT_TEST_RELEASE" ]; do sleep 0.01; done
+    exit 23
+fi
+fg
+while :; do sleep 1; done
+"#,
+            ]);
+            command.env("GCHAT_TEST_PID", pid_file.as_os_str());
+            command.env("GCHAT_TEST_RELEASE", release.as_os_str());
+            command.env("GCHAT_TEST_ORPHAN", if exit_on_release { "1" } else { "0" });
+            let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+            let (reader, cancellation) = LinuxPtyReader::new(pair.master.as_ref()).unwrap();
+            let writer = pair.master.take_writer().unwrap();
+            let child = pair.slave.spawn_command(command).unwrap();
+            drop(pair.slave);
+            let owner = Arc::new(LinuxPtySession::new(child, cancellation));
+            let slot = self.state.slot(id.clone());
+            let generation = {
+                let mut session = slot.session().unwrap();
+                let generation = session.begin_generation();
+                session.master = Some(pair.master);
+                session.writer = Some(writer);
+                session.linux_session = Some(owner.clone());
+                generation
+            };
+            slot.push_thread(start_reader(
+                id.clone(),
+                slot.shared.clone(),
+                generation,
+                Box::new(reader),
+            ))
+            .unwrap();
+            slot.push_thread(start_linux_waiter(
+                id,
+                slot.shared.clone(),
+                generation,
+                owner.clone(),
+            ))
+            .unwrap();
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+            let pid = loop {
+                if let Some(pid) = std::fs::read_to_string(&pid_file)
+                    .ok()
+                    .and_then(|value| value.trim().parse::<i32>().ok())
+                {
+                    break pid;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "PTY child did not become ready"
+                );
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            };
+            // Bash monitor mode gives the launched job its own process group,
+            // reproducing the foreground Code process missed by shell-only HUP.
+            assert_eq!(unsafe { nix::libc::getsid(pid) }, owner.sid);
+            assert_ne!(unsafe { nix::libc::getpgid(pid) }, owner.sid);
+            let fd = unsafe { nix::libc::syscall(nix::libc::SYS_pidfd_open, pid, 0) };
+            assert!(
+                fd >= 0,
+                "could not pin test child: {}",
+                std::io::Error::last_os_error()
+            );
+            (slot, pid, unsafe {
+                std::os::fd::OwnedFd::from_raw_fd(fd as _)
+            })
+        }
+
+        fn release(&self, name: &str) {
+            std::fs::write(
+                self.directory.path().join(format!("{name}.release")),
+                b"exit",
+            )
+            .unwrap();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for LinuxTerminalFixture {
+        fn drop(&mut self) {
+            self.state.shutdown();
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn linux_process_exited(pid: &std::os::fd::OwnedFd) -> bool {
+        use std::os::fd::AsRawFd;
+        let mut fd = nix::libc::pollfd {
+            fd: pid.as_raw_fd(),
+            events: nix::libc::POLLIN,
+            revents: 0,
+        };
+        assert!(unsafe { nix::libc::poll(&mut fd, 1, 0) } >= 0);
+        fd.revents != 0
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_terminal_stop_drains_stopped_resistant_foreground_group() {
+        let fixture = LinuxTerminalFixture::new();
+        let (slot, pid, child) = fixture.spawn(TerminalId::Code, "selected", false);
+        // A stopped Code job defers TERM until CONT; both shell and job also
+        // ignore HUP/TERM so this requires bounded KILL escalation.
+        assert_eq!(unsafe { nix::libc::kill(pid, nix::libc::SIGSTOP) }, 0);
+        slot.session().unwrap().flow_paused = true;
+        let started = std::time::Instant::now();
+        let stopping = slot.stop().unwrap();
+        slot.join_threads().unwrap();
+        assert!(started.elapsed() < std::time::Duration::from_secs(3));
+        assert_eq!(stopping.phase, TerminalPhase::Stopping);
+        let session = slot.session().unwrap();
+        assert_eq!(session.phase, TerminalPhase::Exited);
+        assert!(session.sequence > stopping.sequence);
+        assert!(session.linux_session.is_none());
+        assert!(linux_process_exited(&child));
+        assert!(slot.threads.lock().unwrap().is_empty());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_terminal_shell_exit_drains_orphan_before_publishing_exited() {
+        let fixture = LinuxTerminalFixture::new();
+        let (slot, _, child) =
+            fixture.spawn(TerminalId::CodeWorkspace("orphan".into()), "orphan", true);
+        fixture.release("orphan");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            if slot.session().unwrap().phase == TerminalPhase::Exited {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "shell exit did not drain its orphaned job"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(linux_process_exited(&child));
+        slot.join_threads().unwrap();
+        let session = slot.session().unwrap();
+        assert_eq!(session.exit_code, Some(23));
+        assert!(session.linux_session.is_none());
+        assert!(slot.threads.lock().unwrap().is_empty());
+        drop(session);
+        // Completed owners cannot signal a later session through the old SID.
+        slot.stop().unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_terminal_shutdown_drains_hidden_workspaces_and_preserves_unrelated_session() {
+        let fixture = LinuxTerminalFixture::new();
+        let unrelated = LinuxTerminalFixture::new();
+        let (_, _, untouched) = unrelated.spawn(TerminalId::Code, "unrelated", false);
+        let children: Vec<_> = [
+            TerminalId::Code,
+            TerminalId::CodeWorkspace("hidden".into()),
+            TerminalId::CodeWorkspace("selected".into()),
+            TerminalId::Hermes,
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, id)| fixture.spawn(id, &format!("slot-{index}"), false))
+        .collect();
+        let started = std::time::Instant::now();
+        fixture.state.shutdown();
+        assert!(started.elapsed() < std::time::Duration::from_secs(8));
+        for (slot, _, child) in children {
+            assert!(linux_process_exited(&child));
+            assert_eq!(slot.session().unwrap().phase, TerminalPhase::Exited);
+            assert!(slot.threads.lock().unwrap().is_empty());
+        }
+        assert!(
+            !linux_process_exited(&untouched),
+            "shutdown crossed into an unrelated PTY session"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_terminal_reader_cancels_while_slave_remains_open() {
+        let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+        let (mut reader, cancellation) = LinuxPtyReader::new(pair.master.as_ref()).unwrap();
+        let (sent, received) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || sent.send(reader.read(&mut [0; 16])).unwrap());
+        cancellation.cancel();
+        cancellation.cancel();
+        let result = received.recv_timeout(std::time::Duration::from_secs(1));
+        // Close the slave even on failure so the test never leaves a blocked
+        // reader behind. Production cancellation must work before this close.
+        drop(pair.slave);
+        drop(pair.master);
+        worker.join().unwrap();
+        assert_eq!(result.unwrap().unwrap(), 0);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_terminal_natural_exit_replays_final_output_before_exited_while_paused() {
+        let fixture = LinuxTerminalFixture::new();
+        let id = TerminalId::Code;
+        let slot = fixture.state.slot(id.clone());
+        let mut command = CommandBuilder::new("/bin/sh");
+        command.args(["-c", "printf 'gchat-final-output-before-exit\\n'; exit 19"]);
+        let pair = native_pty_system().openpty(PtySize::default()).unwrap();
+        let (reader, cancellation) = LinuxPtyReader::new(pair.master.as_ref()).unwrap();
+        let writer = pair.master.take_writer().unwrap();
+        let child = pair.slave.spawn_command(command).unwrap();
+        drop(pair.slave);
+        let owner = Arc::new(LinuxPtySession::new(child, cancellation));
+        let (channel, live_events) = recording_channel();
+        let generation = {
+            let mut session = slot.session().unwrap();
+            let generation = session.begin_generation();
+            session.master = Some(pair.master);
+            session.writer = Some(writer);
+            session.linux_session = Some(owner.clone());
+            session.channel = Some(channel);
+            session.flow_paused = true;
+            generation
+        };
+        slot.push_thread(start_reader(
+            id.clone(),
+            slot.shared.clone(),
+            generation,
+            Box::new(reader),
+        ))
+        .unwrap();
+        slot.push_thread(start_linux_waiter(
+            id,
+            slot.shared.clone(),
+            generation,
+            owner,
+        ))
+        .unwrap();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        loop {
+            if slot.session().unwrap().phase == TerminalPhase::Exited {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "natural exit did not finish its paused output reader"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        slot.join_threads().unwrap();
+        let session = slot.session().unwrap();
+        assert_eq!(session.exit_code, Some(19));
+        assert!(session.replay.complete);
+        let mut output = Vec::new();
+        let mut exited = false;
+        for event in &session.replay.events {
+            match event {
+                TerminalEvent::Output { data, .. } => {
+                    assert!(!exited, "output was published after Exited");
+                    output.extend(BASE64.decode(data).unwrap());
+                }
+                TerminalEvent::Exited { .. } => exited = true,
+                event => panic!("unexpected final-output event: {event:?}"),
+            }
+        }
+        assert!(exited);
+        assert!(String::from_utf8(output)
+            .unwrap()
+            .contains("gchat-final-output-before-exit"));
+        // Live delivery and later attachment consume the same ordered replay.
+        let replay: Vec<_> = session
+            .replay
+            .events
+            .iter()
+            .map(|event| serde_json::to_value(event).unwrap())
+            .collect();
+        assert_eq!(*live_events.lock().unwrap(), replay);
     }
 
     fn output_event(sequence: u64, bytes: usize) -> TerminalEvent {

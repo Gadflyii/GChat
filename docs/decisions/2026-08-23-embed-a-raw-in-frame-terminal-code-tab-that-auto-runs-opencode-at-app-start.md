@@ -17,15 +17,25 @@ title: "Embed a raw in-frame terminal (Code tab) that auto-runs OpenCode at app 
   in-frame terminal. It *looks* like part of the app but *is* a raw PTY
   running the user's shell — GChat does not parse, host, or mediate the
   agent's UI. OpenCode is just a process inside it.
-  - Rust: new desktop-only `core/terminal/` module on `portable-pty`
+  - Rust: new desktop-only `core/terminal.rs` module on `portable-pty`
     (forkpty on Linux, ConPTY on Windows). A separately managed
-    `TerminalState` owns exactly one generation-tagged PTY session; it is not
+    `TerminalState` owns the generation-tagged PTY sessions; it is not
     folded into the unrelated application state. Commands attach an ordered
     Tauri IPC `Channel`, spawn, write, resize, apply output flow control,
     report status, and stop/restart the session. The shell is PowerShell on
     Windows and `$SHELL`/bash on Linux; OpenCode is the default command within
-    that shell. App exit kills the child, closes the PTY, and waits for the
-    session threads so no coding-agent process is orphaned.
+    that shell. App exit stops every owned terminal session, closes the PTY, and waits
+    for its workers so no coding-agent process is orphaned. On Linux the
+    terminal owns the PTY session beyond the shell lifetime: interactive jobs
+    can use separate process groups and survive their shell. Stop and exit
+    retain that ownership until descendants and PTY workers drain; bounded
+    signal escalation and a cancellable reader prevent an indefinite exit
+    join. The original shell remains unreaped while the session is drained,
+    and pidfds pin each signaled member so a recycled PID cannot redirect a
+    stop. All terminal slots receive the stop request before any slot drains.
+    Natural exit releases output backpressure and drains buffered terminal
+    bytes before publishing Exited; explicit Stop cancels blocked reads.
+    Failed cleanup retains the session and unfinished worker handles for retry.
   - Transport: PTY output is sent as generation- and sequence-tagged byte
     frames over the ordered channel, not global Tauri events. The frontend
     acknowledges parsed output at high/low watermarks so the bounded reader
@@ -76,4 +86,4 @@ title: "Embed a raw in-frame terminal (Code tab) that auto-runs OpenCode at app 
 - **Links:** `2026-08-21-use-ginfer-as-the-sole-inference-backend-in-the-gchat-fork.md`,
   `2026-08-21-ginfer-sessions-route-through-the-1337-proxy.md`,
   opencode CLI docs (`opencode` / `opencode serve`),
-  `src-tauri/src/core/terminal/`, `web-app/src/routes/code.tsx`.
+  `src-tauri/src/core/terminal.rs`, `web-app/src/routes/code.tsx`.
