@@ -2,50 +2,43 @@
 
 ## Models overlapping deletion recovery — C7, October 18
 
-`GUI-MODELS-DELETE-REFRESH-RECOVERY` follow-up: Codex 8 found that a persistent
-recovery for deleted model A can land after model B is accepted as deleted.
-The older inventory can still contain B, and the persisted provider replacement
-does not apply the store's accepted-deletion list. Filtering only A restores B.
-The shared recovery now reads the current accepted-deletion IDs after the
-inventory request resolves and filters all of them before publishing providers.
-It preserves unrelated models and settings and never repeats deletion.
+`GUI-MODELS-DELETE-REFRESH-RECOVERY` follow-up: the permanent accepted-ID
+filter in rejected candidate `43f4a075c` prevented overlapping reads from
+resurrecting deleted models, but also hid legitimate re-downloads/imports.
+Its focused tests and sole verify passed, but did not cover re-addition; they
+do not qualify the correction below. That fixture and container were retired.
 
 Owned branch `fix/c7-models-delete-overlap-recovery-20261018`, matching
-`/ai/gchat-worktrees/` tree, base `e93d19e77`. Parent owns the shared helper and
-this authority; the test worker owns the existing rendered deletion regression
-and independent S1 SSD fixture. Acceptance: A recovery overlaps accepted B
-deletion, A's older persisted inventory cannot resurrect either model, unrelated
-models remain, and no delete/load/Stop mutation is replayed; focused deletion
-tests, lint and exactly one `make verify`, then return the result to Codex 8
-before mailing merge-ready. No backend, Engine, installed-app or Windows
-qualification changes. Both rendered regression cases are integrated: B's read
-is pending or has failed when A's stale persisted inventory lands, with both
-deleted IDs absent before any later B read can hide resurrection. Frozen source
-`4e3b52ac4` passed both deletion suites (**26/26**), lint (zero errors; five
-existing warnings), and exactly one `make verify`, terminal **21:31:36Z**.
-That gate passed app **3829** (six skipped), extension **130**, Node **65**,
-six critical coverage floors, type checking and quality guards, plus native
-**1319** (28 ignored across 23 successful summaries). Parent reviewed the
-source, rendered regressions and raw terminal results; before/after source,
-dependency and catalog bindings match the frozen candidate. No Engine or
-installed Windows qualification was needed for this frontend correction.
+`/ai/gchat-worktrees/` tree, base `e93d19e77`. Parent owns the shared helper,
+notice caller and this authority; the test worker owns the existing rendered
+deletion regression and independent S1 SSD fixture. The correction tracks each
+accepted deletion by an ephemeral identity. Inventory reads capture those
+identities and receive later accepted deletions. An inventory read started
+after acceptance may acknowledge absence and clear that active identity;
+older pending reads retain their captured identity until they finish. A
+legitimate model re-addition retires its identity and preserves the current
+model, path, settings and selection when an older read lands. The persistent
+store's legacy deleted-ID list is not the authority for local recovery.
 
-Independent S1 SSD preparation first stopped before tests because the donor
-comparison incorrectly required a test-only Tokio manifest addition present in
-the candidate. The locked offline dependency already existed; separate donor
-and candidate references corrected the check without changing candidate source,
-copying again or installing dependencies. Booking3568 returned **21:20Z**;
-corrected preparation and staging passed, then booking3573 CPU88–95 returned
-**21:33Z** after the sole gate. The owned fixture
-`/media/ron/SSD_RAID/ai/tmp-c7-models-delete-overlap-recovery-20261018`
-and exited candidate container were retired at **21:34:35Z**, removing
-**28,880,363,520 allocated fixture bytes**. Parent verified the fixture and
-container absent;
-the inactive donor and protected inputs remain unchanged. Evidence:
+Acceptance: delete B, acknowledge or fail its read, re-add B through normal
+persisted provider publication, then delete A without hiding live B; overlapping
+A recovery and B deletion cannot resurrect B, even after B's newer read has
+acknowledged deletion; an old A read cannot replace or omit a re-added B.
+No delete/load/Stop mutation is replayed. Run focused deletion tests, lint and
+exactly one new `make verify`, as requested for this correction; return to
+Codex 8 before mailing merge-ready. No backend, Engine, installed-app or Windows
+qualification changes. Next: implement the request identities, integrate the
+rendered regressions, freeze source and run those gates. No fixture, booking
+or resource hold is active. The separate Stop/status candidate is preserved.
+
+Retained rejected-candidate evidence is currently
 `out/c7-models-delete-overlap-recovery-20261018/test-result.json` and
-`test-summary.md`. Only those two small evidence files remain. Next: send
-this verified correction to Codex 8, then mail merge-ready. The unfinished
-Stop/status candidate is preserved separately.
+`test-summary.md`; replace the current result with the correction's outcome
+while retaining a concise rejection note. Reuse the owned S1 fixture path
+`/media/ron/SSD_RAID/ai/tmp-c7-models-delete-overlap-recovery-20261018`
+only after confirming it remains absent. Reuse the inactive offline donor;
+compare its manifest references separately from the candidate's test-only
+Tokio addition, which caused the previous preparation to stop before tests.
 
 ## Models accepted deletion and inventory recovery — C7, October 18
 
