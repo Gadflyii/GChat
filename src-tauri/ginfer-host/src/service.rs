@@ -3495,7 +3495,7 @@ mod target_launch_tests {
             gpu_uuids: vec!["GPU-test".into()],
             storage_accepted: true,
             catalog_loaded: true,
-            selected_release_ids: vec![sha256],
+            selected_release_ids: Some(vec![sha256]),
             download_ids: vec![id],
             ..Default::default()
         };

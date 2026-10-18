@@ -1,5 +1,40 @@
 # GInfer host UI
 
+## First-run cleared choices — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-CLEARED-CHOICE-REMOUNT` follows Bubbs's approved unset/empty
+design: new users retain the recommended preselection until an explicit
+choice; saving an empty selection persists `[]` and remains unchecked after
+polling, reopening the screen and restarting the Host. Recommendations stay
+visible as suggestions. Status reads and maintenance must not save an empty
+choice for a user who has never chosen.
+
+Owned branch `fix/gchat3-first-run-cleared-choice-remount-20261018`, base
+`15dbad1e6`, uses the matching `/ai/gchat-worktrees/` source tree. Acceptance
+is rendered new-user/clear/remount behavior, durable Host null/empty behavior,
+focused tests and one `make verify`. No GPU, installed-app or Windows claim is
+made. The independent S1 SSD fixture uses the inactive RC donor. The initial
+focused run passed 54 cases, including clear/remount, and stopped on the
+existing pending-profile test: Clear now appears while profiling, so waiting
+for that button no longer waits for the completed poll. The test now waits
+for the changed recommendation before checking that edits survived. No
+production change was needed for this failure. Frozen source `58100466d`
+then passed only that failed case, 21 native first-run tests / one ignored,
+Rust check/clippy and lint (zero errors, five existing unrelated warnings).
+Exactly one `make verify` passed at **18:57:36Z**: **3,753 app tests / six
+skipped, 127 extension tests, all six coverage floors and 1,317 native tests /
+28 ignored** across 23 summaries. Typecheck and quality guards passed. The
+coordinator reviewed raw results, terminal state and unchanged source,
+dependency and eleven-catalog bindings before cleanup.
+
+CPU88–95 returned **18:58Z**; bookings3499/3500 are canceled. The independent
+`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-cleared-choice-remount-tests-20261018`
+fixture and two exited containers were retired at **19:05:58Z**, removing
+**28,312,764,003 logical bytes**. The inactive RC donor remains unchanged.
+Small evidence is retained in
+`out/first-run-cleared-choice-remount-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the owned GUI queue.
+
 ## First-run action recovery — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-ACTION-ERROR-GUIDANCE` stops describing every rejected setup
