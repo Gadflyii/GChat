@@ -1,5 +1,40 @@
 # GInfer host UI
 
+## Google client ID validation — Gchat 3 native acceptance, October 18
+
+`GUI-GOOGLE-CLIENT-ID-SHAPE` passes its remaining native Linux negative leaf.
+One ordinary manual Save with client ID `abc` and an inert dummy secret stayed
+on step 5, named the required `.apps.googleusercontent.com` suffix and directed
+the user to Google Auth Platform → Clients. The ID and masked secret drafts
+remained; Save stayed enabled for correction. The 1200×800 Dark screenshot was
+visually reviewed. Private `workspace-connections.json` remained absent and
+both private keyring files were byte-identical before/after; the provider cards
+showed no connected accounts. No registration or account was saved.
+
+Allocated main `548d73ed8`; source `5beb06da2` merged `98136eded`.
+The retained `ed68c7443` AppDir has identical GoogleRegistration wizard,
+service and native account persistence paths; only unrelated outer startup
+error presentation differs. Accepted source tests and the valid Save/import
+and persistence result in `out/google-setup-native-20261018/result.json` were
+reused without rerun. This observation qualifies only malformed manual client
+ID rejection. Real Google consent/OAuth, account/service access, Windows and a
+fresh installer remain unqualified. No source change, external browser,
+Google account Connect, GPU/model or Ron profile action occurred.
+
+Owner worktree `/ai/gchat-worktrees/gchat3-google-client-id-native-20261018`,
+branch `test/gchat3-google-client-id-native-20261018`. Canonical result,
+summary, source binding, before/after storage proof, observation and screenshot:
+`out/google-client-id-native-20261018/{result.json,summary.md}`.
+Verified S1 `AIS-2-8592-L01` used CPU 120–127, private HOME/runtime0700,
+D-Bus/unlocked keyring, uid-1000 container and Xvfb :198. Native pointer/keyboard
+drove the controls; WebKit only observed. At 03:59:29Z the exact owned root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-google-client-id-native-20261018` and its
+session/container/sockets were absent; 3.44 GB was released, inspector forward
+ended and booking 2952 canceled. The release donor remains read-only at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`.
+Coordinator evidence, visual and documentation review is complete. Docs-only
+`git diff --check` passes. Next: branch integration; no further gate is required.
+
 ## Model deletion confirmation — Gchat 3 native acceptance, October 18
 
 `GUI-MODEL-DELETE-RESULT-20261017` passes its remaining native Linux
