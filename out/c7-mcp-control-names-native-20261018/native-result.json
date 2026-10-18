@@ -1,0 +1,2623 @@
+{
+  "row": "GUI-MCP-CONTROL-NAMES",
+  "status": "PASS",
+  "source": "cf670bced700183738370658f591a5704be56579",
+  "source_fix": "ee5c2a4db",
+  "platform": "native Linux x86_64 on S1 private Xvfb :87, 1200x800 app window",
+  "input": "Native XTest via xdotool; WebKit inspector read-only DOM/ARIA snapshots",
+  "scope": [
+    "Two distinct server rows expose matching server-specific Advanced/Edit/Remove button names and Use switch names",
+    "Native Shift+Tab reaches named switch, Remove, Edit and Advanced controls",
+    "Native Enter opens matching Advanced, Edit and Remove dialogs",
+    "Space on the focused off switch enables the local stdio server and retains focus; connected green indicator has role img and name MCP server connected",
+    "Remove opens with Cancel focused; Escape cancels without deletion"
+  ],
+  "fixture": "Private stdio Python -I fixture completes MCP initialize and tools/list with zero tools; no tools/call",
+  "limitations": [
+    "Windows and spoken screen-reader output outside Linux acceptance",
+    "Initial fixture launch needed -I because AppDir supplied Python environment; private default Exa was removed after initial migration; incidental initialize only, no tool calls"
+  ],
+  "verification": {
+    "new_source_changes": false,
+    "reused_make_verify_source": "71abf17084c8bbea0eb40da94cb5cfccb8e771f1",
+    "reason": "Relevant MCP route/tests/dialog/English copy unchanged; evidence-only diff check"
+  },
+  "observations": {
+    "mcpConnected": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\n\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******",
+      "active": {
+        "tag": "BODY",
+        "label": null,
+        "role": null,
+        "checked": null,
+        "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nI"
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "label": "MCP server connected",
+          "role": "img",
+          "checked": null,
+          "rect": [
+            504,
+            556,
+            8,
+            8
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "switchOff": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******",
+      "active": {
+        "tag": "BUTTON",
+        "label": "Use C7 local fixture",
+        "role": "switch",
+        "checked": "false",
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "switchOn": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\n\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******",
+      "active": {
+        "tag": "BUTTON",
+        "label": "Use C7 local fixture",
+        "role": "switch",
+        "checked": "true",
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "label": "MCP server connected",
+          "role": "img",
+          "checked": null,
+          "rect": [
+            504,
+            556,
+            8,
+            8
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "focusRemove": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "\nC7 local fixture connection turned on\n\nToggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\n\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******",
+      "active": {
+        "tag": "BUTTON",
+        "label": "Remove connection: C7 local fixture",
+        "role": null,
+        "checked": null,
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Close toast",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            830,
+            -51,
+            20,
+            20
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "label": "MCP server connected",
+          "role": "img",
+          "checked": null,
+          "rect": [
+            504,
+            556,
+            8,
+            8
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1064,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1090,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1116,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1150,
+            549,
+            18,
+            18
+          ]
+        }
+      ]
+    },
+    "focusEdit": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "\nC7 local fixture connection turned on\n\nToggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\n\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******",
+      "active": {
+        "tag": "BUTTON",
+        "label": "Edit tool connection: C7 local fixture",
+        "role": null,
+        "checked": null,
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Close toast",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            830,
+            2,
+            20,
+            20
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "label": "MCP server connected",
+          "role": "img",
+          "checked": null,
+          "rect": [
+            504,
+            556,
+            8,
+            8
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "focusAdvanced": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "\nC7 local fixture connection turned on\n\nToggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\n\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******",
+      "active": {
+        "tag": "BUTTON",
+        "label": "Advanced connection settings: C7 local fixture",
+        "role": null,
+        "checked": null,
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Close toast",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            830,
+            2,
+            20,
+            20
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "label": "MCP server connected",
+          "role": "img",
+          "checked": null,
+          "rect": [
+            504,
+            556,
+            8,
+            8
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "advancedOpen": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "\nC7 local fixture connection turned on\n\nToggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\n\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\nAdvanced connection settings: C7 local fixture\nUse the JSON connection settings supplied by the tool provider. Saving replaces the settings shown here.\n\n{\n  \"active\": true,\n  \"args\": [\n    \"-I\",\n    \"-u\",\n    \"-c\",\n    \"exec(__import__('os').environ['C7_MCP_FIXTURE'])\"\n  ],\n  \"command\": \"/usr/bin/python3\",\n  \"cwd\": \"/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/native-home\",\n  \"env\": {\n    \"C7_MCP_FIXTURE\": \"import sys,json\\nfor line in sys.stdin:\\n r=json.loads(line)\\n with open('/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018/fixture-methods.jsonl',\\\"a\\\") as receipt: receipt.write(json.dumps({\\\"method\\\":r.get(\\\"method\\\")})+\\\"\\\\n\\\")\\n if \\\"id\\\" not in r: continue\\n m=r.get(\\\"method\\\")\\n if m==\\\"initialize\\\": result={\\\"protocolVersion\\\":r[\\\"params\\\"][\\\"protocolVersion\\\"],\\\"capabilities\\\":{\\\"tools\\\":{}},\\\"serverInfo\\\":{\\\"name\\\":\\\"C7 disposable local fixture\\\",\\\"version\\\":\\\"1\\\"}}\\n elif m==\\\"tools/list\\\": result={\\\"tools\\\":[]}\\n else: result={}\\n print(json.dumps({\\\"jsonrpc\\\":\\\"2.0\\\",\\\"id\\\":r[\\\"id\\\"],\\\"result\\\":result}),flush=True)\\n\"\n  },\n  \"type\": \"stdio\"\n}\nSave connection settings\nClose",
+      "active": {
+        "tag": "TEXTAREA",
+        "label": null,
+        "role": null,
+        "checked": null,
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Close toast",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            830,
+            2,
+            20,
+            20
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "label": "MCP server connected",
+          "role": "img",
+          "checked": null,
+          "rect": [
+            504,
+            556,
+            8,
+            8
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "Advanced connection settings: C7 local fixture\nUse the JSON connection settings supplied by the tool",
+          "label": null,
+          "role": "dialog",
+          "checked": null,
+          "rect": [
+            280.79998779296875,
+            79.8499984741211,
+            638.4000244140625,
+            640.300048828125
+          ]
+        }
+      ]
+    },
+    "removeKeyboardFocus": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\n\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******",
+      "active": {
+        "tag": "BUTTON",
+        "label": "Remove connection: C7 local fixture",
+        "role": null,
+        "checked": null,
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "label": "MCP server connected",
+          "role": "img",
+          "checked": null,
+          "rect": [
+            504,
+            556,
+            8,
+            8
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "removeOpen": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\n\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\nRemove tool connection?\nRemove C7 local fixture from GChat. To use it again, you will need to add its connection details again.\nCancel\nRemove connection\nClose",
+      "active": {
+        "tag": "BUTTON",
+        "label": null,
+        "role": null,
+        "checked": null,
+        "text": "Cancel"
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "",
+          "label": "MCP server connected",
+          "role": "img",
+          "checked": null,
+          "rect": [
+            504,
+            556,
+            8,
+            8
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "Remove tool connection?\nRemove C7 local fixture from GChat. To use it again, you will need to add it",
+          "label": null,
+          "role": "dialog",
+          "checked": null,
+          "rect": [
+            264,
+            322,
+            672,
+            156
+          ]
+        }
+      ]
+    },
+    "editKeyboardFocus": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******",
+      "active": {
+        "tag": "BUTTON",
+        "label": "Edit tool connection: C7 local fixture",
+        "role": null,
+        "checked": null,
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        }
+      ]
+    },
+    "editKeyboardOpen": {
+      "url": "tauri://localhost/settings/mcp-servers",
+      "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nSettings\nAdd tool connection\nGeneral\nAttachments\nInterface\nAssistants\nShortcuts\nHardware\nWorkspace connections\nMCP Servers\nHTTPS Proxy\nBUILT-IN TOOLS\nShow help\nEnable Gbot\n\nEnable OpenCode\n\nEnable Hermes\nHermes settings\n\nMODEL PROVIDERS\n\n\nGInfer\nA\nAimlapi\n\nAnthropic\n\nAzure\nD\nDeepseek\nE\nEdenai\n\nGemini\n\nGroq\n\nHugging Face\nM\nMeta\n\nMiniMax\n\nMistral\n\nMoonshot\n\nNVIDIA NIM\n\nOllama\n\nOpenAI\n\nOpenRouter\n\nQwen\n\nxAI\nConnections\nLogs\nTool connections (MCP)\nExperimental\n\nMCP connects GChat to tools from other apps and services. Select Add tool connection and use the setup details supplied by the tool provider. You can then turn each connection on or off below.\nBrowse tools that support MCP at mcp.so\nTime allowed for a tool response (seconds)\nHow long GChat waits for a connected tool to finish before showing a timeout. Increase this only if a tool normally needs longer.\n\nC7 Inactive Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\nC7 Local Fixture\n\n\n\n\nTransport: STDIO\nStart command: /usr/bin/python3\nCommand options: -I, -u, -c, exec(__import__('os').environ['C7_MCP_FIXTURE'])\nExtra settings: C7_MCP_FIXTURE=******\nEdit tool connection\n\nUse the connection details supplied by the tool provider. Give the connection a name, choose how it connects, then select Save connection.\nConnection name\nHow to connect\nChoose the connection type named in the tool provider’s setup instructions.\n\n\nLocal program (STDIO)\n\nWeb address (HTTP)\n\nEvent stream (SSE)\nStart command\nAdd command options only if the provider lists them. Keep them in the same order.\n\nCommand options (arguments)\n\n\n\n\n\nLeave extra settings empty unless the provider supplies a setting name and value, such as an access key.\n\nExtra settings (environment variables)\n\n\nCancel\nSave connection\n",
+      "active": {
+        "tag": "INPUT",
+        "label": null,
+        "role": null,
+        "checked": null,
+        "text": ""
+      },
+      "controls": [
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Downloads",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            173,
+            17,
+            28,
+            28
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Toggle Sidebar",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            231,
+            9,
+            16,
+            782
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Gbot integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            391,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "OpenCode integration",
+          "role": "switch",
+          "checked": "true",
+          "disabled": false,
+          "rect": [
+            424,
+            427,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Hermes integration",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            424,
+            463,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add Provider",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            442,
+            527,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 inactive fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            376,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 inactive fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            377,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Advanced connection settings: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1048,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Edit tool connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1074,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove connection: C7 local fixture",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            1100,
+            548,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Use C7 local fixture",
+          "role": "switch",
+          "checked": "false",
+          "disabled": false,
+          "rect": [
+            1134,
+            549,
+            34,
+            18
+          ]
+        },
+        {
+          "tag": "DIV",
+          "text": "Edit tool connection\n\nUse the connection details supplied by the tool provider. Give the connection ",
+          "label": null,
+          "role": "dialog",
+          "checked": null,
+          "rect": [
+            264,
+            60,
+            672,
+            680
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Paste advanced settings (JSON)",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            887,
+            85,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add command option",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            887,
+            439,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove command option",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            887,
+            477,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove command option",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            887,
+            521,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove command option",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            887,
+            565,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Remove command option",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            887,
+            609,
+            24,
+            24
+          ]
+        },
+        {
+          "tag": "BUTTON",
+          "text": "",
+          "label": "Add extra setting",
+          "role": null,
+          "checked": null,
+          "disabled": false,
+          "rect": [
+            887,
+            678,
+            24,
+            24
+          ]
+        }
+      ]
+    }
+  }
+}
