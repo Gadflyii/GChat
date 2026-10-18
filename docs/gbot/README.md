@@ -1,5 +1,29 @@
 # Gbot design
 
+## Recovering a failed Microsoft sign-in result — Gchat 2
+
+`GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names
+the existing Sign in with Microsoft or Allow read-only Cloud PC access retry
+when a sign-in status response reports failure. Previously, this result bypassed
+the action-error guidance and displayed credential or token diagnostics directly.
+The diagnostic now remains in initially closed Details when supplied.
+
+Rendered journeys retain account choice and keep Cloud PC discovery unavailable
+without permission. Opening Details sends no request; recovery requires an
+explicit retry and status check. A newly connected account remains unselected.
+No sign-in, consent or account is started automatically. This is source/rendered
+mocked-connector scope, with no real account, browser consent or native acceptance.
+
+Validation: both new journeys failed against original production; fixed focus
+passed 185 tests. Lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 21:40:23–21:46:36 UTC) passed 3,830 app tests
+(six skipped), 130 extension tests, 1,319 Rust tests (28 ignored), all six
+coverage floors and lint/typecheck/quality guards. All 3,479 tracked raw bytes
+and modes matched before and after the gates, with fresh tracked timestamps.
+Only this receipt was added afterward. Booking3584 returned21:47Z; the private
+cache and exports were retired by21:47:59Z. Small evidence:
+`/ai/gchat/out/gchat2-m365-signin-result-guidance-20261018/SUMMARY.md`.
+
 ## Cloud connection completion follows its setup — Gchat 2
 
 `GBOT-CLOUD-CONNECT-REQUEST-LIFETIME`, based on main `af8d1b4dc`, keeps a

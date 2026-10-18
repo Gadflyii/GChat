@@ -441,10 +441,23 @@ export default function M365Setup({
           )}
           {flow.status === 'cancelled' && <p>Microsoft sign-in cancelled.</p>}
           {flow.status === 'failed' && (
-            <p>
-              {flow.error ||
-                'Microsoft sign-in failed. Try again or ask your organization’s administrator for help.'}
-            </p>
+            <div className="space-y-2">
+              <p role="alert" className="text-destructive">
+                Microsoft sign-in could not be completed in GChat. Choose{' '}
+                {account
+                  ? 'Allow read-only Cloud PC access'
+                  : 'Sign in with Microsoft'}{' '}
+                to try again.
+              </p>
+              {flow.error && (
+                <details>
+                  <summary>Details</summary>
+                  <p className="whitespace-pre-wrap break-words text-muted-foreground">
+                    {flow.error}
+                  </p>
+                </details>
+              )}
+            </div>
           )}
         </div>
       )}

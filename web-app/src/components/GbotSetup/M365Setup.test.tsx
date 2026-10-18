@@ -337,39 +337,140 @@ it.each([
   }
 )
 
-it('keeps Cloud PC discovery unavailable when browser sign-in cannot be saved', async () => {
-  vi.mocked(connectorAccounts).mockResolvedValue({ ...accounts(), accounts: [] })
-  vi.mocked(beginConnectorAuth).mockResolvedValue({
-    flow_id: 'save-failed',
-    provider: 'microsoft',
-    status: 'waiting',
-  })
-  const message =
-    'You signed in with Microsoft, but saving the account in GChat failed: secure credential vault could not be opened with the current credential key'
-  vi.mocked(connectorAuthStatus).mockResolvedValue({
-    flow_id: 'save-failed',
-    provider: 'microsoft',
-    status: 'failed',
-    error: message,
-  })
-  mount()
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Sign in with Microsoft' })
-  )
-  fireEvent.click(
-    await screen.findByRole('button', { name: 'Check sign-in status' })
-  )
-  expect(await screen.findByText(message)).toBeInTheDocument()
-  expect(
-    screen.queryByText(/Microsoft account connected\./)
-  ).not.toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Microsoft account' })).toHaveTextContent('Choose a Microsoft account')
-  expect(
-    screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
-  ).toBeDisabled()
-  expect(connectorAccounts).toHaveBeenCalledOnce()
-  expect(gbot).not.toHaveBeenCalled()
-})
+it.each([
+  {
+    kind: 'new account with a credential-store diagnostic',
+    selected: false,
+    diagnostic:
+      'You signed in with Microsoft, but saving the account in GChat failed: secure credential vault could not be opened with the current credential key',
+  },
+  {
+    kind: 'selected account permission with no diagnostic',
+    selected: true,
+    diagnostic: null,
+  },
+])(
+  'offers explicit failed sign-in result recovery for $kind',
+  async ({ selected, diagnostic }) => {
+    const user = userEvent.setup()
+    vi.mocked(connectorAccounts)
+      .mockResolvedValueOnce(
+        selected ? accounts(false) : { ...accounts(), accounts: [] }
+      )
+      .mockResolvedValue(accounts())
+    vi.mocked(beginConnectorAuth)
+      .mockResolvedValueOnce({
+        flow_id: 'save-failed',
+        provider: 'microsoft',
+        status: 'waiting',
+      })
+      .mockResolvedValueOnce({
+        flow_id: 'explicit-retry',
+        provider: 'microsoft',
+        status: 'waiting',
+      })
+    vi.mocked(connectorAuthStatus)
+      .mockResolvedValueOnce({
+        flow_id: 'save-failed',
+        provider: 'microsoft',
+        status: 'failed',
+        error: diagnostic,
+      })
+      .mockResolvedValueOnce({
+        flow_id: 'explicit-retry',
+        provider: 'microsoft',
+        status: 'connected',
+        account_id: 'work-account',
+      })
+    const saved = mount()
+    await screen.findByLabelText('Microsoft account')
+    if (selected) await chooseAccount()
+    const retry = selected
+      ? 'Allow read-only Cloud PC access'
+      : 'Sign in with Microsoft'
+    await user.click(screen.getByRole('button', { name: retry }))
+    await user.click(
+      await screen.findByRole('button', { name: 'Check sign-in status' })
+    )
+    const recovery = `Microsoft sign-in could not be completed in GChat. Choose ${retry} to try again.`
+    const alert = await screen.findByText(recovery)
+    expect(alert).toHaveAttribute('role', 'alert')
+    expect(alert).toBeVisible()
+    expect(screen.getByRole('button', { name: retry })).toBeEnabled()
+    if (diagnostic) {
+      const detail = screen.getByText(diagnostic)
+      expect(detail.closest('details')).not.toHaveAttribute('open')
+      expect(detail).not.toBeVisible()
+      await user.click(screen.getByText('Details', { selector: 'summary' }))
+      expect(detail).toBeVisible()
+      await user.click(screen.getByText('Details', { selector: 'summary' }))
+      expect(detail).not.toBeVisible()
+    } else {
+      expect(alert.parentElement?.querySelector('details')).toBeNull()
+    }
+    expect(beginConnectorAuth).toHaveBeenCalledOnce()
+    expect(connectorAuthStatus).toHaveBeenCalledExactlyOnceWith('save-failed')
+    expect(connectorAccounts).toHaveBeenCalledOnce()
+    expect(cancelConnectorAuth).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText(/Microsoft account connected\./)
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Microsoft account' })
+    ).toHaveTextContent(
+      selected ? 'bot@example.test' : 'Choose a Microsoft account'
+    )
+    expect(
+      screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Save Cloud PC setup' })
+    ).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: retry }))
+    await screen.findByText(/Complete Microsoft sign-in in your browser/)
+    expect(screen.queryByText(recovery)).not.toBeInTheDocument()
+    expect(beginConnectorAuth).toHaveBeenCalledTimes(2)
+    expect(beginConnectorAuth).toHaveBeenLastCalledWith({
+      provider: 'microsoft',
+      services: ['cloud_pc'],
+      access: 'read_only',
+      ...(selected ? { account_id: 'work-account' } : {}),
+    })
+    expect(connectorAuthStatus).toHaveBeenCalledOnce()
+    await user.click(
+      screen.getByRole('button', { name: 'Check sign-in status' })
+    )
+    await screen.findByText(
+      'Microsoft account connected. Choose the account and check its assigned PCs.'
+    )
+    expect(connectorAuthStatus).toHaveBeenCalledTimes(2)
+    expect(connectorAuthStatus).toHaveBeenLastCalledWith('explicit-retry')
+    expect(connectorAccounts).toHaveBeenCalledTimes(2)
+    expect(
+      screen.getByRole('button', { name: 'Microsoft account' })
+    ).toHaveTextContent(
+      selected ? 'bot@example.test' : 'Choose a Microsoft account'
+    )
+    if (!selected) {
+      expect(
+        screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+      ).toBeDisabled()
+      await chooseAccount()
+    }
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Check assigned Cloud PCs' })
+      ).toBeEnabled()
+    )
+    expect(
+      screen.getByRole('button', { name: 'Save Cloud PC setup' })
+    ).toBeDisabled()
+    expect(gbot).not.toHaveBeenCalled()
+    expect(opener).not.toHaveBeenCalled()
+    expect(saved).not.toHaveBeenCalled()
+  }
+)
 
 it('requires explicit account, assigned PC, route and dedicated desktop confirmation', async () => {
   vi.mocked(gbot).mockImplementation(async (path) =>
@@ -476,7 +577,15 @@ it('explains the personal-account limit and retains a plain work-account sign-in
   fireEvent.click(
     screen.getByRole('button', { name: 'Sign in with Microsoft' })
   )
-  expect(await screen.findByText(message)).toBeInTheDocument()
+  expect(await screen.findByText(message)).not.toBeVisible()
+  expect(screen.getByText(message).closest('details')).not.toHaveAttribute(
+    'open'
+  )
+  expect(
+    screen.getByText(
+      'Microsoft sign-in could not be completed in GChat. Choose Sign in with Microsoft to try again.'
+    )
+  ).toBeVisible()
   expect(
     screen.getByRole('button', { name: 'Sign in with Microsoft' })
   ).toBeEnabled()
