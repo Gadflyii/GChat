@@ -1,0 +1,45 @@
+{
+  "status": "PASS",
+  "source_commit": "05f60c5d56a47bbb8fa1c5bfe08bb3a1fab1fd40",
+  "source_files_verified_against_committed_tree": {
+    "src-tauri/ginfer-host/src/launcher.rs": "f10f7941a9a7e257cfb13e8c88cb3eb37e03c4144c723c635c47745893b86ab8",
+    "src-tauri/ginfer-host/src/main.rs": "50836378aed695a55d38545688c7e1738995863c56d1af48428f5f01ebdfda8a"
+  },
+  "archive": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution-actionable-recovery/ginfer-bundle-0.1.0-linux-x86_64.tar.gz",
+  "bytes": 622156547,
+  "sha256": "8239716c9055b9ba210dfb77c9ecf3554fcc6eb455673500f79f81def902f8e0",
+  "members": 178,
+  "host_sha256": "89850bbead4aabac2c88067b8bebbcf9b832913b10f1774d2f27f8b521fdd236",
+  "host_ldd_missing": false,
+  "runtime": {
+    "source_commit": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
+    "source_dirty": false,
+    "architecture": "sm_120a",
+    "cuda": "13.3",
+    "glibc": "2.39",
+    "payloads_verified_by_existing_packager": 171,
+    "engine_rebuilt": false
+  },
+  "guide": {
+    "launcher_source": "576449a5cf168eabbf7269a63db9a517d73cdd1a",
+    "only_python_command_prerequisite_diff_from": "65df08dda152089801bfb4eeb76d2a9578da53af",
+    "sha256": "f41aee785c2d14c9f9a13ce7e09b0ff404ee7e1e159413fb48c7b9272d4d492a",
+    "contains_runtime_ownership_paragraph": true,
+    "literal_install_command": "python3 setup.py"
+  },
+  "stages": {
+    "release": {
+      "start": "2026-10-18T04:41:30Z",
+      "end": "2026-10-18T04:42:56Z",
+      "exit": 0
+    },
+    "package": {
+      "start": "2026-10-18T04:42:56Z",
+      "end": "2026-10-18T04:44:08Z",
+      "exit": 0
+    }
+  },
+  "existing_packager": "scripts/package-ginfer-host.py",
+  "command_receipt": "actionable-recovery-command.json",
+  "superseded_archive_cleanup": "archive-retirement.json"
+}

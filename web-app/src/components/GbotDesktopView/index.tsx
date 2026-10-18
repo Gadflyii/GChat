@@ -172,7 +172,8 @@ const GbotDesktopView = forwardRef<
           </>
         )}
         Take over pauses the bot and enables desktop input. Hand back ends your
-        input before the bot resumes.
+        input and returns control to the bot. Paused tasks stay paused until you
+        resume them.
       </p>
     </section>
   )

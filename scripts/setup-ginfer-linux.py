@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Install a bundled Linux runtime and continue the shared Host first-run setup."""
 import argparse
+import ctypes
 import hashlib
 import json
 import os
@@ -9,6 +10,28 @@ import re
 import shutil
 import subprocess
 import sys
+
+
+class MissingNvidiaDriver(RuntimeError):
+    """The selected runtime cannot load a declared system driver library."""
+
+
+def check_nvidia_driver(manifest):
+    for library in ('libcuda.so.1', 'libnvidia-ml.so.1'):
+        if library not in manifest.get('system_dependencies', []):
+            continue
+        try:
+            ctypes.CDLL(library)
+        except OSError as error:
+            toolkit = manifest.get('cuda_toolkit')
+            cuda = f'the bundled CUDA {toolkit} runtime' if toolkit else 'the bundled CUDA runtime'
+            raise MissingNvidiaDriver(
+                f'Cannot load NVIDIA driver library {library}: {error}\n'
+                f'Install or repair the system NVIDIA driver compatible with {cuda}, '
+                'then confirm nvidia-smi works and run setup again. '
+                'GInfer does not include or install the NVIDIA driver. '
+                'In a container, expose the GPU and driver libraries with the NVIDIA Container Toolkit. '
+                'No installation files were written.') from error
 
 
 def install(bundle, destination, provider, config_root, link_dir, apply=False, gpu_uuids=(), interactive=False):
@@ -56,6 +79,7 @@ def install(bundle, destination, provider, config_root, link_dir, apply=False, g
     if not apply:
         print('Preview only. Repeat with --install. No services or models will be started.')
         return
+    check_nvidia_driver(manifest)
     destination.mkdir(parents=True, exist_ok=False)
     for name, source in members.items():
         target = destination / name
@@ -70,7 +94,8 @@ def install(bundle, destination, provider, config_root, link_dir, apply=False, g
     shutil.copy2(runtime / 'runtime-manifest.json', destination / 'runtime-manifest.json')
     if not registered:
         configuration = {'data_dir': str(provider / 'host'), 'host_url': 'https://127.0.0.1:7443',
-                         'desktop': {'provider': str(provider), 'engine': str(destination / 'bin/ginfer-serve')}}
+                         'desktop': {'provider': str(provider), 'engine': str(destination / 'bin/ginfer-serve'),
+                                     'runtime_set': False}}
         path = destination / 'bin/ginfer-launch.json'
         with path.open('x') as stream:
             os.fchmod(stream.fileno(), 0o600)
@@ -147,4 +172,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except MissingNvidiaDriver as error:
+        sys.exit(f'Error: {error}')

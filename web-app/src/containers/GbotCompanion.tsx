@@ -478,8 +478,9 @@ export default function GbotCompanion() {
               )}
               {!botHasControl && (
                 <p className="text-sm text-muted-foreground">
-                  The bot is paused for desktop control. Hand back in Desktop to
-                  continue.
+                  The bot is paused for desktop control. Choose Hand back in
+                  Desktop, then Resume task in Conversation to continue a paused
+                  task.
                 </p>
               )}
             </div>
@@ -694,9 +695,9 @@ export default function GbotCompanion() {
                     visible={visible && tab === 'desktop'}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Hiding this pane closes desktop input and audio. A bot
-                    paused for takeover stays paused until you hand back
-                    control.
+                    Hiding this pane closes desktop input and audio. Hand back
+                    returns control to the bot; paused tasks still need Resume
+                    task in Conversation.
                   </p>
                 </>
               ) : !preparing && !loading && !connectionError ? (

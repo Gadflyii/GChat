@@ -1,0 +1,40 @@
+Script started on 2026-10-17 23:45:34-05:00 [COMMAND="bash --noprofile --norc -i" TERM="xterm" TTY="/dev/pts/0" COLUMNS="80" LINES="24"]
+date -u +%FT%TZ
+python3 --version
+python3 setup.py
+
+
+
+y
+2
+
+r
+q
+"$HOME/.local/lib/ginfer/bin/ginfer-host" first-run > /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/first-run-status.json
+"$HOME/.local/bin/ginfer"
+d
+s
+
+q
+date -u +%FT%TZ
+python3 - <<'PY'
+import os,pathlib,json,hashlib,signal,time
+r=pathlib.Path('/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018')
+base=r/'novice'; conf=base/'home/.local/lib/ginfer/bin/ginfer-launch.json'
+print('CONFIG_EXISTS',conf.exists())
+print('CONFIG_PATHS',list((base/'home/.local/lib/ginfer').rglob('ginfer-launch.json')))
+pid=2781372; cmd=pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode()
+assert cmd.startswith(str(base/'home/.local/lib/ginfer/bin/ginfer-host')+' --desktop-managed '),cmd
+receipt={'pid':pid,'command':cmd,'stop':'SIGTERM to exact verified owned PID','stopped':False}
+os.kill(pid,signal.SIGTERM)
+for _ in range(100):
+ p=pathlib.Path(f'/proc/{pid}')
+ if not p.exists() or (p/'stat').read_text().split()[2]=='Z': receipt['stopped']=True;break
+ time.sleep(.1)
+print('OWN_HOST_STOPPED',receipt['stopped'])
+(base/'host-process-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+assert receipt['stopped']
+PY
+exit
+
+Script done on 2026-10-17 23:46:51-05:00 [COMMAND_EXIT_CODE="0"]

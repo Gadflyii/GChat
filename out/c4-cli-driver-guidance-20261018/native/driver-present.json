@@ -1,0 +1,36 @@
+{
+  "started_utc": "2026-10-18T04:58:48.934205+00:00",
+  "host": "AIS-2-8592-L01",
+  "command": [
+    "python3",
+    "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/extracted/ginfer-bundle-0.1.0-linux-x86_64/setup.py",
+    "--install",
+    "--no-wizard",
+    "--install-directory",
+    "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/install",
+    "--provider-directory",
+    "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/provider",
+    "--link-directory",
+    "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/links"
+  ],
+  "scope": "S1 existing driver, private HOME/XDG0700/DBus/unlocked keyring; no GPU selection, model or profiling",
+  "baseline_host_sha256": "fcb34ca5cbc7869968f14d6d82e19ceb33761b3724cdbed3747257fa1c0d3dd6",
+  "stopped_processes": [
+    {
+      "pid": 2945178,
+      "executable": "gnome-keyring-daemon",
+      "terminal": true
+    },
+    {
+      "pid": 2945419,
+      "executable": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/install/bin/ginfer-host",
+      "terminal": true
+    }
+  ],
+  "exit": 0,
+  "stdout": "Runtime: /media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/install\nModels and host state: /media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/provider\nLauncher: /media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/links/ginfer\nHardware preparation: idle (owned by the shared Host).\nChoose GPU group in GChat or GInfer Manager. No calibration was started.\nContinue setup: /media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/install/bin/ginfer-host first-run --interactive\nNoninteractive installation does not prompt. GChat and Manager resume the same setup.\nInstalled. Launch: /media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/links/ginfer\nAdd /media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/links to your shell PATH to use the bare ginfer command.\n",
+  "stderr": "",
+  "installed_launcher": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/native/driver-present/install/bin/ginfer",
+  "first_run_exit": 1,
+  "terminal_utc": "2026-10-18T04:58:50.830875+00:00"
+}

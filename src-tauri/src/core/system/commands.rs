@@ -326,6 +326,17 @@ pub fn open_file_explorer(path: String) -> Result<(), String> {
     open_file_explorer_with(Path::new(&path), |command| command.status())
 }
 
+/// The Linux opener uses blocking zbus, which must not enter its runtime from
+/// the Tokio worker that executes an async Tauri command.
+#[tauri::command]
+pub async fn reveal_item_in_dir(path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        tauri_plugin_opener::reveal_item_in_dir(path).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| format!("Folder reveal task failed: {error}"))?
+}
+
 /// Deliver a desktop notification from the blocking pool.
 ///
 /// On Linux, do not use the notification plugin: its builder `show()` is
@@ -764,7 +775,7 @@ fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::
     let configuration = serde_json::json!({
         "data_dir": provider.join("host"),
         "host_url": "https://127.0.0.1:7443",
-        "desktop": { "provider": provider, "engine": engine },
+        "desktop": { "provider": provider, "engine": engine, "runtime_set": true },
     });
     let temporary = directory.join(format!(".ginfer-launch-{}", uuid::Uuid::new_v4()));
     let result = (|| -> Result<(), String> {
@@ -4867,6 +4878,54 @@ pub fn migrate_macos_autostart_launchagent<R: Runtime>(
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn reveal_item_in_dir_returns_error_without_panicking_on_runtime_worker() {
+        const FIXTURE: &str = "GCHAT_FOLDER_REVEAL_PRIVATE_BUS";
+        if std::env::var_os(FIXTURE).is_none() {
+            // Never ask the test runner's desktop to reveal a folder. A child
+            // gets an unreachable private bus without changing process-global
+            // environment used by other tests.
+            let root = tempfile::tempdir().unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "core::system::commands::tests::reveal_item_in_dir_returns_error_without_panicking_on_runtime_worker",
+                    "--nocapture",
+                ])
+                .env(FIXTURE, "1")
+                .env(
+                    "DBUS_SESSION_BUS_ADDRESS",
+                    format!("unix:path={}/missing-bus", root.path().display()),
+                )
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr),
+            );
+            assert!(
+                String::from_utf8_lossy(&output.stdout).contains("test result: ok. 1 passed;")
+            );
+            return;
+        }
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let result = tokio::spawn(super::reveal_item_in_dir("private log folder".into()))
+                .await
+                .expect("folder reveal must not panic on a runtime worker");
+            let error = result.expect_err("an unavailable file manager must report an error");
+            assert!(!error.starts_with("Folder reveal task failed:"), "{error}");
+        });
+    }
+
     fn folder_opener_exit_status(code: i32) -> std::process::ExitStatus {
         #[cfg(unix)]
         {
@@ -5255,6 +5314,7 @@ mod tests {
         assert_eq!(config.host_url, "https://127.0.0.1:7443");
         let desktop = config.desktop.unwrap();
         assert_eq!(desktop.provider, replacement);
+        assert!(desktop.runtime_set);
         let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
         #[cfg(target_os = "linux")]
         let expected = replacement.join("linux/sm120a/bin").join(executable);
