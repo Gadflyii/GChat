@@ -1633,10 +1633,10 @@ mod tests {
             } else {
                 result.unwrap();
             }
-            let saved = CuaTask::open(dir.path().join("task.json"))
+            let reopened = CuaTask::open(dir.path().join("task.json"))
                 .await
-                .unwrap()
-                .snapshot();
+                .unwrap();
+            let saved = reopened.snapshot();
             assert_eq!(
                 saved.state,
                 if empty {
