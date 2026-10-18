@@ -888,9 +888,20 @@ function GbotPage() {
               </Button>
             </div>
             {error && !serviceAction && (
-              <p role="alert" className="text-destructive">
-                {error}
-              </p>
+              <div role="alert" className="space-y-2 text-destructive">
+                <p>
+                  Could not load your bots. Choose Refresh to try again. If Gbot
+                  is stopped or disconnected, choose{' '}
+                  {serviceTarget.kind === 'paired_host'
+                    ? 'Connect Gbot service'
+                    : 'Start Gbot service'}{' '}
+                  above.
+                </p>
+                <details className="text-muted-foreground">
+                  <summary>Details</summary>
+                  <p className="whitespace-pre-wrap break-words">{error}</p>
+                </details>
+              </div>
             )}
             {adding && (
               <GbotSetup

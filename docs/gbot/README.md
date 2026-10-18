@@ -1085,6 +1085,35 @@ XML and Gchat 2 custody; inert responses do not qualify live tasks or native
 Windows.
 
 
+## Recovering a failed bot-list read — Gchat 2
+
+`GBOT-BOT-LIST-ERROR-GUIDANCE`, based on main `e93d19e77`, names Refresh
+after the primary bot-list read fails. If the service is stopped or disconnected,
+the message names Start Gbot service or Connect Gbot service for the selected
+service computer. Previously, this alert displayed only its technical error.
+The complete diagnostic remains in initially closed Details, with long text
+wrapping within the panel.
+
+Rendered local Error and paired-service native-string journeys retain the
+selected bot and task draft through failure, diagnostic disclosure and explicit
+Refresh recovery. Disclosure makes no request; recovery performs no service
+start, stop, selection or task/control write. Existing service-start progress
+still hides the alert. This is source/rendered scope; no service or native
+lifecycle, account or VM acceptance is claimed.
+
+Validation: original production failed both new recovery journeys; fixed focus
+passed 130 tests (109 Gbot route, 21 schedules). Lint passed with zero errors
+and five existing warnings. ONE `make verify` (2026-10-18 21:11:53–21:18:10 UTC)
+passed 3,829 app tests (six skipped), 130 extension tests, 1,319 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards. All
+3,479 tracked inputs matched raw bytes and modes before and after the gates,
+with fresh tracked timestamps. Only this receipt was added afterward.
+Booking3565 returned21:18Z; private cache and both local exports were removed
+by21:20:45Z. Small evidence:
+`/ai/gchat/out/gchat2-bot-list-error-guidance-20261018/SUMMARY.md`.
+Final gate SHA256 `76dc5a6f3ec3f44e36f68a08e95884ad722f46ac097c696b6aaa7fce9ce596ce`;
+cleanup SHA256 `af2e9002c11be44d297d451a44aded21c5484faa9af3cb642fbb7beb235d5d08`.
+
 ## Stopped scheduler recovery keeps diagnostics optional — Gchat 2
 
 `GBOT-SCHEDULER-STOPPED-ERROR-GUIDANCE`, based on main `44d737900`,
