@@ -312,6 +312,7 @@ export const useModelProvider = create<ModelProviderState>()(
               }
             }),
             deletedModels: [...currentDeletedModels, modelId],
+            selectedModel: state.selectedModel?.id === modelId ? null : state.selectedModel,
           }
         })
       },

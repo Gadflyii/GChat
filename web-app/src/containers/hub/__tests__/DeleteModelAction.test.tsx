@@ -20,10 +20,12 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 
 const toastSuccess = vi.fn()
 const toastError = vi.fn()
+const toastWarning = vi.fn()
 vi.mock('sonner', () => ({
   toast: {
     success: (...args: unknown[]) => toastSuccess(...args),
     error: (...args: unknown[]) => toastError(...args),
+    warning: (...args: unknown[]) => toastWarning(...args),
   },
 }))
 
@@ -31,12 +33,13 @@ import { DeleteModelAction } from '../DeleteModelAction'
 
 const deleteModel = vi.fn()
 const stopModel = vi.fn()
+const startModel = vi.fn()
 const getProviders = vi.fn()
 
-function deferred() {
-  let resolve!: () => void
+function deferred<T = void>() {
+  let resolve!: (value: T) => void
   let reject!: (reason: unknown) => void
-  const promise = new Promise<void>((done, fail) => {
+  const promise = new Promise<T>((done, fail) => {
     resolve = done
     reject = fail
   })
@@ -68,14 +71,17 @@ describe('DeleteModelAction', () => {
     vi.clearAllMocks()
     deleteModel.mockReset().mockResolvedValue(undefined)
     stopModel.mockReset().mockResolvedValue(undefined)
+    startModel.mockReset().mockResolvedValue(undefined)
     getProviders.mockReset().mockResolvedValue([llamacpp([])])
     seedServiceHub({
-      models: { deleteModel, stopModel } as unknown as ModelsService,
+      models: { deleteModel, stopModel, startModel } as unknown as ModelsService,
       providers: { getProviders } as unknown as ProvidersService,
     })
     useModelProvider.setState({
       providers: [llamacpp(['Qwen3-4B-Q4_K_M'])],
       deletedModels: [],
+      selectedProvider: 'llamacpp',
+      selectedModel: { id: 'Qwen3-4B-Q4_K_M' } as Model,
     })
     useFavoriteModel.setState({
       favoriteModels: [{ id: 'Qwen3-4B-Q4_K_M' } as Model],
@@ -153,6 +159,7 @@ describe('DeleteModelAction', () => {
     expect(within(dialog).getByRole('button', { name: 'common:deleteModel.cancel' })).toBeEnabled()
     expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['Qwen3-4B-Q4_K_M'])
     expect(useFavoriteModel.getState().favoriteModels).toHaveLength(1)
+    expect(useModelProvider.getState().selectedModel?.id).toBe('Qwen3-4B-Q4_K_M')
     expect(getProviders).not.toHaveBeenCalled()
 
     await user.click(within(dialog).getByRole('button', { name: 'common:deleteModel.delete' }))
@@ -246,6 +253,114 @@ describe('DeleteModelAction', () => {
     expect(toastSuccess).toHaveBeenCalledWith('Model deleted', expect.any(Object))
   })
 
+  it.each([false, true])(
+    'preserves accepted deletion and read-only inventory recovery after the row unmounts (external reference: %s)',
+    async (externalReference) => {
+      const modelId = 'Qwen3-4B-Q4_K_M'
+      const deletion = deferred()
+      const initialRead = deferred<ModelProvider[]>()
+      const failedRetry = deferred<ModelProvider[]>()
+      const successfulRetry = deferred<ModelProvider[]>()
+      const onDeleted = vi.fn()
+      const modelProvider = { ...llamacpp([modelId]), provider: 'ginfer' }
+      useModelProvider.setState({
+        providers: [modelProvider],
+        selectedProvider: 'ginfer',
+      })
+      deleteModel.mockReturnValueOnce(deletion.promise)
+      getProviders
+        .mockReturnValueOnce(initialRead.promise)
+        .mockReturnValueOnce(failedRetry.promise)
+        .mockReturnValueOnce(successfulRetry.promise)
+      const row = render(<DeleteModelAction modelId={modelId} provider="ginfer" externalReference={externalReference} onDeleted={onDeleted} />)
+      const user = userEvent.setup()
+      const deleteLabel = externalReference ? 'Remove from Models' : 'common:deleteModel.delete'
+      await user.click(screen.getByRole('button', { name: deleteLabel }))
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: deleteLabel }))
+
+      await act(async () => {
+        deletion.resolve()
+        await deletion.promise
+      })
+
+      expect(getProviders).toHaveBeenCalledOnce()
+      expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')
+      expect(useModelProvider.getState().providers[0].models).toHaveLength(0)
+      expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      expect(onDeleted).not.toHaveBeenCalled()
+      await act(async () => {
+        initialRead.reject(new Error('Provider inventory failed at /models/catalog.json'))
+        await initialRead.promise.catch(() => undefined)
+      })
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(deleteModel).toHaveBeenCalledExactlyOnceWith(modelId, 'ginfer')
+      expect(onDeleted).toHaveBeenCalledOnce()
+      expect(toastError).not.toHaveBeenCalled()
+      expect(toastSuccess).not.toHaveBeenCalled()
+      const title = externalReference ? 'Model removed' : 'Model deleted'
+      const description = externalReference
+        ? 'Removed from Models. The original file remains in place.'
+        : 'common:deleteModel.success'
+      expect(toastWarning).toHaveBeenCalledExactlyOnceWith(title, {
+        id: `delete-model-${modelId}`,
+        duration: Infinity,
+        description: expect.anything(),
+      })
+
+      // The global notification survives removal of the model row itself.
+      row.unmount()
+      render(toastWarning.mock.calls[0][1].description)
+      expect(screen.getByText(description)).toBeVisible()
+      expect(screen.getByText('The model list could not be refreshed. Choose Refresh model list to try again.')).toBeVisible()
+      const details = screen.getByText('Technical details').closest('details')
+      expect(details).not.toHaveAttribute('open')
+      expect(screen.getByText('Provider inventory failed at /models/catalog.json')).not.toBeVisible()
+      const refresh = screen.getByRole('button', { name: 'Refresh model list' })
+      act(() => {
+        refresh.click()
+        refresh.click()
+      })
+
+      expect(getProviders).toHaveBeenCalledTimes(2)
+      expect(refresh).toBeDisabled()
+      expect(refresh).toHaveTextContent('Refreshing model list…')
+      await act(async () => {
+        failedRetry.reject(new Error('Provider inventory is still offline'))
+        await failedRetry.promise.catch(() => undefined)
+      })
+
+      expect(refresh).toBeEnabled()
+      expect(details).not.toHaveAttribute('open')
+      expect(screen.getByText('Provider inventory is still offline')).not.toBeVisible()
+      expect(screen.queryByText('Provider inventory failed at /models/catalog.json')).not.toBeInTheDocument()
+      expect(toastSuccess).not.toHaveBeenCalled()
+      expect(useModelProvider.getState().providers[0].models).toHaveLength(0)
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      await user.click(refresh)
+      expect(getProviders).toHaveBeenCalledTimes(3)
+      await act(async () => {
+        // A stale response must not resurrect the accepted-deleted model.
+        successfulRetry.resolve([{ ...modelProvider, models: [{ id: modelId }, { id: 'fresh-model' }] }])
+        await successfulRetry.promise
+      })
+
+      expect(toastSuccess).toHaveBeenCalledExactlyOnceWith(title, {
+        id: `delete-model-${modelId}`,
+        description: `${description} The model list is up to date.`,
+      })
+      expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['fresh-model'])
+      expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      expect(deleteModel).toHaveBeenCalledOnce()
+      expect(onDeleted).toHaveBeenCalledOnce()
+      expect(stopModel).not.toHaveBeenCalled()
+      expect(startModel).not.toHaveBeenCalled()
+      expect(toastError).not.toHaveBeenCalled()
+    }
+  )
+
   it('preserves a running model when the backend refuses removal', async () => {
     useAppState.setState({ activeModels: ['Qwen3-4B-Q4_K_M'] })
     deleteModel.mockRejectedValue(new Error('Stop this model before deleting its files.'))
@@ -258,6 +373,7 @@ describe('DeleteModelAction', () => {
     expect(stopModel).not.toHaveBeenCalled()
     expect(useAppState.getState().activeModels).toEqual(['Qwen3-4B-Q4_K_M'])
     expect(useModelProvider.getState().providers[0].models.map(m => m.id)).toEqual(['Qwen3-4B-Q4_K_M'])
+    expect(useModelProvider.getState().selectedModel?.id).toBe('Qwen3-4B-Q4_K_M')
   })
 
   it('keeps the model listed and reports the failure when the engine refuses', async () => {

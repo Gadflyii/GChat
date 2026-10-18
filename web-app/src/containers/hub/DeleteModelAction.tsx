@@ -13,6 +13,7 @@ import {
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { useTranslation } from '@/i18n/react-i18next-compat'
 import { deleteLocalModel } from '@/lib/model-deletion'
+import { notifyModelDeletion } from './notifyModelDeletion'
 
 export type DeleteModelActionProps = {
   /** Id the engine registered the model under, not the catalog's spelling. */
@@ -23,7 +24,7 @@ export type DeleteModelActionProps = {
   label?: string
   /** The catalog refers to a file outside app-managed storage. */
   externalReference?: boolean
-  /** Called after removal, before the provider list is refreshed. */
+  /** Called after accepted removal and the initial inventory refresh attempt. */
   onDeleted?: () => void
 }
 
@@ -55,11 +56,14 @@ export function DeleteModelAction({
     setDeleting(true)
     setError(null)
     try {
-      await deleteLocalModel(serviceHub, modelId, provider)
+      const refreshError = await deleteLocalModel(serviceHub, modelId, provider)
       onDeleted?.()
-      toast.success(externalReference ? 'Model removed' : 'Model deleted', {
-        id: `delete-model-${modelId}`,
+      notifyModelDeletion({
+        serviceHub,
+        modelId,
+        title: externalReference ? 'Model removed' : 'Model deleted',
         description: externalReference ? 'Removed from Models. The original file remains in place.' : t('common:deleteModel.success', { modelId: label ?? modelId }),
+        refreshError,
       })
       setOpen(false)
     } catch (error) {

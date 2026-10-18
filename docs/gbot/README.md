@@ -1085,6 +1085,33 @@ XML and Gchat 2 custody; inert responses do not qualify live tasks or native
 Windows.
 
 
+## Stopped scheduler recovery keeps diagnostics optional — Gchat 2
+
+`GBOT-SCHEDULER-STOPPED-ERROR-GUIDANCE`, based on main `44d737900`,
+keeps the stopped-scheduler alert readable when the service reports a journal
+or storage fault. The primary message says scheduling has stopped and names
+the computer where the Gbot service must be restarted. The complete technical
+cause remains available in Details, initially closed and wrapping long text.
+
+The warning stays visible above the collapsed Scheduled tasks panel. Existing
+rendered journeys retain the newest stopped result after an older read returns,
+exercise diagnostic disclosure without a request, and preserve disabled Create
+schedule and no-write behavior. Service restart, scheduler state, saved schedules
+and form drafts are unchanged. This is source/rendered scope, with no native
+service acceptance.
+
+Validation: both stopped-scheduler journeys failed against original production;
+fixed focus passed 128 tests (21 schedules, 107 Gbot route). Lint passed with
+zero errors and five existing warnings. ONE `make verify`
+(2026-10-18 20:57:38–21:03:47 UTC) passed 3,818 app tests (six skipped),
+127 extension tests, 1,319 Rust tests (28 ignored), all six coverage floors and
+typecheck/quality guards. All 3,476 tracked raw bytes and modes matched before
+and after the gates. Only this receipt was added afterward. Booking3558
+returned21:05Z; private cache and exports were removed by21:06:10Z.
+Evidence: `/ai/gchat/out/gchat2-scheduler-stopped-error-guidance-20261018/SUMMARY.md`.
+Gate SHA256 `19b72c380a7cf60f9ef693188769403e9182f95e2e4734e84fe5e85cb97c0f44`;
+cleanup SHA256 `1716c346bcff4a7fe1ff515694d9ed1e52fe90f0b4ca2cf2b3729316fe18db2b`.
+
 ## Stopped schedules identify the service computer — Gchat 2
 
 `GBOT-SCHEDULE-RESTART-COMPUTER-WORDING`, based on main `23d0f3236`,
