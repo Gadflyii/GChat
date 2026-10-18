@@ -2679,6 +2679,7 @@ while True:
             tauri::RunEvent::WindowEvent {
                 label,
                 event: event @ tauri::WindowEvent::CloseRequested { .. },
+                ..
             } => {
                 crate::handle_agent_window_event(
                     &admission_app.state::<AppState>(),
