@@ -630,6 +630,135 @@ it('creates only after separate billing consent with the reviewed quote and expl
   ).not.toBeInTheDocument()
 })
 
+it.each(['delete response', 'progress check'] as const)(
+  'requires fresh billing consent after a %s confirms deletion of a created computer',
+  async (confirmation) => {
+    const initial = { ...review(), confirmed: true }
+    const sources = '203.0.113.10/32\n2001:db8::1/128'
+    const running = deployment(initial, 'running')
+    running.deployment!.source_cidrs = sources.split('\n')
+    const deleted: CloudReview = {
+      ...running,
+      deployment: {
+        ...running.deployment!,
+        phase: 'deleted',
+        resources: [],
+      },
+    }
+    const deleting: CloudReview = {
+      ...running,
+      deployment: {
+        ...running.deployment!,
+        phase: 'deleting',
+        pending: {
+          kind: 'server',
+          name: 'owned-bot',
+          deleting: running.deployment!.resources[0],
+        },
+      },
+    }
+    const creation = deferred<CloudReview>()
+    const deletion = deferred<CloudReview>()
+    const check = deferred<CloudReview>()
+    const recreation = deferred<CloudReview>()
+    vi.mocked(gbot)
+      .mockReturnValueOnce(creation.promise)
+      .mockReturnValueOnce(deletion.promise)
+    render(
+      <CloudCosts
+        name="Research bot"
+        initial={initial}
+        busy={vi.fn()}
+        reviewed={vi.fn()}
+      />
+    )
+    fireEvent.change(screen.getByLabelText('Allowed SSH source networks'), {
+      target: { value: sources },
+    })
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: /authorize creating/ })
+    )
+    const firstCreate = screen.getByRole('button', {
+      name: 'Create cloud computer',
+    })
+    fireEvent.click(firstCreate)
+    fireEvent.click(firstCreate)
+    expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/cloud/create', {
+      id: 'review',
+      quote_id: 'quote',
+      consent: true,
+      source_cidrs: ['203.0.113.10/32', '2001:db8::1/128'],
+    })
+    await act(async () => creation.resolve(running))
+    const remove = screen.getByRole('button', {
+      name: 'Delete cloud computer',
+    })
+    expect(remove).toBeDisabled()
+    fireEvent.click(screen.getByRole('checkbox', { name: /Delete this setup/ }))
+    fireEvent.click(remove)
+    fireEvent.click(remove)
+    expect(gbot).toHaveBeenCalledTimes(2)
+    expect(gbot).toHaveBeenLastCalledWith('setup/cloud/delete', {
+      id: 'review',
+      consent: true,
+    })
+    await act(async () =>
+      deletion.resolve(confirmation === 'delete response' ? deleted : deleting)
+    )
+    if (confirmation === 'progress check') {
+      expect(
+        screen.queryByRole('button', { name: 'Create cloud computer' })
+      ).not.toBeInTheDocument()
+      vi.mocked(gbot).mockReturnValueOnce(check.promise)
+      const progress = screen.getByRole('button', { name: 'Check progress' })
+      fireEvent.click(progress)
+      fireEvent.click(progress)
+      expect(gbot).toHaveBeenCalledTimes(3)
+      expect(gbot).toHaveBeenLastCalledWith('setup/cloud/check', {
+        id: 'review',
+      })
+      expect(
+        screen.getByRole('button', { name: 'Checking cloud computer…' })
+      ).toBeDisabled()
+      await act(async () => check.resolve(deleted))
+    }
+    expect(
+      screen.getByText('Computer and owned provider resources deleted.')
+    ).toBeInTheDocument()
+    const billing = screen.getByRole('checkbox', { name: /authorize creating/ })
+    const nextCreate = screen.getByRole('button', {
+      name: 'Create cloud computer',
+    })
+    expect(billing).not.toBeChecked()
+    expect(nextCreate).toBeDisabled()
+    expect(screen.getByLabelText('Allowed SSH source networks')).toHaveValue(
+      sources
+    )
+    const beforeRecreation = confirmation === 'delete response' ? 2 : 3
+    fireEvent.click(nextCreate)
+    expect(gbot).toHaveBeenCalledTimes(beforeRecreation)
+    fireEvent.click(billing)
+    expect(nextCreate).toBeEnabled()
+    expect(gbot).toHaveBeenCalledTimes(beforeRecreation)
+    vi.mocked(gbot).mockReturnValueOnce(recreation.promise)
+    fireEvent.click(nextCreate)
+    fireEvent.click(nextCreate)
+    expect(
+      screen.getByRole('button', { name: 'Creating cloud computer…' })
+    ).toBeDisabled()
+    expect(gbot).toHaveBeenCalledTimes(beforeRecreation + 1)
+    expect(gbot).toHaveBeenLastCalledWith('setup/cloud/create', {
+      id: 'review',
+      quote_id: 'quote',
+      consent: true,
+      source_cidrs: ['203.0.113.10/32', '2001:db8::1/128'],
+    })
+    await act(async () => recreation.resolve(deployment(initial)))
+    expect(screen.getByText(/Computer creating/)).toBeInTheDocument()
+    expect(gbot).toHaveBeenCalledTimes(beforeRecreation + 1)
+  }
+)
+
 it('keeps recovery and consented deletion available after quote expiry', async () => {
   const initial = deployment(review(), 'check_required')
   initial.expires_at = 1
