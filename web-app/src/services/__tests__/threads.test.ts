@@ -193,6 +193,71 @@ describe('DefaultThreadsService', () => {
   })
 
   describe('updateThread', () => {
+    it('preserves creation time through a favorite and project roundtrip while advancing update time', async () => {
+      const created = 1792281600
+      const original = {
+        id: 'thread-metadata-roundtrip',
+        title: 'Retained conversation',
+        created,
+        updated: created,
+        isFavorite: false,
+        order: 3,
+        model: { id: 'local-model', provider: 'ginfer' },
+        metadata: { note: 'Keep this metadata', order: 3, is_favorite: false },
+      }
+      const project = { id: 'project-1', name: 'Work', updated_at: created }
+      const changes = [
+        { isFavorite: true, project: undefined },
+        { isFavorite: true, project },
+        { isFavorite: true, project: undefined },
+        { isFavorite: false, project: undefined },
+      ]
+      let thread: Thread = original
+      const clock = vi.spyOn(Date, 'now')
+
+      try {
+        mockConversationalExtension.modifyThread.mockResolvedValue(undefined)
+        for (const [index, change] of changes.entries()) {
+          const nowMs = (created + (index + 1) * 60) * 1000 + 574
+          clock.mockReturnValue(nowMs)
+
+          await threadsService.updateThread({
+            ...thread,
+            isFavorite: change.isFavorite,
+            metadata: { ...thread.metadata, project: change.project },
+          })
+
+          const saved = mockConversationalExtension.modifyThread.mock.lastCall![0]
+          expect(saved).toMatchObject({
+            id: original.id,
+            title: original.title,
+            created,
+            updated: nowMs / 1000,
+          })
+          expect(saved.updated).toBeGreaterThan(thread.updated)
+          expect(saved.metadata).toEqual({
+            ...original.metadata,
+            is_favorite: change.isFavorite,
+            project: change.project,
+          })
+
+          mockConversationalExtension.listThreads.mockResolvedValue([saved])
+          ;[thread] = await threadsService.fetchThreads()
+          expect(thread).toMatchObject({
+            created,
+            updated: nowMs / 1000,
+            isFavorite: change.isFavorite,
+            order: original.order,
+            model: original.model,
+            metadata: saved.metadata,
+          })
+        }
+        expect(mockConversationalExtension.modifyThread).toHaveBeenCalledTimes(4)
+      } finally {
+        clock.mockRestore()
+      }
+    })
+
     it('preserves Code reference metadata and favorite without inventing a Chat model', async () => {
       mockConversationalExtension.modifyThread.mockResolvedValue(undefined)
       const row = { id: 'code-ses_saved', title: 'My task', updated: 1, isFavorite: true,

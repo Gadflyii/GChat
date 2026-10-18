@@ -163,7 +163,6 @@ export class DefaultThreadsService implements ThreadsService {
           order: thread.order,
         },
         object: 'thread',
-        created: Date.now() / 1000,
         updated: Date.now() / 1000,
       })
   }

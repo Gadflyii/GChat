@@ -22,6 +22,21 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Chat creation date during history actions — October 18
+
+An isolated native Linux pass found that favoriting a saved chat, adding it to
+a project, removing it and unfavoriting it overwrote its persisted creation
+date with the update time. All messages and the other saved thread files were
+unchanged. The affected service is identical between native source
+`f1c7c73b0` and main `d4ec7abab`.
+
+Thread updates now preserve the existing creation date and refresh only the
+update date. Regression tests, one `make verify` and a corrected native replay
+are pending. Baseline evidence is in
+`/ai/gchat/out/gchat-chat-project-membership-20261018/`; the fix packet is
+`/ai/gchat/out/gchat-chat-created-timestamp-20261018/`. This is a Linux debug
+desktop check; Windows was not built (dev phase).
+
 ## Chat search query selection — October 18
 
 An isolated native Linux pass reproduced a stale keyboard selection when a new
