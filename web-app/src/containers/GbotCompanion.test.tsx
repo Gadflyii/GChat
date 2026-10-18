@@ -135,6 +135,139 @@ async function mount() {
   return view
 }
 
+it.each(['tasks', 'tasks/approvals'] as const)(
+  'recovers a failed %s read without losing the draft or sending task actions',
+  async (failedPath) => {
+    const prompt = 'Read my saved notes'
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [{ role: 'user', content: prompt }],
+        help_requests: [],
+      },
+    ]
+    const approvals = [
+      {
+        id: 'atlas-permission',
+        task_id: 'atlas-task',
+        request: { operation: { kind: 'desktop_input' } },
+      },
+    ]
+    let rejectRetry!: (cause: Error) => void
+    const read = vi
+      .fn()
+      .mockResolvedValueOnce(failedPath === 'tasks' ? tasks : approvals)
+      .mockRejectedValueOnce(new Error('Task status unavailable'))
+      .mockImplementationOnce(
+        () =>
+          new Promise<unknown>((_, reject) => {
+            rejectRetry = reject
+          })
+      )
+      .mockResolvedValue(failedPath === 'tasks' ? tasks : approvals)
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) => {
+      if (path === failedPath) return read()
+      if (path === 'tasks/approvals') return Promise.resolve(approvals)
+      return fallback(path, body)
+    })
+    await mount()
+    const conversation = screen.getByRole('region', { name: 'Bot conversation' })
+    expect(within(conversation).getByText(prompt)).toBeVisible()
+    expect(
+      within(conversation).getByRole('article', { name: 'Bot permission request' })
+    ).toBeVisible()
+    const draft = screen.getByRole('textbox', { name: 'Message bot' })
+    fireEvent.change(draft, { target: { value: 'Keep this draft' } })
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+
+    await act(async () => events.get('gbot-task-update')?.())
+    const retry = await within(conversation).findByRole('button', {
+      name: 'Retry loading tasks',
+    })
+    const alert = within(conversation).getByRole('alert')
+    expect(alert).toHaveTextContent(
+      'Could not load tasks and approval requests. Try again.'
+    )
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      within(alert).getByText('Error: Task status unavailable')
+    ).not.toBeVisible()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+    expect(within(conversation).queryByText(prompt)).not.toBeInTheDocument()
+    expect(
+      within(conversation).queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Connect this bot and save its model/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Give Atlas a task/)).not.toBeInTheDocument()
+
+    mocks.call.mockClear()
+    act(() => {
+      fireEvent.click(retry)
+      fireEvent.click(retry)
+    })
+    expect(
+      within(conversation).getByRole('button', { name: 'Loading tasks…' })
+    ).toBeDisabled()
+    await waitFor(() => expect(rejectRetry).toBeTypeOf('function'))
+    expect(mocks.call.mock.calls.map(([path]) => path)).toEqual([
+      'state',
+      'tasks',
+      'tasks/approvals',
+    ])
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+
+    await act(async () => rejectRetry(new Error('Task status still unavailable')))
+    expect(within(conversation).getByRole('alert')).toHaveTextContent(
+      'Could not load tasks and approval requests. Try again.'
+    )
+    expect(
+      within(conversation).getByText('Error: Task status still unavailable')
+    ).not.toBeVisible()
+    expect(
+      within(conversation).getByRole('button', { name: 'Retry loading tasks' })
+    ).toBeEnabled()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeDisabled()
+    expect(
+      screen.queryByText(/Connect this bot and save its model/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Give Atlas a task/)).not.toBeInTheDocument()
+
+    fireEvent.click(
+      within(conversation).getByRole('button', { name: 'Retry loading tasks' })
+    )
+    expect(await within(conversation).findByText(prompt)).toBeVisible()
+    expect(
+      within(conversation).getByRole('article', { name: 'Bot permission request' })
+    ).toBeVisible()
+    expect(within(conversation).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      within(conversation).queryByRole('button', {
+        name: /Retry loading tasks|Loading tasks…/,
+      })
+    ).not.toBeInTheDocument()
+    expect(draft).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
+    expect(mocks.call.mock.calls.map(([path]) => path)).toEqual([
+      'state',
+      'tasks',
+      'tasks/approvals',
+      'state',
+      'tasks',
+      'tasks/approvals',
+    ])
+  }
+)
+
 it('shows the saved interruption cause beside Resume and clears it after completion', async () => {
   const reason = 'model returned no answer; resume the task to try again'
   tasks = [
