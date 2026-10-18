@@ -105,8 +105,8 @@ $env:LOCALAPPDATA = 'C:\GInfer-test\local'
 ```
 
 For Linux, pass a staged `ginfer-linux-runtime-v1` directory to the same packager
-with `--target linux-x86_64`. Extract the resulting combined archive, then run
-`python3.11 setup.py`. Interactive setup offers binary, model/state and launcher
+with `--target linux-x86_64`. Setup requires Python 3.11 or newer, available as
+`python3`. Extract the resulting combined archive, then run `python3 setup.py`. Interactive setup offers binary, model/state and launcher
 directories; Enter accepts the defaults. Explicit `--install-directory`,
 `--provider-directory`, `--link-directory` and `--install` support unattended use;
 without `--install`, explicit arguments only preview changes. The launcher symlink
