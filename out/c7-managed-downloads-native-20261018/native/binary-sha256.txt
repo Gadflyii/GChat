@@ -1,0 +1,2 @@
+0128e837f7559912308f75f8ade5cfb0287047716503f05c9ec9e3477aaf0ab7  /media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir/usr/bin/gchat
+f8919a5db552de9b4ef8bd0726194fd12dc9a372305cb9ef37c919b945fae663  /media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir/usr/lib/GChat/resources/bin/ginfer-host

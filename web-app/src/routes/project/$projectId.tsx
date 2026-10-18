@@ -1,5 +1,5 @@
 import { createFileRoute, useParams } from '@tanstack/react-router'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 
 import { useThreadManagement } from '@/hooks/useThreadManagement'
 import { useThreads } from '@/hooks/useThreads'
@@ -42,6 +42,8 @@ function ProjectPageContent() {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
+  const dialogTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   // Find the project
   const project = getFolderById(projectId)
@@ -102,20 +104,28 @@ function ProjectPageContent() {
             </h1>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-xs">
+                <Button ref={menuTriggerRef} variant="ghost" size="icon-xs">
                   <MoreHorizontal className="size-4" />
                   <span className="sr-only">More options</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onSelect={() => setEditDialogOpen(true)}>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    dialogTriggerRef.current = menuTriggerRef.current
+                    setEditDialogOpen(true)
+                  }}
+                >
                   <FolderPenIcon className="size-4" />
                   <span>{t('projects.editProject')}</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
-                  onSelect={() => setDeleteDialogOpen(true)}
+                  onSelect={() => {
+                    dialogTriggerRef.current = menuTriggerRef.current
+                    setDeleteDialogOpen(true)
+                  }}
                 >
                   <Trash2 className="size-4" />
                   <span>{t('projects.deleteProject')}</span>
@@ -205,7 +215,10 @@ function ProjectPageContent() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setEditDialogOpen(true)}
+                onClick={(event) => {
+                  dialogTriggerRef.current = event.currentTarget
+                  setEditDialogOpen(true)
+                }}
               >
                 <PencilIcon className="size-3" />
                 <span>{t('common:edit')}</span>
@@ -224,6 +237,7 @@ function ProjectPageContent() {
         editingKey={project.id}
         initialData={project}
         onSave={handleSaveEdit}
+        returnFocusRef={dialogTriggerRef}
       />
 
       <DeleteProjectDialog
@@ -231,6 +245,7 @@ function ProjectPageContent() {
         onOpenChange={setDeleteDialogOpen}
         projectId={project.id}
         projectName={project.name}
+        returnFocusRef={dialogTriggerRef}
       />
     </div>
   )

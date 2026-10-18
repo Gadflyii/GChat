@@ -1,0 +1,7 @@
+	linux-vdso.so.1 (0x000075458fb08000)
+	libssl.so.3 => /media/ron/SSD_RAID/ai/tmp-c7-switch-focus-native-20261018/donor-appdir/usr/lib/GChat/resources/gbot/python/lib/native/libssl.so.3 (0x000075458dd56000)
+	libcrypto.so.3 => /media/ron/SSD_RAID/ai/tmp-c7-switch-focus-native-20261018/donor-appdir/usr/lib/GChat/resources/gbot/python/lib/native/libcrypto.so.3 (0x000075458d800000)
+	libgcc_s.so.1 => /media/ron/SSD_RAID/ai/tmp-c7-switch-focus-native-20261018/donor-appdir/usr/lib/GChat/resources/gbot/python/lib/native/libgcc_s.so.1 (0x000075458face000)
+	libm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x000075458d717000)
+	libc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x000075458d400000)
+	/lib64/ld-linux-x86-64.so.2 (0x000075458fb0a000)

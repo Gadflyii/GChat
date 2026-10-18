@@ -1,0 +1,29 @@
+{
+  "source": "71abf17084c8bbea0eb40da94cb5cfccb8e771f1",
+  "focused": {
+    "frontend": 47,
+    "host_model_downloads": 33
+  },
+  "host_check": 0,
+  "host_strict_all_targets_clippy": 0,
+  "make_verify_runs": 1,
+  "make_verify_exit": 0,
+  "web_core_passed": 3409,
+  "web_core_skipped": 6,
+  "extension_passed": 127,
+  "rust_passed": 1267,
+  "rust_ignored": 28,
+  "release_profile": {
+    "path": "src-tauri/Cargo.toml",
+    "debug_assertions": false,
+    "other_enabling_overrides_in_source": false,
+    "actual_release_rejection": "PASS: both focused --release tests each ran exactly one test"
+  },
+  "native_builds": {
+    "frontend": "NODE_ENV=development; VITE_MODEL_CATALOG_URL=http://192.168.1.109:18761/catalog.json",
+    "gchat": "debug default custom-protocol",
+    "ginfer_host": "debug",
+    "ldd_unresolved": []
+  },
+  "native_acceptance": "PASS: real transfer, popover progress, pause, native delete and empty state"
+}

@@ -340,6 +340,73 @@ DBus and PTY are also terminal; exact owned PIDs were checked after normal
 SIGTERM shutdown. Booking 2963 was canceled and **CPUs 120–127 returned at
 04:14Z**. Saved private state has no selected GPUs, models or startup profiles.
 
+## Linux RC of record — release Flash High PASS, October 17
+
+The retained unsigned, unpublished Linux release RC is **GChat
+`ed68c7443d3d782869dad89736ca049631f8a157` + Engine
+`e2282c336d114b7dcebdfa1a179bfb342731a8b8`: PASS**. CLI, Host and desktop
+were built with the existing release targets; complete package/archive checks
+passed. This release supersedes the earlier ed68 dev-profile binaries. The
+[final result](../../out/linux-rc-final-20261017/current-ed68c7443-e2282c336-release/result.json)
+and [GUI observations](../../out/linux-rc-final-20261017/local5090-ed68c7443-e2282c336-release-flash-high/gui-dom-evidence.jsonl)
+resolve the older Flash High blockers below for this release and this scope.
+
+The final mounted AppImage used a private HOME/XDG/runtime, DBus and unlocked
+keyring on the local RTX 5090. Custom Flash pure 2-bit
+(`8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`)
+Load used context **8192**, concurrency **1**, speculation **none**, Vision
+**off** and **Automatic KV**. Load was clicked at **19:18:15.682Z**;
+Engine reported loaded in **132.883 seconds**, and the GUI reached Ready.
+One **High** request sent at **19:22:13.798Z** answered exactly **`RC_OK`**.
+Normal GUI Stop followed at **19:22:42.020Z**; the app exited normally and
+private Host, mount and helpers were retired by **19:23:03.089Z**.
+
+This qualifies that retained release AppImage's custom-load/High-request path.
+It does not qualify default Installed Load (no matching RTX 5090 Flash catalog
+profile), other models, current-main Linux bytes, or Windows. Ron's Windows
+installer/sign-in test remains the next release gate; the later Windows RC is
+recorded below. A current-main Linux refresh requires its own assigned build
+and acceptance, rather than inheriting this result.
+
+Both packages remain in
+`E:\gchat-linux-rc-20261017\linux-rc-ed68c7443-e2282c336-release` and on S1 under
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/`:
+
+| Release package | Bytes | SHA256 |
+| --- | ---: | --- |
+| `GChat_2.0.42+rc20261017.release.gchated68c7443.enginee2282c336_amd64.deb` | 2,733,559,300 | `4251e175fe83ec3abfe7f3ab33cbc795f8f2bfe07210376403fbbb2ac24bacc5` |
+| `GChat_2.0.42_rc20261017.release.gchated68c7443.enginee2282c336_amd64.AppImage` | 2,857,138,680 | `f75e612779ba1796447d3a8493652859f1845622e782dbe8655617c878529d4e` |
+
+### Retained donors and historical local cleanup, October 18
+
+Protected S1 inputs remain at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
+(the release AppDir) and
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app`
+(the read-only build/cache donor). C3, C4 and C7 have independent-copy grants
+for the app donor; none authorizes donor mutation. C4 completed its read-only
+`runtime-set-e2282c336/sm120a` copy at **06:40Z** and released the donor hold.
+
+The [cleanup result](../../out/linux-rc-final-20261017/cleanup-result-20261018.json)
+and [short cleanup account](../../out/linux-rc-final-20261017/README.md#local-disposable-payload-cleanup--2026-10-18)
+record retirement at **06:42:31Z** of **232 selected historical local files**:
+**19,968,435,665 logical bytes** (**19,969,183,744 allocated bytes**).
+Existing manifests and accepted transfer/source receipts bound literal names
+and sizes; no new large hashing, copy or directory deletion ran. An earlier
+acceptance cleanup had missed detached private desktop helpers. This pass
+verified their PID/start/cwd/private-HOME identities, terminated only the six
+authorized helpers, confirmed them absent, and found no selected-path references
+in readable process metadata before unlinking the selected files.
+
+The mismatched-size d31 Host remains without an exact local-copy binding.
+Generated seed inputs, frontend/asset payload archives and residency libraries
+remain outside the deletion set, as do two stale AppImage FUSE mounts. All S1
+donors/stages/packages, Windows-visible RCs and `/ai/gchat/out/linux` are
+preserved. Unreadable non-dumpable/other-user process metadata limits the
+liveness check; this is scoped local retirement, not a fleet cleanup claim.
+The small JSON receipt and short account retain the disposition; no new build,
+model run or acceptance rerun was needed.
+
 ## Windows RC refresh — release installer delivered, October 18
 
 Bubbs's post-merge refresh is **PASS**. The unsigned Windows release installer
@@ -611,11 +678,11 @@ Linux release `ed68c7443` + Engine `e2282c336` remains the retained Linux PASS
 record. The later Windows release RC `c75096fad` + Engine `b76ce57a3` is now
 delivered as recorded above and awaits Ron's installer/sign-in gate. No refreshed
 Linux qualification is claimed.
-The retained S1 RC donor
-`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
-was offered read-only to Gchat 1; its provider keyboard request was withdrawn
-before any copy or run because retained evidence already qualified that row.
-Preserve this RC donor. Older dated sections below retain their historical scope.
+The protected S1 release AppDir and app-cache donor, current independent-copy
+grants and completed historical local cleanup are recorded in the Linux RC
+section above. Gchat 1's provider-keyboard donor request was withdrawn before
+copy or run because retained evidence already qualified that row. Older dated
+sections below retain their historical scope.
 
 ## Known issues
 
@@ -639,9 +706,13 @@ For the October 17 release candidate:
   The initial [Windows gate](windows-gate-20261016.md) covers a narrower set of
   checks on an RTX 5090; its results do not qualify every Windows feature.
 
-## October 17 current Linux RC — packages verified, Flash High blocked
+## Historical October 17 e9cf Linux RC — packages verified, Flash High blocked
 
-The unsigned, unpublished app-only refresh uses GChat
+This older e9cf/4f attempt remains failed at its recorded scope. The release
+ed68/e228 custom-load and High-request PASS above supersedes it as the Linux
+RC of record; the failure below is not the current release disposition.
+
+The unsigned, unpublished app-only refresh used GChat
 `e9cf3b1a444f6884456bc88ed3ddeacd27b75cb6` with unchanged Engine
 `4f451dded472516ac561b67efdacf9673f776967` (SM80/86/89/120a). It includes the
 merged optional-completion correction: explicit **Cancel profiling** durably
@@ -663,12 +734,12 @@ consumer.
 The corrected e9cf native rebuild, package assembly and complete archive check
 pass, and both NTFS destination SHA256 values match. An earlier attempt used
 stale db670 native outputs and was disqualified before archive checking or
-transfer. Flash High GUI acceptance is **BLOCKED** by Engine startup capacity.
-Gchat 2's current native input-only check **PASSES**, with resources returned at
-11:12Z. Its receipt is
+transfer. Flash High GUI acceptance was **BLOCKED** in this attempt by Engine
+startup capacity. Gchat 2's same-pin native input-only check **PASSES**, with
+resources returned at 11:12Z. Its receipt is
 `/ai/gchat/out/gbot-desktop-keyboard-shortcuts-20261017/native-e9cf3b1a4/result.json`,
 SHA256 `7f52019c6b7e7e25d632e1276ab4e3c7057313390d2a804eb2c13ab637b43ea3`.
-Current RC receipts are under
+This attempt's receipts are under
 `/ai/gchat/out/linux-rc-final-20261017/current-e9cf3b1a4-4f451dded/`.
 
 The exact e9cf/4f AppImage's retained local RTX 5090 fixture now confirms the
@@ -755,9 +826,9 @@ task execution or control transfer.
 
 The packaged Flash pure 2-bit package (SHA256
 `8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`)
-**High-reasoning consumer check remains OPEN**. The c5f/4f attempt was blocked
-before model Start or any request: automatic `complete-remaining-formats`
-profiling disabled Load, and profiling immediately restarted after Cancel.
+**High-reasoning consumer check was not completed in this c5f/4f attempt**.
+It was blocked before model Start or any request: automatic
+`complete-remaining-formats` profiling disabled Load, and profiling immediately restarted after Cancel.
 The merged correction and subsequent capacity-blocked consumer attempt are
 described above; this blocked c5f attempt does not qualify the corrected candidate.
 

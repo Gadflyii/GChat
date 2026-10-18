@@ -554,3 +554,5 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-18** — [Render choice popups with the app theme](2026-10-18-render-choice-popups-with-the-app-theme.md)
 - **2026-10-18** — [Surface background setup failures](2026-10-18-surface-background-setup-failures.md)
 - **2026-10-18** — [Declare installed launcher runtime ownership](2026-10-18-declare-installed-launcher-runtime-ownership.md)
+
+- [Shared private development model catalog](2026-10-18-private-development-model-catalog.md) — development/debug-only shared S1 LAN fixture; production admission unchanged.

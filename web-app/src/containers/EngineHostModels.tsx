@@ -17,6 +17,14 @@ import { formatModelBytes } from '@/lib/model-release'
 
 const advancedFieldLabels = { draft_tokens: 'Draft ahead length (tokens)', draft_tp: 'Drafting graphics cards (TP)', prefill_chunk: 'Input batch size (tokens)' } as const
 const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', stopping: 'Stopping', stopped: 'Stopped', failed: 'Could not start' } as const
+const modelActionMessages = {
+  start: 'Model start requested.',
+  stop: 'Model stop requested.',
+  restart: 'Model restart requested.',
+  reload: 'Model settings saved; restart requested.',
+  launch: 'Model start requested.',
+  profile_launch: 'Model start requested.',
+} as const
 
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
   const refresh = useEngineHosts((s) => s.refresh)
@@ -29,6 +37,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [startupQuote, setStartupQuote] = useState<{ key: string; result?: EngineStartupQuote; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [actionError, setActionError] = useState<{ message: string; details: string } | null>(null)
+  const [actionResult, setActionResult] = useState<string | null>(null)
+  const actionPending = useRef(false)
   const [connectionRemoved, setConnectionRemoved] = useState(false)
   const [connectionCleanupWarning, setConnectionCleanupWarning] = useState<string | null>(null)
   const [connectionRefreshError, setConnectionRefreshError] = useState<string | null>(null)
@@ -82,12 +92,22 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const launchError = invalidNumbers ? 'Use whole numbers. Conversation length and model copies must be at least 1. Requests at once must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
     : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
       ? 'This model cannot use NVFP4 conversation memory. Choose INT8 or BF16, or add a model prepared for NVFP4 memory.' : null
-  const act = async (action: string, args: Record<string, unknown> = {}) => {
+  const act = async (action: keyof typeof modelActionMessages | 'hardware_profile' | 'gbot_grant', args: Record<string, unknown> = {}) => {
+    if (busy || actionPending.current) return false
+    actionPending.current = true
     setBusy(true)
     setActionError(null)
+    setActionResult(null)
+    setConnectionRefreshError(null)
     try {
-      await engineCommand(action, { host_id: host.host_id, ...args })
-      await refresh()
+      if (action === 'start' || action === 'stop' || action === 'restart' || action === 'reload') {
+        const changedSnapshot = await engineCommand<EngineSnapshot>(action, { host_id: host.host_id, ...args })
+        publishSnapshot(host.host_id, changedSnapshot)
+      } else {
+        await engineCommand(action, { host_id: host.host_id, ...args })
+      }
+      if (action !== 'hardware_profile' && action !== 'gbot_grant') setActionResult(modelActionMessages[action])
+      await refreshHostList()
       return true
     }
     catch (e) {
@@ -99,7 +119,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       setActionError({ message, details: String(e) })
       toast.error(message)
       return false
-    } finally { setBusy(false) }
+    } finally { actionPending.current = false; setBusy(false) }
   }
   const refreshHostList = async () => {
     if (hostListRefreshPending.current) return
@@ -206,6 +226,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     </div>
     {connectionResult && <p role="status" className="text-sm">Connected to {host.name}.</p>}
     {scanResult && <p role="status" className="text-sm">Model list refreshed.</p>}
+    {actionResult && <p role="status" className="text-sm">{actionResult}</p>}
     {connectionRefreshFeedback}
     {actionError && <div role="alert" className="text-sm text-destructive"><p>{actionError.message}</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{actionError.details}</p></details></div>}
     {hostStopError && <div role="alert" className="text-sm text-destructive"><p>Could not stop the model service. Wait for any model loading or other work to finish, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{hostStopError}</p></details></div>}
@@ -307,7 +328,13 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {
         if (editing && !await confirmAction({ title: 'Save and restart this model?', message: 'The model will finish its current replies, then restart with your chosen settings. Other people using it will be affected while it restarts.', confirmLabel: 'Save and restart' })) return
-        if (editing) void act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })
+        if (editing) {
+          if (await act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })) {
+            setEditing(null)
+            setEditingSession(null)
+            setSettingsOpen(false)
+          }
+        }
         else void (async () => {
           for (let remaining = instanceCount; remaining > 0; remaining--) {
             if (!await act('launch', { body: { ...configuration, remaining_instances: remaining } })) {
@@ -317,7 +344,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           }
         })()
       }}>{editing ? 'Save and restart model' : 'Start model with these settings'}</Button>
-        {editing && <Button variant="outline" onClick={() => { setEditing(null); setSettingsOpen(false) }}>Cancel editing</Button>}
+        {editing && <Button variant="outline" onClick={() => { setEditing(null); setEditingSession(null); setSettingsOpen(false) }}>Cancel editing</Button>}
       </div>
       </details>
     </details>}

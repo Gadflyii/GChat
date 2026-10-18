@@ -1,0 +1,7 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.33s
+     Running unittests src/lib.rs (/work/native-target/release/deps/ginfer_host-173f17111f18b6ae)
+
+running 1 test
+test model_downloads::tests::private_catalog_requires_explicit_debug_private_ipv4_url ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 269 filtered out; finished in 0.00s

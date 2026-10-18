@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type RefObject } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ interface AddProjectDialogProps {
     assistantId?: string
   }
   onSave: (name: string, assistantId?: string) => void | Promise<void>
+  returnFocusRef?: RefObject<HTMLElement | null>
 }
 
 export default function AddProjectDialog({
@@ -42,6 +43,7 @@ export default function AddProjectDialog({
   editingKey,
   initialData,
   onSave,
+  returnFocusRef,
 }: AddProjectDialogProps) {
   const { t } = useTranslation()
   const [name, setName] = useState(initialData?.name || '')
@@ -132,7 +134,16 @@ export default function AddProjectDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent aria-busy={isSaving} showCloseButton={!isSaving}>
+        <DialogContent
+          aria-busy={isSaving}
+          showCloseButton={!isSaving}
+          onCloseAutoFocus={(event) => {
+            if (returnFocusRef?.current?.isConnected) {
+              event.preventDefault()
+              returnFocusRef.current.focus()
+            }
+          }}
+        >
           <form
             className="space-y-4"
             onSubmit={(event) => {

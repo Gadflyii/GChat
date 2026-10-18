@@ -79,11 +79,12 @@ const ProjectItem = memo(function ProjectItem({
   threads: Thread[]
   isOpen: boolean
   onOpenChange: (projectId: string, open: boolean) => void
-  onEdit: (project: ThreadFolder) => void
-  onDelete: (project: ThreadFolder) => void
+  onEdit: (project: ThreadFolder, trigger: HTMLButtonElement | null) => void
+  onDelete: (project: ThreadFolder, trigger: HTMLButtonElement | null) => void
 }) {
   const navigate = useNavigate()
   const folderIconRef = useRef<FoldersIconHandle>(null)
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const {
     attributes,
     listeners,
@@ -148,7 +149,10 @@ const ProjectItem = memo(function ProjectItem({
             </SidebarMenuButton>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuAction className="hover:bg-sidebar-foreground/8 transition-opacity group-hover/project-row:opacity-100 group-focus-within/project-row:opacity-100 data-[state=open]:opacity-100 md:opacity-0">
+                <SidebarMenuAction
+                  ref={menuTriggerRef}
+                  className="hover:bg-sidebar-foreground/8 transition-opacity group-hover/project-row:opacity-100 group-focus-within/project-row:opacity-100 data-[state=open]:opacity-100 md:opacity-0"
+                >
                   <MoreHorizontal />
                   <span className="sr-only">More</span>
                 </SidebarMenuAction>
@@ -169,14 +173,16 @@ const ProjectItem = memo(function ProjectItem({
                   <FolderOpenIcon className="text-muted-foreground" />
                   <span>View Project</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => onEdit(item)}>
+                <DropdownMenuItem
+                  onSelect={() => onEdit(item, menuTriggerRef.current)}
+                >
                   <FolderEditIcon className="text-muted-foreground" />
                   <span>Edit Project</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
-                  onSelect={() => onDelete(item)}
+                  onSelect={() => onDelete(item, menuTriggerRef.current)}
                 >
                   <Trash2 />
                   <span>Delete Project</span>
@@ -211,6 +217,7 @@ export function NavProjects() {
   const [selectedProject, setSelectedProject] = useState<ThreadFolder | null>(
     null
   )
+  const dialogTriggerRef = useRef<HTMLButtonElement | null>(null)
 
   const sortableProjectIds = useMemo(() => folders.map((f) => f.id), [folders])
 
@@ -230,15 +237,23 @@ export function NavProjects() {
 
   // Stable handlers keep the memoized rows from re-rendering on every parent
   // render (threads and selection change constantly).
-  const handleEdit = useCallback((project: ThreadFolder) => {
-    setSelectedProject(project)
-    setEditDialogOpen(true)
-  }, [])
+  const handleEdit = useCallback(
+    (project: ThreadFolder, trigger: HTMLButtonElement | null) => {
+      dialogTriggerRef.current = trigger
+      setSelectedProject(project)
+      setEditDialogOpen(true)
+    },
+    []
+  )
 
-  const handleDelete = useCallback((project: ThreadFolder) => {
-    setSelectedProject(project)
-    setDeleteDialogOpen(true)
-  }, [])
+  const handleDelete = useCallback(
+    (project: ThreadFolder, trigger: HTMLButtonElement | null) => {
+      dialogTriggerRef.current = trigger
+      setSelectedProject(project)
+      setDeleteDialogOpen(true)
+    },
+    []
+  )
 
   const handleOpenChange = useCallback(
     (projectId: string, expanded: boolean) => {
@@ -330,6 +345,7 @@ export function NavProjects() {
         editingKey={selectedProject?.id ?? null}
         initialData={selectedProject ?? undefined}
         onSave={handleSaveEdit}
+        returnFocusRef={dialogTriggerRef}
       />
 
       <DeleteProjectDialog
@@ -337,6 +353,7 @@ export function NavProjects() {
         onOpenChange={setDeleteDialogOpen}
         projectId={selectedProject?.id}
         projectName={selectedProject?.name}
+        returnFocusRef={dialogTriggerRef}
       />
     </>
   )

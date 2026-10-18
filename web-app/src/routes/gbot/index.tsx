@@ -78,6 +78,12 @@ function GbotPage() {
   })
   const [serviceReady, setServiceReady] = useState(false)
   const [serviceError, setServiceError] = useState('')
+  const serviceChange = useRef(false)
+  const [serviceActionErrors, setServiceActionErrors] = useState<
+    Record<string, { message: string; details: string } | undefined>
+  >({})
+  const serviceActionErrorKey = JSON.stringify(serviceTarget)
+  const serviceActionError = serviceActionErrors[serviceActionErrorKey]
   const serviceSelectionPending = useRef(false)
   const changeServiceDraft = useCallback(
     (target: ServiceTarget, ready: boolean) => {
@@ -105,6 +111,13 @@ function GbotPage() {
   const controlChange = useRef(false)
   const [controlErrors, setControlErrors] = useState<
     Record<string, { returning: boolean; details: string } | undefined>
+  >({})
+  const [recoveryErrors, setRecoveryErrors] = useState<
+    Record<string, string | undefined>
+  >({})
+  const connectionChange = useRef(false)
+  const [connectionErrors, setConnectionErrors] = useState<
+    Record<string, { disconnecting: boolean; details: string } | undefined>
   >({})
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({})
   const gbotEnabled = useGeneralSetting((state) => state.gbotEnabled)
@@ -201,17 +214,19 @@ function GbotPage() {
     }
   }, [refresh, gbotEnabled, serviceStopped])
   const changeService = async (start: boolean) => {
-    if (busy) return
+    if (busy || serviceChange.current) return
+    serviceChange.current = true
+    const key = serviceActionErrorKey
+    setServiceActionErrors((previous) => ({ ...previous, [key]: undefined }))
     const paired = serviceTarget.kind === 'paired_host'
-    setServiceAction(
-      start
-        ? paired
-          ? 'connecting'
-          : 'starting'
-        : paired
-          ? 'disconnecting'
-          : 'stopping'
-    )
+    const action = start
+      ? paired
+        ? 'connecting'
+        : 'starting'
+      : paired
+        ? 'disconnecting'
+        : 'stopping'
+    setServiceAction(action)
     try {
       if (start) {
         await startGbotService()
@@ -225,8 +240,24 @@ function GbotPage() {
       }
     } catch (cause) {
       if (!start) stopped.current = false
-      toast.error(String(cause))
+      setServiceActionErrors((previous) => ({
+        ...previous,
+        [key]: {
+          message: {
+            starting:
+              'Could not start Gbot on this computer. Try Start Gbot service again.',
+            connecting:
+              'Could not connect to the Gbot service on your LAN computer. Try Connect Gbot service again.',
+            stopping:
+              'Could not stop Gbot on this computer. Try Quit Gbot service again.',
+            disconnecting:
+              'Could not disconnect from the Gbot service on your LAN computer. Try Disconnect Gbot service again.',
+          }[action],
+          details: cause instanceof Error ? cause.message : String(cause),
+        },
+      }))
     } finally {
+      serviceChange.current = false
       setServiceAction(undefined)
       void useGbotCompanion.getState().refresh()
     }
@@ -371,22 +402,84 @@ function GbotPage() {
   const recoveryKey = recoverableControl
     ? `${recoverableControl.identity.workspace_id}:${recoverableControl.identity.session_id}:${recoverableControl.owner}`
     : ''
+  const recoveryErrorKey = JSON.stringify([serviceTarget, recoveryKey])
+  const recoveryError = recoveryErrors[recoveryErrorKey]
   const controlErrorKey = JSON.stringify([
     serviceTarget,
     identity?.workspace_id,
     identity?.session_id,
   ])
   const controlError = controlErrors[controlErrorKey]
-  const recoverControl = () => {
-    if (!recoverableControl || recoveryConfirmation !== recoveryKey) return
-    void perform(async () => {
-      await gbot('control/recover', {
-        identity: recoverableControl.identity,
-        expected_owner: recoverableControl.owner,
-        owner,
+  const connectionErrorKey = JSON.stringify([
+    serviceTarget,
+    workspaceId,
+    identity?.session_id,
+  ])
+  const connectionError = connectionErrors[connectionErrorKey]
+  const changeConnection = () => {
+    if (busy || connectionChange.current || !bot || setupBlocked) return
+    connectionChange.current = true
+    const key = connectionErrorKey
+    const disconnecting = Boolean(identity)
+    setConnectionErrors((previous) => ({ ...previous, [key]: undefined }))
+    void perform(
+      () =>
+        gbot(
+          disconnecting ? 'disconnect' : 'connect',
+          identity ||
+            (control && control.state !== 'bot'
+              ? control.identity
+              : {
+                  workspace_id: bot.id,
+                  session_id: crypto.randomUUID(),
+                })
+        ),
+      true
+    )
+      .catch((cause) =>
+        setConnectionErrors((previous) => ({
+          ...previous,
+          [key]: {
+            disconnecting,
+            details: cause instanceof Error ? cause.message : String(cause),
+          },
+        }))
+      )
+      .finally(() => {
+        connectionChange.current = false
       })
-      setRecoveryConfirmation('')
-    })
+  }
+  const recoverControl = () => {
+    if (
+      busy ||
+      controlChange.current ||
+      !recoverableControl ||
+      recoveryConfirmation !== recoveryKey
+    )
+      return
+    controlChange.current = true
+    const key = recoveryErrorKey
+    setRecoveryErrors((previous) => ({ ...previous, [key]: undefined }))
+    void perform(
+      async () => {
+        await gbot('control/recover', {
+          identity: recoverableControl.identity,
+          expected_owner: recoverableControl.owner,
+          owner,
+        })
+        setRecoveryConfirmation('')
+      },
+      true
+    )
+      .catch((cause) =>
+        setRecoveryErrors((previous) => ({
+          ...previous,
+          [key]: cause instanceof Error ? cause.message : String(cause),
+        }))
+      )
+      .finally(() => {
+        controlChange.current = false
+      })
   }
   const changeControl = () => {
     if (
@@ -539,6 +632,9 @@ function GbotPage() {
               variant="outline"
               size="sm"
               disabled={busy}
+              aria-describedby={
+                serviceActionError ? 'gbot-service-action-error' : undefined
+              }
               onClick={() =>
                 void changeService(serviceStopped || Boolean(error))
               }
@@ -576,6 +672,19 @@ function GbotPage() {
             }[serviceAction]
           }
         </p>
+      )}
+      {serviceActionError && (
+        <div
+          id="gbot-service-action-error"
+          role="alert"
+          className="space-y-1 border-b px-5 py-3 text-sm"
+        >
+          <p>{serviceActionError.message}</p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{serviceActionError.details}</p>
+          </details>
+        </div>
       )}
       {choosingService && (
         <section
@@ -878,13 +987,27 @@ function GbotPage() {
                     </p>
                     {recoveryConfirmation === recoveryKey ? (
                       <div className="flex flex-wrap gap-2">
-                        <Button disabled={busy} onClick={recoverControl}>
+                        <Button
+                          disabled={busy}
+                          aria-describedby={
+                            recoveryError
+                              ? 'gbot-settings-recovery-error'
+                              : undefined
+                          }
+                          onClick={recoverControl}
+                        >
                           Confirm recovery
                         </Button>
                         <Button
                           variant="outline"
                           disabled={busy}
-                          onClick={() => setRecoveryConfirmation('')}
+                          onClick={() => {
+                            setRecoveryConfirmation('')
+                            setRecoveryErrors((previous) => ({
+                              ...previous,
+                              [recoveryErrorKey]: undefined,
+                            }))
+                          }}
                         >
                           Cancel recovery
                         </Button>
@@ -897,6 +1020,22 @@ function GbotPage() {
                       >
                         Recover control
                       </Button>
+                    )}
+                    {recoveryError && (
+                      <div
+                        id="gbot-settings-recovery-error"
+                        role="alert"
+                        className="space-y-1"
+                      >
+                        <p>
+                          Could not recover control of this desktop. Try Confirm
+                          recovery again.
+                        </p>
+                        <details className="text-muted-foreground">
+                          <summary className="cursor-pointer">Details</summary>
+                          <p className="break-words">{recoveryError}</p>
+                        </details>
+                      </div>
                     )}
                   </div>
                 )}
@@ -997,20 +1136,12 @@ function GbotPage() {
                     <Button
                       variant="outline"
                       disabled={busy}
-                      onClick={() =>
-                        void perform(() =>
-                          gbot(
-                            identity ? 'disconnect' : 'connect',
-                            identity ||
-                              (control && control.state !== 'bot'
-                                ? control.identity
-                                : {
-                                    workspace_id: bot.id,
-                                    session_id: crypto.randomUUID(),
-                                  })
-                          )
-                        )
+                      aria-describedby={
+                        connectionError
+                          ? 'gbot-settings-connection-error'
+                          : undefined
                       }
+                      onClick={changeConnection}
                     >
                       {identity ? 'Disconnect' : 'Connect'}
                     </Button>
@@ -1032,6 +1163,23 @@ function GbotPage() {
                       </Button>
                     )}
                   </div>
+                  {connectionError && (
+                    <div
+                      id="gbot-settings-connection-error"
+                      role="alert"
+                      className="space-y-1 text-sm"
+                    >
+                      <p>
+                        {connectionError.disconnecting
+                          ? 'Could not disconnect this bot’s computer. Try Disconnect again.'
+                          : 'Could not connect this bot’s computer. Try Connect again.'}
+                      </p>
+                      <details className="text-muted-foreground">
+                        <summary className="cursor-pointer">Details</summary>
+                        <p className="break-words">{connectionError.details}</p>
+                      </details>
+                    </div>
+                  )}
                   {bot.bot_pc?.kind === 'lan' && (
                     <GbotLanBot
                       key={bot.id}
