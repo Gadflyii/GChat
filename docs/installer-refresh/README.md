@@ -1,6 +1,73 @@
 # GChat installer refresh
 
-## WINDOWS-MULTIARCH — accepted, merge-ready
+## Windows RC refresh — release installer delivered, October 18
+
+Bubbs's post-merge refresh is **PASS**. The unsigned Windows release installer
+was delivered at **03:35:36Z** beside the previous RC, without overwriting it:
+
+```text
+C:\Users\Ron\gchat-windows-rc-ed68c7443-20261017\windows-rc-ed68c7443-e2282c336-20261017\GChat_2.0.42_x64-setup.c75096fad-b76ce57a3.exe
+```
+
+| Field | Delivered RC |
+| --- | --- |
+| GChat | `c75096fad6b20fc005b98b5e8885cc2afe4257b7` (main when this refresh was assigned) |
+| Engine | `b76ce57a3cc4823f127a1ce718da454ef1f3510f` |
+| Profile / signature | `release` / `NotSigned` |
+| Size | 1,481,874,830 bytes |
+| SHA256 | `09af5d8d16f5ae1a446c82a1b1035af7462f72b07df1fe3f3e08c2bf66ae6ef6` |
+| Native builder | `RON-9950X3D2` |
+
+The previous `GChat_2.0.42_x64-setup.ed68c7443-e2282c336.exe` remains in the
+same folder; its retained SHA256 was verified unchanged. No installer was run,
+no settings were changed, and no signing or publishing occurred. **Ron's
+Windows installation/sign-in test remains pending.** This delivery does not
+claim acceptance of that test or a Linux RC refresh.
+
+The production frontend, release CLI, Host and desktop all built successfully.
+Existing Tauri packaging produced both NSIS and MSI. Final validation passed
+complete equality with the accepted **14 catalogs containing 103 profiles**,
+including profile values, schema and unique IDs. The accepted same-revision
+SM86/SM89/SM120a Engine archives were reused. Their build, integrity, dispatch,
+cold-CLI bootstrap and Arch-accepted packaged-Host request evidence below remain
+valid; no duplicate Engine builds, dispatch tests or inference requests ran.
+The incidental MSI was hashed successfully, then retired with disposable build
+outputs after the NSIS delivery; its hash and size remain in `app-result.json`.
+
+The first NSIS compression attempt reached its booked 03:12Z cutoff without a
+completed installer. A packaging-only continuation reused all compiled inputs
+and completed both packages at 03:30Z. Its validator then confused catalog and
+profile counts. Metadata-only follow-ups corrected that count, workstation-name
+case and the desktop executable timestamp (Tauri bundle patch/restore updates
+it). Those failed receipts remain; they required no package change or rebuild.
+The final validator checks separate counts and full catalog equality, bounds
+the desktop timestamp by packaging completion, and normalizes host-name case.
+A durable WSL parent held the compile lock through each native guard's exit,
+correcting the initial launch-wrapper timeout that released its lock early.
+Final metadata, guard and delivery receipts all pass.
+
+Gchat 3's branch is `build/windows-rc-current-main-20261018`, worktree
+`/ai/gchat-worktrees/windows-rc-current-main-20261018`. Canonical concise evidence
+and retained failure/build receipts are at
+`/ai/gchat/out/windows-rc-current-main-20261018/`; final authority is
+`package-acceptance/{app-result.json,native-guard-result.json,rc-delivery-result.json,native-retirement-result.json}`.
+Native receipt folders under `E:\gchat3-windows-rc-c75096fad-20261018` retain
+1.13 MB; canonical receipts retain 1.28 MB. The generated build diff is preserved.
+At **03:38:02Z** the six owned disposable children (`source`, `cargo-home`,
+`yarn-cache`, `yarn-global`, `build-tools`, `profile-catalogs`) were removed,
+including duplicate package outputs and the incidental MSI. No native job
+remained. Booking 1411 was canceled and **local5090 returned 03:38Z**.
+Accepted Engine ZIPs under
+`E:\gchat3-windows-multiarch-20261017\accepted\runtimes`, read-only dependency
+and Linux AppDir donors, the previous RC and delivered NSIS remain retained.
+
+**SM86 and SM89 Windows are physically unqualified** until a native Windows
+RTX 30-series or 40-series machine is available. The fleet 4090 is WSL-only;
+Linux/WSL results cannot qualify native Windows. Native compilation and dispatch
+are established separately. Next: Ron's installer/sign-in gate; Gchat 3 continues
+owned Hosts/first-run GUI rows under rule 21 while that gate waits.
+
+## WINDOWS-MULTIARCH — accepted and merged as c75096fad
 
 Gchat 3 owns `fix/windows-multiarch-20261017`, based on GChat main `9e75fc31e`.
 The deliverable is one Windows installer carrying separate SM86, SM89 and
@@ -200,9 +267,10 @@ Retained execution failures and corrections:
 | Host/Gbot library test compilation included platform-specific fixtures on Windows | Test-only `5c1124847` gates the Unix Python fixture; the Linux KVM readiness regression receives its owning Linux gate. Both Host cases and the Gbot schedule-removal case actually passed. No production/package rebuild |
 | Builder preflight compared the LF Git blob hash with its correct native CRLF checkout after preparation had passed | Normalized content and clean pinned tree match. Check the native CRLF hash and hash-bound completed preparation, then reuse owned source/cache without clone/copy or Engine rebuild; `app/app-installer/failed-builder-hash-0102/` and `native-prepared-reuse-validation.json` |
 
-The RC of record remains Linux release `ed68c7443` + Engine `e2282c336` PASS,
-with its Windows installer built and awaiting Ron's Windows sign-in result.
-Refresh both RCs after that report; this candidate does not replace that record.
+Linux release `ed68c7443` + Engine `e2282c336` remains the retained Linux PASS
+record. The later Windows release RC `c75096fad` + Engine `b76ce57a3` is now
+delivered as recorded above and awaits Ron's installer/sign-in gate. No refreshed
+Linux qualification is claimed.
 The retained S1 RC donor
 `/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
 was offered read-only to Gchat 1; its provider keyboard request was withdrawn
