@@ -959,7 +959,7 @@ function DefinitionEditor({
   const copy = EDITOR_COPY[draft.kind]
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 pb-10">
+    <div className="@container mx-auto max-w-4xl space-y-6 pb-10">
       <section>
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
           Definition
@@ -1143,7 +1143,7 @@ function DefinitionEditor({
           />
         </Field>
         {draft.kind !== 'workflow' ? (
-          <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-start">
+          <div className="grid gap-3 @[32rem]:grid-cols-[220px_minmax(0,1fr)] @[32rem]:items-start">
             <Field
               label={
                 draft.kind === 'goal_loop'
@@ -1353,7 +1353,7 @@ function GoalLoopEditor({
           body={`PASS returns the result; REVISE starts the next of ${draft.maxCycles} cycles.`}
         />
       </div>
-      <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-start">
+      <div className="grid gap-3 @[32rem]:grid-cols-[220px_minmax(0,1fr)] @[32rem]:items-start">
         <Field
           label="Maximum cycles"
           help="One cycle is one executor result plus one evaluator decision."
@@ -1535,7 +1535,7 @@ function CoordinatorEditor({
         instance and reasoning level. Specialists configure their own overrides
         below.
       </p>
-      <div className="grid gap-3 md:grid-cols-[220px_1fr] md:items-start">
+      <div className="grid gap-3 @[32rem]:grid-cols-[220px_minmax(0,1fr)] @[32rem]:items-start">
         <Field
           label="Maximum parallel workers"
           help="Limits how many specialist model instances can work at the same time."
@@ -1838,8 +1838,8 @@ function RoleEditor({
 }) {
   const isSpecialist = roleKind === 'specialist'
   return (
-    <div className="rounded-xl border bg-background p-4">
-      <div className="grid gap-3 md:grid-cols-[0.8fr_1fr_auto]">
+    <div className="@container rounded-xl border bg-background p-4">
+      <div className="grid gap-3 @[32rem]:grid-cols-[minmax(0,0.8fr)_minmax(0,1fr)_auto]">
         <Field
           label={`${isSpecialist ? 'Specialist' : 'Stage'} ID`}
           help={
@@ -1872,7 +1872,7 @@ function RoleEditor({
           />
         </Field>
         <Button
-          className="mt-6"
+          className="@[32rem]:mt-6"
           size="icon-sm"
           variant="ghost"
           title={`Remove ${isSpecialist ? 'specialist' : 'stage'}`}
@@ -1881,7 +1881,7 @@ function RoleEditor({
           <IconTrash />
         </Button>
       </div>
-      <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr] md:items-start">
+      <div className="mt-4 grid gap-3 @[32rem]:grid-cols-[180px_minmax(0,1fr)] @[32rem]:items-start">
         <Field
           label="Maximum tool steps"
           help="The most think → act → observe rounds this role may use."
