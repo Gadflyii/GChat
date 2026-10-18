@@ -46,6 +46,65 @@ Use independent copies of the inactive RC donor; retain only
 `out/host-model-editor-save-result-20261018/test-result.json` and adjacent
 summary after cleanup. No installed or Windows acceptance is claimed.
 
+## Laptop context admission catalog prerequisite — Gchat 3, October 18
+
+Bubbs prioritized `LAPTOP-CONTEXT-ADMISSION` ahead of the hardware-feedback
+candidate. Land these four Arch-approved full-Text context bounds with or
+before GInfer Engine fix `18865fd1d` (accepted packet `dbf4674c4`):
+
+| Exact profile ID | Previous context | Admitted context |
+| --- | ---: | ---: |
+| `rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8` | 172032 | 161792 |
+| `rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8` | 149069 | 138240 |
+| `rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated` | 92832 | 82944 |
+| `rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated` | 69423 | 60416 |
+
+The four owning files are GInfer `config/launch-profiles/linux-rtx{3090,4090}-qwen38-groupwise-int-dflash2-q4{,-vision}.json`.
+Correct their displayed contexts too; retain IDs, package identity, arenas,
+options and historical evidence tiers. The numeric-risk report and signed
+disposition are on Codex 1's branch in `docs/laptop-natural-c4-soak/README.md`
+and `bench/reports/laptop-context-admission-20261018/gchat-numeric-risk.json`.
+This metadata repair adds no model/device/Vision qualification.
+
+The private catalog generator input mirrors all four entries. The selected
+live catalog contains only the two Text entries; its pending Vision entries
+remain omitted. C7 and C4 authorized a metadata-only atomic overlay during the
+active package GET: preserve the service PID, URLs, payload identity and exact
+263298-byte catalog size. Context values were overlaid at 07:13Z and display
+names at 07:18Z. A fresh coordinator GET returned 200 with the same 263298 bytes
+and the two corrected Text profiles. The service and package symlinks are
+unchanged. Original generation receipts remain historical evidence; separate
+value and name overlay receipts record the changed metadata.
+
+Acceptance: focused existing Host supplied-catalog validation with all four
+corrected source catalogs, exact mirror comparison, and ONE `make verify`.
+No native Engine code, installed GUI, GPU/model run or Windows qualification.
+Owner source trees are `/ai/gchat-worktrees/gchat3-context-profile-bounds-20261018`
+(base `cf670bced`) and `/ai/ginfer-worktrees/gchat3-context-profile-bounds-20261018`
+(base `8c3911145`), both on `fix/gchat3-context-profile-bounds-20261018`.
+Results live in `out/laptop-context-admission-20261018/`. The independent S1
+SSD fixture `/media/ron/SSD_RAID/ai/tmp-gchat3-context-profile-bounds-tests-20261018`
+uses the inactive RC donor without writes to it. All 35 dependency inputs and
+the six frozen source/catalog inputs match; all four owning catalogs equal
+their generator-input copies. The coordinator inspected the effective argv:
+existing Python packaging tests, the exact Host supplied-catalog test, then
+ONE `make verify`, retaining the explicit four-file `GINFER_PROFILE_CATALOGS`
+through every stage. The durable run started 07:19Z under booking 3123,
+S1 CPUs 120–127/socket1 shared compile lock, nice 10/max 8 jobs, no GPU.
+The exact supplied-catalog test passed (one executed, 280 filtered); the
+existing packaging suite passed five cases and skipped five Windows-only
+cases. ONE full gate passed lint (zero errors, five existing warnings),
+typecheck, quality checks, all six coverage floors, 3441 app/core tests (six
+skipped), 127 extension tests and 1275 native tests (28 ignored, 23 summaries).
+It exited 0 at 07:27Z without OOM; CPUs returned 07:28Z. The coordinator
+reviewed raw results, exit bytes and all six unchanged source/catalog hashes.
+The normal build staged all 38 profiles as an exact ordered merge of the four
+sources, including the four corrected bounds and names. Cleanup finished
+07:30Z: removed the 42.34 GB owned S1 fixture, its terminal container and
+288.87 MB of local disposable inputs/raw output. The inactive RC donor is
+untouched. Retain only the result JSON, short summary and two metadata-overlay
+receipts. Both branches are ready for handoff before the Engine source merge.
+
 ## Host model controls and host-list read feedback — Gchat 3, October 18
 
 `GUI-HOST-MODEL-CONTROL-RESULT-20261018`: the shared action handler discarded
