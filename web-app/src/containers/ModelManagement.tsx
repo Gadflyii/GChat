@@ -27,7 +27,7 @@ import { engineAlias, engineCommand, type LocalModelLoadProgress } from '@/servi
 import { controlLocalHostModel } from '@/utils/localHostModel'
 import { HostCard } from '@/containers/EngineHostModels'
 import { gpuCardName, hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
-import { downloadFailureMessage, downloadStatusLabel, formatModelBytes, releaseReadiness, type ModelDownload, type ModelGpu, type ModelRelease } from '@/lib/model-release'
+import { downloadFailureRecovery, downloadStatusLabel, formatModelBytes, releaseReadiness, type ModelDownload, type ModelGpu, type ModelRelease } from '@/lib/model-release'
 import { switchToModel } from '@/utils/switchModel'
 import { useAppState } from '@/hooks/useAppState'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
@@ -380,12 +380,14 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         {!downloads.length && (downloadsChecked
           ? <p className="rounded-xl border p-6 text-center text-muted-foreground">No downloads on this computer yet. Choose Recommended to find a model.</p>
           : !localDownloadError && <p role="status" className="rounded-xl border p-6 text-center text-muted-foreground">Checking for downloads…</p>)}
-        {downloads.map(job => <section key={job.id} className="space-y-2 rounded-xl border p-4"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-medium">{plainModelName(job.release.name)}</h2><span className="text-sm text-muted-foreground">{downloadStatusLabel(job.status)}</span></div><progress aria-label={`${job.release.name} download`} className="h-2 w-full accent-primary" max={job.release.bytes} value={job.received} /><p className="font-mono text-xs tabular-nums">{formatModelBytes(job.received)} / {formatModelBytes(job.release.bytes)}{job.bytes_per_second > 0 ? ` · ${(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s · about ${Math.ceil((job.release.bytes - job.received) / job.bytes_per_second)} seconds left` : ''}</p>
-          {job.status === 'failed' && <ModelProblem message={downloadFailureMessage(job.error)} detail={job.error} />}<div className="flex gap-2">
+        {downloads.map(job => {
+          const recovery = downloadFailureRecovery(job.error)
+          return <section key={job.id} className="space-y-2 rounded-xl border p-4"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-medium">{plainModelName(job.release.name)}</h2><span className="text-sm text-muted-foreground">{downloadStatusLabel(job.status)}</span></div><progress aria-label={`${job.release.name} download`} className="h-2 w-full accent-primary" max={job.release.bytes} value={job.received} /><p className="font-mono text-xs tabular-nums">{formatModelBytes(job.received)} / {formatModelBytes(job.release.bytes)}{job.bytes_per_second > 0 ? ` · ${(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s · about ${Math.ceil((job.release.bytes - job.received) / job.bytes_per_second)} seconds left` : ''}</p>
+          {job.status === 'failed' && <ModelProblem message={recovery.message} detail={job.error} />}<div className="flex gap-2">
             {['queued', 'downloading'].includes(job.status) && <Button variant="outline" disabled={busy || offline} onClick={() => void transferAction(job, 'pause')}>Pause download</Button>}
-            {['paused', 'failed'].includes(job.status) && <><Button disabled={busy || offline} onClick={() => void transferAction(job, 'resume')}>{job.status === 'failed' ? 'Retry download' : 'Resume download'}</Button><Button variant="outline" disabled={busy || offline} onClick={async () => { if (await confirmAction({ title: 'Delete this partial download?', message: 'This removes the unfinished file. You will need to start the download again. Models already installed stay in place.', confirmLabel: 'Delete partial download', destructive: true })) void transferAction(job, 'discard') }}>Delete partial download</Button></>}
+            {['paused', 'failed'].includes(job.status) && <>{(job.status === 'paused' || recovery.retry) && <Button disabled={busy || offline} onClick={() => void transferAction(job, 'resume')}>{job.status === 'failed' ? 'Retry download' : 'Resume download'}</Button>}<Button variant="outline" disabled={busy || offline} onClick={async () => { if (await confirmAction({ title: 'Delete this partial download?', message: 'This removes the unfinished file. You will need to start the download again. Models already installed stay in place.', confirmLabel: 'Delete partial download', destructive: true })) void transferAction(job, 'discard') }}>Delete partial download</Button></>}
             {job.status === 'installed' && <Button disabled={busy || offline} onClick={() => void act(async () => { await rescan(); setTab('Installed'); toast.success('Your model is ready in Installed') }, 'Could not find the downloaded model. Choose Refresh installed models to try again.')}>Show in Installed</Button>}
-          </div></section>)}
+          </div></section>})}
       </>}
     </main>
   </div>

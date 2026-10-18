@@ -30,6 +30,37 @@ CPU88–95 booking3164. Owned processes stopped by verified PIDs; the disposable
 CPU88–95 returned08:53Z and booking3164 canceled.
 Read-only donors remain unchanged. Windows, model transfers, payload integrity
 and inference are outside this inventory leaf. Next: merge the source/evidence branch.
+## First-run button spacing — C3, October 18
+
+`GUI-FIRST-RUN-BUTTON-GAP` passes its remaining Linux native leaf.
+Retained release DOM measures an **8 px gap** between **Save model choices**
+and **Refresh model catalog**, and between **Download selected models** and
+Refresh; both controls are 36 px high. Inspected dark 1500×1000 and light
+1024×800 screenshots show readable separate controls. The light narrow DOM
+reports no horizontal overflow.
+
+Original fix `c41c73606` merged as `5fd1bc289`. The `flex flex-wrap gap-2`
+wrapper, labels/actions and shared button styles are unchanged between native
+source `d0a8d06bf` and closure base `d74860fcf`. Existing rendered spacing and
+Refresh regression remains. Original **20 focused PASS** and the later full
+`d16521c19` gate are reused: **3,469 app / 6 skipped, 127 extension,
+1,276 native / 28 ignored**, six coverage floors PASS. This docs-only closure
+uses `git diff --check`; no repeated build, suite or native fixture.
+
+[Result and source comparison](../../out/c3-first-run-button-gap-20261018/result.json),
+[dark screenshot](../../out/c3-current-main-release-20261018/remainder-profile-dark-wide.png)
+and [light narrow screenshot](../../out/c3-current-main-release-20261018/remainder-advanced-light-narrow.png)
+retain the acceptance. Save geometry is in `remainder-host-setup-storage.json`;
+Download geometry is in `remainder-host-start-settings.json` in that same
+release packet. Model choices/download behavior, profiling, model startup,
+Windows and extremely narrow wrapping are outside this spacing leaf.
+
+Owner C3; branch `docs/c3-first-run-button-gap-20261018`, worktree
+`/ai/gchat-worktrees/c3-first-run-button-gap-20261018`. The prior native fixture
+is retired. No compute, build, fixture, donor hold or large artifact was
+allocated for this closure; only small JSON/Markdown evidence remains.
+Source fix and native acceptance are complete; next action is merging this
+record. Gchat 3 retains the independent model-choice reasons leaf.
 
 ## Benchmark plain intro — C7, October 18
 
@@ -59,6 +90,82 @@ only small evidence remains and the donor was unchanged. Windows, model load,
 benchmark execution, scoring, performance and later selector/restart controls
 are outside this intro leaf. The older scripted-navigation screenshot is
 supporting history only.
+## Missing saved-settings guidance — Gchat 3, October 18
+
+`GUI-PROFILE-MISSING-WORDING` passes its remaining Linux native leaf. With
+one real read-only Qwen 3.8 27B NVFP4 model and no saved settings, **Start a
+model with saved settings** explains that nothing fits yet and points to
+**Graphics-card setup**, adding matching saved settings and refreshing, or
+choosing the model settings below. **Saved model settings** and **Start model**
+are disabled. The old draft-format/TP prose is absent. Native dark captures
+at 1200×800 and 1024×800 show readable wrapping without horizontal overflow.
+
+Source `fc08e7cbb` merged as `3b4d46f8f`; later wording `2ca421a66` and
+selector `c6b7d2bb6` are included. The picker and its regression file are
+byte-identical at the passing gate `71abf1708`, native donor `8f7d18f6f`
+and closure base `f333b3b47`. Original focused 18 PASS and the later full
+gate are reused: 3,409 web/core, 127 extension and 1,267 Rust PASS, six frontend
+skips and 28 Rust ignores; lint, types and coverage floors PASS. This evidence-only
+branch uses `git diff --check`; no rebuild or repeated suite.
+
+Owner Gchat 3; branch `docs/gchat3-profile-missing-wording-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-profile-missing-wording-20261018`. Gchat 1's
+immutable output copy returned 08:30Z. The private S1 app connected to the
+real bundled Host through its supported installed-menu connection and native
+Refresh. Final Host state was one model, zero profiles/instances, no error and
+idle hardware preparation. The software-only fixture required that explicit
+connection because automatic desktop attach was hardware-guarded. The retained
+Host uses its original provider/engine configuration; this is a source-native
+frontend leaf, not current Host, multiarch or packaged-release qualification.
+
+The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-profile-missing-wording-20261018` stopped
+and CPU72–79 returned 08:40Z; its app/resources/private HOME were removed
+08:41Z. Protected model and donor stayed unchanged. No setup measurement,
+Ensure, model start, inference, Engine change or Windows work occurred.
+Only small evidence remains in
+[the result](../../out/gchat3-profile-missing-wording-20261018/result.json)
+and [short summary](../../out/gchat3-profile-missing-wording-20261018/summary.md).
+Next action is merging this evidence closure.
+## Failed-download recovery controls — C3, October 18
+
+`GUI-FAILED-DOWNLOAD-WORDING` is fixed on
+`fix/c3-failed-download-wording-20261018`, worktree
+`/ai/gchat-worktrees/c3-failed-download-wording-20261018`, base `16a63c18e`.
+Recoverable failed cards now name the visible **Retry download** button.
+Known checksum/invalid-format failures offer **Delete partial download**, then
+direct users to start again from **Recommended**. Paused jobs retain Resume;
+raw diagnostics remain inside closed Technical details.
+
+Host resume preserves partial bytes. A complete corrupt partial therefore skips
+HTTP and fails validation again; removing Retry on these cards prevents that
+ineffective action. Three rendered regressions fail against unchanged source.
+The candidate passes **98 focused checks**, including Retry preserving bytes
+and Delete followed by a fresh zero-byte download. Two initial fixture failures
+were corrected to match the mocked GPU; no production hardware gate changed.
+ONE `make verify` passes at source `203f80fa9`: **3,516 app / 6 skipped,
+127 extension, 1,276 native / 28 ignored**; lint (five existing warnings), types,
+quality, contracts/assets and six critical coverage floors pass.
+
+Native Linux saved-state cards pass the exact guidance/control check,
+Technical details expansion, initially focused Cancel, Cancel preserving both
+jobs, and confirmed Delete removing only the checksum journal entry. Dark
+1500×1000 and 1024×800 layouts are readable without horizontal overflow.
+Fixtures establish native wording and commands, not actual corruption,
+disk exhaustion or transfer correctness; no new light-theme or Windows claim.
+The initial native build omitted generated 32x32.png. Existing
+`build:icon:linux` supplied it before continuing only unfinished Rust/staging;
+the build then passed without repeating the frontend or verification gate.
+
+Evidence, screenshots, command receipts and binary hashes:
+[`out/c3-failed-download-wording-20261018/result.json`](../../out/c3-failed-download-wording-20261018/result.json).
+Original native baseline remains in `out/c7-models-plain-wording-20261018/`.
+Owner C3; no Host/Engine source, Chat/Agents, live transfer or model/GPU work.
+C7 owns the separate Downloads loading-state leaf with no failed-card overlap.
+The independent S1 private processes, forward, five stopped containers and
+`/media/ron/SSD_RAID/ai/tmp-c3-failed-download-wording-20261018` build/fixture root
+are removed; CPU80–87 returned **08:45Z**. Only small evidence remains.
+Source and regressions are merge-ready; no acceptance work remains.
 
 ## Advanced launch-field labels recovery — C3, October 18
 
@@ -3724,6 +3831,20 @@ Type `/` in the composer to see available skills. Use the up and down arrow
 keys to choose a skill, then press Enter or Tab to select it. The selected
 skill stays visible as you move through a long list.
 
+Linux acceptance (`GUI-CHAT-SKILL-SLASH-NATIVE-20261018`): with 42 available
+skills, native ArrowUp wrapped from the first option to the last and ArrowDown
+wrapped back. Moving down 20 options kept the selected skill fully visible in
+the scrolling list. Typing `/keyboard-24` filtered to one option; Tab selected
+it, closed the menu and kept composer focus. Backspace removed the selected
+skill from the empty composer. No message or model was started. All 17 saved
+records, 45 `SKILL.md` files and two workspace inputs stayed unchanged.
+Retained build `8f7d18f6f` matches the relevant Chat/Skills source at
+`e9566246a`; resources returned at 08:44Z. Evidence:
+[`out/gchat-chat-skill-slash-native-20261018/`](../../out/gchat-chat-skill-slash-native-20261018/).
+The source fix retains its 62 focused tests and one cumulative `make verify`
+PASS at `df99cac4f`; this acceptance adds native Linux coverage only. Windows,
+spoken assistive output and model dispatch were not exercised.
+
 In **Agent Studio → Agents & flows**, Tab to a skill and press Space or Enter
 to include or remove it. Each skill announces whether it is selected, including
 skills assigned to a specialist or workflow stage. Choose **Save definition**
@@ -3746,6 +3867,68 @@ After you choose **Create** or **Save**, the button shows **Creating skill…**
 or **Saving skill…** until the request finishes. Wait for the dialog to close
 before using the saved skill. If saving fails, your entries stay in the dialog
 and the button becomes available so you can try again.
+
+## Removing a custom skill
+
+In **Agent Studio → Skills**, open **Skill actions → Uninstall**. The
+confirmation names the skill and initially focuses Cancel. Choose **Delete**
+to remove it. If deletion fails, the dialog keeps the error and allows a retry.
+
+Linux acceptance (`GUI-AGENT-SKILL-DELETE-NATIVE-20261018`): deleting a newly
+created disposable skill from its owned read-only directory returned a real
+permission error inside **Delete skill**. The skill and its instructions stayed
+present; Cancel and Delete recovered with `aria-busy=false`. Restoring the
+original directory permission and pressing Space on Delete in that same dialog
+removed the disposable skill and closed the dialog. Its old detail was replaced
+by the ordinary first-skill fallback. All 17 saved records, 45 original
+`SKILL.md` files and two workspace inputs stayed unchanged; the disposable
+directory was absent. Retained build `8f7d18f6f` matches the relevant source at
+`7070d5856`; resources returned at 08:47Z. Evidence:
+[`out/gchat-agent-skill-delete-native-20261018/`](../../out/gchat-agent-skill-delete-native-20261018/).
+The source fix retains its 19 focused tests and ONE `make verify` PASS. Pending
+races and dismissal guards retain source-only qualification; Windows was not
+exercised.
+
+## Importing a skill
+
+In **Agent Studio → Skills**, choose **Create new → Upload a skill**, then
+**Drag and drop or click to upload**. Choose a Markdown skill definition or a
+`.zip` or `.skill` archive containing `SKILL.md`. Canceling the native file
+window returns to Upload without an error. If import fails, the error appears
+and Upload stays open so you can choose another file.
+
+Linux acceptance (`GUI-AGENT-SKILL-IMPORT-NATIVE-20261018`): the native
+**Skill files** chooser showed **Choose a skill file…** while open. Cancel
+cleared that status silently and enabled the chooser button. Selecting the
+owned `lifecycle-probe` export showed **A skill named `lifecycle-probe` already
+exists**; Upload stayed open with its button enabled and `aria-busy=false`.
+Reopening the native chooser and canceling again passed. All 17 saved records,
+45 `SKILL.md` files, two workspace inputs and the 231-byte archive stayed
+unchanged. Retained build `8f7d18f6f` matches the relevant import source at
+`b12c7e98f`; resources returned at 08:38Z. Evidence:
+[`out/gchat-agent-skill-import-native-20261018/`](../../out/gchat-agent-skill-import-native-20261018/).
+This covers ordinary Linux cancellation and duplicate-name rejection/retry
+readiness; chooser exceptions, successful import recovery and Windows were
+not exercised.
+
+## Downloading a skill
+
+In **Agent Studio → Skills**, open the skill's **Skill actions** menu and choose
+**Download**. Choose where to save its `.skill` archive in the native Save
+window. **Cancel** returns to Skills without exporting; open **Download** again
+when you are ready to save. A successful save shows **Skill exported**.
+
+Linux acceptance (`GUI-AGENT-SKILL-EXPORT-NATIVE-20261018`): Download opened
+the native Save window with `lifecycle-probe.skill` and the **GChat Skill**
+filter. Cancel cleared the saving status silently, and Download became available
+again. Reopening and saving to an owned destination showed **Skill exported**;
+the valid archive contained `SKILL.md` byte identical to its source. The saving
+status cleared and Download was available after success. All 17 saved records,
+45 `SKILL.md` files and two workspace inputs stayed unchanged. The retained
+`8f7d18f6f` build matches the relevant source at `f333b3b47`.
+Evidence: [`out/gchat-agent-skill-export-native-20261018/`](../../out/gchat-agent-skill-export-native-20261018/).
+This covers ordinary Linux Cancel and Save; delayed duplicate submissions,
+export failures and Windows remain outside this native check.
 
 ## Assistant save results — C7
 
