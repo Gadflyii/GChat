@@ -49,6 +49,19 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Adding roles after removal — October 18
+
+An isolated native Linux Studio pass reproduced duplicate generated IDs after
+removing a middle role and adding another: `deliver, stage-2, stage-3` became
+`deliver, stage-3, stage-3`, and the workflow could not save. Coordinator Team
+specialists reproduced the same collision with `specialist-3`. Both Add handlers
+are unchanged between native source `a7debe294` and main `bca080b71`.
+
+Add stage and Add specialist now advance past IDs already in the current draft,
+including manually renamed IDs. Existing role IDs and workflow handoffs remain
+unchanged. Evidence is in
+`/ai/gchat/out/gchat-appended-role-identifiers-20261018/`.
+
 ## Workflow dependency keyboard entry — October 18
 
 An isolated native Linux Studio pass reproduced a dependency editor that removed

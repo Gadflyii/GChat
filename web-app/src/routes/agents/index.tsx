@@ -343,6 +343,13 @@ function newNode(
   return { ...newRole(id, name), workspace }
 }
 
+function nextRoleNumber(prefix: string, roles: AgentRole[]): number {
+  const ids = new Set(roles.map((role) => role.id))
+  let next = roles.length + 1
+  while (ids.has(`${prefix}-${next}`)) next += 1
+  return next
+}
+
 function cloneDefinition(definition: AgentDefinition): AgentDefinition {
   return structuredClone(definition)
 }
@@ -1474,7 +1481,7 @@ function CoordinatorEditor({
         variant="outline"
         disabled={draft.workers.length >= 8}
         onClick={() => {
-          const next = draft.workers.length + 1
+          const next = nextRoleNumber('specialist', draft.workers)
           onChange({
             ...draft,
             workers: [
@@ -1623,7 +1630,7 @@ function WorkflowEditor({
         variant="outline"
         disabled={draft.nodes.length >= 8}
         onClick={() => {
-          const next = draft.nodes.length + 1
+          const next = nextRoleNumber('stage', draft.nodes)
           onChange({
             ...draft,
             nodes: [...draft.nodes, newNode(`stage-${next}`, `Stage ${next}`)],
