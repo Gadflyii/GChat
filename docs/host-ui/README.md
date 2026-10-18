@@ -642,8 +642,11 @@ fresh walk, hardware candidate and merge review finish, then remove owned privat
 retain only result JSON and short summary. Read-only donor remains Claude's.
 ## Fresh first-time-user walk — C3, October 18
 
-The native first-user walk uses main `201f46712` with a private first-run
-profile. Scope: setup, Models, Downloads, Engine/Host settings, Hardware profile,
+The installed-current-main native walk is **IN PROGRESS** using the private
+release AppDir pinned at `d0a8d06bf0592b4b2d522c7e3385f08375558124`. The
+earlier source-native walk used main `201f46712` with a private first-run
+profile; its observations and changed-source packets remain retained below.
+Scope: setup, Models, Downloads, Engine/Host settings, Hardware profile,
 Fleet/connections and Settings, in narrow/wide windows and Light/Dark themes.
 Real pointer/keyboard input exercises visible controls and wording. Reproducible
 defects are recorded on `docs/open-work` and fixed in separate source branches.
@@ -653,15 +656,19 @@ their owners.
 Acceptance: every requested control and sentence is exercised or its concrete
 prerequisite is recorded. Each new source fix needs focused checks, one
 `make verify` and native acceptance using its changed build. The baseline and
-candidates use optimized bundled Vite frontends in debug Rust shells with custom
-protocol. This is Linux source-native evidence; the requested installed-current-main
-walk remains pending. GChat and Manager builds pass. The private release
+candidates used optimized bundled Vite frontends in debug Rust shells with custom
+protocol. Those observations are Linux source-native evidence. The requested
+installed-current-main walk now runs the refreshed production release AppDir
+through its packaged `AppRun`; native acceptance is not complete. The private
 refresh reuses the accepted Linux AppDir runtime closure without changing
 Ron's installation or publishing packages; release performance is not claimed.
-No model, hardware profile or GPU workload has run during the walk. The pinned
-release build started at 04:17:11Z on booked CPU104–111 (line2969, hard end
-04:46Z), socket1 shared lock and nice10. The helper owns the stage until its
-terminal handoff; native installed acceptance follows a passing AppDir refresh.
+No model, hardware profile or GPU workload has run during the walk. The single
+unmodified release sequence passed all seven stages (core, extensions, assets,
+icon, frontend, CLI/Host and desktop) at 04:31:29Z after starting at 04:17:11Z
+on CPU104–111, socket1 shared lock and nice10. All 35 dependency
+manifests matched before reuse. The checked AppDir was ready at 04:33:05Z, then
+the shared stage was handed back; its exited build container was removed and
+booking2969 returned at 04:33Z. Build success does not complete the native walk.
 
 Five reproduced defects have tested, merged source fixes:
 
@@ -754,7 +761,8 @@ selects the public destination; unchanged URL constant `5b8cff5ae` merged throug
 browser keyring prompt was canceled without secrets, then the browser received
 normal TERM.
 
-The final control/theme/window matrix is retained in
+The retained source-native control/theme/window matrix and current installed-walk
+state are in
 `out/c3-first-user-setup-20261018/{result.json,summary.md}`. Conditional actions
 requiring a published descriptor, installed model, owned account credentials,
 prepared/booked GPU group or configured Fleet coordinator were not invoked.
@@ -776,18 +784,23 @@ Resume/Delete, real transfer, model or GPU action ran. Evidence:
 `out/c3-downloads-popover-status-20261018/{result.json,native-result.json,summary.md}`.
 
 Current main is pinned once at `d0a8d06bf0592b4b2d522c7e3385f08375558124`
-for a private release AppDir refresh. Finish the installed-build walk at the
-requested sizes/themes, including General autostart, private CLI installation,
+for this private release AppDir. Packaged `AppRun` launched at 04:33:32Z as
+PID2703401 with the private `current-main-home`; the installed walk remains
+**IN PROGRESS**. Finish the installed-build walk at the requested sizes/themes,
+including General autostart, private CLI installation,
 relocation/reset and Open Containing Folder. Acceptance remains actual native
 control behavior and readable wording/layout; conditional prerequisites above
 remain explicit. No later main changes are silently included in this build.
 The accepted `ed68c7443` Linux release predates current GUI changes; its
 GIO/Gbot/four-family Engine closure is a read-only donor, not current-main
-evidence. Reuse approved `e2282c336` Engine payloads and existing release commands;
-refresh the frontend/core/extensions, CLI/Host/app and bundled skills/catalogs.
-Keep Cargo release settings unchanged. S1 has1.5TiB free; no duplicate Engine
-build or package publication is needed. Conditional model/account/Fleet actions
-retain their stated prerequisites. Support destination remains waiting on Ron.
+evidence. The refresh retains approved `e2282c336` Engine payloads and the
+existing release commands. Current frontend/core/extensions, CLI/Host/app,
+32 skill files and 23 catalogs/175 profiles are refreshed; the six extension
+archives and all three packaged executables are checked. Cargo release settings,
+AppRun/wrapped, GTK/GStreamer hooks and normal packaged PATH are unchanged.
+GIO/Gbot/four-family Engine closure is preserved. No duplicate Engine build,
+fresh installer, system installation or package publication occurred. Conditional
+model/account/Fleet actions retain their stated prerequisites. Support destination remains waiting on Ron.
 
 Owner: Codex 3. Source `/ai/gchat-worktrees/c3-first-user-setup-20261018`, branch
 `fix/c3-first-user-setup-20261018`; original baseline `201f46712`. The status
@@ -795,39 +808,47 @@ acceptance app/private Host/Xvfb stopped at 04:10Z; processes and mounts were
 verified absent and GUI CPU8–15 booking2957 returned. The stopped downloads-home
 and status-candidate can retire after the merged status packet is retained. Manage's merged candidate copy and
 raw passing logs were removed after C4's donor copy completed; concise results
-and screenshots remain. The inspector forward is retained for the next private
-release session. No model/profile/GPU job ran in this walk.
+and screenshots remain. The inspector forward now serves the private release
+session. No model/profile/GPU job ran in this walk.
 
 The owned S1 root
 `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains `runnable`,
 `gchat`, `native-target`, `cargo-home`, `yarn-cache`, resources and launch profiles.
-Shared source/build stage is now exclusively handed to the release refresh
-helper. Its release cache and `current-main-appdir` are private copies of the
-accepted read-only ed68/e228 donor; source overlay/build are authorized at the
-pinned main revision above. All 35 dependency manifests must match before reuse.
-Normal Cargo release settings, exact approved23 catalogs
-/175 profile metadata entries and all four Engine images remain; this does not
-qualify a model or profile. Keep `tools` because C4's Xvfb:196 still executes it.
-C4 has copied the earlier candidate/resources into its own fixture. The external
+The release helper handed back the shared `gchat`/`native-target`/dependency
+stage after its terminal payload checks. `current-main-appdir` is the checked
+release payload for the fixed pin above, copied from the accepted read-only
+ed68/e228 donor and refreshed with current GChat components. It is protected
+while parent-owned native acceptance runs. The live app is PID2703401 under
+private `current-main-home`, Xvfb:79 PID2633590 and CPU88–95 booking2977, hard
+end 05:00Z. Keep `tools`: the parent's private Xvfb:79 now uses them. C4's
+read-only dependency/debug copy and Xvfb:196 are fully terminal at 04:29Z;
+C4 no longer uses this display or stage.
+
+All 35 dependency manifests matched; normal Cargo release settings, approved
+23 catalogs/175 profile metadata entries and all four Engine images remain.
+These are packaged metadata, not model/profile qualification. The external
 dependency donor at `tmp-claude-gchat-finish-20261017/tool-source` remains owned
-by Claude and untouched. Release command/dependency/copy receipts are in
-`out/c3-current-main-release-20261018/`.
+by Claude and untouched. Release command/dependency/copy, all-seven-stage PASS
+and AppDir payload receipts are in `out/c3-current-main-release-20261018/`.
+Source archives/raw build logs and copied release cache remain retained until
+parent acceptance and scoped cleanup.
 
 
 `GUI-DOWNLOADS-TRANSFER-COUNT-WORDING` was also reproduced as “1 transfers”
-in the retained paused screenshots. Separate source-only branch
+in the retained paused screenshots. Separate branch
 `fix/c3-download-count-wording-20261018` at `72c76c51a` says “1 download” /
-“2 downloads”; tests/lint/ONE verify/build/native wait until the release helper
-returns the shared stage. It is not part of the pinned main build yet.
+“2 downloads”. The helper has GO for its focused/lint/ONE verify/build gates
+in the handed-back shared stage on CPU80–87; native acceptance remains pending.
+It is not part of the pinned main release build.
 
 `GUI-INTERFACE-RESET-KEEPS-THEME` is source-confirmed at the same main pin: Reset
 restores font/accent but leaves Light/System unchanged. Separate source candidate
 `18c405b1d` on `fix/c3-interface-reset-theme-20261018` restores Dark/Medium, awaits
 the theme service and reports errors. Native baseline confirmation and all gates
-remain pending; this row follows badge wording after the release stage handoff.
-C4 may read-copy the inactive debug target, root/workspace dependencies and Yarn
-cache into its own standalone-launcher scratch; active release target and
-generated resources are excluded. No donor mutation is authorized.
+remain pending; this row is queued after badge wording. C4's authorized
+read-only copy of the inactive debug target, root/workspace dependencies and
+Yarn cache is complete; the active release target and generated resources were
+excluded and the donor was not mutated.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
