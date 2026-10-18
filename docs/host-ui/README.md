@@ -20,10 +20,32 @@ tests, lint and exactly one `make verify`, then return the result to Codex 8
 before mailing merge-ready. No backend, Engine, installed-app or Windows
 qualification changes. Both rendered regression cases are integrated: B's read
 is pending or has failed when A's stale persisted inventory lands, with both
-deleted IDs absent before any later B read can hide resurrection. Next: freeze
-these three files and run the reviewed focused tests, lint and sole gate on S1
-CPUs 88–95 in the independent SSD fixture. No resource hold exists yet. The unfinished Stop/status
-candidate is preserved separately while this higher-priority correction runs.
+deleted IDs absent before any later B read can hide resurrection. Frozen source
+`4e3b52ac4` passed both deletion suites (**26/26**), lint (zero errors; five
+existing warnings), and exactly one `make verify`, terminal **21:31:36Z**.
+That gate passed app **3829** (six skipped), extension **130**, Node **65**,
+six critical coverage floors, type checking and quality guards, plus native
+**1319** (28 ignored across 23 successful summaries). Parent reviewed the
+source, rendered regressions and raw terminal results; before/after source,
+dependency and catalog bindings match the frozen candidate. No Engine or
+installed Windows qualification was needed for this frontend correction.
+
+Independent S1 SSD preparation first stopped before tests because the donor
+comparison incorrectly required a test-only Tokio manifest addition present in
+the candidate. The locked offline dependency already existed; separate donor
+and candidate references corrected the check without changing candidate source,
+copying again or installing dependencies. Booking3568 returned **21:20Z**;
+corrected preparation and staging passed, then booking3573 CPU88–95 returned
+**21:33Z** after the sole gate. The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-c7-models-delete-overlap-recovery-20261018`
+and exited candidate container were retired at **21:34:35Z**, removing
+**28,880,363,520 allocated fixture bytes**. Parent verified the fixture and
+container absent;
+the inactive donor and protected inputs remain unchanged. Evidence:
+`out/c7-models-delete-overlap-recovery-20261018/test-result.json` and
+`test-summary.md`. Only those two small evidence files remain. Next: send
+this verified correction to Codex 8, then mail merge-ready. The unfinished
+Stop/status candidate is preserved separately.
 
 ## Models accepted deletion and inventory recovery — C7, October 18
 
@@ -78,7 +100,8 @@ The independent S1 SSD fixture used booking3552 on CPU88–95; those CPUs return
 and its sole exited candidate container were retired at **21:00:24Z**, removing
 **28,879,998,976 allocated fixture bytes** after direct review. Only the result
 JSON and short summary remain; the inactive dependency donor and protected
-inputs are preserved. The verified branch is ready for merge. Evidence:
+inputs are preserved. The branch merged as `51dc678b9`; the overlapping-recovery
+follow-up above remains active. Evidence:
 `out/c7-models-delete-refresh-recovery-20261018/test-result.json` and
 `test-summary.md`. No native resource hold exists.
 
