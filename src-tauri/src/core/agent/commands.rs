@@ -2683,10 +2683,16 @@ while True:
         let error = run_turn_with_sink(app.handle().clone(), request.clone(), Arc::new(|_| Ok(())))
             .await
             .unwrap_err();
-        assert!(error.contains("missing-definition"), "turn was admitted: {error}");
+        assert!(
+            error.contains("missing-definition"),
+            "turn was admitted: {error}"
+        );
 
         let cancellation = CancellationToken::new();
-        let _active = state.agent_runs.register("during-confirmation", cancellation.clone()).unwrap();
+        let _active = state
+            .agent_runs
+            .register("during-confirmation", cancellation.clone())
+            .unwrap();
         crate::handle_agent_window_event(&state, "main", &tauri::WindowEvent::Destroyed);
         assert!(cancellation.is_cancelled());
         let error = run_turn_with_sink(app.handle().clone(), request, Arc::new(|_| Ok(())))
