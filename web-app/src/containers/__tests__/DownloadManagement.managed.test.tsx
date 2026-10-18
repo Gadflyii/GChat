@@ -1,11 +1,12 @@
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DownloadManagement } from '../DownloadManegement'
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
-vi.mock('@tanstack/react-router', () => ({ useNavigate: () => vi.fn() }))
+const navigate = vi.hoisted(() => vi.fn())
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 vi.mock('@/hooks/useServiceHub', () => ({ useServiceHub: () => ({}) }))
 const stable = vi.hoisted(() => {
   const noop = () => {}
@@ -30,6 +31,7 @@ vi.mock('@gchat/core', () => ({
 }))
 
 describe('DownloadManagement managed downloads', () => {
+  beforeEach(() => { navigate.mockClear() })
   it('lists a model download managed by the local Host, not only legacy downloads', async () => {
     jobs.list = [{
       id: 'job', status: 'downloading', received: 5 * 1024 ** 3, bytes_per_second: 1, error: null, path: null,
@@ -39,5 +41,17 @@ describe('DownloadManagement managed downloads', () => {
     expect(await screen.findByText('Qwen 27B 2-bit mix')).toBeInTheDocument()
     expect(screen.getByText('50%')).toBeInTheDocument()
     expect(screen.queryByText(/will appear here/)).not.toBeInTheDocument()
+  })
+  it('opens Models directly on Downloads when Manage is selected', async () => {
+    jobs.list = [{
+      id: 'paused-job', status: 'paused', received: 1024, bytes_per_second: 0, error: null, path: null,
+      release: { name: 'Paused model', bytes: 4096 },
+    }]
+    render(<DownloadManagement />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
+    expect(navigate).toHaveBeenCalledExactlyOnceWith({
+      to: '/hub/', search: { tab: 'Downloads' },
+    })
+    expect(screen.queryByText('Paused model')).not.toBeInTheDocument()
   })
 })

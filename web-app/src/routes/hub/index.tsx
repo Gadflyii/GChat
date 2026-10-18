@@ -9,10 +9,17 @@ export const Route = createFileRoute(route.hub.index as any)({
     q: typeof search.q === 'string' ? search.q : undefined,
     model: typeof search.model === 'string' ? search.model : undefined,
     repo: typeof search.repo === 'string' ? search.repo : undefined,
+    tab: search.tab === 'Installed' || search.tab === 'Recommended' || search.tab === 'Downloads'
+      ? search.tab : undefined,
   }),
 })
 
 function ModelsRoute() {
   const search = Route.useSearch()
-  return <ModelManagement initialQuery={search.q ?? search.model ?? search.repo ?? ''} />
+  const navigate = Route.useNavigate()
+  return <ModelManagement
+    initialQuery={search.q ?? search.model ?? search.repo ?? ''}
+    tab={search.tab ?? 'Installed'}
+    onTabChange={tab => { void navigate({ search: { ...search, tab } }) }}
+  />
 }

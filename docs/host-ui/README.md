@@ -97,6 +97,47 @@ Evidence:
 [`out/gchat2-lan-tools-ssh-overlap-20261018/result.json`](../../out/gchat2-lan-tools-ssh-overlap-20261018/result.json).
 These rendered tests use a mocked service. FRESH/OLD remained OFF with original
 XML; this records no native, Windows or live-service qualification.
+## Downloads Manage destination — C3, October 18
+
+`GUI-DOWNLOADS-MANAGE-WRONG-TAB` is fixed. The sidebar Downloads popover's
+**Manage** action opens `/hub/?tab=Downloads`, exposing the transfer controls.
+The validated Models route owns the selected tab: direct links and browser
+Back/Forward select the corresponding panel, and later user tab choices update
+that route state. Missing or invalid tab values default to Installed. Existing
+model search parameters are preserved; transfer actions and payloads are
+unchanged.
+
+All 48 focused Models/control cases and lint pass (zero errors, five existing
+warnings). The ONE `make verify` passes typecheck, the 355-file quality guard,
+3304 app cases, 121 extension cases, 1220 native cases and all six critical
+coverage floors. Six app cases are skipped and 28 native cases ignored. The
+changed-source frontend/native candidate builds. No failure or retry occurred.
+
+Native Linux acceptance passes with real pointer/keyboard input. The baseline
+`201f46712` reproduces Manage opening Installed with Resume absent; selecting
+Downloads manually exposes the same paused journal's controls. The candidate
+opens Downloads with enabled Resume visible and closes the popover. Actual
+Alt+Left/Right preserves later tab choices. Reviewed screenshots cover Dark
+1500×1000 and Light 1024×740 without horizontal overflow. No Resume/Delete,
+actual transfer, model or GPU execution occurred. This is English source-native
+Vite/debug custom-protocol evidence; Windows, installers and release builds
+remain unqualified. The separate paused-status wording row remains unchanged.
+
+Owner/source `/ai/gchat-worktrees/c3-downloads-manage-tab-20261018`, branch
+`fix/c3-downloads-manage-tab-20261018`, base `be69f9190`. Results, native receipt,
+command/dependency receipts, candidate screenshots and a short summary are in
+`out/c3-downloads-manage-tab-20261018`; baseline screenshots remain in
+`out/c3-first-user-setup-20261018`. S1 fixture:
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`, candidate
+`downloads-manage-candidate/bin/gchat`. CPU-only gates used the pinned offline
+image/cache, nice 10 and shared socket 1 compile lock. Build CPUs 88–95 returned
+03:44Z. The container and owned local/remote source archives are removed. The
+private native app, Host and Xvfb 79 are stopped and GUI CPUs 64–71 returned.
+The parent retains the shared stage, candidate/resources, private
+`downloads-home` and remote passing logs for the next paused-status candidate,
+then retires those disposable outputs. The private launch/config receipt is
+`downloads-native-launch.json` under the S1 root. No active job remains for
+this navigation fix.
 
 ## Physical graphics-card inventory — C3, October 18
 
