@@ -1,5 +1,45 @@
 # GInfer host UI
 
+## Secure-storage Check-first recovery — C3, October 18
+
+`GUI-SECURE-STORAGE-CHECK-FIRST` passes its remaining Linux installed leaf using
+the retained packaged acceptance in
+[`out/secure-storage-feedback-native-20261018/result.json`](../../out/secure-storage-feedback-native-20261018/result.json).
+The inspected `check-before.png` shows the initial storage card with primary
+**Check secure storage**, secondary **Skip for now**, and no setup button.
+Native pointer navigation then reached Hosts, where the newly mounted card was
+unchecked; an explicit Check reached **Secure storage is ready.** at 03:05:40Z
+and remained visible at 03:07:06Z in `hosts-check-settled.png`. The initial
+Hosts state is recorded in the packet, rather than a separate screenshot.
+
+Original source fix `9cc84a6b9` is an ancestor of both the tested release
+`ed68c7443` and current base `faa9c326b`. The same `CredentialSetup` is mounted
+by Hosts. Its Check-first condition, primary-button variant, explicit-check
+handler and ready panel are unchanged. Current component differences are the
+unchecked hint wording and clearing a vault message on Cancel; other Hosts
+controls have changed but its storage-card integration is unchanged. Neither
+difference changes this acceptance. The retained UI does not qualify the new
+hint wording or Welcome card order.
+
+The original 10 focused cases passed (Bubbs mailbox, October 17 17:26:47Z).
+The retained regression still covers `can_install: true`: no setup button
+while unchecked, then setup offered after an explicit unavailable result.
+Native keyring installation/admin approval was not exercised. The earlier
+`c48538a27` full gate predates this fix and is not its verification; the later
+passing full gate at `d16521c19`, containing the fix and current component,
+is retained in `out/c3-host-residency-controls-20261018/result.json`.
+No source or test changed; this documentation-only recovery uses
+`git diff --check` and repeats no gate or native session.
+
+Owner C3; branch `docs/c3-secure-storage-check-first-20261018`, worktree
+`/ai/gchat-worktrees/c3-secure-storage-check-first-20261018`, base `faa9c326b`.
+Gchat 1 and Gchat 3 were notified by row ID. No new compute, build, app session,
+dependency copy or disk allocation is required. The original private fixture
+was removed at 03:07Z and its CPUs returned; its donor was untouched. Windows,
+locked-keyring prompts, passphrase-vault setup and readiness across remount or
+restart remain outside this leaf. The accepted locked-keyring launch campaign
+is reused, not repeated. Next: merge this closure record and archive the row.
+
 ## Host residency controls — C3, October 18
 
 `GCHAT-HOST-RESIDENCY-CONTROLS` is source-complete and passes its signed
@@ -36,7 +76,7 @@ CPUs 80–87, nice10/max8 jobs and the socket1 shared lock; no GPU or app sessio
 CPUs returned 07:36Z. Three stopped containers and the 31.51 GB private SSD root
 `/media/ron/SSD_RAID/ai/tmp-c3-host-residency-controls-20261018` were retired;
 the donor remains untouched. Only small evidence and the source worktree remain.
-Next: coordinator review/integration and canonical row closure.
+Merged as `faa9c326b`; the canonical row is closed and archived.
 
 ## Recovered W8 chat-send closures — C3, October 18
 
