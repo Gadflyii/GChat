@@ -256,8 +256,11 @@ function GbotPage() {
     } catch (cause) {
       toast.error(String(cause))
     } finally {
-      setBusy(false)
-      await refresh()
+      try {
+        await refresh()
+      } finally {
+        setBusy(false)
+      }
     }
   }
   const workspaceId = selected || state?.workspaces[0]?.id
