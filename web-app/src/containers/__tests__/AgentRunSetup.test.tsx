@@ -247,7 +247,9 @@ describe('Agent Studio run setup', () => {
 
     for (const value of ['-1', '0.5', '16777217']) {
       fireEvent.change(context, { target: { value } })
-      expect(screen.getByText('Enter a valid minimum context size.')).toBeVisible()
+      expect(screen.getAllByRole('status')[0]).toHaveTextContent(
+        'Enter a valid minimum context size.'
+      )
       expect(run).toBeDisabled()
       fireEvent.blur(context)
       expect(context).toHaveProperty('value', value)
