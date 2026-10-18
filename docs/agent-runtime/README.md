@@ -451,6 +451,26 @@ for `GCHAT-ATTACHMENT-PICKER-STALE-TOOL-SNAPSHOT-20261015`; it does not qualify
 sending the PDF or reading its contents. The preliminary New Chat attempt did
 not exercise the relevant processing branch and is not a causal pass.
 [Native procedure and evidence](remaining-acceptance.md#native-attachment-chooser-current-tools--october-17).
+The separate [October 18 PDF Send check](#native-pdf-send-and-folder-permission--october-18)
+passes the bounded send, folder permission and answer path.
+
+## Native PDF Send and folder permission — October 18
+
+An isolated Linux native Chat selected the correct `short.pdf` (585 bytes)
+through the ordinary attachment chooser and sent a prompt containing no answer
+code. The folder dialog named `os.fs.read_document`; after **Allow folder**, the
+answer included the expected `ORCHID-472`. Saved messages record the exact PDF
+path passed to `os_fs_read_document` and its untruncated 12-character result.
+The dialog disclosed that the grant
+adds the folder to External with **CAN EDIT** access for that session. Expanded
+final tool details were not captured before shutdown.
+
+This uses the retained `832fddb85` desktop plus the run-selection-scroll fix and
+retained sidecars. It does not qualify all latest sidecars, Windows or a fresh
+installation. The initial CPU-profile mismatch and live-cpuset NVIDIA failure,
+corrected restart, and GPU return at 03:17Z after the 03:16Z cutoff remain part
+of the record. No timing claim; broader OI-068 remains PARTIAL.
+[Procedure, identities and evidence](remaining-acceptance.md#oi-068-native-pdf-send-and-folder-permission--october-18).
 
 ## Worker review follow-up
 
