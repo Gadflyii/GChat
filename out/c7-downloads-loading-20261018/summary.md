@@ -23,3 +23,7 @@ native-launch.json, build-command.json and verify-command.json.
 
 Own app, Host and helpers stopped by verified PIDs; disposable SSD root removed.
 CPU88–95 returned08:53Z and booking3164 canceled; immutable donors unchanged.
+
+Merged origin/main a7ab6dc02 without rebase, keeping its adjacent failed-card
+recovery. Combined code: 54 focused tests and affected ESLint PASS. Inventory
+rendering is unchanged from the native-tested build. No repeated full gate.

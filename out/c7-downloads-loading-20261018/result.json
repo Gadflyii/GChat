@@ -24,7 +24,17 @@
       "receipt": "verify-result.json",
       "log": "verify.log"
     },
-    "external_profile_catalogs": "catalog-inputs.json; exact GInfer5825c2e39 private inputs"
+    "external_profile_catalogs": "catalog-inputs.json; exact GInfer5825c2e39 private inputs",
+    "main_merge": {
+      "upstream": "a7ab6dc02",
+      "merge": "fbf6fac2e",
+      "focused_passed": 54,
+      "affected_eslint": "PASS",
+      "full_gate_repeated": false,
+      "native_scope": "Inventory declaration and rendering unchanged; adjacent upstream failed-card recovery retained.",
+      "log": "merged-focused.log",
+      "command": "merged-focused-command.json"
+    }
   },
   "native": {
     "platform": "Linux x86_64, AIS-2-8592-L01",
@@ -51,10 +61,17 @@
     "booking": 3164,
     "cpus": "88-95",
     "cleanup": "PASS: own processes stopped by verified PID; disposable root removed; booking3164 canceled; read-only donors unchanged",
-    "returned": "2026-10-18T08:53:13Z"
+    "returned": "2026-10-18T08:53:13Z",
+    "merge_check_root": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-merge-20261018",
+    "merge_check_booking": 3182,
+    "merge_check_cleanup": "PASS: combined focused/lint terminal; independent SSD copy removed; booking3182 canceled; returned08:56Z"
   },
-  "source_files": {
+  "native_tested_source_files": {
     "web-app/src/containers/ModelManagement.tsx": "bdc689a9ae35abaa8913b8f4b879dd3bbc69c035759d4717cfdec527be3e253b",
     "web-app/src/routes/hub/__tests__/index.test.tsx": "b1c38332782d76808881a85516ab6c7d45844ec0031be006632eb8288d5d9e63"
+  },
+  "merged_source_files": {
+    "web-app/src/containers/ModelManagement.tsx": "43293f2c93688c50d3298053e8893d1fe73478c9935783a1256eb187d28f4e8c",
+    "web-app/src/routes/hub/__tests__/index.test.tsx": "ddd3048189aa19236e87c79d75038d747a62120f0459fd95ba920fa77730a91d"
   }
 }
