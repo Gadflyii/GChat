@@ -7,6 +7,7 @@ import { useEngineHosts } from '@/stores/engine-hosts-store'
 import type { EngineSnapshot } from '@/services/engines'
 import { useAppState } from '@/hooks/useAppState'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
+import { useModelProvider } from '@/hooks/useModelProvider'
 
 const mocks = vi.hoisted(() => ({
   switchToModel: vi.fn(),
@@ -263,6 +264,54 @@ describe('DataProvider', () => {
       expect(getActiveModels).toHaveBeenCalledOnce()
     })
     unmount()
+  })
+
+  it('retains cached models when startup inventory fails while other startup work completes', async () => {
+    const cachedProviders = [{
+      provider: 'ginfer',
+      active: true,
+      settings: [],
+      models: [{ id: 'cached-model' }],
+    }] as ModelProvider[]
+    const state = useModelProvider.getState()
+    const previousProviders = state.providers
+    state.providers = cachedProviders
+    let rejectInventory!: (reason: unknown) => void
+    const inventory = new Promise<ModelProvider[]>((_resolve, reject) => {
+      rejectInventory = reject
+    })
+    getProviders.mockReturnValueOnce(inventory)
+    const failure = new Error('Registered model manifests could not be read')
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { unmount } = render(<DataProvider />)
+
+    try {
+      await waitFor(() => {
+        expect(mocks.setServers).toHaveBeenCalledWith(mcpConfig.mcpServers)
+        expect(mocks.setSettings).toHaveBeenCalledWith(mcpConfig.mcpSettings)
+        expect(mocks.setAssistants).toHaveBeenCalledWith(assistants)
+        expect(mocks.initializeWithLastUsed).toHaveBeenCalledOnce()
+        expect(mocks.setThreads).toHaveBeenCalledWith(threads)
+        expect(getActiveModels).toHaveBeenCalledOnce()
+      })
+      expect(state.providers).toBe(cachedProviders)
+      expect(mocks.setProviders).not.toHaveBeenCalled()
+
+      await act(async () => {
+        rejectInventory(failure)
+        await inventory.catch(() => undefined)
+      })
+
+      expect(errorLog).toHaveBeenCalledWith(expect.any(String), failure)
+      expect(state.providers).toBe(cachedProviders)
+      expect(mocks.setProviders).not.toHaveBeenCalled()
+      expect(mocks.setGbotStartupEnabled).toHaveBeenCalledWith(false)
+      expect(mocks.switchToModel).not.toHaveBeenCalled()
+    } finally {
+      unmount()
+      state.providers = previousProviders
+      errorLog.mockRestore()
+    }
   })
 
   it.each([

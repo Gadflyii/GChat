@@ -282,91 +282,113 @@ describe('DialogDeleteModel deletion result', () => {
     expect(mocks.success).toHaveBeenCalledOnce()
   })
 
-  it('keeps accepted deletion recoverable after Settings unmounts without replaying it on failed or successful reads', async () => {
-    const deletion = deferred()
-    const initialRead = deferred<ModelProvider[]>()
-    const failedRetry = deferred<ModelProvider[]>()
-    const successfulRetry = deferred<ModelProvider[]>()
-    mocks.deleteModel.mockReturnValueOnce(deletion.promise)
-    mocks.getProviders
-      .mockReturnValueOnce(initialRead.promise)
-      .mockReturnValueOnce(failedRetry.promise)
-      .mockReturnValueOnce(successfulRetry.promise)
-    const user = userEvent.setup()
-    const settings = render(modelDeletion(provider, 'model-selected'))
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
-    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }))
+  it.each([false, true])(
+    'keeps accepted deletion recoverable after Settings unmounts without replaying it on failed or successful reads (external reference: %s)',
+    async (externalReference) => {
+      const selectedProvider: ModelProvider = {
+        ...provider,
+        models: provider.models.map((model) => model.id === 'model-selected' && externalReference
+          ? { ...model, source: 'external' }
+          : model),
+      }
+      useModelProvider.setState({
+        providers: [selectedProvider],
+        selectedModel: selectedProvider.models.find((model) => model.id === 'model-selected') ?? null,
+      })
+      const action = externalReference ? 'Remove from Models' : 'Delete'
+      const title = externalReference ? 'Model removed' : 'Delete Model: model-selected'
+      const description = externalReference
+        ? 'Removed from Models. The original file remains in place.'
+        : 'Model model-selected has been permanently deleted.'
+      const deletion = deferred()
+      const initialRead = deferred<ModelProvider[]>()
+      const failedRetry = deferred<ModelProvider[]>()
+      const successfulRetry = deferred<ModelProvider[]>()
+      mocks.deleteModel.mockReturnValueOnce(deletion.promise)
+      mocks.getProviders
+        .mockReturnValueOnce(initialRead.promise)
+        .mockReturnValueOnce(failedRetry.promise)
+        .mockReturnValueOnce(successfulRetry.promise)
+      const user = userEvent.setup()
+      const settings = render(modelDeletion(selectedProvider, 'model-selected'))
+      await user.click(screen.getByRole('button', { name: action }))
+      if (externalReference) {
+        expect(screen.getByRole('dialog', { name: 'Remove model-selected from Models?' })).toBeVisible()
+        expect(screen.getByText('The original model file will remain in place. Only its Models entry will be removed.')).toBeVisible()
+      }
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: action }))
 
-    await act(async () => {
-      deletion.resolve()
-      await deletion.promise
-    })
+      await act(async () => {
+        deletion.resolve()
+        await deletion.promise
+      })
 
-    expect(mocks.getProviders).toHaveBeenCalledOnce()
-    expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['model-first'])
-    expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
-    expect(useModelProvider.getState().selectedModel).toBeNull()
-    expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')
-    await act(async () => {
-      initialRead.reject(new Error('Provider inventory unavailable at /models/catalog.json'))
-      await initialRead.promise.catch(() => undefined)
-    })
+      expect(mocks.getProviders).toHaveBeenCalledOnce()
+      expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['model-first'])
+      expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')
+      await act(async () => {
+        initialRead.reject(new Error('Provider inventory unavailable at /models/catalog.json'))
+        await initialRead.promise.catch(() => undefined)
+      })
 
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(mocks.deleteModel).toHaveBeenCalledExactlyOnceWith('model-selected', 'ginfer')
-    expect(mocks.error).not.toHaveBeenCalled()
-    expect(mocks.success).not.toHaveBeenCalled()
-    expect(mocks.warning).toHaveBeenCalledExactlyOnceWith('Delete Model: model-selected', {
-      id: 'delete-model-model-selected',
-      duration: Infinity,
-      description: expect.anything(),
-    })
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(mocks.deleteModel).toHaveBeenCalledExactlyOnceWith('model-selected', 'ginfer')
+      expect(mocks.error).not.toHaveBeenCalled()
+      expect(mocks.success).not.toHaveBeenCalled()
+      expect(mocks.warning).toHaveBeenCalledExactlyOnceWith(title, {
+        id: 'delete-model-model-selected',
+        duration: Infinity,
+        description: expect.anything(),
+      })
 
-    settings.unmount()
-    render(mocks.warning.mock.calls[0][1].description)
-    expect(screen.getByText('Model model-selected has been permanently deleted.')).toBeVisible()
-    expect(screen.getByText('The model list could not be refreshed. Choose Refresh model list to try again.')).toBeVisible()
-    const details = screen.getByText('Technical details').closest('details')
-    expect(details).not.toHaveAttribute('open')
-    expect(screen.getByText('Provider inventory unavailable at /models/catalog.json')).not.toBeVisible()
-    const refresh = screen.getByRole('button', { name: 'Refresh model list' })
-    act(() => {
-      refresh.click()
-      refresh.click()
-    })
+      settings.unmount()
+      render(mocks.warning.mock.calls[0][1].description)
+      expect(screen.getByText(description)).toBeVisible()
+      expect(screen.getByText('The model list could not be refreshed. Choose Refresh model list to try again.')).toBeVisible()
+      const details = screen.getByText('Technical details').closest('details')
+      expect(details).not.toHaveAttribute('open')
+      expect(screen.getByText('Provider inventory unavailable at /models/catalog.json')).not.toBeVisible()
+      const refresh = screen.getByRole('button', { name: 'Refresh model list' })
+      act(() => {
+        refresh.click()
+        refresh.click()
+      })
 
-    expect(mocks.getProviders).toHaveBeenCalledTimes(2)
-    expect(refresh).toBeDisabled()
-    expect(refresh).toHaveTextContent('Refreshing model list…')
-    await act(async () => {
-      failedRetry.reject(new Error('Provider inventory is still unavailable'))
-      await failedRetry.promise.catch(() => undefined)
-    })
+      expect(mocks.getProviders).toHaveBeenCalledTimes(2)
+      expect(refresh).toBeDisabled()
+      expect(refresh).toHaveTextContent('Refreshing model list…')
+      await act(async () => {
+        failedRetry.reject(new Error('Provider inventory is still unavailable'))
+        await failedRetry.promise.catch(() => undefined)
+      })
 
-    expect(refresh).toBeEnabled()
-    expect(details).not.toHaveAttribute('open')
-    expect(screen.getByText('Provider inventory is still unavailable')).not.toBeVisible()
-    expect(mocks.success).not.toHaveBeenCalled()
-    expect(useModelProvider.getState().selectedModel).toBeNull()
-    await user.click(refresh)
-    expect(mocks.getProviders).toHaveBeenCalledTimes(3)
-    await act(async () => {
-      successfulRetry.resolve([provider])
-      await successfulRetry.promise
-    })
+      expect(refresh).toBeEnabled()
+      expect(details).not.toHaveAttribute('open')
+      expect(screen.getByText('Provider inventory is still unavailable')).not.toBeVisible()
+      expect(mocks.success).not.toHaveBeenCalled()
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      await user.click(refresh)
+      expect(mocks.getProviders).toHaveBeenCalledTimes(3)
+      await act(async () => {
+        successfulRetry.resolve([selectedProvider])
+        await successfulRetry.promise
+      })
 
-    expect(mocks.success).toHaveBeenCalledExactlyOnceWith('Delete Model: model-selected', {
-      id: 'delete-model-model-selected',
-      description: 'Model model-selected has been permanently deleted. The model list is up to date.',
-    })
-    expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['model-first'])
-    expect(useModelProvider.getState().selectedModel).toBeNull()
-    expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
-    expect(mocks.deleteModel).toHaveBeenCalledOnce()
-    expect(mocks.stopModel).not.toHaveBeenCalled()
-    expect(mocks.startModel).not.toHaveBeenCalled()
-    expect(mocks.error).not.toHaveBeenCalled()
-  })
+      expect(mocks.success).toHaveBeenCalledExactlyOnceWith(title, {
+        id: 'delete-model-model-selected',
+        description: `${description} The model list is up to date.`,
+      })
+      expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['model-first'])
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
+      expect(mocks.deleteModel).toHaveBeenCalledOnce()
+      expect(mocks.stopModel).not.toHaveBeenCalled()
+      expect(mocks.startModel).not.toHaveBeenCalled()
+      expect(mocks.error).not.toHaveBeenCalled()
+    }
+  )
 
   it('uses the first provider model only when no model ID was supplied', async () => {
     mocks.getProviders.mockResolvedValueOnce([provider])

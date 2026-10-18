@@ -14,19 +14,30 @@ or stops a model. Rejected deletion keeps the existing retryable confirmation.
 
 Owned branch `fix/c7-models-delete-refresh-recovery-20261018`, matching
 `/ai/gchat-worktrees/` tree, base `a69c6ba20`. Parent owns the shared deletion
-helper, shared notification and both callers; the test worker owns the two
-existing rendered deletion suites and independent S1 SSD fixture. Acceptance:
+helper, shared notification, both callers and inventory service/extension
+corrections; the test worker owns the two existing rendered deletion suites,
+provider/startup/extension read regressions and independent S1 SSD fixture.
+Acceptance:
 ordinary/external accepted-delete/read-failure, notice surviving row removal,
 failed then successful read-only refresh with duplicate-click protection and
 no stale-response resurrection, true rejection and explicit deletion retry,
 focused tests, lint and exactly one `make verify`. The existing Models refresh
 button also adopts files, so it is not a substitute for this read-only retry.
 Accepted deletion also clears a selection of the removed model immediately;
-that must not depend on the inventory read succeeding. No backend, Engine,
+that must not depend on the inventory read succeeding. No native backend, Engine,
 model run, installed-app or Windows qualification changes.
-The accepted/read split and persistent recovery notice are implemented. Next:
-run rendered regressions and the independent SSD source gate against the
-frozen commit. No native resource hold exists.
+The accepted/read split and persistent recovery notice are implemented. The
+real desktop provider service previously swallowed inventory failures as an
+empty list, bypassing recovery; it now rejects and startup retains its cached
+inventory on failure. The extension's `list()` previously adopted loose files
+on each read; it now only reads registered models. Explicit Models refresh
+still adopts files, and the existing single-model lookup/load path is unchanged.
+Direct service, startup and extension regressions now cover these boundaries,
+including read rejection/retry and a legitimately empty registered inventory.
+The Settings external-reference case also preserves its original-file promise
+through dialog removal and read-only recovery. Next: run the focused regressions,
+lint and one `make verify` on this frozen candidate in the independent S1 SSD
+fixture. No native resource hold exists.
 
 ## Models accepted download requests — C7, October 18
 

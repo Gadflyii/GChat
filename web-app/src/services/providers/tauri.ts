@@ -265,7 +265,7 @@ export class TauriProvidersService extends DefaultProvidersService {
       return runtimeProviders.concat(builtinProviders as ModelProvider[])
     } catch (error: unknown) {
       console.error('Error getting providers in Tauri:', error)
-      return []
+      throw error
     }
   }
 

@@ -235,7 +235,8 @@ export default class ginfer_extension extends AIEngine {
   }
 
   override async list(): Promise<modelInfo[]> {
-    await this.adoptRootArtifacts()
+    // Inventory refresh is read-only. Models' explicit refresh action owns
+    // adoption of loose artifacts; retries must not move files or register them.
     const locations = await this.modelLocations()
 
     const gchatDataFolderPath = await getJanDataFolderPath()
