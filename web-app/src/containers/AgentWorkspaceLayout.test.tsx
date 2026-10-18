@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { forwardRef, useImperativeHandle, type ReactNode } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { mockIPC } from '@tauri-apps/api/mocks'
+import { mockConvertFileSrc, mockIPC } from '@tauri-apps/api/mocks'
 import { AgentWorkspaceLayout } from './AgentWorkspaceLayout'
 import { useArtifactStore } from '@/stores/artifact-store'
 import { useWorkspacePreviewStore } from '@/stores/workspace-preview-store'
@@ -100,6 +100,7 @@ describe('AgentWorkspaceLayout', () => {
       }
     )
     mockIPC(artifactPreview.command)
+    mockConvertFileSrc('linux')
     media.desktop = true
     panelLayouts.values = []
     workspace.entries = [
