@@ -1,5 +1,33 @@
 # Gbot design
 
+## Recovering linked-account failures — Gchat 2
+
+`GBOT-LINKED-ACCOUNTS-ERROR-GUIDANCE`, based on main `2f6e397d9`, names
+Refresh accounts after a failed list read and Save linked accounts after an
+unconfirmed save. Previously, save failures did not name their retry action
+and both failures displayed technical diagnostics directly in the panel.
+Diagnostics now stay in closed Details until requested.
+
+Unsaved selections remain available. A read-only refresh cannot hide an
+unconfirmed save, overwrite its draft or repeat it; each explicit retry clears
+only its own failure. Existing pending controls and bot-switch/request-lifetime
+guards remain. Rendered journeys cover Error and native-string failures,
+diagnostic disclosure, separate failures and successful explicit retries.
+This is source/rendered scope, with no service or account-permission change.
+
+Validation: original production failed all four new Error/native-string read and
+save journeys; fixed focus passed 123 tests (16 Linked accounts, 107 Gbot route).
+Lint passed with zero errors and five existing warnings. ONE `make verify`
+(2026-10-18 19:57:17–20:03:17 UTC) passed 3,793 app tests (six skipped),
+127 extension tests, 1,318 Rust tests (28 ignored), all six coverage floors and
+lint/typecheck/quality guards. All 3,461 tracked bytes and modes matched before
+and after the gates, with fresh tracked timestamps. Only this receipt was added
+afterward. Booking3533 returned20:03Z; the private cache and both local exports
+were removed by20:04:27Z. Small evidence:
+`/ai/gchat/out/gchat2-linked-accounts-error-guidance-20261018/SUMMARY.md`.
+Final gate SHA256 `a91cc48079fca74122afc6a4687ed311328a19f3d8b9be750c84bdb83e8f9fe6`;
+cleanup SHA256 `b56282da7aa9835e838704f71be8fde6086a99c239c61425479603e2be3cac63`.
+
 ## Saving a LAN bot name once — Gchat 2
 
 `GBOT-LAN-RENAME-SUBMIT-PROGRESS`, based on main `b659383f3`, guards

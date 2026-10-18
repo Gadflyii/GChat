@@ -14,8 +14,8 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
   const [settings, setSettings] = useState<BotConnectors>()
   const [linked, setLinked] = useState<string[]>([])
   const [busy, setBusy] = useState<'refresh' | 'save' | null>('refresh')
-  const [refreshError, setRefreshError] = useState('')
-  const [saveError, setSaveError] = useState('')
+  const [refreshError, setRefreshError] = useState<string>()
+  const [saveError, setSaveError] = useState<string>()
   const [status, setStatus] = useState('')
   const setupHelpId = useId()
   const noAccountsId = useId()
@@ -28,7 +28,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     pending.current = true
     const request = ++generation.current
     setBusy('refresh')
-    setRefreshError('')
+    setRefreshError(undefined)
     setStatus('')
     try {
       const value = await gbot<BotConnectors>('connectors/get', {
@@ -45,7 +45,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     } catch (cause) {
       if (request !== generation.current) return
       setRefreshError(
-        `Could not refresh linked accounts. Try Refresh accounts again. ${String(cause)}`
+        cause instanceof Error ? cause.message : String(cause)
       )
     } finally {
       if (request === generation.current) {
@@ -68,7 +68,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     pending.current = true
     const request = ++generation.current
     setBusy('save')
-    setSaveError('')
+    setSaveError(undefined)
     setStatus('')
     try {
       const value = await gbot<BotConnectors>('connectors/save', {
@@ -83,7 +83,7 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
     } catch (cause) {
       if (request !== generation.current) return
       setSaveError(
-        `Could not save linked accounts. Your selections are kept. ${String(cause)}`
+        cause instanceof Error ? cause.message : String(cause)
       )
     } finally {
       if (request === generation.current) {
@@ -111,10 +111,17 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
         To add or reconnect an account, open Settings → Workspace connections,
         then refresh this list. Linking an account does not change its permissions.
       </p>
-      {refreshError && (
-        <p role="alert" className="mb-3 text-sm text-destructive">
-          {refreshError}
-        </p>
+      {refreshError !== undefined && (
+        <div role="alert" className="mb-3 space-y-1 text-sm">
+          <p className="text-destructive">
+            Could not refresh linked accounts. Your selections are unchanged.
+            Choose Refresh accounts to try again.
+          </p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="whitespace-pre-wrap break-words">{refreshError}</p>
+          </details>
+        </div>
       )}
       {(busy || status) && (
         <p role="status" className="mb-3 text-sm text-muted-foreground">
@@ -193,10 +200,17 @@ function WorkspaceConnectors({ workspaceId }: { workspaceId: string }) {
           </div>
         </>
       ) : null}
-      {saveError && (
-        <p role="alert" className="mt-3 text-sm text-destructive">
-          {saveError}
-        </p>
+      {saveError !== undefined && (
+        <div role="alert" className="mt-3 space-y-1 text-sm">
+          <p className="text-destructive">
+            Could not confirm whether linked accounts were saved. Your selections
+            are kept. Choose Save linked accounts to try again.
+          </p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="whitespace-pre-wrap break-words">{saveError}</p>
+          </details>
+        </div>
       )}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button
