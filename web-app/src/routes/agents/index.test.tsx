@@ -1004,6 +1004,44 @@ describe('AgentStudioPage', () => {
     ))
   })
 
+  it('saves a new coordinator with valid default parallelism and allows more specialists', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: /Coordinator Team/i }))
+
+    expect(screen.getByLabelText('Maximum parallel workers')).toHaveValue(1)
+    expect(screen.getAllByLabelText('Specialist ID')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledOnce())
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        kind: 'coordinator',
+        maxParallel: 1,
+        workers: [expect.objectContaining({ id: 'researcher' })],
+      })
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Add specialist' }))
+    fireEvent.change(screen.getByLabelText('Maximum parallel workers'), {
+      target: { value: '2' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledTimes(2))
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        maxParallel: 2,
+        workers: [
+          expect.objectContaining({ id: 'researcher' }),
+          expect.objectContaining({ id: 'specialist-2' }),
+        ],
+      })
+    )
+  })
+
   it('offers every GInfer reasoning effort', async () => {
     render(<AgentStudioPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
