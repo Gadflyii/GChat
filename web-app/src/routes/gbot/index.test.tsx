@@ -3756,7 +3756,7 @@ it.each([
       const stopLabel = kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service'
       const startLabel = kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service'
       const stoppedMessage = kind === 'local'
-        ? 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+        ? 'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'
         : 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
       if (start) {
         fireEvent.click(await screen.findByRole('button', { name: stopLabel }))
@@ -3784,7 +3784,7 @@ it.each([
           ? 'Starting Gbot on this computer. First-time setup or an update may need several minutes to prepare files. The service will start automatically when preparation finishes. You can keep using GChat.'
           : 'Connecting to the Gbot service on your selected LAN computer. Please wait.'
         : kind === 'local'
-          ? 'Stopping the Gbot service. Tasks and schedules will resume when you start it again.'
+          ? 'Stopping the Gbot service. Unfinished tasks will stop. After restarting, review them before choosing Resume. Check Scheduled tasks for schedules that need review.'
           : 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.'
       expect(screen.getByText(progressMessage)).toHaveAttribute('role', 'status')
       expect(screen.getByText(progressMessage)).toBeVisible()
@@ -3964,7 +3964,7 @@ it('clears failed startup progress and allows an explicit retry', async () => {
   ).not.toBeInTheDocument()
   expect(
     screen.getByText(
-      'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+      'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'
     )
   ).toBeVisible()
   const retry = screen.getByRole('button', { name: 'Start Gbot service' })
@@ -3980,9 +3980,44 @@ it('clears failed startup progress and allows an explicit retry', async () => {
 })
 
 it.each(['local', 'paired_host'] as const)(
-  'shows %s shutdown progress without claiming the service has already stopped',
+  'shows %s shutdown progress and explicit task recovery after restarting',
   async (kind) => {
-    readyTaskBots()
+    const [identity] = readyTaskBots()
+    const fallback = mocks.call.getMockImplementation()!
+    const task = {
+      id: 'saved-before-quit',
+      identity,
+      state: 'running',
+      messages: [{ role: 'user', content: 'Finish my saved note' }],
+      help_requests: [],
+    }
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'tasks') return [task]
+        if (path === 'tasks/resume') {
+          task.state = 'running'
+          return task
+        }
+        if (path === 'schedules')
+          return {
+            stopped: null,
+            schedules: [
+              {
+                id: 'saved-schedule',
+                workspace_id: identity.workspace_id,
+                prompt: 'Check my saved note each morning',
+                enabled: true,
+                assignment: { model: 'qwen' },
+                timing: { kind: 'interval', every_seconds: 86400 },
+                next_at: null,
+                occurrences: [{ task_id: task.id, state: 'needs_review' }],
+              },
+            ],
+          }
+        return fallback(path, body)
+      }
+    )
+    mocks.startService.mockReset().mockResolvedValue(undefined)
     mocks.getTarget.mockResolvedValue(
       kind === 'local' ? { kind } : { kind, host_id: 'paired-host' }
     )
@@ -4003,7 +4038,7 @@ it.each(['local', 'paired_host'] as const)(
     )
     const progress = screen.getByText(
       kind === 'local'
-        ? 'Stopping the Gbot service. Tasks and schedules will resume when you start it again.'
+        ? 'Stopping the Gbot service. Unfinished tasks will stop. After restarting, review them before choosing Resume. Check Scheduled tasks for schedules that need review.'
         : 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.'
     )
     expect(progress).toHaveAttribute('role', 'status')
@@ -4016,6 +4051,7 @@ it.each(['local', 'paired_host'] as const)(
       })
     ).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+    if (kind === 'local') task.state = 'cancelled'
     await act(async () => finish())
     await waitFor(() =>
       expect(
@@ -4032,10 +4068,59 @@ it.each(['local', 'paired_host'] as const)(
     expect(
       screen.getByText(
         kind === 'local'
-          ? 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+          ? 'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'
           : 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
       )
     ).toBeVisible()
+    const taskWrites = () =>
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    expect(taskWrites()).toEqual([])
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service',
+      })
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name: kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service',
+        })
+      ).toBeEnabled()
+    )
+    const card = (await screen.findByText('Finish my saved note')).closest(
+      'article'
+    )!
+    expect(
+      within(card).getByText(kind === 'local' ? 'cancelled' : 'running', {
+        exact: true,
+      })
+    ).toBeVisible()
+    expect(taskWrites()).toEqual([])
+    fireEvent.click(screen.getByText('Scheduled tasks'))
+    expect(
+      await screen.findByText('Needs review. Future occurrences are held.')
+    ).toBeVisible()
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path.startsWith('schedules/'))
+    ).toEqual([])
+    if (kind === 'local') {
+      const resume = within(card).getByRole('button', {
+        name: 'Resume',
+        exact: true,
+      })
+      expect(resume).toBeEnabled()
+      fireEvent.click(resume)
+      expect(await within(card).findByText('running', { exact: true })).toBeVisible()
+      expect(taskWrites()).toEqual([['tasks/resume', { id: task.id }]])
+    } else {
+      expect(
+        within(card).queryByRole('button', { name: 'Resume', exact: true })
+      ).not.toBeInTheDocument()
+    }
+    expect(mocks.quitService).toHaveBeenCalledTimes(1)
+    expect(mocks.startService).toHaveBeenCalledTimes(1)
   }
 )
 
@@ -4052,7 +4137,7 @@ it('explicitly stops the service without refreshing and starts it before reconne
   await screen.findByRole('form', { name: 'Set up Gbot' })
   fireEvent.click(screen.getByRole('button', { name: 'Quit Gbot service' }))
   await screen.findByText(
-    'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+    'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'
   )
   expect(mocks.quitService).toHaveBeenCalledTimes(1)
   const calls = mocks.call.mock.calls.length
