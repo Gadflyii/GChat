@@ -1,5 +1,30 @@
 # GInfer host UI
 
+## Gbot tools and SSH checks — Gchat2, October 18
+
+`GBOT-LAN-TOOLS-SSH-CHECK-OVERLAP`: Rechecking SSH while Check tools or Prepare
+tools was pending could detach that work; its late result could enable Continue
+beside an SSH failure.
+[LanSetup](../../web-app/src/components/GbotSetup/LanSetup.tsx) now tracks child
+tool work synchronously and disables SSH rechecking until it finishes.
+The [LAN setup
+regressions](../../web-app/src/components/GbotSetup/LanSetup.test.tsx) cover Check
+and Prepare overlap, and the [wizard
+regression](../../web-app/src/components/GbotSetup/index.test.tsx) keeps Continue
+unavailable until SSH and tools checks finish in order.
+The unfixed regression run had **3 failures / 29 skipped**; the fixed focused run
+passed **36 tests**:
+`yarn test web-app/src/components/GbotSetup/LanSetup.test.tsx web-app/src/components/GbotSetup/LanTools.test.tsx web-app/src/components/GbotSetup/index.test.tsx`.
+Qualification on main `1d80da074`: **ONE `make verify` passed** on S1
+CPU96–103, 03:38:26–03:46:12 UTC: 3,303 application tests (6 skipped),
+121 extension tests, 1,220 Rust tests (28 ignored), all six coverage floors,
+lint (0 errors, 5 existing warnings), type checking and quality checks.
+Changed source hashes matched before and after the gate.
+Evidence:
+[`out/gchat2-lan-tools-ssh-overlap-20261018/result.json`](../../out/gchat2-lan-tools-ssh-overlap-20261018/result.json).
+These rendered tests use a mocked service. FRESH/OLD remained OFF with original
+XML; this records no native, Windows or live-service qualification.
+
 ## Physical graphics-card inventory — C3, October 18
 
 `GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED`: the fresh private native main
