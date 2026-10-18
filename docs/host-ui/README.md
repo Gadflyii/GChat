@@ -3693,6 +3693,20 @@ Type `/` in the composer to see available skills. Use the up and down arrow
 keys to choose a skill, then press Enter or Tab to select it. The selected
 skill stays visible as you move through a long list.
 
+Linux acceptance (`GUI-CHAT-SKILL-SLASH-NATIVE-20261018`): with 42 available
+skills, native ArrowUp wrapped from the first option to the last and ArrowDown
+wrapped back. Moving down 20 options kept the selected skill fully visible in
+the scrolling list. Typing `/keyboard-24` filtered to one option; Tab selected
+it, closed the menu and kept composer focus. Backspace removed the selected
+skill from the empty composer. No message or model was started. All 17 saved
+records, 45 `SKILL.md` files and two workspace inputs stayed unchanged.
+Retained build `8f7d18f6f` matches the relevant Chat/Skills source at
+`e9566246a`; resources returned at 08:44Z. Evidence:
+[`out/gchat-chat-skill-slash-native-20261018/`](../../out/gchat-chat-skill-slash-native-20261018/).
+The source fix retains its 62 focused tests and one cumulative `make verify`
+PASS at `df99cac4f`; this acceptance adds native Linux coverage only. Windows,
+spoken assistive output and model dispatch were not exercised.
+
 In **Agent Studio → Agents & flows**, Tab to a skill and press Space or Enter
 to include or remove it. Each skill announces whether it is selected, including
 skills assigned to a specialist or workflow stage. Choose **Save definition**
