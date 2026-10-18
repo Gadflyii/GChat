@@ -60,6 +60,7 @@ export function AgentStudioHeader({
             <Button
               key={id}
               variant={active === id ? 'secondary' : 'ghost'}
+              aria-current={active === id ? 'page' : undefined}
               size="sm"
               className="shrink-0"
               onClick={() => onSelect(id)}

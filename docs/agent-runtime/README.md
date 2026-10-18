@@ -22,6 +22,31 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Agent Studio current section — October 18
+
+A private native pass selected Templates with Enter. The section changed and
+kept keyboard focus, but all five navigation buttons omitted a current-section
+state. Only styling identified the active section, leaving assistive technology
+without that information. The `cf9124a1e` desktop's header source matched main
+`71ee50ce7`. Baseline DOM receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1303/`.
+
+The shared Studio header now identifies exactly one current page in its
+navigation. This includes Skills, which uses the same header on its own route.
+Section activation and keyboard focus keep their existing behavior.
+
+Validation: 126 focused tests and workspace lint PASS; one `make verify`
+PASS (3,600 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `014afdc21`. Rebuilt private
+native acceptance PASS: Enter and Space select all five sections, with exactly
+one matching current page throughout. The candidate screenshot was viewed.
+Normal close at 13:14:39Z kept saved thread/messages, agent definitions and run
+history byte-identical; CPU booking 3303 returned 13:15Z. This checks exposed
+section state, without a screen reader session, inference, installed-package or
+Windows acceptance. Cross-route Skills focus loss was observed separately and
+is outside this change. Candidate receipts:
+`/ai/gchat/out/gchat-agent-studio-current-section-20261018/`.
+
 ## Message edit cancellation keyboard focus — October 18
 
 A private native Chat pass reproduced focus moving to the page body after
