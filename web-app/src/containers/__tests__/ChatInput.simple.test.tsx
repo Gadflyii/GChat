@@ -464,6 +464,94 @@ describe('ChatInput', () => {
     expect(screen.getByTestId('chat-input')).toHaveValue('')
   })
 
+  it('restores each draft skill with its text across New Chat, conversation switches and reopening', () => {
+    agentSkills.value = ['pdf', 'slides'].map((name) => ({
+      name, description: name, version: '1.0.0', requiresTools: [], requiresScripts: [],
+      dangerous: false, platforms: null, enabled: true, compatible: true,
+      reserved: false, unavailableReasons: [], error: null,
+    }))
+    useThreads.setState({ currentThreadId: 'skill-draft-a' })
+    const view = render(<ChatInput />)
+    const input = () => screen.getByTestId('chat-input')
+    const chooseSkill = (name: string) => {
+      fireEvent.change(input(), { target: { value: `/${name}` } })
+      fireEvent.keyDown(input(), { key: 'Enter' })
+      expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent(`/${name}`)
+    }
+    chooseSkill('pdf')
+    fireEvent.change(input(), { target: { value: 'Summarize the document' } })
+
+    view.rerender(<ChatInput initialMessage />)
+    expect(input()).toHaveValue('')
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    chooseSkill('slides')
+    fireEvent.change(input(), { target: { value: 'Prepare a presentation' } })
+
+    view.rerender(<ChatInput />)
+    expect(input()).toHaveValue('Summarize the document')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/pdf')
+    act(() => useThreads.setState({ currentThreadId: 'skill-draft-b' }))
+    expect(input()).toHaveValue('')
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    view.unmount()
+
+    const reopened = render(<ChatInput initialMessage />)
+    expect(input()).toHaveValue('Prepare a presentation')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/slides')
+    reopened.rerender(<ChatInput />)
+    act(() => useThreads.setState({ currentThreadId: 'skill-draft-a' }))
+    expect(input()).toHaveValue('Summarize the document')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/pdf')
+    fireEvent.change(input(), { target: { value: '' } })
+    fireEvent.keyDown(input(), { key: 'Backspace' })
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    reopened.rerender(<ChatInput initialMessage />)
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/slides')
+    reopened.rerender(<ChatInput />)
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+  })
+
+  it.each([false, true])('clears the sending thread skill after an attachment send finishes away from its composer (reopen=%s)', async (reopen) => {
+    agentSkills.value = ['pdf', 'slides'].map((name) => ({
+      name, description: name, version: '1.0.0', requiresTools: [], requiresScripts: [],
+      dangerous: false, platforms: null, enabled: true, compatible: true,
+      reserved: false, unavailableReasons: [], error: null,
+    }))
+    useThreads.setState({ currentThreadId: 'skill-send-a' })
+    const attachment = { ...createDocumentAttachment({ name: 'notes.pdf', path: '/docs/notes.pdf' }), id: 'skill-notes', processed: true }
+    useChatAttachments.getState().setAttachments('skill-send-a', [attachment])
+    const pending = deferred<void>()
+    const onSubmit = vi.fn().mockReturnValue(pending.promise)
+    let view = render(<ChatInput onSubmit={onSubmit} preselectedAgentSkillName="pdf" />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Summarize the document' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Summarize the document', undefined, 'pdf', undefined, [attachment])
+
+    act(() => useThreads.setState({ currentThreadId: 'skill-send-b' }))
+    if (reopen) {
+      view.unmount()
+      view = render(<ChatInput onSubmit={onSubmit} />)
+    } else {
+      view.rerender(<ChatInput onSubmit={onSubmit} />)
+    }
+    const input = screen.getByTestId('chat-input')
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    fireEvent.change(input, { target: { value: '/slides' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(input, { target: { value: 'Prepare a presentation' } })
+    await act(async () => {
+      pending.resolve(undefined)
+      await pending.promise
+    })
+
+    expect(input).toHaveValue('Prepare a presentation')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/slides')
+    act(() => useThreads.setState({ currentThreadId: 'skill-send-a' }))
+    expect(input).toHaveValue('')
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    expect(useChatAttachments.getState().getAttachments('skill-send-a')).toEqual([])
+  })
+
   it('renders the production input with its translated placeholder', () => {
     const { unmount } = render(<ChatInput />)
 

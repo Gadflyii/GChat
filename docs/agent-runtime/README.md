@@ -22,6 +22,19 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Conversation draft skills — October 18
+
+A private Linux native Chat pass selected `/pdf`, typed a summary request,
+visited New Chat and returned. The text returned but the selected skill was
+lost. Baseline DOM observations and a viewed screenshot are retained in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1637/`.
+
+Draft skills now stay in memory with their conversation, alongside draft text.
+Navigation and reopening the composer restore both. Starting New Chat clears
+its own skill. A successful send clears the sending conversation's selected
+skill even when its composer has closed, while a different selection or another
+conversation's draft stays intact. Failed sends retain the skill for retry.
+
 ## Finding a newly saved agent — October 18
 
 A private Linux native pass saved `Zebraweeklyplanner` in a long Agent Studio
