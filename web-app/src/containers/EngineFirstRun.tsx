@@ -121,7 +121,11 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
     if (!resourcesReady) return
     let stopped = false
     let grace: ReturnType<typeof setTimeout> | undefined
-    void refresh().catch(e => setPollError(String(e))).finally(() => {
+    const requestRevision = revision.current
+    void refresh().catch(e => {
+      // A newer setup command owns the feedback even if discovery finishes last.
+      if (!stopped && !pendingAction.current && requestRevision === revision.current) setPollError(String(e))
+    }).finally(() => {
       if (!stopped) grace = setTimeout(() => setChecked(true), LOCAL_HOST_START_GRACE_MS)
     })
     return () => { stopped = true; clearTimeout(grace) }
@@ -296,7 +300,13 @@ function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: 
         <Button type="submit" variant="outline" disabled={busy}>Check startup settings</Button>
       </form></details>
     </div>)}<p className="text-sm text-muted-foreground">GInfer checks that these settings fit in memory. Finish setup when all checks pass, then load a model when you are ready to chat.</p><Button disabled={busy || !flow?.startup_profiles.length || flow.startup_profiles.some(profile => profile.error || !profile.quote || startupChanged(profile))} onClick={() => void act({ action: 'complete' })}>Finish local setup</Button></div>}
-    {unavailable && <Button variant="outline" disabled={busy} onClick={() => { void refresh().catch(e => setPollError(String(e))); if (localId) void act({}) }}>Retry local setup</Button>}
+    {unavailable && <Button variant="outline" disabled={busy} onClick={() => {
+      const requestRevision = revision.current
+      void refresh().catch(e => {
+        if (active.current && !pendingAction.current && requestRevision === revision.current) setPollError(String(e))
+      })
+      if (localId) void act({})
+    }}>Retry local setup</Button>}
     {hardwareProfileControls && <details open={manualOpen} onToggle={event => setManualOpen(event.currentTarget.open)} className="space-y-3">
       <summary className="cursor-pointer font-medium">Advanced graphics-card setup options</summary>
       <p className="text-sm text-muted-foreground">Measure graphics cards again or continue unfinished setup without downloading a model. Your folder and model choices are kept. Close these options to return to guided setup.</p>
