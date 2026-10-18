@@ -2604,11 +2604,12 @@ mod tests {
             }
         }
         shutdown.send(()).unwrap();
+        // The owned server's join proves shutdown; parallel fixtures may reuse its endpoint.
         tokio::time::timeout(Duration::from_secs(2), serving)
             .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
+            .expect("owned API server did not stop within two seconds")
+            .expect("owned API server task panicked")
+            .expect("owned API server failed during shutdown");
         let persisted = std::fs::read(&state_path).unwrap();
         assert!(!persisted
             .windows(passphrase.len())
@@ -2617,7 +2618,6 @@ mod tests {
             .windows(plain.len())
             .any(|window| window == plain.as_bytes()));
         assert!(service.snapshot().await.workspaces.is_empty());
-        assert!(tokio::net::TcpStream::connect(endpoint).await.is_err());
     }
 
     #[tokio::test]
@@ -2966,12 +2966,12 @@ mod tests {
         assert_eq!(state["assignments"].as_array().unwrap().len(), 2);
         assert!(!state.to_string().contains("model-secret"));
         shutdown.send(()).unwrap();
+        // The owned server's join proves shutdown; parallel fixtures may reuse its endpoint.
         tokio::time::timeout(Duration::from_secs(2), serving)
             .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        assert!(tokio::net::TcpStream::connect(endpoint).await.is_err());
+            .expect("owned API server did not stop within two seconds")
+            .expect("owned API server task panicked")
+            .expect("owned API server failed during shutdown");
         drop(client);
         drop(local_api);
         drop(service);
