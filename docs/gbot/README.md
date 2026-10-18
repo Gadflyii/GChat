@@ -469,6 +469,13 @@ that probe makes the new regression fail deterministically. The fixed suite
 passes all 25 runs (425 cases); formatting, `cargo check`, strict Clippy and
 one full `make verify` pass. Result: `out/gchat-ssh-fixture-20261018/result.json`.
 
+API fixture follow-up qualified on Linux on 2026-10-18: the credential-import
+and paired-assignment tests retain the two-second join of their own server task.
+A timeout, task panic or server error still fails teardown. They no longer probe
+the released endpoint, which another parallel fixture may already own. Both
+focused tests, `cargo check`, strict Clippy and one full `make verify` pass.
+Evidence: `out/gchat-api-ssh-teardown-fixture-20261018/result.json`.
+
 ## Sleeping icon visual qualification — C7
 
 `GBOT-SLEEPING-ICON-PROPORTIONS-20261017`: the ordinary installed functional
