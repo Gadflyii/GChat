@@ -7,6 +7,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@layer utilities {
+  /* Closing details hides its contents, but space-y-* still puts a margin on
+     the summary. Override it in the utility layer so that margin cannot win. */
+  details:not([open]) > summary {
+    margin-block-end: 0;
+  }
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -224,12 +232,6 @@
   input[type='checkbox']:focus-visible,
   input[type='radio']:focus {
     @apply outline-2 outline-offset-2 outline-ring;
-  }
-
-  /* A collapsed <details> keeps the gap that space-y-* puts under its summary,
-     leaving an empty band inside the box. */
-  details:not([open]) > summary {
-    margin-block-end: 0;
   }
 
   /* Native <progress> bars: a themed track and fill, and a moving fill when the
