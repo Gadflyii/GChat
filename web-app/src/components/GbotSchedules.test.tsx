@@ -415,6 +415,201 @@ it('retains a failed schedule draft and lets the user retry creating it', async 
   expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
 })
 
+it('retries loading saved schedules without losing a draft or submitting it', async () => {
+  const retry = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  const recovery = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  request
+    .mockRejectedValueOnce(new Error('Schedule list unavailable'))
+    .mockReturnValueOnce(retry.promise)
+    .mockReturnValueOnce(recovery.promise)
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Schedule list unavailable'
+  )
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  expect(request.mock.calls).toEqual([['schedules']])
+  expect(screen.queryByText('Check the calendar')).not.toBeInTheDocument()
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Prepare my notes' },
+  })
+  fireEvent.change(screen.getByLabelText('Schedule start time'), {
+    target: { value: '2030-01-02T09:00' },
+  })
+  const form = screen.getByRole('form', { name: 'Schedule a bot task' })
+  const retryButton = screen.getByRole('button', {
+    name: 'Retry loading schedules',
+  })
+  act(() => {
+    fireEvent.click(retryButton)
+    fireEvent.click(retryButton)
+    fireEvent.submit(form)
+  })
+  expect(request.mock.calls).toEqual([['schedules'], ['schedules']])
+  expect(retryButton).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Loading schedules…')
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
+  expect(screen.getByLabelText('Scheduled task prompt')).toBeDisabled()
+  expect(screen.getByLabelText('Schedule start time')).toBeDisabled()
+
+  await act(async () => retry.reject('Connection still unavailable'))
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Connection still unavailable'
+  )
+  expect(retryButton).toBeEnabled()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Prepare my notes'
+  )
+  expect(screen.getByLabelText('Schedule start time')).toHaveValue(
+    '2030-01-02T09:00'
+  )
+  expect(request.mock.calls).toEqual([['schedules'], ['schedules']])
+
+  fireEvent.click(retryButton)
+  expect(retryButton).toBeDisabled()
+  await act(async () =>
+    recovery.resolve({
+      schedules: [
+        schedule,
+        {
+          ...schedule,
+          id: 'other',
+          workspace_id: 'bot-two',
+          prompt: 'Other bot task',
+        },
+      ],
+      stopped: null,
+    })
+  )
+  expect(screen.getByText('Check the calendar')).toBeInTheDocument()
+  expect(screen.queryByText('Other bot task')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeEnabled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Retry loading schedules' })
+  ).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Prepare my notes'
+  )
+  expect(screen.getByLabelText('Schedule start time')).toHaveValue(
+    '2030-01-02T09:00'
+  )
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeEnabled()
+  expect(request.mock.calls).toEqual([
+    ['schedules'],
+    ['schedules'],
+    ['schedules'],
+  ])
+})
+
+it('preserves a failed schedule draft during an explicit list retry', async () => {
+  const create = deferred<unknown>()
+  const listFailure = deferred<never>()
+  const reload = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  const createRetry = deferred<unknown>()
+  request
+    .mockResolvedValueOnce({ schedules: [schedule], stopped: null })
+    .mockReturnValueOnce(create.promise)
+    .mockReturnValueOnce(listFailure.promise)
+    .mockReturnValueOnce(reload.promise)
+    .mockReturnValueOnce(createRetry.promise)
+    .mockResolvedValueOnce({
+      schedules: [
+        schedule,
+        { ...schedule, id: 'new-schedule', prompt: 'Prepare my notes' },
+      ],
+      stopped: null,
+    })
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Prepare my notes' },
+  })
+  fireEvent.change(screen.getByLabelText('Schedule start time'), {
+    target: { value: '2030-01-02T09:00' },
+  })
+  fireEvent.click(screen.getByRole('button', { name: 'Create schedule' }))
+  await act(async () => create.reject(new Error('Could not save schedule')))
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not save schedule')
+  taskUpdate()
+  await act(async () =>
+    listFailure.reject(new Error('Schedule list unavailable'))
+  )
+  const alerts = screen.getAllByRole('alert')
+  expect(alerts).toHaveLength(2)
+  expect(alerts.map((alert) => alert.textContent)).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining('Could not save schedule'),
+      expect.stringContaining('Schedule list unavailable'),
+    ])
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Retry loading schedules' }))
+  expect(screen.getByRole('status')).toHaveTextContent('Loading schedules…')
+  expect(
+    screen.getByRole('button', { name: 'Retry loading schedules' })
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeDisabled()
+  expect(screen.getAllByRole('alert')).toHaveLength(2)
+  expect(
+    request.mock.calls.filter(([route]) => route === 'schedules/create')
+  ).toHaveLength(1)
+  await act(async () => reload.resolve({ schedules: [schedule], stopped: null }))
+
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not save schedule')
+  expect(screen.queryByText(/Schedule list unavailable/)).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Retry loading schedules' })
+  ).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeEnabled()
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Prepare my notes'
+  )
+  expect(screen.getByLabelText('Schedule start time')).toHaveValue(
+    '2030-01-02T09:00'
+  )
+  expect(screen.getByRole('button', { name: 'Create schedule' })).toBeEnabled()
+  expect(
+    request.mock.calls.filter(([route]) => route === 'schedules/create')
+  ).toHaveLength(1)
+
+  fireEvent.click(screen.getByRole('button', { name: 'Create schedule' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  const payload = {
+    workspace_id: 'bot-one',
+    prompt: 'Prepare my notes',
+    timing: {
+      kind: 'once',
+      at: Math.floor(new Date('2030-01-02T09:00').getTime() / 1000),
+    },
+    missed_run_policy: 'run_latest',
+  }
+  expect(
+    request.mock.calls.filter(([route]) => route === 'schedules/create')
+  ).toEqual([
+    ['schedules/create', payload],
+    ['schedules/create', payload],
+  ])
+  await act(async () => createRetry.resolve(undefined))
+  expect(screen.getByText('Prepare my notes')).toBeInTheDocument()
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(request.mock.calls.map(([route]) => route)).toEqual([
+    'schedules',
+    'schedules/create',
+    'schedules',
+    'schedules',
+    'schedules/create',
+    'schedules',
+  ])
+})
+
 it('clears a schedule-list connection error when a task update refresh succeeds', async () => {
   request
     .mockRejectedValueOnce(new Error('Schedule list unavailable'))

@@ -1,5 +1,38 @@
 # Gbot design
 
+## Recovering a failed schedule read — Gchat 2
+
+`GBOT-SCHEDULE-LOAD-RETRY`, based on main `16a63c18e`, fixes the schedule
+list offering no recovery after a read fails. Saved tasks can be missing from
+the view, so their Disable schedule controls are unavailable. Opening
+Scheduled tasks does not reload the list.
+
+A load failure now offers Retry loading schedules. It reads the list again,
+keeps the draft, shows loading progress and blocks overlapping clicks or
+schedule changes until the request settles. A repeated failure keeps Retry
+available. A successful read restores saved tasks and clears only the load
+error. Any failed save remains visible until the user explicitly retries it;
+list recovery never replays a write. Create schedule keeps its own label while
+the list loads.
+
+Both deferred regressions fail on unchanged main (15 cases filtered): Retry
+is missing and a failed save hides the later load error. All 17 focused
+schedule cases pass with the fix. They cover repeated load failure, explicit
+recovery, duplicate clicks, blocked writes, preserved drafts, separate error
+messages and an explicit save retry with its original payload.
+
+One isolated S1 `make verify` passes on 18 October, 08:24:09–08:32:00
+UTC: 3,513 app, 127 extension and 1,276 Rust tests pass; six app tests are
+skipped and 28 Rust tests ignored. Lint, type checking, quality guards and all
+six coverage floors pass. Source, test and documentation hashes match before
+and after the gate; this receipt was added afterward. The private S1 build
+and cache were removed, the shared donor preserved, and CPUs 96–103 returned
+at 08:33 UTC; booking 3158 canceled. Evidence:
+`out/gchat2-schedule-load-retry-20261018/{result.json,SUMMARY.md}`.
+FRESH and OLD remain off with original XML and Gchat 2 custody; this leaf
+uses inert schedule responses and does not qualify live scheduled execution
+or native Windows.
+
 ## SSH key fields stay stable during requests — Gchat 2
 
 `GBOT-LAN-KEY-FIELDS-BUSY`, based on main `1ba852d1e`, fixes advanced

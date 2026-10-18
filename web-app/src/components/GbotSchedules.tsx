@@ -59,12 +59,12 @@ function WorkspaceSchedules({
   const [pending, setPending] = useState<{
     label: string
     scheduleId?: string
+    refreshing?: boolean
   }>()
   const pendingRef = useRef(false)
   const busy = !!pending
   const [error, setError] = useState('')
   const [refreshError, setRefreshError] = useState('')
-  const visibleError = error || refreshError
   const [stopped, setStopped] = useState<string | null>(null)
   const refreshVersion = useRef(0)
   const refresh = useCallback(async () => {
@@ -94,6 +94,18 @@ function WorkspaceSchedules({
     }
   }, [refresh])
 
+  async function retryRefresh() {
+    if (pendingRef.current) return
+    pendingRef.current = true
+    setPending({ label: 'Loading schedules…', refreshing: true })
+    try {
+      await refresh()
+    } finally {
+      pendingRef.current = false
+      setPending(undefined)
+    }
+  }
+
   async function perform(
     label: string,
     action: () => Promise<unknown>,
@@ -122,10 +134,24 @@ function WorkspaceSchedules({
           recover before schedules run again.
         </p>
       )}
-      {visibleError && (
+      {error && (
         <p role="alert" className="mb-3 text-sm text-destructive">
-          {visibleError}
+          {error}
         </p>
+      )}
+      {refreshError && (
+        <div className="mb-3 space-y-2">
+          <p role="alert" className="text-sm text-destructive">
+            Could not load scheduled tasks. {refreshError}
+          </p>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => void retryRefresh()}
+          >
+            Retry loading schedules
+          </Button>
+        </div>
       )}
       {pending && (
         <p role="status" className="mb-3 text-sm text-muted-foreground">
@@ -330,7 +356,9 @@ function WorkspaceSchedules({
           <Button
             disabled={busy || !!stopped || !assignment || !prompt.trim() || !at}
           >
-            {pending && !pending.scheduleId ? pending.label : 'Create schedule'}
+            {pending && !pending.scheduleId && !pending.refreshing
+              ? pending.label
+              : 'Create schedule'}
           </Button>
         </form>
       </details>
