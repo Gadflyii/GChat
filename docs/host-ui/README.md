@@ -8,21 +8,63 @@
 The original fix `6fb07b18c` (merged `d54a0db25`) remains ineffective: its
 closed-summary override sits in Tailwind's base layer, below the utilities
 layer that supplies `space-y-3`. The source-text assertion passes despite
-the cascade defect. The retained `d0a8d06bf` light narrow manual-Host box is
-consistent with an extra 12 px; the original 66→54 px claim has no retained
-geometry receipt and cannot establish current behavior.
+the cascade defect; the original reported 66→54 px reduction does not
+establish the retained product's behavior.
 
-Acceptance is removal of the extra spacing under closed summaries while
-open contents retain their spacing. Move the closed-state override into the
-utilities layer and remove the ineffective source-text assertion. Use the
-existing native inspector to measure baseline/candidate geometry and native
-clicks to open/close the real manual-Host section, plus focused tests and ONE
-`make verify`. No new harness, model/GPU work, setup behavior or Windows claim.
-Owned S1 root `/media/ron/SSD_RAID/ai/tmp-c3-closed-details-gap-20261018`
-will hold independent copies from the inactive Gchat 3 RC dependency/AppDir
-donor; no donor writes or shared fixture. CPU80–87, socket1 shared guard,
-nice10, max8; private HOME/XDG700/D-Bus/keyring/Xvfb. Next action: baseline
-native measurement, then current-source candidate build and acceptance.
+Native baseline source `ed68c7443` demonstrates the extra 12 px. The closed
+manual-Host box is **74 px** high: a 20 px summary, 20 px padding on each
+side, 1 px borders and a 12 px summary margin. Closed **Launch Server
+Instance** and **Server details** boxes are **66 px** high with the same
+20 px summary, 16 px padding, 1 px borders and 12 px margin. A native pointer
+click opens the manual section to **210 px**; its first label begins 12 px
+after the summary, preserving the intended open-content spacing.
+[Closed geometry](../../out/c3-closed-details-gap-20261018/baseline-closed.json)
+and [open geometry](../../out/c3-closed-details-gap-20261018/baseline-open.json)
+retain these measurements.
+
+Candidate `9ff124a55` moves the closed-state override from base to utilities
+and removes the ineffective source-text assertion. **72 focused checks PASS**;
+ONE `make verify` PASS: 3,518 app / 6 skipped, 127 extension, 1,284 native /
+28 ignored, six coverage floors, lint, types and quality guards. All six
+stages exit 0, including the frontend and native desktop/Host builds.
+
+Implementation and Linux native acceptance are **complete**. In Dark
+1500×1000 and Light 1024×800, closed sections have **zero summary margin**:
+manual Host is **62 px** (baseline 74), **Start a model with saved settings**
+and **Model and memory settings** are **54 px** (baseline 66), and advanced
+sections are **20 px** (baseline 32). No horizontal overflow is present;
+inspected screenshots are readable. Real pointer and Space open/close checks
+pass. Space on the focused manual summary closes it to 62 px with zero margin.
+[Dark closed geometry](../../out/c3-closed-details-gap-20261018/candidate-closed-dark-wide.json),
+[light narrow geometry](../../out/c3-closed-details-gap-20261018/candidate-closed-light-narrow.json),
+[dark model geometry](../../out/c3-closed-details-gap-20261018/candidate-models-closed-dark-wide.json),
+[light narrow model geometry](../../out/c3-closed-details-gap-20261018/candidate-models-closed-light-narrow.json)
+and [keyboard close](../../out/c3-closed-details-gap-20261018/candidate-keyboard-close.json)
+retain these checks.
+
+Open sections retain **12 px summary margin and content gap**. Measured open
+heights are manual Host 242 px, saved settings 373 px, model/memory settings
+194 px, nested **Choose model settings** 658 px, and hardware advanced 606 px.
+The actual model advanced section also opens with 12 px summary margin.
+Total open height depends on content; the preserved summary-to-content gap
+is the acceptance criterion.
+[Manual open](../../out/c3-closed-details-gap-20261018/candidate-open-dark-wide.json),
+[saved settings open](../../out/c3-closed-details-gap-20261018/candidate-model-open-light-narrow.json),
+[model/memory open](../../out/c3-closed-details-gap-20261018/candidate-settings-open-dark-wide.json),
+[nested settings open](../../out/c3-closed-details-gap-20261018/candidate-nested-open-dark-wide.json),
+[hardware advanced open](../../out/c3-closed-details-gap-20261018/candidate-advanced-open-light-narrow.json)
+and [model advanced open](../../out/c3-closed-details-gap-20261018/candidate-model-advanced-open-dark-wide.json)
+retain the open-state measurements.
+
+The independent private S1 fixture, Host, keyring/D-Bus, Xvfb and SSH observer
+are stopped. Owned root
+`/media/ron/SSD_RAID/ai/tmp-c3-closed-details-gap-20261018` and its build
+container were removed; CPU80–87 returned09:15Z and booking3180 canceled.
+The inactive Gchat 3 RC donor was unchanged, with no remaining hold. Only
+small evidence remains in
+[the result packet](../../out/c3-closed-details-gap-20261018/result.json).
+Next action: merge the fix and evidence. Windows, model/download/profile/GPU
+execution and setup behavior remain outside this CSS spacing leaf.
 
 ## First-run button spacing — C3, October 18
 
