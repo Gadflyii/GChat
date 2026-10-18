@@ -1,5 +1,30 @@
 # GInfer host UI
 
+## Saved Gbot cloud setup removal confirmation — October 18
+
+`GBOT-CLOUD-SETUP-REMOVE-CONFIRMATION`: **Remove saved review** previously
+called the removal service immediately. That service discards the provider
+access key and optional SSH key as well as the saved setup. The control now
+says **Remove saved setup** and opens the shared confirmation dialog, names the
+setup, explains which keys are removed and says the access key must be entered
+again to restart setup. Cancel receives initial focus. Accepting after leaving
+the page cannot dispatch removal. Existing cloud-resource and workspace
+eligibility checks remain in place.
+
+Four rendered regressions exercise Cancel, confirmed single submission while
+removal is pending, service rejection followed by an explicitly confirmed retry,
+and leaving the page before answering. All four fail on baseline `36c278f28`;
+all 77 route tests and three shared-dialog tests pass with the fix. ONE
+`make verify` passed on S1 CPUs96–103, 04:05:10–04:12:41Z: lint, typecheck,
+quality guards, 3,319 app tests (six skipped), 121 extension tests, all six
+coverage floors and 1,220 Rust tests (28 ignored). Pre/post source hashes
+matched. The service is mocked: no real cloud setup or stored credential was
+removed. FRESH/OLD stayed OFF with original XML, in Gchat 2
+custody. Windows: not built (dev phase); the change uses shared frontend APIs.
+
+Result: `out/gchat2-cloud-setup-remove-confirmation-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-cloud-setup-remove-confirmation-20261018`.
+
 ## Model deletion confirmation — Gchat 3 native acceptance, October 18
 
 `GUI-MODEL-DELETE-RESULT-20261017` passes its remaining native Linux
