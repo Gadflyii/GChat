@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ChoiceSelect } from '@/components/ui/choice-select'
-import { engineCommand, hardwareProfileBlocksLaunch, type EngineHost, type EngineSnapshot, type EngineLaunchOptions, type EngineStartupQuote } from '@/services/engines'
+import { engineCommand, hardwareProfileBlocksLaunch, type EngineHost, type EngineSnapshot, type EngineLaunchOptions, type EngineStartupQuote, type EngineHardwareProfile as HardwareProfileStatus } from '@/services/engines'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { EngineHostSharing } from '@/containers/EngineHostSharing'
 import { EngineGbotControl } from '@/containers/EngineGbotControl'
@@ -29,6 +29,7 @@ const modelActionMessages = {
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
   const refresh = useEngineHosts((s) => s.refresh)
   const publishSnapshot = useEngineHosts((s) => s.publishSnapshot)
+  const publishHardwareProfile = useEngineHosts((s) => s.publishHardwareProfile)
   const [modelId, setModelId] = useState('')
   const [gpus, setGpus] = useState<string[]>([])
   const [context, setContext] = useState(0)
@@ -103,6 +104,11 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       if (action === 'start' || action === 'stop' || action === 'restart' || action === 'reload') {
         const changedSnapshot = await engineCommand<EngineSnapshot>(action, { host_id: host.host_id, ...args })
         publishSnapshot(host.host_id, changedSnapshot)
+      } else if (action === 'hardware_profile') {
+        const status = await engineCommand<HardwareProfileStatus>(action, { host_id: host.host_id, ...args })
+        publishHardwareProfile(host.host_id, status)
+        setActionResult((args.body as { action: string }).action === 'cancel'
+          ? 'Graphics-card setup stop requested.' : 'Graphics-card setup requested.')
       } else {
         await engineCommand(action, { host_id: host.host_id, ...args })
       }

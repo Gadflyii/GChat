@@ -4,12 +4,13 @@ import type { ReactNode } from 'react'
 import { toast } from 'sonner'
 import { afterEach, expect, it, vi } from 'vitest'
 import { HostCard } from '../EngineHostModels'
-import { engineCommand, type EngineSnapshot, type EngineStartupQuote } from '@/services/engines'
+import { engineCommand, type EngineSnapshot, type EngineStartupQuote, type EngineHardwareProfile } from '@/services/engines'
 import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 
-const { refreshHosts, publishSnapshot } = vi.hoisted(() => ({
+const { refreshHosts, publishSnapshot, publishHardwareProfile } = vi.hoisted(() => ({
   refreshHosts: vi.fn().mockResolvedValue(undefined),
   publishSnapshot: vi.fn(),
+  publishHardwareProfile: vi.fn(),
 }))
 
 vi.mock('@/services/engines', async (original) => ({
@@ -17,13 +18,17 @@ vi.mock('@/services/engines', async (original) => ({
   engineCommand: vi.fn().mockResolvedValue({}),
 }))
 vi.mock('@/stores/engine-hosts-store', () => ({
-  useEngineHosts: (selector: (state: { refresh: typeof refreshHosts; publishSnapshot: typeof publishSnapshot }) => unknown) =>
-    selector({ refresh: refreshHosts, publishSnapshot }),
+  useEngineHosts: (selector: (state: { refresh: typeof refreshHosts; publishSnapshot: typeof publishSnapshot; publishHardwareProfile: typeof publishHardwareProfile }) => unknown) =>
+    selector({ refresh: refreshHosts, publishSnapshot, publishHardwareProfile }),
 }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }))
 vi.mock('../EngineProfilePicker', () => ({ EngineProfilePicker: () => null }))
 vi.mock('../EngineFirstRun', () => ({ EngineFirstRun: ({ hostId, hardwareProfileControls }: { hostId: string; hardwareProfileControls?: ReactNode }) => <section aria-label={`First-run setup for ${hostId}`}>{hardwareProfileControls}</section> }))
-afterEach(() => { cleanup(); settleConfirm(false); vi.clearAllMocks(); publishSnapshot.mockReset() })
+afterEach(() => {
+  cleanup(); settleConfirm(false); vi.clearAllMocks(); publishSnapshot.mockReset(); publishHardwareProfile.mockReset()
+  vi.mocked(engineCommand).mockReset().mockResolvedValue({})
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+})
 
 const localHost = { local: true, host_id: 'host', name: 'Host', base_url: 'https://host', certificate_sha256: '', client_id: 'client' }
 const importedModelSnapshot: EngineSnapshot = {
@@ -38,6 +43,88 @@ const importedQuote: EngineStartupQuote = {
   model_identity: { model_id: 'qwen3.8-27b', weights_id: 'int8' }, instance_count: 2, kv_arena_bytes: 1048576,
 }
 
+const hardwareProfile: EngineHardwareProfile = {
+  status: 'idle', pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'],
+  engine_path: '/bin/ginfer', job_id: null, pid: null, reprofile: false,
+  started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+  checkpoint_available: false, diagnostic_tail: '', error: null, available: true,
+}
+const hardwareActions = [
+  { action: 'ensure', status: 'idle', button: 'Measure graphics cards', cards: true },
+  { action: 'refresh', status: 'completed', button: 'Measure again', cards: true },
+  { action: 'resume', status: 'cancelled', button: 'Continue setup', cards: false },
+  { action: 'cancel', status: 'running', button: 'Stop setup', cards: false },
+] as const
+
+it.each(hardwareActions)('keeps the hardware setup action result for $action after a failed host-list read', async ({ action, status, button, cards }) => {
+  const snapshot: EngineSnapshot = { ...importedModelSnapshot, hardware_profile: {
+    ...hardwareProfile, status, job_id: status === 'idle' ? null : 'setup-job',
+  } }
+  const accepted: EngineHardwareProfile = { ...snapshot.hardware_profile!, status: action === 'cancel' ? 'cancelling' : 'running', job_id: 'setup-job' }
+  let finish!: (profile: EngineHardwareProfile) => void
+  vi.mocked(engineCommand).mockReturnValueOnce(new Promise<EngineHardwareProfile>(resolve => { finish = resolve }))
+  refreshHosts.mockRejectedValueOnce(new Error('host-list read failed')).mockResolvedValueOnce(undefined)
+  const view = render(<HostCard host={localHost} snapshot={snapshot} />)
+  publishHardwareProfile.mockImplementation((hostId, profile) => {
+    expect(hostId).toBe('host')
+    view.rerender(<HostCard host={localHost} snapshot={{ ...snapshot, hardware_profile: profile }} />)
+  })
+  if (cards) fireEvent.click(within(screen.getByRole('region', { name: 'First-run setup for host' })).getByRole('checkbox', { name: 'Graphics card 1: Fixture GPU' }))
+  const control = screen.getByRole('button', { name: button })
+  fireEvent.click(control)
+  fireEvent.click(control)
+  expect(control).toBeDisabled()
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('hardware_profile', {
+    host_id: 'host', body: { action, ...(cards ? { gpu_uuids: ['GPU-one'] } : {}) },
+  })
+  expect(screen.queryByText('Graphics-card setup requested.')).not.toBeInTheDocument()
+  expect(screen.queryByText('Graphics-card setup stop requested.')).not.toBeInTheDocument()
+  expect(publishHardwareProfile).not.toHaveBeenCalled()
+  await act(async () => { finish(accepted) })
+  expect(await screen.findByText(action === 'cancel' ? 'Graphics-card setup stop requested.' : 'Graphics-card setup requested.')).toBeVisible()
+  expect(publishHardwareProfile).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(screen.getByRole('progressbar', { name: 'Graphics-card setup in progress' })).toBeVisible()
+  if (action === 'cancel') expect(screen.getByRole('button', { name: 'Stopping setup…' })).toBeDisabled()
+  else expect(screen.getByRole('button', { name: 'Stop setup' })).toBeEnabled()
+  expect(screen.getByRole('alert')).toHaveTextContent('Could not refresh the host list.')
+  expect(screen.queryByText(/Could not change the graphics-card setup/)).not.toBeInTheDocument()
+  expect(screen.getByText('Error: host-list read failed')).not.toBeVisible()
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh host list' }))
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenCalledTimes(1)
+})
+
+it.each(hardwareActions)('allows explicit retry after a rejected hardware setup action result for $action', async ({ action, status, button, cards }) => {
+  const snapshot: EngineSnapshot = { ...importedModelSnapshot, hardware_profile: {
+    ...hardwareProfile, status, job_id: status === 'idle' ? null : 'setup-job',
+  } }
+  const accepted: EngineHardwareProfile = { ...snapshot.hardware_profile!, status: action === 'cancel' ? 'cancelling' : 'running', job_id: 'setup-job' }
+  vi.mocked(engineCommand).mockRejectedValueOnce(new Error('setup command refused')).mockResolvedValueOnce(accepted)
+  refreshHosts.mockResolvedValueOnce(undefined)
+  render(<HostCard host={localHost} snapshot={snapshot} />)
+  if (cards) fireEvent.click(within(screen.getByRole('region', { name: 'First-run setup for host' })).getByRole('checkbox', { name: 'Graphics card 1: Fixture GPU' }))
+  fireEvent.click(screen.getByRole('button', { name: button }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not change the graphics-card setup.')
+  expect(screen.getByText('Error: setup command refused')).not.toBeVisible()
+  expect(screen.getByRole('button', { name: button })).toBeEnabled()
+  expect(publishHardwareProfile).not.toHaveBeenCalled()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  expect(screen.queryByText('Graphics-card setup requested.')).not.toBeInTheDocument()
+  expect(screen.queryByText('Graphics-card setup stop requested.')).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: button }))
+  expect(await screen.findByText(action === 'cancel' ? 'Graphics-card setup stop requested.' : 'Graphics-card setup requested.')).toBeVisible()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(publishHardwareProfile).toHaveBeenCalledExactlyOnceWith('host', accepted)
+  expect(publishSnapshot).not.toHaveBeenCalled()
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  for (const call of vi.mocked(engineCommand).mock.calls) expect(call).toEqual(['hardware_profile', {
+    host_id: 'host', body: { action, ...(cards ? { gpu_uuids: ['GPU-one'] } : {}) },
+  }])
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+})
+
 it('keeps local hardware controls in setup and remote hardware controls directly accessible', async () => {
   const snapshot: EngineSnapshot = { ...importedModelSnapshot, hardware_profile: {
     status: 'running', pending_gpu_groups: [], stale_groups: [], gpu_uuids: ['GPU-one'],
@@ -45,6 +132,7 @@ it('keeps local hardware controls in setup and remote hardware controls directly
     started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
     checkpoint_available: true, diagnostic_tail: '', error: null, available: true,
   } }
+  vi.mocked(engineCommand).mockResolvedValueOnce({ ...snapshot.hardware_profile, status: 'cancelling' })
   const view = render(<HostCard host={localHost} snapshot={snapshot} />)
   const setup = screen.getByRole('region', { name: 'First-run setup for host' })
   expect(within(setup).getByRole('progressbar', { name: 'Graphics-card setup in progress' })).toBeVisible()

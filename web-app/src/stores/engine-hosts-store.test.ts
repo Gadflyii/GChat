@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useLocalApiServer } from '@/hooks/useLocalApiServer'
 import { useEngineHosts, hasReadyHostInstance } from '@/stores/engine-hosts-store'
-import { engineCommand } from '@/services/engines'
+import { engineCommand, type EngineHardwareProfile, type EngineHost, type EngineSnapshot } from '@/services/engines'
 
 const providers = vi.hoisted(() => ({
   getProviderByName: vi.fn(() => ({ provider: 'ginfer-lan' })),
@@ -16,6 +16,150 @@ vi.mock('@/services/engines', async (original) => ({
   ...(await original<object>()),
   engineCommand: vi.fn(),
 }))
+
+describe('Host hardware-profile publication', () => {
+  const host: EngineHost = { host_id: 'local', local: true, name: 'This computer',
+    base_url: 'https://localhost', certificate_sha256: '', client_id: 'client' }
+  const idle: EngineHardwareProfile = {
+    status: 'idle', job_id: null, pid: null, reprofile: false,
+    started_unix_ms: null, finished_unix_ms: null, profile_path: '/hardware.json',
+    gpu_uuids: ['GPU-one'], engine_path: '/bin/ginfer', pending_gpu_groups: [], stale_groups: [],
+    checkpoint_available: false, diagnostic_tail: '', error: null, available: true,
+  }
+  const cancelled: EngineHardwareProfile = { ...idle, status: 'cancelled', job_id: 'job',
+    started_unix_ms: 100, finished_unix_ms: 200 }
+  const initial: EngineSnapshot = {
+    host_id: 'local', display_name: 'This computer', revision: 20, boot_id: 'first-boot', gpus: [],
+    models: [{ id: 'old-model', path: '/old.ginfer', artifact_set: false,
+      metadata: { identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' }, tp_size: 1, draft_tp: 0, size_bytes: 1 } }],
+    instances: [{ instance_id: 'old-instance', session_id: 'old-session', display_name: 'Old model',
+      upstream_model_id: 'old-model', status: 'ready', configuration: { gpu_uuids: ['GPU-one'], max_context: 4096, concurrency: 1 } }],
+    hardware_profile: idle,
+  }
+  beforeEach(() => {
+    useEngineHosts.setState({ hosts: [host], snapshots: { local: initial }, refreshing: false, errors: {} })
+    providers.getProviderByName.mockReturnValue({ provider: 'ginfer-lan' })
+    providers.updateProvider.mockClear()
+    providers.selectModelProvider.mockClear()
+  })
+  const pendingRead = () => {
+    let resolve!: (snapshot: EngineSnapshot) => void
+    let reject!: (error: Error) => void
+    let readStarted!: () => void
+    const started = new Promise<void>(done => { readStarted = done })
+    const response = new Promise<EngineSnapshot>((done, fail) => { resolve = done; reject = fail })
+    vi.mocked(engineCommand).mockImplementation(async action => {
+      if (action === 'list') return { registered: [host], discovered: [] } as never
+      readStarted()
+      return response as never
+    })
+    return { started, resolve, reject }
+  }
+
+  it('publishes accepted setup status onto the latest snapshot without changing errors or chat models', () => {
+    const latest = { ...initial, revision: 21, instances: [{ ...initial.instances[0], status: 'stopped' as const }] }
+    useEngineHosts.getState().publishSnapshot('local', latest)
+    useEngineHosts.setState({ errors: { local: 'Snapshot unavailable' } })
+    providers.updateProvider.mockClear()
+    providers.selectModelProvider.mockClear()
+
+    useEngineHosts.getState().publishHardwareProfile('local', cancelled)
+
+    expect(useEngineHosts.getState().snapshots.local).toEqual({ ...latest, hardware_profile: cancelled })
+    expect(useEngineHosts.getState().snapshots.local.models).toBe(latest.models)
+    expect(useEngineHosts.getState().snapshots.local.instances).toBe(latest.instances)
+    expect(useEngineHosts.getState().errors).toEqual({ local: 'Snapshot unavailable' })
+    expect(providers.updateProvider).not.toHaveBeenCalled()
+    expect(providers.selectModelProvider).not.toHaveBeenCalled()
+  })
+
+  it('does not fabricate a snapshot when an accepted setup response outlives its Host', () => {
+    useEngineHosts.setState({ hosts: [], snapshots: {} })
+    useEngineHosts.getState().publishHardwareProfile('local', cancelled)
+    expect(useEngineHosts.getState().snapshots).toEqual({})
+    expect(providers.updateProvider).not.toHaveBeenCalled()
+  })
+
+  it('merges accepted setup status without losing newer model and instance data from an in-flight read', async () => {
+    const read = pendingRead()
+    const refreshing = useEngineHosts.getState().refresh()
+    await read.started
+    const newer: EngineSnapshot = { ...initial, revision: 22,
+      models: [{ ...initial.models[0], id: 'new-model', path: '/new.ginfer' }],
+      instances: [{ ...initial.instances[0], instance_id: 'new-instance', session_id: 'new-session', upstream_model_id: 'new-model' }] }
+
+    useEngineHosts.getState().publishHardwareProfile('local', cancelled)
+    read.resolve(newer)
+    await refreshing
+
+    expect(useEngineHosts.getState().snapshots.local).toEqual({ ...newer, hardware_profile: cancelled })
+    expect(useEngineHosts.getState().snapshots.local.models).toBe(newer.models)
+    expect(useEngineHosts.getState().snapshots.local.instances).toBe(newer.instances)
+    expect(providers.updateProvider.mock.calls.at(-1)?.[1].models.map((model: { id: string }) => model.id))
+      .toEqual(['ginfer/local/new-instance'])
+  })
+
+  it('retains accepted setup status and offline protection when an in-flight snapshot read fails', async () => {
+    const read = pendingRead()
+    const refreshing = useEngineHosts.getState().refresh()
+    await read.started
+    useEngineHosts.getState().publishHardwareProfile('local', cancelled)
+    read.reject(new Error('Snapshot connection lost'))
+    await refreshing
+
+    expect(useEngineHosts.getState().snapshots.local.hardware_profile).toBe(cancelled)
+    expect(useEngineHosts.getState().snapshots.local.instances).toBe(initial.instances)
+    expect(useEngineHosts.getState().errors.local).toBe('Error: Snapshot connection lost')
+    expect(hasReadyHostInstance(useEngineHosts.getState())).toBe(false)
+    expect(providers.updateProvider.mock.calls.at(-1)?.[1].models).toEqual([])
+  })
+
+  it('lets a later successful refresh replace accepted setup status with actual completion', async () => {
+    const running: EngineHardwareProfile = { ...cancelled, status: 'running', finished_unix_ms: null }
+    useEngineHosts.getState().publishHardwareProfile('local', running)
+    const completed: EngineHardwareProfile = { ...running, status: 'completed', finished_unix_ms: 300 }
+    const newer = { ...initial, revision: 22, hardware_profile: completed }
+    vi.mocked(engineCommand).mockImplementation(async action => action === 'list'
+      ? { registered: [host], discovered: [] } as never : newer as never)
+
+    await useEngineHosts.getState().refresh()
+
+    expect(useEngineHosts.getState().snapshots.local).toBe(newer)
+    expect(useEngineHosts.getState().snapshots.local.hardware_profile).toBe(completed)
+  })
+
+  it('does not overlay old setup status onto an in-flight snapshot from a restarted Host', async () => {
+    const read = pendingRead()
+    const refreshing = useEngineHosts.getState().refresh()
+    await read.started
+    useEngineHosts.getState().publishHardwareProfile('local', cancelled)
+    const restarted = { ...initial, revision: 1, boot_id: 'second-boot' }
+    read.resolve(restarted)
+    await refreshing
+
+    expect(useEngineHosts.getState().snapshots.local).toBe(restarted)
+    expect(useEngineHosts.getState().snapshots.local.hardware_profile).toBe(idle)
+  })
+
+  it.each(['before', 'after'] as const)('preserves a full lifecycle publication when setup status arrives %s it during a read', async order => {
+    const read = pendingRead()
+    const refreshing = useEngineHosts.getState().refresh()
+    await read.started
+    const stopped: EngineSnapshot = { ...initial, revision: 1,
+      instances: [{ ...initial.instances[0], status: 'stopped' }] }
+    if (order === 'before') useEngineHosts.getState().publishHardwareProfile('local', cancelled)
+    useEngineHosts.getState().publishSnapshot('local', stopped)
+    if (order === 'after') useEngineHosts.getState().publishHardwareProfile('local', cancelled)
+    read.resolve(initial)
+    await refreshing
+
+    expect(useEngineHosts.getState().snapshots.local).toEqual({ ...stopped,
+      hardware_profile: order === 'before' ? idle : cancelled })
+    expect(useEngineHosts.getState().errors).toEqual({})
+    expect(providers.updateProvider.mock.calls.at(-1)?.[1].models).toEqual([])
+    expect(hasReadyHostInstance(useEngineHosts.getState())).toBe(false)
+  })
+})
 
 describe('Host facade address projection', () => {
   it.each([21, 1])('retains a lifecycle Stop publication at revision %s when an earlier read finishes late', async revision => {
