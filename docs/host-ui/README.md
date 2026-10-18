@@ -1,5 +1,41 @@
 # GInfer host UI
 
+## Readable model-settings check — C3, October 18
+
+`GUI-STARTUP-CHECK-SIZES` is waiting on retained native input. The original readable-size/plural
+fix `d3aa2668c`, merged `b4bba8b23`, is delivered; later plain language uses
+“model copy/copies” and “graphics-card conversation memory”. Acceptance
+remaining: native Check model settings shows formatted memory and the proper
+copy count, without a raw byte count or `instance(s)`. Existing focused/full
+gates cover the formatter and result. Retained `ed68c7443` is a pre-fix
+baseline and cannot qualify this wording. C7 owns the adjacent completed
+profile-card row; this item does not rerun profiling or load a model.
+
+The result sentence, `formatModelBytes` and imported-artifact quote regression
+are unchanged between retained desktop `11ce0355d`, tested source `1062ba9f8`
+and this branch. The existing ONE full gate passes all 69 Host-model cases
+and 48 model-release cases, including two-copy readable-memory output;
+no repeat gate is needed. The whole Host-card component has unrelated later
+changes, so compatibility is claimed only for this result and formatter.
+The retained pre-fix quote output is contrary evidence, not acceptance.
+
+Owned worktree `/ai/gchat-worktrees/c3-startup-check-sizes-20261018`, branch
+`docs/c3-startup-check-sizes-20261018`, base `3de78b829`. Next: recover a
+post-fix native result or copy-safe real schema-2 hardware profile, matching
+S1 Engine and artifact receipt for a source-compatible retained desktop.
+The real quote-only route opens a GPU context and reads the profile but does
+not start a resident model; it does not regenerate missing profile data.
+Gchat 3 and C7 retain no qualifying profile output; C4 was asked at 10:06Z
+and has not replied. Bounded recovery found no post-fix native quote receipt.
+The missing input is a copy-safe S1 schema-2 profile with its matching
+Engine/artifact receipt. No new profiling or model run is authorized by this
+evidence leaf; native acceptance stays open while other GUI work proceeds.
+No retained no-GPU quote executable is available. The historical completed
+job JSON is a UI record, not Engine hardware-profile data.
+Independent runtime copies, if needed,
+belong under S1 `/media/ron/SSD_RAID/ai/tmp-c3-startup-check-sizes-20261018`
+and will be removed after capture. No resources or fixture allocated yet.
+
 ## Progress bars — C3, October 18
 
 `GUI-PROGRESS-BARS` passes its remaining Linux native leaf. The original
