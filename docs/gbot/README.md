@@ -1,5 +1,27 @@
 # Gbot design
 
+## Failed cloud SSH checks keep retry guidance — Gchat 2
+
+`GBOT-CLOUD-SSH-ERROR-PERSISTENCE`, based on main `5e371d36e`, keeps
+failed Verify SSH access feedback beside that action when Check progress succeeds.
+The warning gives a plain retry step and keeps the technical diagnostic in closed
+Details. Progress refreshes do not retry SSH or enable the desktop; an accepted
+explicit SSH retry clears its warning. Checking a new identity or leaving the
+running-computer stage invalidates the old warning with its identity.
+
+Rendered Error and native-string regressions confirm the fingerprint, attach the
+computer, reject its SSH check, refresh progress and explicitly retry. Unchanged
+production reproduced both failures (13 filtered). Focused suite: 15 PASS
+(`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotSetup/CloudCosts.test.tsx`);
+lint: 0 errors / 5 existing warnings. One `make verify`, 2026-10-18
+12:37:51–12:41:23Z: PASS, 3,588 app / 6 skipped, 127 extension, 1,288 Rust /
+28 ignored across 23 summaries, all six critical coverage floors,
+lint/typecheck/guards. All 3,452 tracked source hashes and modes stayed unchanged;
+this final receipt was added afterward. CPU112–119 booking3284 returned 12:41Z;
+the private cache was retained idle for the coordinator.
+Evidence: `out/gchat2-cloud-ssh-error-persistence-20261018/result.json`.
+This source/rendered scope does not qualify live provider, SSH or native actions.
+
 ## Failed LAN bot removals keep recovery guidance — Gchat 2
 
 `GBOT-LAN-REMOVE-INLINE-ERROR`, based on main `fbebb98b7`, keeps a
