@@ -780,6 +780,36 @@ three exited containers were removed at 03:59:59Z, releasing 42.31 GB; the
 280 MB disposable source archive was also removed. Read-only donors remain.
 CPU 88–95 booking 2944 was canceled; returned 04:00Z. Next: reviewed branch
 integration; no further test run is required.
+## Host-managed download in the popover — C7 native acceptance
+
+`GUI-DOWNLOADS-POPOVER-MANAGED` remains blocked for its real-transfer native
+leaf. The merged listing/status source and prior focused/full gates remain
+valid; retained paused-journal screenshots do not establish that a download
+started in Models appears live in the popover.
+
+The October 18 source check found no supported private transfer route in
+current main or the retained `d0a8d06bf` AppDir. Models reads the compile-time
+`VITE_MODEL_CATALOG_URL`; Host reads `GINFER_MODEL_CATALOG_URL`. Both release
+validators require commit-pinned HTTPS Hugging Face `.ginfer` URLs, and Host
+catalog/transfer clients require HTTPS. The default catalog contains only
+unpublished placeholders without release metadata. The existing loopback
+resume test injects a job/client inside a unit test and cannot be started from
+native Models. This is the existing public-catalog release limitation, not a
+reason to weaken admission for a screenshot. Next: qualify the real transfer
+when Ron supplies the release catalog, or when an explicit development-fixture
+change is authorized. No native launch, model transfer or GPU use occurred.
+
+Owner C7, branch `test/c7-managed-downloads-native-20261018`, base `e0a67a528`,
+worktree `/ai/gchat-worktrees/c7-managed-downloads-native-20261018`. The authorized
+read-only `d0a8d06bf` AppDir copy is private at
+`/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir`
+(4.1 GB, all links dereferenced). Copy completed 06:07Z; booking 3072 canceled,
+returned 06:07Z. C3 donor custody was released immediately. The copy is retained
+only for C7's next native GUI leaf; it contains no borrowed profile or cache.
+Source references: `web-app/src/stores/model-catalog-store.ts`,
+`web-app/src/constants/models.ts`, `web-app/src/lib/model-release.ts` and
+`src-tauri/ginfer-host/src/model_downloads.rs`. No source changed or tests rerun.
+
 ## Downloads popover transfer status — C3, October 18
 
 `GUI-DOWNLOADS-POPOVER-STATUS` is fixed and merge-ready. The private native
