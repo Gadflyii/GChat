@@ -1,5 +1,32 @@
 # GInfer host UI
 
+## Gbot companion task-load retry — October 18
+
+`GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously
+cleared the companion history and disabled Send without a recovery control,
+even for a connected bot with a saved model. The companion now explains that
+tasks and approval requests could not load and offers **Retry loading tasks**.
+The retry reads state, tasks and approvals; it sends no task action. It disables
+the retry while loading, preserves the unsent draft through repeated failures,
+and restores history, approval requests and Send after a successful read.
+The raw cause remains in closed Details; misleading setup and empty-history
+prompts stay hidden while loading has failed.
+
+Baseline `ca25804f6`; rendered cases cover failures of each read, repeated
+failure, duplicate-click prevention, draft preservation and successful recovery.
+Both regressions fail baseline because Retry is absent; all 40 focused tests
+pass. ONE `make verify` passed on S1 CPUs96–103, 05:14:10–05:21:54Z:
+lint, typecheck, quality guards, 3,371 app tests (six skipped), 127 extension
+tests, all six coverage floors and 1,229 Rust tests (28 ignored). Source and
+test hashes matched before and after the gate. The private remote tree was
+removed and booking3020 canceled; CPUs returned05:22Z before the next booking.
+No backend, approval policy or task state changed.
+No VM, native Windows, model or live task was run. FRESH/OLD remain OFF with
+original XML, in Gchat 2 custody. Windows: not built (dev phase).
+
+Result: `out/gchat2-companion-task-load-retry-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-companion-task-load-retry-20261018`.
+
 ## Gbot human-help failure recovery — October 18
 
 `GBOT-HUMAN-HELP-INLINE-ERRORS`: Gbot settings and the companion previously
