@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -11,7 +12,9 @@ import { CredentialSetup } from '../CredentialSetup'
 const command = vi.hoisted(() => vi.fn())
 vi.mock('@/services/engines', () => ({ engineCommand: command }))
 afterEach(cleanup)
-beforeEach(() => command.mockReset())
+beforeEach(() => {
+  command.mockReset()
+})
 describe('secure storage intake', () => {
   it('reads only passive status on mount and checks the keyring after an explicit click', async () => {
     command.mockResolvedValue({
@@ -348,5 +351,187 @@ describe('secure storage intake', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Lock vault' }))
     await screen.findByRole('button', { name: 'Unlock vault' })
     expect(command).toHaveBeenLastCalledWith('credential_lock', {})
+  })
+})
+
+describe('Lock vault feedback', () => {
+  const unlocked = {
+    ready: true,
+    platform: 'linux',
+    can_install: false,
+    tier: 'passphrase',
+    state: 'ready',
+  }
+  const locked = { ...unlocked, ready: false, state: 'locked' }
+  const confirmLockMessage =
+    'Could not finish locking the vault. Choose Check again to confirm whether the vault is locked before continuing.'
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+
+  it('names a pending Lock, removes stale readiness and prevents duplicate locking', async () => {
+    const lock = deferred<typeof locked>()
+    command.mockResolvedValueOnce(unlocked).mockReturnValueOnce(lock.promise)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    const lockButton = await screen.findByRole('button', { name: 'Lock vault' })
+    expect(ready).toHaveBeenLastCalledWith(true)
+
+    fireEvent.click(lockButton)
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Locking the passphrase vault…'
+    )
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/You can continue setup/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Lock vault' })).toBeDisabled()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Lock vault' }))
+    expect(command).toHaveBeenCalledTimes(2)
+    expect(command).toHaveBeenLastCalledWith('credential_lock', {})
+
+    await act(async () => {
+      lock.resolve(locked)
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Unlock vault' })
+    ).toBeEnabled()
+    expect(
+      screen.queryByText(/Locking the passphrase vault/)
+    ).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+  })
+
+  it('keeps rejected Lock pending through its status read, then explains an unlocked result and permits one deliberate retry', async () => {
+    const statusRead = deferred<typeof unlocked>()
+    const retryLock = deferred<typeof locked>()
+    const nativeError = 'Native Lock cleanup failed after closing account access'
+    command
+      .mockResolvedValueOnce(unlocked)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockReturnValueOnce(statusRead.promise)
+      .mockReturnValueOnce(retryLock.promise)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Lock vault' }))
+
+    await waitFor(() => expect(command).toHaveBeenCalledTimes(3))
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Locking the passphrase vault…'
+    )
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/You can continue setup/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Lock vault' })).toBeDisabled()
+    expect(screen.queryByText(new RegExp(nativeError))).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+
+    await act(async () => {
+      statusRead.resolve(unlocked)
+    })
+    expect(
+      await screen.findByText(
+        'Could not finish locking the vault. The vault is currently unlocked. Choose Lock vault to try again.'
+      )
+    ).toBeVisible()
+    const errorDetails = screen.getByText('Lock error details').closest('details')!
+    expect(errorDetails).not.toHaveAttribute('open')
+    expect(errorDetails).toHaveTextContent(nativeError)
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+
+    const retry = screen.getByRole('button', { name: 'Lock vault' })
+    expect(retry).toBeEnabled()
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+    expect(command).toHaveBeenCalledTimes(4)
+    expect(command).toHaveBeenLastCalledWith('credential_lock', {})
+    expect(ready).toHaveBeenLastCalledWith(false)
+    await act(async () => {
+      retryLock.resolve(locked)
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Unlock vault' })
+    ).toBeEnabled()
+    expect(
+      screen.queryByText(/Could not finish locking the vault/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Lock error details')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+  })
+
+  it('does not claim a rejected Lock left the vault unlocked when the fresh status is locked', async () => {
+    const nativeError = 'Native Lock reported an error after locking credentials'
+    command
+      .mockResolvedValueOnce(unlocked)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(locked)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Lock vault' }))
+
+    expect(await screen.findByText(confirmLockMessage)).toBeVisible()
+    expect(
+      screen.queryByText(/The vault is currently unlocked/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/You can continue setup/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled()
+    const errorDetails = screen.getByText('Lock error details').closest('details')!
+    expect(errorDetails).not.toHaveAttribute('open')
+    expect(errorDetails).toHaveTextContent(nativeError)
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+  })
+
+  it('recovers an unknown Lock outcome with an explicit read-only Check without replaying Lock', async () => {
+    const recovery = deferred<typeof locked>()
+    const nativeError = 'Native Lock could not finish clearing connection state'
+    command
+      .mockResolvedValueOnce(unlocked)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockRejectedValueOnce(new Error('Passive vault status is unavailable'))
+      .mockReturnValueOnce(recovery.promise)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Lock vault' }))
+
+    expect(await screen.findByText(confirmLockMessage)).toBeVisible()
+    expect(
+      screen.queryByText(/The vault is currently unlocked/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/You can continue setup/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Lock vault' })
+    ).not.toBeInTheDocument()
+    const errorDetails = screen.getByText('Lock error details').closest('details')!
+    expect(errorDetails).not.toHaveAttribute('open')
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+    expect(ready).toHaveBeenLastCalledWith(false)
+
+    const check = screen.getByRole('button', { name: 'Check again' })
+    fireEvent.click(check)
+    expect(check).toBeDisabled()
+    expect(command).toHaveBeenCalledTimes(4)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
+    expect(
+      command.mock.calls.filter(([action]) => action === 'credential_lock')
+    ).toHaveLength(1)
+    await act(async () => {
+      recovery.resolve(locked)
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Unlock vault' })
+    ).toBeEnabled()
+    expect(screen.queryByText(confirmLockMessage)).not.toBeInTheDocument()
+    expect(screen.queryByText('Lock error details')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(command).toHaveBeenCalledTimes(4)
   })
 })
