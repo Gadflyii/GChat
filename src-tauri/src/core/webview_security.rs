@@ -340,3 +340,579 @@ mod tests {
         }
     }
 }
+
+/// Opt-in native acceptance; never starts the product or its credential/Host
+/// services. Run alone on an explicitly booked Windows desktop host.
+#[cfg(all(test, target_os = "windows", not(feature = "cli")))]
+mod windows_native_admission {
+    use super::*;
+    use serde_json::{json, Value};
+    use std::{
+        borrow::Cow,
+        path::PathBuf,
+        sync::{mpsc, Arc, Mutex},
+        time::{Duration, Instant},
+    };
+    use tauri::utils::assets::{AssetKey, AssetsIter, CspHash};
+    use webview2_com::{
+        take_pwstr, Microsoft::Web::WebView2::Win32::ICoreWebView2_2,
+        NavigationStartingEventHandler, NewWindowRequestedEventHandler,
+        WebMessageReceivedEventHandler, WebResourceResponseReceivedEventHandler,
+    };
+    use windows::{
+        core::{Interface, BOOL, HSTRING, PCWSTR, PWSTR},
+        Win32::System::{
+            StationsAndDesktops::{
+                CloseDesktop, CreateDesktopW, GetThreadDesktop, SetThreadDesktop,
+                DESKTOP_CONTROL_FLAGS, DESKTOP_CREATEMENU, DESKTOP_CREATEWINDOW, DESKTOP_ENUMERATE,
+                DESKTOP_READOBJECTS, DESKTOP_WRITEOBJECTS, HDESK,
+            },
+            Threading::GetCurrentThreadId,
+        },
+    };
+
+    struct PrivateDesktop {
+        original: HDESK,
+        owned: Option<HDESK>,
+    }
+
+    impl PrivateDesktop {
+        fn enter(name: &str) -> Result<Self, String> {
+            unsafe {
+                let original = GetThreadDesktop(GetCurrentThreadId()).map_err(|e| e.to_string())?;
+                let owned = CreateDesktopW(
+                    &HSTRING::from(name),
+                    PCWSTR::null(),
+                    None,
+                    DESKTOP_CONTROL_FLAGS(0),
+                    DESKTOP_CREATEWINDOW.0
+                        | DESKTOP_CREATEMENU.0
+                        | DESKTOP_READOBJECTS.0
+                        | DESKTOP_WRITEOBJECTS.0
+                        | DESKTOP_ENUMERATE.0,
+                    None,
+                )
+                .map_err(|e| e.to_string())?;
+                if let Err(error) = SetThreadDesktop(owned) {
+                    let _ = CloseDesktop(owned);
+                    return Err(error.to_string());
+                }
+                Ok(Self {
+                    original,
+                    owned: Some(owned),
+                })
+            }
+        }
+
+        fn close(&mut self) -> Result<(), String> {
+            if let Some(owned) = self.owned {
+                unsafe {
+                    SetThreadDesktop(self.original).map_err(|e| e.to_string())?;
+                    CloseDesktop(owned).map_err(|e| e.to_string())?;
+                }
+                self.owned = None;
+            }
+            Ok(())
+        }
+    }
+
+    impl Drop for PrivateDesktop {
+        fn drop(&mut self) {
+            let _ = self.close();
+        }
+    }
+
+    /// These paths did not exist before this fixture and have a UUID identifier
+    /// as their final component. Never call any product data-folder resolver.
+    struct PrivateData {
+        paths: Vec<PathBuf>,
+        identifier: String,
+    }
+
+    impl PrivateData {
+        fn new(identifier: &str) -> Result<Self, String> {
+            let mut paths = vec![
+                dirs::data_local_dir()
+                    .ok_or("No Windows local data directory")?
+                    .join(identifier),
+                dirs::cache_dir()
+                    .ok_or("No Windows cache directory")?
+                    .join(identifier),
+            ];
+            paths.sort();
+            paths.dedup();
+            for path in &paths {
+                if path.exists() {
+                    return Err(format!(
+                        "Refusing existing fixture data: {}",
+                        path.display()
+                    ));
+                }
+            }
+            Ok(Self {
+                paths,
+                identifier: identifier.into(),
+            })
+        }
+
+        fn cleanup(&self) -> Result<(), String> {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            loop {
+                let mut errors = Vec::new();
+                for path in &self.paths {
+                    if path.file_name().and_then(|v| v.to_str()) != Some(&self.identifier) {
+                        return Err("Private-data ownership check failed".into());
+                    }
+                    match std::fs::remove_dir_all(path) {
+                        Ok(()) => (),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (),
+                        Err(error) => errors.push(format!("{}: {error}", path.display())),
+                    }
+                }
+                if errors.is_empty() {
+                    return Ok(());
+                }
+                if Instant::now() >= deadline {
+                    return Err(errors.join("; "));
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+    }
+
+    impl Drop for PrivateData {
+        fn drop(&mut self) {
+            let _ = self.cleanup();
+        }
+    }
+
+    struct FixtureAssets {
+        html: Vec<u8>,
+        script: Vec<u8>,
+    }
+
+    impl tauri::Assets<tauri::Wry> for FixtureAssets {
+        fn get(&self, key: &AssetKey) -> Option<Cow<'_, [u8]>> {
+            match key.as_ref() {
+                "/probe.js" => Some(Cow::Borrowed(&self.script)),
+                "/" | "/index.html" | "/logs" => Some(Cow::Borrowed(&self.html)),
+                _ => None,
+            }
+        }
+
+        fn iter(&self) -> Box<AssetsIter<'_>> {
+            Box::new(
+                [
+                    (
+                        Cow::Borrowed("/index.html"),
+                        Cow::Borrowed(self.html.as_slice()),
+                    ),
+                    (
+                        Cow::Borrowed("/probe.js"),
+                        Cow::Borrowed(self.script.as_slice()),
+                    ),
+                ]
+                .into_iter(),
+            )
+        }
+
+        fn csp_hashes(&self, _: &AssetKey) -> Box<dyn Iterator<Item = CspHash<'_>> + '_> {
+            Box::new(std::iter::empty())
+        }
+    }
+
+    #[derive(Default)]
+    struct Observations {
+        events: Vec<Value>,
+        result: Option<Value>,
+        app_route: bool,
+    }
+
+    fn observe(state: &Arc<Mutex<Observations>>, event: Value) {
+        state.lock().unwrap().events.push(event);
+    }
+
+    // No bridge shim or parent command relay: these are calls made by the
+    // actual sandboxed document, through whatever bridge WebView2 gave it.
+    fn preview_html(metadata: &Value) -> String {
+        let script = r#"
+const m = __METADATA__;
+const violations = [];
+addEventListener('securitypolicyviolation', e => violations.push({directive:e.effectiveDirective, blocked:e.blockedURI}));
+const bounded = p => Promise.race([p, new Promise(r => setTimeout(() => r({kind:'timeout'}), 4000))]);
+async function invoke(command, payload) {
+  try {
+    return await bounded(window.__TAURI_INTERNALS__.invoke(command, payload).then(
+      value => ({kind:'success',value}),
+      error => { const text=String(error); return {kind: /not allowed|not permitted|denied.*permission|permission.*denied/i.test(text) ? 'native-acl-rejection' : /Origin header is not a valid URL/i.test(text) ? 'invalid-null-origin' : 'other-rejection',error:text}; }
+    ));
+  } catch(error) {
+    return {kind:typeof window.__TAURI_INTERNALS__?.invoke !== 'function' && error instanceof TypeError ? 'missing-bridge' : 'other-rejection',error:String(error)};
+  }
+}
+(async () => {
+  let parentAccess;
+  try { void parent.document.body; parentAccess='allowed'; } catch(e) { parentAccess=String(e); }
+  const app=invoke('join_path',{args:[m.directory,'joined.txt']});
+  const plugin=invoke('plugin:os|locale',{});
+  const asset=bounded(fetch(m.asset).then(r=>r.text()).then(value=>({kind:'success',value}),error=>({kind:'rejected',error:String(error)})));
+  const result={app:await app,plugin:await plugin,asset:await asset,parentAccess,violations,bridge:typeof window.__TAURI_INTERNALS__?.invoke,href:location.href};
+  parent.postMessage({fixture:m.fixture,type:'preview',result},'*');
+})();
+"#;
+        format!("<!doctype html><meta charset=\"utf-8\"><title>Private preview probe</title><script>{}</script>", script.replace("__METADATA__", &metadata.to_string()))
+    }
+
+    fn main_script(metadata: &Value) -> Vec<u8> {
+        r#"
+const m = __METADATA__;
+const send = data => window.chrome.webview.postMessage({fixture:m.fixture,...data});
+if (location.pathname === '/logs') {
+  send({type:'app-route',href:location.href});
+} else {
+  const bounded = p => Promise.race([p,new Promise(r=>setTimeout(()=>r({kind:'timeout'}),6500))]);
+  const call = (command,payload) => bounded(window.__TAURI_INTERNALS__.invoke(command,payload).then(value=>({kind:'success',value}),error=>({kind:'rejected',error:String(error)})));
+  (async () => {
+    const mainApp=await call('join_path',{args:[m.directory,'joined.txt']});
+    const mainPlugin=await call('plugin:os|locale',{});
+    const mainAsset=await bounded(fetch(m.asset).then(r=>r.text()).then(value=>({kind:'success',value}),error=>({kind:'rejected',error:String(error)})));
+    const frame=document.createElement('iframe');
+    frame.setAttribute('sandbox','allow-scripts');
+    const preview=bounded(new Promise(resolve=>addEventListener('message',function receipt(e) {
+      if(e.source===frame.contentWindow && e.origin==='null' && e.data?.fixture===m.fixture && e.data.type==='preview') {
+        removeEventListener('message',receipt); resolve({...e.data.result,eventOrigin:e.origin});
+      }
+    })));
+    frame.src=m.preview; document.body.append(frame);
+    const child=await preview;
+    // Resource requests use the real native filter. A native observer, rather
+    // than an opaque no-cors JS response, verifies every status/header below.
+    for(const uri of m.invalidResources) await bounded(fetch(uri,{mode:'no-cors'}).catch(()=>null));
+    const blob=URL.createObjectURL(new Blob(['<!doctype html><title>blocked</title>'],{type:'text/html'}));
+    const badFrame=document.createElement('iframe'); badFrame.src=blob; document.body.append(badFrame);
+    window.open('gchat-preview://localhost/'+m.id,'_blank');
+    location.href=m.preview;
+    await new Promise(r=>setTimeout(r,250));
+    location.href='https://example.invalid/gchat-native-admission';
+    await new Promise(r=>setTimeout(r,500));
+    send({type:'result',mainApp,mainPlugin,mainAsset,child});
+    URL.revokeObjectURL(blob);
+    setTimeout(()=>{location.href='/logs';},200);
+  })().catch(error=>send({type:'result',fatal:String(error)}));
+}
+"#.replace("__METADATA__", &metadata.to_string()).into_bytes()
+    }
+
+    fn install_observers(
+        window: &WebviewWindow,
+        state: Arc<Mutex<Observations>>,
+        fixture: String,
+    ) -> Result<(), String> {
+        let app = window.app_handle().clone();
+        let (sent, received) = mpsc::sync_channel(1);
+        window.with_webview(move |native| {
+            let result = (|| unsafe {
+                let view = native.controller().CoreWebView2()?;
+                let mut token = 0;
+                let messages = state.clone();
+                view.add_WebMessageReceived(&WebMessageReceivedEventHandler::create(Box::new(move |_, args| {
+                    let Some(args) = args else { return Ok(()) };
+                    let mut source=PWSTR::null(); args.Source(&mut source)?;
+                    let source=take_pwstr(source);
+                    let mut text=PWSTR::null(); args.WebMessageAsJson(&mut text)?;
+                    let text=take_pwstr(text);
+                    let Ok(value)=serde_json::from_str::<Value>(&text) else { return Ok(()) };
+                    if value["fixture"] != fixture || !source.starts_with("http://tauri.localhost/") { return Ok(()) }
+                    let done = {
+                        let mut state=messages.lock().unwrap();
+                        state.events.push(json!({"kind":"message","source":source,"value":value}));
+                        if value["type"] == "result" { state.result=Some(value); }
+                        else if value["type"] == "app-route" { state.app_route=true; }
+                        state.result.is_some() && state.app_route
+                    };
+                    if done { app.exit(0); }
+                    Ok(())
+                })), &mut token)?;
+                for (main_frame, observer) in [(true,state.clone()),(false,state.clone())] {
+                    let handler=NavigationStartingEventHandler::create(Box::new(move |_,args| {
+                        if let Some(args)=args {
+                            let mut uri=PWSTR::null(); args.Uri(&mut uri)?;
+                            let mut cancel=BOOL::default(); args.Cancel(&mut cancel)?;
+                            observe(&observer,json!({"kind":"navigation","mainFrame":main_frame,"uri":take_pwstr(uri),"cancelled":cancel.as_bool()}));
+                        }
+                        Ok(())
+                    }));
+                    if main_frame { view.add_NavigationStarting(&handler,&mut token)?; }
+                    else { view.add_FrameNavigationStarting(&handler,&mut token)?; }
+                }
+                let popups=state.clone();
+                view.add_NewWindowRequested(&NewWindowRequestedEventHandler::create(Box::new(move |_,args| {
+                    if let Some(args)=args {
+                        let mut uri=PWSTR::null(); args.Uri(&mut uri)?;
+                        let mut handled=BOOL::default(); args.Handled(&mut handled)?;
+                        observe(&popups,json!({"kind":"popup","uri":take_pwstr(uri),"handled":handled.as_bool()}));
+                    }
+                    Ok(())
+                })),&mut token)?;
+                let responses=view.cast::<ICoreWebView2_2>()?;
+                responses.add_WebResourceResponseReceived(&WebResourceResponseReceivedEventHandler::create(Box::new(move |_,args| {
+                    if let Some(args)=args {
+                        let request=args.Request()?;
+                        let mut uri=PWSTR::null(); request.Uri(&mut uri)?;
+                        let uri=take_pwstr(uri);
+                        if Url::parse(&uri).is_ok_and(|u|u.host_str()==Some("gchat-preview.localhost")) {
+                            let response=args.Response()?;
+                            let mut status=0; response.StatusCode(&mut status)?;
+                            let headers=response.Headers()?;
+                            let mut csp=PWSTR::null(); headers.GetHeader(&HSTRING::from("Content-Security-Policy"),&mut csp)?;
+                            let mut nosniff=PWSTR::null(); headers.GetHeader(&HSTRING::from("X-Content-Type-Options"),&mut nosniff)?;
+                            observe(&state,json!({"kind":"response","uri":uri,"status":status,"csp":take_pwstr(csp),"nosniff":take_pwstr(nosniff)}));
+                        }
+                    }
+                    Ok(())
+                })),&mut token)?;
+                Ok::<_,windows::core::Error>(())
+            })().map_err(|error|error.to_string());
+            let _=sent.send(result);
+        }).map_err(|error|error.to_string())?;
+        received.recv().map_err(|error| error.to_string())?
+    }
+
+    fn validate(state: &Observations, metadata: &Value, exit: i32) -> Result<(), String> {
+        let require = |condition, message: &str| {
+            if condition {
+                Ok(())
+            } else {
+                Err(message.to_string())
+            }
+        };
+        require(
+            exit == 0,
+            "Native event-loop timeout/failure (not a denial PASS)",
+        )?;
+        require(state.app_route, "Allowed same-origin route did not commit")?;
+        let result = state
+            .result
+            .as_ref()
+            .ok_or("No main result (not a denial PASS)")?;
+        require(
+            result["mainApp"]["kind"] == "success"
+                && result["mainApp"]["value"] == metadata["expectedJoin"],
+            "Main application invoke did not succeed",
+        )?;
+        require(
+            result["mainPlugin"]["kind"] == "success" && result["mainPlugin"]["value"].is_string(),
+            "Main os.locale invoke did not succeed",
+        )?;
+        require(
+            result["mainAsset"]["kind"] == "success"
+                && result["mainAsset"]["value"] == metadata["marker"],
+            "Main asset marker was not readable",
+        )?;
+        let child = &result["child"];
+        require(
+            child["eventOrigin"] == "null",
+            "Preview did not report from its opaque sandbox",
+        )?;
+        for command in ["app", "plugin"] {
+            let outcome = &child[command];
+            let blocked = outcome["kind"] == "native-acl-rejection"
+                || outcome["kind"] == "invalid-null-origin"
+                || (outcome["kind"] == "missing-bridge"
+                    && outcome["error"]
+                        .as_str()
+                        .is_some_and(|error| error.starts_with("TypeError:")));
+            require(blocked, &format!("Preview {command} lacks an observed invoke rejection; timeout/silence and unclassified errors are not denial evidence: {outcome}"))?;
+        }
+        require(
+            child["asset"]["kind"] == "rejected",
+            "Preview asset fetch was not rejected",
+        )?;
+        require(
+            child["violations"]
+                .as_array()
+                .is_some_and(|v| v.iter().any(|e| e["directive"] == "connect-src")),
+            "Preview asset rejection lacks actual connect-src CSP evidence",
+        )?;
+        require(
+            child["parentAccess"]
+                .as_str()
+                .is_some_and(|s| s.contains("SecurityError")),
+            "Sandbox preview accessed parent document",
+        )?;
+        let events = &state.events;
+        for uri in metadata["invalidResources"]
+            .as_array()
+            .ok_or("Missing resource expectations")?
+        {
+            require(
+                events.iter().any(|e| {
+                    e["kind"] == "response"
+                        && e["uri"] == *uri
+                        && e["status"] == 404
+                        && e["nosniff"] == "nosniff"
+                        && e["csp"] == super::super::artifact::PREVIEW_CONTENT_SECURITY_POLICY
+                }),
+                &format!("Reserved request lacks native local 404/CSP/no-sniff response: {uri}"),
+            )?;
+        }
+        require(
+            events.iter().any(|e| {
+                e["kind"] == "response" && e["uri"] == metadata["preview"] && e["status"] == 200
+            }),
+            "Valid preview did not receive native 200",
+        )?;
+        for uri in [
+            metadata["preview"].as_str().unwrap(),
+            "https://example.invalid/gchat-native-admission",
+        ] {
+            require(
+                events.iter().any(|e| {
+                    e["kind"] == "navigation"
+                        && e["mainFrame"] == true
+                        && e["uri"] == uri
+                        && e["cancelled"] == true
+                }),
+                &format!("Top navigation lacks actual native cancellation: {uri}"),
+            )?;
+        }
+        require(
+            events.iter().any(|e| {
+                e["kind"] == "navigation"
+                    && e["mainFrame"] == false
+                    && e["uri"].as_str().is_some_and(|s| s.starts_with("blob:"))
+                    && e["cancelled"] == true
+            }),
+            "Inherited-origin Blob frame lacks native cancellation",
+        )?;
+        require(
+            events
+                .iter()
+                .any(|e| e["kind"] == "popup" && e["handled"] == true),
+            "Native popup was not denied",
+        )
+    }
+
+    fn run_fixture() -> Result<(), String> {
+        let uuid = uuid::Uuid::new_v4().simple().to_string();
+        // Set the thread desktop before Tauri/COM creates any windows. Never
+        // switch the interactive input desktop, and never use product setup.
+        let mut desktop = PrivateDesktop::enter(&format!("gchat-native-admission-{uuid}"))?;
+        let identifier = format!("app.gchat.windows-native-admission.{uuid}");
+        let private = PrivateData::new(&identifier)?;
+        let root = std::env::var_os("GCHAT_WINDOWS_NATIVE_ADMISSION_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
+        if !root.is_absolute() || !root.is_dir() {
+            return Err("Fixture root must be an existing absolute owned directory".into());
+        }
+        let temp = tempfile::Builder::new()
+            .prefix("gchat-native-admission-")
+            .tempdir_in(&root)
+            .map_err(|e| e.to_string())?;
+        let marker = "gchat-private-asset-marker";
+        let marker_path = temp.path().join("asset-marker.txt");
+        std::fs::write(&marker_path, marker).map_err(|e| e.to_string())?;
+        let id = format!("windows-native-{uuid}");
+        let preview = format!("http://gchat-preview.localhost/{id}");
+        let encoded: String =
+            url::form_urlencoded::byte_serialize(marker_path.to_string_lossy().as_bytes())
+                .collect();
+        // encodeURIComponent semantics for a native absolute Windows path
+        // (form_urlencoded differs only for space, absent in the UUID child).
+        let asset = format!("http://asset.localhost/{}", encoded.replace('+', "%20"));
+        let metadata = json!({"fixture":uuid,"id":id,"directory":temp.path(),"expectedJoin":temp.path().join("joined.txt"),"asset":asset,"marker":marker,"preview":preview,"invalidResources":[
+            format!("https://gchat-preview.localhost/{id}"),
+            format!("http://gchat-preview.localhost:43121/{id}"),
+            "http://gchat-preview.localhost/missing",
+            format!("http://gchat-preview.localhost/{id}?query=1"),
+            "http://gchat-preview.localhost/%2Foutside"
+        ]});
+        let mut context: tauri::Context<tauri::Wry> = tauri::generate_context!();
+        context.config_mut().identifier = identifier;
+        context.config_mut().app.windows.clear();
+        context.config_mut().build.dev_url = None;
+        context.config_mut().build.frontend_dist = None;
+        // Deliberately retain the generated real capabilities and CSP.
+        context.set_assets(Box::new(FixtureAssets {
+            html:b"<!doctype html><meta charset=\"utf-8\"><title>Private native admission fixture</title><script src=\"/probe.js\" defer></script><body></body>".to_vec(),
+            script:main_script(&metadata),
+        }));
+        let app = tauri::Builder::default()
+            .any_thread()
+            .plugin(tauri_plugin_os::init())
+            .invoke_handler(tauri::generate_handler![
+                crate::core::filesystem::commands::join_path
+            ])
+            .build(context)
+            .map_err(|e| e.to_string())?;
+        let run_result = (|| {
+            super::super::artifact::set_artifact_html(
+                app.handle().clone(),
+                id,
+                preview_html(&metadata),
+            )?;
+            let rejected = tauri::utils::config::WindowConfig {
+                label: "rejected-native-fixture".into(),
+                url: tauri::WebviewUrl::External(Url::parse("https://example.invalid/").unwrap()),
+                ..Default::default()
+            };
+            if build_window(app.handle(), &rejected).is_ok() {
+                return Err("Initial foreign URL was accepted".to_string());
+            }
+            let config = tauri::utils::config::WindowConfig {
+                label: "main".into(),
+                title: "Private GChat native admission".into(),
+                visible: true,
+                data_directory: None,
+                ..Default::default()
+            };
+            let window = build_window(app.handle(), &config).map_err(|e| e.to_string())?;
+            let state = Arc::new(Mutex::new(Observations::default()));
+            install_observers(&window, state.clone(), uuid)?;
+            window
+                .navigate(Url::parse("http://tauri.localhost/").unwrap())
+                .map_err(|e| e.to_string())?;
+            drop(window);
+            let (finished, wait) = mpsc::channel();
+            let watchdog_app = app.handle().clone();
+            let watchdog = std::thread::spawn(move || {
+                if wait.recv_timeout(Duration::from_secs(40)).is_err() {
+                    watchdog_app.exit(124);
+                }
+            });
+            let exit = app.run_return(|_, _| {});
+            let _ = finished.send(());
+            let _ = watchdog.join();
+            let state = state.lock().unwrap();
+            let result = validate(&state, &metadata, exit);
+            println!(
+                "GCHAT_WINDOWS_NATIVE_ADMISSION {}",
+                json!({"metadata":metadata,"exit":exit,"events":state.events,"result":state.result,"validation":result.as_ref().err(),"productSetup":false,"credentialManager":false})
+            );
+            result
+        })();
+        // Cleanup is mandatory even for failed evidence. The browser/cache
+        // UUID children are separate from the explicit owned input root.
+        let data_cleanup = private.cleanup();
+        let input_cleanup = temp.close().map_err(|e| e.to_string());
+        let desktop_cleanup = desktop.close();
+        println!(
+            "GCHAT_WINDOWS_NATIVE_ADMISSION_CLEANUP {}",
+            json!({"privateData":data_cleanup.as_ref().err(),"inputs":input_cleanup.as_ref().err(),"desktop":desktop_cleanup.as_ref().err(),"paths":private.paths})
+        );
+        run_result
+            .and(data_cleanup)
+            .and(input_cleanup)
+            .and(desktop_cleanup)
+    }
+
+    #[test]
+    #[ignore = "Requires an explicitly booked Windows host; creates a private Win32 desktop and removes UUID browser data"]
+    fn windows_private_desktop_enforces_frame_and_command_admission() {
+        let result = std::thread::spawn(run_fixture)
+            .join()
+            .expect("Private GUI fixture thread panicked");
+        assert!(result.is_ok(), "{}", result.unwrap_err());
+    }
+}
