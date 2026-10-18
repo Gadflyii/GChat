@@ -1,0 +1,25 @@
+{
+  "started_utc": "2026-10-18T18:25:09.966318+00:00",
+  "pid": 241190,
+  "command": [
+    "taskset",
+    "-c",
+    "0-19",
+    "/home/ron/tmp-c5-consumer-launch-profiles-20261018/python311/bin/python3.11",
+    "/home/ron/tmp-c5-consumer-first-use-20261018/controls/natural.py",
+    "/home/ron/tmp-c5-consumer-first-use-20261018/evidence/laptop-muse-natural",
+    "--attach"
+  ],
+  "deadline_utc": "2026-10-18T18:55:00Z",
+  "api_key_configured": true,
+  "model_id": "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c",
+  "request_sha256": "5f83808bb1bee3e69ff393b9a209197ef2f38fecf91a1070d7a8bb48bd8c73ce",
+  "selected_profile_id": null,
+  "derived_catalog_source_id": "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated",
+  "application_ready_observed_utc": "2026-10-18T18:20:08.191069Z",
+  "application_instance_id": "a6cc56c4-2447-4be1-8a68-7decfa304e74",
+  "engine_max_concurrency": 1,
+  "client_count_scope": "C1 and C4 HTTP clients through application-selected C1 Engine",
+  "s1_pair_return_utc": "2026-10-18T18:24:00Z",
+  "booking": 408
+}

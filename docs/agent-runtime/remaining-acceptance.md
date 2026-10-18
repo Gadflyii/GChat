@@ -1530,8 +1530,47 @@ Source `a0e51478d` is merged as `97b387202`. The named CPU-only fixture
 columns stay unchanged` PASS on October 12: full 960 by 739 pixels and 961 by
 740 at the same 24 rows and 80 columns. Evidence:
 `/ai/gchat/out/gchat-open-items-20261012/pty-geometry-test.log`.
-No new source change or repeat test was needed. Installed geometry and mouse
-acceptance remain pending.
+No new source change or repeat test was needed.
+
+Installed native Linux acceptance PASS on October 18 using the accepted DEB
+from GChat `3e32ad0c9` / Engine `b26ec5b8f`, on S1 GPU1 / CPUs24–31.
+The fresh private SSD fixture reused the accepted same-Engine/GPU hardware
+profile without changing measurements or model settings. Normal Start loaded
+the Qwen3.8 INT model. Explicitly selecting that loaded model in Chat configured
+Code and opened its connected TUI; merely displaying the suggested Chat model
+had not selected it for the local API.
+
+| Native observation | Result |
+| --- | --- |
+| 1,200 × 800 app window | Container 960 × 739; kernel PTY pixels 960 × 739 |
+| Resize app to 1,201 × 801 | Container and kernel pixels 961 × 740 |
+| Grid across the pixel-only resize | Unchanged at 35 rows × 118 columns |
+| Type `/models`, then mouse-click the configured GChat model | Menu closes; the same model remains selected |
+
+No inference prompt, account or Hermes provisioning was used. This accepts
+installed Code geometry and ordinary model-menu mouse input; it does not claim
+that the units correction improves mouse behavior. The retained October 12
+focused fixture remains the source gate. This evidence-only update requires
+`git diff --check`, with no new full verification gate.
+
+Two fixture failures were corrected before acceptance. A model-file-only NAS
+bind changed the parent filesystem identity; binding the existing NAS root
+read-only preserved device `0:72` throughout. After Docker CPU allocation
+changed following GPU creation, NVML was unavailable; stopping and starting
+the same container at final CPUs24–31 restored the exact Host inventory command. Future
+GPU fixtures must use the final CPU allocation at creation. Neither fixture
+failure establishes a product regression.
+
+Evidence: `/ai/gchat/out/c3-code-pty-native-20261018/`, including
+`91-geometry-baseline.json`, `91-pty-baseline.json`,
+`92-geometry-plus-one.json`, `92-pty-plus-one.json`, and the
+`93-code-models.png` / `94-mouse-selected.png` mouse observations.
+GPU1 returned at 20:33Z; the private container, HOME, runtime and X session were
+retired. No model copy was created. The accepted installer packages remain on
+S1 at the paths recorded in `docs/installer-refresh/README.md`. The inline
+3 GiB backstop did not trigger. Normal app Close is not claimed by this pass:
+the retained DEB predates the separately accepted Stop/Close lifetime fix.
+Broader OI-068 crash recovery, power loss, Hermes and Windows remain PARTIAL.
 
 The contrary same-session observation is retained at
 `/ai/gchat/out/linux-code-tui-20261011/geometry-probe.json`: supplying full 960 by

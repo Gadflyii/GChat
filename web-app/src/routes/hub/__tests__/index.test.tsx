@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { spyConfirm } from '@/test/confirm'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,8 +7,8 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { ModelManagement as ModelManagementView, type ModelManagementTab } from '@/containers/ModelManagement'
 import { Route } from '../index'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
-import type { ModelRelease } from '@/lib/model-release'
-import type { LocalModelLoadProgress } from '@/services/engines'
+import type { ModelDownload, ModelRelease } from '@/lib/model-release'
+import type { EngineSnapshot, LocalModelLoadProgress } from '@/services/engines'
 import type { DialogOpenOptions } from '@/services/dialog/types'
 type TestProvider = { provider: string; settings?: ProviderSetting[]; models: { id: string; displayName: string; path: string; source?: string }[] }
 const mocks = vi.hoisted(() => ({
@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   catalog: [] as unknown[], catalogError: null as string | null, errors: {} as Record<string, string>,
   resources: { ready: true as boolean | null, error: '' },
   localSnapshot: null as null | Record<string, unknown>,
+  remoteDownloads: [] as ModelDownload[],
+  publishSnapshot: vi.fn<(hostId: string, snapshot: EngineSnapshot) => void>(),
   controlHost: vi.fn(async () => {}),
 }))
 vi.mock('@gchat/core', async importOriginal => ({
@@ -56,8 +58,8 @@ vi.mock('@/hooks/useHardware', () => ({ useHardware: (selector: (s: unknown) => 
 }) }))
 vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog, error: mocks.catalogError, refresh: mocks.refreshCatalog }) }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (s: unknown) => unknown) => selector({
-  hosts: [{ host_id: 'remote', name: 'Lab server' }, ...(mocks.localSnapshot ? [{ host_id: 'local-host', name: 'This computer', local: true }] : [])], errors: mocks.errors, refresh: mocks.refresh,
-  snapshots: { ...(mocks.localSnapshot ? { 'local-host': mocks.localSnapshot } : {}), remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: [] } } },
+  hosts: [{ host_id: 'remote', name: 'Lab server' }, ...(mocks.localSnapshot ? [{ host_id: 'local-host', name: 'This computer', local: true }] : [])], errors: mocks.errors, refresh: mocks.refresh, publishSnapshot: mocks.publishSnapshot,
+  snapshots: { ...(mocks.localSnapshot ? { 'local-host': mocks.localSnapshot } : {}), remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: mocks.remoteDownloads } } },
 }) }))
 const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: 'muse', weights_id: 'nvfp4' },
   url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64), bytes: 4096,
@@ -82,12 +84,25 @@ function renderModelsRoute(initialEntry: string) {
   return router
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((accept, fail) => { resolve = accept; reject = fail })
+  return { promise, resolve, reject }
+}
+
 describe('host-scoped Models', () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null
     useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
+    mocks.remoteDownloads = []
+    mocks.publishSnapshot.mockImplementation((hostId, snapshot) => {
+      if (hostId === 'remote') mocks.remoteDownloads = snapshot.model_management?.downloads ?? []
+      delete mocks.errors[hostId]
+    })
     mocks.resources = { ready: true, error: '' }
     mocks.command.mockResolvedValue([])
+    mocks.refresh.mockReset().mockResolvedValue(undefined)
     mocks.switchModel.mockResolvedValue(undefined)
     mocks.providers = [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally', path: '/models/local.ginfer' }] }]
     mocks.getProviders.mockImplementation(async () => mocks.providers)
@@ -205,6 +220,85 @@ describe('host-scoped Models', () => {
     expect(mocks.open).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('alert')).toHaveTextContent('This file is not a valid .ginfer model.')
   })
+  it.each(['provider inventory', 'Host status'] as const)('recovers an accepted registration after a failed %s read without adding or loading again', async failedRead => {
+    mocks.providers = [{ provider: 'ginfer', models: [] }]
+    mocks.catalog = []
+    const path = '/external/Added model.ginfer'
+    const registered = [{ provider: 'ginfer', models: [{ id: 'registered-model', displayName: 'Added local model', path, source: 'external' }] }]
+    const guidance = 'The model was added, but the model list could not be refreshed. Choose Refresh installed models to try again.'
+    const initialError = `${failedRead} request failed`
+    const retryError = `${failedRead} retry failed`
+    let rejectInitial!: (error: Error) => void
+    mocks.open.mockResolvedValue(path)
+    mocks.getProviders.mockResolvedValue(registered)
+    render(<ModelManagement />)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce())
+    mocks.refresh.mockClear()
+    if (failedRead === 'provider inventory') {
+      mocks.getProviders.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectInitial = reject }))
+    } else {
+      mocks.refresh.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectInitial = reject }))
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
+    await waitFor(() => expect(failedRead === 'provider inventory' ? mocks.getProviders : mocks.refresh).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: 'Adding local model…' })).toBeDisabled()
+    await act(async () => { rejectInitial(new Error(initialError)) })
+    expect(await screen.findByText(guidance)).toBeVisible()
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Could not add this model.')
+    expect(screen.getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText(initialError)).not.toBeVisible()
+    expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled()
+    if (failedRead === 'Host status') expect(screen.getByText('Added local model')).toBeVisible()
+
+    let finishInventory!: (providers: TestProvider[]) => void
+    let rejectInventory!: (error: Error) => void
+    let rejectHosts!: (error: Error) => void
+    mocks.getProviders.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      finishInventory = resolve
+      rejectInventory = reject
+    }))
+    if (failedRead === 'Host status') {
+      mocks.refresh.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectHosts = reject }))
+    }
+    const refresh = screen.getByRole('button', { name: 'Refresh installed models' })
+    act(() => { fireEvent.click(refresh); fireEvent.click(refresh) })
+    expect(mocks.getProviders).toHaveBeenCalledTimes(2)
+    expect(refresh).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add local model' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Model destination' })).toBeDisabled()
+    expect(screen.getByText(guidance)).toBeVisible()
+    if (failedRead === 'provider inventory') {
+      await act(async () => { rejectInventory(new Error(retryError)) })
+    } else {
+      await act(async () => { finishInventory(registered) })
+      expect(mocks.refresh).toHaveBeenCalledTimes(2)
+      expect(refresh).toBeDisabled()
+      fireEvent.click(refresh)
+      expect(mocks.getProviders).toHaveBeenCalledTimes(2)
+      await act(async () => { rejectHosts(new Error(retryError)) })
+    }
+    expect(screen.getByText(guidance)).toBeVisible()
+    expect(screen.getByText(retryError)).not.toBeVisible()
+    expect(screen.getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+    expect(refresh).toBeEnabled()
+
+    fireEvent.click(refresh)
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(screen.getByText('Added local model')).toBeVisible()
+    expect(refresh).toBeEnabled()
+    expect(mocks.getProviders).toHaveBeenCalledTimes(3)
+    expect(mocks.setProviders).toHaveBeenCalledTimes(failedRead === 'provider inventory' ? 1 : 3)
+    expect(mocks.setProviders).toHaveBeenLastCalledWith(registered)
+    expect(mocks.refresh).toHaveBeenCalledTimes(failedRead === 'provider inventory' ? 1 : 3)
+    expect(mocks.open).toHaveBeenCalledOnce()
+    expect(mocks.command.mock.calls.filter(([action]) => action !== 'local_model_downloads')).toEqual([
+      ['local_model_register', { path }],
+    ])
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+    expect(mocks.controlHost).not.toHaveBeenCalled()
+  })
   it('guards repeated clicks before the chooser, registration and inventory refresh finish', async () => {
     let choose!: (path: string) => void
     let register!: (result: unknown) => void
@@ -276,6 +370,180 @@ describe('host-scoped Models', () => {
     expect(mocks.command.mock.calls.some(call => call[0] === 'local_model_download')).toBe(false)
     expect(mocks.switchModel).not.toHaveBeenCalled()
     expect(screen.getByRole('tab', { name: 'Downloads' })).toHaveAttribute('aria-selected', 'true')
+  })
+  it.each(['start', 'pause', 'resume', 'discard'] as const)('recovers an accepted local %s request with status reads only', async operation => {
+    const usableRelease = { ...release, qualified_sm: ['8.6', '12.0'], min_vram_mib_per_gpu: 8192 }
+    mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [usableRelease] }]
+    const job: ModelDownload = { id: 'action-job', release: usableRelease, status: operation === 'pause' ? 'downloading' : 'paused', received: 1024, bytes_per_second: 0, error: null, path: null }
+    const initialJobs = operation === 'start' ? [] : [job]
+    const accepted = deferred<unknown>()
+    const followingRead = deferred<ModelDownload[]>()
+    let readJobs = () => Promise.resolve(initialJobs)
+    mocks.command.mockImplementation((action) => {
+      if (action === 'local_model_downloads') return readJobs()
+      if (action === 'local_model_download' || action === 'local_model_download_action') return accepted.promise
+      return Promise.resolve([])
+    })
+    spyConfirm().mockReturnValue(true)
+    render(<ModelManagement />)
+    await waitFor(() => expect(useLocalModelDownloads.getState().loaded).toBe(true))
+    fireEvent.click(screen.getByRole('tab', { name: operation === 'start' ? 'Recommended' : 'Downloads' }))
+    const labels = { start: 'Download to this computer', pause: 'Pause download', resume: 'Resume download', discard: 'Delete partial download' }
+    const request = screen.getByRole('button', { name: labels[operation] })
+    const mutations = () => mocks.command.mock.calls.filter(([action]) => action === 'local_model_download' || action === 'local_model_download_action')
+    readJobs = () => followingRead.promise
+    act(() => { fireEvent.click(request); fireEvent.click(request) })
+    await waitFor(() => expect(mutations()).toHaveLength(1))
+    expect(request).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Model destination' })).toBeDisabled()
+    expect(mutations()).toEqual(operation === 'start'
+      ? [['local_model_download', { host_id: 'local', body: usableRelease }]]
+      : [['local_model_download_action', { id: job.id, operation }]])
+    await act(async () => { accepted.resolve({ ...job, status: 'queued' }) })
+    await waitFor(() => expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(2))
+    expect(screen.getByRole('button', { name: 'Refresh downloads' })).toBeDisabled()
+    await act(async () => { followingRead.reject(new Error('accepted-action status read failed')) })
+    const guidance = 'The download request was accepted, but its status could not be refreshed. Choose Refresh downloads to check its current state.'
+    const alert = (await screen.findByText(guidance)).closest('[role="alert"]') as HTMLElement
+    expect(within(alert).getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+    expect(within(alert).getByText('accepted-action status read failed')).not.toBeVisible()
+    if (operation === 'start') {
+      expect(screen.getByText('Download status is unavailable. Choose Refresh downloads to check it.')).toBeVisible()
+      expect(screen.queryByText('No downloads on this computer yet. Choose Recommended to find a model.')).not.toBeInTheDocument()
+      expect(screen.queryByText(/of unfinished downloads/)).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText(/Could not (start the download|pause the download|resume the download|delete the partial download)/)).not.toBeInTheDocument()
+    for (const button of screen.queryAllByRole('button', { name: /^(Pause download|Resume download|Delete partial download)$/ })) expect(button).toBeDisabled()
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByRole('button', { name: 'Download to this computer' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+
+    const failedRetry = deferred<ModelDownload[]>()
+    readJobs = () => failedRetry.promise
+    const beforeRetry = mocks.command.mock.calls.length
+    const refresh = screen.getByRole('button', { name: 'Refresh downloads' })
+    act(() => { fireEvent.click(refresh); fireEvent.click(refresh) })
+    await waitFor(() => expect(mocks.command.mock.calls.slice(beforeRetry)).toEqual([['local_model_downloads']]))
+    expect(refresh).toBeDisabled()
+    await act(async () => { failedRetry.reject(new Error('read-only retry still unavailable')) })
+    expect(screen.getByText(guidance)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Refresh downloads' })).toBeEnabled()
+    const retryAlert = screen.getByText(guidance).closest('[role="alert"]') as HTMLElement
+    expect(within(retryAlert).getByText('read-only retry still unavailable')).not.toBeVisible()
+    expect(within(retryAlert).getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+
+    const successfulRetry = deferred<ModelDownload[]>()
+    readJobs = () => successfulRetry.promise
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh downloads' }))
+    await act(async () => { successfulRetry.resolve(operation === 'discard' ? [] : [{ ...job, status: operation === 'pause' ? 'paused' : 'queued' }]) })
+    expect(screen.queryByText(guidance)).not.toBeInTheDocument()
+    expect(screen.queryByText('read-only retry still unavailable')).not.toBeInTheDocument()
+    expect(await screen.findByText(operation === 'discard' ? 'No downloads on this computer yet. Choose Recommended to find a model.' : operation === 'pause' ? 'Paused; resume to continue' : 'Waiting to download')).toBeVisible()
+    expect(mocks.command.mock.calls.slice(beforeRetry)).toEqual([['local_model_downloads'], ['local_model_downloads']])
+    expect(mutations()).toHaveLength(1)
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByRole('button', { name: 'Download to this computer' })).toBeEnabled()
+    expect(mocks.getProviders).not.toHaveBeenCalled()
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+    expect(mocks.controlHost).not.toHaveBeenCalled()
+  })
+  it('keeps accepted paired-computer recovery with that computer while another remains available', async () => {
+    const user = userEvent.setup()
+    const usableRelease = { ...release, qualified_sm: ['8.6', '12.0'], min_vram_mib_per_gpu: 8192 }
+    mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [usableRelease] }]
+    mocks.remoteDownloads = [{ id: 'remote-job', release: usableRelease, status: 'downloading', received: 1024, bytes_per_second: 0, error: null, path: null }]
+    const accepted = deferred<unknown>()
+    const followingRead = deferred<EngineSnapshot>()
+    let readSnapshot = () => followingRead.promise
+    mocks.command.mockImplementation(action => action === 'download_action' ? accepted.promise : action === 'snapshot' ? readSnapshot() : Promise.resolve([]))
+    render(<ModelManagement />)
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce())
+    await user.click(screen.getByRole('button', { name: 'Model destination' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Lab server' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    const pause = screen.getByRole('button', { name: 'Pause download' })
+    act(() => { fireEvent.click(pause); fireEvent.click(pause) })
+    await act(async () => { accepted.resolve(undefined) })
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'download_action')).toEqual([
+      ['download_action', { host_id: 'remote', body: { id: 'remote-job', action: 'pause' } }],
+    ])
+    expect(mocks.command).toHaveBeenCalledWith('snapshot', { host_id: 'remote' })
+    await act(async () => { followingRead.reject(new Error('paired status read failed')) })
+    const guidance = 'The download request was accepted, but its status could not be refreshed. Choose Refresh downloads to check its current state.'
+    const alert = (await screen.findByText(guidance)).closest('[role="alert"]') as HTMLElement
+    expect(within(alert).getByText('paired status read failed')).not.toBeVisible()
+    expect(within(alert).getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByRole('button', { name: 'Pause download' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeDisabled()
+
+    await user.click(screen.getByRole('button', { name: 'Model destination' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'This computer' }))
+    expect(screen.queryByText(guidance)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Download to this computer' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Model destination' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Lab server' }))
+    expect(screen.getByText(guidance)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    const failedRetry = deferred<EngineSnapshot>()
+    readSnapshot = () => failedRetry.promise
+    mocks.errors = { remote: 'previous fleet status unavailable' }
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh downloads' }))
+    await act(async () => { failedRetry.reject(new Error('paired retry failed')) })
+    const retryAlert = (await screen.findByText('paired retry failed')).closest('[role="alert"]') as HTMLElement
+    expect(within(retryAlert).getByText(guidance)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Refresh downloads' })).toBeEnabled()
+    const finalRead = deferred<EngineSnapshot>()
+    readSnapshot = () => finalRead.promise
+    const refresh = screen.getByRole('button', { name: 'Refresh downloads' })
+    act(() => { fireEvent.click(refresh); fireEvent.click(refresh) })
+    expect(refresh).toBeDisabled()
+    const updatedSnapshot: EngineSnapshot = {
+      host_id: 'remote', display_name: 'Lab server', revision: 2,
+      gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [],
+      model_management: { version: 1, managed_root: '/models', engine_presets_available: true, downloads: [] },
+    }
+    await act(async () => { finalRead.resolve(updatedSnapshot) })
+    expect(await screen.findByText('No downloads on this computer yet. Choose Recommended to find a model.')).toBeVisible()
+    expect(screen.queryByText(guidance)).not.toBeInTheDocument()
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+    expect(mocks.publishSnapshot).toHaveBeenCalledExactlyOnceWith('remote', updatedSnapshot)
+    expect(mocks.errors).toEqual({})
+    expect(mocks.command.mock.calls.filter(([action]) => action !== 'local_model_downloads')).toEqual([
+      ['download_action', { host_id: 'remote', body: { id: 'remote-job', action: 'pause' } }],
+      ['snapshot', { host_id: 'remote' }],
+      ['snapshot', { host_id: 'remote' }],
+      ['snapshot', { host_id: 'remote' }],
+    ])
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+    expect(mocks.controlHost).not.toHaveBeenCalled()
+  })
+  it('keeps a rejected download request retryable without claiming it was accepted', async () => {
+    const job: ModelDownload = { id: 'rejected-job', release, status: 'downloading', received: 1024, bytes_per_second: 0, error: null, path: null }
+    const rejected = deferred<unknown>()
+    let response = rejected.promise
+    mocks.command.mockImplementation(action => action === 'local_model_downloads' ? Promise.resolve([job]) : response)
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    const pause = await screen.findByRole('button', { name: 'Pause download' })
+    act(() => { fireEvent.click(pause); fireEvent.click(pause) })
+    await act(async () => { rejected.reject(new Error('pause request rejected')) })
+    expect(await screen.findByText('Could not pause the download. Try again when this computer is connected.')).toBeVisible()
+    expect(screen.queryByText(/The download request was accepted/)).not.toBeInTheDocument()
+    expect(screen.getByText('pause request rejected')).not.toBeVisible()
+    expect(screen.getByRole('button', { name: 'Pause download' })).toBeEnabled()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(1)
+    const retry = deferred<unknown>()
+    response = retry.promise
+    fireEvent.click(screen.getByRole('button', { name: 'Pause download' }))
+    await act(async () => { job.status = 'paused'; retry.resolve(undefined) })
+    expect(await screen.findByText('Paused; resume to continue')).toBeVisible()
+    expect(screen.queryByText('pause request rejected')).not.toBeInTheDocument()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_download_action')).toEqual([
+      ['local_model_download_action', { id: 'rejected-job', operation: 'pause' }],
+      ['local_model_download_action', { id: 'rejected-job', operation: 'pause' }],
+    ])
   })
   it('describes downloads and recommendations in plain words', async () => {
     mocks.command.mockImplementation(async action => action === 'local_model_downloads'

@@ -266,6 +266,99 @@ it('removes only after the shared confirm dialog is accepted', async () => {
   await waitFor(() => expect(removed).toHaveBeenCalled())
 })
 
+it('ignores a LAN removal confirmation after its bot panel is replaced', async () => {
+  const user = userEvent.setup()
+  const perform = vi.fn(async (action: () => Promise<unknown>) => { await action() })
+  const removed = vi.fn()
+  request.mockResolvedValue({ removed: true })
+  const panel = (id: string, name: string) => (
+    <>
+      <GbotLanBot
+        key={id}
+        id={id}
+        name={name}
+        busy={false}
+        connected={false}
+        perform={perform}
+        removed={() => removed(id)}
+      />
+      <ConfirmDialogHost />
+    </>
+  )
+  const view = render(panel('bot-1', 'Writer'))
+  await user.click(screen.getByRole('button', { name: 'Remove bot' }))
+  expect(screen.getByRole('dialog')).toHaveAccessibleName('Remove Writer?')
+
+  view.rerender(panel('bot-2', 'Researcher'))
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove bot' }))
+  expect(request).not.toHaveBeenCalled()
+  expect(perform).not.toHaveBeenCalled()
+  expect(removed).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: 'Remove bot' })).toBeEnabled()
+
+  await user.click(screen.getByRole('button', { name: 'Remove bot' }))
+  expect(screen.getByRole('dialog')).toHaveAccessibleName('Remove Researcher?')
+  expect(request).not.toHaveBeenCalled()
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove bot' }))
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/remove', { workspace_id: 'bot-2' }],
+  ])
+  expect(removed).toHaveBeenCalledExactlyOnceWith('bot-2')
+})
+
+it('keeps the replacement bot selected when an earlier LAN removal finishes late', async () => {
+  const user = userEvent.setup()
+  const firstRemoval = deferred<{ removed: boolean }>()
+  request.mockReturnValueOnce(firstRemoval.promise).mockResolvedValue({ removed: true })
+  const removed = vi.fn()
+  function Parent({ id, name }: { id: string; name: string }) {
+    const [cleared, setCleared] = useState(false)
+    return (
+      <>
+        <p>Selected bot: {cleared ? 'None' : name}</p>
+        {!cleared && (
+          <GbotLanBot
+            key={id}
+            id={id}
+            name={name}
+            busy={false}
+            connected={false}
+            perform={async (action) => { await action() }}
+            removed={() => {
+              removed(id)
+              setCleared(true)
+            }}
+          />
+        )}
+        <ConfirmDialogHost />
+      </>
+    )
+  }
+  const view = render(<Parent id="bot-1" name="Writer" />)
+  await user.click(screen.getByRole('button', { name: 'Remove bot' }))
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove bot' }))
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/remove', { workspace_id: 'bot-1' }],
+  ])
+  view.rerender(<Parent id="bot-2" name="Researcher" />)
+  await act(async () => firstRemoval.resolve({ removed: true }))
+  expect(removed).not.toHaveBeenCalled()
+  expect(screen.getByText('Selected bot: Researcher')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Remove bot' })).toBeEnabled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+  await user.click(screen.getByRole('button', { name: 'Remove bot' }))
+  expect(screen.getByRole('dialog')).toHaveAccessibleName('Remove Researcher?')
+  expect(request).toHaveBeenCalledTimes(1)
+  await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Remove bot' }))
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/remove', { workspace_id: 'bot-1' }],
+    ['workspaces/ssh/remove', { workspace_id: 'bot-2' }],
+  ])
+  expect(removed).toHaveBeenCalledExactlyOnceWith('bot-2')
+  expect(screen.getByText('Selected bot: None')).toBeVisible()
+})
+
 it('disables removal with a visible reason while connected', () => {
   mount(true)
   const remove = screen.getByRole('button', { name: 'Remove bot' })

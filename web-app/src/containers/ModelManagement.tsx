@@ -23,7 +23,7 @@ import { useServiceHub } from '@/hooks/useServiceHub'
 import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { useModelCatalogStore } from '@/stores/model-catalog-store'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
-import { engineAlias, engineCommand, type LocalModelLoadProgress } from '@/services/engines'
+import { engineAlias, engineCommand, type EngineSnapshot, type LocalModelLoadProgress } from '@/services/engines'
 import { controlLocalHostModel } from '@/utils/localHostModel'
 import { HostCard } from '@/containers/EngineHostModels'
 import { gpuCardName, hostModelLabel, plainModelName } from '@/lib/engine-host-labels'
@@ -51,6 +51,8 @@ const loadPhaseLabels: Record<LocalModelLoadProgress['phase'], string> = {
 const managementTabs = ['Installed', 'Recommended', 'Downloads'] as const
 export type ModelManagementTab = (typeof managementTabs)[number]
 
+const REGISTERED_MODEL_REFRESH_FAILED = 'The model was added, but the model list could not be refreshed. Choose Refresh installed models to try again.'
+const ACCEPTED_DOWNLOAD_REFRESH_FAILED = 'The download request was accepted, but its status could not be refreshed. Choose Refresh downloads to check its current state.'
 const NO_SETTINGS = ' has no tested settings for automatic loading. To start it, open GInfer Hosts, expand Model and memory settings and Choose model settings, then select Check model settings and Start model with these settings.'
 const capabilityLabels = (capabilities: string[] = []) => capabilities.flatMap(capability => {
   switch (capability.toLowerCase()) {
@@ -87,6 +89,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const snapshots = useEngineHosts(s => s.snapshots)
   const hostErrors = useEngineHosts(s => s.errors)
   const refreshHosts = useEngineHosts(s => s.refresh)
+  const publishSnapshot = useEngineHosts(s => s.publishSnapshot)
   const hardware = useHardware(s => s.hardwareData)
   const hardwareReady = useHardware(s => s.hardwareReady)
   const selectedGpuUuids = useHardware(s => s.selectedGpuUuids)
@@ -106,7 +109,10 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const [error, setError] = useState<string | null>(null)
   const [errorSummary, setErrorSummary] = useState('Could not refresh the model list. Try refreshing it again.')
   const [busy, setBusy] = useState(false)
+  const downloadActionPending = useRef(false)
+  const [downloadRefreshErrors, setDownloadRefreshErrors] = useState<Record<string, string>>({})
   const registrationPending = useRef(false)
+  const registrationNeedsRefresh = useRef(false)
   const [localRegistration, setLocalRegistration] = useState<'choosing' | 'registering' | null>(null)
   const mounted = useRef(true)
   const loadRef = useRef<PendingLocalLoad | null>(null)
@@ -117,6 +123,8 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const [cancellingLoad, setCancellingLoad] = useState(false)
   const [cancelError, setCancelError] = useState(false)
   const local = destination === 'local'
+  const downloadRefreshError = downloadRefreshErrors[destination]
+  const downloadNeedsRefresh = downloadRefreshError !== undefined
   const resources = useBundledResources(local)
   const localLoadReady = resources.ready === true && !resources.error
   const host = hosts.find(h => h.host_id === destination)
@@ -128,7 +136,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   const invalidGpuSelection = !hardwareReady || (selectedGpuUuids !== null &&
     (!selectedGpuUuids.length || selectedGpuUuids.some(id => !gpus.some(g => g.uuid === id))))
   const downloads = local ? localDownloads : snapshot?.model_management?.downloads ?? []
-  const downloadsChecked = !local || localDownloadsLoaded
+  const downloadsChecked = !downloadNeedsRefresh && (!local || localDownloadsLoaded)
   const managementAvailable = local || snapshot?.model_management?.version === 1
   const localProvider = providers.find(p => p.provider === 'ginfer')
   const localModels = localProvider?.models ?? []
@@ -207,11 +215,34 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
     useModelProvider.getState().setProviders(await service.providers().getProviders())
     if (report.rejected.length) throw new Error(report.rejected.map(r => `${r.filename}: ${r.reason}`).join('\n'))
   }
+  const refreshRegisteredModels = async () => {
+    const updated = await service.providers().getProviders()
+    if (!mounted.current) return
+    useModelProvider.getState().setProviders(updated)
+    await refreshHosts()
+    if (mounted.current) {
+      registrationNeedsRefresh.current = false
+      setError(null)
+    }
+  }
+  const retryRegisteredModelRefresh = async () => {
+    if (busy || registrationPending.current) return
+    registrationPending.current = true
+    setBusy(true)
+    try { await refreshRegisteredModels() }
+    catch (e) {
+      if (mounted.current) { setErrorSummary(REGISTERED_MODEL_REFRESH_FAILED); setError(errorMessage(e)) }
+    } finally {
+      registrationPending.current = false
+      if (mounted.current) setBusy(false)
+    }
+  }
   const addLocalModel = async () => {
     if (!local || busy || registrationPending.current) return
     registrationPending.current = true
     setBusy(true)
     setLocalRegistration('choosing')
+    let registered = false
     try {
       const path = await service.dialog().open({
         multiple: false,
@@ -224,21 +255,53 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       const configuredRoot = String(localProvider?.settings?.find(s => s.key === 'model_path')?.controller_props.value ?? '').trim()
       const modelsRoot = configuredRoot ? await joinPath([configuredRoot, 'models']) : undefined
       await engineCommand('local_model_register', { path, ...(modelsRoot === undefined ? {} : { modelsRoot }) })
-      useModelProvider.getState().setProviders(await service.providers().getProviders())
-      await refreshHosts()
+      registered = true
+      registrationNeedsRefresh.current = true
+      await refreshRegisteredModels()
     } catch (e) {
-      if (mounted.current) { setErrorSummary('Could not add this model. Choose a complete .ginfer file that GInfer supports, then try again.'); setError(errorMessage(e)) }
+      if (mounted.current) { setErrorSummary(registered ? REGISTERED_MODEL_REFRESH_FAILED : 'Could not add this model. Choose a complete .ginfer file that GInfer supports, then try again.'); setError(errorMessage(e)) }
     } finally {
       registrationPending.current = false
       if (mounted.current) { setLocalRegistration(null); setBusy(false) }
     }
   }
-  const download = (release: ModelRelease) => act(async () => {
+  const updateDownloads = async (operation?: () => Promise<unknown>, failure = 'Could not check your downloads. Choose Refresh downloads to try again.') => {
+    if (busy || downloadActionPending.current || (operation && downloadNeedsRefresh)) return
+    downloadActionPending.current = true
+    setBusy(true)
+    let accepted = false
+    try {
+      if (operation) { await operation(); accepted = true }
+      if (!mounted.current) return
+      if (local) await refreshLocal()
+      else {
+        // The fleet refresh can retain a stale snapshot without rejecting, or
+        // return while another refresh is pending. Read this computer directly.
+        const updated = await engineCommand<EngineSnapshot>('snapshot', { host_id: destination })
+        if (mounted.current) publishSnapshot(destination, updated)
+      }
+      if (mounted.current) {
+        setDownloadRefreshErrors(errors => { const updated = { ...errors }; delete updated[destination]; return updated })
+        setError(null)
+      }
+    } catch (e) {
+      if (mounted.current) {
+        if (accepted || downloadNeedsRefresh) {
+          setDownloadRefreshErrors(errors => ({ ...errors, [destination]: errorMessage(e) }))
+          setError(null)
+        } else { setErrorSummary(failure); setError(errorMessage(e)) }
+      }
+    } finally {
+      downloadActionPending.current = false
+      if (mounted.current) setBusy(false)
+    }
+  }
+  const download = (release: ModelRelease) => updateDownloads(async () => {
     const job = await engineCommand<ModelDownload>(local ? 'local_model_download' : 'download', { host_id: destination, body: release })
     if (local) useLocalModelDownloads.getState().acknowledge(job)
     setTab('Downloads')
   }, 'Could not start the download. Check the computer’s connection and free disk space, then try again.')
-  const transferAction = (job: ModelDownload, action: string) => act(() =>
+  const transferAction = (job: ModelDownload, action: string) => updateDownloads(() =>
     engineCommand(local ? 'local_model_download_action' : 'download_action', local ?
       { id: job.id, operation: action } : { host_id: destination, body: { id: job.id, action } }), `Could not ${action === 'discard' ? 'delete the partial download' : action === 'resume' ? 'resume the download' : 'pause the download'}. Try again when this computer is connected.`)
   const loadLocal = (modelId: string) => act(async () => {
@@ -330,12 +393,13 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
           }}>{t}</Button>)}
       </div><div className="flex flex-wrap gap-2">
         {local && tab === 'Installed' && <Button disabled={busy} onClick={() => void addLocalModel()}>{localRegistration === 'choosing' ? 'Choose a model file…' : localRegistration === 'registering' ? 'Adding local model…' : 'Add local model'}</Button>}
-        <Button variant="outline" disabled={busy || (offline && tab !== 'Recommended')} onClick={() => void act(tab === 'Recommended' ? refreshCatalog : tab === 'Downloads' ? (local ? refreshLocal : refreshHosts) : rescan)}>{tab === 'Recommended' ? 'Refresh recommendations' : tab === 'Downloads' ? 'Refresh downloads' : 'Refresh installed models'}</Button>
+        <Button variant="outline" disabled={busy || (offline && tab === 'Installed')} onClick={() => void (tab === 'Downloads' ? updateDownloads() : local && tab === 'Installed' && registrationNeedsRefresh.current ? retryRegisteredModelRefresh() : act(tab === 'Recommended' ? refreshCatalog : rescan))}>{tab === 'Recommended' ? 'Refresh recommendations' : tab === 'Downloads' ? 'Refresh downloads' : 'Refresh installed models'}</Button>
       </div></div>
       {local && tab === 'Installed' && <p className="text-sm text-muted-foreground">Add an existing .ginfer file. The file stays in its current location.</p>}
       {error && (error.endsWith(NO_SETTINGS)
         ? <div role="alert" className="rounded border border-destructive/40 p-3 text-sm text-destructive">{error} <Link to={route.engines.index} className="underline">Open GInfer Hosts</Link></div>
         : <ModelProblem message={errorSummary} detail={error} />)}
+      {downloadNeedsRefresh && <ModelProblem message={ACCEPTED_DOWNLOAD_REFRESH_FAILED} detail={downloadRefreshError} />}
       {offline && <ModelProblem message={`Cannot reach ${host?.name ?? 'this computer'}. Check that it is on and GInfer Host is running, then reconnect in GInfer Hosts. The model list shown here may be out of date.`} detail={hostErrors[destination]} />}
       {local && !localLoadReady && (resources.error
         ? <ModelProblem message="Could not prepare GInfer to run models on this computer. Restart GChat to try again. If this keeps happening, reinstall GChat." detail={resources.error} />
@@ -352,7 +416,7 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         {cancelError && <p>Could not confirm that startup was cancelled. Choose Cancel load to try again.</p>}
         <Button variant="outline" disabled={cancellingLoad || pendingLoad.ready} onClick={() => void cancelPendingLoad()}>Cancel load</Button>
       </div>}
-      {local && localDownloadError && <ModelProblem message="Could not check your downloads. Open Downloads and choose Refresh downloads to try again." detail={localDownloadError} />}
+      {local && localDownloadError && !downloadNeedsRefresh && <ModelProblem message="Could not check your downloads. Open Downloads and choose Refresh downloads to try again." detail={localDownloadError} />}
       {(tab === 'Recommended' || (tab === 'Installed' && local)) && <Input aria-label="Search models" placeholder="Find a model…" value={query} onChange={e => setQuery(e.target.value)} />}
       {tab === 'Installed' && <>
         {local && <fieldset disabled={busy} className="space-y-2 rounded border p-3"><legend>Graphics cards to use when loading a model</legend>
@@ -371,21 +435,23 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showUnavailable} onChange={e => setShowUnavailable(e.target.checked)} />Show unavailable models and explanations</label>
         {!releases.some(r => r.readiness.available) && <div className="rounded-xl border p-5"><h2 className="font-medium">No recommended model for these graphics cards yet</h2><p className="mt-1 text-sm text-muted-foreground">A model is only recommended once it has been tested on your graphics card. Check back later, use a model you already have installed, or choose another computer in the Computer menu.</p></div>}
         {releases.filter(r => (showUnavailable || r.readiness.available) && r.name.toLowerCase().includes(query.toLowerCase())).map((r, i) => <section key={r.release?.sha256 ?? `${r.name}-${i}`} className="space-y-3 rounded-xl border p-5"><h2 className="font-medium">{plainModelName(r.name)}</h2><p className="text-sm text-muted-foreground">{r.readiness.reason}</p>{r.release && <p className="text-sm text-muted-foreground">{formatModelBytes(r.release.bytes)} download · {r.release.tp === 1 ? '1 graphics card' : `${r.release.tp} graphics cards`} · {capabilityLabels(r.release.capabilities)}</p>}
-          <Button disabled={!r.readiness.available || offline || busy || !managementAvailable} onClick={() => r.release && void download(r.release)}>Download to {local ? 'this computer' : host?.name}</Button>
+          <Button disabled={!r.readiness.available || offline || busy || downloadNeedsRefresh || !managementAvailable} onClick={() => r.release && void download(r.release)}>Download to {local ? 'this computer' : host?.name}</Button>
         </section>)}
         {!managementAvailable && <p role="alert">Downloads are not available on this computer’s version of GInfer Host. Update GInfer on that computer, then reconnect in GInfer Hosts.</p>}
       </>}
       {tab === 'Downloads' && <>
         <p className="text-sm text-muted-foreground">{downloadsChecked && <>{formatModelBytes(partialBytes)} of unfinished downloads · {formatModelBytes(totalInstalled)} of downloaded models. </>}Only one model downloads at a time on each computer.</p>
-        {!downloads.length && (downloadsChecked
+        {!downloads.length && (downloadNeedsRefresh
+          ? <p className="rounded-xl border p-6 text-center text-muted-foreground">Download status is unavailable. Choose Refresh downloads to check it.</p>
+          : downloadsChecked
           ? <p className="rounded-xl border p-6 text-center text-muted-foreground">No downloads on this computer yet. Choose Recommended to find a model.</p>
           : !localDownloadError && <p role="status" className="rounded-xl border p-6 text-center text-muted-foreground">Checking for downloads…</p>)}
         {downloads.map(job => {
           const recovery = downloadFailureRecovery(job.error)
           return <section key={job.id} className="space-y-2 rounded-xl border p-4"><div className="flex flex-wrap justify-between gap-2"><h2 className="font-medium">{plainModelName(job.release.name)}</h2><span className="text-sm text-muted-foreground">{downloadStatusLabel(job.status)}</span></div><progress aria-label={`${job.release.name} download`} className="h-2 w-full accent-primary" max={job.release.bytes} value={job.received} /><p className="font-mono text-xs tabular-nums">{formatModelBytes(job.received)} / {formatModelBytes(job.release.bytes)}{job.bytes_per_second > 0 ? ` · ${(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s · about ${Math.ceil((job.release.bytes - job.received) / job.bytes_per_second)} seconds left` : ''}</p>
           {job.status === 'failed' && <ModelProblem message={recovery.message} detail={job.error} />}<div className="flex gap-2">
-            {['queued', 'downloading'].includes(job.status) && <Button variant="outline" disabled={busy || offline} onClick={() => void transferAction(job, 'pause')}>Pause download</Button>}
-            {['paused', 'failed'].includes(job.status) && <>{(job.status === 'paused' || recovery.retry) && <Button disabled={busy || offline} onClick={() => void transferAction(job, 'resume')}>{job.status === 'failed' ? 'Retry download' : 'Resume download'}</Button>}<Button variant="outline" disabled={busy || offline} onClick={async () => { if (await confirmAction({ title: 'Delete this partial download?', message: 'This removes the unfinished file. You will need to start the download again. Models already installed stay in place.', confirmLabel: 'Delete partial download', destructive: true })) void transferAction(job, 'discard') }}>Delete partial download</Button></>}
+            {['queued', 'downloading'].includes(job.status) && <Button variant="outline" disabled={busy || offline || downloadNeedsRefresh} onClick={() => void transferAction(job, 'pause')}>Pause download</Button>}
+            {['paused', 'failed'].includes(job.status) && <>{(job.status === 'paused' || recovery.retry) && <Button disabled={busy || offline || downloadNeedsRefresh} onClick={() => void transferAction(job, 'resume')}>{job.status === 'failed' ? 'Retry download' : 'Resume download'}</Button>}<Button variant="outline" disabled={busy || offline || downloadNeedsRefresh} onClick={async () => { if (await confirmAction({ title: 'Delete this partial download?', message: 'This removes the unfinished file. You will need to start the download again. Models already installed stay in place.', confirmLabel: 'Delete partial download', destructive: true })) void transferAction(job, 'discard') }}>Delete partial download</Button></>}
             {job.status === 'installed' && <Button disabled={busy || offline} onClick={() => void act(async () => { await rescan(); setTab('Installed'); toast.success('Your model is ready in Installed') }, 'Could not find the downloaded model. Choose Refresh installed models to try again.')}>Show in Installed</Button>}
           </div></section>})}
       </>}

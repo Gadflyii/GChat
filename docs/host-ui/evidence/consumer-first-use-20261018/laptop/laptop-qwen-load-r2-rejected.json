@@ -1,0 +1,21 @@
+{
+  "observed_utc": "2026-10-18T20:29:59.477962+00:00",
+  "status": "BLOCKED_PRE_READY_QUOTE",
+  "package_sha256": "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+  "expected_catalog_profile_id": "rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-52k-int8-screened",
+  "expected_max_context": 53248,
+  "expected_concurrency": 8,
+  "native_automatic_load_utc": "2026-10-18T20:23:41.449151Z",
+  "error": "GPU rank 0 cannot fit 1 new instance(s): Engine quotes 15761145856 free bytes, 17209084416 non-KV bytes and 314572800 headroom bytes per instance; KV needs at least 276891648 bytes per instance, with 0 bytes available per instance",
+  "qwen_instance_count": 0,
+  "engine_process_count": 0,
+  "app_api_natural_started": false,
+  "swap_counters": {
+    "pswpin": 468,
+    "pswpout": 775
+  },
+  "hardware_profile_scope_complete": true,
+  "booking": 413,
+  "booking_cancelled": true,
+  "next_action": "Attribute quote/settings mismatch from source, route Engine issue to Bubbs; no duplicate load or tuning."
+}

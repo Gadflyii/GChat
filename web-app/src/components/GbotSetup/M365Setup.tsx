@@ -619,6 +619,7 @@ export default function M365Setup({
               const launch = await gbot<{ url: string }>('setup/m365/launch', {
                 id,
               })
+              if (!active.current) return
               await getServiceHub().opener().open(launch.url)
               if (active.current)
                 setNotice(

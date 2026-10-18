@@ -1,0 +1,23 @@
+{
+  "checked_utc": "2026-10-18T17:10:39.841504+00:00",
+  "instances": [
+    {
+      "instance_id": "1ee7a7be-a54d-489f-8c7e-ddff27d50716",
+      "status": "stopped",
+      "state": null,
+      "last_error": null
+    },
+    {
+      "instance_id": "fcd7f7e1-eca6-4de6-ab91-f2ce2f639c47",
+      "status": "stopped",
+      "state": null,
+      "last_error": null
+    }
+  ],
+  "local_api": {
+    "running": false,
+    "pid": 0,
+    "port": 1337
+  },
+  "engine_process_exists": false
+}

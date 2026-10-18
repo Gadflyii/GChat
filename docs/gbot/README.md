@@ -1,5 +1,85 @@
 # Gbot design
 
+## Microsoft client launch follows its setup — Gchat 2
+
+`GBOT-M365-CLIENT-LAUNCH-LIFETIME`, based on main `ba3ec1a3a`, ignores a
+launch URL that arrives after the initiating Cloud PC setup has left.
+Previously, leaving setup while Open Microsoft client waited for its URL
+could still open that client later. A replacement setup requires its own
+explicit Open Microsoft client action and fresh URL.
+
+The rendered regression replaces setup during the delayed URL request,
+checks that the old response opens nothing, then opens the replacement
+client explicitly. Existing progress and duplicate-action guards remain.
+This is source/rendered UI scope; no real Microsoft account, sign-in or
+native client acceptance is claimed.
+
+Validation: the new journey failed against the original production code;
+fixed focus passed 182 tests across the Microsoft setup, setup wizard and Gbot
+route. Lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 20:31:41–20:37:43 UTC) passed 3,802 app tests
+(six skipped), 127 extension tests, 1,318 Rust tests (28 ignored) and all six
+critical coverage floors. All 3,461 tracked inputs matched raw bytes and modes
+before and after verification. Private cache and exports retired at 20:39 UTC;
+protected donor and guest image remain. Evidence:
+`/ai/gchat/out/gchat2-m365-client-launch-lifetime-20261018/SUMMARY.md`.
+
+## LAN removal follows its bot panel — Gchat 2
+
+`GBOT-LAN-REMOVAL-REQUEST-LIFETIME`, based on main `82ad083b1`, ignores a
+removal confirmation after the initiating saved-bot panel has left. Previously,
+accepting the old dialog could still remove that bot. An already submitted
+removal may finish, but its result cannot clear a replacement bot selection or
+show a failure in its panel.
+
+The replacement bot requires its own explicit removal confirmation. Rendered
+journeys cover replacement while the dialog is open and while the request is
+pending, followed by a freshly confirmed action for the replacement. Existing
+confirmation cancellation and failure/retry feedback remain. This is
+source/rendered UI scope, with no service or native removal contract change.
+
+
+Validation: both new journeys failed against the original production code;
+fixed focus passed 119 tests (12 LAN bot, 107 Gbot route). Lint passed with
+zero errors and five existing warnings. ONE `make verify`
+(2026-10-18 20:14:10–20:20:13 UTC) passed 3,801 app tests (six skipped),
+127 extension tests, 1,318 Rust tests (28 ignored), all six coverage floors and
+lint/typecheck/quality guards. All 3,461 tracked bytes and modes matched before
+and after the gates, with fresh tracked timestamps. Only this receipt was added
+afterward. Booking3540 returned20:20Z; the private cache and both local exports
+were removed by20:21:30Z. Small evidence:
+`/ai/gchat/out/gchat2-lan-removal-request-lifetime-20261018/SUMMARY.md`.
+Final gate SHA256 `6a2a969a3f9cd3dde1fd4ee731444aa7e6e2cd9603d0deef66442e275b81dfba`;
+cleanup SHA256 `5be045353c469aaea76b7068bbb66764bc3f6df691e0633bcd3ae872107bd780`.
+
+## Recovering linked-account failures — Gchat 2
+
+`GBOT-LINKED-ACCOUNTS-ERROR-GUIDANCE`, based on main `2f6e397d9`, names
+Refresh accounts after a failed list read and Save linked accounts after an
+unconfirmed save. Previously, save failures did not name their retry action
+and both failures displayed technical diagnostics directly in the panel.
+Diagnostics now stay in closed Details until requested.
+
+Unsaved selections remain available. A read-only refresh cannot hide an
+unconfirmed save, overwrite its draft or repeat it; each explicit retry clears
+only its own failure. Existing pending controls and bot-switch/request-lifetime
+guards remain. Rendered journeys cover Error and native-string failures,
+diagnostic disclosure, separate failures and successful explicit retries.
+This is source/rendered scope, with no service or account-permission change.
+
+Validation: original production failed all four new Error/native-string read and
+save journeys; fixed focus passed 123 tests (16 Linked accounts, 107 Gbot route).
+Lint passed with zero errors and five existing warnings. ONE `make verify`
+(2026-10-18 19:57:17–20:03:17 UTC) passed 3,793 app tests (six skipped),
+127 extension tests, 1,318 Rust tests (28 ignored), all six coverage floors and
+lint/typecheck/quality guards. All 3,461 tracked bytes and modes matched before
+and after the gates, with fresh tracked timestamps. Only this receipt was added
+afterward. Booking3533 returned20:03Z; the private cache and both local exports
+were removed by20:04:27Z. Small evidence:
+`/ai/gchat/out/gchat2-linked-accounts-error-guidance-20261018/SUMMARY.md`.
+Final gate SHA256 `a91cc48079fca74122afc6a4687ed311328a19f3d8b9be750c84bdb83e8f9fe6`;
+cleanup SHA256 `b56282da7aa9835e838704f71be8fde6086a99c239c61425479603e2be3cac63`.
+
 ## Saving a LAN bot name once — Gchat 2
 
 `GBOT-LAN-RENAME-SUBMIT-PROGRESS`, based on main `b659383f3`, guards
