@@ -655,10 +655,13 @@ prerequisite is recorded. Each new source fix needs focused checks, one
 `make verify` and native acceptance using its changed build. The baseline and
 candidates use optimized bundled Vite frontends in debug Rust shells with custom
 protocol. This is Linux source-native evidence; the requested installed-current-main
-walk remains pending. GChat and Manager builds pass. The next private release
-refresh will reuse the accepted Linux AppDir runtime closure without changing
+walk remains pending. GChat and Manager builds pass. The private release
+refresh reuses the accepted Linux AppDir runtime closure without changing
 Ron's installation or publishing packages; release performance is not claimed.
-No model, hardware profile or GPU workload has run during the walk.
+No model, hardware profile or GPU workload has run during the walk. The pinned
+release build started at 04:17:11Z on booked CPU104–111 (line2969, hard end
+04:46Z), socket1 shared lock and nice10. The helper owns the stage until its
+terminal handoff; native installed acceptance follows a passing AppDir refresh.
 
 Five reproduced defects have tested, merged source fixes:
 
@@ -816,6 +819,15 @@ in the retained paused screenshots. Separate source-only branch
 `fix/c3-download-count-wording-20261018` at `72c76c51a` says “1 download” /
 “2 downloads”; tests/lint/ONE verify/build/native wait until the release helper
 returns the shared stage. It is not part of the pinned main build yet.
+
+`GUI-INTERFACE-RESET-KEEPS-THEME` is source-confirmed at the same main pin: Reset
+restores font/accent but leaves Light/System unchanged. Separate source candidate
+`18c405b1d` on `fix/c3-interface-reset-theme-20261018` restores Dark/Medium, awaits
+the theme service and reports errors. Native baseline confirmation and all gates
+remain pending; this row follows badge wording after the release stage handoff.
+C4 may read-copy the inactive debug target, root/workspace dependencies and Yarn
+cache into its own standalone-launcher scratch; active release target and
+generated resources are excluded. No donor mutation is authorized.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
