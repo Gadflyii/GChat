@@ -91,6 +91,7 @@ export default function CloudComputer({
   const update = (result: CloudReview) => {
     updated(result)
     if (result.deployment?.phase === 'deleted') {
+      setBilling(false)
       setError(undefined)
       setCheckError('')
       setRemove(false)

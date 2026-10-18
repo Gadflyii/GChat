@@ -1,5 +1,33 @@
 # Gbot design
 
+## Fresh billing consent after cloud computer deletion — Gchat 2
+
+`GBOT-CLOUD-RECREATION-BILLING-CONSENT`, based on main `78078ddae`,
+clears the creation billing checkbox when the service confirms deletion.
+Previously, creating and deleting a computer in the same setup kept its old
+authorization checked when the creation form returned. A second computer now
+requires fresh billing consent followed by an explicit Create cloud computer
+action, even while its saved cost review is still valid.
+
+The same reset applies when Check progress confirms a pending deletion.
+Unconfirmed deletion and failed creation retries retain their existing recovery;
+SSH source entries, quote checks, expiry and duplicate-action guards remain.
+Rendered tests follow both complete creation/deletion journeys, check that old
+consent cannot create another computer and verify the explicit newly consented
+request. This is source/rendered UI scope with no provider or service change.
+
+
+Validation: both original-production regressions failed because billing consent
+remained checked after deletion. Fixed CloudCosts/wizard focus passed 61 tests;
+lint had zero errors and five existing warnings. ONE `make verify`, 18 October
+18:23:46–18:29:44 UTC, passed 3,753 app tests (six skipped), 127 extension
+tests, 1,316 Rust tests (28 ignored, 23 summaries), six coverage floors and
+lint/typecheck/guards. All 3,459 tracked raw bytes/modes matched before and after
+verification with fresh build timestamps. This receipt was added afterward,
+with product and test source unchanged. CPU80–87 booking3485 returned18:30Z.
+Evidence: `out/gchat2-cloud-recreation-billing-consent-20261018/result.json`
+and adjacent raw logs. Native and provider acceptance remain separate.
+
 ## Cloud computer action recovery across progress checks — Gchat 2
 
 `GBOT-CLOUD-COMPUTER-ACTION-ERROR-PERSISTENCE`, based on main `21bfcb946`,
