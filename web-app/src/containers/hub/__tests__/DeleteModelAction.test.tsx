@@ -47,10 +47,10 @@ function deferred<T = void>() {
   return { promise, resolve, reject }
 }
 
-const llamacpp = (ids: string[]): ModelProvider =>
+const ginferProvider = (ids: string[]): ModelProvider =>
   ({
     active: true,
-    provider: 'llamacpp',
+    provider: 'ginfer',
     persist: true,
     settings: [],
     models: ids.map((id) => ({ id })),
@@ -73,15 +73,16 @@ describe('DeleteModelAction', () => {
     deleteModel.mockReset().mockResolvedValue(undefined)
     stopModel.mockReset().mockResolvedValue(undefined)
     startModel.mockReset().mockResolvedValue(undefined)
-    getProviders.mockReset().mockResolvedValue([llamacpp([])])
+    getProviders.mockReset().mockResolvedValue([ginferProvider([])])
     seedServiceHub({
       models: { deleteModel, stopModel, startModel } as unknown as ModelsService,
       providers: { getProviders } as unknown as ProvidersService,
+      path: { sep: () => '/' } as PathService,
     })
     useModelProvider.setState({
-      providers: [llamacpp(['Qwen3-4B-Q4_K_M'])],
-      deletedModels: [],
-      selectedProvider: 'llamacpp',
+      providers: [ginferProvider(['Qwen3-4B-Q4_K_M'])],
+      inventoryRevision: 0, modelMutations: {},
+      selectedProvider: 'ginfer',
       selectedModel: { id: 'Qwen3-4B-Q4_K_M' } as Model,
     })
     useFavoriteModel.setState({
@@ -91,7 +92,7 @@ describe('DeleteModelAction', () => {
   })
 
   it('only deletes after the confirmation is accepted', async () => {
-    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" />)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="ginfer" />)
 
     expect(deleteModel).not.toHaveBeenCalled()
 
@@ -99,12 +100,12 @@ describe('DeleteModelAction', () => {
     await user.click(confirm)
 
     await waitFor(() =>
-      expect(deleteModel).toHaveBeenCalledWith('Qwen3-4B-Q4_K_M', 'llamacpp')
+      expect(deleteModel).toHaveBeenCalledWith('Qwen3-4B-Q4_K_M', 'ginfer')
     )
   })
 
   it('focuses Cancel so Enter dismisses the confirmation without deleting the model', async () => {
-    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" />)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="ginfer" />)
 
     const { user } = await openConfirm()
     const cancel = screen.getByRole('button', { name: 'common:deleteModel.cancel' })
@@ -122,7 +123,7 @@ describe('DeleteModelAction', () => {
     const retry = deferred()
     const onDeleted = vi.fn()
     deleteModel.mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise)
-    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" onDeleted={onDeleted} />)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="ginfer" onDeleted={onDeleted} />)
     const trigger = screen.getByRole('button', { name: 'common:deleteModel.delete' })
     const { user, confirm } = await openConfirm()
     const dialog = screen.getByRole('dialog')
@@ -140,7 +141,7 @@ describe('DeleteModelAction', () => {
       ctrlKey: false,
     })
     expect(dialog).toBeInTheDocument()
-    expect(deleteModel).toHaveBeenCalledExactlyOnceWith('Qwen3-4B-Q4_K_M', 'llamacpp')
+    expect(deleteModel).toHaveBeenCalledExactlyOnceWith('Qwen3-4B-Q4_K_M', 'ginfer')
     expect(onDeleted).not.toHaveBeenCalled()
     expect(getProviders).not.toHaveBeenCalled()
 
@@ -165,7 +166,7 @@ describe('DeleteModelAction', () => {
 
     await user.click(within(dialog).getByRole('button', { name: 'common:deleteModel.delete' }))
     expect(deleteModel).toHaveBeenCalledTimes(2)
-    expect(deleteModel).toHaveBeenLastCalledWith('Qwen3-4B-Q4_K_M', 'llamacpp')
+    expect(deleteModel).toHaveBeenLastCalledWith('Qwen3-4B-Q4_K_M', 'ginfer')
     expect(dialog).toBeInTheDocument()
     expect(dialog).toHaveAttribute('aria-busy', 'true')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -184,7 +185,7 @@ describe('DeleteModelAction', () => {
   it('guards same-turn duplicate deletion and closes only after the request succeeds', async () => {
     const deletion = deferred()
     deleteModel.mockReturnValue(deletion.promise)
-    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" />)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="ginfer" />)
     const { confirm } = await openConfirm()
 
     act(() => {
@@ -192,7 +193,7 @@ describe('DeleteModelAction', () => {
       confirm.click()
     })
 
-    expect(deleteModel).toHaveBeenCalledExactlyOnceWith('Qwen3-4B-Q4_K_M', 'llamacpp')
+    expect(deleteModel).toHaveBeenCalledExactlyOnceWith('Qwen3-4B-Q4_K_M', 'ginfer')
     expect(screen.getByRole('dialog')).toBeInTheDocument()
     expect(getProviders).not.toHaveBeenCalled()
     expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['Qwen3-4B-Q4_K_M'])
@@ -209,7 +210,7 @@ describe('DeleteModelAction', () => {
   it('names the model by its readable label, not its package hash, in the confirmation', async () => {
     const hash = 'a'.repeat(64)
     render(
-      <DeleteModelAction modelId={hash} label="Qwen 27B 2-bit mix" provider="llamacpp" />
+      <DeleteModelAction modelId={hash} label="Qwen 27B 2-bit mix" provider="ginfer" />
     )
     await openConfirm()
     expect(
@@ -234,7 +235,7 @@ describe('DeleteModelAction', () => {
     render(
       <DeleteModelAction
         modelId="Qwen3-4B-Q4_K_M"
-        provider="llamacpp"
+        provider="ginfer"
         onDeleted={onDeleted}
       />
     )
@@ -263,7 +264,7 @@ describe('DeleteModelAction', () => {
       const failedRetry = deferred<ModelProvider[]>()
       const successfulRetry = deferred<ModelProvider[]>()
       const onDeleted = vi.fn()
-      const modelProvider = { ...llamacpp([modelId]), provider: 'ginfer' }
+      const modelProvider = { ...ginferProvider([modelId]), provider: 'ginfer' }
       useModelProvider.setState({
         providers: [modelProvider],
         selectedProvider: 'ginfer',
@@ -373,7 +374,7 @@ describe('DeleteModelAction', () => {
         settings: { temperature: { controller_props: { value: 0.35 } } },
       } as Model
       const provider = {
-        ...llamacpp([firstId, secondId]),
+        ...ginferProvider([firstId, secondId]),
         provider: 'ginfer',
         models: [{ id: firstId }, { id: secondId }, retainedModel],
         api_key: 'retained-key',
@@ -399,7 +400,7 @@ describe('DeleteModelAction', () => {
       })
       useModelProvider.setState({
         providers: [provider],
-        deletedModels: [],
+        inventoryRevision: 0, modelMutations: {},
         selectedProvider: 'ginfer',
         selectedModel: retainedModel,
       })
@@ -431,7 +432,6 @@ describe('DeleteModelAction', () => {
       await user.click(screen.getByRole('button', { name: 'common:deleteModel.delete' }))
       await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'common:deleteModel.delete' }))
       await waitFor(() => expect(getProviders).toHaveBeenCalledTimes(3))
-      expect(useModelProvider.getState().deletedModels).toEqual([firstId, secondId])
       expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['retained-model'])
       if (secondReadState === 'acknowledged') {
         await act(async () => {
@@ -469,7 +469,6 @@ describe('DeleteModelAction', () => {
       expect(state.providers[0].models).toEqual([retainedModel])
       expect(state.providers[0]).toMatchObject({ api_key: 'retained-key', base_url: 'http://localhost:1337/v1' })
       expect(state.selectedModel).toEqual(retainedModel)
-      expect(state.deletedModels).toEqual([firstId, secondId])
       expect(toastSuccess).toHaveBeenLastCalledWith('Model deleted', {
         id: `delete-model-${firstId}`,
         description: 'common:deleteModel.success The model list is up to date.',
@@ -492,102 +491,24 @@ describe('DeleteModelAction', () => {
     }
   )
 
-  it.each(['acknowledged', 'failed'] as const)(
-    'preserves a legitimately re-added model during another deletion after its original inventory read %s',
-    async (originalRead) => {
-      const firstId = 'model-a'
-      const secondId = 'model-b'
-      const retainedModel = { id: 'retained-model', displayName: 'Keep this model' } as Model
-      const readdedModel = {
-        id: secondId,
-        displayName: 'My re-added model',
-        path: '/models/re-added-b.ginfer',
-        settings: { temperature: { controller_props: { value: 0.25 } } },
-      } as Model
-      const provider = {
-        ...llamacpp([firstId, secondId]),
-        provider: 'ginfer',
-        models: [{ id: firstId }, { id: secondId, path: '/models/original-b.ginfer' }, retainedModel],
-        api_key: 'retained-key',
-        base_url: 'http://localhost:1337/v1',
-      } as ModelProvider
-      const secondRead = deferred<ModelProvider[]>()
-      const firstRead = deferred<ModelProvider[]>()
-      const secondDeleted = vi.fn()
-      const firstDeleted = vi.fn()
-      seedServiceHub({
-        models: { deleteModel, stopModel, startModel } as unknown as ModelsService,
-        providers: { getProviders } as unknown as ProvidersService,
-        path: { sep: () => '/' } as PathService,
-      })
-      useModelProvider.setState({
-        providers: [provider], deletedModels: [], selectedProvider: 'ginfer', selectedModel: retainedModel,
-      })
-      getProviders.mockReturnValueOnce(secondRead.promise).mockReturnValueOnce(firstRead.promise)
-      const secondRow = render(<DeleteModelAction modelId={secondId} provider="ginfer" onDeleted={secondDeleted} />)
-      const { user, confirm } = await openConfirm()
-      await user.click(confirm)
-      await waitFor(() => expect(getProviders).toHaveBeenCalledOnce())
-      await act(async () => {
-        if (originalRead === 'acknowledged') {
-          secondRead.resolve([{ ...provider, models: [{ id: firstId }, retainedModel] }])
-          await secondRead.promise
-        } else {
-          secondRead.reject(new Error('The removed model inventory is unavailable'))
-          await secondRead.promise.catch(() => undefined)
-        }
-      })
-      await waitFor(() => expect(secondDeleted).toHaveBeenCalledOnce())
-      secondRow.unmount()
-      expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual([firstId, 'retained-model'])
-
-      // Registration and rescan both publish real persist:true inventory this way.
-      act(() => {
-        useModelProvider.getState().setProviders([{ ...provider, models: [{ id: firstId }, readdedModel, retainedModel] }])
-        useModelProvider.getState().selectModelProvider('ginfer', secondId)
-      })
-      const acceptedReadd = useModelProvider.getState().selectedModel
-      expect(acceptedReadd).toMatchObject(readdedModel)
-      expect(useModelProvider.getState().deletedModels).toEqual([secondId])
-
-      render(<DeleteModelAction modelId={firstId} provider="ginfer" onDeleted={firstDeleted} />)
-      await user.click(screen.getByRole('button', { name: 'common:deleteModel.delete' }))
-      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'common:deleteModel.delete' }))
-      await waitFor(() => expect(getProviders).toHaveBeenCalledTimes(2))
-      expect(useModelProvider.getState().selectedModel).toEqual(acceptedReadd)
-      await act(async () => {
-        firstRead.resolve([{ ...provider, models: [{ id: firstId }, readdedModel, retainedModel] }])
-        await firstRead.promise
-      })
-
-      await waitFor(() => expect(firstDeleted).toHaveBeenCalledOnce())
-      const state = useModelProvider.getState()
-      expect(state.providers[0].models).toEqual([acceptedReadd, retainedModel])
-      expect(state.providers[0]).toMatchObject({ persist: true, api_key: 'retained-key', base_url: 'http://localhost:1337/v1' })
-      expect(state.selectedModel).toEqual(acceptedReadd)
-      expect(deleteModel.mock.calls).toEqual([[secondId, 'ginfer'], [firstId, 'ginfer']])
-      expect(getProviders).toHaveBeenCalledTimes(2)
-      expect(toastWarning).toHaveBeenCalledTimes(originalRead === 'failed' ? 1 : 0)
-      expect(stopModel).not.toHaveBeenCalled()
-      expect(startModel).not.toHaveBeenCalled()
-      expect(toastError).not.toHaveBeenCalled()
-    }
-  )
-
-  it.each(['stale', 'omitted'] as const)(
-    'preserves the current re-added model when an older recovery returns %s model data',
-    async (returnedModel) => {
+  it.each([
+    { order: 'B acknowledged before A read', returned: 'omitted', originalRead: 'acknowledged' },
+    { order: 'B acknowledged before A read', returned: 'stale', originalRead: 'acknowledged' },
+    { order: 'B re-added before A deletion', returned: 'current', originalRead: 'acknowledged' },
+    { order: 'B re-added before A deletion', returned: 'current', originalRead: 'failed' },
+    { order: 'B deleted during A read', returned: 'omitted', originalRead: 'acknowledged' },
+    { order: 'B deleted during A read', returned: 'stale', originalRead: 'acknowledged' },
+  ])(
+    'preserves a selected re-add across $order and a $returned response (B read: $originalRead)',
+    async ({ order, returned, originalRead }) => {
       const firstId = 'model-a'
       const secondId = 'model-b'
       const retainedModel = {
-        id: 'retained-model',
-        displayName: 'Keep this model',
+        id: 'retained-model', displayName: 'Keep this model',
         settings: { temperature: { controller_props: { value: 0.35 } } },
       } as Model
       const originalSecond = {
-        id: secondId,
-        displayName: 'Original B',
-        path: '/models/original-b.ginfer',
+        id: secondId, displayName: 'Original B', path: '/models/original-b.ginfer',
         settings: { temperature: { controller_props: { value: 0.9 } } },
       } as Model
       const readdedModel = {
@@ -597,72 +518,90 @@ describe('DeleteModelAction', () => {
         settings: { temperature: { controller_props: { value: 0.25 } } },
       } as Model
       const provider = {
-        ...llamacpp([firstId, secondId]),
+        ...ginferProvider([firstId, secondId]),
         provider: 'ginfer',
         models: [{ id: firstId }, originalSecond, retainedModel],
         api_key: 'retained-key',
         base_url: 'http://localhost:1337/v1',
       } as ModelProvider
+      const secondRead = deferred<ModelProvider[]>()
       const firstRead = deferred<ModelProvider[]>()
       const firstRecovery = deferred<ModelProvider[]>()
-      const secondRead = deferred<ModelProvider[]>()
-      const firstDeleted = vi.fn()
       const secondDeleted = vi.fn()
+      const firstDeleted = vi.fn()
       seedServiceHub({
         models: { deleteModel, stopModel, startModel } as unknown as ModelsService,
         providers: { getProviders } as unknown as ProvidersService,
         path: { sep: () => '/' } as PathService,
       })
       useModelProvider.setState({
-        providers: [provider], deletedModels: [], selectedProvider: 'ginfer', selectedModel: retainedModel,
+        providers: [provider], inventoryRevision: 0, modelMutations: {}, selectedProvider: 'ginfer', selectedModel: retainedModel,
       })
-      getProviders
-        .mockReturnValueOnce(firstRead.promise)
-        .mockReturnValueOnce(firstRecovery.promise)
-        .mockReturnValueOnce(secondRead.promise)
-      const firstRow = render(<DeleteModelAction modelId={firstId} provider="ginfer" onDeleted={firstDeleted} />)
-      const { user, confirm } = await openConfirm()
-      await user.click(confirm)
-      await waitFor(() => expect(getProviders).toHaveBeenCalledOnce())
-      await act(async () => {
-        firstRead.reject(new Error('First inventory read is offline'))
-        await firstRead.promise.catch(() => undefined)
-      })
-      await waitFor(() => expect(firstDeleted).toHaveBeenCalledOnce())
-      firstRow.unmount()
-      const notice = render(toastWarning.mock.calls[0][1].description)
-      await user.click(within(notice.container).getByRole('button', { name: 'Refresh model list' }))
-      expect(getProviders).toHaveBeenCalledTimes(2)
-
-      // B's clean read acknowledges its deletion while A still holds an older read.
-      const secondRow = render(<DeleteModelAction modelId={secondId} provider="ginfer" onDeleted={secondDeleted} />)
-      await user.click(screen.getByRole('button', { name: 'common:deleteModel.delete' }))
-      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'common:deleteModel.delete' }))
-      await waitFor(() => expect(getProviders).toHaveBeenCalledTimes(3))
-      await act(async () => {
-        secondRead.resolve([{ ...provider, models: [retainedModel] }])
-        await secondRead.promise
-      })
-      await waitFor(() => expect(secondDeleted).toHaveBeenCalledOnce())
-      secondRow.unmount()
-      act(() => {
-        useModelProvider.getState().setProviders([{ ...provider, models: [readdedModel, retainedModel] }])
+      const user = userEvent.setup()
+      const deleteRow = async (id: string, read: Promise<ModelProvider[]>, onDeleted: () => void) => {
+        const reads = getProviders.mock.calls.length
+        getProviders.mockReturnValueOnce(read)
+        const row = render(<DeleteModelAction modelId={id} provider="ginfer" onDeleted={onDeleted} />)
+        const { confirm } = await openConfirm()
+        await user.click(confirm)
+        await waitFor(() => expect(getProviders).toHaveBeenCalledTimes(reads + 1))
+        return row
+      }
+      const deleteSecond = async () => {
+        const row = await deleteRow(secondId, secondRead.promise, secondDeleted)
+        expect(useModelProvider.getState().providers[0].models.some(model => model.id === secondId)).toBe(false)
+        await act(async () => {
+          if (originalRead === 'failed') {
+            secondRead.reject(new Error('The removed model inventory is unavailable'))
+            await secondRead.promise.catch(() => undefined)
+          } else {
+            secondRead.resolve([{ ...provider, models: useModelProvider.getState().providers[0].models }])
+            await secondRead.promise
+          }
+        })
+        await waitFor(() => expect(secondDeleted).toHaveBeenCalledOnce())
+        row.unmount()
+      }
+      const readdSecond = () => act(() => {
+        const otherModels = useModelProvider.getState().providers[0].models.filter(model => model.id !== secondId)
+        useModelProvider.getState().setProviders([{ ...provider, models: [...otherModels, readdedModel] }])
         useModelProvider.getState().selectModelProvider('ginfer', secondId)
       })
+
+      if (order !== 'B deleted during A read') await deleteSecond()
+      if (order === 'B re-added before A deletion') readdSecond()
+      const firstRow = await deleteRow(firstId, firstRead.promise, firstDeleted)
+      if (order !== 'B re-added before A deletion') {
+        await act(async () => {
+          firstRead.reject(new Error('First inventory read is offline'))
+          await firstRead.promise.catch(() => undefined)
+        })
+        await waitFor(() => expect(firstDeleted).toHaveBeenCalledOnce())
+        firstRow.unmount()
+        const notice = render(toastWarning.mock.calls.at(-1)![1].description)
+        getProviders.mockReturnValueOnce(firstRecovery.promise)
+        await user.click(within(notice.container).getByRole('button', { name: 'Refresh model list' }))
+        expect(within(notice.container).getByRole('button', { name: 'Refresh model list' })).toBeDisabled()
+        if (order === 'B deleted during A read') await deleteSecond()
+        // In particular, B's earlier clean acknowledgement must not let this
+        // older A read erase B when the re-add lands after the read began.
+        readdSecond()
+      }
       const acceptedReadd = useModelProvider.getState().selectedModel
       expect(acceptedReadd).toMatchObject(readdedModel)
-      expect(useModelProvider.getState().deletedModels).toEqual([firstId, secondId])
+      const pendingRead = order === 'B re-added before A deletion' ? firstRead : firstRecovery
       await act(async () => {
-        firstRecovery.resolve([{
+        pendingRead.resolve([{
           ...provider,
-          models: [{ id: firstId }, ...(returnedModel === 'stale' ? [originalSecond] : []), retainedModel],
+          models: [{ id: firstId }, ...(returned === 'omitted' ? [] : [returned === 'stale' ? originalSecond : readdedModel]), retainedModel],
         }])
-        await firstRecovery.promise
+        await pendingRead.promise
       })
 
+      await waitFor(() => expect(firstDeleted).toHaveBeenCalledOnce())
       expect(toastSuccess).toHaveBeenLastCalledWith('Model deleted', {
         id: `delete-model-${firstId}`,
-        description: 'common:deleteModel.success The model list is up to date.',
+        description: order === 'B re-added before A deletion' ? 'common:deleteModel.success' : 'common:deleteModel.success The model list is up to date.',
       })
       const state = useModelProvider.getState()
       expect(state.providers[0].models).toHaveLength(2)
@@ -671,9 +610,11 @@ describe('DeleteModelAction', () => {
       expect(state.providers[0].models.some(model => model.id === firstId)).toBe(false)
       expect(state.providers[0]).toMatchObject({ persist: true, api_key: 'retained-key', base_url: 'http://localhost:1337/v1' })
       expect(state.selectedModel).toEqual(acceptedReadd)
-      expect(getProviders).toHaveBeenCalledTimes(3)
-      expect(deleteModel.mock.calls).toEqual([[firstId, 'ginfer'], [secondId, 'ginfer']])
-      expect(toastWarning).toHaveBeenCalledOnce()
+      expect(getProviders).toHaveBeenCalledTimes(order === 'B re-added before A deletion' ? 2 : 3)
+      expect(deleteModel.mock.calls).toEqual(order === 'B deleted during A read'
+        ? [[firstId, 'ginfer'], [secondId, 'ginfer']]
+        : [[secondId, 'ginfer'], [firstId, 'ginfer']])
+      expect(toastWarning).toHaveBeenCalledTimes(order === 'B re-added before A deletion' ? (originalRead === 'failed' ? 1 : 0) : 1)
       expect(stopModel).not.toHaveBeenCalled()
       expect(startModel).not.toHaveBeenCalled()
       expect(toastError).not.toHaveBeenCalled()
@@ -683,7 +624,7 @@ describe('DeleteModelAction', () => {
   it('preserves a running model when the backend refuses removal', async () => {
     useAppState.setState({ activeModels: ['Qwen3-4B-Q4_K_M'] })
     deleteModel.mockRejectedValue(new Error('Stop this model before deleting its files.'))
-    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" />)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="ginfer" />)
 
     const { user, confirm } = await openConfirm()
     await user.click(confirm)
@@ -697,7 +638,7 @@ describe('DeleteModelAction', () => {
 
   it('keeps the model listed and reports the failure when the engine refuses', async () => {
     deleteModel.mockRejectedValue(new Error('Model does not exist'))
-    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" />)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="ginfer" />)
 
     const { user, confirm } = await openConfirm()
     await user.click(confirm)

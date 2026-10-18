@@ -12,30 +12,6 @@ import { useFavoriteModel } from '@/hooks/useFavoriteModel'
 import { useModelProvider } from '@/hooks/useModelProvider'
 import type { ServiceHub } from '@/services'
 
-type AcceptedDeletion = { modelId: string; readded: boolean }
-
-const acceptedDeletions = new Map<string, AcceptedDeletion>()
-const pendingInventoryReads = new Set<Map<string, AcceptedDeletion>>()
-
-function retireReaddedModels() {
-  // Accepted deletions already removed their cached rows. A row now present
-  // came from a later registration/download publication and must stay visible.
-  const installedIds = new Set(
-    useModelProvider.getState().providers.flatMap((provider) =>
-      provider.models.map((model) => model.id)
-    )
-  )
-  for (const deletions of [acceptedDeletions, ...pendingInventoryReads]) {
-    for (const deletion of deletions.values()) {
-      if (!installedIds.has(deletion.modelId)) continue
-      deletion.readded = true
-      if (acceptedDeletions.get(deletion.modelId) === deletion) {
-        acceptedDeletions.delete(deletion.modelId)
-      }
-    }
-  }
-}
-
 /**
  * Delete a local model and reconcile the app state around it. A rejected delete
  * throws. Once accepted, returns null for a refreshed inventory or the refresh
@@ -48,10 +24,6 @@ export async function deleteLocalModel(
 ): Promise<string | null> {
   await serviceHub.models().deleteModel(modelId, provider)
 
-  retireReaddedModels()
-  const deletion = { modelId, readded: false }
-  acceptedDeletions.set(modelId, deletion)
-  for (const read of pendingInventoryReads) read.set(modelId, deletion)
   useFavoriteModel.getState().removeFavorite(modelId)
   useModelProvider.getState().deleteModel(modelId)
 
@@ -67,39 +39,7 @@ export async function deleteLocalModel(
 export async function refreshModelProviders(
   serviceHub: ServiceHub
 ): Promise<void> {
-  retireReaddedModels()
-  const deletions = new Map(acceptedDeletions)
-  // A snapshot started before a deletion cannot acknowledge its absence.
-  const acknowledgeable = new Set(deletions.values())
-  pendingInventoryReads.add(deletions)
-  try {
-    const providers = await serviceHub.providers().getProviders()
-    retireReaddedModels()
-    const state = useModelProvider.getState()
-    state.setProviders(
-      providers.map((entry) => ({
-        ...entry,
-        models: [
-          ...entry.models.filter((model) => !deletions.has(model.id)),
-          // An older snapshot must not erase or overwrite a new installation.
-          ...(state.providers.find((current) => current.provider === entry.provider)
-            ?.models.filter((model) => deletions.get(model.id)?.readded) ?? []),
-        ],
-      }))
-    )
-    const installedIds = new Set(
-      providers.flatMap((entry) => entry.models.map((model) => model.id))
-    )
-    for (const deletion of acknowledgeable) {
-      if (
-        !deletion.readded &&
-        !installedIds.has(deletion.modelId) &&
-        acceptedDeletions.get(deletion.modelId) === deletion
-      ) {
-        acceptedDeletions.delete(deletion.modelId)
-      }
-    }
-  } finally {
-    pendingInventoryReads.delete(deletions)
-  }
+  const revision = useModelProvider.getState().inventoryRevision
+  const providers = await serviceHub.providers().getProviders()
+  useModelProvider.getState().setProviders(providers, revision)
 }
