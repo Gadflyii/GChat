@@ -215,6 +215,35 @@ CPUs returned 01:41Z. Retain only the
 [summary](../../out/c3-reset-agent-drain-20261018/summary.md).
 Next: Codex 8 follow-up review and Bubbs's merge; continue the paused startup
 quote native acceptance separately.
+## Native radio arrow-key focus — Gchat 2, October 18
+
+`GUI-CHECKBOX-THEME`: the retained Linux release from `ed68c7443` has the
+same native-control CSS and test as main `29c301aeb`. In OLD's private app
+profile, real XTest input passed 16px Models checkbox checked/unchecked,
+Tab and Space controls in Light and Dark. Gbot's **Service computer** radios
+changed selection with Right/Left, but WebKit reported `:focus-visible` false
+and removed the focus ring in both themes. Tab or Space restored it.
+
+Native radios now use `:focus`; checkboxes retain `:focus-visible`.
+The existing stylesheet regression checks that selector and its outline.
+Six focused cases and one full `make verify` pass: 3,200 frontend, 121 extension
+and 1,208 Rust tests, with six frontend skips and 27 Rust ignores. All six
+critical coverage floors pass; all 3,100 tracked source files remain unchanged
+across verification. No Engine code changed.
+
+The production release candidate passes native Right/Left radio selection in
+Light and Dark: the selected radio retains its visible 2px theme ring even when
+WebKit reports `:focus-visible` false. Models checkboxes also pass real Tab/Space,
+checked and unchecked, in both themes. All observed XTest key events are trusted;
+native viewport snapshots were visually inspected. Dark was restored.
+
+The private app/profile and owned SSD build/cache root were removed. OLD is OFF
+with its original XML restored and hash matched; FRESH was untouched. CPUs
+returned after replay. This is limited to Linux Models checkboxes and Gbot
+service-computer radios; connected Host, signed-in Workspace and disabled
+controls remain unqualified, as does Windows.
+No model, setup, sign-in, Ensure, save or service-computer confirmation was run.
+Evidence: [native-control result](../../out/gchat2-checkbox-native-20261018/result.json).
 
 ## Confirmation replacement focus — October 18
 

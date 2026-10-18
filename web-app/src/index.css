@@ -242,8 +242,10 @@
     color-scheme: dark;
   }
 
+  /* WebKit can omit :focus-visible when arrow keys move within a radio group.
+     Keep the ring on the focused radio so keyboard selection stays visible. */
   input[type='checkbox']:focus-visible,
-  input[type='radio']:focus-visible {
+  input[type='radio']:focus {
     @apply outline-2 outline-offset-2 outline-ring;
   }
 
