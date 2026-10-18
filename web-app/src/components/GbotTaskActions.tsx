@@ -25,23 +25,25 @@ export default function GbotTaskActions({
 }) {
   const [pending, setPending] = useState<TaskAction>()
   const submitting = useRef(false)
-  const available: TaskAction | undefined = [
-    'running',
-    'waiting_for_human',
-  ].includes(taskState)
-    ? 'cancel'
-    : ['ready', 'paused', 'interrupted', 'cancelled'].includes(taskState)
-      ? 'resume'
-      : undefined
-  const action = pending ?? available
-  if (!action) return null
-  const blocked = busy || (action === 'resume' && (!ready || !botHasControl))
-  const perform = async () => {
-    if (blocked || submitting.current || !available) return
+  const available: TaskAction[] = ['running', 'waiting_for_human'].includes(taskState)
+    ? ['cancel']
+    : ['ready', 'paused', 'interrupted'].includes(taskState)
+      ? ['cancel', 'resume']
+      : taskState === 'cancelled'
+        ? ['resume']
+        : []
+  const actions = pending && !available.includes(pending)
+    ? [...available, pending]
+    : available
+  if (!actions.length) return null
+  const blocked = (action: TaskAction) =>
+    busy || Boolean(pending) || (action === 'resume' && (!ready || !botHasControl))
+  const perform = async (action: TaskAction) => {
+    if (blocked(action) || submitting.current || !available.includes(action)) return
     submitting.current = true
-    setPending(available)
+    setPending(action)
     try {
-      await onAction(available)
+      await onAction(action)
     } catch (cause) {
       toast.error(String(cause))
     } finally {
@@ -56,22 +58,25 @@ export default function GbotTaskActions({
           {pending === 'cancel' ? 'Stopping this task…' : 'Resuming this task…'}
         </span>
       )}
-      <Button
-        type="button"
-        variant="ghost"
-        size={size}
-        aria-busy={Boolean(pending)}
-        disabled={blocked || Boolean(pending)}
-        onClick={() => void perform()}
-      >
-        {pending
-          ? pending === 'cancel'
-            ? 'Stopping…'
-            : 'Resuming…'
-          : action === 'cancel'
-            ? stopLabel
-            : resumeLabel}
-      </Button>
+      {actions.map((action) => (
+        <Button
+          key={action}
+          type="button"
+          variant="ghost"
+          size={size}
+          aria-busy={pending === action}
+          disabled={blocked(action)}
+          onClick={() => void perform(action)}
+        >
+          {pending === action
+            ? action === 'cancel'
+              ? 'Stopping…'
+              : 'Resuming…'
+            : action === 'cancel'
+              ? stopLabel
+              : resumeLabel}
+        </Button>
+      ))}
     </div>
   )
 }
