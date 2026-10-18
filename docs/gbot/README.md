@@ -1,5 +1,33 @@
 # Gbot design
 
+## Task history and approval read recovery in settings — Gchat 2
+
+`GBOT-SETTINGS-TASK-HISTORY-RETRY`, based on main `69f6e043c`, gives
+failed task-history and approval-list reads plain guidance and an explicit
+Retry loading tasks control in Gbot settings. Technical diagnostics remain in
+Details, initially closed. While the retry is pending, the control shows
+Loading tasks… and blocks duplicate clicks, including clicks in the same event
+turn. The task guidance names this control before suggesting changes to a bot's
+brain or task draft.
+
+The retry uses the existing read refresh. It preserves the selected bot, task
+draft, previously loaded history and pending approval requests. It does not
+submit, stop, resume or approve a task, or answer human-help requests. Rendered
+regressions cover both failed reads, a failed retry followed by recovery,
+diagnostic disclosure, duplicate clicks, preserved drafts and previously loaded
+history. This is source/rendered UI scope.
+
+Unchanged production reproduced four failed assertions while 103 route tests
+passed. The fixed route suite passed all 107 tests; lint passed with zero errors
+and five existing warnings. ONE `make verify`, 18 October 15:16:20–15:22:09 UTC,
+passed 3,646 app tests (six skipped), 127 extension tests, 1,309 Rust tests
+(28 ignored, 23 summaries), six coverage floors and lint/typecheck/guards.
+All 3,459 tracked raw source bytes and modes matched before and after the gate;
+tracked timestamps were refreshed before checks. This final receipt was added
+afterward with product and test source unchanged. CPU104–111 booking3356 returned.
+Evidence: `out/gchat2-settings-task-history-retry-20261018/result.json` and
+adjacent raw logs. No retry or whole-gate repeat.
+
 ## Service approval recovery — Gchat 2
 
 `GBOT-SERVICE-APPROVAL-ERROR-GUIDANCE`, based on main `2aa268c25`,
