@@ -643,9 +643,27 @@ S1 CPUs104–111 in a private SSD copy with pinned image `ad7f9bf020d7`, offline
 caches and read-only launch profiles; the booking was returned at 23:51Z.
 No local root-disk build or Engine/model run is involved. Evidence and final
 verification results:
-`/ai/gchat/out/c3-project-storage-rejection-20261017/`. Installed acceptance of
-the corrected source remains for the next RC; the frozen RC above reproduced
-the failure and was not modified.
+`/ai/gchat/out/c3-project-storage-rejection-20261017/`. Source `95f122e1f` is merged in `fe0c2cb6a`.
+
+Native corrected-source acceptance is **PASS** (2026-10-18). The retained Linux
+runnable `d8ce59320` contains that fix; its binary matches the retained build
+receipt and the affected project source is unchanged from the fix. In a
+private S1 HOME/XDG, dbus, unlocked keyring and Xvfb session, real XTest Create
+and Edit each encountered native WebKit `QuotaExceededError`. Both kept the
+dialog and exact draft open, showed the error, preserved the persisted project
+list byte for byte and kept the current location. Removing only the disposable
+quota-filling key allowed the same draft to save once without re-entry; Edit
+retained its project ID. No false success or Project Not Found occurred.
+The existing rendered tests supply delayed-save and repeated-input coverage.
+
+Evidence-only branch `test/c3-project-save-native-20261018` starts at
+`7bf20d7ff`; no source changes or repeated gates. Packet:
+`/ai/gchat/out/c3-project-save-native-20261018/{result.json,summary.md}`.
+Private app, auxiliary processes, observer forward and owned SSD profile are
+removed; CPU booking cancelled, returned02:15Z. No model, hardware profile,
+inference, shared app data or Windows action. This qualifies the corrected
+native Linux runnable; it does not qualify a new installer or Windows build.
+The old selected `ed68c7443` RC remains the recorded before-fix reproduction.
 
 ## Hardware live statistics wording — C7
 
