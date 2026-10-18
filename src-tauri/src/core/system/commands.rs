@@ -5260,26 +5260,209 @@ mod tests {
         );
     }
 
+    #[cfg(target_os = "linux")]
+    fn opencode_fixture_executable(path: &Path, script: &str) {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, script).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn opencode_setup_fixture(test_name: &str) -> Option<PathBuf> {
+        const FIXTURE_ROOT: &str = "GCHAT_OPENCODE_SETUP_FIXTURE_ROOT";
+        let root = match std::env::var_os(FIXTURE_ROOT) {
+            Some(root) => PathBuf::from(root),
+            None => {
+                // Keep PATH/HOME private without changing other tests' environment.
+                let root = tempfile::tempdir().unwrap();
+                let tools = root.path().join("tools with spaces");
+                fs::create_dir_all(&tools).unwrap();
+                fs::create_dir_all(root.path().join("home")).unwrap();
+                let result = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        &format!("core::system::commands::tests::{test_name}"),
+                        "--nocapture",
+                    ])
+                    .env(FIXTURE_ROOT, root.path())
+                    .env("PATH", &tools)
+                    .env("HOME", root.path().join("home"))
+                    .output()
+                    .unwrap();
+                assert!(
+                    result.status.success(),
+                    "{}{}",
+                    String::from_utf8_lossy(&result.stdout),
+                    String::from_utf8_lossy(&result.stderr),
+                );
+                assert!(
+                    String::from_utf8_lossy(&result.stdout).contains("test result: ok. 1 passed;")
+                );
+                return None;
+            }
+        };
+        let tools = root.join("tools with spaces");
+        std::os::unix::fs::symlink("/usr/bin/which", tools.join("which")).unwrap();
+        opencode_fixture_executable(&tools.join("node"), "#!/bin/sh\nprintf 'v18.19.1\\n'\n");
+        opencode_fixture_executable(
+            &tools.join("npm"),
+            r##"#!/bin/sh
+if [ "$1" = --version ]; then printf '9.2.0\n'; exit 0; fi
+[ "$1" = install ] && [ "$2" = --global=false ] && [ "$3" = --prefix ] && [ "$5" = --cache ] || exit 8
+prefix="$4"
+[ "$PWD" = "$prefix" ] || exit 8
+IFS= read -r mode < "$GCHAT_OPENCODE_SETUP_FIXTURE_ROOT/install-mode"
+/bin/mkdir -p "$prefix/node_modules/.bin" || exit 9
+if [ "$mode" = broken-version ]; then
+  printf '#!/bin/sh\nexit 29\n' > "$prefix/node_modules/.bin/opencode"
+else
+  printf '#!/bin/sh\nprintf "1.2.3\\n"\n' > "$prefix/node_modules/.bin/opencode"
+fi
+/bin/chmod 700 "$prefix/node_modules/.bin/opencode" || exit 9
+printf '%s\n' "$mode" >> "$GCHAT_OPENCODE_SETUP_FIXTURE_ROOT/npm-install-attempts"
+if [ "$mode" = npm-failure ]; then echo 'fixture npm failed after writing its shim' >&2; exit 23; fi
+"##,
+        );
+        fs::write(root.join("install-mode"), "success\n").unwrap();
+        Some(root)
+    }
+
+    #[cfg(target_os = "linux")]
     #[tokio::test]
     async fn opencode_detection_uses_the_selected_managed_root_and_keeps_custom_authoritative() {
-        let root = tempfile::tempdir().unwrap();
-        let data = root.path().join("selected Code data");
+        let Some(root) = opencode_setup_fixture(
+            "opencode_detection_uses_the_selected_managed_root_and_keeps_custom_authoritative",
+        ) else {
+            return;
+        };
+        let data = root.join("selected Code data");
         let managed = super::super::opencode_runtime::managed_executable(&data);
-        std::fs::create_dir_all(managed.parent().unwrap()).unwrap();
-        std::fs::write(&managed, "managed Code").unwrap();
         let app = tauri::test::mock_app();
         app.manage(crate::test_support::TestDataRoot(data));
-        let found = super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+        super::install_agent(app.handle().clone(), "opencode".into(), None)
+            .await
+            .unwrap();
+        let installed = fs::read(&managed).unwrap();
+        let found =
+            super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
         assert!(found.installed);
         assert!(!found.via_wsl);
-        for invalid in [root.path().join("missing Code"), PathBuf::from("relative Code")] {
+        for invalid in [root.join("missing Code"), PathBuf::from("relative Code")] {
             let found = super::detect_agent_installed(
-                app.handle().clone(), "opencode".into(), Some(invalid.to_string_lossy().into_owned()),
-            ).await;
+                app.handle().clone(),
+                "opencode".into(),
+                Some(invalid.to_string_lossy().into_owned()),
+            )
+            .await;
             assert!(!found.installed);
             assert!(!found.via_wsl);
         }
-        assert_eq!(std::fs::read_to_string(managed).unwrap(), "managed Code");
+        assert_eq!(fs::read(managed).unwrap(), installed);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn opencode_failed_setup_stays_missing_until_an_explicit_successful_retry() {
+        let Some(root) = opencode_setup_fixture(
+            "opencode_failed_setup_stays_missing_until_an_explicit_successful_retry",
+        ) else {
+            return;
+        };
+        for failure in ["npm-failure", "broken-version"] {
+            fs::write(root.join("install-mode"), format!("{failure}\n")).unwrap();
+            let data = root.join(failure).join("selected data");
+            let app = tauri::test::mock_app();
+            app.manage(crate::test_support::TestDataRoot(data.clone()));
+            let error = super::install_agent(app.handle().clone(), "opencode".into(), None)
+                .await
+                .expect_err("a failed setup must not publish its shim");
+            assert!(error.contains("Code"), "{error}");
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(!found.installed, "{failure} must remain repairable");
+            assert!(!found.via_wsl);
+            assert!(super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .is_none());
+
+            fs::write(root.join("install-mode"), "success\n").unwrap();
+            super::install_agent(app.handle().clone(), "opencode".into(), None)
+                .await
+                .expect("an explicit retry must repair the failed setup");
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(found.installed);
+            assert!(!found.via_wsl);
+            let resolved = super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                resolved.ownership,
+                super::super::opencode_runtime::OpenCodeOwnership::Managed
+            );
+            assert_eq!(
+                resolved.executable,
+                super::super::opencode_runtime::managed_executable(&data)
+            );
+            assert_eq!(
+                super::super::opencode_runtime::version(&resolved.executable, &data).unwrap(),
+                "1.2.3"
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(root.join("npm-install-attempts")).unwrap(),
+            "npm-failure\nsuccess\nbroken-version\nsuccess\n",
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn opencode_failed_managed_adoption_keeps_the_working_native_path_available() {
+        let Some(root) = opencode_setup_fixture(
+            "opencode_failed_managed_adoption_keeps_the_working_native_path_available",
+        ) else {
+            return;
+        };
+        let native = root.join("tools with spaces/opencode");
+        opencode_fixture_executable(&native, "#!/bin/sh\nprintf '9.8.7\\n'\n");
+        let original = fs::read(&native).unwrap();
+        for failure in ["npm-failure", "broken-version"] {
+            fs::write(root.join("install-mode"), format!("{failure}\n")).unwrap();
+            let data = root.join(failure).join("selected data");
+            let app = tauri::test::mock_app();
+            app.manage(crate::test_support::TestDataRoot(data.clone()));
+            assert!(
+                super::install_agent(app.handle().clone(), "opencode".into(), None)
+                    .await
+                    .is_err()
+            );
+            let found =
+                super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+            assert!(
+                found.installed,
+                "{failure} must not hide the PATH installation"
+            );
+            assert!(!found.via_wsl);
+            let resolved = super::super::opencode_runtime::resolve(&data, None)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                resolved.ownership,
+                super::super::opencode_runtime::OpenCodeOwnership::Native
+            );
+            assert_eq!(resolved.executable, native);
+            assert_eq!(
+                super::super::opencode_runtime::version(&resolved.executable, &data).unwrap(),
+                "9.8.7"
+            );
+        }
+        assert_eq!(fs::read(native).unwrap(), original);
+        assert_eq!(
+            fs::read_to_string(root.join("npm-install-attempts")).unwrap(),
+            "npm-failure\nbroken-version\n",
+        );
     }
 
     #[tokio::test]

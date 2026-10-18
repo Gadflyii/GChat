@@ -51,6 +51,18 @@ behavior was not checked.
 
 ## Archive OpenCode provisioning — C7, October 18
 
+Priority follow-up: Codex 8 reproduced a failed setup leaving a shim that the
+resolver incorrectly accepted as installed. C7 owns the correction on
+`fix/c7-opencode-atomic-install-20261018`, based on `e0a67a528`. Acceptance is
+private temporary-prefix installation, successful runtime/version verification
+before publication, and readiness that ignores unpublished shims. Failed setup
+must permit reinstall and preserve native PATH fallback; failed updates must
+preserve the last working managed copy. Focused Rust regressions, check/Clippy
+and one `make verify` are the required gates. Arch signed staging, the verification marker, native fallback and preservation
+of the previous runtime at 05:40:41Z. Implementation and regression fixtures are
+ready; the next action is focused verification and the single full gate. No native fixture or GPU is allocated;
+Downloads native acceptance is on hold for this priority item.
+
 `GUI-FIRST-USER-OPENCODE-PROVISIONING` is implemented on
 `fix/c7-opencode-private-prefix-20261018`, source `13125b2ab` from main
 `d31e328d6`. Clean archive startup previously ran a global npm installation and
