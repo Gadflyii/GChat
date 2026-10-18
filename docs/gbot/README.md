@@ -1,5 +1,28 @@
 # Gbot design
 
+## Companion keyboard focus with no saved bot — Gchat 2
+
+`GBOT-EMPTY-COMPANION-FOCUS-RETURN` restores keyboard focus to the sidebar
+opener when Escape or Hide bot pane closes an empty companion. The selected
+named bot remains the preferred return target; when that bot is absent, the
+empty opener provides a fallback. Previously, the empty opener had no focus
+restoration target, leaving focus in the hidden pane or on the document.
+
+Rendered keyboard journeys cover opening and closing the empty companion and
+a named bot using Escape and Hide. This is rendered UI scope; task, desktop
+and service behavior is unchanged.
+
+Validation: original production reproduced both empty-opener focus failures;
+both named-bot controls passed. The fixed companion suite passed all 45 tests.
+Lint passed with zero errors and five existing warnings. ONE `make verify`
+(2026-10-18 23:36:17–23:42:48 UTC) passed 3,896 app tests (six skipped),
+130 extension tests, 1,323 Rust tests (28 ignored), all six coverage floors
+and lint/typecheck/quality guards. All 3,482 tracked inputs matched raw bytes
+and modes before and after verification, with fresh tracked timestamps. Only
+this receipt was added afterward. Booking 3640 returned 23:43Z; the private
+build cache and exports were removed. Evidence:
+`/ai/gchat/out/gchat2-empty-companion-focus-return-20261018/SUMMARY.md`.
+
 ## Queued scheduled work shows its retry — Gchat 2
 
 `GBOT-SCHEDULE-RETRY-GUIDANCE` distinguishes a Once schedule with no later
