@@ -886,6 +886,7 @@ if (location.pathname === '/logs') {
                 label: "main".into(),
                 title: "Private GChat native admission".into(),
                 visible: true,
+                focus: false,
                 data_directory: None,
                 ..Default::default()
             };
