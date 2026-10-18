@@ -28,6 +28,50 @@ only small evidence remains and the donor was unchanged. Windows, model load,
 benchmark execution, scoring, performance and later selector/restart controls
 are outside this intro leaf. The older scripted-navigation screenshot is
 supporting history only.
+
+## First-run model reasons — Gchat 3, October 18
+
+`GUI-FIRST-RUN-MODEL-REASONS` passes its remaining Linux native wording
+leaf. The actual **Hosts → Use selected graphics cards** model-choice path
+shows a recommended Qwen card with: “Fits your graphics card and free disk
+space. GInfer still checks the download and measures your hardware before it
+can start.” The inspected dark 1200×800
+[native screenshot](../../out/gchat3-first-run-model-reasons-20261018/model-reasons-wide.png)
+and [DOM](../../out/gchat3-first-run-model-reasons-20261018/model-reasons-dom.json)
+show the complete reason without clipping. The
+[final Host state](../../out/gchat3-first-run-model-reasons-20261018/host-final-sanitized.json)
+confirms a loaded catalog, zero downloads/instances and idle hardware
+measurement. Model choices
+were not saved and no download, Ensure, profiling or model start occurred.
+
+Original fix `5b0e37f16` merged as `dd62b4607`. The Host recommendation file
+is identical between passing gate `71abf1708` and native source `3928dda90`;
+its reason rendering is also unchanged in the 08:55Z main comparison.
+Original focused **17 PASS** and the retained ONE `make verify` are reused:
+**3,409 web/core, 127 extension, 1,267 Rust PASS**, six frontend skips and
+28 Rust ignores; lint, types and coverage floors PASS. This evidence-only
+closure uses `git diff --check`, without repeating the suites.
+
+Owner Gchat 3; branch `docs/gchat3-first-run-model-reasons-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-first-run-model-reasons-20261018`. Frontend,
+debug Host and desktop were built from `3928dda90` on S1 using an independent
+copy of inactive RC dependencies, CPUs 72–79 and the socket-1 shared compile
+lock. Restoring generated icons omitted by the source archive allowed the
+failed desktop stage to resume. The private HOME/runtime700, D-Bus/keyring
+and Xvfb app used the read-only development LAN catalog and its own Host at
+`https://127.0.0.1:17543`. No GPU or native exclusive lock was held.
+
+The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-model-reasons-20261018` stopped
+and CPUs 72–79 returned 09:05Z; booking3179 was canceled. Its build, app and
+private HOME were removed 09:06Z, releasing 48.84 GB of logical files. Only
+small evidence remains in
+[the result](../../out/gchat3-first-run-model-reasons-20261018/result.json).
+This qualifies development native wording only. Public/release catalog
+admission, launch-profile bounds, payload transfer, Engine execution and
+Windows are outside this leaf; the shared catalog and inactive donor remain
+unchanged.
+
 ## Missing saved-settings guidance — Gchat 3, October 18
 
 `GUI-PROFILE-MISSING-WORDING` passes its remaining Linux native leaf. With
@@ -64,7 +108,7 @@ Ensure, model start, inference, Engine change or Windows work occurred.
 Only small evidence remains in
 [the result](../../out/gchat3-profile-missing-wording-20261018/result.json)
 and [short summary](../../out/gchat3-profile-missing-wording-20261018/summary.md).
-Next action is merging this evidence closure.
+Evidence closure merged as `3928dda90`.
 
 ## Advanced launch-field labels recovery — C3, October 18
 
