@@ -620,11 +620,20 @@ function AgentStudioPage() {
       setDraft(null)
       return
     }
-    mutatingDraft.current = true
+    const savedId = draftSavedId
     const revision = draftRevision.current
+    const savedName = definitions.find((definition) => definition.id === savedId)?.name ?? draft.name
+    const accepted = await confirmAction({
+      title: 'Delete saved agent?',
+      message: `Delete "${savedName}" from your saved agents? This cannot be undone.`,
+      confirmLabel: 'Delete agent',
+      destructive: true,
+    })
+    if (!accepted || revision !== draftRevision.current || mutatingDraft.current) return
+    mutatingDraft.current = true
     setDeleting(true)
     try {
-      await remove(draftSavedId)
+      await remove(savedId)
       if (revision === draftRevision.current) setDraft(null)
       toast.success('Agent definition deleted')
     } catch (reason) {

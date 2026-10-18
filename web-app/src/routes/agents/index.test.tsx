@@ -1098,6 +1098,7 @@ describe('AgentStudioPage', () => {
     ]
     definitionState.value.save.mockImplementation(async (value) => value)
     render(<AgentStudioPage />)
+    render(<ConfirmDialogHost />)
     await screen.findByDisplayValue(firstAgent.name)
     fireEvent.click(screen.getByTitle('New agent'))
     await screen.findByDisplayValue(editableDraft.name)
@@ -1122,6 +1123,8 @@ describe('AgentStudioPage', () => {
     }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled())
     fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
     expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith('review-assistant-3')
   })
 
@@ -1232,14 +1235,83 @@ describe('AgentStudioPage', () => {
     })
   })
 
+  it('requires explicit confirmation before deleting a saved agent', async () => {
+    await renderSavedAgents()
+    render(<ConfirmDialogHost />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    let dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    expect(dialog).toHaveTextContent(`Delete "${firstAgent.name}" from your saved agents? This cannot be undone.`)
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    await user.keyboard('{Enter}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByLabelText('Name')).toHaveValue(firstAgent.name)
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByLabelText('Name')).toHaveValue(firstAgent.name)
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Delete agent' }))
+    await waitFor(() => expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id))
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(deleteAgentRun).not.toHaveBeenCalled()
+  })
+
+  it.each(['edit', 'select'] as const)('rejects an older delete approval after a newer draft %s', async (action) => {
+    await renderSavedAgents()
+    render(<ConfirmDialogHost />)
+    const nextAgent = screen.getByRole('button', { name: new RegExp(secondAgent.name) })
+    fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    if (action === 'edit') {
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep newer edits' } })
+    } else {
+      fireEvent.click(nextAgent)
+      await screen.findByDisplayValue(secondAgent.name)
+    }
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Name')).toHaveValue(action === 'edit' ? 'Keep newer edits' : secondAgent.name)
+  })
+
+  it('keeps a failed saved-agent deletion available for an explicit retry', async () => {
+    definitionState.value.remove.mockRejectedValueOnce(new Error('Private storage unavailable')).mockResolvedValueOnce(undefined)
+    await renderSavedAgents()
+    render(<ConfirmDialogHost />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    let dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Delete agent' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Error: Private storage unavailable'))
+    expect(screen.getByLabelText('Name')).toHaveValue(firstAgent.name)
+    expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+    expect(definitionState.value.remove).toHaveBeenCalledTimes(1)
+    await user.click(within(dialog).getByRole('button', { name: 'Delete agent' }))
+    await waitFor(() => expect(definitionState.value.remove).toHaveBeenCalledTimes(2))
+    expect(definitionState.value.remove.mock.calls).toEqual([[firstAgent.id], [firstAgent.id]])
+  })
+
   it.each([secondAgent.id, ''])(
     'deletes only the selected saved agent after changing its identifier to %s', async (id) => {
       await renderSavedAgents()
+      render(<ConfirmDialogHost />)
       fireEvent.change(screen.getByLabelText('Identifier'), {
         target: { value: id },
       })
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Unsaved replacement name' } })
       fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
-
+      const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+      expect(dialog).toHaveTextContent(`Delete "${firstAgent.name}"`)
+      expect(dialog).not.toHaveTextContent('Unsaved replacement name')
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+      await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
       expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id)
       expect(definitionState.value.save).not.toHaveBeenCalled()
       expect(definitionState.value.definitions[1]).toEqual(secondAgent)
@@ -1328,12 +1400,16 @@ describe('AgentStudioPage', () => {
       const pending = deferred<void>()
       definitionState.value.remove.mockReturnValue(pending.promise)
       await renderSavedAgents()
+      render(<ConfirmDialogHost />)
 
       const deleteButton = screen.getByRole('button', { name: 'Delete', exact: true })
       act(() => {
         fireEvent.click(deleteButton)
         fireEvent.click(deleteButton)
       })
+      const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+      await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
       expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id)
       expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Save definition' })).toBeDisabled()

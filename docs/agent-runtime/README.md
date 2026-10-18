@@ -22,6 +22,38 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Saved Agent Studio deletion — October 18
+
+An isolated native pass reproduced immediate permanent removal of a saved
+agent after one keyboard activation of **Delete**, with no confirmation or
+Undo. The `ae95203a2` desktop's Agent Studio source matched main `7727db673`.
+Only a disposable definition was deleted; original definitions and run history
+remained byte-identical. Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1155/`.
+
+Deleting a saved agent now asks **Delete saved agent?**, names the saved
+definition and explains that deletion cannot be undone. Cancel is the keyboard
+default; Enter on Cancel and Escape keep the draft. Only **Delete agent**
+approves removal. An edited Identifier or Name cannot redirect the deletion or
+change the name shown in the confirmation. Approval for an older draft cannot
+delete after a newer edit or selection. A failed deletion keeps the draft and
+requires fresh confirmation to retry. New unsaved drafts retain **Discard**.
+
+Validation: 101 focused tests and workspace lint PASS; one `make verify`
+PASS (3,573 web-app, 127 extension and 1,288 Rust tests, plus six coverage
+floors). Frontend and native Linux builds PASS on `22b69002b`.
+Rebuilt private native acceptance PASS: Cancel starts focused, Enter and
+Escape retain the draft and return focus to Delete, and edited Name and
+Identifier do not change the saved name in the dialog. Explicit **Delete agent**
+removes only the original disposable definition; new unsaved **Discard** remains
+local. The candidate screenshot was viewed. Normal close at 12:08:56Z kept
+original definitions and run history byte-identical; CPU booking 3271 was
+returned at 12:09Z. Receipts:
+`/ai/gchat/out/gchat-agent-delete-confirmation-20261018/`.
+This qualifies private Linux source-native deletion; Windows, agent execution
+and inference are outside this check. Only a disposable definition was saved
+and deleted.
+
 ## Unsaved Agent Studio navigation — October 18
 
 An isolated native pass on main `f48c551e2` reproduced silent loss of an
