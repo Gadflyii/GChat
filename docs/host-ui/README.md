@@ -4856,14 +4856,23 @@ scope, translations and success notification remain the contract.
 Acceptance: rendered keyboard, repeated activation, pending, success and retry
 tests, then one full `make verify`; commit and push an isolated merge-ready
 branch. No real conversation deletion, Engine, model or GPU operation.
-Installed confirmation belongs to Gchat 3's parent GUI qualification. Windows
-host-port collision remains pending Gchat 2's installed-app handoff.
+Gchat 3 completed the remaining Linux native keyboard/Cancel leaf on
+October 18. The ordinary project Conversation menu opens the
+confirmation with Cancel focused; Enter and Escape preserve the private dummy
+conversations; explicitly activating Delete all removes only that project's
+conversations and preserves an unrelated dummy conversation and the project.
+The existing rendered evidence covers pending/rejected operations; a fast
+native filesystem operation cannot establish those cases. No Windows or
+installed-package qualification is claimed by this source-native check.
+Windows host-port collision remains pending Gchat 2's installed-app handoff.
 
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
 | C7 / local | `/ai/gchat-worktrees/c7-project-threads-delete-single-submit-20261017`, branch `fix/c7-project-threads-delete-single-submit-20261017` | From main `a08e2b053`; dialog implementation and six dedicated regression cases frozen at `79b06e217` |
 | C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-project-threads-delete-single-submit-20261017/` | Private source/dependency/native cache retired after verification; booking 2563 canceled, returned 14:12Z |
 | C7 / evidence | `/ai/gchat/out/project-threads-delete-single-submit-20261017/{result.json,summary.md}` | Passing focused and full verification result retained here |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-project-delete-native-20261018`, branch `docs/gchat3-project-delete-native-20261018`, base `ec6d2ba1f` | Evidence-only native acceptance; no implementation changes |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-project-delete-native-20261018` | Native input acceptance PASS13:18Z; private runnable/HOME retired (8.52GB), returned13:19Z; no GPU/model |
 
 The six focused rendered regression cases pass. The single full `make verify`
 exited 0 at 14:10:39Z on S1 in pinned image `ad7f9bf020d7`: lint, frontend
@@ -4872,8 +4881,28 @@ types, contracts and critical coverage floors passed, with 2,796 frontend tests,
 27 Rust tests ignored. The gate used private offline caches and 22 retained
 profile catalogs; generated local-core archive references changed only inside
 the disposable copy. Source dependency files and the read-only donor are
-unchanged. The private build copy is retired. Next: coordinator merge of the
-isolated branch; installed confirmation remains with Gchat 3.
+unchanged. The private build copy is retired and the implementation is merged.
+The granted inactive desktop donor was built from `cf9124a1e`, binary SHA256
+`ce13ab7f462504eaf031448503e8332bd35164366acaaaae618bbd00cc11ee6b`.
+Its dialog, button/dialog/dropdown primitives, project route, thread hook,
+project/thread services, conversational extension and native thread storage
+match `ec6d2ba1f` (18 source files). The independent copy ran with private
+HOME, unlocked keyring, D-Bus and Xvfb `:202`, software rendering and no GPU.
+Through the ordinary project Conversation menu, native XTest input opened
+the confirmation with Cancel focused. Enter canceled and Escape dismissed a
+reopened confirmation; both times all three dummy thread files were unchanged.
+Tab moved focus from Cancel to Delete All; Enter removed the two project thread
+directories. The project remained in storage and the unrelated conversation
+retained its original file hash. Screenshots, DOM observations and filesystem
+receipts are retained in
+`/ai/gchat/out/project-delete-native-20261018/`. An initial X11 authorization
+failure stopped before app startup; the private Xauthority entry was corrected
+for the container hostname before this successful execution. The private fixture
+was retired and CPU booking3305 canceled at13:19Z; the donor is unchanged.
+
+The accepted focused/full gates above were reused. This evidence-only branch
+adds no implementation change and uses `git diff --check` only. Windows and
+installed-release package acceptance remain outside this source-native result.
 
 ## Disable OpenCode workspaces — C7
 
