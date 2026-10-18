@@ -435,6 +435,7 @@ function AgentStudioPage() {
   const [runs, setRuns] = useState<AgentRunRecord[]>([])
   const historyRequest = useRef(0)
   const deletingRuns = useRef(new Set<string>())
+  const confirmingRunDeletion = useRef(false)
   const [deletingRunIds, setDeletingRunIds] = useState(new Set<string>())
   const [modelInstances, setModelInstances] = useState<AgentModelInstance[]>([])
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
@@ -720,8 +721,22 @@ function AgentStudioPage() {
     }
   }
 
-  const deleteRun = async (run: AgentRunRecord) => {
-    if (deletingRuns.current.has(run.id)) return
+  const deleteRun = async (run: AgentRunRecord, trigger?: HTMLButtonElement) => {
+    if (confirmingRunDeletion.current || deletingRuns.current.has(run.id)) return
+    confirmingRunDeletion.current = true
+    let accepted = false
+    try {
+      accepted = await confirmAction({
+        title: 'Delete saved run?',
+        message: `Delete the saved run "${run.definitionName}" from ${new Date(run.startedAtMs).toLocaleString()}? Its saved history and run files will be removed. This cannot be undone.`,
+        confirmLabel: 'Delete run',
+        destructive: true,
+        returnFocus: trigger,
+      })
+    } finally {
+      confirmingRunDeletion.current = false
+    }
+    if (!accepted || deletingRuns.current.has(run.id)) return
     deletingRuns.current.add(run.id)
     setDeletingRunIds(new Set(deletingRuns.current))
     try {
@@ -930,7 +945,7 @@ function AgentStudioPage() {
             }}
             onRerun={(run, trigger) => void rerun(run, false, trigger)}
             onContinue={(run, trigger) => void rerun(run, true, trigger)}
-            onDelete={(run) => void deleteRun(run)}
+            onDelete={(run, trigger) => void deleteRun(run, trigger)}
             onRefresh={() => void refreshRuns()}
           />
         </div>
@@ -2207,7 +2222,7 @@ function RunInspector({
   onRefresh: () => void
   onRerun: (run: AgentRunRecord, trigger?: HTMLButtonElement) => void
   onContinue: (run: AgentRunRecord, trigger?: HTMLButtonElement) => void
-  onDelete: (run: AgentRunRecord) => void
+  onDelete: (run: AgentRunRecord, trigger?: HTMLButtonElement) => void
 }) {
   const instanceMetrics = aggregateAgentMetrics(
     selected?.stages.map((stage) => ({
@@ -2312,7 +2327,7 @@ function RunInspector({
                   <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
                     disabled={deletingRunIds.has(run.id)}
-                    onSelect={() => onDelete(run)}
+                    onSelect={() => onDelete(run, actionTriggers.current.get(run.id))}
                   >
                     <IconTrash /> {deletingRunIds.has(run.id) ? 'Deleting…' : 'Delete'}
                   </DropdownMenuItem>

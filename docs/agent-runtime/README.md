@@ -22,6 +22,35 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Saved-run deletion confirmation — October 18
+
+A private native Linux pass found that choosing **Delete** from a saved run’s
+Actions menu immediately removed the run and showed **Run deleted**, without
+confirmation. The same backend operation also prunes that run’s saved files.
+The original private history was restored after normal app close. Baseline:
+`/ai/gchat/out/gchat-run-delete-confirmation-20261018/baseline.json`.
+
+Deleting a saved run now asks for confirmation, naming the run and its start
+time and explaining that its history and run files will be removed permanently.
+**Cancel** is the default keyboard action. Cancel, Enter on that default and
+Escape preserve the record and return focus to its Actions button. Explicit
+**Delete run** keeps the existing per-run in-flight guard, failure/retry feedback,
+independent deletion completion and stale-refresh protection.
+
+Native Linux acceptance of frozen source `f1bd00509` passed at 1,024 × 740.
+Enter on the default Cancel, Escape and explicit Cancel each preserved all
+three records and returned focus to General Agent’s Actions button. Explicit
+**Delete run** removed only General Agent while preserving the selected recovery
+run; returning to Runs retained the two remaining records, and the saved
+history file contained those same two IDs after normal Close. The private
+history was then restored, with protected definitions, chat and skill files
+unchanged. No model or inference was used.
+
+Focused Agents/confirmation tests (126), lint, one `make verify` (3,788 app,
+127 extension and 1,317 Rust tests), frontend and native builds passed. Six app
+tests were skipped and 28 Rust tests ignored. Receipts and screenshots:
+`/ai/gchat/out/gchat-run-delete-confirmation-20261018/`.
+
 ## Unsaved skill instructions — October 18
 
 A private native Linux pass found that Escape silently discarded edited skill
