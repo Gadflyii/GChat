@@ -6541,8 +6541,14 @@ receipt, second load or natural request occurred, and swap counters468/775
 remain unchanged. C5 stopped and reported the failure to Arch/C1 as directed,
 returned22:28 UTC and canceled426. Retain the
 [pre-Engine rejection](evidence/consumer-first-use-20261018/laptop/laptop-qwen-corrected-preengine-rejection.json).
-Recover the exact1209 SM86 sibling CLI donor, validate the complete runtime
-layout before a dependent load, and await Arch direction before any retry. Keep the staged ac536 donor unchanged; it is not the accepted
+Arch22:31:42 UTC cleared this fixture-only retry: stage `ginfer-serve` and
+its sibling `ginfer` from C1's same1209 build, verify both build identities,
+then execute the first and second Automatic53248/C8 loads once each under
+the22:22 instructions. C1 confirmed22:36 UTC that the matching CLI was not
+retained and is building only that target from the accepted cache, without
+rebuilding the server or repeating its tests. The exact CLI donor remains pending; the
+parent-mediated relay waits local1506's native-build return. Validate the
+complete runtime layout before a dependent load. Keep the staged ac536 donor unchanged; it is not the accepted
 app runtime. No model copy or completed laptop control repeat is needed.
 Gchat3 returned the laptop22:11 UTC after native Qwen rejected before Engine
 startup. Arch holds native Qwen/Muse for the corrected Engine and e001 Host;
