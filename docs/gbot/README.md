@@ -1,5 +1,30 @@
 # Gbot design
 
+## Setup action error recovery — Gchat 2
+
+`GBOT-SETUP-ACTION-ERROR-GUIDANCE`, based on main `d63edda08`, gives failed
+service selection and Save bot actions plain guidance naming the existing
+Continue or Save bot control. The wording describes an unconfirmed outcome;
+technical Details start closed. The selected service and reviewed bot/computer
+details remain available, and opening Details sends no request.
+
+Existing pending guards still prevent duplicate submissions. Three rendered
+journeys cover selection failure and retry, immediate save failure and retry,
+and a delayed save failure after same-tick submissions, including unchanged
+reviewed values. This is source/rendered UI wording scope with no service or
+native behavior change.
+
+Validation: all three original-production regressions failed. Fixed wizard/service
+focus passed 53 tests; lint had zero errors and five existing warnings. ONE
+`make verify`, 18 October 19:09:48–19:15:46 UTC, passed 3,773 app tests
+(six skipped), 127 extension tests, 1,316 Rust tests (28 ignored, 23 summaries),
+six coverage floors and lint/typecheck/guards. All 3,460 tracked raw bytes/modes
+matched before and after verification, with tracked timestamps refreshed first.
+This receipt was added afterward with product and test source unchanged.
+CPU80–87 booking3508 returned19:17Z. Evidence:
+`out/gchat2-setup-action-error-guidance-20261018/result.json` and adjacent raw
+logs. Native acceptance remains separate.
+
 ## Fresh billing consent after cloud computer deletion — Gchat 2
 
 `GBOT-CLOUD-RECREATION-BILLING-CONSENT`, based on main `78078ddae`,
