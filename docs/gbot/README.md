@@ -1,5 +1,38 @@
 # Gbot design
 
+## Local computer action recovery — Gchat 2
+
+`GBOT-LOCAL-VM-ACTION-ERROR-PERSISTENCE`, based on main `fe0630a14`, keeps
+failed local-computer Start, Stop, Remove and Use feedback visible while the user
+checks prerequisites or receives background progress. The action warning names
+the uncertain outcome and gives a plain recovery step; technical diagnostics
+remain in Details, initially closed. A separate failed prerequisite check can
+show its own error without replacing the action warning. Only an explicit
+computer action clears the previous action warning; canceling removal leaves it
+in place and sends no request.
+
+If creation fails before a setup record is saved, an explicit Retry computer
+setup control stays available. It reuses the original setup ID and the existing
+duplicate-click guard. When a saved record appears, its normal Resume setup or
+Use this computer controls take over. Checking prerequisites and opening Details
+do not replay a computer action; removal still requires confirmation.
+
+Rendered regressions cover all four action failures, successful and failed
+prerequisite checks, background reads, canceled and confirmed removal, and
+same-ID creation retries for both KVM and Hyper-V. This is source/rendered UI
+scope; the previously accepted physical guest lifecycle is unchanged.
+
+Six targeted regressions failed on unchanged production. The fixed local setup
+and wizard suites passed all 52 cases; lint passed with zero errors and five
+existing warnings. ONE `make verify`, 18 October 15:35:39–15:41:37 UTC, passed
+3,659 app tests (six skipped), 127 extension tests, 1,309 Rust tests (28 ignored,
+23 summaries), six coverage floors and lint/typecheck/guards. All 3,459 tracked
+raw source bytes and modes matched before and after the gate; tracked timestamps
+were refreshed before checks. This receipt was added afterward with product
+and test source unchanged. CPU120–127 booking3370 returned 15:41Z. Evidence:
+`out/gchat2-local-vm-action-error-persistence-20261018/result.json` and adjacent
+raw logs. No retry or whole-gate repeat.
+
 ## Task history and approval read recovery in settings — Gchat 2
 
 `GBOT-SETTINGS-TASK-HISTORY-RETRY`, based on main `69f6e043c`, gives
