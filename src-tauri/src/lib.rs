@@ -22,6 +22,19 @@ use tauri_plugin_store::StoreExt;
 #[cfg(not(feature = "cli"))]
 use tokio::sync::Mutex;
 
+#[cfg(all(not(feature = "cli"), any(target_os = "linux", target_os = "windows")))]
+pub(crate) fn handle_agent_window_event(
+    state: &AppState,
+    label: &str,
+    event: &tauri::WindowEvent,
+) {
+    // A close request can be cancelled by the unsaved-draft dialog.
+    // Fence turns only after the main window really closes.
+    if label == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+        state.agent_runs.close_admission();
+    }
+}
+
 #[cfg(not(feature = "cli"))]
 #[cfg_attr(
     all(mobile, any(target_os = "android", target_os = "ios")),
@@ -666,21 +679,19 @@ pub fn run() {
                 label,
                 event: window_event,
                 ..
-            } => match window_event {
+            } => {
+                #[cfg(any(target_os = "linux", target_os = "windows"))]
+                handle_agent_window_event(&app.state::<AppState>(), &label, &window_event);
+                match window_event {
                 tauri::WindowEvent::CloseRequested { .. } => {
                     log::info!("Window close requested: {label}");
                 }
                 tauri::WindowEvent::Destroyed => {
-                    // A close request can be cancelled by the unsaved-draft
-                    // dialog. Fence turns only after the window really closes.
-                    #[cfg(any(target_os = "linux", target_os = "windows"))]
-                    if label == "main" {
-                        app.state::<AppState>().agent_runs.close_admission();
-                    }
                     log::info!("Window destroyed: {label}");
                 }
                 _ => {}
-            },
+                }
+            }
             RunEvent::Exit => {
                 let app_handle = app.clone();
                 // Fence turns before other cleanup can close their event sink.

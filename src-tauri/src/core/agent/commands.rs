@@ -2656,6 +2656,45 @@ while True:
             .is_empty());
     }
 
+    #[cfg(all(not(feature = "cli"), any(target_os = "linux", target_os = "windows")))]
+    #[tokio::test]
+    async fn cancelled_window_close_keeps_turn_admission_until_main_destroyed() {
+        let root = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(AppState::default());
+        app.manage(crate::test_support::TestDataRoot(root.path().to_owned()));
+        let state = app.state::<AppState>();
+        let (signal_tx, signal_rx) = std::sync::mpsc::channel();
+        let requested = tauri::WindowEvent::from(
+            tauri::runtime::window::WindowEvent::CloseRequested { signal_tx },
+        );
+        crate::handle_agent_window_event(&state, "main", &requested);
+        if let tauri::WindowEvent::CloseRequested { api, .. } = requested {
+            api.prevent_close();
+        }
+        assert!(signal_rx.recv().unwrap());
+        // A secondary window disappearing must not disable the main window.
+        crate::handle_agent_window_event(&state, "other", &tauri::WindowEvent::Destroyed);
+        let request: AgentTurnRequest = serde_json::from_value(serde_json::json!({
+            "run_id":"after-cancel","session_id":Uuid::new_v4().to_string(),
+            "model_id":"unused","definition_id":"missing-definition","user_message":"not started"
+        }))
+        .unwrap();
+        let error = run_turn_with_sink(app.handle().clone(), request.clone(), Arc::new(|_| Ok(())))
+            .await
+            .unwrap_err();
+        assert!(error.contains("missing-definition"), "turn was admitted: {error}");
+
+        let cancellation = CancellationToken::new();
+        let _active = state.agent_runs.register("during-confirmation", cancellation.clone()).unwrap();
+        crate::handle_agent_window_event(&state, "main", &tauri::WindowEvent::Destroyed);
+        assert!(cancellation.is_cancelled());
+        let error = run_turn_with_sink(app.handle().clone(), request, Arc::new(|_| Ok(())))
+            .await
+            .unwrap_err();
+        assert!(error.contains("GChat is shutting down"), "late turn: {error}");
+    }
+
     #[tokio::test]
     async fn failed_studio_preflight_releases_exit_tracking() {
         let root = tempfile::tempdir().unwrap();
