@@ -22,6 +22,20 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Chat search query selection — October 18
+
+An isolated native Linux pass reproduced a stale keyboard selection when a new
+search query returned the same number of chats. After selecting the second
+match for `a`, replacing the query with `v` kept the second position selected
+even though the matching chats changed. Enter opened that chat instead of the
+first match. The Search dialog and sidebar are unchanged between the observed
+native source `edcd74e49` and main `beee1f2f9`.
+
+Search now resets selection when its items change and scrolls the selected
+item into view when results change. Arrow navigation within the current results
+is preserved. Evidence is in
+`/ai/gchat/out/gchat-chat-search-keyboard-20261018/`.
+
 ## First-use duplicate agent names — October 17
 
 An isolated native Linux pass of main `9e75fc31e` reproduced silent replacement:

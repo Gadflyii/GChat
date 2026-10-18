@@ -163,7 +163,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
   // Reset selected index when items change
   useEffect(() => {
     setSelectedIndex(0)
-  }, [allItems.length])
+  }, [allItems])
 
   // Scroll selected item into view
   useEffect(() => {
@@ -173,7 +173,7 @@ export function SearchDialog({ open, onOpenChange }: SearchDialogProps) {
       )
       selectedElement?.scrollIntoView({ block: 'nearest' })
     }
-  }, [selectedIndex])
+  }, [allItems, selectedIndex])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
