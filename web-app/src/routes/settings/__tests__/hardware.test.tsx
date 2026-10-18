@@ -4,6 +4,24 @@ import '@testing-library/jest-dom'
 import type { ServiceHub } from '@/services'
 import { seedServiceHub } from '@/test/service-hub'
 
+const { hardwareFixture, defaultGpu } = vi.hoisted(() => {
+  const defaultGpu = () => ({
+    name: 'RTX 3080',
+    total_memory: 10240,
+    vendor: 'NVIDIA',
+    uuid: 'gpu0-uuid',
+    driver_version: '550.00',
+    nvidia_info: { index: 0, compute_capability: '8.6' },
+    vulkan_info: {
+      index: 0,
+      device_id: 900,
+      device_type: 'discrete-gpu',
+      api_version: '1.3',
+    },
+  })
+  return { hardwareFixture: { gpus: [defaultGpu()] }, defaultGpu }
+})
+
 const hardwareService = {
   getHardwareInfo: vi.fn().mockResolvedValue(null),
   getSystemUsage: vi.fn().mockResolvedValue(null),
@@ -76,22 +94,7 @@ vi.mock('@/hooks/useHardware', () => ({
         extensions: ['SSE'],
       },
       total_memory: 16384,
-      gpus: [
-        {
-          name: 'RTX 3080',
-          total_memory: 10240,
-          vendor: 'NVIDIA',
-          uuid: 'gpu0-uuid',
-          driver_version: '550.00',
-          nvidia_info: { index: 0, compute_capability: '8.6' },
-          vulkan_info: {
-            index: 0,
-            device_id: 900,
-            device_type: 'discrete-gpu',
-            api_version: '1.3',
-          },
-        },
-      ],
+      gpus: hardwareFixture.gpus,
     },
     systemUsage: { cpu: 50, used_memory: 8192, total_memory: 16384, gpus: [] },
     setHardwareData: vi.fn(),
@@ -159,10 +162,12 @@ global.IS_MACOS = false
 
 // Import the actual component after all mocks are set up
 import { Route } from '../hardware'
+import { Route as MonitorRoute } from '../../system-monitor'
 
 describe('Hardware Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    hardwareFixture.gpus = [defaultGpu()]
     seedServiceHub({
       hardware: hardwareService as ReturnType<ServiceHub['hardware']>,
       window: {
@@ -226,6 +231,32 @@ describe('Hardware Settings', () => {
     await waitFor(() => {
       expect(screen.getByText('settings:hardware.gpus')).toBeInTheDocument()
       expect(screen.getByText('RTX 3080')).toBeInTheDocument()
+    })
+  })
+
+  it.each([
+    ['Hardware Settings', Route.component],
+    ['System Monitor', MonitorRoute.component],
+  ])('shows both identical physical cards in %s', async (_name, component) => {
+    const name = 'NVIDIA RTX PRO 6000 Blackwell Workstation Edition'
+    hardwareFixture.gpus = [
+      '5268c64e-5bc4-4be1-ed12-e731c3de56cf',
+      'bb41307d-6d91-5de3-9e23-a4aec948c49c',
+    ].map((uuid, index) => ({
+      ...defaultGpu(),
+      name,
+      total_memory: 97887,
+      uuid,
+      nvidia_info: { index, compute_capability: '12.0' },
+      vulkan_info: { ...defaultGpu().vulkan_info, index },
+    }))
+
+    const Component = component as React.ComponentType
+    render(<Component />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(name)).toHaveLength(2)
+      expect(screen.getAllByText('97887 MB')).toHaveLength(2)
     })
   })
 

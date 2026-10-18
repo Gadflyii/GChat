@@ -8,6 +8,7 @@ import {
 } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import KvmSetup from './KvmSetup'
+import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 const { call, events } = vi.hoisted(() => ({
   call: vi.fn(),
   events: { update: null as null | (() => void) },
@@ -21,6 +22,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 }))
 afterEach(() => {
   cleanup()
+  settleConfirm(false)
   call.mockReset()
   events.update = null
 })
@@ -273,8 +275,12 @@ it.each([
     const other = screen.getByRole('button', {
       name: path === 'start' ? 'Remove owned computer' : 'Resume setup',
     })
-    act(() => {
+    await act(async () => {
       action.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      if (path === 'remove') {
+        settleConfirm(true)
+        await Promise.resolve()
+      }
       other.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       action.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
@@ -335,6 +341,77 @@ it('creates one owned setup when Create is repeated before the first render', as
   )
 })
 
+it.each(['ready', 'connecting'])(
+  'confirms deleting a %s computer and its saved files before any removal',
+  async (stage) => {
+    const saved = { id: 'writer-id', name: 'Writer', stage, issue: null }
+    let records = [saved]
+    call.mockImplementation((path) => {
+      if (path.endsWith('preflight'))
+        return Promise.resolve({ ready: true, issues: [] })
+      if (path.endsWith('status')) return Promise.resolve(records)
+      if (path.endsWith('remove')) {
+        records = []
+        return Promise.resolve({ ...saved, stage: 'removed' })
+      }
+      return Promise.resolve([])
+    })
+    render(
+      <KvmSetup name="Different bot" initialId={saved.id} connected={vi.fn()} />
+    )
+    const remove = await screen.findByRole('button', {
+      name: 'Remove owned computer',
+    })
+    await waitFor(() => expect(remove).toBeEnabled())
+    fireEvent.click(remove)
+    expect(call).not.toHaveBeenCalledWith('setup/kvm/remove', expect.anything())
+    const pending = useConfirmStore.getState().pending
+    expect(pending).toMatchObject({
+      title: 'Delete Writer’s computer?',
+      confirmLabel: 'Delete computer',
+      destructive: true,
+    })
+    expect(pending?.message).toContain('all files saved on it')
+    expect(pending?.message).toContain('cannot be undone')
+    await act(async () => settleConfirm(false))
+    expect(call).not.toHaveBeenCalledWith('setup/kvm/remove', expect.anything())
+    expect(remove).toBeEnabled()
+
+    fireEvent.click(remove)
+    await act(async () => settleConfirm(true))
+    expect(call).toHaveBeenCalledWith('setup/kvm/remove', { id: saved.id })
+    expect(
+      call.mock.calls.filter(([path]) => path.endsWith('/remove'))
+    ).toHaveLength(1)
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Saved local computer setups')
+      ).not.toBeInTheDocument()
+    )
+  }
+)
+
+it('does not delete a computer when its confirmation is accepted after leaving setup', async () => {
+  const saved = { id: 'writer-id', name: 'Writer', stage: 'ready', issue: null }
+  call.mockImplementation((path) =>
+    Promise.resolve(
+      path.endsWith('preflight') ? { ready: true, issues: [] } : [saved]
+    )
+  )
+  const { unmount } = render(
+    <KvmSetup name="Different bot" initialId={saved.id} connected={vi.fn()} />
+  )
+  const remove = await screen.findByRole('button', {
+    name: 'Remove owned computer',
+  })
+  await waitFor(() => expect(remove).toBeEnabled())
+  fireEvent.click(remove)
+  expect(useConfirmStore.getState().pending).not.toBeNull()
+  unmount()
+  await act(async () => settleConfirm(true))
+  expect(call).not.toHaveBeenCalledWith('setup/kvm/remove', expect.anything())
+})
+
 it.each(['reply', 'error'] as const)(
   'does not resurrect a removed computer when an earlier event status returns a late %s',
   async (outcome) => {
@@ -368,6 +445,7 @@ it.each(['reply', 'error'] as const)(
     act(() => events.update?.())
     expect(statusReads).toBe(2)
     fireEvent.click(remove)
+    await act(async () => settleConfirm(true))
     expect(call).toHaveBeenCalledWith('setup/kvm/remove', { id: saved.id })
     await act(async () => removal.resolve({ ...saved, stage: 'removed' }))
     await waitFor(() => expect(statusReads).toBe(3))

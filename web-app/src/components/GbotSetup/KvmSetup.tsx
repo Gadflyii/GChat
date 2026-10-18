@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Button } from '@/components/ui/button'
 import { gbot, type KvmSetupRecord, type SetupIssue } from '@/services/gbot'
+import { confirmAction } from '@/lib/confirm'
 
 type Preflight = {
   ready: boolean
@@ -42,6 +43,7 @@ export default function KvmSetup({
   const [error, setError] = useState('')
   const checkPending = useRef(false)
   const actionPending = useRef(false)
+  const mounted = useRef(false)
   const refreshVersion = useRef(0)
   const newId = useRef(crypto.randomUUID())
   const invalidateRefresh = useCallback(() => {
@@ -75,11 +77,13 @@ export default function KvmSetup({
     }
   }, [refresh])
   useEffect(() => {
+    mounted.current = true
     void check()
     const subscription = listen('gbot-setup-update', () => {
       void refresh().catch((cause) => setError(String(cause)))
     })
     return () => {
+      mounted.current = false
       invalidateRefresh()
       void subscription.then((unlisten) => unlisten())
     }
@@ -126,6 +130,16 @@ export default function KvmSetup({
       actionPending.current = false
       setAction(undefined)
     }
+  }
+  const removeComputer = async (saved: KvmSetupRecord) => {
+    if (actionPending.current || checkPending.current) return
+    const accepted = await confirmAction({
+      title: `Delete ${saved.name}’s computer?`,
+      message: `This permanently deletes ${saved.name}’s separate computer and all files saved on it, and removes its saved connection from GChat. This cannot be undone.`,
+      confirmLabel: 'Delete computer',
+      destructive: true,
+    })
+    if (accepted && mounted.current) await act('remove', saved)
   }
   return (
     <div className="space-y-3" aria-label="Local VM setup">
@@ -236,7 +250,7 @@ export default function KvmSetup({
                   type="button"
                   variant="outline"
                   disabled={busy || checking}
-                  onClick={() => void act('remove', saved)}
+                  onClick={() => void removeComputer(saved)}
                 >
                   {action?.id === saved.id && action.kind === 'remove'
                     ? 'Removing computer…'

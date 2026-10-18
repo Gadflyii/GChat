@@ -383,6 +383,47 @@ content extraction, Windows or fresh-install acceptance is claimed. Evidence:
 `/ai/gchat/out/attachment-picker-current-tools-20261016/result.json` and the
 `05-picker-thread-*` receipts in
 `/ai/gchat/out/oi068-process-death-20261017/`.
+The separate [October 18 check below](#oi-068-native-pdf-send-and-folder-permission--october-18)
+qualifies the bounded PDF Send, folder permission and answer path.
+
+## OI-068 native PDF Send and folder permission — October 18
+
+The isolated S1 Linux desktop selected `short.pdf` (585 bytes) through the
+ordinary native attachment chooser. Its SHA256 is
+`706f0c512fc86bf62bc644b59dda76e448ec818f4ed9c20d1bb2479aa41cea68`.
+The prompt was “Read the attached PDF using the document reader and return its
+printed code exactly.” It contained no answer code. **Send** was clicked at
+03:15:12.779Z. The subsequent **Allow folder access** dialog named
+`os.fs.read_document` and the fixture's parent folder, disclosing External
+**CAN EDIT** access for this session. **Allow folder** was clicked at
+03:15:28.696Z. The answer observed at 03:17:06.536Z included the expected
+`ORCHID-472`; the folder sidebar then showed the PDF. The folder request and
+answer are visible in both DOM evidence and viewed screenshots. Persisted
+`saved-messages.jsonl` records `gchat_capability_call(os_fs_read_document)` with
+the exact `short.pdf` path, then output `originalChars: 12`, `truncated: false`
+and a summary containing `ORCHID-472`, followed by the final answer. Expanded
+final tool details were not captured in the UI before shutdown.
+
+The retained desktop uses source `832fddb85` plus the frozen run-selection-scroll
+fix, executable SHA256
+`3057d962c8045da8182a72d7c59d1c46220984f6202258f20c41841392ab7ba6`,
+and retained sidecars. Qwen3.8 27B NVFP4 package SHA256 is
+`4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6`.
+The run used physical S1 GPU1, with a private Xvfb display, HOME, XDG directories,
+D-Bus session and keyring. It is not acceptance of all latest sidecars.
+
+The first attempt did not reach Ready or issue a model request: the saved
+CPU8–15 profile conflicted with process CPUs40–47. A live Docker cpuset change
+was followed by NVML Unknown and CUDA reporting no device. A clean restart with
+initial CPUs8–15 reached Ready and completed the PDF path above. The 03:16Z
+booking cutoff was exceeded; stop and GPU return were signaled at 03:17Z.
+This qualifier is retained without a timing or performance claim.
+
+This passes the bounded PDF attachment → Send → explicit folder grant →
+document-reader request → answer path. Broader OI-068 remains PARTIAL; this adds
+no Windows, fresh-install, broad document-format or crash-recovery acceptance.
+Windows: not built (dev phase). Evidence:
+`/ai/gchat/out/gchat-pdf-send-final-20261018/{native-result.json,gui-dom-evidence.jsonl,saved-messages.jsonl,pdf-folder-permission.png,pdf-answer.png,summary.md}`.
 
 ## Worker review guidance — October 15
 

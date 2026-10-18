@@ -256,8 +256,11 @@ function GbotPage() {
     } catch (cause) {
       toast.error(String(cause))
     } finally {
-      setBusy(false)
-      await refresh()
+      try {
+        await refresh()
+      } finally {
+        setBusy(false)
+      }
     }
   }
   const workspaceId = selected || state?.workspaces[0]?.id
@@ -292,6 +295,14 @@ function GbotPage() {
   const setAssignment = (value: Assignment) => {
     if (workspaceId)
       setAssignments((previous) => ({ ...previous, [workspaceId]: value }))
+  }
+  const discardAssignment = () => {
+    if (!workspaceId) return
+    setAssignments((previous) => {
+      const next = { ...previous }
+      delete next[workspaceId]
+      return next
+    })
   }
   const isKvm =
     bot?.bot_pc?.kind === 'local_vm' && bot.bot_pc.hypervisor === 'kvm'
@@ -981,6 +992,7 @@ function GbotPage() {
                     busy={busy}
                     computerReady={Boolean(identity && !setupBlocked)}
                     onChange={setAssignment}
+                    onCancel={discardAssignment}
                     onSave={async () => {
                       if (busy) return
                       setBusy(true)
@@ -992,11 +1004,7 @@ function GbotPage() {
                           context_tokens: assignment.context_tokens,
                           api_key: assignment.api_key,
                         })
-                        setAssignments((previous) => {
-                          const next = { ...previous }
-                          delete next[workspaceId || '']
-                          return next
-                        })
+                        discardAssignment()
                       } finally {
                         await refresh()
                         setBusy(false)

@@ -470,6 +470,65 @@ describe('Engines host intake and launch controls', () => {
     )
   })
 
+  it('explains malformed host addresses without attempting pairing and clears the error on correction', async () => {
+    renderExpandedPage()
+    fireEvent.click(screen.getByText('Enter a host address manually'))
+    await screen.findByText('Secure storage is ready.')
+    const input = screen.getByLabelText('Host address')
+    const pair = screen.getByRole('button', { name: 'Pair host' })
+    for (const value of ['', '   ']) {
+      fireEvent.change(input, { target: { value } })
+      expect(pair).toBeDisabled()
+      expect(input).not.toBeInvalid()
+    }
+    for (const value of ['not-a-host', 'http://host:7444', 'https://host:7444/path', 'https://user:secret@host:7444', 'https://host:7444?', 'https://host:7444#']) {
+      fireEvent.change(input, { target: { value } })
+      expect(input).toBeInvalid()
+      expect(input).toHaveAccessibleDescription(/Use an address starting with https:\/\//)
+      expect(screen.getByRole('alert')).toHaveTextContent('host name or IP address and port')
+      expect(pair).toBeDisabled()
+      fireEvent.click(pair)
+    }
+    expect(mocks.command).not.toHaveBeenCalledWith('pair', expect.anything())
+    fireEvent.change(input, { target: { value: '  https://host:7444  ' } })
+    expect(input).not.toBeInvalid()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(pair).toBeEnabled()
+    fireEvent.click(pair)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('pair', { base_url: 'https://host:7444' }))
+  })
+
+  it('keeps a failed manual pairing draft and actionable feedback through refresh, then permits retry', async () => {
+    const original = mocks.command.getMockImplementation()!
+    mocks.command.mockImplementation(async (action: string) => {
+      if (action === 'pair') throw new Error('connection refused')
+      return original(action)
+    })
+    renderExpandedPage()
+    fireEvent.click(screen.getByText('Enter a host address manually'))
+    await screen.findByText('Secure storage is ready.')
+    const input = screen.getByLabelText('Host address')
+    const pair = screen.getByRole('button', { name: 'Pair host' })
+    fireEvent.change(input, { target: { value: 'https://host:7444' } })
+    fireEvent.click(pair)
+    const feedback = await screen.findByRole('alert')
+    expect(feedback).toHaveTextContent('Check the address and that GInfer sharing is on')
+    expect(input).toHaveValue('https://host:7444')
+    expect(input).toBeEnabled()
+    expect(pair).toBeEnabled()
+    fireEvent.click(screen.getByText('Pairing error details'))
+    expect(feedback.querySelector('details')).toHaveAttribute('open')
+    expect(feedback).toHaveTextContent('connection refused')
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    expect(feedback).toBeInTheDocument()
+    expect(feedback.querySelector('details')).toHaveAttribute('open')
+    mocks.command.mockImplementation(original)
+    fireEvent.click(pair)
+    await waitFor(() => expect(input).toHaveValue(''))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'pair')).toHaveLength(2)
+  })
+
   it('blocks fractional launch values but allows Qwen Vision with speculation', async () => {
     const user = userEvent.setup()
     renderExpandedPage()

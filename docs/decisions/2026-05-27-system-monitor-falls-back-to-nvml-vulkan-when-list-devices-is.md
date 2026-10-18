@@ -5,6 +5,13 @@ title: "System Monitor falls back to NVML/Vulkan when `--list-devices` is empty;
 
 # 2026-05-27 — System Monitor falls back to NVML/Vulkan when `--list-devices` is empty; fix NVIDIA dup-log spam and the missing `refresh_system_info` ACL
 
+**Updated October 18, 2026:** The tuple-based UI deduplication and deferred
+Fix D below are superseded by `GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED`.
+The native plugin now reconciles NVML/Vulkan aliases using exact PCI addresses,
+with UUID fallback when PCI comparison is unavailable. UI views preserve every
+physical card. See [current host UI state](../host-ui/README.md). The original
+decision below is historical.
+
 - **Context:** Two new Discord reports confirmed that the 2026-05-26
   work (driver-gate precision + tier-picker corroboration guard +
   `DriverOutdatedBanner`) did not move the user-visible symptom on

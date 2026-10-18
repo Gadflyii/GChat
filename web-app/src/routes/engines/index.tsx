@@ -17,6 +17,14 @@ import { HostCard } from '@/containers/EngineHostModels'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.engines.index as any)({ component: EnginesPage })
 
+function validHostAddress(value: string) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && !!url.hostname && url.pathname === '/'
+      && !url.username && !url.password && !url.href.includes('?') && !url.href.includes('#')
+  } catch { return false }
+}
+
 function EnginesPage() {
   const [credentialReady, setCredentialReady] = useState(false)
   const { hosts, nearby, snapshots, errors, refreshing, discoveryError, refresh } = useEngineHosts()
@@ -37,20 +45,26 @@ function EnginesPage() {
     }
   }
   const [address, setAddress] = useState('')
+  const [pairError, setPairError] = useState<string | null>(null)
+  const addressInvalid = !!address.trim() && !validHostAddress(address.trim())
   const [busy, setBusy] = useState<string | null>(null)
   useEffect(() => {
     const update = () => void refresh().catch((e) => toast.error(String(e)))
     update()
   }, [refresh])
   const pair = async (hostId?: string) => {
-    if (!credentialReady || busy) return
+    if (!credentialReady || busy || (!hostId && (!address.trim() || addressInvalid))) return
+    if (!hostId) setPairError(null)
     setBusy(hostId ?? 'manual')
     try {
       const result = await engineCommand<{ credential_cleanup_warning?: string }>('pair', hostId ? { host_id: hostId } : { base_url: address.trim() })
-      setAddress(''); await refresh(); toast.success('Host paired')
+      setAddress(''); setPairError(null); await refresh(); toast.success('Host paired')
       if (result.credential_cleanup_warning) toast.warning(`Pairing saved; cleanup needs attention: ${result.credential_cleanup_warning}`)
     }
-    catch (e) { toast.error(String(e)) } finally { setBusy(null) }
+    catch (e) {
+      if (hostId) toast.error(String(e))
+      else setPairError(String(e))
+    } finally { setBusy(null) }
   }
   return <div className="flex h-svh min-h-0 flex-col overflow-hidden">
     <HeaderPage><div className="flex w-full items-center justify-between pr-4"><h1>GInfer Hosts</h1><Button size="sm" variant="outline" disabled={refreshing || !resourcesReady} aria-describedby={!resourcesReady ? 'host-runtime-preparation' : undefined} onClick={() => void refresh().catch((e) => toast.error(String(e)))}><IconRefresh size={16} className={refreshing ? 'animate-spin' : undefined} />Refresh</Button></div></HeaderPage>
@@ -77,8 +91,11 @@ function EnginesPage() {
       {!!Object.keys(ignored).length && <details className="rounded-lg border p-4"><summary className="cursor-pointer">Ignored hosts ({Object.keys(ignored).length})</summary><p className="text-sm text-muted-foreground">Ignored hosts do not appear in nearby results or trigger notifications. This does not revoke an existing pairing.</p>{Object.entries(ignored).map(([id, name]) => <div key={id} className="mt-2 flex items-center justify-between gap-2"><span>{name}</span><Button variant="outline" onClick={() => restore(id)}>Show again</Button></div>)}</details>}
       <details className="rounded-xl border p-5 space-y-3">
         <summary className="cursor-pointer font-semibold">Enter a host address manually</summary>
-        <label className="block text-sm">Host address<Input placeholder="https://192.168.1.10:7444" value={address} onChange={(e) => setAddress(e.target.value)} /></label>
-        <Button aria-describedby={credentialReady ? undefined : 'pair-needs-storage'} disabled={!credentialReady || busy !== null || !address.trim()} onClick={() => void pair()}>{busy === 'manual' ? 'Pairing…' : 'Pair host'}</Button>
+        <label className="block text-sm">Host address<Input placeholder="https://192.168.1.10:7444" value={address} disabled={busy === 'manual'} aria-invalid={addressInvalid || undefined} aria-describedby={`host-address-help${addressInvalid ? ' host-address-error' : ''}${pairError !== null ? ' host-pair-error' : ''}`} onChange={(e) => { setAddress(e.target.value); setPairError(null) }} /></label>
+        <p id="host-address-help" className="text-sm text-muted-foreground">Enter the HTTPS address shown by the other computer, for example https://192.168.1.10:7444.</p>
+        {addressInvalid && <p id="host-address-error" role="alert" className="text-sm text-destructive">Use an address starting with https:// and only the host name or IP address and port. Remove any sign-in details, path, question mark or # fragment.</p>}
+        {pairError !== null && <div id="host-pair-error" role="alert" className="space-y-2 text-sm text-destructive"><p>Could not pair this host. Check the address and that GInfer sharing is on at the other computer, then choose Pair host to try again.</p><details><summary className="cursor-pointer">Pairing error details</summary><p className="whitespace-pre-wrap break-all">{pairError}</p></details></div>}
+        <Button aria-describedby={credentialReady ? undefined : 'pair-needs-storage'} disabled={!credentialReady || busy !== null || !address.trim() || addressInvalid} onClick={() => void pair()}>{busy === 'manual' ? 'Pairing…' : 'Pair host'}</Button>
         {!credentialReady && <p id="pair-needs-storage" className="text-sm text-muted-foreground">Pairing needs secure storage. Choose Check secure storage above first.</p>}
       </details>
       {hosts.map((host) => <HostCard key={host.host_id} host={host} snapshot={snapshots[host.host_id]} error={errors[host.host_id]} />)}

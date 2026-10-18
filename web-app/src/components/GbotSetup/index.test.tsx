@@ -862,3 +862,62 @@ it('resumes the saved key and keeps a changed host identity from passing the con
     vi.mocked(gbot).mock.calls.every(([route]) => route !== 'workspaces/ssh')
   ).toBe(true)
 })
+
+it('keeps SSH and tools checks separate before enabling Continue', async () => {
+  let finishTools!: (value: { installed: boolean }) => void
+  const tools = new Promise<{ installed: boolean }>((resolve) => {
+    finishTools = resolve
+  })
+  let failSsh!: (reason: Error) => void
+  const recheck = new Promise<never>((_, reject) => {
+    failSsh = reject
+  })
+  let checks = 0
+  const api = vi.mocked(gbot).mockImplementation(async (route) => {
+    if (route === 'workspaces/ssh/key')
+      return { algorithm: 'ssh-ed25519', public_key: 'saved-public-key' }
+    if (route === 'workspaces/ssh/check')
+      return ++checks === 1 ? { authenticated: true } : recheck
+    if (route === 'workspaces/ssh/tools') return tools
+    throw new Error(`Unexpected ${route}`)
+  })
+  render(
+    <GbotSetup
+      save={vi.fn()}
+      localReady={vi.fn()}
+      cancel={vi.fn()}
+      resume={{
+        id: 'saved-bot',
+        name: 'Writer',
+        connection: {
+          kind: 'ssh',
+          endpoint: { hostname: 'bot.local', port: 22, user: 'bot' },
+          pinned_host_key: { algorithm: 'ssh-ed25519', public_key: 'pinned' },
+        },
+      }}
+    />
+  )
+  await screen.findByDisplayValue('ssh-ed25519 saved-public-key')
+  fireEvent.click(screen.getByRole('button', { name: 'Check SSH access' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Check tools' }))
+  const ssh = screen.getByRole('button', { name: 'Check SSH access' })
+  expect(ssh).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  fireEvent.click(ssh)
+  expect(
+    api.mock.calls.filter(([route]) => route === 'workspaces/ssh/check')
+  ).toHaveLength(1)
+  await act(async () => finishTools({ installed: true }))
+  expect(ssh).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+  fireEvent.click(ssh)
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  await act(async () => failSsh(new Error('The SSH host identity changed')))
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'The SSH host identity changed'
+  )
+  expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: 'Check tools' })
+  ).not.toBeInTheDocument()
+})

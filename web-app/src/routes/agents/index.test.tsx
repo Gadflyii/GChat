@@ -240,6 +240,21 @@ describe('AgentStudioPage', () => {
     expect(screen.getByText('Completed Agent Studio runs will appear here.')).toBeInTheDocument()
   })
 
+  it('opens each selected run at its result overview after scrolling another run', async () => {
+    await renderRunHistory()
+    const detail = () => screen.getByRole('heading', { name: 'Result overview' }).closest('main')!
+    detail().scrollTop = 430
+
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant incomplete/ }))
+    expect(detail().scrollTop).toBe(0)
+    expect(within(detail()).getAllByText(secondHistoricalRun.finalReply).length).toBeGreaterThan(0)
+
+    detail().scrollTop = 160
+    fireEvent.click(screen.getByRole('button', { name: /Review assistant incomplete/ }))
+    expect(detail().scrollTop).toBe(0)
+    expect(within(detail()).getAllByText(firstHistoricalRun.finalReply).length).toBeGreaterThan(0)
+  })
+
   it('lets the run history pane fill the page height so its divider reaches the bottom', async () => {
     listAgentRuns.mockResolvedValue([])
     await renderRunHistory()
@@ -680,7 +695,96 @@ describe('AgentStudioPage', () => {
     expect(definitionState.value.save).toHaveBeenLastCalledWith(expect.objectContaining({
       id: 'review-assistant-3', name: 'Renamed agent',
     }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+    expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith('review-assistant-3')
   })
+
+  it.each(['new', 'template'] as const)(
+    'rejects a saved identifier in a %s draft and discards without deleting the saved agent', async (source) => {
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template',
+        name: 'Review template',
+        description: 'Start a separate review agent.',
+        definition: firstAgent,
+      }])
+      await renderSavedAgents()
+      if (source === 'new') {
+        fireEvent.click(screen.getByTitle('New agent'))
+        await screen.findByDisplayValue(editableDraft.name)
+      } else {
+        fireEvent.click(screen.getByRole('button', { name: 'Templates', exact: true }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Use template' }))
+        await screen.findByDisplayValue(`${firstAgent.name} Copy`)
+      }
+      fireEvent.change(screen.getByLabelText('Identifier'), {
+        target: { value: firstAgent.id },
+      })
+
+      expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
+      expect(screen.queryByRole('button', { name: 'Delete', exact: true })).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Save & run' }))
+
+      expect(toast.error).toHaveBeenCalledTimes(2)
+      expect(toast.error).toHaveBeenCalledWith(
+        `An agent with identifier "${firstAgent.id}" already exists. Choose a different identifier.`
+      )
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+      await screen.findByDisplayValue(firstAgent.name)
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+      expect(definitionState.value.definitions).toEqual([firstAgent, secondAgent])
+    }
+  )
+
+  it('rejects another saved identifier during an edit and still saves changes to the selected agent', async () => {
+    definitionState.value.save.mockImplementation(async (definition) => definition)
+    await renderSavedAgents()
+    fireEvent.change(screen.getByLabelText('Name'), {
+      target: { value: 'My edited review agent' },
+    })
+    fireEvent.change(screen.getByLabelText('Identifier'), {
+      target: { value: secondAgent.id },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save & run' }))
+
+    expect(toast.error).toHaveBeenCalledTimes(2)
+    expect(toast.error).toHaveBeenCalledWith(
+      `An agent with identifier "${secondAgent.id}" already exists. Choose a different identifier.`
+    )
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(definitionState.value.remove).not.toHaveBeenCalled()
+    expect(definitionState.value.definitions).toEqual([firstAgent, secondAgent])
+
+    fireEvent.change(screen.getByLabelText('Identifier'), {
+      target: { value: firstAgent.id },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith({
+      ...firstAgent,
+      name: 'My edited review agent',
+    })
+  })
+
+  it.each([secondAgent.id, ''])(
+    'deletes only the selected saved agent after changing its identifier to %s', async (id) => {
+      await renderSavedAgents()
+      fireEvent.change(screen.getByLabelText('Identifier'), {
+        target: { value: id },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
+
+      expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith(firstAgent.id)
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.definitions[1]).toEqual(secondAgent)
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled())
+    }
+  )
 
   it.each([
     ['General', 'general-2'],
@@ -905,6 +1009,44 @@ describe('AgentStudioPage', () => {
     ))
   })
 
+  it('saves a new coordinator with valid default parallelism and allows more specialists', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: /Coordinator Team/i }))
+
+    expect(screen.getByLabelText('Maximum parallel workers')).toHaveValue(1)
+    expect(screen.getAllByLabelText('Specialist ID')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledOnce())
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        kind: 'coordinator',
+        maxParallel: 1,
+        workers: [expect.objectContaining({ id: 'researcher' })],
+      })
+    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save definition' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Add specialist' }))
+    fireEvent.change(screen.getByLabelText('Maximum parallel workers'), {
+      target: { value: '2' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledTimes(2))
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        maxParallel: 2,
+        workers: [
+          expect.objectContaining({ id: 'researcher' }),
+          expect.objectContaining({ id: 'specialist-2' }),
+        ],
+      })
+    )
+  })
+
   it.each([
     ['Off', 'none'], ['Minimal', 'minimal'], ['Low', 'low'], ['Medium', 'medium'],
     ['High', 'high'], ['Extra high', 'xhigh'], ['Maximum', 'max'], ['Model default', null],
@@ -928,6 +1070,79 @@ describe('AgentStudioPage', () => {
     await user.click(screen.getByRole('button', { name: 'Save definition' }))
     await waitFor(() => expect(definitionState.value.save).toHaveBeenLastCalledWith(
       expect.objectContaining({ reasoningEffort: value })
+    ))
+  })
+
+  it.each([
+    ['Workflow', 'Stage ID', 'Add stage', 'Remove stage', 'nodes'],
+    ['Coordinator Team', 'Specialist ID', 'Add specialist', 'Remove specialist', 'workers'],
+  ] as const)('keeps %s role IDs focused while typing and after removing a role', async (composition, label, add, remove, collection) => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(composition) }))
+
+    const identifier = screen.getByLabelText(label)
+    identifier.focus()
+    for (let length = 1; length <= 'risk-reviewer'.length; length++) {
+      const value = 'risk-reviewer'.slice(0, length)
+      fireEvent.change(identifier, { target: { value } })
+      expect(screen.getByLabelText(label)).toBe(identifier)
+      expect(identifier).toHaveFocus()
+      expect(identifier).toHaveValue(value)
+    }
+    fireEvent.change(identifier, { target: { value: 'risk-reviewer-' } })
+    expect(identifier).toHaveValue('risk-reviewer-')
+    fireEvent.blur(identifier)
+    expect(identifier).toHaveValue('risk-reviewer')
+
+    fireEvent.click(screen.getByRole('button', { name: add }))
+    fireEvent.change(screen.getAllByLabelText(label)[1], { target: { value: 'final-review' } })
+    fireEvent.change(screen.getAllByLabelText('Display name')[1], { target: { value: 'Final Review' } })
+    fireEvent.click(screen.getAllByTitle(remove)[0])
+    const remaining = screen.getByLabelText(label)
+    expect(remaining).toHaveValue('final-review')
+    expect(screen.getByLabelText('Display name')).toHaveValue('Final Review')
+    remaining.focus()
+    fireEvent.change(remaining, { target: { value: 'final-reviewer' } })
+    expect(remaining).toHaveFocus()
+    fireEvent.blur(remaining)
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        [collection]: [expect.objectContaining({ id: 'final-reviewer', name: 'Final Review' })],
+      })
+    ))
+  })
+
+  it('keeps workflow dependencies connected while typing a stage ID', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    fireEvent.click(screen.getByRole('button', { name: /Workflow/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add stage' }))
+    fireEvent.change(screen.getAllByLabelText('Depends on stage IDs')[1], {
+      target: { value: 'deliver' },
+    })
+
+    const identifier = screen.getAllByLabelText('Stage ID')[0]
+    identifier.focus()
+    for (let length = 1; length <= 'review-stage'.length; length++) {
+      const value = 'review-stage'.slice(0, length)
+      fireEvent.change(identifier, { target: { value } })
+      expect(identifier).toHaveFocus()
+      expect(screen.getAllByLabelText('Depends on stage IDs')[1]).toHaveValue(value)
+    }
+    fireEvent.change(identifier, { target: { value: 'review-stage-' } })
+    fireEvent.blur(identifier)
+    expect(screen.getAllByLabelText('Depends on stage IDs')[1]).toHaveValue('review-stage')
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({ edges: [{ from: 'review-stage', to: 'stage-2' }] })
     ))
   })
 

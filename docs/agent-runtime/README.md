@@ -49,6 +49,58 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Untouched Coordinator Team defaults — October 18
+
+An isolated native Linux Studio pass found that **New agent** → **Coordinator
+Team** created one `researcher` specialist but set **Maximum parallel workers**
+to 2. Selecting **Save definition** without editing these defaults displayed
+“Coordinator parallelism must be between 1 and the worker count.” The affected
+`withKind` helper was byte-identical from observed role-ID candidate
+`26608cb72d2f` (base `80424bb41`) through main `ff3361720`.
+
+New Coordinator Teams now start at parallelism 1. Native replay saved the
+untouched definition with one `researcher` and `maxParallel: 1`. Adding a second
+specialist, typing 2 in **Maximum parallel workers**, and saving retained
+`researcher`, `specialist-2`, and `maxParallel: 2`. Existing definitions were
+preserved. The focused suite passed 49 tests; the sole `make verify`, frontend
+build and native build passed. Candidate SHA256 is
+`939d6296703854ade1633f84aa86fd2871f6b15b74eff73685ac10b3932f241c`
+(source `3818d7a2`).
+
+Baseline receipts, native DOM captures, saved-definition snapshots and the
+accepted two-specialist screenshot are in
+`/ai/gchat/out/gchat-coordinator-default-parallelism-20261018/`. This is an
+isolated Linux debug editor check with retained sidecars and no GPU or model
+request. CPU resources were returned at 03:54Z. Windows: not built (dev phase).
+
+## Role identifiers retain keyboard focus — October 18
+
+An isolated native Linux Studio pass found that typing `review-stage` into a
+Workflow **Stage ID**, or `risk-reviewer` into a Coordinator **Specialist ID**,
+retained only the first `r` and moved focus to the page body. After refocusing,
+a trailing minus was discarded even while the input retained focus. The affected
+slug helper and role editors are byte-identical from the observed identifier
+candidate (`2264e2200f`, source `e2ff6de49`) through main `80424bb41`.
+
+The correction preserves focus as role IDs change, retains a trailing separator
+during typing, and normalizes on blur. Native Linux replay typed `review-stage`
+with ordinary keyboard input while retaining the same Stage ID control; adding
+`-` preserved it until Tab. The dependent stage followed both edits, and saving
+retained `review-stage` → `stage-2`. Coordinator replay likewise retained focus
+for `risk-reviewer`, preserved its trailing `-` until Tab, and saved it alongside
+`specialist-2`. Removing the first worker showed the remaining worker's own ID;
+renaming it to `evidence-reader` with display name `EvidenceReader` saved only
+that worker with maximum parallelism 1.
+
+The focused suite passed 48 tests; the sole `make verify`, frontend build and
+native build passed. Candidate SHA256 is
+`26608cb72d2f4b27b6b3f5586388022f114693c3b39b8003d57e6f64e63151c5`
+(base `80424bb41` plus this correction). Evidence and the viewed workflow and
+specialist screenshots are in
+`/ai/gchat/out/gchat-role-id-keyboard-20261018/`. This is an isolated Linux debug
+editor check with retained sidecars and no GPU or model requests, not a full
+sidecar rebuild or installer qualification. Windows: not built (dev phase).
+
 ## Uncollected Chat worker history — October 18
 
 A worker dispatched through Chat's `agent_spawn` could disappear from its
@@ -251,6 +303,58 @@ Screenshots `11`–`13`, gate logs and candidate receipts are retained in
 `/ai/gchat/out/gchat1-chat-agents-pass-20261017`. This qualifies the Linux debug
 desktop layout; installer and Windows qualification remain separate.
 
+## Studio drafts preserve saved agent identity — October 18
+
+A private native pass saved “Control probe A”, created a new “Control probe B”
+and entered A’s identifier in B’s Identifier field. The unsaved draft incorrectly
+offered Delete, and Save definition silently replaced A. The baseline screenshot
+and ordinary-input transcript are retained in
+`/ai/gchat/out/gchat-chat-agent-controls-20261018/`.
+
+The editor now keeps the saved record identity separate from the editable
+identifier. A new or copied draft remains Discard, and saving an identifier used
+by another saved agent reports a collision before changing any definition or
+opening run setup. Delete on an edited saved agent targets that original record.
+The focused Agent Studio file passes all 44 tests, and one full `make verify`
+passes (3283 web tests, six skipped; 121 extension/core tests; platform Rust
+suites, lint, typecheck, quality guards and coverage floors).
+
+The separate Linux native candidate passes the original collision flow. Both
+Save definition and Save & run show the correction message while preserving A
+and the unsaved B draft; run setup does not open. Changing B to an unused
+identifier saves both agents. Editing saved B to A’s identifier and choosing
+Delete removes original B while preserving A’s identifier and name. The new
+draft offers Discard throughout the collision. Ordinary-input transcripts,
+viewed screenshots and saved definitions are retained in
+`/ai/gchat/out/gchat-agent-identifier-collision-20261018/`.
+
+The desktop was rebuilt from `dd064f1d5` plus this correction; its SHA-256 is
+`2264e2200faf1f341b84ff4009eeae2a17d88f26e9051db8c09dde91b2214a31`.
+Retained sidecars were not rebuilt, so this qualifies the Studio controls only.
+No model requests or GPU use. Windows not built (dev phase).
+
+## Studio run selection starts at its overview — October 18
+
+In the native 1024 × 740 pass with the sidebar expanded, reading the bottom of a
+finished run and selecting a failed run retained the previous 430 px scroll
+position. The selected run’s result overview and continuation controls were above
+the visible pane. The details pane now starts at the top when the selected saved
+run changes. Selecting records does not change their saved contents.
+
+The regression selects another run after scrolling, then returns to the original
+and checks each new selection starts at its result overview. All 40 focused
+Studio tests passed. The isolated native candidate passed finished, failed and
+incomplete saved-run transitions at 1024 × 740, plus a larger 1200 × 800 replay:
+each selection opened at scrollTop 0 with its overview and actions visible and
+no horizontal overflow. No inference or continuation execution occurred.
+
+Full `make verify` passed on the combined branch after merging the setup polling
+test reconciliation and current main. The original failed gate remains in the
+packet. The native replay used the earlier candidate with identical scroll
+implementation and regression bytes; no new desktop build was needed.
+Evidence and gate results:
+`/ai/gchat/out/gchat-run-selection-scroll-20261018/`. Windows not built (dev phase).
+
 ## Studio worker exit persistence — October 15
 
 Normal app exit now tracks direct Studio turns alongside Chat and Code workers,
@@ -429,6 +533,26 @@ for `GCHAT-ATTACHMENT-PICKER-STALE-TOOL-SNAPSHOT-20261015`; it does not qualify
 sending the PDF or reading its contents. The preliminary New Chat attempt did
 not exercise the relevant processing branch and is not a causal pass.
 [Native procedure and evidence](remaining-acceptance.md#native-attachment-chooser-current-tools--october-17).
+The separate [October 18 PDF Send check](#native-pdf-send-and-folder-permission--october-18)
+passes the bounded send, folder permission and answer path.
+
+## Native PDF Send and folder permission — October 18
+
+An isolated Linux native Chat selected the correct `short.pdf` (585 bytes)
+through the ordinary attachment chooser and sent a prompt containing no answer
+code. The folder dialog named `os.fs.read_document`; after **Allow folder**, the
+answer included the expected `ORCHID-472`. Saved messages record the exact PDF
+path passed to `os_fs_read_document` and its untruncated 12-character result.
+The dialog disclosed that the grant
+adds the folder to External with **CAN EDIT** access for that session. Expanded
+final tool details were not captured before shutdown.
+
+This uses the retained `832fddb85` desktop plus the run-selection-scroll fix and
+retained sidecars. It does not qualify all latest sidecars, Windows or a fresh
+installation. The initial CPU-profile mismatch and live-cpuset NVIDIA failure,
+corrected restart, and GPU return at 03:17Z after the 03:16Z cutoff remain part
+of the record. No timing claim; broader OI-068 remains PARTIAL.
+[Procedure, identities and evidence](remaining-acceptance.md#oi-068-native-pdf-send-and-folder-permission--october-18).
 
 ## Worker review follow-up
 

@@ -304,7 +304,7 @@ function withKind(
       return {
         ...base,
         kind,
-        maxParallel: 2,
+        maxParallel: 1,
         coordinatorInstructions:
           'Decompose the goal into concise, non-overlapping assignments.',
         synthesisInstructions:
@@ -347,12 +347,12 @@ function cloneDefinition(definition: AgentDefinition): AgentDefinition {
   return structuredClone(definition)
 }
 
-function slug(value: string): string {
+function slug(value: string, editing = false): string {
   return value
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
+    .replace(editing ? /^-/g : /^-|-$/g, '')
     .slice(0, 52)
 }
 
@@ -381,12 +381,19 @@ function AgentStudioPage() {
   const { skills } = useAgentSkills()
   const [view, setView] = useState<StudioView>(search.view ?? 'definitions')
   const [draft, setDraftState] = useState<AgentDefinition | null>(null)
+  // The editable identifier does not determine which saved record this draft owns.
+  const [draftSavedId, setDraftSavedId] = useState<string | null>(null)
   const draftRevision = useRef(0)
   const mutatingDraft = useRef(false)
-  const setDraft = useCallback((next: AgentDefinition | null) => {
-    ++draftRevision.current
-    setDraftState(next)
-  }, [])
+  const setDraft = useCallback(
+    (next: AgentDefinition | null, savedId?: string | null) => {
+      ++draftRevision.current
+      setDraftState(next)
+      if (!next) setDraftSavedId(null)
+      else if (savedId !== undefined) setDraftSavedId(savedId)
+    },
+    []
+  )
   const [templates, setTemplates] = useState<AgentTemplate[]>([])
   const [runs, setRuns] = useState<AgentRunRecord[]>([])
   const historyRequest = useRef(0)
@@ -418,7 +425,7 @@ function AgentStudioPage() {
 
   useEffect(() => {
     if (!draft && definitions.length > 0) {
-      setDraft(cloneDefinition(definitions[0]))
+      setDraft(cloneDefinition(definitions[0]), definitions[0].id)
     }
   }, [definitions, draft, setDraft])
 
@@ -488,7 +495,7 @@ function AgentStudioPage() {
     try {
       const created = await createDraft()
       if (revision !== draftRevision.current) return
-      setDraft(created)
+      setDraft(created, null)
       selectView('definitions')
     } catch (reason) {
       toast.error(String(reason))
@@ -499,7 +506,7 @@ function AgentStudioPage() {
   }
 
   const edit = (definition: AgentDefinition) => {
-    setDraft(cloneDefinition(definition))
+    setDraft(cloneDefinition(definition), definition.id)
     selectView('definitions')
   }
 
@@ -508,7 +515,7 @@ function AgentStudioPage() {
     copy.builtIn = false
     copy.id = ''
     copy.name = `${copy.name} Copy`
-    setDraft(copy)
+    setDraft(copy, null)
     selectView('definitions')
   }
 
@@ -526,12 +533,21 @@ function AgentStudioPage() {
       id: draft.id || unusedDefinitionId(draft.name, definitions),
       builtIn: false,
     }
+    if (
+      candidate.id !== draftSavedId &&
+      definitions.some((definition) => definition.id === candidate.id)
+    ) {
+      toast.error(
+        `An agent with identifier "${candidate.id}" already exists. Choose a different identifier.`
+      )
+      return null
+    }
     mutatingDraft.current = true
     setSaving(true)
     try {
       const saved = await save(candidate)
       if (revision !== draftRevision.current) return null
-      setDraft(cloneDefinition(saved))
+      setDraft(cloneDefinition(saved), saved.id)
       if (showToast) toast.success('Agent definition saved')
       return saved
     } catch (reason) {
@@ -545,7 +561,7 @@ function AgentStudioPage() {
 
   const deleteDraft = async () => {
     if (!draft || mutatingDraft.current) return
-    if (!draft.id) {
+    if (!draftSavedId) {
       setDraft(null)
       return
     }
@@ -553,7 +569,7 @@ function AgentStudioPage() {
     const revision = draftRevision.current
     setDeleting(true)
     try {
-      await remove(draft.id)
+      await remove(draftSavedId)
       if (revision === draftRevision.current) setDraft(null)
       toast.success('Agent definition deleted')
     } catch (reason) {
@@ -684,7 +700,7 @@ function AgentStudioPage() {
                     type="button"
                     className={cn(
                       'w-full rounded-xl border p-3 text-left transition hover:bg-accent/60',
-                      draft?.id === definition.id && 'border-primary bg-accent'
+                      draftSavedId === definition.id && 'border-primary bg-accent'
                     )}
                     onClick={() => edit(definition)}
                   >
@@ -729,9 +745,7 @@ function AgentStudioPage() {
                 onSave={() => void saveDraft()}
                 onDelete={() => void deleteDraft()}
                 onTry={() => void tryInChat(draft)}
-                saved={definitions.some(
-                  (definition) => definition.id === draft.id
-                )}
+                saved={draftSavedId !== null}
               />
             )}
           </aside>
@@ -1435,7 +1449,7 @@ function CoordinatorEditor({
       <div className="space-y-3">
         {draft.workers.map((worker, index) => (
           <RoleEditor
-            key={`${worker.id}-${index}`}
+            key={index}
             role={worker}
             roleKind="specialist"
             skills={skills}
@@ -1543,7 +1557,7 @@ function WorkflowEditor({
             .join(', ')
           return (
             <div
-              key={`${node.id}-${index}`}
+              key={index}
               className="rounded-xl border bg-background p-4"
             >
               <RoleEditor
@@ -1575,7 +1589,7 @@ function WorkflowEditor({
                     onChange={(event) => {
                       const from = event.target.value
                         .split(',')
-                        .map(slug)
+                        .map((value) => slug(value))
                         .filter(Boolean)
                       onChange({
                         ...draft,
@@ -1663,6 +1677,9 @@ function RoleEditor({
             value={role.id}
             placeholder={isSpecialist ? 'risk-reviewer' : 'analyze'}
             onChange={(event) =>
+              onChange({ ...role, id: slug(event.target.value, true) })
+            }
+            onBlur={(event) =>
               onChange({ ...role, id: slug(event.target.value) })
             }
           />
@@ -2124,7 +2141,7 @@ function RunInspector({
           ))}
         </div>
       </aside>
-      <main className="min-h-0 overflow-y-auto p-6">
+      <main key={selected?.id} className="min-h-0 overflow-y-auto p-6">
         {selected ? (
           <div className="mx-auto max-w-4xl space-y-5">
             <section className="space-y-3 rounded-lg border bg-card p-4">
