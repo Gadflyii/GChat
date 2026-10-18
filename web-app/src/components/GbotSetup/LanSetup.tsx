@@ -36,7 +36,9 @@ export default function LanSetup({
   const [verified, setVerified] = useState(false)
   const [action, setAction] = useState<keyof typeof actionLabels>()
   const pending = useRef(false)
-  const working = action !== undefined
+  const toolsPending = useRef(false)
+  const [toolsWorking, setToolsWorking] = useState(false)
+  const working = action !== undefined || toolsWorking
   const [locked, setLocked] = useState(Boolean(connection.workspaceId))
   const [publicKey, setPublicKey] = useState('')
   const [error, setError] = useState('')
@@ -76,7 +78,7 @@ export default function LanSetup({
     nextAction: keyof typeof actionLabels,
     perform: () => Promise<void>
   ) => {
-    if (pending.current) return
+    if (pending.current || toolsPending.current) return
     pending.current = true
     setAction(nextAction)
     busy(true)
@@ -346,7 +348,11 @@ export default function LanSetup({
                 <LanTools
                   workspaceId={connection.workspaceId}
                   ready={ready}
-                  busy={busy}
+                  busy={(value) => {
+                    toolsPending.current = value
+                    setToolsWorking(value)
+                    busy(value)
+                  }}
                 />
               )}
             </div>
