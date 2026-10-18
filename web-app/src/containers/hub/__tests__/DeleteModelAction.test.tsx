@@ -581,7 +581,7 @@ describe('DeleteModelAction', () => {
         const notice = render(toastWarning.mock.calls.at(-1)![1].description)
         getProviders.mockReturnValueOnce(firstRecovery.promise)
         await user.click(within(notice.container).getByRole('button', { name: 'Refresh model list' }))
-        expect(within(notice.container).getByRole('button', { name: 'Refresh model list' })).toBeDisabled()
+        expect(within(notice.container).getByRole('button', { name: 'Refreshing model list…' })).toBeDisabled()
         if (order === 'B deleted during A read') await deleteSecond()
         // In particular, B's earlier clean acknowledgement must not let this
         // older A read erase B when the re-add lands after the read began.

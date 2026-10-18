@@ -29,6 +29,17 @@ responses. Next: freeze source, run the 124 focused affected tests and lint,
 then exactly one new `make verify`, and return to Codex 8 before mailing
 merge-ready. No backend, Engine, installed-app or Windows changes.
 
+First frozen source `19eaa0083` staged successfully on S1. Its focused run
+stopped at **120 passed / four failed**: the combined regression looked up the
+idle **Refresh model list** label after clicking it, while the UI correctly
+showed disabled **Refreshing model list…**. The assertion now uses that busy
+accessible name, retaining the duplicate-action guard and all orderings.
+Lint and `make verify` did not start. Booking3599 returned22:19Z; its inactive
+fixture and raw failure remain for the corrected focused run. Next: freeze
+that test correction, rebook the existing fixture, focused tests/lint and the
+still-unrun single `make verify`, then Codex 8.
+
+
 Prior source `540b1761f` passed its 31 focused cases and one verify at
 21:55Z, but missed the rejected ordering. Booking3588 returned21:56Z. Its
 fixture/container were retired21:57Z; only small JSON/summary evidence remains
