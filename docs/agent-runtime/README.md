@@ -66,6 +66,63 @@ plus lint, type checking, quality and critical-coverage gates.
 Receipts: `/ai/gchat/out/gchat-agent-window-close-draft-20261018/`.
 This check covers normal Linux window close. Page reload, process-loss draft
 recovery and Windows platform acceptance remain outside it.
+## Linux Hermes native continuation — October 18
+
+The Linux Hermes reply, workspace-file tool read and same-session continuation
+leaf of OI-068 **passes**. Ordinary upstream setup installed Hermes 0.22.2 in a
+private S1 container. A native baseline walk then found that Hermes hid a Ready
+Host whose projected provider had no API key. Selecting the imported filename
+instead correctly failed qualified startup, but left **Save connection** stuck
+on **Loading model…**. No Hermes prompt was submitted on that baseline.
+
+The fix uses the shared Ready-instance catalog, saves an exact canonical
+instance or a unique confirmed alias, validates its actual context and keeps a
+Ready model running. Unrelated Ready instances never replace the user's
+selection. Save now releases its busy state on failure; selection and Clear
+remain disabled during a single pending Save.
+
+Native Release acceptance passed at 22:08Z. The unconfirmed imported filename
+still received the correct startup rejection, after which Save was usable.
+Selecting the visible **Ready** Host and saving wrote its canonical model ID,
+local API URL and actual 262144-token context without restarting the model.
+The normal Host used C1, Vision/structured output, DFlash off and automatic KV.
+Hermes' ordinary terminal setup uses its 65536-token budget, within that live
+Engine context. Its first turn called `read_file` on the harmless workspace
+note and reported `cobalt-orchard-7319`, 19, 23 and sum 42. The second turn in
+the same persisted session reported the project, sum 42 and sum plus eight, 50,
+without another tool call. The note remained unchanged.
+
+Focused rendered tests pass all 11 cases, including ambiguous aliases, stale
+instances, insufficient/unknown context, deferred Save and retry. ONE
+`make verify`, with failed/unreached targets resumed after visible-outcome
+assertions corrected the test-quality failure, passes: 3818 app, 127 extension
+and 1318 Rust tests; six app skips and 28 Rust ignores. Normal Release desktop,
+CLI and Host builds pass. Source is `fix/c3-hermes-ready-host-20261018`, based
+on main `af8d1b4dc`; desktop SHA256 is
+`8fc19e3f3f3c55cb288a073ffa92f820959847b8ddd251cac81793ef09cf6120`.
+
+The candidate used the retained extracted release DEB's normal installed paths
+with candidate desktop/CLI/resources overlaid read-only; frozen Engine
+`b26ec5b8f` and 179-profile catalog were preserved. This accepts the changed
+Hermes route, not a newly packaged RC. Native input ran on a private X display,
+D-Bus, unlocked keyring and SSD HOME/XDG; the normal NAS root was read-only.
+Model Stop passed. The private app/container/session and inspector tunnel are
+stopped; booking 3594 canceled, **returned 22:09Z**. The authorized 3 GiB RAM
+backstop did not fire.
+
+Small receipts, transcript and viewed screenshots:
+[`out/c3-hermes-native-20261018/`](../../out/c3-hermes-native-20261018/)
+(`current-result.json`, `candidate-session-transcript.json`); build/verification:
+`out/c3-hermes-ready-host-20261018/`. The owned 11 GiB native fixture
+`/media/ron/SSD_RAID/ai/tmp-c3-hermes-native-20261018` and 59 GiB candidate build
+`/media/ron/SSD_RAID/ai/tmp-c3-hermes-ready-host-20261018` are retained only
+until merge, then removed. The accepted DEB/AppImage under
+`tmp-c3-linux-rc-20261018/packages/` remain protected.
+
+Windows, Hermes compaction/restart/crash recovery and a full 262144-token input
+remain outside this leaf. OI-068 stays PARTIAL. Next: merge the verified fix,
+retire its disposable fixture/build and coordinate the remaining Windows leaf;
+do not repeat this passing Linux gate.
 
 ## Try in chat skill catalog failures — October 18
 
