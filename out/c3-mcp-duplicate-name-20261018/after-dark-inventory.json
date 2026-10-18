@@ -1,0 +1,34 @@
+{
+  "config": {
+    "mcpServers": {
+      "C3 saved calendar": {
+        "active": false,
+        "args": [
+          "saved"
+        ],
+        "command": "/c3-saved-not-executed",
+        "env": {
+          "C3_SEED": "saved"
+        }
+      },
+      "GChat Browser MCP": {
+        "active": false,
+        "args": [
+          "-y",
+          "search-mcp-server@latest"
+        ],
+        "command": "npx",
+        "env": {
+          "BRIDGE_HOST": "127.0.0.1",
+          "BRIDGE_PORT": "17389"
+        },
+        "official": true
+      }
+    },
+    "mcpSettings": {
+      "toolCallTimeoutSeconds": 30
+    }
+  },
+  "sha256": "ace6c9d57f4eaa7f4f6f74647ecb4f227bef49697e0563c48ef6fe87c6436652",
+  "mcp_log": []
+}

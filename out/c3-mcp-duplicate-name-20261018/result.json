@@ -1,0 +1,43 @@
+{
+  "row": "GUI-MCP-DUPLICATE-NAME",
+  "status": "LINUX_NATIVE_ACCEPTANCE_PASS",
+  "source_fix": "42eb97903",
+  "source_merge": "373d706c7",
+  "native_source": "ed68c7443",
+  "base": "bb194ff03",
+  "host": "AIS-2-8592-L01",
+  "input": "Native XTest pointer/keys; inspector read-only DOM/screenshots.",
+  "cases": [
+    {
+      "layout": "Dark 1500x1000",
+      "name": "C3 saved calendar",
+      "result": "Duplicate alert, name/changed command draft retained, original saved config unchanged.",
+      "observation": "duplicate-dark-wide.json",
+      "screenshot": "duplicate-dark-wide.png"
+    },
+    {
+      "layout": "Light 1024x800",
+      "name": "  C3 saved calendar  ",
+      "result": "Trimmed-name duplicate rejected; readable wrapped alert, draft retained, no overflow.",
+      "observation": "duplicate-light-narrow.json",
+      "screenshot": "duplicate-light-narrow.png"
+    }
+  ],
+  "cancel": "Dialog closes; original saved inactive connection/command/options/settings visible.",
+  "saved_state": {
+    "baseline_after_dark_final_sha256": "ace6c9d57f4eaa7f4f6f74647ecb4f227bef49697e0563c48ef6fe87c6436652",
+    "unchanged": true,
+    "original_active": false,
+    "mcp_initialized": 0,
+    "official_browser": "App-generated inactive entry present before baseline snapshot."
+  },
+  "reused_gates": {
+    "focused_passed": 11,
+    "verify": "PASS 3459 app, 127 extension, 1275 native; six floors",
+    "receipt": "/ai/gchat/out/c7-mcp-dialog-row-buttons-20261018/verify-result.json",
+    "binding": "source-binding.json"
+  },
+  "verification": "Evidence-only; git diff --check. No repeated tests/build.",
+  "limits": "Linux ordinary Add form; no tool process, account, model/GPU or Windows qualification.",
+  "cleanup": "Private app/Host/keyring/DBus/Xvfb/observer stopped; owned S1 scratch removed; booking3211 canceled; returned09:30Z. Donor unchanged/no hold."
+}

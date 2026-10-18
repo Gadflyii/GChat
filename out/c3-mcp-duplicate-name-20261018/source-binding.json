@@ -1,0 +1,146 @@
+{
+  "row": "GUI-MCP-DUPLICATE-NAME",
+  "status": "SOURCE_BINDING_PASS",
+  "checked_utc": "2026-10-18T09:29:15.686768+00:00",
+  "scope": "Source comparison and existing evidence reuse only; no test, build or GUI execution.",
+  "source": {
+    "base": "bb194ff0362877c934004ded2bd7a26b03f564cf",
+    "native": "ed68c7443d3d782869dad89736ca049631f8a157",
+    "original_fix": "42eb979038cc1fd35dab33e7f41cc81099cb179e",
+    "original_merge": "373d706c73ee08c507cdbaba6a92e2dd0e071c6e",
+    "original_fix_is_ancestor": {
+      "bb194ff0362877c934004ded2bd7a26b03f564cf": true,
+      "ed68c7443d3d782869dad89736ca049631f8a157": true,
+      "6aad35fc39d6634df25231e62185e2ecd42e20ab": true
+    }
+  },
+  "native_to_current_sections": {
+    "duplicate_guard": {
+      "file": "web-app/src/containers/dialogs/AddEditMCPServer.tsx",
+      "equal": true,
+      "native_sha256": "ace9d47b03f2326b511c8cfb4659e686942117db729fc6dd3994a072bb0abb67",
+      "current_sha256": "ace9d47b03f2326b511c8cfb4659e686942117db729fc6dd3994a072bb0abb67"
+    },
+    "name_type_command_address_fields": {
+      "file": "web-app/src/containers/dialogs/AddEditMCPServer.tsx",
+      "equal": true,
+      "native_sha256": "d64b1d1f37d10c10c55b3f3db6cfb0e32947fd1ece58ab7e63d33e3eb502ab8b",
+      "current_sha256": "d64b1d1f37d10c10c55b3f3db6cfb0e32947fd1ece58ab7e63d33e3eb502ab8b"
+    },
+    "alert_save_cancel": {
+      "file": "web-app/src/containers/dialogs/AddEditMCPServer.tsx",
+      "equal": true,
+      "native_sha256": "5f80cbd8701e1bea60ae4306b8dfbc5fdac97acc805d3fa3d366d33076632888",
+      "current_sha256": "5f80cbd8701e1bea60ae4306b8dfbc5fdac97acc805d3fa3d366d33076632888"
+    },
+    "route_existing_names_and_save_binding": {
+      "file": "web-app/src/routes/settings/mcp-servers.tsx",
+      "equal": true,
+      "native_sha256": "acb6cb5be43ddaad2e39e62cf1b8f38a875a54a13edc128dd6bc97f1537fd44e",
+      "current_sha256": "acb6cb5be43ddaad2e39e62cf1b8f38a875a54a13edc128dd6bc97f1537fd44e"
+    },
+    "route_handle_save_server": {
+      "file": "web-app/src/routes/settings/mcp-servers.tsx",
+      "equal": true,
+      "native_sha256": "a01dfd51b8c0e055bbce90955596a219057d9af8dba4be709290f23e13b416e9",
+      "current_sha256": "a01dfd51b8c0e055bbce90955596a219057d9af8dba4be709290f23e13b416e9"
+    },
+    "duplicate_behavioral_test": {
+      "file": "web-app/src/containers/__tests__/MCPServerDialogs.test.tsx",
+      "equal": true,
+      "native_sha256": "98019c80a21c74822158efe8a9a5ad88de7173dc9ec9963986d28bdecaeb7fc9",
+      "current_sha256": "98019c80a21c74822158efe8a9a5ad88de7173dc9ec9963986d28bdecaeb7fc9"
+    }
+  },
+  "english_name_save_cancel_copy": {
+    "serverName": {
+      "native": "Connection name",
+      "current": "Connection name",
+      "equal": true
+    },
+    "enterServerName": {
+      "native": "A name you will recognize, such as My calendar",
+      "current": "A name you will recognize, such as My calendar",
+      "equal": true
+    },
+    "save": {
+      "native": "Save connection",
+      "current": "Save connection",
+      "equal": true
+    },
+    "cancel": {
+      "native": "Cancel",
+      "current": "Cancel",
+      "equal": true
+    }
+  },
+  "current_component_and_test_binding": {
+    "web-app/src/containers/dialogs/AddEditMCPServer.tsx": {
+      "current_sha256": "754029b178db7c0980f5de7bc06f28a4aa4ff30f7b5e966b0f9696476437c50b",
+      "retained_verify_terminal_sha256": "754029b178db7c0980f5de7bc06f28a4aa4ff30f7b5e966b0f9696476437c50b",
+      "equal": true
+    },
+    "web-app/src/containers/__tests__/MCPServerDialogs.test.tsx": {
+      "current_sha256": "f03f4d4396360eb6ebcf626d7f39a994321feafa2608b37ed877179b7ac71251",
+      "retained_verify_terminal_sha256": "f03f4d4396360eb6ebcf626d7f39a994321feafa2608b37ed877179b7ac71251",
+      "equal": true
+    }
+  },
+  "current_route_and_route_test_binding_to_verify_baseline": {
+    "web-app/src/routes/settings/mcp-servers.tsx": {
+      "current_sha256": "3a4a42ce2dc09c227a1a8c48215edf0a50561e777721391e1bb5ba540b8fc347",
+      "verify_baseline_sha256": "3a4a42ce2dc09c227a1a8c48215edf0a50561e777721391e1bb5ba540b8fc347",
+      "equal": true
+    },
+    "web-app/src/routes/settings/__tests__/mcp-servers.test.tsx": {
+      "current_sha256": "f24691a71ea234e711a3c55eb68e72b2866794ee5404d05f88fd934e2783b3ad",
+      "verify_baseline_sha256": "f24691a71ea234e711a3c55eb68e72b2866794ee5404d05f88fd934e2783b3ad",
+      "equal": true
+    }
+  },
+  "supported_contract": {
+    "guard": "Ordinary Add form only: !editingKey && existingNames?.includes(serverName.trim()). Exact case-sensitive saved-name comparison; trimming occurs before comparison.",
+    "alert": "A tool connection named “<name>” already exists. Choose another name, or edit the existing one.",
+    "effect": "Returns before required-field checks and onSave. Draft remains open; existing saved configuration is untouched. A duplicate-name rejection needs no valid command or live tool.",
+    "route": "existingNames={Object.keys(mcpServers)} passes all saved keys. handleSaveServer merges supplied keys into current saved inventory; the Add-form guard prevents this overwrite path for a duplicate.",
+    "test": "does not let a new connection silently replace one with the same name; provides existingNames=[Exa], enters Exa, clicks Save, checks role=alert and verifies save was not called.",
+    "line_anchors": {
+      "duplicate_guard": "AddEditMCPServer.tsx:395",
+      "behavioral_test": "MCPServerDialogs.test.tsx:150",
+      "route_existing_names": "mcp-servers.tsx:708",
+      "route_save": "mcp-servers.tsx:182"
+    },
+    "limits": "This leaf does not qualify Advanced JSON replacement semantics or editing/renaming an existing connection."
+  },
+  "unrelated_native_to_current_changes": {
+    "dialog": "Native/current changes concern native command-option reorder buttons, focus styling, stable argument row IDs and KeyboardSensor coordinates. Argument serialization reads arg.value; duplicate guard and name/Save/Cancel copy are unchanged.",
+    "route": "The Logs server filter changed from native select to ChoiceSelect; its route regression was added. existingNames and handleSaveServer are byte-identical.",
+    "tests": "Later rendered keyboard/reorder tests expand dialog coverage; the duplicate-name test is byte-identical."
+  },
+  "retained_verification": {
+    "focused_passed": 11,
+    "focused_receipts": [
+      "/ai/gchat/out/c7-mcp-dialog-row-buttons-20261018/native-result.json",
+      "/ai/gchat/out/c7-mcp-dialog-row-buttons-20261018/summary.md"
+    ],
+    "one_make_verify_receipt": "/ai/gchat/out/c7-mcp-dialog-row-buttons-20261018/verify-result.json",
+    "status": "VERIFY_PASS",
+    "exit": 0,
+    "automatic_retry": false,
+    "start": "2026-10-18T07:40:43.172379+00:00",
+    "end": "2026-10-18T07:48:32.503007+00:00",
+    "counts": {
+      "app_passed": 3459,
+      "app_skipped": 6,
+      "extension_passed": 127,
+      "native_passed": 1275,
+      "native_ignored": 28,
+      "critical_coverage_floors": 6
+    },
+    "original_focused_mail": {
+      "path": "/ai/coordination/mailbox/bubbs.log:11497",
+      "reported": "dialogs + route tests 11 PASS"
+    }
+  },
+  "native_boundary": "Known C7 MCP and C3 required-field packets contain no duplicate-name rejection. Parent owns new native captures and result/README; this binding makes no new GUI acceptance claim."
+}
