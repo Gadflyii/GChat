@@ -2592,6 +2592,130 @@ it.each(['Send reply', 'Decline'])(
   }
 )
 
+it.each(['Send reply', 'Decline'])(
+  'recovers a saved human-help %s without resending the response in settings',
+  async (action) => {
+    const [identity] = readyTaskBots()
+    const call = mocks.call.getMockImplementation()!
+    const request = {
+      id: 'saved-help',
+      question: 'Which folder?',
+      status: 'pending',
+      response: null as string | null,
+    }
+    const task = {
+      id: 'saved-help-task',
+      identity,
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [request],
+    }
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let rejectReply!: (cause: string) => void
+    const pendingReply = new Promise<void>((_, reject) => {
+      rejectReply = reject
+    })
+    let finishResume!: () => void
+    const pendingResume = new Promise<void>((resolve) => {
+      finishResume = resolve
+    })
+    const help = vi.fn().mockReturnValue(pendingReply)
+    const resume = vi.fn().mockReturnValue(pendingResume)
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'tasks') return [task]
+        if (path === 'tasks/help') return help(body)
+        if (path === 'tasks/resume') return resume(body)
+        return call(path, body)
+      }
+    )
+    render(<Page />)
+    const card = (await screen.findByText('Which folder?')).closest('article')!
+    fireEvent.change(within(card).getByLabelText('Your reply'), {
+      target: { value: 'Use Documents' },
+    })
+    fireEvent.click(within(card).getByRole('button', { name: action }))
+    const payload = {
+      id: task.id,
+      request_id: request.id,
+      response: action === 'Send reply' ? 'Use Documents' : null,
+    }
+    expect(help).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      action === 'Send reply' ? 'Sending reply…' : 'Declining request…'
+    )
+
+    // The service saves the response before attempting to restart execution.
+    task.state = 'interrupted'
+    request.status = payload.response === null ? 'declined' : 'completed'
+    request.response = payload.response
+    await act(async () => rejectReply('Model connection unavailable'))
+    const guidance =
+      'Your response was saved, but this task could not continue. Check the model and computer connections, then resume the task.'
+    const outcome =
+      action === 'Send reply' ? 'Your reply: Use Documents' : 'Request declined'
+    expect(await within(card).findByText(outcome)).toBeVisible()
+    expect(await within(card).findByRole('alert')).toHaveTextContent(guidance)
+    expect(within(card).queryByLabelText('Your reply')).not.toBeInTheDocument()
+    expect(
+      within(card).queryByRole('button', { name: 'Send reply' })
+    ).not.toBeInTheDocument()
+    expect(
+      within(card).queryByRole('button', { name: 'Decline' })
+    ).not.toBeInTheDocument()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+      ).toBeGreaterThan(reads)
+    )
+    expect(within(card).getByRole('alert')).toHaveTextContent(guidance)
+    expect(within(card).getByText(outcome)).toBeVisible()
+    expect(help).toHaveBeenCalledTimes(1)
+    expect(resume).not.toHaveBeenCalled()
+
+    const resumeButton = within(card).getByRole('button', { name: 'Resume' })
+    expect(resumeButton).toBeEnabled()
+    fireEvent.click(resumeButton)
+    expect(resume).toHaveBeenCalledExactlyOnceWith({ id: task.id })
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      'Resuming this task…'
+    )
+    task.state = 'running'
+    await act(async () => finishResume())
+    await waitFor(() =>
+      expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    )
+    expect(within(card).getByText(outcome)).toBeVisible()
+
+    task.state = 'interrupted'
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        within(card).getByRole('button', { name: 'Resume' })
+      ).toBeEnabled()
+    )
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(card).getByText(outcome)).toBeVisible()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    ).toEqual([
+      ['tasks/help', payload],
+      ['tasks/resume', { id: task.id }],
+    ])
+  }
+)
+
 it('sends task-bound human replies and declines, retaining them after reload', async () => {
   const identity = { workspace_id: 'one', session_id: 'session' }
   const tasks = [

@@ -1311,6 +1311,7 @@ function GbotPage() {
                         <HumanHelp
                           key={request.id}
                           request={request}
+                          taskState={task.state}
                           busy={busy}
                           reply={(response) =>
                             perform(

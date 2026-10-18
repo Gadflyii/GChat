@@ -501,6 +501,7 @@ export default function GbotCompanion() {
                     <GbotHumanHelp
                       key={request.id}
                       request={request}
+                      taskState={task.state}
                       busy={busy}
                       reply={(response) =>
                         perform(
