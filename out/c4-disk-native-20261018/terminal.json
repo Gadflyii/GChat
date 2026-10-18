@@ -3,5 +3,11 @@
   "native_app_host_listener_terminal": true,
   "no_model_children": true,
   "xvfb_stop_signaled": 2352941,
-  "scope": "C4 private native test only"
+  "scope": "C4 private native test only",
+  "owned_build_cleanup_utc": "2026-10-18T04:34:23Z",
+  "removed_owned_roots": [
+    "/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018",
+    "/media/ron/SSD_RAID/ai/tmp-c4-gui-maintenance-disk-error-20261018"
+  ],
+  "cleanup_note": "Inactive roots removed after native acceptance/source merge; root-owned generated files removed through the existing pinned container with only the owned root bound. Read-only donor/model inputs retained."
 }

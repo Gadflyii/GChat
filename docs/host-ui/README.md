@@ -2221,7 +2221,8 @@ and POST-STOP-GPU-BUSY, all prefixed `GUI-JOURNEY-`.
 Acceptance: exercise the changed controls in one isolated Linux native session,
 retain observed results and limitations, and close demonstrated rows on GInfer
 `docs/open-work`. All eight native leaves now pass at the recorded scope. The
-new background-maintenance failure reporting fix awaits branch integration; the
+background-maintenance failure reporting fix merged as `16a4b2f25` from
+`810e9e7bb`; all eight canonical rows are CLOSED at GInfer `816a6ffb4`. The
 earlier warning change alone did not resolve that gap.
 
 Source: `origin/main@e6b28e8d4`; the retained C3 native donor is `be69f9190`
@@ -2260,13 +2261,14 @@ one verification gate plus bounded failed-stage continuation, and the native
 fault/retry acceptance described below.
 
 Owned native inventory: S1
-`/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018` contains a copied native
+`/media/ron/SSD_RAID/ai/tmp-c4-gui-journey-20261018` held the copied native
 candidate and fresh private HOME, XDG, DBus, unlocked keyring, Xauthority and
 1200×800 Xvfb display; Wayland is unset. CPU-only at initial launch, then GPU1
 booking 2962 (04:07–04:16 UTC, canceled at return) covered Ensure, startup, Stop and tuning;
 the independent GPU0 fit is untouched. No disk filling, real download or changes
-to another user's profile. Native pointer/keyboard input; inspector observation only. Retire the
-owned copy and private state after retaining concise results.
+to another user's profile. Native pointer/keyboard input; inspector observation only.
+The completed native root and separate disk-fix build root are retired after
+retaining the result JSON and screenshots; no donor or model input is removed.
 
 Completed real-lifecycle gate: the existing read-only
 `/media/ron/SSD_RAID/ai/gbot-models/qwen38_27b_smol_df2.ginfer` was imported
@@ -2288,8 +2290,12 @@ request retained its separate catalog error; no Engine child ran. Three reviewed
 folder failures plus recovery, with existing ENOSPC mapping/rendered regressions;
 no disk was filled and no native ENOSPC is claimed. App, idle Host, keyring, D-Bus,
 listener, inspector forward and Xvfb are stopped; CPU80–87 returned at04:29 UTC.
-Next: integrate the source fix and close its canonical row; preserve the concise
-packet while retiring owned disposable builds/private state.
+The source fix is merged and its canonical row is CLOSED. Both verified-inactive
+owned roots, `tmp-c4-gui-journey-20261018` (7.3 GiB allocated) and
+`tmp-c4-gui-maintenance-disk-error-20261018` (31 GiB allocated), were removed
+from S1 after acceptance. Concise results and screenshots remain in this branch;
+the read-only model and dependency donors remain unchanged. Next: continue the
+separately owned Linux CLI archive first-run walk.
 
 ## Engine settings native acceptance — C3
 
