@@ -36,8 +36,15 @@ SSD preparation started at **22:40:43Z** on S1 `AIS-2-8592-L01`, booking3613,
 CPU88–95 through23:10Z. Owned fixture:
 `/media/ron/SSD_RAID/ai/tmp-c7-models-stop-status-recovery-20261018`;
 container: `c7-models-stop-status-recovery-20261018-candidate`. The inactive RC
-dependency donor and eleven protected catalog inputs remain separate. No tests
-have started. Small command/binding/result metadata is in
+dependency donor and eleven protected catalog inputs remain separate. Preparation
+stopped before source staging or tests: the reused recipe expected candidate
+Cargo manifest `44ea3465` as the donor reference, but the retained donor is
+`9c7223b0`; its only difference is the already-cached Tokio test-util feature.
+All 34 other dependency references match. Booking3613 returned22:46Z. The
+corrective continuation preserves the completed copies and original failed
+receipt, derives the donor reference from that donor, and keeps candidate
+bindings exclusively from frozen Git. Source staging requires its own successful
+continuation receipt. No tests have started. Small command/binding/result metadata is in
 `out/c7-models-stop-status-recovery-20261018/`; raw results stay on S1 until
 coordinator review, then the disposable fixture is retired. Next: finish
 preparation, then focused Models66, lint and exactly one `make verify`, stopping
