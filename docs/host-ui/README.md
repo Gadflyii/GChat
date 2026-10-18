@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Gbot human-help failure recovery — October 18
+
+`GBOT-HUMAN-HELP-INLINE-ERRORS`: Gbot settings and the companion previously
+caught failed **Send reply** and **Decline** requests before their help cards
+could display the error. Both views now pass these failures to the existing
+card handler. The error stays beside the request through normal task refreshes,
+the unsent reply remains available, and either action can be retried. Successful
+responses still refresh and show the saved reply or declined outcome.
+
+Four rendered integration regressions cover both actions in both views,
+including pending feedback, duplicate prevention, preserved drafts, refresh and
+retry with the original task/request/response. They fail on baseline
+`84d6b23f0` because the inline alert is absent. All 110 focused tests pass.
+One `make verify` passed lint, typecheck, quality, hardening, manager and assets
+checks, then stopped at an unrelated first-run folder-hydration test race.
+The failed coverage and unrun Rust stages pass with
+`make test-coverage-critical test-rust`: 3,361 app tests, 121 extension tests,
+1,228 Rust tests and all six coverage floors; six app skips and 28 Rust ignores.
+This continuation reused Codex 3’s exact timing correction `7fd01cf0a` as a test
+source overlay; that separately owned change must accompany integration.
+The human-help source hashes remained unchanged through verification.
+No backend, task-control or approval policy changed.
+No VM, native Windows, model or live task was run. FRESH/OLD remain OFF with
+original XML, in Gchat 2 custody. Windows: not built (dev phase).
+
+Result: `out/gchat2-human-help-inline-errors-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-human-help-inline-errors-20261018`.
+
 ## Gbot Hand back and task resume guidance — October 18
 
 `GBOT-HAND-BACK-RESUME-GUIDANCE`: the desktop viewer and companion previously
