@@ -10,7 +10,10 @@ export type ConfirmOptions = {
   destructive?: boolean
 }
 
-type Pending = ConfirmOptions & { resolve: (accepted: boolean) => void }
+type Pending = ConfirmOptions & {
+  resolve: (accepted: boolean) => void
+  returnFocus: HTMLElement | null
+}
 
 export const useConfirmStore = create<{ pending: Pending | null }>(() => ({ pending: null }))
 
@@ -21,8 +24,14 @@ export const useConfirmStore = create<{ pending: Pending | null }>(() => ({ pend
  */
 export function confirmAction(options: ConfirmOptions): Promise<boolean> {
   return new Promise((resolve) => {
-    useConfirmStore.getState().pending?.resolve(false)
-    useConfirmStore.setState({ pending: { ...options, resolve } })
+    const previous = useConfirmStore.getState().pending
+    const returnFocus = previous
+      ? previous.returnFocus
+      : typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null
+    previous?.resolve(false)
+    useConfirmStore.setState({ pending: { ...options, resolve, returnFocus } })
   })
 }
 

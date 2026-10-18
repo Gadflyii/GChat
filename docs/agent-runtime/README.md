@@ -22,6 +22,22 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Shared confirmation keyboard return — October 18
+
+Private native Agent Studio on main `0f604653e` reproduced focus loss after
+opening a draft-discard confirmation from a library row with Enter and
+dismissing it with Escape: focus fell to the body, and the next Tab jumped to
+Downloads. The dialog source matched main; the private desktop used the
+preceding source-compatible `84a0027b3` build. Normal shutdown kept saved
+definitions and history byte-identical. Baseline receipts and the viewed
+screenshot are in `/ai/gchat/out/gchat-confirm-dialog-focus-20261018/`.
+
+Shared confirmations now retain their opening control at request time and
+restore focus on dismissal or confirmation when it is still connected.
+Replacing an open request keeps the original opener; an exiting dialog does
+not take focus from a newer request. Cancel remains the initial keyboard
+default. No confirmation action or decision is changed.
+
 ## Unsaved Agent Studio draft replacement — October 18
 
 An isolated native pass on main `de74862d6` reproduced silent loss of edits

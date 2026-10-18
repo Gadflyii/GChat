@@ -14,9 +14,13 @@ import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 export function ConfirmDialogHost() {
   const pending = useConfirmStore((state) => state.pending)
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const returnFocusRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
     // A replacement request must not inherit focus from the previous Confirm.
-    if (pending) cancelRef.current?.focus()
+    if (pending) {
+      returnFocusRef.current = pending.returnFocus
+      cancelRef.current?.focus()
+    }
   }, [pending])
   return (
     <Dialog open={!!pending} onOpenChange={(open) => { if (!open) settleConfirm(false) }}>
@@ -26,6 +30,14 @@ export function ConfirmDialogHost() {
           // Cancel is the safe default: Enter or Space never confirms by accident.
           event.preventDefault()
           cancelRef.current?.focus()
+        }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          // There is no DialogTrigger for this shared host. Keep the original
+          // opener through replacement requests, and respect a newer dialog.
+          if (!useConfirmStore.getState().pending && returnFocusRef.current?.isConnected) {
+            returnFocusRef.current.focus()
+          }
         }}
       >
         <DialogHeader>

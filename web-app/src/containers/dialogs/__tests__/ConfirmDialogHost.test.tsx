@@ -53,4 +53,43 @@ describe('ConfirmDialogHost', () => {
     await user.keyboard('{Escape}')
     await expect(third!).resolves.toBe(false)
   })
+
+  it.each(['Escape', 'Enter', 'Confirm'])(
+    'returns keyboard focus to the opener after %s, keeping the next Tab nearby',
+    async (dismissal) => {
+      const user = userEvent.setup()
+      render(<>
+        <button>Before</button>
+        <button onClick={() => void confirmAction({ message: 'Change this item?' })}>Open confirmation</button>
+        <button>After</button>
+        <ConfirmDialogHost />
+      </>)
+      const opener = screen.getByRole('button', { name: 'Open confirmation' })
+      opener.focus()
+      await user.keyboard('{Enter}')
+      expect(await screen.findByRole('button', { name: 'Cancel' })).toHaveFocus()
+      if (dismissal === 'Confirm') await user.click(screen.getByRole('button', { name: 'Confirm' }))
+      else await user.keyboard(`{${dismissal}}`)
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(opener).toHaveFocus()
+      await user.tab()
+      expect(screen.getByRole('button', { name: 'After' })).toHaveFocus()
+    }
+  )
+
+  it('keeps the original opener when a newer request replaces the open confirmation', async () => {
+    const user = userEvent.setup()
+    render(<>
+      <button onClick={() => void confirmAction({ message: 'First?' })}>Open confirmation</button>
+      <ConfirmDialogHost />
+    </>)
+    const opener = screen.getByRole('button', { name: 'Open confirmation' })
+    await user.click(opener)
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Confirm' })).toHaveFocus()
+    act(() => { void confirmAction({ message: 'Replacement?' }) })
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(opener).toHaveFocus()
+  })
 })
