@@ -4,6 +4,46 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## OI-068 Linux Hermes reply, file tool and continuation — October 18, Codex 3
+
+The Linux Hermes leaf **passes** on normal Release candidate
+`9ad8796ba`, based on main `af8d1b4dc`, merged as `e5d0f3c38`. Ordinary product
+setup installed upstream Hermes 0.22.2 in a disposable S1 container. The
+candidate's desktop/CLI/resources ran at the retained extracted DEB's normal
+installed paths, preserving Engine `b26ec5b8f` and the frozen 179-profile
+catalog. This qualifies the changed Hermes route, not a refreshed installer.
+
+The baseline hid Ready Hosts without a projected API key and retained a stuck
+Save state after imported-file startup rejection. The fix lists shared Ready
+instances, resolves only exact identities or unique confirmed aliases, checks
+live context and releases Save on failure. In the native candidate, rejecting
+the unconfirmed imported filename left Save usable. Selecting the exact Ready
+Host then saved its canonical `ginfer/...` ID, local API URL and actual 262144
+context without a model restart. The Host and Engine startup log agree on
+262144; ordinary Hermes terminal provisioning uses its 65536-token budget.
+
+Session `20261018_220741_b2b569` contains both native-input prompts and final
+replies. One `read_file` call returned the unchanged three-line workspace note.
+The first reply correctly reported project `cobalt-orchard-7319`, numbers 19/23
+and sum 42. The same-session follow-up correctly retained the project and sum,
+then returned 50 for sum-plus-eight, with no additional tool call. Final replies
+and the actual tool result are preserved in the read-only SQLite transcript.
+
+Native Model Stop passed; private processes/container/display/keyring/tunnel
+are stopped, booking 3594 canceled, **returned 22:09Z**. The named, inline 3 GiB
+RAM backstop did not fire. All product actions used native input in a private
+X display, D-Bus, unlocked keyring and SSD HOME/XDG; no host install, account
+setup or Ron desktop/keyring access occurred.
+
+Verification: focused 11; ONE `make verify` with corrected failed/unreached
+targets resumed (3818 app/127 extension/1318 Rust pass, six app skips,
+28 Rust ignores); normal Release desktop/CLI/Host build. Small evidence and
+viewed screenshots: `out/c3-hermes-native-20261018/`; build/verification:
+`out/c3-hermes-ready-host-20261018/`. Current owned paths and retirement status
+are in the [subject README](README.md#linux-hermes-native-continuation--october-18).
+Windows, Hermes compaction/restart/crash recovery and full-context input are
+unqualified; OI-068 remains PARTIAL. Do not repeat the passing Linux leaf.
+
 ## Gbot credentials after abrupt Linux service loss — October 18, Codex 3
 
 The bounded Linux service-plus-desktop crash/relaunch leaf of
@@ -102,8 +142,9 @@ it.
 
 The actual selected Linux stock Code session passes workbook access through
 GChat's tool bridge, explicit folder approval, native `/compact` and a completed
-same-session answer using the retained values. OI-068 remains PARTIAL; Hermes,
-Windows and configured connectors retain their separate acceptance leaves.
+same-session answer using the retained values. OI-068 remains PARTIAL; the
+later Linux Hermes leaf passes separately, while Windows and configured
+connectors retain their separate acceptance leaves.
 
 This reused the accepted Linux RC DEB, GChat `3e32ad0c9` / Engine `b26ec5b8f`,
 from S1 `/media/ron/SSD_RAID/ai/tmp-c3-linux-rc-20261018/packages/`.
@@ -1338,12 +1379,12 @@ unchanged from the source used for this gate.
 
 | Gate | Accepted evidence already available | Remaining scope |
 | --- | --- | --- |
-| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. October 17 desktop-only process death retained the original incomplete record and unchanged artifacts without replay; explicitly approved Continue finished as a distinct record. A separate idle Host SIGTERM plus ordinary Stop cancelled without executing the pending command; explicit same-profile Start and fresh approval finished a distinct new run while original archives stayed unchanged. Its final model narrative was inaccurate. A separate in-flight Engine process death produced visible failed history without an observed automatic retry; ordinary same-profile Start and a distinct new GUI run then read the file and replied with its exact contents. Both records remained visible. The October 18 active Host SIGKILL check also passes visible failed history, observed child Engine exit, automatic Host replacement and explicit same-profile Start/new GUI run with a correct two-step read/reply; original archives remained unchanged and both histories reopened. Model Stop passed; the open desktop recreated the Host/profiler after initial cleanup. Desktop exit and final replacement teardown completed at 01:39:40Z; returned 01:40Z corrects the earlier premature return, with a two-minute cleanup booking. One native task passed at 241364 measured input tokens with configured context 262144, reserve 20480, correct three-code Reply and zero compactions; saved Result reopening and normal Stop passed. | Automatic continuation/replay, exactly-once execution and power-loss recovery; broader mid-inference recovery beyond the bounded Engine-loss and active Host-loss/new-run checks; Windows/Hermes at release. Windows: not built (dev phase) for the October 18 check. The original harder review is a known accuracy limitation in the release notes. The measured input gate does not qualify literal 262144 input tokens or fresh-install packaging. Read-range defect tracked separately. No performance claim. Do not replay passing gates. |
+| OI-068 installed app walkthrough | Linux Chat, Code and builder/run routes; two workers collected/reopened; targeted Stop/parent/reopen and nine-step new-run continuation; live-worker checkpoint continuity. A later native checkpoint reduced32584→17211, followed by six source reads and a factually correct eight-file reference; exact terminal reply reopened. Normal active-worker window Close persisted cancelled history/session, then ordinary Studio reopening passed after same-data relaunch. October 17 desktop-only process death retained the original incomplete record and unchanged artifacts without replay; explicitly approved Continue finished as a distinct record. A separate idle Host SIGTERM plus ordinary Stop cancelled without executing the pending command; explicit same-profile Start and fresh approval finished a distinct new run while original archives stayed unchanged. Its final model narrative was inaccurate. A separate in-flight Engine process death produced visible failed history without an observed automatic retry; ordinary same-profile Start and a distinct new GUI run then read the file and replied with its exact contents. Both records remained visible. The October 18 active Host SIGKILL check also passes visible failed history, observed child Engine exit, automatic Host replacement and explicit same-profile Start/new GUI run with a correct two-step read/reply; original archives remained unchanged and both histories reopened. Model Stop passed; the open desktop recreated the Host/profiler after initial cleanup. Desktop exit and final replacement teardown completed at 01:39:40Z; returned 01:40Z corrects the earlier premature return, with a two-minute cleanup booking. One native task passed at 241364 measured input tokens with configured context 262144, reserve 20480, correct three-code Reply and zero compactions; saved Result reopening and normal Stop passed. Linux Hermes now also passes exact Ready-Host Save, actual file read/reply and same-session continuation without another tool call. | Automatic continuation/replay, exactly-once execution and power-loss recovery; broader mid-inference recovery beyond the bounded Engine-loss and active Host-loss/new-run checks; Windows at release; Hermes compaction/restart/crash recovery remains unqualified. Windows: not built (dev phase) for the October 18 check. The original harder review is a known accuracy limitation in the release notes. The measured input gate does not qualify literal 262144 input tokens or fresh-install packaging. Read-range defect tracked separately. No performance claim. Do not replay passing gates. |
 | OI-071 / Manager tray rows | Linux own SNI registration and native Hide. | Open/Exit on Ron's desktop release walkthrough; vault restoration across a real logout/login. No further finder loops. |
 | Manager credential presentation | Forget warning DOM cases; vault success/failure/retry component fixture. | One native success/error presentation check at release. Do not repeat the DOM cases. |
 | GCHAT-SHARED-APP-ICON | Shared canonical source; actual `3aff66d62` ICO generation and desktop compilation passed. | One installed GChat/Manager window and tray comparison at release. No new artwork/generator run. |
 | GCHAT-HARDWARE-PROFILE-INSTALL | Linux exact-group reuse, interrupt/resume and cancellation. | Native Windows normal/cancel/Host-loss lifetime and MSVC release build. |
-| GCHAT-UNIX-PTY-PIXEL-GEOMETRY | Source is merged; Linux TUI/input acceptance covers a different parser fix. | Named pixel-only resize fixture PASS (one case); native geometry/mouse behavior is not qualified. |
+| GCHAT-UNIX-PTY-PIXEL-GEOMETRY | Merged source and [native Linux geometry/mouse acceptance](#current-unix-pty-window-geometry-correction) pass: whole-window pixels, one-pixel resize at unchanged grid and ordinary Code model-menu selection. | Windows remains separate; do not repeat passing Linux geometry. |
 | OI-072 model/profile qualification | Historical evidence and source binding audit. | Exact current Muse TP1 C4/131072 NVFP4 KV + Q4 DFlash2 artifact/engine at the scheduled release gate. |
 | Google / Microsoft connectors | Existing 36 focused auth/provider/runtime/UI cases plus two full local mock OAuth lifecycles; 13 current account-owner cases PASS. Source scope complete; synthetic credentials and test-only endpoints. | Live provider consent: Ron's release gate using existing approved registrations/accounts; consent/refresh/one read/revocation or local disconnect and per-bot isolation. No new credentials/accounts or broad CRUD matrix. |
 | Gbot Linux executor | Exact desktop overwrite + two actual Cua file evaluators passed. | Broader task set and Vision; new cua-bench dependency closure is not approved. |
