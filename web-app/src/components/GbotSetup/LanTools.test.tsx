@@ -126,7 +126,9 @@ it('announces preparation, blocks repeat requests and restores controls after fa
   expect(ready).toHaveBeenLastCalledWith(false)
 
   failPreparation(new Error('SSH unavailable'))
-  await screen.findByText('SSH unavailable')
+  await screen.findByText(/GChat could not finish preparing the tools/)
+  const details = screen.getByText('SSH unavailable').closest('details')
+  expect(details).not.toHaveAttribute('open')
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Prepare tools' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Check tools' })).toBeEnabled()
@@ -134,26 +136,113 @@ it('announces preparation, blocks repeat requests and restores controls after fa
   expect(busy).toHaveBeenLastCalledWith(false)
 })
 
-it('shows the failed step and allows another preparation or installation check', async () => {
-  const ready = vi.fn()
-  const api = vi
-    .mocked(gbot)
-    .mockResolvedValueOnce({
-      installed: false,
-      command: null,
-      issue: 'Guest archive upload failed: checksum mismatch',
+it.each(['archive', 'installer'])(
+  'explains a failed %s upload and retries preparation only when requested',
+  async (upload) => {
+    const ready = vi.fn()
+    const busy = vi.fn()
+    const diagnostic = `Guest ${upload} upload failed: checksum mismatch`
+    const api = vi
+      .mocked(gbot)
+      .mockResolvedValueOnce({
+        installed: false,
+        command: null,
+        issue: diagnostic,
+      })
+      .mockRejectedValueOnce(new Error('SSH unavailable'))
+      .mockResolvedValueOnce({ installed: true, command: null, issue: null })
+    render(<LanTools workspaceId="bot" ready={ready} busy={busy} />)
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare tools' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      'GChat could not finish preparing the tools.'
+    )
+    expect(alert).toHaveTextContent(
+      'Check the computer’s connection and available disk space'
+    )
+    expect(alert).toHaveTextContent('choose Prepare tools to try again')
+    expect(alert).toHaveTextContent(
+      'If you already ran the installation command, choose Check tools first.'
+    )
+    const details = screen.getByText(diagnostic).closest('details')
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByText('Details'))
+    expect(details).toHaveAttribute('open')
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(busy).toHaveBeenLastCalledWith(false)
+    expect(screen.getByRole('button', { name: 'Prepare tools' })).toBeEnabled()
+    expect(api).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Prepare tools' }))
+    await screen.findByText('SSH unavailable')
+    expect(screen.queryByText(diagnostic)).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'GChat could not finish preparing the tools.'
+    )
+    expect(
+      screen.getByText('SSH unavailable').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(api).toHaveBeenNthCalledWith(2, 'workspaces/ssh/prepare', {
+      workspace_id: 'bot',
+      consent: true,
     })
-    .mockRejectedValueOnce(new Error('SSH unavailable'))
-    .mockResolvedValueOnce({ installed: true, command: null, issue: null })
+    fireEvent.click(screen.getByRole('button', { name: 'Check tools' }))
+    await waitFor(() => expect(ready).toHaveBeenLastCalledWith(true))
+    expect(api).toHaveBeenCalledTimes(3)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
+it.each([new Error('SSH unavailable'), 'SSH transport closed'])(
+  'explains a failed tool check and clears it only on an explicit retry (%s)',
+  async (cause) => {
+    const ready = vi.fn()
+    const busy = vi.fn()
+    const api = vi
+      .mocked(gbot)
+      .mockRejectedValueOnce(cause)
+      .mockResolvedValueOnce({ installed: true, command: null, issue: null })
+    render(<LanTools workspaceId="bot" ready={ready} busy={busy} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Check tools' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('GChat could not check the tools.')
+    expect(alert).toHaveTextContent(
+      'Check the computer’s connection, then choose Check tools to try again.'
+    )
+    expect(
+      screen
+        .getByText(String(cause instanceof Error ? cause.message : cause))
+        .closest('details')
+    ).not.toHaveAttribute('open')
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(busy).toHaveBeenLastCalledWith(false)
+    expect(screen.getByRole('button', { name: 'Check tools' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Prepare tools' })).toBeDisabled()
+    expect(api).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Check tools' }))
+    await waitFor(() => expect(ready).toHaveBeenLastCalledWith(true))
+    expect(api).toHaveBeenNthCalledWith(2, 'workspaces/ssh/tools', {
+      workspace_id: 'bot',
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  }
+)
+
+it.each([
+  'This setup supports a dedicated Debian 13 computer. Use an already prepared computer for another OS.',
+  'A person may be using this desktop. Sign out of graphical sessions before preparing the bot computer.',
+  'Gbot tools are not fully installed. For a dedicated Debian 13 computer, authorize installation and choose Prepare tools in GChat.',
+])('keeps actionable tool instructions visible: %s', async (issue) => {
+  vi.mocked(gbot).mockResolvedValueOnce({
+    installed: false,
+    command: null,
+    issue,
+  })
+  const ready = vi.fn()
   render(<LanTools workspaceId="bot" ready={ready} busy={vi.fn()} />)
-  fireEvent.click(screen.getByRole('checkbox'))
-  fireEvent.click(screen.getByRole('button', { name: 'Prepare tools' }))
-  await screen.findByText('Guest archive upload failed: checksum mismatch')
-  fireEvent.click(screen.getByRole('button', { name: 'Prepare tools' }))
-  await screen.findByText('SSH unavailable')
-  expect(ready).toHaveBeenLastCalledWith(false)
   fireEvent.click(screen.getByRole('button', { name: 'Check tools' }))
-  await waitFor(() => expect(ready).toHaveBeenLastCalledWith(true))
-  expect(api).toHaveBeenCalledTimes(3)
-  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(await screen.findByRole('alert')).toHaveTextContent(issue)
+  expect(screen.getByText(issue).closest('details')).toBeNull()
+  expect(ready).toHaveBeenLastCalledWith(false)
 })

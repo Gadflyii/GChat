@@ -1,5 +1,35 @@
 # Gbot design
 
+## Tool preparation and check recovery — Gchat 2
+
+`GBOT-TOOLS-CHECK-ERROR-GUIDANCE`, based on main `fe17d90f6`, gives
+failed Prepare tools and Check tools requests a plain recovery step beside the
+controls, with technical diagnostics in Details, initially closed. Failed
+archive or installer uploads explain checking the connection and free disk
+space before explicitly retrying preparation. If the administrator command was
+already run, the guidance directs the user to Check tools first.
+
+Returned instructions about the supported operating system, active desktop
+sessions and missing tools remain visible. Failed requests keep readiness false;
+consent, administrator commands and explicit retry behavior retain their existing
+contract. This is source/rendered UI scope, with no live installation or SSH
+acceptance claim.
+
+Unchanged production reproduced five failures (five passed); the fixed rendered
+suite passed all ten cases. Lint passed with zero errors and five existing
+warnings. ONE `make verify` passed 3,635 app tests (six skipped), 127 extension
+tests, six coverage floors and guards, then stopped at an unchanged executor
+`AlreadyRunning` teardown assertion. Copied Cargo artifacts were subsequently
+rejected after a zero-mtime export was found to preserve older fingerprints.
+After verifying all 3,458 tracked bytes/modes and refreshing their timestamps,
+only Rust and typecheck were rebuilt: fresh `make test-rust` passed 1,308 tests
+(28 ignored, 23 summaries), and fresh `make typecheck` passed. No Vitest, lint,
+extension or floor rerun. The failed and interrupted attempts remain in the
+packet; the fresh results supersede their Rust results. Final source postcheck
+matched all files. CPU104–111 booking3335 returned 14:37Z. Evidence:
+`out/gchat2-tools-check-error-guidance-20261018/result.json`. This receipt was
+added after the gate; product and test source stayed frozen.
+
 ## Independent-service paired-model sessions — Codex 3
 
 `GUI-GBOT-PAIRED-MODELS-SESSION-20261018`, based on main `ef64363fb`,
