@@ -22,6 +22,27 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Unavailable assignment in run setup — October 18
+
+An isolated native Linux **Re-run** pass at 1200×800 reproduced horizontal
+overflow when the saved instance was unavailable. Its long assignment label
+expanded the dialog's implicit grid column to about 836 pixels inside a
+672-pixel dialog, clipping **Browse**, **Cancel** and **Run**. Editing the task,
+cancelling and reopening restored the original task with the save-defaults
+checkbox unchecked; the layout defect was separate. The affected setup, dialog,
+choice and workspace components are unchanged from retained native source
+`f1c7c73b0` through branch base `df96d39bd`.
+
+Run setup now uses one grid column with a zero minimum width, allowing the
+existing assignment-label truncation to constrain the content to the dialog.
+The baseline used a private HOME/XDG, Xvfb, D-Bus and unlocked test keyring,
+without a model or GPU. The viewed screenshot `reopened.png` and DOM bounds
+(`setup-layout-rects`) are in
+`/ai/gchat/out/gchat-agent-rerun-cancel-20261018/`.
+
+Focused `AgentRunSetup` tests, one `make verify`, frontend/native builds and
+corrected native replays at 1200×800 and 1024×740 are pending.
+
 ## Chat search query selection — October 18
 
 An isolated native Linux pass reproduced a stale keyboard selection when a new
