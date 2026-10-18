@@ -5563,3 +5563,67 @@ at 07:15 UTC. The owned S1 source/build/AppDir/HOME/tools root
 `/media/ron/SSD_RAID/ai/tmp-c7-mcp-control-names-native-20261018` is retired.
 The shared development catalog remains live. Next: coordinator integration and
 canonical Linux leaf closure.
+
+## Consumer Qwen 27B 2-bit mix launch catalog — GChat integration
+
+`CONSUMER-LAUNCH-PROFILES` mirrors the signed Linux RTX 5090, RTX 4090 and
+RTX 3080 Ti Laptop settings for package `483343c2` (full SHA-256
+`483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`,
+10,667,321,600 bytes). The exact source catalogs come from GInfer `7d275e026`
+(RTX 5090) and merged `7792f3ac3` (RTX 4090/laptop). Each remains
+**screened-startup**: TP1, C8, Text, fixed DFlash7, INT8 KV, automatic KV arena,
+300 MiB reserve, CUDA graphs/prefix defaults, zero full-context requests.
+The admitted contexts are 131,072 for RTX 5090/4090 and 53,248 for the laptop.
+The evidence and qualification revision stay bound to Engine `aa1c48016`;
+these entries do not qualify a different Engine revision or promise a
+simultaneous full-length cohort. See the existing
+[screened-profile decision](../decisions/2026-10-16-label-screened-startup-launch-profiles.md).
+
+The Host's existing supplied-release-catalog test now checks all three exact
+artifact identities, device/memory/context bounds, launch options and startup
+qualification records. The runtime/parser and frontend need no change. The
+release builder already consumes `GINFER_PROFILE_CATALOGS`; its generated
+`resources/bin/launch-profiles.json` is a build output, not a tracked source
+catalog. Acceptance uses seven explicit, nonempty frozen inputs: the three
+signed files plus the four previously corrected Text/Vision catalogs. Their
+ordered merge must equal all 41 merged profile objects (old 38 plus new 3)
+exactly, retaining the four prior context lowerings. The existing screened-profile frontend
+regression runs within ONE `make verify`.
+
+Candidate: `/ai/gchat-worktrees/gchat3-consumer-launch-profiles-20261018`, branch
+`fix/gchat3-consumer-launch-profiles-20261018`, base `7727db673`.
+The small source/input bindings and test evidence are in
+[`out/consumer-launch-profiles-20261018/`](../../out/consumer-launch-profiles-20261018/).
+The focused supplied-catalog test passes (one test); Host check and clippy
+also pass. ONE `make verify` completed at 12:11:54 UTC with 3,569 app tests
+(six skipped), 127 extension tests, 1,288 native tests (28 ignored across 23
+summaries), and all six coverage floors passing. Lint has zero errors and five
+existing warnings. The actual generated catalog is 86,734 bytes, 41 profiles,
+and exactly equals the seven inputs' ordered JSON merge, preserving every
+profile field. Its SHA-256 is
+`2093fb22efc904555e42be272d4a6ebdf9c07987510441ecf890b30b9197a3a3`.
+The tested Host source is unchanged after execution.
+
+The S1 gate used CPUs 96–103, a shared socket-1 compile lock, nice 10 and max
+eight jobs, with no GPU. Booking 3272 was returned at 12:12 UTC. The terminal
+container and owned fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-consumer-launch-profiles-tests-20261018`
+were retired at 12:14 UTC after retaining the small result, summary and raw
+logs and verifying no readers or live jobs. This removed 29.11 GB of allocated
+owned source/dependency/build copies. The inactive RC donor
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app`
+remains protected and was used only for independent read-copy.
+The coordinator owns private DEV publication and Linux RC input handoff; no
+live catalog mutation is part of this source/test fixture. Its independent
+private DEV generation completed at 11:58:04 UTC with eight packages and 115
+selected profiles: all prior seven packages/112 selected profiles are unchanged.
+The 272,545-byte catalog is bound in `private-dev-deployment-result.json`.
+Coordinator HTTP acceptance passed at 12:03:39 UTC: the live catalog equals
+that generated output, all three new profiles equal the frozen signed sources,
+and all eight payload routes pass exact-length HEAD and one-byte Range checks.
+See `private-dev-http-acceptance.json`; no payload, option, qualification label
+or existing profile was changed. The seven frozen inputs and
+`gchat-catalog-binding.json` were handed to Codex3 at 12:04 UTC for inclusion
+with the other current Linux catalogs in the next RC. Codex3 owns that release
+build; this gate does not claim that an RC has already been rebuilt. Source
+and private DEV integration are complete and ready for coordinator merge.
