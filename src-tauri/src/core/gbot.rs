@@ -1168,7 +1168,7 @@ mod tests {
         assert!(super::service_target(root.path()).is_err());
     }
 
-    use super::{background::packaged_executor, supported_route};
+    use super::supported_route;
 
     #[test]
     fn native_bridge_admits_transactional_setup_and_rejects_unknown_operations() {
@@ -1199,52 +1199,5 @@ mod tests {
         }
         assert!(!supported_route("/v1/setup/kvm/exec"));
         assert!(!supported_route("/v1/schedules/dispatch"));
-    }
-
-    #[test]
-    fn packaged_runtime_discovers_commands_and_rejects_incomplete_resources() {
-        let directory = tempfile::tempdir().unwrap();
-        let resource_dir = directory.path();
-        assert!(packaged_executor(resource_dir).unwrap().is_none());
-        let root = resource_dir.join("resources/gbot");
-        for name in [
-            "gbot/python/bin/python",
-            "gbot/python/bin/python3.12",
-            "gbot/python/lib/python3.12/os.py",
-            "gbot/python/lib/python3.12/dist-packages/cua_agent/loops/ginfer.py",
-            "gbot/context-preparer.ts",
-            "gbot/smart-context.ts",
-            "bin/bun",
-        ] {
-            let path = resource_dir.join("resources").join(name);
-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-            std::fs::write(path, "resource").unwrap();
-        }
-        std::fs::write(
-            root.join("runtime.json"),
-            serde_json::json!({
-                "schema": "gbot-cua-runtime-v1", "platform": "linux-x64",
-                "python_version": "3.12.3", "package_count": 61,
-                "sdk_revision": "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc",
-                "agent_revision": "896c68871da6f3a659c58f341781a977ada20459"
-            })
-            .to_string(),
-        )
-        .unwrap();
-        let processes = packaged_executor(resource_dir).unwrap().unwrap();
-        assert_eq!(processes.python.program, root.join("python/bin/python"));
-        assert_eq!(
-            processes.context.program,
-            resource_dir.join("resources/bin/bun")
-        );
-        assert_eq!(
-            processes.context.args,
-            vec![root
-                .join("context-preparer.ts")
-                .to_string_lossy()
-                .into_owned()]
-        );
-        std::fs::remove_file(resource_dir.join("resources/bin/bun")).unwrap();
-        assert!(packaged_executor(resource_dir).is_err());
     }
 }

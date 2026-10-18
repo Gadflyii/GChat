@@ -416,13 +416,15 @@ test-all: install-and-build install-rust-targets
 
 # Full Windows release build (local, no code signing).
 # Requires the clean Engine SM86, SM89 and SM120a producer-final archives.
-# Pass GINFER_RUNTIME_ARCHIVES="path86;path89;path120a" and GINFER_SOURCE_COMMIT.
+# Pass GINFER_RUNTIME_ARCHIVES="path86;path89;path120a", GINFER_SOURCE_COMMIT,
+# and GBOT_CUA_RUNTIME with the accepted staged Windows Cua runtime directory.
 # PREPARED_ENVIRONMENT=1 requires existing tools and skips workstation setup.
 # Output: src-tauri/target/release/bundle/nsis/*.exe
 build-windows-release:
 ifeq ($(OS),Windows_NT)
 	powershell -ExecutionPolicy Bypass -File scripts/build-windows-release.ps1 \
 		-GinferRuntimeArchives "$(GINFER_RUNTIME_ARCHIVES)" \
+		-GbotCuaRuntime "$(GBOT_CUA_RUNTIME)" \
 		$(if $(GINFER_SOURCE_COMMIT),-GinferSourceCommit "$(GINFER_SOURCE_COMMIT)",) \
 		$(if $(filter 1,$(PREPARED_ENVIRONMENT)),-PreparedEnvironment,)
 else

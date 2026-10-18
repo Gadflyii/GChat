@@ -3165,10 +3165,86 @@ esac
 mod native_tests {
     use super::*;
     use crate::{
-        executor::{ExecutorProcesses, ProcessSpec},
+        executor::{Assignment, ExecutorProcesses, ProcessSpec, TaskState},
         tasks::TaskRunner,
         vault::VaultFuture,
     };
+
+    struct ModelAcceptance {
+        processes: ExecutorProcesses,
+        api_base: String,
+        model: String,
+    }
+
+    impl ModelAcceptance {
+        fn from_env() -> Result<Option<Self>, String> {
+            let resources = std::env::var_os("GBOT_CUA_ACCEPTANCE_RESOURCES");
+            let api_base = std::env::var("GBOT_CUA_ACCEPTANCE_API_BASE").ok();
+            let model = std::env::var("GBOT_CUA_ACCEPTANCE_MODEL").ok();
+            match (resources, api_base, model) {
+                (None, None, None) => Ok(None),
+                (Some(resources), Some(api_base), Some(model))
+                    if !api_base.trim().is_empty() && !model.trim().is_empty() =>
+                {
+                    let uri: hyper::Uri = api_base
+                        .parse()
+                        .map_err(|_| "Invalid GBOT_CUA_ACCEPTANCE_API_BASE")?;
+                    if uri.scheme_str() != Some("http") || uri.authority().is_none() {
+                        return Err("GBOT_CUA_ACCEPTANCE_API_BASE must name the explicit HTTP model API including /v1".into());
+                    }
+                    let processes = ExecutorProcesses::packaged(Path::new(&resources))?
+                        .ok_or("No packaged Cua runtime at GBOT_CUA_ACCEPTANCE_RESOURCES")?;
+                    Ok(Some(Self {
+                        processes,
+                        api_base,
+                        model,
+                    }))
+                }
+                _ => Err("Set GBOT_CUA_ACCEPTANCE_RESOURCES, GBOT_CUA_ACCEPTANCE_API_BASE and GBOT_CUA_ACCEPTANCE_MODEL together, or leave all three unset for lifecycle-only acceptance".into()),
+            }
+        }
+
+        async fn assignment(&self) -> Result<Assignment, String> {
+            // The optional key follows the existing ephemeral fixture mechanism:
+            // pass it to the model request/children, never the journal or output.
+            let api_key = std::env::var("GBOT_MODEL_API_KEY").ok();
+            let mut builder =
+                hyper::Request::get(format!("{}/models", self.api_base.trim_end_matches('/')));
+            if let Some(key) = &api_key {
+                builder = builder.header("authorization", format!("Bearer {key}"));
+            }
+            let request = builder
+                .body(hyper::Body::empty())
+                .map_err(|_| "Could not construct the model inventory request")?;
+            let response = hyper::Client::new()
+                .request(request)
+                .await
+                .map_err(|error| format!("Model inventory request failed: {error}"))?;
+            let status = response.status();
+            if !status.is_success() {
+                return Err(format!("Model inventory HTTP {status}"));
+            }
+            let bytes = hyper::body::to_bytes(response.into_body())
+                .await
+                .map_err(|error| error.to_string())?;
+            let inventory: serde_json::Value =
+                serde_json::from_slice(&bytes).map_err(|error| error.to_string())?;
+            let selected = inventory["data"]
+                .as_array()
+                .and_then(|models| models.iter().find(|model| model["id"] == self.model))
+                .ok_or("The explicitly selected acceptance model is not served")?;
+            let context_tokens = selected["max_model_len"]
+                .as_u64()
+                .filter(|capacity| *capacity > 0)
+                .ok_or("The selected model did not report its context capacity")?;
+            Ok(Assignment {
+                api_base: self.api_base.clone(),
+                api_key,
+                model: self.model.clone(),
+                context_tokens,
+            })
+        }
+    }
 
     #[derive(Default)]
     struct FixtureVault(Mutex<BTreeMap<Uuid, Vec<u8>>>);
@@ -3253,9 +3329,135 @@ mod native_tests {
         }
     }
 
+    async fn model_task(
+        fixture: &ModelAcceptance,
+        tasks: &TaskRunner,
+        runtime: &WorkspaceRuntime,
+        identity: SessionIdentity,
+    ) -> Result<(), String> {
+        tokio::time::timeout(Duration::from_secs(1200), async {
+            let nonce = Uuid::new_v4();
+            let path = GuestPath(format!("/home/gbot/cua-runtime-acceptance-{nonce}.txt"));
+            let sentinel = format!("Packaged Windows Cua runtime {nonce}\n");
+            let prompt = format!(
+                "Use this dedicated Linux computer's existing Mousepad editor to create a new plain text document and save it as {}. Its complete contents must be exactly the following line, followed by one newline:\n```\n{}```\nThe readiness editor is already open with Gbot-setup-{} in its title. Create a new document there and type the requested line. Then press Enter exactly once in the document to insert the required final newline; typing only the visible line is incomplete. Reinspect the active document text and confirm the final newline before using Save As to save the requested unique path. Use the available foreground desktop tools and inspect the window before actions. Use current element tokens and reinspect after input. This is a text-only model: get_window_state must use include_screenshot=false; do not request screenshots. The service owns session IDs. Finish only after saving the complete document, including its final newline.",
+                path.0, sentinel, identity.workspace_id.as_uuid()
+            );
+            let assignment = fixture.assignment().await?;
+            let mut changes = tasks.subscribe();
+            let started = tasks
+                .start(identity, prompt, Some(assignment))
+                .await
+                .map_err(|error| error.to_string())?;
+            println!(
+                "{}",
+                serde_json::json!({"event":"model_task_started", "task_id":started.id, "path":path})
+            );
+            let completed = loop {
+                let task = tasks
+                    .snapshot(started.id)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                match task.state {
+                    TaskState::Completed => break task,
+                    TaskState::Ready | TaskState::Running => {}
+                    state => return Err(format!("Model task stopped at {state:?}")),
+                }
+                for approval in tasks.approvals().await.map_err(|error| error.to_string())? {
+                    if approval.task_id != started.id {
+                        continue;
+                    }
+                    let request: GuestRequest = serde_json::from_value(approval.request)
+                        .map_err(|_| "The model requested a non-guest fixture operation")?;
+                    let allow = request.identity == identity;
+                    tasks
+                        .decide(approval.id, allow)
+                        .await
+                        .map_err(|error| error.to_string())?;
+                    if !allow {
+                        return Err("The model requested another guest identity".into());
+                    }
+                }
+                changes
+                    .changed()
+                    .await
+                    .map_err(|_| "The task event stream closed")?;
+            };
+            let input_receipts = completed
+                .calls
+                .iter()
+                .filter(|call| {
+                    call.request.identity == identity
+                        && !call.not_executed
+                        && matches!(&call.request.operation, GuestOperationKind::Desktop { tool, .. }
+                            if matches!(tool.as_str(), "type_text" | "press_key" | "hotkey" | "click"))
+                        && call.reply.as_ref().is_some_and(|reply| {
+                            reply.validate(&call.request).is_ok()
+                                && matches!(&reply.outcome, GuestOutcome::Success {
+                                    result: GuestResult::Desktop { result },
+                                } if result["isError"] != true)
+                        })
+                })
+                .count();
+            if completed.model_replies.is_empty() || input_receipts == 0 {
+                return Err("The completed task has no real model reply or successful foreground-input receipt".into());
+            }
+            let read = request(
+                runtime,
+                identity,
+                GuestOperationKind::Read {
+                    path: path.clone(),
+                    offset: 0,
+                    length: sentinel.len() as u64 + 1,
+                },
+            )
+            .await?;
+            if !matches!(read, GuestResult::Read { data } if data.as_slice() == sentinel.as_bytes()) {
+                return Err("The model-created guest file did not exactly match its unique sentinel".into());
+            }
+            println!(
+                "{}",
+                serde_json::json!({"event":"model_task_pass", "task_id":completed.id,
+                    "state":completed.state, "model_replies":completed.model_replies.len(),
+                    "foreground_input_receipts":input_receipts, "path":path,
+                    "independent_readback":true, "executor":"packaged"})
+            );
+            Ok(())
+        })
+        .await
+        .map_err(|_| "The model-backed acceptance task exceeded 20 minutes".to_owned())?
+    }
+
+    async fn cancel_fixture_tasks(tasks: &TaskRunner, id: WorkspaceId) -> Result<(), String> {
+        let mut errors = Vec::new();
+        for task in tasks.list().await.map_err(|error| error.to_string())? {
+            if task.identity.workspace_id == id
+                && !matches!(task.state, TaskState::Completed | TaskState::Cancelled)
+            {
+                match tasks.cancel(task.id).await {
+                    Ok(cancelled)
+                        if matches!(cancelled.state, TaskState::Completed | TaskState::Cancelled) => {}
+                    Ok(cancelled) => errors.push(format!(
+                        "Fixture task {} still needs its retained receipts resolved: {:?}",
+                        task.id, cancelled.state
+                    )),
+                    Err(error) => errors.push(format!("Cancel fixture task {}: {error}", task.id)),
+                }
+            }
+        }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("; "))
+        }
+    }
+
     #[tokio::test]
     #[ignore = "Creates and retires a real Hyper-V guest; requires explicit private C: fixture root and staged pinned assets"]
     async fn hyperv_native_lifecycle() {
+        // The default stays lifecycle-only. Supplying all three explicit model
+        // inputs selects the same packaged processes as ordinary app startup.
+        let model_acceptance = ModelAcceptance::from_env().unwrap();
         let root = PathBuf::from(std::env::var_os("GBOT_HYPERV_ACCEPTANCE_ROOT")
             .expect("Set GBOT_HYPERV_ACCEPTANCE_ROOT to an owned, empty private C: fixture with vms/assets staged"));
         assert!(
@@ -3275,7 +3477,7 @@ mod native_tests {
         let runtime = Arc::new(WorkspaceRuntime::new(service.clone(), vault.clone()));
         runtime.configure_kvm_setup(root.clone()).await.unwrap();
         // Match service startup: saved-desktop renewal must inspect the loaded
-        // task/schedule state. This lifecycle-only acceptance never runs a model.
+        // task/schedule state, even in the default lifecycle-only acceptance.
         let disabled_executor = ProcessSpec {
             program: root.join("no-model-executor-in-lifecycle-acceptance"),
             args: vec![],
@@ -3284,10 +3486,13 @@ mod native_tests {
             TaskRunner::new(
                 root.join("tasks"),
                 runtime.clone(),
-                ExecutorProcesses {
-                    python: disabled_executor.clone(),
-                    context: disabled_executor,
-                },
+                model_acceptance.as_ref().map_or_else(
+                    || ExecutorProcesses {
+                        python: disabled_executor.clone(),
+                        context: disabled_executor,
+                    },
+                    |fixture| fixture.processes.clone(),
+                ),
             )
             .await
             .unwrap(),
@@ -3345,6 +3550,9 @@ mod native_tests {
                 return Err(format!("Unexpected guest write reply: {written:?}"));
             }
             println!("{}", serde_json::json!({"event":"ready", "checks":["bootstrap", "pinned SSH", "worker", "command", "file", "desktop capture", "keyboard saved file", "view handshake", "sentinel write"]}));
+            if let Some(fixture) = &model_acceptance {
+                model_task(fixture, &tasks, &runtime, first.identity).await?;
+            }
             let stopped = tasks.stop_computer(setup.clone(), id).await.map_err(|error| error.to_string())?;
             if stopped.stage != SetupStage::Stopped || !directory.join("disk.vhdx").is_file() {
                 return Err("Graceful stop did not preserve the guest disk".into());
@@ -3367,6 +3575,14 @@ mod native_tests {
             println!("{}", serde_json::json!({"event":"restarted", "persistent_disk":true, "pinned_ssh_identity":true}));
             Ok(())
         }.await;
+        // A failed/interrupted model task must not keep the production lifecycle
+        // guard occupied. Cancel only this private fixture's unfinished tasks,
+        // then attempt owned-guest retirement even if cancellation reports error.
+        let task_cleanup = if model_acceptance.is_some() {
+            cancel_fixture_tasks(&tasks, id).await
+        } else {
+            Ok(())
+        };
         if result.is_err() {
             // Preserve bounded boot/endpoint evidence before retirement removes
             // this disposable guest. Never retain its private SSH credential.
@@ -3413,9 +3629,10 @@ mod native_tests {
         let closed = runtime.close().await.map_err(|error| error.to_string());
         println!(
             "{}",
-            serde_json::json!({"event":"result", "lifecycle":result, "retirement":retirement, "tasks_close":tasks_closed, "runtime_close":closed})
+            serde_json::json!({"event":"result", "lifecycle":result, "task_cleanup":task_cleanup, "retirement":retirement, "tasks_close":tasks_closed, "runtime_close":closed})
         );
         assert_eq!(retirement, Ok(()));
+        assert_eq!(task_cleanup, Ok(()));
         assert_eq!(tasks_closed, Ok(()));
         assert_eq!(closed, Ok(()));
         assert_eq!(result, Ok(()));

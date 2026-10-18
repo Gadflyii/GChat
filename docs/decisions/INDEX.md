@@ -561,3 +561,4 @@ decision is reversed, add a new one that says which record it supersedes.
 
 - [Shared private development model catalog](2026-10-18-private-development-model-catalog.md) — development/debug-only shared S1 LAN fixture; production admission unchanged.
 - **2026-10-18** — [Own Windows Hyper-V Bot computers](2026-10-18-own-windows-hyperv-bot-computers.md)
+- **2026-10-18** — [Bundle the accepted Cua runtime on Windows](2026-10-18-bundle-private-windows-cua-runtime.md)
