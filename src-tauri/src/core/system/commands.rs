@@ -1797,7 +1797,8 @@ fn strip_gchat_managed_block(content: &str) -> String {
 
 /// Installer spec for an agent: (program, args, prerequisite_binary, docs_url).
 /// Verified against each vendor's official install path:
-///   - Claude Code / Codex / OpenCode / OpenClaw ship as global npm packages.
+///   - Claude Code / Codex / OpenClaw ship as global npm packages.
+///   - OpenCode uses the separate app-owned local npm runtime.
 ///   - Hermes is a Python project installed via its official shell / PowerShell
 ///     bootstrap script (NOT npm).
 fn agent_install_spec(
@@ -1841,10 +1842,6 @@ fn agent_install_spec(
         "codex" => {
             let (p, a) = npm("@openai/codex");
             Ok((p, a, "npm", "https://github.com/openai/codex"))
-        }
-        "opencode" => {
-            let (p, a) = npm("opencode-ai");
-            Ok((p, a, "npm", "https://opencode.ai"))
         }
         "cline" => {
             let (p, a) = npm("cline");
@@ -2290,7 +2287,7 @@ fn proxy_url_with_auth(url: &str, username: Option<&str>, password: Option<&str>
 ///
 /// Best-effort: `uv`/`curl` honor `ALL_PROXY`/SOCKS; npm and PowerShell
 /// `Invoke-RestMethod` largely ignore SOCKS env (handled by clearer messaging).
-fn apply_proxy_env(cmd: &mut std::process::Command, proxy: &ProxyEnv) {
+pub(crate) fn apply_proxy_env(cmd: &mut std::process::Command, proxy: &ProxyEnv) {
     let url = proxy.url.trim();
     if url.is_empty() {
         return;
@@ -2430,6 +2427,29 @@ async fn detect_via_wsl(bin: &str) -> bool {
     )
 }
 
+/// Probe agent availability. OpenCode uses its selected data root and the
+/// shared custom > managed > native resolver, without treating WSL as native.
+/// Other integrations retain their external-agent lookup below.
+#[tauri::command]
+pub async fn detect_agent_installed<R: Runtime>(
+    app: AppHandle<R>,
+    bin: String,
+    custom_path: Option<String>,
+) -> AgentDetection {
+    if bin == "opencode" {
+        let data = get_jan_data_folder_path(app);
+        let found = tokio::task::spawn_blocking(move || {
+            super::opencode_runtime::resolve(&data, custom_path.as_deref())
+        })
+        .await;
+        return AgentDetection {
+            installed: matches!(found, Ok(Ok(Some(_)))),
+            via_wsl: false,
+        };
+    }
+    detect_external_agent_installed(bin, custom_path).await
+}
+
 /// Probe whether an external CLI agent is reachable.
 ///
 /// Resolution order:
@@ -2439,8 +2459,10 @@ async fn detect_via_wsl(bin: &str) -> bool {
 /// 2. native PATH lookup (`which` / `where`).
 /// 3. (Windows only) a WSL fallback so agents installed inside a WSL
 ///    distribution are detected instead of showing as missing.
-#[tauri::command]
-pub async fn detect_agent_installed(bin: String, custom_path: Option<String>) -> AgentDetection {
+pub async fn detect_external_agent_installed(
+    bin: String,
+    custom_path: Option<String>,
+) -> AgentDetection {
     if let Some(path) = custom_path
         .as_deref()
         .map(str::trim)
@@ -2493,7 +2515,7 @@ async fn try_bootstrap_npm_via_winget<R: Runtime>(
 ) -> bool {
     // winget itself (App Installer) must be present; it ships on Win10 1809+
     // mainline but not on LTSC / Server / stripped images.
-    let winget = detect_agent_installed("winget".to_string(), None).await;
+    let winget = detect_external_agent_installed("winget".to_string(), None).await;
     if !native_agent_available(&winget) {
         let _ = app_handle.emit(
             event,
@@ -2565,7 +2587,7 @@ async fn try_bootstrap_npm_via_winget<R: Runtime>(
     // winget adds the Node install dir to PATH; `detect_agent_installed`
     // re-reads the registry PATH at runtime, so native npm is found without a
     // restart. A WSL-only npm does not satisfy a native Windows install.
-    let npm = detect_agent_installed("npm".to_string(), None).await;
+    let npm = detect_external_agent_installed("npm".to_string(), None).await;
     native_agent_available(&npm)
 }
 
@@ -2586,6 +2608,23 @@ pub async fn install_agent<R: Runtime>(
     agent_id: String,
     proxy: Option<ProxyEnv>,
 ) -> Result<(), String> {
+    if agent_id == "opencode" {
+        let data = get_jan_data_folder_path(app_handle.clone());
+        return tokio::task::spawn_blocking(move || {
+            super::opencode_runtime::install_managed(
+                &data,
+                None,
+                proxy.as_ref(),
+                "gchat-install.log",
+                |line| {
+                    let _ = app_handle.emit("agent_install_log:opencode", line.to_owned());
+                },
+            )
+            .map(|_| ())
+        })
+        .await
+        .map_err(|error| format!("Code setup stopped: {error}"))?;
+    }
     let (program, args, prereq, docs) = agent_install_spec(&agent_id)?;
 
     let event = format!("agent_install_log:{}", agent_id);
@@ -2594,7 +2633,7 @@ pub async fn install_agent<R: Runtime>(
     // so a Node/npm installed after the app launched (or present in the registry
     // but not the GUI's snapshotted PATH) is found without an app restart. A
     // prerequisite found only inside WSL cannot run a native installer.
-    let prerequisite = detect_agent_installed(prereq.to_string(), None).await;
+    let prerequisite = detect_external_agent_installed(prereq.to_string(), None).await;
     if !native_agent_available(&prerequisite) {
         // For npm-based agents on Windows, try to auto-install Node.js (which
         // bundles npm) via winget before giving up, so the Launch flow works on
@@ -4596,16 +4635,23 @@ pub fn open_agent_terminal<R: Runtime>(
     app: AppHandle<R>,
     agent_id: String,
     command: String,
+    custom_path: Option<String>,
     proxy: Option<ProxyEnv>,
 ) -> Result<(), String> {
     let command = command.trim().to_string();
     if command.is_empty() {
         return Err("Empty terminal command".to_string());
     }
-    let environment = if agent_id == "opencode" {
-        agent_terminal_environment(&agent_id, &get_jan_data_folder_path(app))
+    let (command, environment) = if agent_id == "opencode" {
+        let data = get_jan_data_folder_path(app);
+        let resolved = super::opencode_runtime::resolve(&data, custom_path.as_deref())?
+            .ok_or("Code is not installed. Set it up in GChat, then try again.")?;
+        (
+            super::opencode_runtime::shell_invocation(&resolved.executable, &[]),
+            agent_terminal_environment(&agent_id, &data),
+        )
     } else {
-        Vec::new()
+        (command, Vec::new())
     };
     #[cfg(unix)]
     let command = agent_terminal_payload(&command, &environment)?;
@@ -4643,6 +4689,23 @@ pub fn open_agent_terminal<R: Runtime>(
 
     #[cfg(target_os = "windows")]
     {
+        if agent_id == "opencode" {
+            use std::os::windows::process::CommandExt;
+            // Bypass cmd.exe so metacharacters in a user-selected path remain
+            // literal PowerShell arguments in the new interactive console.
+            let mut cmd = std::process::Command::new("powershell.exe");
+            cmd.args(["-NoProfile", "-NoExit", "-Command", &command])
+                .envs(environment)
+                .creation_flags(0x00000010); // CREATE_NEW_CONSOLE
+            apply_login_path(&mut cmd);
+            apply_runtime_path(&mut cmd);
+            if let Some(ref proxy) = proxy {
+                apply_proxy_env(&mut cmd, proxy);
+            }
+            cmd.spawn()
+                .map_err(|error| format!("Could not open the Code terminal: {error}"))?;
+            return Ok(());
+        }
         // `start "" cmd /K <cmd>` opens a fresh console that stays open so the
         // interactive agent keeps running. The empty "" is the window title arg.
         // The new console inherits this command's environment, so the proxy env
@@ -5099,6 +5162,28 @@ mod tests {
             super::agent_terminal_payload("opencode --help", &unrelated).unwrap(),
             "opencode --help"
         );
+    }
+
+    #[tokio::test]
+    async fn opencode_detection_uses_the_selected_managed_root_and_keeps_custom_authoritative() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("selected Code data");
+        let managed = super::super::opencode_runtime::managed_executable(&data);
+        std::fs::create_dir_all(managed.parent().unwrap()).unwrap();
+        std::fs::write(&managed, "managed Code").unwrap();
+        let app = tauri::test::mock_app();
+        app.manage(crate::test_support::TestDataRoot(data));
+        let found = super::detect_agent_installed(app.handle().clone(), "opencode".into(), None).await;
+        assert!(found.installed);
+        assert!(!found.via_wsl);
+        for invalid in [root.path().join("missing Code"), PathBuf::from("relative Code")] {
+            let found = super::detect_agent_installed(
+                app.handle().clone(), "opencode".into(), Some(invalid.to_string_lossy().into_owned()),
+            ).await;
+            assert!(!found.installed);
+            assert!(!found.via_wsl);
+        }
+        assert_eq!(std::fs::read_to_string(managed).unwrap(), "managed Code");
     }
 
     #[tokio::test]

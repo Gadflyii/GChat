@@ -49,6 +49,40 @@ or GPU; CPUs were returned at 04:55Z. Evidence is in
 debug desktop interaction; Windows was not built (dev phase), and installer
 behavior was not checked.
 
+## Archive OpenCode provisioning — C7, October 18
+
+`GUI-FIRST-USER-OPENCODE-PROVISIONING` is active from main `d31e328d6` on
+`fix/c7-opencode-private-prefix-20261018`, worktree
+`/ai/gchat-worktrees/c7-opencode-private-prefix-20261018`. C3's clean archive
+walk on `72c76c51a` ran `npm install --global opencode-ai` and failed to create
+`/usr/local/lib/node_modules` with EACCES. Its retained S1 receipt is
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/badge-native-launch.json`;
+the exact npm log is under that fixture's
+`downloads-home/.npm/_logs/2026-10-18T04_43_51_190Z-debug-0.log`. The donor
+and all C3 files remain read-only.
+
+Deliverable: clean archive startup installs OpenCode under the selected GChat
+data folder, without global npm writes. One resolver chooses custom, managed,
+then native executables for readiness, embedded/external launch, CLI and offline
+session deletion. Managed updates use that same private prefix/cache; external
+updates show the existing installation's own command and offer explicit use of
+a managed copy. Missing Node/npm must explain how to install Node.js LTS, with
+no automatic system installation. Arch signed this design at 04:58:46Z.
+
+Acceptance: focused resolver/install/update/consumer regressions, Rust check and
+clippy, ONE `make verify`, and a clean private native archive replay with
+screenshots in this source branch. Preserve existing native/custom reuse,
+proxy behavior, selected configuration root, HOME and user work. No model/GPU,
+Windows account, host install, global npm installation or C3 donor mutation.
+The baseline private archive-style startup reproduced the same npm EACCES at
+05:11Z. Its global prefix was redirected to a denied directory inside the
+disposable app data folder, protecting the host while preserving the failing
+global command. Implementation and consumer regressions are ready; the next
+action is focused verification, the single full gate, and native candidate
+acceptance. S1 caches/builds are reused at
+`/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018`; the separate
+baseline HOME/stage are disposable after evidence capture. No GPU is used.
+
 ## First-use duplicate agent names — October 17
 
 An isolated native Linux pass of main `9e75fc31e` reproduced silent replacement:

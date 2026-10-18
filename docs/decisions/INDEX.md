@@ -1,5 +1,7 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-18** — [Install managed OpenCode in the GChat data folder](2026-10-18-install-managed-opencode-in-the-gchat-data-folder.md)
+
 - **2026-10-18** — [Report typed Gbot startup failures](2026-10-18-report-typed-gbot-startup-failures.md)
 
 - **2026-10-17** — [Contain Gbot desktop keyboard input](2026-10-17-contain-gbot-desktop-keyboard-input.md)

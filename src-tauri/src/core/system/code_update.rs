@@ -1,10 +1,14 @@
 use serde::Serialize;
 use std::{
-    path::{Path, PathBuf},
-    process::{Command, Stdio},
+    path::Path,
     sync::atomic::{AtomicBool, Ordering},
 };
 use tauri::{ipc::Channel, AppHandle, Runtime};
+
+use super::{
+    commands::ProxyEnv,
+    opencode_runtime::{self, OpenCodeOwnership, ResolvedOpenCode},
+};
 
 static UPDATING: AtomicBool = AtomicBool::new(false);
 struct UpdateGuard;
@@ -15,89 +19,47 @@ impl Drop for UpdateGuard {
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CodeUpdateResult {
-    log_path: String,
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CodeUpdateResult {
+    Updated {
+        #[serde(rename = "logPath")]
+        log_path: String,
+    },
+    External {
+        command: String,
+    },
 }
 
-fn command(executable: &Path, args: &[&str], directory: &Path) -> Command {
-    #[cfg(windows)]
-    let mut cmd = {
-        use std::os::windows::process::CommandExt;
-        let literal = |s: &str| format!("'{}'", s.replace('\'', "''"));
-        let mut cmd = Command::new("powershell.exe");
-        cmd.args(["-NoProfile", "-NonInteractive", "-Command"])
-            .arg(format!(
-                "& {} {}; exit $LASTEXITCODE",
-                literal(&executable.to_string_lossy()),
-                args.iter()
-                    .map(|s| literal(s))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ))
-            .creation_flags(0x08000000);
-        cmd
-    };
-    #[cfg(not(windows))]
-    let mut cmd = {
-        let mut cmd = Command::new(executable);
-        cmd.args(args);
-        cmd
-    };
-    super::commands::apply_login_path(&mut cmd);
-    super::commands::apply_runtime_path(&mut cmd);
-    cmd.current_dir(directory)
-        .stdin(Stdio::null())
-        .env("NO_COLOR", "1")
-        .envs(super::opencode_config::child_env(directory));
-    cmd
+fn manual_update_command(executable: &Path) -> String {
+    opencode_runtime::shell_invocation(executable, &["upgrade"])
 }
 
-fn run_update(
-    executable: &Path,
-    directory: &Path,
-    target: &str,
-    progress: impl Fn(&str),
-) -> Result<CodeUpdateResult, String> {
-    std::fs::create_dir_all(directory).map_err(|e| e.to_string())?;
-    let log_path = directory.join("gchat-update.log");
-    let log = std::fs::File::create(&log_path).map_err(|e| e.to_string())?;
-    let stderr = log.try_clone().map_err(|e| e.to_string())?;
-    progress("Downloading and installing updates");
-    let status = command(executable, &["upgrade", target], directory)
-        .stdout(Stdio::from(log))
-        .stderr(Stdio::from(stderr))
-        .status()
-        .map_err(|e| format!("Could not start the Code updater: {e}"))?;
-    if !status.success() {
-        return Err(format!("Code could not finish updating. Close other Code sessions and retry. Diagnostic log: {}", log_path.display()));
-    }
-    progress("Checking Code version");
-    let check = command(executable, &["--version"], directory)
-        .output()
-        .map_err(|e| e.to_string())?;
-    // Upstream can return exit code zero after a failed upgrade.
-    if !check.status.success()
-        || String::from_utf8_lossy(&check.stdout)
-            .trim()
-            .trim_start_matches('v')
-            != target
-    {
-        return Err(format!("Code did not reach the requested version. Retry the update; if it keeps failing, check installation permissions. Diagnostic log: {}", log_path.display()));
-    }
-    Ok(CodeUpdateResult {
-        log_path: log_path.to_string_lossy().into_owned(),
+fn external_update(resolved: ResolvedOpenCode) -> Option<CodeUpdateResult> {
+    (resolved.ownership != OpenCodeOwnership::Managed).then(|| CodeUpdateResult::External {
+        command: manual_update_command(&resolved.executable),
     })
+}
+
+fn prepare_update(
+    data: &Path,
+    custom_path: Option<&str>,
+    use_managed_copy: bool,
+) -> Result<Option<CodeUpdateResult>, String> {
+    if use_managed_copy {
+        return Ok(None);
+    }
+    Ok(opencode_runtime::resolve(data, custom_path)?.and_then(external_update))
 }
 
 #[tauri::command]
 pub async fn update_code<R: Runtime>(
     app: AppHandle<R>,
     custom_path: Option<String>,
+    use_managed_copy: Option<bool>,
+    proxy: Option<ProxyEnv>,
     on_progress: Channel<String>,
 ) -> Result<CodeUpdateResult, String> {
     let data = crate::core::app::commands::get_jan_data_folder_path(app);
-    let directory = super::opencode_config::config_directory(&data);
     if UPDATING
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
         .is_err()
@@ -105,86 +67,140 @@ pub async fn update_code<R: Runtime>(
         return Err("Code is already updating.".into());
     }
     let guard = UpdateGuard;
+    let selected_data = data.clone();
+    if let Some(external) = tokio::task::spawn_blocking(move || {
+        prepare_update(
+            &selected_data,
+            custom_path.as_deref(),
+            use_managed_copy.unwrap_or(false),
+        )
+    })
+    .await
+    .map_err(|error| format!("Could not find Code: {error}"))??
+    {
+        // External installations remain under the user's control. In particular,
+        // do not fetch a release or run an installer before explicit adoption.
+        return Ok(external);
+    }
     let _ = on_progress.send("Checking for updates".into());
-    let release: serde_json::Value = reqwest::Client::new()
+    let mut client = reqwest::Client::builder();
+    if let Some(proxy) = proxy.as_ref().filter(|proxy| !proxy.url.trim().is_empty()) {
+        let mut configured = reqwest::Proxy::all(proxy.url.trim()).map_err(|error| {
+            format!("Check the app's proxy address, then retry. Details: {error}")
+        })?;
+        if let Some(username) = proxy.username.as_deref().filter(|value| !value.is_empty()) {
+            configured = configured.basic_auth(username, proxy.password.as_deref().unwrap_or(""));
+        }
+        if let Some(no_proxy) = proxy.no_proxy.as_deref() {
+            configured = configured.no_proxy(reqwest::NoProxy::from_string(no_proxy));
+        }
+        client = client.proxy(configured);
+    }
+    let release: serde_json::Value = client
+        .build()
+        .map_err(|error| error.to_string())?
         .get("https://registry.npmjs.org/opencode-ai/latest")
         .timeout(std::time::Duration::from_secs(30))
         .send()
         .await
-        .map_err(|e| format!("Could not check for Code updates: {e}"))?
+        .map_err(|error| format!("Could not check for Code updates: {error}"))?
         .error_for_status()
-        .map_err(|e| format!("Could not check for Code updates: {e}"))?
+        .map_err(|error| format!("Could not check for Code updates: {error}"))?
         .json()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|error| error.to_string())?;
     let target = release["version"]
         .as_str()
-        .filter(|s| !s.is_empty())
+        .filter(|version| !version.is_empty())
         .ok_or("The Code release has no version.")?
         .to_owned();
     tokio::task::spawn_blocking(move || {
         let _guard = guard;
-        let executable = if let Some(path) = custom_path.filter(|p| !p.trim().is_empty()) {
-            let path = PathBuf::from(path);
-            if !path.is_absolute() || !path.is_file() {
-                return Err("The custom Code executable must be an absolute file path.".into());
-            }
-            path
-        } else {
-            PathBuf::from(if cfg!(windows) {
-                "opencode.cmd"
-            } else {
-                "opencode"
-            })
-        };
-        run_update(&executable, &directory, &target, |phase| {
-            let _ = on_progress.send(phase.into());
+        let _ = on_progress.send("Downloading and installing Code in GChat's data folder".into());
+        opencode_runtime::install_managed(
+            &data,
+            Some(&target),
+            proxy.as_ref(),
+            "gchat-update.log",
+            |line| {
+                let _ = on_progress.send(line.into());
+            },
+        )?;
+        Ok(CodeUpdateResult::Updated {
+            log_path: super::opencode_config::config_directory(&data)
+                .join("gchat-update.log")
+                .to_string_lossy()
+                .into_owned(),
         })
     })
     .await
-    .map_err(|e| format!("Code updater stopped: {e}"))?
+    .map_err(|error| format!("Code updater stopped: {error}"))?
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::PermissionsExt;
 
     #[test]
-    fn update_is_noninteractive_and_requires_the_requested_version() {
-        for (version, exit, success) in
-            [("1.2.3", 0, true), ("1.2.2", 0, false), ("1.2.3", 7, false)]
-        {
-            let dir = tempfile::tempdir().unwrap();
-            let directory =
-                super::super::opencode_config::config_directory(&dir.path().join("selected data"));
-            let exe = dir.path().join("code");
-            std::fs::write(&exe, format!("#!/bin/sh\nprintf '%s\\n' \"$XDG_CONFIG_HOME\" \"$OPENCODE_CONFIG_DIR\" \"$OPENCODE_CONFIG\" \"$PWD\" > \"$OPENCODE_CONFIG_DIR/child-$1.env\"\nif [ \"$1\" = '--version' ]; then echo '{version}'; exit 0; fi\n[ \"$*\" = 'upgrade 1.2.3' ] || exit 8\nread answer && exit 9\necho 'private update log'\nexit {exit}\n")).unwrap();
-            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o700)).unwrap();
-            assert_eq!(
-                run_update(&exe, &directory, "1.2.3", |_| {}).is_ok(),
-                success
-            );
-            let expected = format!(
-                "{}\n{}\n{}\n{}\n",
-                directory.parent().unwrap().display(),
-                directory.display(),
-                directory.join("opencode.jsonc").display(),
-                directory.display(),
-            );
-            assert_eq!(
-                std::fs::read_to_string(directory.join("child-upgrade.env")).unwrap(),
-                expected,
-            );
-            if exit == 0 {
-                assert_eq!(
-                    std::fs::read_to_string(directory.join("child---version.env")).unwrap(),
-                    expected,
-                );
-            }
-            assert!(std::fs::read_to_string(directory.join("gchat-update.log"))
-                .unwrap()
-                .contains("private update log"));
+    fn external_update_is_a_manual_command_without_mutating_the_installation() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("selected data");
+        let executable = dir.path().join("user's code");
+        std::fs::write(&executable, "external installation, never run by GChat").unwrap();
+        let result = prepare_update(&data, executable.to_str(), false)
+            .unwrap()
+            .unwrap();
+        let value = serde_json::to_value(result).unwrap();
+        assert_eq!(value["kind"], "external");
+        assert_eq!(value["command"], manual_update_command(&executable));
+        assert_eq!(
+            std::fs::read_to_string(&executable).unwrap(),
+            "external installation, never run by GChat"
+        );
+        assert!(!data.exists());
+        assert!(external_update(ResolvedOpenCode {
+            executable,
+            ownership: OpenCodeOwnership::Native
+        })
+        .is_some());
+    }
+
+    #[test]
+    fn only_explicit_adoption_bypasses_an_invalid_authoritative_custom_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let data = dir.path().join("selected data");
+        assert!(prepare_update(&data, Some("missing custom code"), false).is_err());
+        assert!(prepare_update(&data, Some("missing custom code"), true)
+            .unwrap()
+            .is_none());
+        assert!(!data.exists());
+    }
+
+    #[test]
+    fn managed_update_retains_the_selected_root_and_returns_the_typed_log_result() {
+        let dir = tempfile::tempdir().unwrap();
+        let executable = opencode_runtime::managed_executable(dir.path());
+        std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        std::fs::write(&executable, "managed").unwrap();
+        assert!(prepare_update(dir.path(), None, false).unwrap().is_none());
+        let result = CodeUpdateResult::Updated {
+            log_path: "selected data/code/opencode/gchat-update.log".into(),
+        };
+        assert_eq!(
+            serde_json::to_value(result).unwrap(),
+            serde_json::json!({
+                "kind": "updated", "logPath": "selected data/code/opencode/gchat-update.log"
+            })
+        );
+    }
+
+    #[test]
+    fn manual_commands_quote_user_paths() {
+        let command = manual_update_command(Path::new("/users/it's code/$tool"));
+        if cfg!(windows) {
+            assert_eq!(command, "& '/users/it''s code/$tool' 'upgrade'");
+        } else {
+            assert_eq!(command, "'/users/it'\\''s code/$tool' 'upgrade'");
         }
     }
 }

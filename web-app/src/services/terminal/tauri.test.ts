@@ -5,6 +5,7 @@ import {
   provisionHermes,
   provisionOpenCode,
   terminalBinaryStringToBytes,
+  updateCode,
 } from './tauri'
 
 const mocks = vi.hoisted(() => ({ invoke: vi.fn() }))
@@ -257,5 +258,24 @@ describe('Hermes provisioning', () => {
       'configure_hermes_agent',
       'hermes_readiness',
     ])
+  })
+})
+
+
+describe('OpenCode updates', () => {
+  it('passes explicit managed adoption and installer proxy without treating an external command as an update', async () => {
+    const external = { kind: 'external', command: "'/user/opencode' upgrade" }
+    const updated = { kind: 'updated', logPath: '/data/code/gchat-update.log' }
+    mocks.invoke.mockResolvedValueOnce(external).mockResolvedValueOnce(updated)
+    const progress = vi.fn()
+    await expect(updateCode('/user/opencode', progress)).resolves.toEqual(external)
+    expect(mocks.invoke).toHaveBeenLastCalledWith('update_code', expect.objectContaining({
+      customPath: '/user/opencode', useManagedCopy: false, proxy: undefined,
+    }))
+    const proxy = { url: 'http://127.0.0.1:8080' }
+    await expect(updateCode('/user/opencode', progress, true, proxy)).resolves.toEqual(updated)
+    expect(mocks.invoke).toHaveBeenLastCalledWith('update_code', expect.objectContaining({
+      customPath: '/user/opencode', useManagedCopy: true, proxy,
+    }))
   })
 })

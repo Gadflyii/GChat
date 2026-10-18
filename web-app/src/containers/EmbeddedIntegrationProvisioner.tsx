@@ -57,8 +57,8 @@ export function EmbeddedIntegrationProvisioner() {
     const proxy = currentInstallerProxy()
 
     const provision = async () => {
-      // Keep installers sequential: both may bootstrap package-manager state
-      // on a clean Windows host, and those system operations must not race.
+      // Keep package operations sequential. OpenCode uses only its private
+      // data-folder prefix; neither installer waits for model configuration.
       if (openCodeEnabled) {
         await provisionOpenCode({
           customPath: customOpenCodePath || undefined,
