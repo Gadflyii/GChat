@@ -699,6 +699,86 @@ it('requests a fresh launch URL each time and never saves or renders it', async 
   ).not.toBeInTheDocument()
 })
 
+it('does not open a late Microsoft client URL after its setup is replaced', async () => {
+  let finishLaunch!: (result: { url: string }) => void
+  vi.mocked(gbot)
+    .mockReturnValueOnce(
+      new Promise<{ url: string }>((resolve) => {
+        finishLaunch = resolve
+      })
+    )
+    .mockResolvedValueOnce({
+      url: 'https://windows365.microsoft.com/replacement-launch',
+    })
+  const busy = vi.fn()
+  const saved = vi.fn()
+  const replacement = { ...initial, id: 'replacement-setup' }
+  const { rerender } = render(
+    <M365Setup
+      key={initial.id}
+      name="Research bot"
+      initial={initial}
+      busy={busy}
+      saved={saved}
+    />
+  )
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Open Microsoft client' })
+    ).toBeEnabled()
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Open Microsoft client' }))
+  expect(gbot).toHaveBeenCalledExactlyOnceWith('setup/m365/launch', {
+    id: initial.id,
+  })
+  expect(
+    screen.getByRole('button', { name: 'Opening Microsoft client…' })
+  ).toBeDisabled()
+
+  rerender(
+    <M365Setup
+      key={replacement.id}
+      name="Replacement bot"
+      initial={replacement}
+      busy={vi.fn()}
+      saved={saved}
+    />
+  )
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Open Microsoft client' })
+    ).toBeEnabled()
+  )
+  await act(async () =>
+    finishLaunch({ url: 'https://windows365.microsoft.com/stale-launch' })
+  )
+  expect(opener).not.toHaveBeenCalled()
+  expect(busy.mock.calls).toEqual([[true]])
+  expect(saved).not.toHaveBeenCalled()
+  expect(
+    screen.queryByText(
+      'Microsoft client opened. Desktop control is not connected yet.'
+    )
+  ).not.toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Open Microsoft client' }))
+  await waitFor(() =>
+    expect(opener).toHaveBeenCalledExactlyOnceWith(
+      'https://windows365.microsoft.com/replacement-launch'
+    )
+  )
+  expect(vi.mocked(gbot).mock.calls).toEqual([
+    ['setup/m365/launch', { id: initial.id }],
+    ['setup/m365/launch', { id: replacement.id }],
+  ])
+  await screen.findByText(
+    'Microsoft client opened. Desktop control is not connected yet.'
+  )
+  expect(
+    screen.queryByText(/stale-launch|replacement-launch/)
+  ).not.toBeInTheDocument()
+})
+
 it('keeps the same setup ID and exact route through a failed save retry', async () => {
   vi.mocked(gbot)
     .mockResolvedValueOnce([cloudPc])
