@@ -82,32 +82,7 @@ vi.mock('@/stores/engine-hosts-store', async () => {
       refreshing: mocks.refreshing,
       discoveryError: null,
       snapshots: {
-        host: mocks.snapshot ?? {
-          host_id: 'host',
-          display_name: 'Lab host',
-          revision: 1,
-          instances: mocks.instances,
-          lan_sharing: {
-            managed: true,
-            enabled: true,
-            active: true,
-            port: 7444,
-          },
-          gpus: [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768 }],
-          models: [
-            {
-              id: 'model',
-              artifact_set: false,
-              path: '/models/qwen.ginfer',
-              metadata: {
-                identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' },
-                tp_size: 1,
-                draft_tp: 0,
-                size_bytes: 1024,
-              },
-            },
-          ],
-        },
+        host: currentHostSnapshot(),
       },
     }
     return selector ? selector(state) : state
@@ -122,6 +97,35 @@ function publishHostSnapshot(snapshot: EngineSnapshot) {
   mocks.error = ''
   mocks.storeVersion++
   mocks.storeListeners.forEach(listener => listener())
+}
+
+function currentHostSnapshot(): EngineSnapshot {
+  return mocks.snapshot ?? {
+    host_id: 'host',
+    display_name: 'Lab host',
+    revision: 1,
+    instances: mocks.instances,
+    lan_sharing: {
+      managed: true,
+      enabled: true,
+      active: true,
+      port: 7444,
+    },
+    gpus: [{ uuid: 'GPU-one', name: 'RTX 5090', memory_mib: 32768 }],
+    models: [
+      {
+        id: 'model',
+        artifact_set: false,
+        path: '/models/qwen.ginfer',
+        metadata: {
+          identity: { model_id: 'qwen3.8-27b', weights_id: 'nvfp4' },
+          tp_size: 1,
+          draft_tp: 0,
+          size_bytes: 1024,
+        },
+      },
+    ],
+  }
 }
 
 function sharingSnapshot(enabled: boolean, revision = 1): EngineSnapshot {
@@ -167,7 +171,9 @@ beforeEach(() => {
             }
           : action === 'lan_sharing'
             ? sharingSnapshot(args?.body?.enabled ?? true, 2)
-            : {}
+            : ['start', 'stop', 'restart', 'reload'].includes(action)
+              ? currentHostSnapshot()
+              : {}
     )
   mocks.refresh.mockReset().mockResolvedValue(undefined)
 })
