@@ -331,9 +331,17 @@ export default function KvmSetup({
         </p>
       )}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>Could not check this computer’s setup.</p>
+          <p>
+            Check the connection to the service computer, then choose Check
+            prerequisites again.
+          </p>
+          <details>
+            <summary className="cursor-pointer">Details</summary>
+            <p className="whitespace-pre-wrap break-words">{error}</p>
+          </details>
+        </div>
       )}
       {actionError && (
         <div role="alert" className="space-y-2 text-sm text-destructive">

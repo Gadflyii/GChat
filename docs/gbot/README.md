@@ -1,5 +1,30 @@
 # Gbot design
 
+## Local computer check and progress read recovery — Gchat 2
+
+`GBOT-LOCAL-VM-READ-ERROR-GUIDANCE` gives prerequisite and saved-progress read
+failures plain guidance naming Check prerequisites again. Technical Details
+start closed, and opening them sends no request. Saved computers remain
+reviewable after an event read fails; explicit recovery only reads prerequisites
+and progress. Failed prerequisite checks still disable new computer creation,
+and existing lifecycle action warnings remain separate.
+
+Rendered journeys cover a failed recheck, a saved-progress failure after a
+successful preflight, and an event-read failure with a retained saved computer.
+Each preserves the existing explicit retry and does not start, stop, remove or
+connect a computer. This is source/rendered wording scope only.
+
+Validation: all three original-production regressions failed; fixed local
+computer/wizard focus passed 67 tests. Lint had zero errors and five existing
+warnings. ONE `make verify`, 18 October 19:23:20–19:29:21 UTC, passed 3,774 app
+tests (six skipped), 127 extension tests, 1,316 Rust tests (28 ignored, 23
+summaries), six coverage floors and lint/typecheck/guards. All 3,460 tracked
+raw bytes/modes matched before and after verification with fresh tracked build
+timestamps. Product and test source remain unchanged by this receipt.
+CPU80–87 booking3516 returned19:29Z; the private cache was retired19:31Z.
+Evidence: `out/gchat2-local-vm-read-error-guidance-20261018/result.json` and
+adjacent raw logs. Native acceptance remains separate.
+
 ## Fresh billing consent after cloud computer deletion — Gchat 2
 
 `GBOT-CLOUD-RECREATION-BILLING-CONSENT`, based on main `78078ddae`,
