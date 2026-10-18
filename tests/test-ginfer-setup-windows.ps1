@@ -66,6 +66,7 @@ public static class SetupHardwareHandoff {
     & $script -Install -NoPath -GpuUuids @('GPU-second', 'GPU-first')
     $config = Get-Content (Join-Path $target 'bin\ginfer-launch.json') -Raw | ConvertFrom-Json
     if ($config.desktop.provider -ne (Join-Path $env:APPDATA 'GInfer\data')) { throw 'Wrong default provider' }
+    if ($config.desktop.runtime_set -cne $false) { throw 'Standalone setup must explicitly select its single runtime image' }
     if ($config.host_url -cne 'https://127.0.0.1:7443') { throw 'Wrong default Host endpoint' }
     if (Test-Path $config.desktop.provider) { throw 'Setup must not create host/model storage' }
     if (-not (Test-Path (Join-Path $target 'bin\ginfer-host.exe'))) { throw 'Host is not a launcher sibling' }

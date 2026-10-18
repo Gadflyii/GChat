@@ -1,5 +1,62 @@
 # GChat installer refresh
 
+## Standalone launcher runtime ownership — source gates and release PASS; archive/native replay pending, October 18
+
+The private novice installation recorded on `test/c4-cli-first-run-20261018`
+at `7f8e9a61e` copied the accepted single-image archive and registered its Host,
+then both the interactive first-run wizard and no-argument menu failed because
+the menu unconditionally required a desktop runtime-set manifest. Help, invalid
+model-path and unavailable inventory-tool checks completed; no calibration or
+model ran. That blocked walk remains evidence, not a passing installation.
+
+The fix on `fix/c4-standalone-launcher-20261018` makes the existing installed
+configuration require `desktop.runtime_set`. Linux and Windows standalone setup
+write `false`; the desktop writer writes `true`. Hardware preparation and menu
+bootstrap share that selection. Desktop manifests remain strict, and a supplied
+installed configuration cannot be overridden with `--runtime-set`. Existing
+registrations retain their current owner. Engine source and accepted Engine
+runtime `e2282c336` are unchanged. The
+[decision record](../decisions/2026-10-18-declare-installed-launcher-runtime-ownership.md)
+describes the contract; Arch startup-path sign-off is pending.
+
+Acceptance is focused installed-launcher/setup regressions, one full verification,
+a refreshed archive containing the current Host/setup and accepted runtime, and
+continuation of the blocked private novice wizard/menu and its remaining error
+paths. GPU calibration or model execution requires its own actual-start booking;
+installation outside the private test root is excluded. Source is frozen from
+`bca080b7166f` plus the owned patch.
+
+The S1 offline gate ran **04:22:22–04:26:18Z** on booked CPUs 120–127, nice 10,
+eight Cargo jobs and the shared socket-1 compile guard. Linux setup, five installed
+launcher cases, installed preparation argument ownership, the desktop writer and
+Host clippy passed. The single `make verify` invocation passed lint, typecheck and
+its early contract checks, then failed root Vitest because the source archive had
+no generated `core/dist/index.js`: every reported error is unresolved `@gchat/core`.
+This is an invalid cache prerequisite, not a passing full gate. No release build
+or packaging ran. Booking 2973 was canceled at **04:27Z**. The authorized recovery
+started at **04:28:22Z**, booking 2980 on the same CPUs through 04:46Z. The existing
+core build and explicit generated-entry check passed, then the failed root
+coverage command, unexecuted extension coverage and coverage floors passed. The
+previously unexecuted Rust suite passed at **04:32:42Z** (1,223 tests passed,
+28 ignored), and the release Host build passed at **04:34:12Z**. No full
+`make verify` or passed focused, lint, type or contract stage was repeated. Keep
+the generated core entry as a checked prerequisite for archived-source gates.
+Packaging started immediately after release. The final package will use the exact
+`docs/lan-host-setup.md` from the separate Python-command correction `65df08dda`;
+that guide is an explicit packaging input, not a launcher-source change. Reuse
+the release binary and repeat packaging only to incorporate that correction.
+Next: finish the archive and replay the private installation through GPU intent,
+storage and the actual published catalog. Empty/unavailable catalogs must remain
+reported as such. Calibration/Ready wait for Arch startup-path sign-off and a
+separate actual-start GPU booking. Fastest-disk recommendations still require
+real eligible measurements.
+
+| Owner / host | Path | State / retention |
+| --- | --- | --- |
+| Codex 4 / local | `/ai/gchat-worktrees/c4-standalone-launcher-20261018` | Frozen launcher source, current authority and `out/c4-standalone-launcher-20261018/command.json` |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | Recovery PID 2648729, CPUs 120–127 through 04:46Z; focused, recovered coverage, Rust and release PASS, packaging active. Original invalid gate and per-stage receipts retained; no Engine build |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018` | Retained failed private install, original archive and owned release cache until fix acceptance; no live job |
+
 ## Windows RC refresh — release installer delivered, October 18
 
 Bubbs's post-merge refresh is **PASS**. The unsigned Windows release installer

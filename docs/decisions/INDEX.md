@@ -541,3 +541,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-17** — [Chunk Windows native credentials](2026-10-17-chunk-windows-native-credentials.md)
 - **2026-10-18** — [Register local model files in place](2026-10-18-register-local-model-files-in-place.md)
 - **2026-10-18** — [Render choice popups with the app theme](2026-10-18-render-choice-popups-with-the-app-theme.md)
+- **2026-10-18** — [Declare installed launcher runtime ownership](2026-10-18-declare-installed-launcher-runtime-ownership.md)

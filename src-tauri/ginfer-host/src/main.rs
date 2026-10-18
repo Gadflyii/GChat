@@ -86,7 +86,8 @@ struct PrepareHardware {
     #[arg(long, default_value = "nvidia-smi")]
     nvidia_smi: PathBuf,
     /// Use the installed GChat runtime set for this platform (single-image installs omit this).
-    #[arg(long)]
+    /// Installed configuration owns this choice when supplied.
+    #[arg(long, conflicts_with = "installed_configuration")]
     runtime_set: bool,
     /// Exact ordered deployment GPU UUID grant (repeat for TP2/TP4).
     #[arg(long)]
@@ -170,17 +171,19 @@ fn store_hardware_configuration(
 }
 async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
     use ginfer_host::hardware_profile::{Configuration, HardwareProfileAction};
-    let (directory, provider, origin, configured_engine) =
+    let (directory, provider, origin, configured_engine, configured_runtimes) =
         if let Some(path) = args.installed_configuration {
             let config: ginfer_host::launcher::InstalledConfiguration =
                 serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
                     .map_err(|e| e.to_string())?;
             let desktop = config.desktop;
+            let runtimes = desktop.as_ref().map(|d| d.engine_runtimes()).transpose()?;
             (
                 config.data_dir,
                 desktop.as_ref().map(|d| d.provider.clone()),
                 config.host_url,
                 desktop.map(|d| d.engine),
+                runtimes,
             )
         } else {
             (
@@ -188,6 +191,7 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
                     .ok_or("--data-dir or --installed-configuration is required")?,
                 args.desktop_provider,
                 args.host_url,
+                None,
                 None,
             )
         };
@@ -224,7 +228,9 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
         .parse()
         .map_err(|_| "local Host origin must use a loopback IP address")?;
     #[cfg(any(target_os = "linux", target_os = "windows"))]
-    let engine_runtimes = if args.runtime_set {
+    let engine_runtimes = if let Some(runtimes) = configured_runtimes {
+        runtimes
+    } else if args.runtime_set {
         ginfer_host::local_host::desktop_runtimes(
             provider
                 .as_ref()
@@ -737,6 +743,17 @@ fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn installed_preparation_owns_runtime_selection() {
+        use clap::Parser;
+        let args = ["prepare-hardware", "--engine", "ginfer", "--installed-configuration", "ginfer-launch.json"];
+        assert!(super::PrepareHardware::try_parse_from(args).is_ok());
+        let mut conflicting = args.to_vec();
+        conflicting.push("--runtime-set");
+        assert_eq!(super::PrepareHardware::try_parse_from(conflicting).err().unwrap().kind(),
+            clap::error::ErrorKind::ArgumentConflict);
+    }
+
     #[test]
     fn hardware_profile_preparation_rejects_invalid_groups_without_changing_persistence() {
         use ginfer_host::hardware_profile::{group_key, group_profile_path, Configuration};
