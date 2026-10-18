@@ -16,6 +16,32 @@ Preparation still requires installation consent; neither opening Details nor
 receiving a failed result repeats a request. Source/rendered mocked-service
 scope only; no guest installation, native or account acceptance.
 
+## Saved local computer action recovery — Gchat 2
+
+Saved local setups and connected local bots share Start/Stop error feedback.
+A failed action names Start computer, Stop computer or Resume setup for an
+explicit retry, according to the saved progress;
+technical diagnostics stay in closed Details. Once saved status confirms the
+computer is ready after Start or stopped after Stop, the old warning is hidden.
+Previously, unfinished setup cards retained the raw warning even after a
+read-only Refresh confirmed the stop completed.
+
+Rendered journeys cover Error and native-string failures, pending duplicate
+clicks, explicit retry, read-only Refresh and confirmation after a lost action
+response, plus resuming partially advanced setup. No automatic retry,
+connection or task is added. This is source and
+rendered acceptance; live Linux/Windows guest acceptance is unchanged.
+
+Validation: all six new journeys failed against original production; fixed
+focus passed 153 tests across the route and local setup. Lint passed with
+zero errors and five existing warnings. ONE `make verify` (2026-10-18
+23:03:58–23:10:04 UTC) passed 3,878 app tests (six skipped), 130 extension
+tests, 1,323 Rust tests (28 ignored), all six coverage floors and
+lint/typecheck/quality guards. All 3,481 tracked inputs matched raw bytes and
+modes before and after verification, with fresh tracked timestamps. Only this
+receipt was added afterward. Booking3625 returned23:10Z. Evidence:
+`/ai/gchat/out/gchat2-saved-local-vm-failure-recovery-20261018/SUMMARY.md`.
+
 ## Refreshing accounts after Microsoft sign-in — Gchat 2
 
 `GBOT-M365-CONNECTED-ACCOUNT-REFRESH`, based on main `42759aafd`, keeps
