@@ -111,6 +111,59 @@ returned at 04:38Z and was canceled. The owned 42.32 GB SSD copy, two exited
 containers and disposable local source archive were removed. Concise results
 and logs remain; the retained RC dependency donor stayed read-only. No GPU use
 or newly built installed-GUI qualification is claimed.
+## Models download-count wording — C3, October 18
+
+`GUI-DOWNLOADS-TRANSFER-COUNT-WORDING` passes source verification, its changed
+build and native acceptance. The accepted paused-status candidate `4e635c35a` showed
+**1 transfers** beside Models in both Light and Dark. Existing evidence:
+`out/c3-downloads-popover-status-20261018/{status-light-wide.png,status-dark-narrow.png}`.
+
+The badge now reads **1 download** or **2 downloads**, with the title **Active or
+incomplete model downloads**. Counting is unchanged: incomplete local journal
+entries count once, the mirrored local Host snapshot is excluded, remote entries
+count separately even for the same model, and installed entries do not count.
+Rendered NavMain regressions cover singular paused/verifying entries, the mixed
+local/remote plural including an installed remote entry, and removal when the
+local download installs while its Host snapshot remains stale. Chat, Gbot,
+transfer actions and routing are outside this wording change.
+
+All 14 focused NavMain cases and lint pass (zero errors, five existing warnings).
+The ONE `make verify` passes typecheck, the 356-file quality guard, 3,338 app
+cases, 121 extension cases, 1,220 native cases and all six coverage floors. Six
+app cases are skipped and 28 native cases ignored. No failure or continuation
+occurred. The production Vite build takes 22.19 seconds and the debug
+custom-protocol shell builds in 54.22 seconds. Result and command:
+`out/c3-download-count-wording-20261018/{result.json,command.json,summary.md}`.
+
+Owner: Codex 3. Baseline `3bbea776c`; source commit `72c76c51a` in
+`/ai/gchat-worktrees/c3-download-count-wording-20261018`, branch
+`fix/c3-download-count-wording-20261018`. Only NavMain, its existing rendered
+tests and this subject record change. The current-main release helper handed
+over the S1 source/build stage and caches after its checked AppDir completed
+at 04:33Z. Its immutable AppDir and the coordinator's private installed-build
+walk stay separate from this changed-source candidate. No GPU or model is used.
+All 35 retained dependency manifests/locks/config files match before reuse;
+no dependencies were downloaded. S1 CPU 80–87 ran with nice 10 and the shared
+socket 1 lock from 04:34Z to build completion at 04:41:46Z, returned 04:42Z.
+The stopped container and disposable source archives are removed. The shared
+source, native target and caches pass to the next authorized owner. Candidate
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/badge-candidate`
+retains the checked Linux x86_64 binary, a resource link to immutable `runnable`
+and its own pre-install copy for coordinator acceptance. The private
+`downloads-home`, current-main AppDir/HOME, runnable and tools remain intact.
+
+Native acceptance passes on the exact changed build (SHA256
+`b88355fb5130d627400d3ccef6b5109e86aba5c13d1e30ca549b4e4290d3b878`).
+Actual xdotool input shows **1 download** in Light1500×1000 and Dark1024×800,
+then **2 downloads** in Dark1024×800. The tooltip is **Active or incomplete
+model downloads** and neither width overflows. All three retained screenshots
+were visually reviewed. The private journal contains inert paused entries;
+no transfer, model or GPU was used. App and idle private Host stopped at04:54Z.
+The shared isolated display/profile and immutable resources remain for the
+next acceptance; the stopped badge binary is disposable after integration.
+
+Next: coordinator integration. No further source gates are needed. This is
+Linux source-native acceptance, with no installed-release or Windows claim.
 
 ## Google client ID validation — Gchat 3 native acceptance, October 18
 
