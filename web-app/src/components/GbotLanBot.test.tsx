@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { useState } from 'react'
 import userEvent from '@testing-library/user-event'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import GbotLanBot from './GbotLanBot'
 import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 
@@ -34,7 +34,7 @@ function mount(connected = false) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void
-  let reject!: (reason: Error) => void
+  let reject!: (reason: unknown) => void
   const promise = new Promise<T>((done, fail) => {
     resolve = done
     reject = fail
@@ -182,4 +182,127 @@ it('disables removal with a visible reason while connected', () => {
   const remove = screen.getByRole('button', { name: 'Remove bot' })
   expect(remove).toBeDisabled()
   expect(remove).toHaveAccessibleDescription(/Disconnect this bot before removing it/)
+})
+
+it.each([
+  ['Error', new Error('could not persist Gbot state')],
+  ['native string', 'Gbot service request failed'],
+])('keeps failed LAN rename feedback for a %s through refresh until retry succeeds', async (_kind, cause) => {
+  const user = userEvent.setup()
+  const firstRename = deferred<void>()
+  const retryRename = deferred<void>()
+  const firstRefresh = deferred<string>()
+  const retryRefresh = deferred<string>()
+  const refresh = vi.fn()
+    .mockReturnValueOnce(firstRefresh.promise)
+    .mockReturnValueOnce(retryRefresh.promise)
+  const toastError = vi.fn()
+  request.mockReturnValueOnce(firstRename.promise).mockReturnValueOnce(retryRename.promise)
+
+  function Parent({ revision = 0 }: { revision?: number }) {
+    const [busy, setBusy] = useState(false)
+    const [name, setName] = useState('Writer')
+    const perform = async (
+      action: () => Promise<unknown>,
+      propagateError = false
+    ) => {
+      setBusy(true)
+      try {
+        await action()
+      } catch (failure) {
+        if (propagateError) throw failure
+        toastError(String(failure))
+      } finally {
+        try {
+          setName(await refresh())
+        } finally {
+          setBusy(false)
+        }
+      }
+    }
+    return (
+      <section aria-label={`Saved bot snapshot ${revision}`}>
+        <GbotLanBot
+          id="bot-1"
+          name={name}
+          busy={busy}
+          connected={false}
+          perform={perform}
+          removed={vi.fn()}
+        />
+      </section>
+    )
+  }
+  const view = render(<Parent />)
+  await user.click(screen.getByRole('button', { name: 'Rename bot' }))
+  const input = screen.getByLabelText('Bot name')
+  await user.clear(input)
+  await user.type(input, 'Editor')
+  await user.click(screen.getByRole('button', { name: 'Save name' }))
+  expect(input).toBeDisabled()
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+  ])
+  await act(async () => firstRename.reject(cause))
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1))
+  expect(input).toBeDisabled()
+  await act(async () => firstRefresh.resolve('Writer'))
+  const message = 'Could not save this bot’s name. Try Save name again.'
+  const alert = await screen.findByRole('alert')
+  expect(within(alert).getByText(message)).toBeVisible()
+  const details = within(alert).getByText('Details').closest('details')
+  expect(details).not.toHaveAttribute('open')
+  expect(within(alert).getByText(cause instanceof Error ? cause.message : cause)).toBeInTheDocument()
+  expect(input).toHaveValue('Editor')
+  expect(input).toBeEnabled()
+  expect(input).toHaveAccessibleDescription(/Could not save this bot’s name/)
+  expect(toastError).not.toHaveBeenCalled()
+
+  view.rerender(<Parent revision={1} />)
+  expect(screen.getByRole('alert')).toHaveTextContent(message)
+  expect(input).toHaveValue('Editor')
+  expect(request).toHaveBeenCalledTimes(1)
+  await user.click(screen.getByRole('button', { name: 'Save name' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(input).toBeDisabled()
+  expect(request.mock.calls).toEqual([
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+    ['workspaces/ssh/rename', { workspace_id: 'bot-1', name: 'Editor' }],
+  ])
+  await act(async () => retryRename.resolve())
+  await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2))
+  await act(async () => retryRefresh.resolve('Editor'))
+  await user.click(screen.getByRole('button', { name: 'Rename bot' }))
+  expect(screen.getByLabelText('Bot name')).toHaveValue('Editor')
+  expect(screen.getByRole('button', { name: 'Save name' })).toBeDisabled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(request).toHaveBeenCalledTimes(2)
+})
+
+it('clears failed LAN rename guidance when the user cancels the retained draft', async () => {
+  const user = userEvent.setup()
+  request.mockRejectedValue('Name was not saved')
+  render(
+    <GbotLanBot
+      id="bot-1"
+      name="Writer"
+      busy={false}
+      connected={false}
+      perform={async (action) => {
+        await action()
+      }}
+      removed={vi.fn()}
+    />
+  )
+  await user.click(screen.getByRole('button', { name: 'Rename bot' }))
+  await user.clear(screen.getByLabelText('Bot name'))
+  await user.type(screen.getByLabelText('Bot name'), 'Editor')
+  await user.click(screen.getByRole('button', { name: 'Save name' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Could not save this bot’s name.')
+  await user.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Rename bot' }))
+  expect(screen.getByLabelText('Bot name')).toHaveValue('Writer')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(request).toHaveBeenCalledTimes(1)
 })
