@@ -448,7 +448,7 @@ it('shows a failed Cancel and keeps its retry available while disabling offline 
   expect(screen.getByRole('button', { name: 'Stop setup' })).toBeDisabled()
 })
 
-it('keeps a rejected Cancel visible through status polls until the user retries', async () => {
+it('keeps a rejected stop request visible through status polls until the user retries', async () => {
   vi.useFakeTimers()
   try {
     const saved = flow('profiling', { hardware_profile: hardwareStatus('running') })
@@ -459,18 +459,23 @@ it('keeps a rejected Cancel visible through status polls until the user retries'
       return Promise.resolve(hardwareStatus('cancelling'))
     })
     await act(async () => { render(<EngineFirstRun />) })
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel profiling' })) })
-    expect(screen.getByRole('alert')).toHaveTextContent('Host could not stop profiling')
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop setup' })) })
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    expect(screen.getByText('Error: Host could not stop profiling')).not.toBeVisible()
+    fireEvent.click(screen.getByText('Connection error details'))
+    expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
 
     await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
     expect(mocks.command.mock.calls.filter(([operation]) => operation === 'first_run')).toHaveLength(3)
-    expect(screen.getByRole('alert')).toHaveTextContent('Host could not stop profiling')
-    expect(screen.getByRole('button', { name: 'Cancel profiling' })).toBeEnabled()
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    expect(screen.getByText('Error: Host could not stop profiling')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Stop setup' })).toBeEnabled()
     expect(attempts).toBe(1)
 
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel profiling' })) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Stop setup' })) })
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByText('Stopping hardware profiling…')).toBeVisible()
+    expect(screen.getByText('Stopping graphics-card setup…')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Stopping setup…' })).toBeDisabled()
     expect(attempts).toBe(2)
   } finally { vi.useRealTimers() }
 })
