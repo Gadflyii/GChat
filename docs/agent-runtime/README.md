@@ -22,6 +22,26 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Saved Agent Studio deletion — October 18
+
+An isolated native pass reproduced immediate permanent removal of a saved
+agent after one keyboard activation of **Delete**, with no confirmation or
+Undo. The `ae95203a2` desktop's Agent Studio source matched main `7727db673`.
+Only a disposable definition was deleted; original definitions and run history
+remained byte-identical. Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1155/`.
+
+Deleting a saved agent now asks **Delete saved agent?**, names the saved
+definition and explains that deletion cannot be undone. Cancel is the keyboard
+default; Enter on Cancel and Escape keep the draft. Only **Delete agent**
+approves removal. An edited Identifier or Name cannot redirect the deletion or
+change the name shown in the confirmation. Approval for an older draft cannot
+delete after a newer edit or selection. A failed deletion keeps the draft and
+requires fresh confirmation to retry. New unsaved drafts retain **Discard**.
+
+Validation and rebuilt private native acceptance are pending; receipts will be
+recorded in `/ai/gchat/out/gchat-agent-delete-confirmation-20261018/`.
+
 ## Unsaved Agent Studio navigation — October 18
 
 An isolated native pass on main `f48c551e2` reproduced silent loss of an
