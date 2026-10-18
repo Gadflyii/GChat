@@ -38,13 +38,24 @@ script through Node, then the remaining coverage and Rust stages. No passing
 stage was repeated. Source hashes and command results are recorded in
 `out/gchat2-windows-hyperv-20261018/result.json`.
 
-Windows Rust compilation and native guest acceptance remain pending on Ron's
-Windows 11 Pro 4090 host `192.168.1.143`. Bubbs placed it under a reboot hold at
-10:06 UTC; no further access occurs until he reopens it. The last read-only
-detection reported a pending restart, missing `vmms`, Hyper-V cmdlets and
-`qemu-img.exe`, and about 58.6 GiB free on F:. Prerequisites and free space must
-be checked again before creation. No native guest has been created. Live worker
-readiness, view/input, stop/start persistence and owned retirement remain open.
+The Windows guest resource is a ready VHDX with its own pinned SHA256 and
+byte count, derived from the same accepted Debian image as Linux. Release
+staging records the source and converter; the adapter needs only built-in
+Hyper-V disk cmdlets. No host converter is installed or required. Use the
+existing `package-gbot-runtime.py --platform windows --guest-assets ...`
+staging path; publication remains Ron-gated.
+
+Native Windows service all-target checking, test-executable compilation and
+10 focused service tests pass. The compile findings were Linux-only vault
+control routes and a Linux-only KVM example being included on Windows; both
+now follow their platform boundary. The updated production PowerShell
+dispatcher and module fake pass 224 assertions on Windows PowerShell 5.1.
+Read-only detection on Ron's Windows 11 Pro `.143` reports no prerequisite
+issues, and all three pinned guest resources are staged in the private C:
+fixture. No native guest has yet been created; worker readiness, view/input,
+persistence and retirement remain open while the machine's timed model run
+finishes. The native shell asset-installer regression is also pending its
+separate compile slot.
 
 ## Saved human replies keep recovery errors visible — Gchat 2
 

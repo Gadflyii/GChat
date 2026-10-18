@@ -871,7 +871,7 @@ async fn route(
     if request.method() == Method::POST && request.uri().path().starts_with("/v1/setup/cloud/") {
         return Ok(cloud_route(runtime, request).await);
     }
-    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[cfg(target_os = "linux")]
     if request.method() == Method::POST
         && matches!(
             request.uri().path(),
@@ -1741,6 +1741,44 @@ mod tests {
                 .as_slice(),
             b"private bytes"
         );
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    #[tokio::test]
+    async fn credential_lock_routes_are_not_exposed_outside_linux() {
+        let root = tempfile::tempdir().unwrap();
+        let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+        let api = Api::bind(service, Arc::new(MemoryVault::default()), 0)
+            .await
+            .unwrap();
+        for path in ["/v1/credentials/lock", "/v1/credentials/unlock"] {
+            let request = Request::builder()
+                .method(Method::POST)
+                .uri(path)
+                .header(
+                    AUTHORIZATION,
+                    format!(
+                        "Bearer {}",
+                        std::str::from_utf8(api.token.expose_secret()).unwrap()
+                    ),
+                )
+                .body(Body::from("{}"))
+                .unwrap();
+            let response = route(
+                api.service.clone(),
+                api.runtime.clone(),
+                api.tasks.clone(),
+                api.token.clone(),
+                request,
+            )
+            .await
+            .unwrap();
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            let body: serde_json::Value =
+                serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap())
+                    .unwrap();
+            assert_eq!(body["error"]["code"], "not_found");
+        }
     }
 
     #[tokio::test]

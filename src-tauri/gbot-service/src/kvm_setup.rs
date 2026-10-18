@@ -177,9 +177,13 @@ impl Assets {
     #[cfg(target_os = "windows")]
     async fn check(&self) -> Vec<SetupIssue> {
         let assets = [
-            (self.image.clone(), self.image_pin.clone()),
-            (self.driver.clone(), self.driver_pin.clone()),
-            (self.media.clone(), self.media_pin.clone()),
+            (
+                self.image.clone(),
+                self.image_pin.clone(),
+                crate::guest_assets::accepted()[0].bytes,
+            ),
+            (self.driver.clone(), self.driver_pin.clone(), None),
+            (self.media.clone(), self.media_pin.clone(), None),
         ];
         match crate::hyperv::validate_assets(&KvmTools::default(), &assets).await {
             Ok(()) => Vec::new(),
@@ -3153,5 +3157,217 @@ esac
                 .code,
             "setup_conflict"
         );
+    }
+}
+
+/// Explicit opt-in: owns a disposable guest and never uses the user's vault.
+#[cfg(all(test, target_os = "windows"))]
+mod native_tests {
+    use super::*;
+    use crate::vault::VaultFuture;
+
+    #[derive(Default)]
+    struct FixtureVault(Mutex<BTreeMap<Uuid, Vec<u8>>>);
+    impl Vault for FixtureVault {
+        fn get(&self, reference: Uuid) -> VaultFuture<'_, Option<Secret>> {
+            Box::pin(async move {
+                Ok(self
+                    .0
+                    .lock()
+                    .await
+                    .get(&reference)
+                    .cloned()
+                    .map(Secret::new))
+            })
+        }
+        fn put(&self, reference: Uuid, secret: Secret) -> VaultFuture<'_, ()> {
+            Box::pin(async move {
+                self.0
+                    .lock()
+                    .await
+                    .insert(reference, secret.expose_secret().to_vec());
+                Ok(())
+            })
+        }
+        fn delete(&self, reference: Uuid) -> VaultFuture<'_, ()> {
+            Box::pin(async move {
+                self.0.lock().await.remove(&reference);
+                Ok(())
+            })
+        }
+    }
+
+    async fn ready(setup: &KvmSetup, id: WorkspaceId) -> Result<SetupRecord, String> {
+        tokio::time::timeout(Duration::from_secs(1200), async {
+            let mut previous = None;
+            loop {
+                let record = setup
+                    .status()
+                    .await
+                    .into_iter()
+                    .find(|record| record.id == id)
+                    .ok_or("The native setup record disappeared")?;
+                if previous.as_ref() != Some(&record.stage) {
+                    println!(
+                        "{}",
+                        serde_json::json!({"event":"stage", "stage":record.stage, "id":id})
+                    );
+                    previous = Some(record.stage.clone());
+                }
+                if !setup.jobs.lock().await.contains(&id) {
+                    if let Some(issue) = record.issue {
+                        return Err(format!("{}: {}", issue.code, issue));
+                    }
+                    if record.stage == SetupStage::Ready && record.pinned_host_key.is_some() {
+                        return Ok(record);
+                    }
+                    return Err(format!("Setup stopped at {:?}", record.stage));
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        })
+        .await
+        .map_err(|_| "Native setup exceeded 20 minutes".to_owned())?
+    }
+
+    async fn request(
+        runtime: &WorkspaceRuntime,
+        identity: SessionIdentity,
+        operation: GuestOperationKind,
+    ) -> Result<GuestResult, String> {
+        let reply = runtime
+            .request(GuestRequest {
+                identity,
+                operation_id: OperationId::new(),
+                operation,
+            })
+            .await
+            .map_err(|error| error.to_string())?;
+        match reply.outcome {
+            GuestOutcome::Success { result } => Ok(result),
+            other => Err(format!("Native guest operation failed: {other:?}")),
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "Creates and retires a real Hyper-V guest; requires explicit private C: fixture root and staged pinned assets"]
+    async fn hyperv_native_lifecycle() {
+        let root = PathBuf::from(std::env::var_os("GBOT_HYPERV_ACCEPTANCE_ROOT")
+            .expect("Set GBOT_HYPERV_ACCEPTANCE_ROOT to an owned, empty private C: fixture with vms/assets staged"));
+        assert!(
+            root.is_absolute()
+                && root
+                    .to_string_lossy()
+                    .to_ascii_lowercase()
+                    .starts_with("c:\\")
+        );
+        assert!(
+            !root.join("state.json").exists(),
+            "Use a fresh private fixture"
+        );
+        fs::create_dir_all(&root).await.unwrap();
+        let service = Arc::new(Service::open(root.join("state.json")).await.unwrap());
+        let vault = Arc::new(FixtureVault::default());
+        let runtime = Arc::new(WorkspaceRuntime::new(service.clone(), vault.clone()));
+        runtime.configure_kvm_setup(root.clone()).await.unwrap();
+        let setup = runtime.kvm_setup().unwrap();
+        let id = WorkspaceId::new();
+        let credential_ref = VaultCredentialRef::new();
+        let name = "Gchat2 Hyper-V acceptance".to_owned();
+        // Keep this acceptance guest on Ron's explicitly chosen C: drive. The
+        // ordinary resumed record selects it without changing the product's
+        // non-system-drive preference or redirecting any existing user data.
+        let record = SetupRecord {
+            id,
+            name: name.clone(),
+            service_id: service.snapshot().await.service_id,
+            credential_ref,
+            pending_model_credential: None,
+            identity: SessionIdentity {
+                workspace_id: id,
+                session_id: SessionId::new(),
+            },
+            stage: SetupStage::CheckingPc,
+            resume_on_start: false,
+            issue: None,
+            spec: None,
+            vm_root: Some(root.join("vms")),
+            pinned_host_key: None,
+        };
+        setup.save(record.clone()).await.unwrap();
+        let directory = setup.vm_directory(&record);
+        println!(
+            "{}",
+            serde_json::json!({"event":"fixture", "id":id, "root":root, "directory":directory, "vault":"private in-memory fixture"})
+        );
+        let result: Result<(), String> = async {
+            let preflight = setup.preflight_at(record.vm_root.as_deref()).await;
+            println!("{}", serde_json::json!({"event":"preflight", "report":preflight}));
+            if !preflight.ready { return Err("Hyper-V preflight refused the host or assets".into()); }
+            setup.start(StartSetup { id, name: name.clone() }).await.map_err(|error| error.to_string())?;
+            // Ready includes authenticated worker SSH, file/command operations,
+            // real desktop frames, keyboard input saved in a document, and a
+            // negotiated view lease through the production Workspace runtime.
+            let first = ready(&setup, id).await?;
+            let first_spec = first.spec.as_ref().ok_or("No saved native VM specification")?;
+            let first_spec_json = serde_json::to_value(first_spec).map_err(|error| error.to_string())?;
+            let path = GuestPath("/home/gbot/hyperv-acceptance.txt".into());
+            let sentinel = format!("persistent Hyper-V guest {id:?}\n").into_bytes();
+            let written = request(&runtime, first.identity, GuestOperationKind::Write {
+                path: path.clone(), offset: 0, data: sentinel.clone(), truncate: true,
+            }).await?;
+            if !matches!(written, GuestResult::Written { bytes_written } if bytes_written == sentinel.len() as u64) {
+                return Err(format!("Unexpected guest write reply: {written:?}"));
+            }
+            println!("{}", serde_json::json!({"event":"ready", "checks":["bootstrap", "pinned SSH", "worker", "command", "file", "desktop capture", "keyboard saved file", "view handshake", "sentinel write"]}));
+            let stopped = setup.stop(id).await.map_err(|error| error.to_string())?;
+            if stopped.stage != SetupStage::Stopped || !directory.join("disk.vhdx").is_file() {
+                return Err("Graceful stop did not preserve the guest disk".into());
+            }
+            println!("{}", serde_json::json!({"event":"stopped", "id":id}));
+            setup.start(StartSetup { id, name: name.clone() }).await.map_err(|error| error.to_string())?;
+            let second = ready(&setup, id).await?;
+            if second.credential_ref != first.credential_ref || second.pinned_host_key != first.pinned_host_key
+                || second.vm_root != first.vm_root
+                || serde_json::to_value(&second.spec).map_err(|error| error.to_string())? != first_spec_json
+            {
+                return Err("Restart changed the persistent VM identity, storage, or SSH identity".into());
+            }
+            let read = request(&runtime, second.identity, GuestOperationKind::Read {
+                path, offset: 0, length: sentinel.len() as u64 + 1,
+            }).await?;
+            if !matches!(read, GuestResult::Read { data } if data == sentinel) {
+                return Err("The guest file did not persist across stop/start".into());
+            }
+            println!("{}", serde_json::json!({"event":"restarted", "persistent_disk":true, "pinned_ssh_identity":true}));
+            Ok(())
+        }.await;
+        // Always use the production owned-guest retirement path, including after
+        // acceptance failure; errors retain its ownership record for safe retry.
+        let retired = setup.remove(id).await.map_err(|error| error.to_string());
+        let retirement = match retired {
+            Ok(record) if record.stage == SetupStage::Removed => {
+                let registered =
+                    crate::hyperv::inspect_registered(&setup.tools, id.as_uuid(), &directory).await;
+                match registered {
+                    Ok(false)
+                        if !directory.exists()
+                            && vault.get(credential_ref.as_uuid()).await.unwrap().is_none() =>
+                    {
+                        Ok(())
+                    }
+                    other => Err(format!("Retirement did not confirm absence: {other:?}")),
+                }
+            }
+            other => Err(format!("Owned guest retirement failed: {other:?}")),
+        };
+        let closed = runtime.close().await.map_err(|error| error.to_string());
+        println!(
+            "{}",
+            serde_json::json!({"event":"result", "lifecycle":result, "retirement":retirement, "runtime_close":closed})
+        );
+        assert_eq!(retirement, Ok(()));
+        assert_eq!(closed, Ok(()));
+        assert_eq!(result, Ok(()));
     }
 }

@@ -1,7 +1,7 @@
 # Run with Windows PowerShell 5.1 or PowerShell 7; no Hyper-V module is loaded.
 # Loads production functions and its request dispatcher, then supplies an in-memory
 # Windows filesystem, CIM inventory and Hyper-V cmdlets. This qualifies adapter
-# behavior. COM, qemu-img and a real Hyper-V installation need native VM QA.
+# behavior. COM, VHDX handling and a real Hyper-V installation need native VM QA.
 param([string]$AdapterPath = (Join-Path $PSScriptRoot '../src/hyperv.ps1'))
 
 $ErrorActionPreference = 'Stop'
@@ -37,11 +37,14 @@ function Assert-True($condition, [string]$message) {
 function Assert-Equal($actual, $expected, [string]$message) {
     Assert-True (($actual | ConvertTo-Json -Depth 12 -Compress) -ceq ($expected | ConvertTo-Json -Depth 12 -Compress)) $message
 }
-function Assert-Refused([scriptblock]$operation, [string]$message, [string]$reason) {
+function Assert-Failed([scriptblock]$operation, [string]$message, [string]$reason) {
     $failure = $null
     try { $null = & $operation } catch { $failure = $_.Exception.Message }
     Assert-True ($null -ne $failure) $message
     Assert-True ($failure.Contains($reason)) ("Unexpected refusal: " + $failure)
+}
+function Assert-Refused([scriptblock]$operation, [string]$message, [string]$reason) {
+    Assert-Failed $operation $message $reason
     Assert-Equal @($script:Mutations.ToArray()) @() 'A refused ownership check mutated a resource.'
 }
 function Record-Mutation([string]$name, $arguments) {
@@ -95,6 +98,7 @@ function Remove-Item {
     param([string]$LiteralPath, [switch]$Force)
     Record-Mutation 'Remove-Item' @{ path=$LiteralPath }
     $script:Files.Remove($LiteralPath)
+    $script:Vhds.Remove($LiteralPath)
 }
 function Move-Item {
     param([string]$LiteralPath, [string]$Destination)
@@ -102,6 +106,33 @@ function Move-Item {
     Record-Mutation 'Move-Item' @{ source=$LiteralPath; destination=$Destination }
     $script:Files[$Destination] = $script:Files[$LiteralPath]
     $script:Files.Remove($LiteralPath)
+    if ($script:Vhds.ContainsKey($LiteralPath)) {
+        $script:Vhds[$Destination] = $script:Vhds[$LiteralPath]
+        $script:Vhds.Remove($LiteralPath)
+    }
+}
+function CopyFile([string]$source, [string]$destination) {
+    if (-not $script:Files.ContainsKey($source)) { throw 'Fake copy source missing.' }
+    if ($script:Files.ContainsKey($destination)) { throw 'Fake copy refuses an existing destination.' }
+    Record-Mutation 'CopyFile' @{ source=$source; destination=$destination }
+    $script:Files[$destination] = $script:Files[$source]
+    $script:Vhds[$destination] = $script:Vhds[$source].Clone()
+    if ($script:FailCopy) { throw 'Fake copy interrupted.' }
+}
+function Get-VHD {
+    [CmdletBinding()]
+    param([string]$Path)
+    $script:VhdReads.Add($Path)
+    if (-not $script:Files.ContainsKey($Path) -or -not $script:Vhds.ContainsKey($Path)) { throw 'Fake VHDX missing.' }
+    [pscustomobject]$script:Vhds[$Path]
+}
+function Resize-VHD {
+    [CmdletBinding()]
+    param([string]$Path, [uint64]$SizeBytes)
+    if (-not $script:Vhds.ContainsKey($Path)) { throw 'Fake resize disk missing.' }
+    Record-Mutation 'Resize-VHD' @{ path=$Path; size=$SizeBytes }
+    if ($script:FailResize) { throw 'Fake disk expansion interrupted.' }
+    if (-not $script:UnconfirmedResize) { $script:Vhds[$Path].Size = $SizeBytes }
 }
 function New-Object {
     [CmdletBinding()]
@@ -135,10 +166,8 @@ function Get-Service {
 function Get-Command {
     [CmdletBinding()]
     param([Parameter(Position=0)][string]$Name, [string]$CommandType)
-    if ($Name -eq 'Get-VM') {
-        if ($script:Inventory.tools) { [pscustomobject]@{ Name='Get-VM' } }
-    } elseif ($Name -eq 'qemu-img.exe') {
-        if ($script:Inventory.imageTool) { [pscustomobject]@{ Name=$Name; Source=$script:ImageTool } }
+    if ($Name -in @('Get-VM','Get-VHD','Resize-VHD')) {
+        if ($script:Inventory.tools -and $Name -ne $script:MissingTool) { [pscustomobject]@{ Name=$Name } }
     } else { throw "Unexpected command lookup $Name" }
 }
 function Get-VM {
@@ -243,13 +272,15 @@ function Reset-Fake([switch]$Owned) {
     $script:Id = '11111111-1111-4111-8111-111111111111'
     $script:Directory = 'F:\GChat\Gbot\S-1-5-21-1000\vms\' + $script:Id
     $script:SwitchId = [guid]'33333333-3333-4333-8333-333333333333'
-    $script:Inventory = @{ sku=48; hypervisor=$true; firmware=$true; slat=$true; feature=1; service='Running'; tools=$true; imageTool=$true; imapi=$true; denied=$false; cpus=8; freeMemoryKiB=(8GB / 1KB) }
+    $script:Inventory = @{ sku=48; hypervisor=$true; firmware=$true; slat=$true; feature=1; service='Running'; tools=$true; imapi=$true; denied=$false; cpus=8; freeMemoryKiB=(8GB / 1KB) }
     $script:Disks = @(
         [pscustomobject]@{ DeviceID='C:'; FreeSpace=[uint64]200GB },
         [pscustomobject]@{ DeviceID='F:'; FreeSpace=[uint64]100GB }
     )
     $script:Switches = @([pscustomobject]@{ Name='Default Switch'; SwitchType='Internal'; Id=$script:SwitchId })
-    $script:Files = @{ 'F:\accepted\guest.qcow2'='accepted image' }
+    $script:Files = @{ 'F:\accepted\guest.vhdx'='accepted image' }
+    $script:Vhds = @{ 'F:\accepted\guest.vhdx'=@{ VhdFormat='VHDX'; VhdType='Dynamic'; ParentPath=''; Size=[uint64]3GB } }
+    $script:VhdReads = New-Object 'System.Collections.Generic.List[object]'
     $script:Directories = @{}
     $script:Directories[$script:Directory] = $true
     $script:Redirects = @()
@@ -257,6 +288,10 @@ function Reset-Fake([switch]$Owned) {
     $script:Mutations = New-Object 'System.Collections.Generic.List[object]'
     $script:Vms = @()
     $script:DeferredShutdown = $false
+    $script:MissingTool = $null
+    $script:FailCopy = $false
+    $script:FailResize = $false
+    $script:UnconfirmedResize = $false
     Save-Claim $null
     if ($Owned) {
         $script:Vms = @(New-FakeVm)
@@ -265,22 +300,9 @@ function Reset-Fake([switch]$Owned) {
         Save-Claim ([string]$script:Vms[0].Id)
     }
 }
-$script:ImageTool = {
-    # No named parameters: native -o must not bind as an abbreviation.
-    $operation = $args[0]
-    $imageArguments = @($args | Select-Object -Skip 1)
-    Record-Mutation 'qemu-img' @{ operation=$operation; arguments=$imageArguments }
-    $global:LASTEXITCODE = 0
-    switch ($operation) {
-        'convert' { $script:Files[[string]$imageArguments[-1]] = 'fake VHDX' }
-        'info' { '{"virtual-size":1073741824}' }
-        'resize' { }
-        default { throw 'Unexpected image-tool operation.' }
-    }
-}
 # Use .NET constructors directly so the New-Object mock stays a narrow COM seam.
 function Invoke-Operation([string]$action, $extra = @{}) {
-    $request = @{ action=$action; id=$script:Id; directory=$script:Directory; image_tool='qemu-img.exe' }
+    $request = @{ action=$action; id=$script:Id; directory=$script:Directory }
     foreach ($key in $extra.Keys) { $request[$key] = $extra[$key] }
     $reader = [IO.StringReader]::new(($request | ConvertTo-Json -Depth 12))
     $writer = [IO.StringWriter]::new()
@@ -311,7 +333,7 @@ try {
     Assert-Equal $detected.memory_mib 16384 'Detection lost memory inventory.'
     Assert-Equal @($script:Mutations.ToArray()) @() 'Detection must remain read-only.'
 
-    foreach ($case in @('cpu_unavailable','memory_unavailable','windows_edition','virtualization_disabled','hyperv_disabled','hyperv_service','hyperv_tools','hyperv_access','image_tool_missing','seed_iso_unavailable','disk_space')) {
+    foreach ($case in @('cpu_unavailable','memory_unavailable','windows_edition','virtualization_disabled','hyperv_disabled','hyperv_service','hyperv_tools','hyperv_access','seed_iso_unavailable','disk_space')) {
         Reset-Fake
         switch ($case) {
             'cpu_unavailable' { $script:Inventory.cpus = 1 }
@@ -322,7 +344,6 @@ try {
             'hyperv_service' { $script:Inventory.service = 'Stopped' }
             'hyperv_tools' { $script:Inventory.tools = $false }
             'hyperv_access' { $script:Inventory.denied = $true }
-            'image_tool_missing' { $script:Inventory.imageTool = $false }
             'seed_iso_unavailable' { $script:Inventory.imapi = $false }
             'disk_space' { $script:Disks | ForEach-Object { $_.FreeSpace = [uint64]1GB } }
         }
@@ -330,6 +351,12 @@ try {
         $issue = @($result.issues | Where-Object { $_.code -eq $case })
         Assert-True ($issue.Count -eq 1 -and -not [string]::IsNullOrWhiteSpace($issue[0].next_action)) "Missing actionable detector issue $case."
         Assert-Equal @($script:Mutations.ToArray()) @() "Detection mutated the host for $case."
+    }
+    foreach ($tool in @('Get-VHD','Resize-VHD')) {
+        Reset-Fake
+        $script:MissingTool = $tool
+        Assert-True (@((Invoke-Operation 'detect').issues | Where-Object { $_.code -eq 'hyperv_tools' }).Count -eq 1) "Detection must require the built-in $tool cmdlet."
+        Assert-Equal @($script:Mutations.ToArray()) @() 'VHD cmdlet detection changed the host.'
     }
     foreach ($key in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired')) {
         Reset-Fake
@@ -367,8 +394,59 @@ try {
     Assert-True (@($missing.issues | Where-Object { $_.code -eq 'saved_disk_unavailable' }).Count -eq 1) 'An unavailable saved drive needs an actionable issue.'
     Assert-True ($null -eq $missing.preferred_root) 'A missing saved drive must not silently select another drive.'
 
+    foreach ($case in @('missing','unreadable','format','fixed','parent','zero','too_small','oversized')) {
+        Reset-Fake
+        $sourceDisk = $script:Vhds['F:\accepted\guest.vhdx']
+        $reason = 'standalone dynamic VHDX'
+        switch ($case) {
+            'missing' { $script:Files.Remove('F:\accepted\guest.vhdx'); $reason='accepted guest image is missing' }
+            'unreadable' { $script:Vhds.Remove('F:\accepted\guest.vhdx'); $reason='Fake VHDX missing' }
+            'format' { $sourceDisk.VhdFormat = 'VHD' }
+            'fixed' { $sourceDisk.VhdType = 'Fixed' }
+            'parent' { $sourceDisk.ParentPath = 'F:\foreign\parent.vhdx' }
+            'zero' { $sourceDisk.Size = [uint64]0 }
+            'too_small' { $sourceDisk.Size = [uint64]512MB }
+            'oversized' { $sourceDisk.Size = [uint64]41GB }
+        }
+        $script:Files[$script:Directory + '\disk.partial.vhdx'] = 'retained partial'
+        Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 } } "Preparation accepted an invalid $case VHDX." $reason
+        Assert-Equal $script:Files[$script:Directory + '\disk.partial.vhdx'] 'retained partial' 'Asset refusal removed a previous partial output.'
+    }
+    foreach ($path in @('F:\accepted\guest.vhdx', ($script:Directory + '\disk.partial.vhdx'))) {
+        Reset-Fake
+        $script:Files[$script:Directory + '\disk.partial.vhdx'] = 'retained partial'
+        $script:Redirects = @($path)
+        Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 } } 'Preparation accepted a redirected source or partial disk.' 'must not contain links'
+        Assert-Equal $script:Files[$script:Directory + '\disk.partial.vhdx'] 'retained partial' 'Redirect refusal changed a partial output.'
+    }
+    foreach ($failure in @('copy','resize','unconfirmed_resize')) {
+        Reset-Fake
+        switch ($failure) {
+            'copy' { $script:FailCopy = $true; $reason='could not be copied' }
+            'resize' { $script:FailResize = $true; $reason='could not be expanded' }
+            'unconfirmed_resize' { $script:UnconfirmedResize = $true; $reason='capacity was not confirmed' }
+        }
+        Assert-Failed { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 } } "A $failure failure unexpectedly registered a guest." $reason
+        Assert-True ($script:Files.ContainsKey($script:Directory + '\setup.json')) 'An interrupted copy or expansion removed its claim.'
+        Assert-True ($script:Files.ContainsKey($script:Directory + '\disk.partial.vhdx')) 'An interrupted copy or expansion removed its partial output.'
+        Assert-True (-not $script:Files.ContainsKey($script:Directory + '\disk.vhdx')) 'An unconfirmed partial disk became the final guest disk.'
+        Assert-Equal $script:Vms.Count 0 'An interrupted disk preparation registered a VM.'
+        Assert-Equal $script:Vhds['F:\accepted\guest.vhdx'].Size ([uint64]3GB) 'An interrupted preparation resized the pinned source.'
+        $script:FailCopy = $false
+        $script:FailResize = $false
+        $script:UnconfirmedResize = $false
+        $script:Mutations.Clear()
+        Assert-True ((Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 }).registered) 'An explicit retry failed to rebuild its owned partial disk.'
+        Assert-True (@($script:Mutations | Where-Object { $_.name -eq 'Remove-Item' -and $_.arguments.path -ceq ($script:Directory + '\disk.partial.vhdx') }).Count -eq 1) 'Retry did not replace only its exact owned partial disk.'
+        Assert-True (-not $script:Files.ContainsKey($script:Directory + '\disk.partial.vhdx')) 'Successful retry left a duplicate partial disk.'
+    }
     Reset-Fake
-    $prepared = Invoke-Operation 'prepare' @{ image='F:\accepted\guest.qcow2'; cpus=2; memory_mib=4096; disk_gib=40 }
+    $script:Vhds['F:\accepted\guest.vhdx'].Size = [uint64]40GB
+    Assert-True ((Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 }).registered) 'An already-sized VHDX could not be prepared.'
+    Assert-True (@($script:Mutations | Where-Object { $_.name -eq 'Resize-VHD' }).Count -eq 0) 'An already-sized VHDX must not be resized.'
+
+    Reset-Fake
+    $prepared = Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 }
     Assert-True $prepared.registered 'Preparation did not register the owned VM.'
     Assert-Equal $prepared.vm_id ([string]$script:Vms[0].Id) 'Preparation did not return the actual Hyper-V GUID.'
     $created = @($script:Mutations | Where-Object { $_.name -eq 'New-VM' })[0].arguments
@@ -378,7 +456,12 @@ try {
     Assert-True (@($script:Mutations | Where-Object { $_.name -eq 'Set-VMProcessor' -and $_.arguments.count -eq 2 }).Count -eq 1) 'The owned guest must use two CPU threads.'
     Assert-True (@($script:Mutations | Where-Object { $_.name -eq 'Set-VMFirmware' -and $_.arguments.secure_boot -ceq 'Off' }).Count -eq 1) 'Only the guest Secure Boot setting should change.'
     Assert-True (@($script:Mutations | Where-Object { $_.name -eq 'Set-VMComPort' -and $_.arguments.number -eq 1 -and $_.arguments.path -ceq ('\\.\pipe\GChat-Gbot-' + $script:Id) }).Count -eq 1) 'The owned guest must use its exact COM1 pipe.'
-    Assert-True (@($script:Mutations | Where-Object { $_.name -eq 'qemu-img' -and $_.arguments.operation -eq 'resize' -and $_.arguments.arguments[-1] -ceq '40G' }).Count -eq 1) 'The owned guest disk must be 40 GiB.'
+    Assert-True (@($script:Mutations | Where-Object { $_.name -eq 'CopyFile' -and $_.arguments.source -ceq 'F:\accepted\guest.vhdx' -and $_.arguments.destination -ceq ($script:Directory + '\disk.partial.vhdx') }).Count -eq 1) 'Preparation must copy only the accepted VHDX into its owned partial path.'
+    Assert-True (@($script:Mutations | Where-Object { $_.name -eq 'Resize-VHD' -and $_.arguments.path -ceq ($script:Directory + '\disk.partial.vhdx') -and $_.arguments.size -eq 40GB }).Count -eq 1) 'The copied 3 GiB guest disk must expand to 40 GiB.'
+    Assert-Equal $script:Vhds[$script:Directory + '\disk.vhdx'].Size ([uint64]40GB) 'The registered disk capacity was not confirmed.'
+    Assert-Equal $script:Vhds['F:\accepted\guest.vhdx'].Size ([uint64]3GB) 'Preparation resized the accepted source asset.'
+    Assert-Equal $script:Files['F:\accepted\guest.vhdx'] 'accepted image' 'Preparation changed the accepted source asset.'
+    Assert-Equal @($script:VhdReads.ToArray()) @('F:\accepted\guest.vhdx', ($script:Directory + '\disk.partial.vhdx'), ($script:Directory + '\disk.partial.vhdx')) 'Preparation must validate the source, copied disk and confirmed expanded disk.'
     Save-Claim $prepared.vm_id
     $script:Mutations.Clear()
     Assert-Equal (Invoke-Operation 'start' @{ vm_id=$prepared.vm_id }).state 'Running' 'Start did not use the persisted owned VM.'
@@ -433,27 +516,38 @@ try {
 
     foreach ($field in @('cpus','memory_mib','disk_gib')) {
         Reset-Fake
-        $resources = @{ image='F:\accepted\guest.qcow2'; cpus=2; memory_mib=4096; disk_gib=40 }
+        $resources = @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 }
         $resources[$field]++
         Assert-Refused { Invoke-Operation 'prepare' $resources } "Preparation changed persisted $field." 'requested guest resources'
     }
     Reset-Fake
     $script:Disks[1].FreeSpace = [uint64]40GB
-    Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.qcow2'; cpus=2; memory_mib=4096; disk_gib=40 } } 'Preparation allocated on a drive without setup space.' 'selected local drive'
+    Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 } } 'Preparation allocated on a drive without setup space.' 'selected local drive'
     Reset-Fake -Owned
     $ownedId = [string]$script:Vms[0].Id
     $script:Disks[1].FreeSpace = [uint64]1GB
     $reused = Invoke-Operation 'prepare' @{ cpus=2; memory_mib=4096; disk_gib=40 }
     Assert-Equal $reused.vm_id $ownedId 'Low free space must not recreate an existing registered guest.'
-    Assert-True (@($script:Mutations | Where-Object { $_.name -in @('New-VM','qemu-img','CreateIso','Remove-Item','Move-Item') }).Count -eq 0) 'Registered guest reuse rebuilt its saved disk.'
+    Assert-True (@($script:Mutations | Where-Object { $_.name -in @('New-VM','CopyFile','Resize-VHD','CreateIso','Remove-Item','Move-Item') }).Count -eq 0) 'Registered guest reuse rebuilt its saved disk.'
     Reset-Fake -Owned
     $script:Vms = @()
-    Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.qcow2'; cpus=2; memory_mib=4096; disk_gib=40 } } 'A missing registered VM was recreated automatically.' 'previously registered owned guest is missing'
+    Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 } } 'A missing registered VM was recreated automatically.' 'previously registered owned guest is missing'
     Reset-Fake
     $foreign = New-FakeVm
     $foreign.Name = 'unrelated'
     $script:Vms = @($foreign)
-    Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.qcow2'; cpus=2; memory_mib=4096; disk_gib=40 } } 'A disk attached to another VM was overwritten.' 'attached to another VM'
+    Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 } } 'A disk attached to another VM was overwritten.' 'attached to another VM'
+    Reset-Fake
+    $foreign = New-FakeVm
+    $foreign.Name = 'unrelated'
+    $foreign.Disks = @($script:Directory + '\disk.partial.vhdx')
+    $script:Vms = @($foreign)
+    $script:Files[$script:Directory + '\disk.partial.vhdx'] = 'foreign attached disk'
+    Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 } } 'A partial disk attached to another VM was overwritten.' 'attached to another VM'
+    Assert-Equal $script:Files[$script:Directory + '\disk.partial.vhdx'] 'foreign attached disk' 'A foreign attached partial disk was changed.'
+    Reset-Fake
+    $script:Files.Remove($script:Directory + '\setup.json')
+    Assert-Refused { Invoke-Operation 'prepare' @{ image='F:\accepted\guest.vhdx'; cpus=2; memory_mib=4096; disk_gib=40 } } 'Preparation without an owned claim was accepted.' 'no persisted owned setup claim'
 
     Reset-Fake
     $script:Files.Remove($script:Directory + '\setup.json')

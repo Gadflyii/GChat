@@ -1,16 +1,21 @@
 //! Opt-in native-client gate for an owned guest; never attaches to a host desktop.
+#[cfg(target_os = "linux")]
 use gbot_service::{
     api::Api,
     service::Service,
     vault::{NativeVault, Vault},
 };
+#[cfg(target_os = "linux")]
 use serde_json::{json, Value};
+#[cfg(target_os = "linux")]
 use std::{path::PathBuf, sync::Arc};
+#[cfg(target_os = "linux")]
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::UnixListener,
 };
 
+#[cfg(target_os = "linux")]
 async fn ssh_readback(
     record: gbot_service::kvm_setup::SetupRecord,
     data: &std::path::Path,
@@ -61,6 +66,7 @@ async fn ssh_readback(
     )
 }
 
+#[cfg(target_os = "linux")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args: Vec<_> = std::env::args().collect();
@@ -128,4 +134,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     NativeVault.delete(service_id).await?;
     tokio::fs::remove_file(socket).await?;
     Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn main() {
+    eprintln!("This KVM native-client gate requires Linux.");
+    std::process::exit(1);
 }

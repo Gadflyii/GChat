@@ -28,13 +28,11 @@ const SCRIPT: &str = include_str!("hyperv.ps1");
 #[derive(Clone, Debug)]
 pub struct HypervTools {
     pub powershell: PathBuf,
-    pub image: PathBuf,
 }
 impl Default for HypervTools {
     fn default() -> Self {
         Self {
             powershell: "powershell.exe".into(),
-            image: "qemu-img.exe".into(),
         }
     }
 }
@@ -60,25 +58,26 @@ pub async fn detect(root: &Path) -> io::Result<Detection> {
 }
 
 pub async fn detect_with_tools(root: &Path, tools: &HypervTools) -> io::Result<Detection> {
-    request(
-        tools,
-        json!({"action": "detect", "directory": root, "image_tool": tools.image}),
-    )
-    .await
+    request(tools, json!({"action": "detect", "directory": root})).await
 }
 
 /// Validate the persisted storage choice without moving an existing guest.
 pub async fn detect_saved_root(root: &Path, tools: &HypervTools) -> io::Result<Detection> {
-    request(
-        tools,
-        json!({"action": "detect", "saved_root": root, "image_tool": tools.image}),
-    )
-    .await
+    request(tools, json!({"action": "detect", "saved_root": root})).await
 }
 
 /// Use Windows' built-in checksum provider; never substitute an unpinned asset.
-pub async fn validate_assets(tools: &HypervTools, assets: &[(PathBuf, String)]) -> io::Result<()> {
-    for (path, digest) in assets {
+pub async fn validate_assets(
+    tools: &HypervTools,
+    assets: &[(PathBuf, String, Option<u64>)],
+) -> io::Result<()> {
+    for (path, digest, bytes) in assets {
+        let metadata = fs::metadata(path).await?;
+        if !metadata.is_file() || bytes.is_some_and(|expected| metadata.len() != expected) {
+            return Err(invalid(
+                "guest asset size does not match the accepted artifact",
+            ));
+        }
         if !matches!(digest.len(), 64 | 128) || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
         {
             return Err(invalid("guest assets require SHA-256 or SHA-512 digests"));
@@ -235,13 +234,12 @@ impl PreparedVm {
         ] {
             if let GuestBinary::SeedArchive { path, sha256 } = binary {
                 let path = canonical_local(path).await?;
-                validate_assets(tools, &[(path.clone(), sha256.clone())]).await?;
+                validate_assets(tools, &[(path.clone(), sha256.clone(), None)]).await?;
                 fs::copy(path, seed.join(name)).await?;
             }
         }
         let mut operation = vm.operation("prepare");
         operation["image"] = json!(image);
-        operation["image_tool"] = json!(tools.image);
         operation["cpus"] = json!(vm.spec.cpus);
         operation["memory_mib"] = json!(vm.spec.memory_mib);
         operation["disk_gib"] = json!(vm.spec.disk_gib);
@@ -668,7 +666,7 @@ json.dump(result, sys.stdout)
             let root = tempfile::tempdir().unwrap();
             let directory = root.path().join("owned guests");
             std::fs::create_dir(&directory).unwrap();
-            let image = root.path().join("pinned guest image.qcow2");
+            let image = root.path().join("pinned guest image.vhdx");
             std::fs::write(&image, b"accepted fixture").unwrap();
             let powershell = root.path().join("PowerShell boundary.py");
             std::fs::write(&powershell, JSON_BOUNDARY).unwrap();
@@ -686,10 +684,7 @@ json.dump(result, sys.stdout)
                 _root: root,
                 directory,
                 image,
-                tools: HypervTools {
-                    powershell,
-                    image: "existing qemu-img.exe".into(),
-                },
+                tools: HypervTools { powershell },
                 registered_id,
             }
         }
@@ -763,13 +758,13 @@ json.dump(result, sys.stdout)
         assert_eq!(
             requests[0],
             json!({
-                "action": "detect", "directory": service_root, "image_tool": fixture.tools.image
+                "action": "detect", "directory": service_root
             })
         );
         assert_eq!(
             requests[1],
             json!({
-                "action": "detect", "saved_root": saved, "image_tool": fixture.tools.image
+                "action": "detect", "saved_root": saved
             })
         );
     }
@@ -787,23 +782,31 @@ json.dump(result, sys.stdout)
         validate_assets(
             &fixture.tools,
             &[
-                (asset.clone(), sha256.into()),
-                (asset.clone(), sha512.into()),
+                (asset.clone(), sha256.into(), Some(0)),
+                (asset.clone(), sha512.into(), Some(0)),
             ],
         )
         .await
         .unwrap();
         std::fs::write(&asset, b"changed").unwrap();
+        let before_size_refusal = fixture.requests().len();
         assert!(
-            validate_assets(&fixture.tools, &[(asset.clone(), sha256.into())])
+            validate_assets(&fixture.tools, &[(asset.clone(), sha256.into(), Some(0))])
                 .await
                 .is_err()
         );
+        assert_eq!(fixture.requests().len(), before_size_refusal);
+        assert!(
+            validate_assets(&fixture.tools, &[(asset.clone(), sha256.into(), Some(7))])
+                .await
+                .is_err()
+        );
+        assert_eq!(fixture.requests().len(), before_size_refusal + 1);
         assert_eq!(std::fs::read(&asset).unwrap(), b"changed");
         let count = fixture.requests().len();
         for invalid_digest in ["a".repeat(40), "z".repeat(64)] {
             assert_eq!(
-                validate_assets(&fixture.tools, &[(asset.clone(), invalid_digest)])
+                validate_assets(&fixture.tools, &[(asset.clone(), invalid_digest, None)])
                     .await
                     .unwrap_err()
                     .kind(),
@@ -838,7 +841,7 @@ json.dump(result, sys.stdout)
         assert_eq!(prepare["vm_id"], Value::Null);
         assert_eq!(prepare["directory"], json!(vm.directory));
         assert_eq!(prepare["image"], json!(fixture.image));
-        assert_eq!(prepare["image_tool"], json!(fixture.tools.image));
+        assert!(prepare.get("image_tool").is_none());
         assert_eq!(prepare["disk_gib"], 40);
         assert_eq!(requests[1]["vm_id"], json!(fixture.registered_id));
         let mut changed = requested.clone();

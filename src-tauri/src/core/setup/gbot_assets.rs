@@ -76,28 +76,69 @@ fn install_from(source: &Path, destination: &Path, assets: &[GuestAsset]) -> io:
         let target = destination.join(&asset.filename);
         let temporary = destination.join(format!(".{}.installing", asset.filename));
         if target.exists() {
-            match fs::remove_file(&temporary) {
-                Ok(()) => {}
-                Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                Err(e) => return Err(e),
-            }
+            remove_partial(&temporary)?;
             continue;
         }
         // A previous interrupted copy is disposable, including a copied read-only
         // mode; recreate it so retry never depends on the partial's permissions.
-        match fs::remove_file(&temporary) {
-            Ok(()) => {}
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e),
-        }
+        remove_partial(&temporary)?;
         fs::copy(source.join(&asset.filename), &temporary)?;
         verify(&temporary, asset)?;
-        File::open(&temporary)?.sync_all()?;
+        sync_partial(&temporary)?;
         fs::rename(&temporary, &target)?;
+        #[cfg(unix)]
         File::open(destination)?.sync_all()?;
         changed = true;
     }
     Ok(changed)
+}
+
+fn sync_partial(path: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        // FlushFileBuffers needs a write handle. A bundled read-only source also
+        // makes its owned copy read-only, so restore that mode after flushing.
+        let permissions = fs::metadata(path)?.permissions();
+        let readonly = permissions.readonly();
+        if readonly {
+            let mut writable = permissions.clone();
+            writable.set_readonly(false);
+            fs::set_permissions(path, writable)?;
+        }
+        let result = fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .and_then(|file| file.sync_all());
+        if readonly {
+            fs::set_permissions(path, permissions)?;
+        }
+        result
+    }
+    #[cfg(not(windows))]
+    File::open(path)?.sync_all()
+}
+
+fn remove_partial(path: &Path) -> io::Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    // Only the exact installer-owned regular partial can have its permissions
+    // changed. Never follow a link to a different file during Windows cleanup.
+    if !metadata.file_type().is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Guest asset partial is not a regular file: {}", path.display()),
+        ));
+    }
+    #[cfg(windows)]
+    if metadata.permissions().readonly() {
+        let mut permissions = metadata.permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(path, permissions)?;
+    }
+    fs::remove_file(path)
 }
 
 #[cfg(test)]
@@ -107,8 +148,22 @@ mod tests {
     #[test]
     fn pinned_guest_delivery_retries_interruption_and_refuses_mismatches() {
         let pins = accepted();
+        #[cfg(target_os = "windows")]
+        let first_pin = (
+            "debian-13-genericcloud-amd64-20261001-2618.vhdx",
+            "sha256",
+            "9feafe51b36dccdcd79c2e97653a2ec04d9901ea7b69d75be9712f10c95f7c19",
+            Some(1233125376),
+        );
+        #[cfg(not(target_os = "windows"))]
+        let first_pin = (
+            "debian-13-genericcloud-amd64-20261001-2618.qcow2",
+            "sha512",
+            "f46f0671a6e5bdec5291ab8972bae2f10e5408c2f64a74078f11efc2f06a436a9d0313ed50e0472542eeabf780e9f7c792ac0a314c6c20507fcd9fd81b468c3d",
+            Some(341508096),
+        );
         assert_eq!(pins.iter().map(|a| (a.filename.as_str(), a.algorithm.as_str(), a.digest.as_str(), a.bytes)).collect::<Vec<_>>(), vec![
-            ("debian-13-genericcloud-amd64-20261001-2618.qcow2", "sha512", "f46f0671a6e5bdec5291ab8972bae2f10e5408c2f64a74078f11efc2f06a436a9d0313ed50e0472542eeabf780e9f7c792ac0a314c6c20507fcd9fd81b468c3d", Some(341508096)),
+            first_pin,
             ("cua-driver-c549ab4d7.tar.gz", "sha256", "2532c8bb8c6bef4f179285c58241a2f46c8fd2e1f6228c65bb65a1e6176261c6", None),
             ("cua-spacesd-native-20261012.tar.gz", "sha256", "f7d2d547ad4d94759aba93a5eb37ad1b5b93d5272074273a5ed4a130ee0b0ed7", None),
         ]);
@@ -140,12 +195,24 @@ mod tests {
         fs::write(data.join("keep-state"), "unrelated state").unwrap();
         let first = &fixture[0].filename;
         fs::copy(source.join(first), destination.join(first)).unwrap();
-        let partial = destination.join(format!(".{}.installing", fixture[1].filename));
-        fs::write(&partial, "interrupted").unwrap();
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(&partial, fs::Permissions::from_mode(0o444)).unwrap();
+        let partials = [first, &fixture[1].filename].map(|filename| {
+            let partial = destination.join(format!(".{filename}.installing"));
+            fs::write(&partial, "interrupted").unwrap();
+            let mut permissions = fs::metadata(&partial).unwrap().permissions();
+            permissions.set_readonly(true);
+            fs::set_permissions(&partial, permissions).unwrap();
+            partial
+        });
+        let readonly_source = source.join(&fixture[1].filename);
+        let mut permissions = fs::metadata(&readonly_source).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&readonly_source, permissions).unwrap();
         assert!(install_from(&source, &destination, &fixture).unwrap());
-        assert!(!partial.exists());
+        assert!(partials.iter().all(|partial| !partial.exists()));
+        assert!(fs::metadata(destination.join(&fixture[1].filename))
+            .unwrap()
+            .permissions()
+            .readonly());
         for asset in &fixture {
             assert_eq!(
                 fs::read(source.join(&asset.filename)).unwrap(),
@@ -168,5 +235,39 @@ mod tests {
             fs::read(data.join("keep-state")).unwrap(),
             b"unrelated state"
         );
+        #[cfg(windows)]
+        for path in [readonly_source, destination.join(&fixture[1].filename)] {
+            let mut permissions = fs::metadata(&path).unwrap().permissions();
+            permissions.set_readonly(false);
+            fs::set_permissions(path, permissions).unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn guest_delivery_refuses_a_linked_partial_without_changing_its_target() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("source");
+        let destination = root.path().join("destination");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&destination).unwrap();
+        let mut asset = accepted().remove(0);
+        asset.algorithm = "sha256".into();
+        asset.bytes = Some(7);
+        asset.digest = format!("{:x}", Sha256::digest(b"fixture"));
+        fs::write(source.join(&asset.filename), "fixture").unwrap();
+        let unrelated = root.path().join("keep-state");
+        fs::write(&unrelated, "unrelated state").unwrap();
+        let partial = destination.join(format!(".{}.installing", asset.filename));
+        std::os::unix::fs::symlink(&unrelated, &partial).unwrap();
+
+        let error = install_from(&source, &destination, std::slice::from_ref(&asset)).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(fs::symlink_metadata(&partial)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(fs::read(&unrelated).unwrap(), b"unrelated state");
+        assert!(!destination.join(&asset.filename).exists());
     }
 }

@@ -72,7 +72,7 @@ function Detect($request) {
     if ($null -eq $service -or [string]$service.Status -ne 'Running') {
         $issues.Add((Issue 'hyperv_service' 'The Hyper-V management service is not running.' 'After enabling Hyper-V, restart Windows. If it is already enabled, ask your administrator to check the Hyper-V Virtual Machine Management service, then retry.'))
     }
-    if ($null -eq (Get-Command Get-VM -ErrorAction SilentlyContinue)) {
+    if (@('Get-VM','Get-VHD','Resize-VHD' | Where-Object { $null -eq (Get-Command $_ -ErrorAction SilentlyContinue) }).Count -gt 0) {
         $issues.Add((Issue 'hyperv_tools' 'The Windows Hyper-V management tools are unavailable.' 'Enable the Hyper-V Management Tools in Windows features yourself, restart if Windows asks, then retry.'))
     } elseif ($null -ne $service -and [string]$service.Status -eq 'Running') {
         try {
@@ -81,9 +81,6 @@ function Detect($request) {
         } catch {
             $issues.Add((Issue 'hyperv_access' 'GChat cannot manage a local Hyper-V bot computer with this Windows account.' 'Ask your administrator to grant this account Hyper-V Administrators access and check the existing Default Switch. Sign out and back in, then retry.'))
         }
-    }
-    if ($null -eq (Get-Command ([string]$request.image_tool) -ErrorAction SilentlyContinue)) {
-        $issues.Add((Issue 'image_tool_missing' 'The qemu-img.exe guest-image conversion tool is unavailable.' 'Provide an existing qemu-img.exe on this account''s PATH, then retry. GChat does not install host tools.'))
     }
     try {
         $null = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
@@ -230,6 +227,19 @@ public static class GChatIsoStream {
 '@
     [GChatIsoStream]::Save($result.ImageStream, $destination)
 }
+function CopyFile([string]$source, [string]$destination) {
+    # Never overwrite an unexpected output between the ownership check and copy.
+    [IO.File]::Copy($source, $destination, $false)
+}
+function GuestDisk([string]$path, [uint64]$capacity) {
+    $disk = Get-VHD -Path $path -ErrorAction Stop
+    if ([string]$disk.VhdFormat -ne 'VHDX' -or [string]$disk.VhdType -ne 'Dynamic' -or
+        -not [string]::IsNullOrEmpty([string]$disk.ParentPath) -or
+        [uint64]$disk.Size -lt 1GB -or [uint64]$disk.Size -gt $capacity) {
+        throw 'The accepted guest image must be a standalone dynamic VHDX between 1 GiB and the requested guest capacity. Restore the pinned guest asset, then retry; existing resources were retained.'
+    }
+    $disk
+}
 function Prepare($request, $context) {
     foreach ($field in @('cpus', 'memory_mib', 'disk_gib')) {
         if ([uint64]$request.$field -ne [uint64]$context.claim.spec.$field -or [uint64]$request.$field -eq 0) {
@@ -241,20 +251,23 @@ function Prepare($request, $context) {
         if ($null -ne $context.vm_id) {
             throw 'The previously registered owned guest is missing. Its setup was retained; remove this setup explicitly before creating another guest.'
         }
-        $tool = Get-Command ([string]$request.image_tool) -CommandType Application -ErrorAction SilentlyContinue
-        if ($null -eq $tool) { throw 'qemu-img.exe is unavailable. Provide an existing qemu-img.exe on this account''s PATH, then retry. GChat does not install host tools.' }
         $image = FullPath ([string]$request.image)
         NoRedirects $image
         if (-not (Test-Path -LiteralPath $image -PathType Leaf)) { throw 'The accepted guest image is missing. Restore the pinned guest asset, then retry.' }
         $drive = @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | Where-Object { $_.DeviceID -ieq [IO.Path]::GetPathRoot($context.directory).TrimEnd('\') })
         $required = [uint64]$request.disk_gib * 1GB
+        $null = GuestDisk $image $required
         $seedBytes = [uint64]0
         foreach ($item in @(Get-ChildItem -LiteralPath (Join-Path $context.directory 'seed') -Recurse -File)) { $seedBytes += [uint64]$item.Length }
         $reserve = [Math]::Max([uint64]1GB, ($seedBytes + [uint64]512MB))
         if ($drive.Count -ne 1 -or [uint64]$drive[0].FreeSpace -lt ($required + $reserve)) { throw 'The selected local drive does not have enough free space for this guest. Free space there, then retry; existing resources were retained.' }
         foreach ($other in @(Get-VM)) {
             foreach ($disk in @(Get-VMHardDiskDrive -VM $other)) {
-                if (-not [string]::IsNullOrEmpty([string]$disk.Path) -and (SamePath ([string]$disk.Path) $context.disk)) { throw 'The requested guest disk is attached to another VM. Its resources were left unchanged.' }
+                if (-not [string]::IsNullOrEmpty([string]$disk.Path) -and
+                    ((SamePath ([string]$disk.Path) $context.disk) -or
+                     (SamePath ([string]$disk.Path) (Join-Path $context.directory 'disk.partial.vhdx')))) {
+                    throw 'The requested guest disk is attached to another VM. Its resources were left unchanged.'
+                }
             }
         }
         # With no registered guest, only this claim's exact partial outputs can be rebuilt.
@@ -263,14 +276,13 @@ function Prepare($request, $context) {
             if (Test-Path -LiteralPath $path) { Remove-Item -LiteralPath $path -Force }
         }
         $partialDisk = Join-Path $context.directory 'disk.partial.vhdx'
-        $output = & $tool.Source convert -f qcow2 -O vhdx -o subformat=dynamic $image $partialDisk 2>&1
-        if ($LASTEXITCODE -ne 0) { throw 'The accepted guest image could not be converted to VHDX. Its setup claim and partial output were retained.' }
-        $output = & $tool.Source info --output=json -f vhdx $partialDisk 2>&1
-        if ($LASTEXITCODE -ne 0) { throw 'The converted guest disk could not be inspected; it was retained.' }
-        $diskInfo = ($output -join "`n") | ConvertFrom-Json
-        if ([uint64]$diskInfo.'virtual-size' -gt $required) { throw 'The accepted guest image is larger than the requested guest disk. Its setup was retained.' }
-        $output = & $tool.Source resize -f vhdx $partialDisk ([string]$request.disk_gib + 'G') 2>&1
-        if ($LASTEXITCODE -ne 0) { throw 'The owned guest disk could not be expanded; it was retained.' }
+        try { CopyFile $image $partialDisk } catch { throw 'The accepted VHDX could not be copied. Its setup claim and any partial output were retained; free space or restore the pinned asset, then retry.' }
+        $diskInfo = GuestDisk $partialDisk $required
+        if ([uint64]$diskInfo.Size -lt $required) {
+            try { Resize-VHD -Path $partialDisk -SizeBytes $required -ErrorAction Stop } catch { throw 'The owned guest disk could not be expanded. Its setup claim and partial output were retained; resolve the disk error, then retry.' }
+            $diskInfo = GuestDisk $partialDisk $required
+            if ([uint64]$diskInfo.Size -ne $required) { throw 'The owned guest disk capacity was not confirmed. Its setup claim and partial output were retained.' }
+        }
         Move-Item -LiteralPath $partialDisk -Destination $context.disk
         $partialIso = Join-Path $context.directory 'seed.partial.iso'
         CreateIso (Join-Path $context.directory 'seed') $partialIso
