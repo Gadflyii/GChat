@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -11,7 +12,9 @@ import { CredentialSetup } from '../CredentialSetup'
 const command = vi.hoisted(() => vi.fn())
 vi.mock('@/services/engines', () => ({ engineCommand: command }))
 afterEach(cleanup)
-beforeEach(() => command.mockReset())
+beforeEach(() => {
+  command.mockReset()
+})
 describe('secure storage intake', () => {
   it('reads only passive status on mount and checks the keyring after an explicit click', async () => {
     command.mockResolvedValue({
@@ -349,4 +352,753 @@ describe('secure storage intake', () => {
     await screen.findByRole('button', { name: 'Unlock vault' })
     expect(command).toHaveBeenLastCalledWith('credential_lock', {})
   })
+})
+
+describe('Lock vault feedback', () => {
+  const unlocked = {
+    ready: true,
+    platform: 'linux',
+    can_install: false,
+    tier: 'passphrase',
+    state: 'ready',
+  }
+  const locked = { ...unlocked, ready: false, state: 'locked' }
+  const confirmLockMessage =
+    'Could not finish locking the vault. Choose Check again to confirm whether the vault is locked before continuing.'
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+
+  it('names a pending Lock, removes stale readiness and prevents duplicate locking', async () => {
+    const lock = deferred<typeof locked>()
+    command.mockResolvedValueOnce(unlocked).mockReturnValueOnce(lock.promise)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    const lockButton = await screen.findByRole('button', { name: 'Lock vault' })
+    expect(ready).toHaveBeenLastCalledWith(true)
+
+    fireEvent.click(lockButton)
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Locking the passphrase vault…'
+    )
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/You can continue setup/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Lock vault' })).toBeDisabled()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Lock vault' }))
+    expect(command).toHaveBeenCalledTimes(2)
+    expect(command).toHaveBeenLastCalledWith('credential_lock', {})
+
+    await act(async () => {
+      lock.resolve(locked)
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Unlock vault' })
+    ).toBeEnabled()
+    expect(
+      screen.queryByText(/Locking the passphrase vault/)
+    ).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+  })
+
+  it('keeps rejected Lock pending through its status read, then explains an unlocked result and permits one deliberate retry', async () => {
+    const statusRead = deferred<typeof unlocked>()
+    const retryLock = deferred<typeof locked>()
+    const nativeError = 'Native Lock cleanup failed after closing account access'
+    command
+      .mockResolvedValueOnce(unlocked)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockReturnValueOnce(statusRead.promise)
+      .mockReturnValueOnce(retryLock.promise)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Lock vault' }))
+
+    await waitFor(() => expect(command).toHaveBeenCalledTimes(3))
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Locking the passphrase vault…'
+    )
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/You can continue setup/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Lock vault' })).toBeDisabled()
+    expect(screen.queryByText(new RegExp(nativeError))).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+
+    await act(async () => {
+      statusRead.resolve(unlocked)
+    })
+    expect(
+      await screen.findByText(
+        'Could not finish locking the vault. The vault is currently unlocked. Choose Lock vault to try again.'
+      )
+    ).toBeVisible()
+    const errorDetails = screen.getByText('Lock error details').closest('details')!
+    expect(errorDetails).not.toHaveAttribute('open')
+    expect(errorDetails).toHaveTextContent(nativeError)
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+
+    const retry = screen.getByRole('button', { name: 'Lock vault' })
+    expect(retry).toBeEnabled()
+    fireEvent.click(retry)
+    fireEvent.click(retry)
+    expect(command).toHaveBeenCalledTimes(4)
+    expect(command).toHaveBeenLastCalledWith('credential_lock', {})
+    expect(ready).toHaveBeenLastCalledWith(false)
+    await act(async () => {
+      retryLock.resolve(locked)
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Unlock vault' })
+    ).toBeEnabled()
+    expect(
+      screen.queryByText(/Could not finish locking the vault/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Lock error details')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+  })
+
+  it('does not claim a rejected Lock left the vault unlocked when the fresh status is locked', async () => {
+    const nativeError = 'Native Lock reported an error after locking credentials'
+    command
+      .mockResolvedValueOnce(unlocked)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(locked)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Lock vault' }))
+
+    expect(await screen.findByText(confirmLockMessage)).toBeVisible()
+    expect(
+      screen.queryByText(/The vault is currently unlocked/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/You can continue setup/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled()
+    const errorDetails = screen.getByText('Lock error details').closest('details')!
+    expect(errorDetails).not.toHaveAttribute('open')
+    expect(errorDetails).toHaveTextContent(nativeError)
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+  })
+
+  it('recovers an unknown Lock outcome with an explicit read-only Check without replaying Lock', async () => {
+    const recovery = deferred<typeof locked>()
+    const nativeError = 'Native Lock could not finish clearing connection state'
+    command
+      .mockResolvedValueOnce(unlocked)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockRejectedValueOnce(new Error('Passive vault status is unavailable'))
+      .mockReturnValueOnce(recovery.promise)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Lock vault' }))
+
+    expect(await screen.findByText(confirmLockMessage)).toBeVisible()
+    expect(
+      screen.queryByText(/The vault is currently unlocked/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/You can continue setup/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Lock vault' })
+    ).not.toBeInTheDocument()
+    const errorDetails = screen.getByText('Lock error details').closest('details')!
+    expect(errorDetails).not.toHaveAttribute('open')
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+    expect(ready).toHaveBeenLastCalledWith(false)
+
+    const check = screen.getByRole('button', { name: 'Check again' })
+    fireEvent.click(check)
+    expect(check).toBeDisabled()
+    expect(command).toHaveBeenCalledTimes(4)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
+    expect(
+      command.mock.calls.filter(([action]) => action === 'credential_lock')
+    ).toHaveLength(1)
+    await act(async () => {
+      recovery.resolve(locked)
+    })
+    expect(
+      await screen.findByRole('button', { name: 'Unlock vault' })
+    ).toBeEnabled()
+    expect(screen.queryByText(confirmLockMessage)).not.toBeInTheDocument()
+    expect(screen.queryByText('Lock error details')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(command).toHaveBeenCalledTimes(4)
+  })
+})
+
+describe('Passphrase vault error guidance', () => {
+  const locked = {
+    ready: false,
+    platform: 'linux',
+    can_install: false,
+    tier: 'passphrase',
+    state: 'locked',
+  }
+  const unlocked = { ...locked, ready: true, state: 'ready' }
+  const canCreate = {
+    ready: false,
+    platform: 'linux',
+    can_install: false,
+    can_create: true,
+    state: 'missing_provider',
+  }
+
+  function expectClosedError(nativeError: string) {
+    const details = screen.getByText('Vault error details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toHaveTextContent(nativeError)
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+  }
+
+  it('explains a rejected Unlock, clears the secret and allows one explicit retry from a fresh locked status', async () => {
+    const nativeError = 'The passphrase is incorrect or the vault is damaged'
+    command
+      .mockResolvedValueOnce(locked)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(unlocked)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Unlock vault' }))
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'first passphrase' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+
+    expect(
+      await screen.findByText('Could not finish unlocking the vault.')
+    ).toBeVisible()
+    expect(screen.getByText(/The vault is currently locked/)).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+      'autocomplete',
+      'current-password'
+    )
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(ready).not.toHaveBeenCalledWith(true)
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'retry passphrase' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+    expect(await screen.findByRole('button', { name: 'Lock vault' })).toBeEnabled()
+    expect(command).toHaveBeenCalledTimes(4)
+    expect(command).toHaveBeenLastCalledWith('credential_unlock', {
+      passphrase: 'retry passphrase',
+    })
+    expect(screen.queryByText('Vault error details')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(true)
+  })
+
+  it('clears both Create fields and explains how to retry when fresh status still permits creation', async () => {
+    const nativeError = 'The vault file could not be written'
+    command
+      .mockResolvedValueOnce(canCreate)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(canCreate)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a passphrase vault' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.change(screen.getByLabelText('Confirm passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    )
+
+    expect(
+      await screen.findByText('Could not finish creating the passphrase vault.')
+    ).toBeVisible()
+    expect(screen.getByText(/Enter and confirm your passphrase/)).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Confirm passphrase')).toHaveValue('')
+    expect(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    ).toBeEnabled()
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+    expect(ready).not.toHaveBeenCalledWith(true)
+  })
+
+  it('keeps an interrupted migration on Resume with the existing passphrase even when fresh status is ready', async () => {
+    const migrating = {
+      ...unlocked,
+      tier: 'native',
+      migrating: true,
+    }
+    const nativeError = 'The connection copy could not be verified'
+    command
+      .mockResolvedValueOnce({ ...migrating, ready: false })
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(migrating)
+    render(<CredentialSetup />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Resume migration' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'existing passphrase' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Resume migration' }))
+
+    expect(
+      await screen.findByText('Could not finish resuming the vault migration.')
+    ).toBeVisible()
+    expect(
+      screen.getByText(/Your saved connections are still being moved/)
+    ).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.getByRole('button', { name: 'Resume migration' })).toBeEnabled()
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+      'autocomplete',
+      'current-password'
+    )
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Create passphrase vault' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(command).toHaveBeenCalledWith('credential_create', {
+      confirmed: true,
+      passphrase: 'existing passphrase',
+    })
+    expect(command).toHaveBeenCalledTimes(3)
+  })
+
+  it('closes Create after a rejected operation leaves an unlocked vault while retaining its warning', async () => {
+    const nativeError = 'Gbot could not unlock its saved connections'
+    command
+      .mockResolvedValueOnce(canCreate)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(unlocked)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a passphrase vault' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.change(screen.getByLabelText('Confirm passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    )
+
+    expect(
+      await screen.findByText('Could not finish creating the passphrase vault.')
+    ).toBeVisible()
+    expect(screen.getByText(/The vault is currently unlocked/)).toBeVisible()
+    expect(
+      screen.getByText(/If Gbot still cannot use your saved connections/)
+    ).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Create passphrase vault' })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Lock vault' })).toBeEnabled()
+    expect(ready).toHaveBeenLastCalledWith(true)
+    expect(command).toHaveBeenCalledTimes(3)
+  })
+
+  it.each(['unavailable status', 'failed status read'])(
+    'requires a read-only Check before an explicit Unlock retry after an unknown outcome from %s',
+    async (outcome) => {
+      const nativeError = 'Gbot did not confirm that its vault was unlocked'
+      let resolveCheck!: (value: typeof locked) => void
+      const checkResult = new Promise<typeof locked>((resolve) => {
+        resolveCheck = resolve
+      })
+      command
+        .mockResolvedValueOnce(locked)
+        .mockRejectedValueOnce(new Error(nativeError))
+      if (outcome === 'unavailable status')
+        command.mockResolvedValueOnce({
+          ...locked,
+          state: 'unavailable',
+          error: 'The vault is busy finishing an earlier request',
+        })
+      else command.mockRejectedValueOnce(new Error('The status read timed out'))
+      command.mockReturnValueOnce(checkResult).mockResolvedValueOnce(unlocked)
+      const ready = vi.fn()
+      render(<CredentialSetup onReady={ready} />)
+      fireEvent.click(await screen.findByRole('button', { name: 'Unlock vault' }))
+      fireEvent.change(screen.getByLabelText('Passphrase'), {
+        target: { value: 'existing passphrase' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+
+      expect(
+        await screen.findByText(
+          /The vault’s current state could not be confirmed/
+        )
+      ).toBeVisible()
+      expectClosedError(nativeError)
+      expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Unlock vault' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Create passphrase vault' })
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/The vault is currently locked/)
+      ).not.toBeInTheDocument()
+      expect(ready).not.toHaveBeenCalledWith(true)
+      expect(command).toHaveBeenCalledTimes(3)
+
+      const checkButton = screen.getByRole('button', { name: 'Check again' })
+      fireEvent.click(checkButton)
+      expect(checkButton).toBeDisabled()
+      expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Unlock vault' })
+      ).not.toBeInTheDocument()
+      expect(ready).toHaveBeenLastCalledWith(false)
+      expect(command).toHaveBeenCalledTimes(4)
+      expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
+      expect(
+        command.mock.calls.filter(([action]) => action === 'credential_unlock')
+      ).toHaveLength(1)
+      fireEvent.click(checkButton)
+      expect(command).toHaveBeenCalledTimes(4)
+
+      await act(async () => {
+        resolveCheck(locked)
+      })
+      expect(
+        await screen.findByRole('button', { name: 'Unlock vault' })
+      ).toBeEnabled()
+      expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+      expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+        'autocomplete',
+        'current-password'
+      )
+      expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+      expect(command).toHaveBeenCalledTimes(4)
+      expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
+      expect(
+        command.mock.calls.filter(([action]) => action === 'credential_unlock')
+      ).toHaveLength(1)
+      expect(ready).not.toHaveBeenCalledWith(true)
+
+      fireEvent.change(screen.getByLabelText('Passphrase'), {
+        target: { value: 'retry passphrase' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+
+      expect(
+        await screen.findByRole('button', { name: 'Lock vault' })
+      ).toBeEnabled()
+      expect(command).toHaveBeenCalledTimes(5)
+      expect(
+        command.mock.calls.filter(([action]) => action === 'credential_unlock')
+      ).toEqual([
+        ['credential_unlock', { passphrase: 'existing passphrase' }],
+        ['credential_unlock', { passphrase: 'retry passphrase' }],
+      ])
+      expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+      expect(screen.queryByText('Vault error details')).not.toBeInTheDocument()
+      expect(ready).toHaveBeenLastCalledWith(true)
+    }
+  )
+
+  it('switches from Create to Unlock when a rejected creation has already left a locked vault', async () => {
+    const nativeError = 'Gbot did not accept the newly created vault'
+    command
+      .mockResolvedValueOnce(canCreate)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce(locked)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a passphrase vault' })
+    )
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.change(screen.getByLabelText('Confirm passphrase'), {
+      target: { value: 'new passphrase' },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Create passphrase vault' })
+    )
+
+    expect(
+      await screen.findByText('Could not finish creating the passphrase vault.')
+    ).toBeVisible()
+    expect(screen.getByText(/The vault is currently locked/)).toBeVisible()
+    expectClosedError(nativeError)
+    expect(screen.getByRole('button', { name: 'Unlock vault' })).toBeEnabled()
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+      'autocomplete',
+      'current-password'
+    )
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Create passphrase vault' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Use a passphrase vault' })
+    ).not.toBeInTheDocument()
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+    expect(ready).not.toHaveBeenCalledWith(true)
+  })
+})
+
+describe('Secure storage installation error guidance', () => {
+  const installable = {
+    ready: false,
+    platform: 'linux',
+    can_install: true,
+    tier: 'native',
+    state: 'missing_provider',
+  }
+  const readyNative = {
+    ...installable,
+    ready: true,
+    can_install: false,
+    state: 'ready',
+  }
+
+  function deferred<T>() {
+    let resolve!: (value: T) => void
+    const promise = new Promise<T>((done) => {
+      resolve = done
+    })
+    return { promise, resolve }
+  }
+
+  function expectClosedInstallationError(nativeError: string) {
+    const details = screen
+      .getByText('Installation error details')
+      .closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toHaveTextContent(nativeError)
+    expect(screen.getByText(new RegExp(nativeError))).not.toBeVisible()
+  }
+
+  it('keeps recovery pending through a passive status read and permits only an explicit confirmed installation retry', async () => {
+    const recovery = deferred<typeof installable>()
+    const retry = deferred<{ installed: boolean }>()
+    const nativeError = 'Administrator approval was cancelled'
+    command
+      .mockResolvedValueOnce(installable)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockReturnValueOnce(recovery.promise)
+      .mockReturnValueOnce(retry.promise)
+      .mockResolvedValueOnce(readyNative)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    await screen.findByText(/Secure storage is unavailable/)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Set up secure storage' })
+    )
+
+    await waitFor(() => expect(command).toHaveBeenCalledTimes(3))
+    expect(command.mock.calls).toEqual([
+      ['credential_status', { check: false }],
+      ['credential_install', { confirmed: true }],
+      ['credential_status', { check: false }],
+    ])
+    expect(
+      screen.getByRole('button', { name: 'Set up secure storage' })
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Check again' })).toBeDisabled()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Installation finished/)).not.toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(nativeError))).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+
+    await act(async () => {
+      recovery.resolve(installable)
+    })
+    expect(
+      await screen.findByText('Could not finish setting up secure storage.')
+    ).toBeVisible()
+    expect(
+      screen.getByText(/Choose Set up secure storage to retry installation/)
+    ).toBeVisible()
+    expectClosedInstallationError(nativeError)
+    const installButton = screen.getByRole('button', {
+      name: 'Set up secure storage',
+    })
+    expect(installButton).toBeEnabled()
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(ready).not.toHaveBeenCalledWith(true)
+
+    fireEvent.click(installButton)
+    expect(installButton).toBeDisabled()
+    expect(
+      screen.queryByText('Could not finish setting up secure storage.')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Installation error details')
+    ).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    fireEvent.click(installButton)
+    expect(command).toHaveBeenCalledTimes(4)
+    expect(command).toHaveBeenLastCalledWith('credential_install', {
+      confirmed: true,
+    })
+
+    await act(async () => {
+      retry.resolve({ installed: true })
+    })
+    expect(await screen.findByText('Secure storage is ready.')).toBeVisible()
+    expect(screen.getByText(/Installation finished/)).toBeVisible()
+    expect(
+      screen.queryByText('Could not finish setting up secure storage.')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Installation error details')
+    ).not.toBeInTheDocument()
+    expect(command.mock.calls).toEqual([
+      ['credential_status', { check: false }],
+      ['credential_install', { confirmed: true }],
+      ['credential_status', { check: false }],
+      ['credential_install', { confirmed: true }],
+      ['credential_status', { check: true }],
+    ])
+    expect(ready).toHaveBeenLastCalledWith(true)
+  })
+
+  it('requires an explicit Check for a fresh native provider and retains the installation warning after readiness is confirmed', async () => {
+    const nativeError = 'The package command failed after installing the provider'
+    command
+      .mockResolvedValueOnce(installable)
+      .mockRejectedValueOnce(new Error(nativeError))
+      .mockResolvedValueOnce({
+        ...installable,
+        can_install: false,
+        state: 'unchecked',
+      })
+      .mockResolvedValueOnce(readyNative)
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+    await screen.findByText(/Secure storage is unavailable/)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Set up secure storage' })
+    )
+
+    expect(
+      await screen.findByText('Could not finish setting up secure storage.')
+    ).toBeVisible()
+    expectClosedInstallationError(nativeError)
+    expect(
+      screen.getByText(
+        /Choose Check secure storage to confirm whether it is ready/
+      )
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'Set up secure storage' })
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Installation finished/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(ready).not.toHaveBeenCalledWith(true)
+    expect(command).toHaveBeenCalledTimes(3)
+    expect(command).toHaveBeenLastCalledWith('credential_status', { check: false })
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Check secure storage' })
+    )
+    expect(await screen.findByText('Secure storage is ready.')).toBeVisible()
+    expect(
+      screen.getByText('Could not finish setting up secure storage.')
+    ).toBeVisible()
+    expectClosedInstallationError(nativeError)
+    expect(
+      screen.getByText('Secure storage is now ready. You can continue setup.')
+    ).toBeVisible()
+    expect(screen.queryByText(/Installation finished/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Set up secure storage' })
+    ).not.toBeInTheDocument()
+    expect(command.mock.calls).toEqual([
+      ['credential_status', { check: false }],
+      ['credential_install', { confirmed: true }],
+      ['credential_status', { check: false }],
+      ['credential_status', { check: true }],
+    ])
+    expect(ready).toHaveBeenLastCalledWith(true)
+  })
+
+  it.each(['unavailable status', 'failed status read'])(
+    'recovers a rejected installation with a read-only Check again after %s',
+    async (outcome) => {
+      const nativeError = 'The installer could not finish setting up the provider'
+      command
+        .mockResolvedValueOnce(installable)
+        .mockRejectedValueOnce(new Error(nativeError))
+      if (outcome === 'unavailable status')
+        command.mockResolvedValueOnce({
+          ...installable,
+          can_install: false,
+          state: 'unavailable',
+          error: 'The selected password storage is unavailable',
+        })
+      else command.mockRejectedValueOnce(new Error('Passive status timed out'))
+      command.mockResolvedValueOnce(readyNative)
+      const ready = vi.fn()
+      render(<CredentialSetup onReady={ready} />)
+      await screen.findByText(/Secure storage is unavailable/)
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Set up secure storage' })
+      )
+
+      expect(
+        await screen.findByText('Could not finish setting up secure storage.')
+      ).toBeVisible()
+      expect(
+        screen.getByText(/Choose Check again to confirm the current state/)
+      ).toBeVisible()
+      expectClosedInstallationError(nativeError)
+      expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled()
+      expect(screen.queryByText(/Installation finished/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText('Secure storage is ready.')
+      ).not.toBeInTheDocument()
+      expect(command.mock.calls).toEqual([
+        ['credential_status', { check: false }],
+        ['credential_install', { confirmed: true }],
+        ['credential_status', { check: false }],
+      ])
+      expect(ready).not.toHaveBeenCalledWith(true)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Check again' }))
+      expect(await screen.findByText('Secure storage is ready.')).toBeVisible()
+      expect(command).toHaveBeenCalledTimes(4)
+      expect(command).toHaveBeenLastCalledWith('credential_status', { check: true })
+      expect(
+        command.mock.calls.filter(([action]) => action === 'credential_install')
+      ).toHaveLength(1)
+      expect(ready).toHaveBeenLastCalledWith(true)
+    }
+  )
 })

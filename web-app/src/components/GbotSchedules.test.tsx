@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import GbotSchedules from './GbotSchedules'
@@ -40,9 +41,10 @@ beforeEach(() => {
   request.mockReset()
   listen.mockReset()
   listen.mockImplementation(async () => vi.fn())
-  request.mockImplementation(async (route: string) =>
-    route === 'schedules'
-      ? {
+  request.mockImplementation(
+    async (route: string, input?: Record<string, unknown>) => {
+      if (route === 'schedules') {
+        return {
           schedules: [
             schedule,
             {
@@ -54,7 +56,12 @@ beforeEach(() => {
           ],
           stopped: null,
         }
-      : undefined
+      }
+      if (route === 'schedules/enabled') return { ...schedule, ...input }
+      if (route === 'schedules/create') {
+        return { ...schedule, id: 'created', ...input }
+      }
+    }
   )
 })
 afterEach(cleanup)
@@ -77,6 +84,158 @@ function taskUpdate() {
   act(() => registration[1]())
 }
 
+it.each([true, false])(
+  'keeps the confirmed schedule change from enabled=%s when reloading fails',
+  async (enabled) => {
+    const current = { ...schedule, enabled }
+    const saved = { ...current, enabled: !enabled }
+    const older = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+    const change = deferred<typeof saved>()
+    const reload = deferred<never>()
+    const retry = deferred<{
+      schedules: (typeof schedule)[]
+      stopped: null
+    }>()
+    request
+      .mockResolvedValueOnce({ schedules: [current], stopped: null })
+      .mockReturnValueOnce(older.promise)
+      .mockReturnValueOnce(change.promise)
+      .mockReturnValueOnce(reload.promise)
+      .mockReturnValueOnce(retry.promise)
+    render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+    fireEvent.click(screen.getByText('Scheduled tasks'))
+    await screen.findByText('Check the calendar')
+    fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+      target: { value: 'Keep this draft' },
+    })
+    fireEvent.change(screen.getByLabelText('Schedule start time'), {
+      target: { value: '2030-01-02T09:00' },
+    })
+    taskUpdate()
+    const originalLabel = enabled ? 'Disable schedule' : 'Enable schedule'
+    const savedLabel = enabled ? 'Enable schedule' : 'Disable schedule'
+    fireEvent.click(screen.getByRole('button', { name: originalLabel }))
+    await act(async () => change.resolve(saved))
+
+    expect(
+      screen.getByText(enabled ? /^Disabled ·/ : /^Enabled ·/)
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /schedule…/ })).toBeDisabled()
+    await act(async () =>
+      older.resolve({ schedules: [current], stopped: null })
+    )
+    expect(
+      screen.getByText(enabled ? /^Disabled ·/ : /^Enabled ·/)
+    ).toBeInTheDocument()
+    await act(async () => reload.reject(new Error('Schedule list unavailable')))
+
+    expect(screen.getByRole('button', { name: savedLabel })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: originalLabel })
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Schedule list unavailable'
+    )
+    expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+      'Keep this draft'
+    )
+    expect(screen.getByLabelText('Schedule start time')).toHaveValue(
+      '2030-01-02T09:00'
+    )
+    expect(
+      request.mock.calls.filter(([route]) => route === 'schedules/enabled')
+    ).toEqual([['schedules/enabled', { id: current.id, enabled: !enabled }]])
+
+    const retryButton = screen.getByRole('button', {
+      name: 'Retry loading schedules',
+    })
+    act(() => {
+      fireEvent.click(retryButton)
+      fireEvent.click(retryButton)
+    })
+    expect(screen.getByRole('button', { name: savedLabel })).toBeDisabled()
+    await act(async () =>
+      retry.resolve({ schedules: [current], stopped: null })
+    )
+    expect(screen.getByRole('button', { name: originalLabel })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+      'Keep this draft'
+    )
+    expect(request.mock.calls.map(([route]) => route)).toEqual([
+      'schedules',
+      'schedules',
+      'schedules/enabled',
+      'schedules',
+      'schedules',
+    ])
+  }
+)
+
+it('keeps the confirmed new schedule when reloading fails without creating it again', async () => {
+  const saved = { ...schedule, id: 'created', prompt: 'Prepare my notes' }
+  const older = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
+  const create = deferred<typeof saved>()
+  const reload = deferred<never>()
+  const failedRetry = deferred<never>()
+  request
+    .mockResolvedValueOnce({ schedules: [], stopped: null })
+    .mockReturnValueOnce(older.promise)
+    .mockReturnValueOnce(create.promise)
+    .mockReturnValueOnce(reload.promise)
+    .mockReturnValueOnce(failedRetry.promise)
+    .mockResolvedValueOnce({ schedules: [saved], stopped: null })
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await waitFor(() => expect(request).toHaveBeenCalledWith('schedules'))
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: saved.prompt },
+  })
+  fireEvent.change(screen.getByLabelText('Schedule start time'), {
+    target: { value: '2030-01-02T09:00' },
+  })
+  taskUpdate()
+  fireEvent.click(screen.getByRole('button', { name: 'Create schedule' }))
+  await act(async () => create.resolve(saved))
+
+  expect(screen.getByText(saved.prompt)).toBeInTheDocument()
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
+  expect(screen.getByRole('button', { name: 'Creating schedule…' })).toBeDisabled()
+  await act(async () => older.resolve({ schedules: [], stopped: null }))
+  expect(screen.getByText(saved.prompt)).toBeInTheDocument()
+  await act(async () => reload.reject(new Error('Schedule list unavailable')))
+  expect(screen.getByText(saved.prompt)).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeEnabled()
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Next task draft' },
+  })
+
+  fireEvent.click(screen.getByRole('button', { name: 'Retry loading schedules' }))
+  await act(async () => failedRetry.reject(new Error('Still disconnected')))
+  expect(screen.getByText(saved.prompt)).toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('Still disconnected')
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Next task draft'
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Retry loading schedules' }))
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  expect(screen.getByText(saved.prompt)).toBeInTheDocument()
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Next task draft'
+  )
+  expect(
+    request.mock.calls.filter(([route]) => route === 'schedules/create')
+  ).toHaveLength(1)
+  expect(request.mock.calls.map(([route]) => route)).toEqual([
+    'schedules',
+    'schedules',
+    'schedules/create',
+    'schedules',
+    'schedules',
+    'schedules',
+  ])
+})
+
 it('does not restore Enabled from an older task-update refresh after Disable succeeds', async () => {
   const older = deferred<{ schedules: (typeof schedule)[]; stopped: null }>()
   const disable = deferred<unknown>()
@@ -92,7 +251,7 @@ it('does not restore Enabled from an older task-update refresh after Disable suc
 
   taskUpdate()
   fireEvent.click(screen.getByRole('button', { name: 'Disable schedule' }))
-  await act(async () => disable.resolve(undefined))
+  await act(async () => disable.resolve({ ...schedule, enabled: false }))
   await act(async () =>
     latest.resolve({
       schedules: [{ ...schedule, enabled: false }],
@@ -271,7 +430,19 @@ it('creates an explicit interval prompt and missed-run policy for the selected b
   expect(screen.getByLabelText('Scheduled task prompt')).toBeDisabled()
   expect(screen.getByRole('status')).toHaveTextContent('Creating schedule…')
   expect(screen.getByRole('status').closest('details')).toBeNull()
-  await act(async () => create.resolve(undefined))
+  await act(async () =>
+    create.resolve({
+      ...schedule,
+      id: 'created',
+      prompt: 'Prepare my daily notes',
+      timing: {
+        kind: 'interval',
+        first_at: Math.floor(new Date('2030-01-02T09:00').getTime() / 1000),
+        every_seconds: 86400,
+      },
+      missed_run_policy: 'skip_missed',
+    })
+  )
   expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
   expect(
     screen.getByRole('button', { name: 'Creating schedule…' })
@@ -339,7 +510,18 @@ it.each([
     expect(screen.getByRole('status')).toHaveTextContent(progress)
 
     await act(async () => change.reject(new Error('Service unavailable')))
-    expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(
+      `Could not confirm whether this schedule was ${enabled ? 'disabled' : 'enabled'}. Choose Retry loading schedules to check its current state before changing it again.`
+    )
+    expect(within(alert).getByText('Service unavailable')).not.toBeVisible()
+    const details = within(alert).getByText('Details').closest('details')
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(within(alert).getByText('Service unavailable')).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Retry loading schedules' })
+    ).toBeEnabled()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: label })).toBeEnabled()
     await act(async () => taskUpdate())
@@ -351,7 +533,7 @@ it.each([
     fireEvent.click(screen.getByRole('button', { name: label }))
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent(progress)
-    await act(async () => retry.resolve(undefined))
+    await act(async () => retry.resolve({ ...current, enabled: !enabled }))
     expect(
       request.mock.calls.filter(([route]) => route === 'schedules/enabled')
     ).toEqual([
@@ -373,7 +555,15 @@ it('retains a failed schedule draft and lets the user retry creating it', async 
     .mockResolvedValueOnce({ schedules: [], stopped: null })
     .mockReturnValueOnce(create.promise)
     .mockResolvedValueOnce({ schedules: [], stopped: null })
-    .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce({
+      ...schedule,
+      id: 'created',
+      prompt: 'Check task',
+      timing: {
+        kind: 'once',
+        at: Math.floor(new Date('2030-01-02T09:00').getTime() / 1000),
+      },
+    })
     .mockResolvedValueOnce({ schedules: [], stopped: null })
   render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
   fireEvent.click(screen.getByText('Scheduled tasks'))
@@ -386,7 +576,19 @@ it('retains a failed schedule draft and lets the user retry creating it', async 
   })
   fireEvent.click(screen.getByRole('button', { name: 'Create schedule' }))
   await act(async () => create.reject(new Error('Could not save schedule')))
-  expect(screen.getByRole('alert')).toHaveTextContent('Could not save schedule')
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not confirm that the schedule was created. Your draft is still here. Choose Retry loading schedules to check for it before trying Create schedule again.'
+  )
+  expect(within(alert).getByText('Could not save schedule')).not.toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  fireEvent.click(within(alert).getByText('Details'))
+  expect(within(alert).getByText('Could not save schedule')).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Retry loading schedules' })
+  ).toBeEnabled()
   expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
     'Check task'
   )
@@ -426,9 +628,17 @@ it('retries loading saved schedules without losing a draft or submitting it', as
     .mockReturnValueOnce(retry.promise)
     .mockReturnValueOnce(recovery.promise)
   render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
-  expect(await screen.findByRole('alert')).toHaveTextContent(
-    'Schedule list unavailable'
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not load scheduled tasks. Check the Gbot service connection, then choose Retry loading schedules.'
   )
+  expect(within(alert).getByText('Schedule list unavailable')).not.toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  fireEvent.click(within(alert).getByText('Details'))
+  expect(within(alert).getByText('Schedule list unavailable')).toBeVisible()
+  fireEvent.click(within(alert).getByText('Details'))
   fireEvent.click(screen.getByText('Scheduled tasks'))
   fireEvent.click(screen.getByText('Scheduled tasks'))
   fireEvent.click(screen.getByText('Scheduled tasks'))
@@ -538,7 +748,21 @@ it('preserves a failed schedule draft during an explicit list retry', async () =
   fireEvent.click(screen.getByRole('button', { name: 'Create schedule' }))
   await act(async () => create.reject(new Error('Could not save schedule')))
   expect(screen.getByRole('alert')).toHaveTextContent('Could not save schedule')
-  taskUpdate()
+  const retryButton = screen.getByRole('button', {
+    name: 'Retry loading schedules',
+  })
+  act(() => {
+    fireEvent.click(retryButton)
+    fireEvent.click(retryButton)
+    fireEvent.submit(screen.getByRole('form', { name: 'Schedule a bot task' }))
+  })
+  expect(request.mock.calls.map(([route]) => route)).toEqual([
+    'schedules',
+    'schedules/create',
+    'schedules',
+  ])
+  expect(retryButton).toBeDisabled()
+  expect(screen.getByLabelText('Scheduled task prompt')).toBeDisabled()
   await act(async () =>
     listFailure.reject(new Error('Schedule list unavailable'))
   )
@@ -550,6 +774,9 @@ it('preserves a failed schedule draft during an explicit list retry', async () =
       expect.stringContaining('Schedule list unavailable'),
     ])
   )
+  expect(
+    screen.getAllByRole('button', { name: 'Retry loading schedules' })
+  ).toHaveLength(1)
 
   fireEvent.click(screen.getByRole('button', { name: 'Retry loading schedules' }))
   expect(screen.getByRole('status')).toHaveTextContent('Loading schedules…')
@@ -567,8 +794,8 @@ it('preserves a failed schedule draft during an explicit list retry', async () =
   expect(screen.getByRole('alert')).toHaveTextContent('Could not save schedule')
   expect(screen.queryByText(/Schedule list unavailable/)).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('button', { name: 'Retry loading schedules' })
-  ).not.toBeInTheDocument()
+    screen.getByRole('button', { name: 'Retry loading schedules' })
+  ).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Disable schedule' })).toBeEnabled()
   expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
     'Prepare my notes'
@@ -598,7 +825,13 @@ it('preserves a failed schedule draft during an explicit list retry', async () =
     ['schedules/create', payload],
     ['schedules/create', payload],
   ])
-  await act(async () => createRetry.resolve(undefined))
+  await act(async () =>
+    createRetry.resolve({
+      ...schedule,
+      ...payload,
+      id: 'new-schedule',
+    })
+  )
   expect(screen.getByText('Prepare my notes')).toBeInTheDocument()
   expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -611,6 +844,49 @@ it('preserves a failed schedule draft during an explicit list retry', async () =
     'schedules/create',
     'schedules',
   ])
+})
+
+it('keeps invalid schedule entries as plain validation without a service retry', async () => {
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+  fireEvent.change(screen.getByLabelText('Scheduled task prompt'), {
+    target: { value: 'Prepare my notes' },
+  })
+  fireEvent.change(screen.getByLabelText('Schedule start time'), {
+    target: { value: '2030-01-02T09:00' },
+  })
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('button', { name: 'Schedule repetition' }))
+  await user.click(screen.getByRole('menuitemradio', { name: 'At an interval' }))
+  fireEvent.change(screen.getByLabelText('Schedule interval in seconds'), {
+    target: { value: '0' },
+  })
+  const form = screen.getByRole('form', { name: 'Schedule a bot task' })
+  fireEvent.submit(form)
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Enter a prompt, start time and positive whole interval in seconds.'
+  )
+  expect(screen.queryByText('Details')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Retry loading schedules' })
+  ).not.toBeInTheDocument()
+  expect(request.mock.calls).toEqual([['schedules']])
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue(
+    'Prepare my notes'
+  )
+  fireEvent.change(screen.getByLabelText('Schedule interval in seconds'), {
+    target: { value: '60' },
+  })
+  fireEvent.submit(form)
+  await waitFor(() =>
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(
+    request.mock.calls.filter(([route]) => route === 'schedules/create')
+  ).toHaveLength(1)
+  expect(screen.getByLabelText('Scheduled task prompt')).toHaveValue('')
 })
 
 it('clears a schedule-list connection error when a task update refresh succeeds', async () => {

@@ -280,6 +280,76 @@ it('keeps a paused download informational and resumes its retained progress', as
   ])
 })
 
+it.each(['pause', 'discard'] as const)('keeps an accepted %s download action when its status read fails', async action => {
+  vi.useFakeTimers()
+  try {
+    const job = { id: 'download', release, status: action === 'pause' ? 'downloading' : 'paused', received: 297664406, bytes_per_second: 0 }
+    const before = flow('downloads', { hardware_profile: { status: 'idle' }, selected_downloads: [job] })
+    const after = action === 'pause'
+      ? flow('downloads', { hardware_profile: { status: 'idle' }, selected_downloads: [{ ...job, status: 'paused' }] })
+      : flow('models', { selected_release_ids: [], models: [{ release, recommended: false, reason: 'Choose a model to download' }] })
+    let accepted = false
+    let readable = false
+    mocks.command.mockImplementation((operation, args) => {
+      if (operation === 'download_action') {
+        accepted = true
+        return Promise.resolve({ ok: true })
+      }
+      if (args.action) throw new Error('Recovery must only read status')
+      return accepted ? readable ? Promise.resolve(after) : Promise.reject(new Error('Status read disconnected')) : Promise.resolve(before)
+    })
+    await act(async () => { render(<EngineFirstRun />) })
+    const label = action === 'pause' ? 'Pause download' : 'Discard download'
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: label })) })
+    const acceptedMessage = action === 'pause' ? /Pause request accepted/ : /Discard request accepted/
+    expect(screen.getByText(acceptedMessage)).toBeVisible()
+    expect(screen.getByRole('button', { name: label })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Resume downloads' })).toBeDisabled()
+    expect(screen.getByRole('progressbar', { name: 'Muse download' })).toHaveAttribute('value', String(job.received))
+    if (action === 'pause') expect(screen.queryByRole('button', { name: 'Discard download' })).not.toBeInTheDocument()
+
+    // A failed retry keeps the accepted receipt and never replays the mutation.
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry local setup' })) })
+    expect(screen.getByText(acceptedMessage)).toBeVisible()
+    expect(screen.getByRole('button', { name: label })).toBeDisabled()
+    readable = true
+    await act(async () => {
+      if (action === 'pause') fireEvent.click(screen.getByRole('button', { name: 'Retry local setup' }))
+      else await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(screen.queryByText(acceptedMessage)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    if (action === 'pause') {
+      expect(screen.getByRole('button', { name: 'Discard download' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Resume downloads' })).toBeEnabled()
+      expect(screen.getByText(/Muse · Paused; resume to continue/)).toBeVisible()
+    } else {
+      expect(screen.queryByRole('progressbar', { name: 'Muse download' })).not.toBeInTheDocument()
+      expect(screen.getByRole('checkbox', { name: /Muse/ })).not.toBeChecked()
+    }
+    expect(mocks.command.mock.calls.filter(([operation]) => operation === 'download_action')).toEqual([
+      ['download_action', { host_id: 'local', body: { id: 'download', action } }],
+    ])
+    expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([])
+  } finally { vi.useRealTimers() }
+})
+
+it.each(['pause', 'discard'] as const)('allows retrying a rejected %s download action', async action => {
+  const job = { id: 'download', release, status: action === 'pause' ? 'downloading' : 'paused', received: 297664406, bytes_per_second: 0 }
+  mocks.command.mockImplementation(operation => operation === 'download_action'
+    ? Promise.reject(new Error('Download action was rejected'))
+    : Promise.resolve(flow('downloads', { hardware_profile: { status: 'idle' }, selected_downloads: [job] })))
+  render(<EngineFirstRun />)
+  const label = action === 'pause' ? 'Pause download' : 'Discard download'
+  const button = await screen.findByRole('button', { name: label })
+  await act(async () => { fireEvent.click(button) })
+  expect(screen.getByText('Error: Download action was rejected')).toBeInTheDocument()
+  expect(screen.queryByText(/request accepted/)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: label })).toBeEnabled()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: label })) })
+  expect(mocks.command.mock.calls.filter(([operation]) => operation === 'download_action')).toHaveLength(2)
+})
+
 it('pauses then discards a first-run download after the Host reports it paused', async () => {
   vi.useFakeTimers()
   try {

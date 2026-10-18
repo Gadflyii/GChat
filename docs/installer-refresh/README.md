@@ -1,5 +1,211 @@
 # GChat installer refresh
 
+## Current Linux RC refresh — Codex 3, October 18
+
+`GCHAT-LINUX-RC-PACKAGES` is **PASS**, transferred from Gchat 3 by
+bubbs. The final normal Release build is frozen at GChat main
+`3e32ad0c9009b312426577d6a3c5e2a6edc10fd1` with GInfer dev/next
+`b26ec5b8f03f978ccb3b2599c3f89b89f5174632`. It includes the model-list and
+Gbot paired-session corrections found during the installed-DEB first-user walk.
+Do not chase subsequent main commits or rebuild the unchanged Engine.
+
+Acceptance passed with integrity-checked SM80/86/89/120a Release runtimes,
+DEB/AppImage paths and SHA256s, and an isolated native installed-DEB walk of
+setup, Models/Downloads, Engine/Host and hardware settings, Fleet/connections,
+Settings, Chat, Agent Studio and Gbot setup. Account sign-in, publication,
+Windows and additional GPU/model qualification are excluded. Private HOME,
+mode-700 XDG runtime, DBus, unlocked keyring and Xvfb isolate the app; WAYLAND
+is unset. Ron's installed apps and desktop remain untouched.
+
+Owned branch: `build/c3-linux-rc-20261018`, worktree
+`/ai/gchat-worktrees/c3-linux-rc-20261018`. All build, installer, extracted
+payload and private-HOME bytes were confined to S1 under
+`/media/ron/SSD_RAID/ai/tmp-c3-linux-rc-20261018`. Final packages stay there.
+Gchat 3 release and Gchat 1 dependency donors are read-only inputs.
+
+### Package status
+
+The final desktop/CLI/Host Release refresh from `3e32ad0c9` passed at
+14:26:20Z. Both archives passed and canonical replacement completed at
+14:39:58Z. Native binary comparisons account for the documented Tauri bundle
+marker and linuxdeploy ELF RUNPATH relocation; executable code and unaffected
+sections match, with exact assembled AppDir bytes and semantically identical
+dynamic symbols. See the [final build/archive result](/ai/gchat/out/c3-linux-rc-20261018/model-root-refresh-result.json).
+Its [prepared command](/ai/gchat/out/c3-linux-rc-20261018/model-root-refresh-prepared-command.json)
+and [source delta](/ai/gchat/out/c3-linux-rc-20261018/model-root-source-delta.json)
+retain the reviewed source and inputs. It preserves eight signed catalog files
+plus 19 other selected Linux catalogs: 27 files / 179 profiles, actual staged
+JSON SHA256 `8e528704aae69d2ca699daaf117fe918dbe2fc16c7e511793ad79ddb26aa389c`.
+The accepted signed subset is 42 profiles; its
+[binding proof](/ai/gchat/out/consumer-flash-profile-20261018/catalog-staged-proof.json)
+records SHA256 `2da2c9adb6d2bf034e4b4e0a35a14a26eeeb0728f9119ab513ac3202142e0598`.
+The three signed Qwen 27B 2-bit mix cards use package SHA256
+`483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`.
+The signed Flash5090 pure 2-bit card uses package SHA256
+`8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`.
+Flash catalog-input SHA256:
+`56abd825c2b325242573a3e22a0194f7e421793228f94fb265bf0ed727b3b2a2`.
+Private DEV HTTP acceptance for the prior quote was eight packages / 116
+profiles. C7’s Muse replacement passed at 14:31:45Z with nine packages / 122
+profiles and released its consumer hold. This assembled RC retains the accepted
+eight signed inputs; the new eleven-input / 48-profile Muse packet requires its
+newer Engine and belongs to the next consumer build. The final native restart
+removed the debug-only private HTTP catalog override. Both catalog variables
+were unset in the Release build; actual Host compiler dependency metadata
+confirms no compiled URL. No public release catalog is approved, so the normal
+Release fixture has an empty download catalog and supports local-model import.
+
+The four exact Engine Release images passed at 11:38:59Z: 684 payload
+size/hash checks, eight executable help checks, ELF dependency closure,
+GLIBC 2.39 and exact architecture tags. No GPU was used. Runtime-set SHA256:
+`53b1fb8f3aa8d98b9f728bd84213a2a2939feccd0a6be5b7f90bcbba43d2b9fe`.
+See [Engine verification](/ai/gchat/out/c3-linux-rc-20261018/runtime-set-b26ec5b8f-proof.json).
+The retained Gbot closure passes the existing integrity and guest-asset checks.
+
+The final accepted packages are retained on S1 at
+`/media/ron/SSD_RAID/ai/tmp-c3-linux-rc-20261018/packages/`.
+
+| Package | Bytes | SHA256 |
+| --- | ---: | --- |
+| `GChat_2.0.42_amd64.deb` | 2,747,416,906 | `2c579df0055ddc045e9bb7c450b0aade116ba41db5cef4dc30c262387756a1a7` |
+| `GChat_2.0.42_amd64.AppImage` | 2,781,067,768 | `048b44698a1ba3fad509347d87d094a017dd256474e7a69145f952e234c77e61` |
+
+Both final archives contain the accepted catalog, runtime set and Gbot closure.
+The installed DEB desktop SHA256 is
+`42172b9c0014416e8491f09a1228ce1c1d84fcb2420b2d73d2ae8bf07f95d009`.
+The [replacement record](/ai/gchat/out/c3-linux-rc-20261018/model-root-package-replacement.json)
+retains their paths and packaged binary hashes. Final AppImage headless
+acceptance passed all 29 process/closure checks once; see the
+[final receipt](/ai/gchat/out/c3-linux-rc-20261018/model-root-appimage-check/appimage-verification.json).
+Its final CLI hash assertion was corrected to distinguish the launcher from
+the resource copy without repeating those checks. Earlier AppImage acceptance
+also passed a separate fresh
+native AppRun Welcome/Settings walk with readable pixels and version 2.0.42.
+FUSE mounting is not qualified.
+
+### Native first-user results and corrections
+
+Actual private `dpkg -i` installed `g-chat` 2.0.42 under `walk/`, with independent
+SSD `/usr`, `/etc` and `/var` bind mounts. The native walk used short SSD HOME
+alias `/tmp/c3rc18`, display `:173`, its own Host locator and CPUs 24–31. The
+initial long HOME caused a fixture UNIX-socket-path limit; normal computer
+removal and service quit preceded the corrected short-alias fixture.
+
+Linux journey recovery uses the retained
+[launch command](/ai/gchat/out/c3-linux-rc-20261018/native-model-root-refresh-launch-command.json)
+and [private install command](/ai/gchat/out/c3-linux-rc-20261018/deb-model-root-refresh-install-command.json).
+The installed executable was `walk/usr/bin/gchat`, private HOME was
+`/tmp/c3rc18/home` (SSD alias to `walk/final/home`), Xauthority was
+`walk/Xauthority`, and display was `:173`. These owned RC fixture paths were
+separate from Gchat 2’s FRESH/OLD fixtures and have been retired. The normal
+package paths above remain the recovery input.
+
+The pre-fix installed build passed Welcome GPU detection and secure storage;
+GPU selection/clear, unloaded Host and Advanced controls; General name/language,
+CLI install/uninstall, reset cancellation; Interface light/dark, font reset and
+1024×800 readability; Attachments, Shortcuts, HTTPS proxy and MCP forms;
+Workspace Google/Microsoft guidance and import cancellation; Hardware/System
+Monitor; Models Recommended cards, details and Downloads; Memory new-item
+cancellation; and Integrations prerequisites/toggles. No external account was
+signed in. Hardware live-memory wording remains the existing tracked frontend
+limitation `GUI-HARDWARE-LIVE-STATS-WORDING-20261017`, with NVML initialization
+successful.
+
+The unchanged all-format hardware profiler passed on GPU1 in 660.563 seconds
+(13:03:50–13:14:49Z), saving a complete profile. With unchanged defaults—context
+262,144, one request, Auto conversation memory, Vision on and reply speedup
+off—the settings check quoted 74.6 GiB of graphics-card conversation memory
+per copy without starting a model. Normal Start reached Ready. Qwen artifact
+SHA256: `bcf29abd1598f5666c641da7c59ac28bd999aa98a8d6ba533ae7aa579abd06a7`.
+No artifact copy or reduced settings were used.
+
+Native [Chat](/ai/gchat/out/c3-linux-rc-20261018/final-chat-result.json) completed
+“C3 Linux RC chat ready.” Agent Studio rendered all four compositions, saved a
+Standard definition, completed “C3 Linux RC agent ready.” and displayed its
+saved FINISHED history after Refresh. Default limits were unchanged. See the
+[Agent Studio result](/ai/gchat/out/c3-linux-rc-20261018/final-agent-result.json).
+The final installed app also restored the saved Chat response and Agent Studio
+FINISHED run after restart and native Refresh; see the
+[restored history](/ai/gchat/out/c3-linux-rc-20261018/refreshed-agent-history.png).
+These are functional checks, not performance qualification.
+
+Gbot setup created and connected the private KVM computer. Streaming viewer,
+Take over, native typing, Save As, file-manager reopen/readback, Return keyboard
+and Hand back passed. The saved guest proof file is
+`/home/gbot/c3-rc-desktop-proof.txt`; its
+[native readback](/ai/gchat/out/c3-linux-rc-20261018/final-gbot-desktop-readback.png)
+is retained. The final installed Gbot service restarted, reconnected the saved
+computer and streamed its native desktop again; see the
+[refreshed viewer](/ai/gchat/out/c3-linux-rc-20261018/refreshed-gbot-desktop.png).
+No SSH-only substitute was used.
+
+Two source regressions were corrected on separate branches and merged:
+
+- `GUI-MODELS-SYMLINK-DATA-ROOT-20261018`, main `528288db2`: canonical model
+  enumeration could fail containment against the unresolved HOME alias,
+  leaving Installed empty. Focused/merge gates and source-native Installed/
+  Refresh passed. The final installed DEB displays the retained Qwen model
+  and preserves it after Refresh; see the
+  [native screenshot](/ai/gchat/out/c3-linux-rc-20261018/refreshed-installed-models.png).
+- `GUI-GBOT-PAIRED-MODELS-SESSION-20261018`, source
+  `1204902f74ffd89aa3bcadd22509502a378d3e35`, merged in `3e32ad0c9`: Gbot did
+  not establish its own authorized Host sessions and discarded discovery
+  errors. Four focused TLS/Host regressions, Rust check and Clippy passed.
+  The sole `make verify` passed 3,605 app tests, then stopped at an omitted
+  nested extension cache. Restoring that private cache allowed only the
+  unreached stages to continue: 127 extension tests, all six coverage floors
+  and 1,294 Rust tests passed. The
+  [receipt](/ai/gchat/out/c3-gbot-paired-model-session-20261018/verification-result.json)
+  distinguishes the failed invocation and completed continuation. Final native
+  installed-DEB acceptance passed: the ready Host model appeared, selection
+  saved, Edit brain restored its exact identity and 262,144-token context,
+  Cancel edits retained it, and normal Run completed with “C3 Linux RC bot
+  ready”. See the [native result](/ai/gchat/out/c3-linux-rc-20261018/refreshed-gbot-result.json)
+  and [completed task](/ai/gchat/out/c3-linux-rc-20261018/refreshed-gbot-completed.png).
+
+The initial model stopped normally; GPU1 returned 13:46Z and CPUs 24–31
+returned 13:52Z after the app/Host phase. Its authorized inline, unsaved
+private-PID backstop did not trigger; minimum MemAvailable was
+686,667,743,232 bytes. Its
+[receipt](/ai/gchat/out/c3-linux-rc-20261018/final-memory-backstop.json) is retained.
+Bubbs's named authorization permits this native S1 private process tree alone
+to receive exact-PID SIGTERM first below 3 GiB. The final refreshed model
+reused the complete hardware profile and unchanged settings, started normally
+at 14:53:22Z and reached Ready by 14:58:41Z. After the Gbot task, normal Stop
+model and Stop computer completed. GPU1/CPU24–31 returned at 15:03Z and
+booking 3346 was canceled. The final backstop did not trigger; minimum
+MemAvailable was 685,205,270,528 bytes. See its
+[receipt](/ai/gchat/out/c3-linux-rc-20261018/refreshed-memory-backstop.json).
+
+The separate normal Release Manager companion passed 14 native Fleet/dialog
+checks with its own private HOME, display and keyring. It is absent from the
+installers. See the [Manager summary](/ai/gchat/out/c3-linux-rc-20261018/manager-native-summary.md).
+An inherited private HTTP catalog was rejected by Release. Removing that
+override allowed an empty-catalog refresh without a source change; this was
+not a published-catalog network acceptance.
+
+### Final fixture cleanup and disk lifecycle
+
+The refreshed DEB's three installed native executable hashes matched the
+accepted package. Installed/Refresh, Gbot paired-model selection, save/reopen
+and task completion passed; Chat/Agent controls and saved results also passed
+on the final app bytes. The model and private VM stopped normally. The stopped
+VM was removed through the normal confirmation UI, then the Gbot service quit.
+Closing the app's X window on the fixture without a window manager ended the
+process with Xvfb `BadDrawable`; clean application shutdown is not claimed.
+The remaining owned Host, Xvfb and libvirtd processes received exact-PID
+SIGTERM and exited before fixture deletion.
+
+Cleanup completed at 15:07:34Z. Removed: app Release cache (~31 GiB), Engine
+and runtime set (~11 GiB), AppDir (~3.9 GiB), catalog copies, private walk
+(~17 GiB) and `/tmp/c3rc18` alias. The S1 campaign root now contains only
+`packages/` (~5.2 GiB) and the small fixture-preparation receipt. The
+[build cleanup receipt](/ai/gchat/out/c3-linux-rc-20261018/build-shard-cleanup.json)
+records retained package sizes and removed build paths. Small build, native
+walk and verification evidence remains under `out/c3-linux-rc-20261018/`.
+The separate merged Gbot fix's 38.4 GB disposable directory was removed 14:08Z.
+Donors, model inputs and other sessions' paths were untouched.
+
 ## Native Windows fixed-volume qualification — Codex 7, October 18
 
 `GCHAT-WINDOWS-FASTEST-DISK-20261016` **passed the existing C:/D:/E:

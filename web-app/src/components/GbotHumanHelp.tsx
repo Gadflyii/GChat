@@ -16,12 +16,15 @@ export default function GbotHumanHelp({
   const [answer, setAnswer] = useState('')
   const [pending, setPending] = useState<'reply' | 'decline' | null>(null)
   const pendingRef = useRef(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<{
+    action: 'reply' | 'decline'
+    message: string
+  } | null>(null)
   const disabled = busy || pending !== null
 
   useEffect(() => {
     if (error && request.status !== 'pending' && taskState !== 'interrupted') {
-      setError('')
+      setError(null)
     }
   }, [error, request.status, taskState])
 
@@ -34,13 +37,17 @@ export default function GbotHumanHelp({
     ) {
       return
     }
+    const action = response === null ? 'decline' : 'reply'
     pendingRef.current = true
-    setPending(response === null ? 'decline' : 'reply')
-    setError('')
+    setPending(action)
+    setError(null)
     try {
       await reply(response)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause))
+      setError({
+        action,
+        message: cause instanceof Error ? cause.message : String(cause),
+      })
     } finally {
       pendingRef.current = false
       setPending(null)
@@ -100,13 +107,27 @@ export default function GbotHumanHelp({
       )}
       {error && (
         <div role="alert" className="space-y-1 text-sm text-destructive">
-          {(request.status === 'completed' || request.status === 'declined') && (
+          {request.status === 'completed' || request.status === 'declined' ? (
             <p>
               Your response was saved, but this task could not continue. Check
               the model and computer connections, then resume the task.
             </p>
+          ) : request.status === 'pending' ? (
+            <p>
+              {error.action === 'reply'
+                ? 'Could not confirm your reply. Your draft is still here. If this task is still asking for help, choose Send reply to try again.'
+                : 'Could not confirm that the request was declined. Your draft is still here. If this task is still asking for help, choose Decline to try again.'}
+            </p>
+          ) : (
+            <p>
+              Could not confirm your response. This help request is no longer
+              open. Check the task status.
+            </p>
           )}
-          <p className="whitespace-pre-wrap break-words">{error}</p>
+          <details className="text-muted-foreground">
+            <summary>Details</summary>
+            <p className="whitespace-pre-wrap break-words">{error.message}</p>
+          </details>
         </div>
       )}
     </div>

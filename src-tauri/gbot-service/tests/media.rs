@@ -7,7 +7,63 @@ use gbot_service::{
     media::{MediaLease, OpenView},
 };
 use hyper::{Body, Client, Request, StatusCode};
+use std::time::Duration;
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+    task::JoinHandle,
+};
 use uuid::Uuid;
+
+// Keep a connection to this gateway, rather than probing an address after it
+// has been released and may belong to another parallel fixture.
+struct GatewayConnection {
+    requests: hyper::client::conn::SendRequest<Body>,
+    task: Option<JoinHandle<Result<(), hyper::Error>>>,
+}
+
+impl GatewayConnection {
+    async fn open(lease: &MediaLease) -> Self {
+        let url = lease.ticket.ws_url.replacen("ws://", "http://", 1);
+        let uri: hyper::Uri = url.parse().unwrap();
+        let socket = TcpStream::connect(uri.authority().unwrap().as_str())
+            .await
+            .unwrap();
+        let (requests, connection) = hyper::client::conn::handshake(socket).await.unwrap();
+        let mut connection = Self {
+            requests,
+            task: Some(tokio::spawn(connection)),
+        };
+        let response = connection
+            .requests
+            .send_request(Request::get(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        hyper::body::to_bytes(response.into_body()).await.unwrap();
+        connection
+    }
+
+    async fn assert_closed(&mut self) {
+        if let Some(task) = self.task.as_mut() {
+            // EOF and a reset both prove the original connection ended. A
+            // timeout or a task panic is a teardown failure.
+            let _ = tokio::time::timeout(Duration::from_secs(2), task)
+                .await
+                .expect("the closed gateway must end its existing connection")
+                .expect("the gateway connection task must not panic");
+            self.task = None;
+        }
+    }
+}
+
+impl Drop for GatewayConnection {
+    fn drop(&mut self) {
+        if let Some(task) = &self.task {
+            task.abort();
+        }
+    }
+}
 
 #[tokio::test]
 async fn scoped_media_policies_and_revocation() {
@@ -93,10 +149,12 @@ async fn scoped_media_policies_and_revocation() {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let mut connection = GatewayConnection::open(&lease).await;
         lease.close().await.unwrap();
-        assert!(Client::new().get(url.parse().unwrap()).await.is_err());
+        connection.assert_closed().await;
     }
     assert_eq!(server.state.observed.media_close.lock().unwrap().len(), 4);
+    server.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -136,9 +194,10 @@ async fn media_failures_identify_the_operation_and_keep_the_cause() {
         .to_lowercase()
         .contains("unauthenticated"));
     assert!(!format!("{error:?}").contains(root_token));
+    server.shutdown().await.unwrap();
 }
 
-async fn media_close_fixture() -> (MockServer, MediaLease) {
+async fn media_close_fixture() -> (MockServer, MediaLease, GatewayConnection) {
     let root_token = "private-media-close-token";
     let server = MockServer::start(MockAuth {
         token: Some(root_token.into()),
@@ -174,36 +233,30 @@ async fn media_close_fixture() -> (MockServer, MediaLease) {
     )
     .await
     .unwrap();
-    let url = lease.ticket.ws_url.replacen("ws://", "http://", 1);
-    assert_eq!(
-        Client::new()
-            .get(url.parse().unwrap())
-            .await
-            .unwrap()
-            .status(),
-        StatusCode::NOT_FOUND,
-        "the local gateway must be listening before close"
-    );
-    (server, lease)
+    let connection = GatewayConnection::open(&lease).await;
+    (server, lease, connection)
 }
 
 #[tokio::test]
 async fn expired_guest_media_closes_the_gateway_and_repeated_close_is_safe() {
-    let (server, mut lease) = media_close_fixture().await;
+    let (server, mut lease, mut connection) = media_close_fixture().await;
     *server.state.media_close_error.lock().unwrap() =
         Some(Status::not_found("unknown media session"));
-    let url = lease.ticket.ws_url.replacen("ws://", "http://", 1);
 
     for _ in 0..2 {
         lease.close().await.unwrap();
-        assert!(Client::new().get(url.parse().unwrap()).await.is_err());
+        connection.assert_closed().await;
     }
 
-    let closes = server.state.observed.media_close.lock().unwrap();
-    assert_eq!(closes.len(), 2);
-    assert!(closes
-        .iter()
-        .all(|request| request.media_session_id == lease.ticket.media_session_id));
+    {
+        let closes = server.state.observed.media_close.lock().unwrap();
+        assert_eq!(closes.len(), 2);
+        assert!(closes
+            .iter()
+            .all(|request| request.media_session_id == lease.ticket.media_session_id));
+    }
+    drop(lease);
+    server.shutdown().await.unwrap();
 }
 
 #[tokio::test]
@@ -214,11 +267,10 @@ async fn other_guest_close_errors_remain_failures_with_the_gateway_stopped() {
         Code::DeadlineExceeded,
         Code::PermissionDenied,
     ] {
-        let (server, mut lease) = media_close_fixture().await;
+        let (server, mut lease, mut connection) = media_close_fixture().await;
         // The same detail as expiry must not turn another status into success.
         *server.state.media_close_error.lock().unwrap() =
             Some(Status::new(code, "unknown media session"));
-        let url = lease.ticket.ws_url.replacen("ws://", "http://", 1);
 
         let error = lease.close().await.unwrap_err();
         assert!(error.to_string().contains("close media"), "{code:?}");
@@ -226,15 +278,39 @@ async fn other_guest_close_errors_remain_failures_with_the_gateway_stopped() {
             error.diagnostic().contains("unknown media session"),
             "{code:?}: {error:?}"
         );
-        assert!(Client::new().get(url.parse().unwrap()).await.is_err());
+        connection.assert_closed().await;
 
         *server.state.media_close_error.lock().unwrap() = None;
         lease.close().await.unwrap();
-        assert!(Client::new().get(url.parse().unwrap()).await.is_err());
-        let closes = server.state.observed.media_close.lock().unwrap();
-        assert_eq!(closes.len(), 2, "{code:?}");
-        assert!(closes
-            .iter()
-            .all(|request| request.media_session_id == lease.ticket.media_session_id));
+        connection.assert_closed().await;
+        {
+            let closes = server.state.observed.media_close.lock().unwrap();
+            assert_eq!(closes.len(), 2, "{code:?}");
+            assert!(closes
+                .iter()
+                .all(|request| request.media_session_id == lease.ticket.media_session_id));
+        }
+        drop(lease);
+        server.shutdown().await.unwrap();
     }
+}
+
+#[tokio::test]
+async fn mock_shutdown_joins_an_incomplete_front_connection() {
+    let server = MockServer::start(MockAuth::default()).await;
+    let mut socket = TcpStream::connect(server.addr).await.unwrap();
+    // Leave protocol detection or the HTTP reader with an incomplete request.
+    socket.write_all(b"GET /tunnel").await.unwrap();
+    tokio::time::timeout(Duration::from_secs(2), server.shutdown())
+        .await
+        .expect("mock shutdown must join its ingress and server tasks")
+        .unwrap();
+    let closed = tokio::time::timeout(Duration::from_secs(2), socket.read(&mut [0]))
+        .await
+        .expect("mock shutdown must close its original front connection");
+    assert!(
+        matches!(closed, Ok(0))
+            || matches!(closed, Err(ref error) if error.kind() == std::io::ErrorKind::ConnectionReset),
+        "original mock connection remained open: {closed:?}"
+    );
 }

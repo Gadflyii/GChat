@@ -1,5 +1,283 @@
 # Gbot design
 
+## Human-help response error recovery — Gchat 2
+
+`GBOT-HUMAN-HELP-ERROR-GUIDANCE`, based on main `3b967a5bc`, gives failed
+Send reply and Decline actions plain recovery guidance. It describes the
+unconfirmed outcome, keeps the reply draft and names the matching control for
+an explicit retry if the task is still asking for help. Technical diagnostics
+remain in Details, initially closed.
+
+The shared settings and companion component preserves confirmed saved-response
+guidance: check the model and computer connections, then resume the task without
+resending the response. If the help request closes during an unconfirmed action,
+the message asks the user to check task status and offers no response control.
+Background updates preserve the error while relevant; continuing the task clears
+it. Opening Details does not retry an action. This is source/rendered UI scope.
+
+All three regressions failed on unchanged production. The fixed component suite
+passed seven cases, and four existing settings/companion saved-response cases
+passed. Lint passed with zero errors and five existing warnings. ONE
+`make verify`, 18 October 16:51:07–16:57:29 UTC, passed 3,713 app tests (six
+skipped), 127 extension tests, 1,309 Rust tests (28 ignored, 23 summaries), six
+coverage floors and lint/typecheck/guards. All 3,459 tracked raw source bytes
+and modes matched before and after the gate, with timestamps refreshed before
+checks. This receipt was added afterward with product and test source unchanged.
+CPU120–127 booking3423 returned 16:58Z. Evidence:
+`out/gchat2-human-help-error-guidance-20261018/result.json` and adjacent logs.
+No retry or whole-gate repeat.
+## Schedule error guidance and list checks — Gchat 2
+
+`GBOT-SCHEDULE-ERROR-GUIDANCE`, based on main `ddf46f9d8`, gives failed
+Create, Enable and Disable requests plain guidance about their unconfirmed
+outcome. The existing Retry loading schedules control is now available after
+those failures, so users can check saved state before changing it again.
+Failed list reads also name the recovery control. Technical diagnostics stay in
+Details, initially closed.
+
+List checks preserve the schedule draft and action warning and send no write.
+The same pending guard blocks duplicate reads or writes during recovery. Only
+an explicit action retry clears its warning; confirmed saved results continue
+to survive a failed follow-up read. Invalid form entries keep plain validation
+without technical Details or a service retry. Rendered regressions cover both
+enabled states, creation, failed and successful list checks, and validation.
+This is source/rendered UI scope with no service contract change.
+
+All five guidance regressions failed on unchanged production. The fixed suite
+passed all 21 unique cases: 17 initially, then the four failed diagnostic-text
+cases after correcting Error.message formatting. Passing focused cases were
+not repeated. Lint passed with zero errors and five existing warnings.
+ONE `make verify`, 18 October 17:12:06–17:18:11 UTC, passed 3,716 app tests
+(six skipped), 127 extension tests, 1,311 Rust tests (28 ignored, 23 summaries),
+six coverage floors and lint/typecheck/guards. All 3,459 tracked raw source bytes
+and modes matched before and after the gate; tracked timestamps were refreshed.
+This receipt was added afterward with product and test source unchanged.
+CPU120–127 booking3438 returned 17:18Z. Evidence:
+`out/gchat2-schedule-error-guidance-20261018/result.json` and adjacent raw logs.
+No whole-gate repeat or native acceptance claimed.
+
+## Keep confirmed schedule changes after a failed reload — Gchat 2
+
+`GBOT-SCHEDULE-ACTION-RESULT`, based on main `739d5da2f`, displays the saved
+schedule returned by Create, Enable or Disable before reloading the list.
+Previously, a failed reload left the old enabled state and its opposite action
+on screen, or hid the newly created schedule after clearing its prompt.
+
+The confirmed result now stays visible when list reading fails. Retry loading
+schedules reads the list without repeating the write; a successful read can
+replace the confirmed result with newer service state. Pending controls remain
+guarded through the follow-up read. Older in-flight reads cannot overwrite the
+saved result, and existing drafts survive read failures and retries. This is
+source/rendered UI scope and uses the existing service response contract.
+
+All three new cases failed on unchanged production. The fixed schedule suite
+passed all 20 cases; lint passed with zero errors and five existing warnings.
+ONE `make verify`, 18 October 16:35:38–16:41:33 UTC, passed 3,710 app tests
+(six skipped), 127 extension tests, 1,309 Rust tests (28 ignored, 23 summaries),
+six coverage floors and lint/typecheck/guards. All 3,459 tracked raw source bytes
+and modes matched before and after the gate; tracked timestamps were refreshed
+before checks. This receipt was added afterward with product and test source
+unchanged. CPU120–127 booking3410 returned 16:42Z. Evidence:
+`out/gchat2-schedule-action-result-20261018/result.json` and adjacent raw logs.
+No retry or whole-gate repeat.
+
+## Brain setup error recovery — Gchat 2
+
+`GBOT-BRAIN-ERROR-GUIDANCE`, based on main `8de8e5f3d`, gives failed
+brain saves and ready-Host checks plain recovery steps beside their controls.
+Save feedback explains that the outcome could not be confirmed, keeps the
+entries available, and names Save brain settings for an explicit retry.
+Host discovery feedback names Refresh hosts. Technical diagnostics remain in
+Details, initially closed.
+
+A failed Host read no longer claims there are no ready models or that the saved
+session is unavailable. Those messages require a successful read. The selected
+model, context size and API key draft stay intact; opening Details and refreshing
+Hosts do not save settings or start a model. Rendered regressions cover both
+connection types and initial or refreshed discovery failures. This is
+source/rendered UI scope.
+
+All four new cases failed on unchanged production. The fixed brain setup and
+wizard suites passed all 53 cases; lint passed with zero errors and five existing
+warnings. ONE `make verify`, 18 October 16:17:34–16:23:22 UTC, passed 3,698 app
+tests (six skipped), 127 extension tests, 1,309 Rust tests (28 ignored,
+23 summaries), six coverage floors and lint/typecheck/guards. All 3,459 tracked
+raw source bytes and modes matched before and after the gate; tracked timestamps
+were refreshed before checks. This receipt was added afterward with product
+and test source unchanged. CPU120–127 booking3399 returned 16:23Z. Evidence:
+`out/gchat2-brain-error-guidance-20261018/result.json` and adjacent raw logs.
+No retry or whole-gate repeat.
+
+## Keep setup open during local computer actions — Gchat 2
+
+`GBOT-LOCAL-VM-NAVIGATION-PENDING`, based on main `aec8f8710`, keeps
+Back and Cancel unavailable while creating, starting, stopping, removing or
+connecting to a local computer. The pending state lasts through the follow-up
+status read and releases after success or failure, leaving existing action
+feedback available. Navigation and form submission also check pending state
+before React has rendered the disabled controls.
+
+Prerequisite reads and an unanswered removal confirmation leave navigation
+available. Removal still requires explicit confirmation; no request is sent if
+the user leaves before answering it. Rendered regressions cover all five actions
+with successful and failed responses, delayed status reads and same-turn
+navigation. This is source/rendered UI scope.
+
+All ten new cases failed on unchanged production. The fixed local setup and
+wizard suites passed all 62 cases; lint passed with zero errors and five existing
+warnings. ONE `make verify`, 18 October 15:56:57–16:02:58 UTC, passed 3,678 app
+tests (six skipped), 127 extension tests, 1,309 Rust tests (28 ignored,
+23 summaries), six coverage floors and lint/typecheck/guards. All 3,459 tracked
+raw source bytes and modes matched before and after the gate; tracked timestamps
+were refreshed before checks. This receipt was added afterward with product
+and test source unchanged. CPU112–119 booking3390 returned 16:03Z. Evidence:
+`out/gchat2-local-vm-navigation-pending-20261018/result.json` and adjacent raw
+logs. No retry or whole-gate repeat.
+
+## Local computer action recovery — Gchat 2
+
+`GBOT-LOCAL-VM-ACTION-ERROR-PERSISTENCE`, based on main `fe0630a14`, keeps
+failed local-computer Start, Stop, Remove and Use feedback visible while the user
+checks prerequisites or receives background progress. The action warning names
+the uncertain outcome and gives a plain recovery step; technical diagnostics
+remain in Details, initially closed. A separate failed prerequisite check can
+show its own error without replacing the action warning. Only an explicit
+computer action clears the previous action warning; canceling removal leaves it
+in place and sends no request.
+
+If creation fails before a setup record is saved, an explicit Retry computer
+setup control stays available. It reuses the original setup ID and the existing
+duplicate-click guard. When a saved record appears, its normal Resume setup or
+Use this computer controls take over. Checking prerequisites and opening Details
+do not replay a computer action; removal still requires confirmation.
+
+Rendered regressions cover all four action failures, successful and failed
+prerequisite checks, background reads, canceled and confirmed removal, and
+same-ID creation retries for both KVM and Hyper-V. This is source/rendered UI
+scope; the previously accepted physical guest lifecycle is unchanged.
+
+Six targeted regressions failed on unchanged production. The fixed local setup
+and wizard suites passed all 52 cases; lint passed with zero errors and five
+existing warnings. ONE `make verify`, 18 October 15:35:39–15:41:37 UTC, passed
+3,659 app tests (six skipped), 127 extension tests, 1,309 Rust tests (28 ignored,
+23 summaries), six coverage floors and lint/typecheck/guards. All 3,459 tracked
+raw source bytes and modes matched before and after the gate; tracked timestamps
+were refreshed before checks. This receipt was added afterward with product
+and test source unchanged. CPU120–127 booking3370 returned 15:41Z. Evidence:
+`out/gchat2-local-vm-action-error-persistence-20261018/result.json` and adjacent
+raw logs. No retry or whole-gate repeat.
+
+## Task history and approval read recovery in settings — Gchat 2
+
+`GBOT-SETTINGS-TASK-HISTORY-RETRY`, based on main `69f6e043c`, gives
+failed task-history and approval-list reads plain guidance and an explicit
+Retry loading tasks control in Gbot settings. Technical diagnostics remain in
+Details, initially closed. While the retry is pending, the control shows
+Loading tasks… and blocks duplicate clicks, including clicks in the same event
+turn. The task guidance names this control before suggesting changes to a bot's
+brain or task draft.
+
+The retry uses the existing read refresh. It preserves the selected bot, task
+draft, previously loaded history and pending approval requests. It does not
+submit, stop, resume or approve a task, or answer human-help requests. Rendered
+regressions cover both failed reads, a failed retry followed by recovery,
+diagnostic disclosure, duplicate clicks, preserved drafts and previously loaded
+history. This is source/rendered UI scope.
+
+Unchanged production reproduced four failed assertions while 103 route tests
+passed. The fixed route suite passed all 107 tests; lint passed with zero errors
+and five existing warnings. ONE `make verify`, 18 October 15:16:20–15:22:09 UTC,
+passed 3,646 app tests (six skipped), 127 extension tests, 1,309 Rust tests
+(28 ignored, 23 summaries), six coverage floors and lint/typecheck/guards.
+All 3,459 tracked raw source bytes and modes matched before and after the gate;
+tracked timestamps were refreshed before checks. This final receipt was added
+afterward with product and test source unchanged. CPU104–111 booking3356 returned.
+Evidence: `out/gchat2-settings-task-history-retry-20261018/result.json` and
+adjacent raw logs. No retry or whole-gate repeat.
+
+## Service approval recovery — Gchat 2
+
+`GBOT-SERVICE-APPROVAL-ERROR-GUIDANCE`, based on main `2aa268c25`,
+gives failed service-control requests and approval checks a plain recovery step.
+It names the failed action, asks the user to check the service computer's
+connection, and names the available Request Gbot control or Check approval
+button. Technical diagnostics are retained in Details, initially closed.
+
+Opening Details or refreshing the computer list does not replay an approval
+action. The selected computer, previous grant, owner-approval instructions and
+explicit retry contract stay in place. This is source/rendered UI scope; it
+claims no live grant, account or native Windows acceptance.
+
+Unchanged production failed four rendered assertions (nine passed). The fixed
+ServiceSetup and wizard suites passed all 39 cases; lint passed with zero errors
+and five existing warnings. ONE `make verify`, 18 October 14:57:13–15:03:04 UTC,
+passed 3,643 app tests (six skipped), 127 extension tests, 1,309 Rust tests
+(28 ignored, 23 summaries), six coverage floors and lint/typecheck/guards.
+All 3,459 tracked raw source bytes and modes matched before and after the gate;
+tracked timestamps were refreshed before checks. This receipt was added after
+the gate with product/test source unchanged. CPU104–111 booking3347 returned.
+Evidence: `out/gchat2-service-approval-error-guidance-20261018/result.json`
+and adjacent raw logs. No retry or whole-gate repeat.
+
+
+## Tool preparation and check recovery — Gchat 2
+
+`GBOT-TOOLS-CHECK-ERROR-GUIDANCE`, based on main `fe17d90f6`, gives
+failed Prepare tools and Check tools requests a plain recovery step beside the
+controls, with technical diagnostics in Details, initially closed. Failed
+archive or installer uploads explain checking the connection and free disk
+space before explicitly retrying preparation. If the administrator command was
+already run, the guidance directs the user to Check tools first.
+
+Returned instructions about the supported operating system, active desktop
+sessions and missing tools remain visible. Failed requests keep readiness false;
+consent, administrator commands and explicit retry behavior retain their existing
+contract. This is source/rendered UI scope, with no live installation or SSH
+acceptance claim.
+
+Unchanged production reproduced five failures (five passed); the fixed rendered
+suite passed all ten cases. Lint passed with zero errors and five existing
+warnings. ONE `make verify` passed 3,635 app tests (six skipped), 127 extension
+tests, six coverage floors and guards, then stopped at an unchanged executor
+`AlreadyRunning` teardown assertion. Copied Cargo artifacts were subsequently
+rejected after a zero-mtime export was found to preserve older fingerprints.
+After verifying all 3,458 tracked bytes/modes and refreshing their timestamps,
+only Rust and typecheck were rebuilt: fresh `make test-rust` passed 1,308 tests
+(28 ignored, 23 summaries), and fresh `make typecheck` passed. No Vitest, lint,
+extension or floor rerun. The failed and interrupted attempts remain in the
+packet; the fresh results supersede their Rust results. Final source postcheck
+matched all files. CPU104–111 booking3335 returned 14:37Z. Evidence:
+`out/gchat2-tools-check-error-guidance-20261018/result.json`. This receipt was
+added after the gate; product and test source stayed frozen.
+## Await media fixture teardown — Gchat 2
+
+`GBOT-MEDIA-TEARDOWN-JOIN`, based on main `770f3c03d`, removes a
+parallel-test race in desktop media revocation checks. `MediaLease::close`
+already joins its gateway and aborts/drains its connection jobs. Reconnecting
+to the released ephemeral port afterward can reach another fixture. Media
+tests now keep an established connection to the original gateway, verify that
+close ends it, and join the client connection task. This preserves codec,
+policy, exact remote-session revocation and repeated-close/error assertions.
+
+The Cua mock now owns its ingress and tonic server handles and tracks ingress
+classifier/tunnel jobs. Explicit async shutdown signals both servers, aborts
+and drains ingress jobs, and joins both owners after clients/streams are dropped.
+Every media fixture awaits shutdown before it is reused or leaves its scope;
+Drop remains cancellation-only. An incomplete front request also exercises the
+joined shutdown. No product media behavior, retry delay or test serialization
+changes.
+
+All-target Cargo check and strict Clippy passed. The requested 25-run loop
+passed all five media tests with four test threads in every run: 125 PASS,
+no failure or retry, 18 October 14:38:40–14:39:39 UTC. ONE `make verify`,
+14:40:19–14:45:44 UTC, passed: 3,631 app / 6 skipped, 127 extension,
+1,309 Rust / 28 ignored across 23 summaries, all six coverage floors,
+lint/typecheck/guards. All 3,458 tracked raw source hashes and modes matched
+before and after the gate; tracked input timestamps were refreshed before
+checks to prevent stale cache acceptance. This final receipt was added afterward.
+CPU104–111 booking3341 returned 14:45Z. Evidence:
+`out/gchat2-media-teardown-join-20261018/result.json` and adjacent raw logs.
+
 ## Independent-service paired-model sessions — Codex 3
 
 `GUI-GBOT-PAIRED-MODELS-SESSION-20261018`, based on main `ef64363fb`,
@@ -20,15 +298,20 @@ returns an empty list.
 
 Four focused CPU-only native TLS/Host regressions passed for cold saved sessions,
 late model availability, local-owner attachment, partial success, credential/poll
-errors and dispatch without discovery. Rust check and Clippy passed. Installed
-native brain selection and execution remain with the release owner. No Host
-server, Engine, GPU, frontend or passive Client authorization changes.
+errors and dispatch without discovery. Rust check and Clippy passed. The final
+installed Linux DEB at main `3e32ad0c9` also passed native ready-model selection,
+Save brain settings, Edit brain restoration, Cancel edits and normal task
+completion with the unchanged 262,144-token context. The rendered task finished
+with “C3 Linux RC bot ready”; see
+[native acceptance](/ai/gchat/out/c3-linux-rc-20261018/refreshed-gbot-result.json).
+No Host server, Engine, GPU, frontend or passive Client authorization changes.
 
 Owned source: `fix/c3-gbot-paired-model-session-20261018` at
-`/ai/gchat-worktrees/c3-gbot-paired-model-session-20261018`. S1 disposable source,
-read-copied caches and check output remain inactive at
-`/media/ron/SSD_RAID/ai/tmp-c3-gbot-paired-model-session-20261018` pending release
-integration; remove the owned copy after merge. Small retained evidence is
+`/ai/gchat-worktrees/c3-gbot-paired-model-session-20261018`. The correction is
+merged in main `3e32ad0c9`. Its inactive S1 disposable source, read-copied caches
+and check output at
+`/media/ron/SSD_RAID/ai/tmp-c3-gbot-paired-model-session-20261018` were removed
+after merge at 14:08Z, reclaiming 38.4 GB. Small retained evidence is
 `out/c3-gbot-paired-model-session-20261018/` in the main checkout. Discovery also
 checks that a credential failure cannot
 advertise a previous ready snapshot; only Hosts connected successfully in the
@@ -69,6 +352,9 @@ All 3,457 tracked raw source hashes and modes stayed unchanged through the gate;
 this final receipt was added afterward. CPU120–127 booking3320 returned 14:07Z.
 Evidence: `out/gchat2-desktop-connection-error-guidance-20261018/result.json`.
 Installed/native connection acceptance is separate.
+returned after all jobs exited. Installed native acceptance is complete; the
+[installer record](../installer-refresh/README.md) owns final package hashes,
+fixture retirement and the release scope.
 
 ## Failed cloud SSH checks keep retry guidance — Gchat 2
 

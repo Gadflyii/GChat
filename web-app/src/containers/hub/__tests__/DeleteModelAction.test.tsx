@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -33,6 +33,16 @@ const deleteModel = vi.fn()
 const stopModel = vi.fn()
 const getProviders = vi.fn()
 
+function deferred() {
+  let resolve!: () => void
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<void>((done, fail) => {
+    resolve = done
+    reject = fail
+  })
+  return { promise, resolve, reject }
+}
+
 const llamacpp = (ids: string[]): ModelProvider =>
   ({
     active: true,
@@ -56,9 +66,9 @@ const openConfirm = async () => {
 describe('DeleteModelAction', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    deleteModel.mockResolvedValue(undefined)
-    stopModel.mockResolvedValue(undefined)
-    getProviders.mockResolvedValue([llamacpp([])])
+    deleteModel.mockReset().mockResolvedValue(undefined)
+    stopModel.mockReset().mockResolvedValue(undefined)
+    getProviders.mockReset().mockResolvedValue([llamacpp([])])
     seedServiceHub({
       models: { deleteModel, stopModel } as unknown as ModelsService,
       providers: { getProviders } as unknown as ProvidersService,
@@ -84,6 +94,108 @@ describe('DeleteModelAction', () => {
     await waitFor(() =>
       expect(deleteModel).toHaveBeenCalledWith('Qwen3-4B-Q4_K_M', 'llamacpp')
     )
+  })
+
+  it('focuses Cancel so Enter dismisses the confirmation without deleting the model', async () => {
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" />)
+
+    const { user } = await openConfirm()
+    const cancel = screen.getByRole('button', { name: 'common:deleteModel.cancel' })
+    await waitFor(() => expect(cancel).toHaveFocus())
+    await user.keyboard('{Enter}')
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(deleteModel).not.toHaveBeenCalled()
+    expect(getProviders).not.toHaveBeenCalled()
+    expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['Qwen3-4B-Q4_K_M'])
+  })
+
+  it('keeps the confirmation open during deletion and permits an explicit retry after rejection', async () => {
+    const first = deferred()
+    const retry = deferred()
+    const onDeleted = vi.fn()
+    deleteModel.mockReturnValueOnce(first.promise).mockReturnValueOnce(retry.promise)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" onDeleted={onDeleted} />)
+    const trigger = screen.getByRole('button', { name: 'common:deleteModel.delete' })
+    const { user, confirm } = await openConfirm()
+    const dialog = screen.getByRole('dialog')
+    await user.click(confirm)
+
+    expect(dialog).toHaveAttribute('aria-busy', 'true')
+    expect(confirm).toBeDisabled()
+    expect(confirm).toHaveTextContent('Deleting model…')
+    expect(trigger).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'common:deleteModel.cancel' })).toBeDisabled()
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+    await user.keyboard('{Enter}{Escape}')
+    fireEvent.pointerDown(document.querySelector('[data-slot="dialog-overlay"]')!, {
+      button: 0,
+      ctrlKey: false,
+    })
+    expect(dialog).toBeInTheDocument()
+    expect(deleteModel).toHaveBeenCalledExactlyOnceWith('Qwen3-4B-Q4_K_M', 'llamacpp')
+    expect(onDeleted).not.toHaveBeenCalled()
+    expect(getProviders).not.toHaveBeenCalled()
+
+    await act(async () => {
+      first.reject(new Error('Model files are busy at /models/qwen.ginfer'))
+      await first.promise.catch(() => undefined)
+    })
+
+    expect(dialog).toBeInTheDocument()
+    expect(dialog).not.toHaveAttribute('aria-busy', 'true')
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not delete this model. Stop it if it is running, then try again.')
+    const details = screen.getByText('Technical details').closest('details')
+    expect(details).not.toHaveAttribute('open')
+    expect(details).toHaveTextContent('Model files are busy at /models/qwen.ginfer')
+    expect(screen.getByText('Model files are busy at /models/qwen.ginfer')).not.toBeVisible()
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled()
+    expect(within(dialog).getByRole('button', { name: 'common:deleteModel.cancel' })).toBeEnabled()
+    expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['Qwen3-4B-Q4_K_M'])
+    expect(useFavoriteModel.getState().favoriteModels).toHaveLength(1)
+    expect(getProviders).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'common:deleteModel.delete' }))
+    expect(deleteModel).toHaveBeenCalledTimes(2)
+    expect(deleteModel).toHaveBeenLastCalledWith('Qwen3-4B-Q4_K_M', 'llamacpp')
+    expect(dialog).toBeInTheDocument()
+    expect(dialog).toHaveAttribute('aria-busy', 'true')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    await act(async () => {
+      retry.resolve()
+      await retry.promise
+    })
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(onDeleted).toHaveBeenCalledOnce()
+    expect(getProviders).toHaveBeenCalledOnce()
+    expect(deleteModel).toHaveBeenCalledTimes(2)
+    expect(toastSuccess).toHaveBeenCalledWith('Model deleted', expect.any(Object))
+  })
+
+  it('guards same-turn duplicate deletion and closes only after the request succeeds', async () => {
+    const deletion = deferred()
+    deleteModel.mockReturnValue(deletion.promise)
+    render(<DeleteModelAction modelId="Qwen3-4B-Q4_K_M" provider="llamacpp" />)
+    const { confirm } = await openConfirm()
+
+    act(() => {
+      confirm.click()
+      confirm.click()
+    })
+
+    expect(deleteModel).toHaveBeenCalledExactlyOnceWith('Qwen3-4B-Q4_K_M', 'llamacpp')
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(getProviders).not.toHaveBeenCalled()
+    expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['Qwen3-4B-Q4_K_M'])
+    await act(async () => {
+      deletion.resolve()
+      await deletion.promise
+    })
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(deleteModel).toHaveBeenCalledOnce()
+    expect(getProviders).toHaveBeenCalledOnce()
   })
 
   it('names the model by its readable label, not its package hash, in the confirmation', async () => {

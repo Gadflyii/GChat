@@ -289,6 +289,37 @@ describe('AgentStudioPage', () => {
     }
   })
 
+  it.each(['saved agent', 'unsaved template'] as const)(
+    'moves keyboard focus into the template editor from %s without interrupting edits', async (source) => {
+      listAgentTemplates.mockResolvedValue([{
+        id: 'review-template', name: 'Review template', description: '', definition: firstAgent,
+      }])
+      const router = await renderNavigableStudio()
+      navigate.mockImplementation((options) => router.navigate(options))
+      const user = userEvent.setup()
+      for (let attempt = 0; attempt < (source === 'unsaved template' ? 2 : 1); attempt++) {
+        screen.getByRole('button', { name: 'Templates', exact: true }).focus()
+        await user.keyboard('{Enter}')
+        const useTemplate = await screen.findByRole('button', { name: 'Use template' })
+        useTemplate.focus()
+        await user.keyboard('{Enter}')
+        await waitFor(() => expect(screen.getByLabelText('Name')).toHaveFocus())
+        expect(screen.getByLabelText('Name')).toHaveValue(`${firstAgent.name} Copy`)
+        expect(screen.getByRole('button', { name: 'Agents & flows', current: 'page' })).toBeInTheDocument()
+      }
+      await user.keyboard('{Control>}a{/Control}')
+      await user.keyboard('My keyboard template')
+      expect(screen.getByLabelText('Name')).toHaveFocus()
+      await user.tab()
+      expect(screen.getByLabelText('Identifier')).toHaveFocus()
+      await user.keyboard('keyboard-template')
+      expect(screen.getByLabelText('Identifier')).toHaveFocus()
+      expect(screen.getByLabelText('Name')).toHaveValue('My keyboard template')
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    }
+  )
+
   it.each(['saved', 'new', 'template'] as const)(
     'guards navigation away from an edited %s draft until discard is explicit', async (source) => {
       listAgentTemplates.mockResolvedValue([{
@@ -1177,6 +1208,59 @@ describe('AgentStudioPage', () => {
     expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith('review-assistant-3')
   })
 
+  it.each(['before', 'after'] as const)(
+    'reveals the newly saved library entry when its list arrives %s save resolves, without stealing focus or repeating on refresh',
+    async (arrival) => {
+      const saved = { ...editableDraft, id: 'zebra-planner', name: 'Zebra planner' }
+      definitionState.value.definitions = [firstAgent, secondAgent]
+      definitionState.value.save.mockImplementation(async () => {
+        if (arrival === 'before') {
+          definitionState.value.definitions = [firstAgent, secondAgent, saved]
+        }
+        return saved
+      })
+      const revealed: HTMLElement[] = []
+      const scroll = vi.fn(function (this: HTMLElement) { revealed.push(this) })
+      const originalScroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll })
+      try {
+        const page = render(<AgentStudioPage />)
+        await screen.findByDisplayValue(firstAgent.name)
+        fireEvent.click(screen.getByTitle('New agent'))
+        await screen.findByDisplayValue(editableDraft.name)
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: saved.name } })
+        const focusTarget = screen.getByRole('button', { name: 'Templates', exact: true })
+        focusTarget.focus()
+        scroll.mockClear()
+        revealed.length = 0
+        fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+        await waitFor(() => expect(screen.getByLabelText('Identifier')).toHaveValue(saved.id))
+        if (arrival === 'after') {
+          expect(scroll).not.toHaveBeenCalled()
+          definitionState.value.definitions = [firstAgent, secondAgent, saved]
+          page.rerender(<AgentStudioPage />)
+        }
+        const selected = screen.getByRole('button', { name: /Zebra planner/ })
+        await waitFor(() => expect(revealed).toEqual([selected]))
+        expect(scroll).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
+        expect(selected).toHaveClass('border-primary')
+        expect(focusTarget).toHaveFocus()
+
+        const library = selected.closest('aside')!
+        library.scrollTop = 0
+        definitionState.value.definitions = [...definitionState.value.definitions]
+        page.rerender(<AgentStudioPage />)
+        fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A weekly plan.' } })
+        expect(library.scrollTop).toBe(0)
+        expect(scroll).toHaveBeenCalledTimes(1)
+        expect(focusTarget).toHaveFocus()
+      } finally {
+        if (originalScroll) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScroll)
+        else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+      }
+    }
+  )
+
   it.each(['new', 'existing'] as const)(
     'keeps a hyphenated identifier while typing a %s draft and normalizes it on blur', async (source) => {
       const user = userEvent.setup()
@@ -1395,6 +1479,62 @@ describe('AgentStudioPage', () => {
     expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
   })
 
+  it.each([
+    ['Save definition', '256.5'],
+    ['Save & run', '256.5'],
+    ['Save definition', '255'],
+    ['Save & run', '255'],
+    ['Save definition', '262145'],
+    ['Save & run', '262145'],
+  ])('reveals and focuses an invalid output budget before %s with %s', async (action, value) => {
+    definitionState.value.save.mockImplementation(async (definition) => definition)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    const input = screen.getByLabelText('Output budget per model call')
+    const advanced = input.closest('details')!
+    fireEvent.change(input, { target: { value } })
+    expect(advanced.open).toBe(false)
+
+    screen.getByRole('button', { name: action }).focus()
+    await userEvent.setup().keyboard('{Enter}')
+
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith(
+      'Output budget must be Auto or a whole number from 256 to 262,144 tokens.'
+    )
+    expect(advanced.open).toBe(true)
+    expect(input).toHaveFocus()
+    expect(input).toHaveValue(Number(value))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.change(input, { target: { value: '4096' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ maxOutputTokens: 4096 })
+    ))
+  })
+
+  it.each([
+    ['', null],
+    ['256', 256],
+    ['262144', 262144],
+  ])('preserves the valid output budget %s when saving', async (value, maxOutputTokens) => {
+    definitionState.value.save.mockImplementation(async (definition) => definition)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    const input = screen.getByLabelText('Output budget per model call')
+    fireEvent.change(input, { target: { value: '4096' } })
+    fireEvent.change(input, { target: { value } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ maxOutputTokens })
+    ))
+    expect(toast.error).not.toHaveBeenCalled()
+  })
+
   it('saves once while keeping newer edits when the reviewed save completes', async () => {
     const pending = deferred<AgentDefinition>()
     definitionState.value.save.mockReturnValue(pending.promise)
@@ -1575,6 +1715,32 @@ describe('AgentStudioPage', () => {
     expect(screen.getByRole('button', { name: 'Default model instance' })).toHaveTextContent('muse · port 8124')
   })
 
+  it('exposes one selected composition through keyboard changes and saves that selection', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    const names = [/^Standard Agent/, /^Goal Loop/, /^Coordinator Team/, /^Workflow/]
+    const expectSelected = (selected: number) => {
+      names.forEach((name, index) => {
+        expect(screen.getByRole('button', { name, pressed: index === selected })).toBeInTheDocument()
+      })
+    }
+    expectSelected(0)
+    for (const [index, key] of [[1, ' '], [2, '{Enter}'], [3, ' '], [0, '{Enter}']] as const) {
+      const choice = screen.getByRole('button', { name: names[index], pressed: false })
+      choice.focus()
+      await user.keyboard(key)
+      expectSelected(index)
+      expect(choice).toHaveFocus()
+    }
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'standard' })
+    ))
+  })
+
   it('preserves and saves the default goal when changing composition', async () => {
     definitionState.value.save.mockImplementation(async (value) => value)
     render(<AgentStudioPage />)
@@ -1600,8 +1766,9 @@ describe('AgentStudioPage', () => {
     render(<AgentStudioPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
     await screen.findByLabelText('Name')
-    const composition = screen.getByRole('button', { name: /Goal Loop/i })
+    const composition = screen.getByRole('button', { name: /Goal Loop/i, pressed: false })
     fireEvent.click(composition)
+    expect(screen.getByRole('button', { name: /Goal Loop/i, pressed: true })).toBe(composition)
     fireEvent.change(screen.getByLabelText('Success criteria'), {
       target: { value: 'The report cites every source.' },
     })
@@ -1654,6 +1821,7 @@ describe('AgentStudioPage', () => {
       })
       const composition = screen.getByRole('button', {
         name: kind === 'coordinator' ? /^Coordinator Team/ : /^Workflow/,
+        pressed: true,
       })
       composition.focus()
       await userEvent.setup().keyboard(' ')

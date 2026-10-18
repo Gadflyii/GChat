@@ -1,4 +1,11 @@
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { HelpRequest } from '@/services/gbot'
 import GbotHumanHelp from './GbotHumanHelp'
@@ -71,7 +78,7 @@ it.each(['Send reply', 'Decline'])(
       .fn()
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(retry.promise)
-    render(
+    const { rerender } = render(
       <GbotHumanHelp
         request={request}
         taskState="waiting_for_human"
@@ -84,17 +91,86 @@ it.each(['Send reply', 'Decline'])(
     })
     fireEvent.click(screen.getByRole('button', { name: action }))
     await act(async () => first.reject(new Error('Service unavailable')))
-    expect(screen.getByRole('alert')).toHaveTextContent('Service unavailable')
+    const guidance =
+      action === 'Send reply'
+        ? 'Could not confirm your reply. Your draft is still here. If this task is still asking for help, choose Send reply to try again.'
+        : 'Could not confirm that the request was declined. Your draft is still here. If this task is still asking for help, choose Decline to try again.'
+    const alert = screen.getByRole('alert')
+    expect(within(alert).getByText(guidance)).toBeVisible()
+    const details = within(alert).getByText('Details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(alert).getByText('Service unavailable')).not.toBeVisible()
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(within(alert).getByText('Service unavailable')).toBeVisible()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Your reply')).toHaveValue('Keep this draft')
     expect(screen.getByLabelText('Your reply')).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: action }))
+    rerender(
+      <GbotHumanHelp
+        request={{ ...request }}
+        taskState="waiting_for_human"
+        busy={false}
+        reply={reply}
+      />
+    )
+    expect(screen.getByText(guidance)).toBeVisible()
+    expect(screen.getByLabelText('Your reply')).toHaveValue('Keep this draft')
+    expect(reply).toHaveBeenCalledTimes(1)
+    const retryButton = screen.getByRole('button', { name: action })
+    act(() => {
+      fireEvent.click(retryButton)
+      fireEvent.click(retryButton)
+    })
     expect(reply).toHaveBeenCalledTimes(2)
     expect(reply.mock.calls[1]).toEqual(reply.mock.calls[0])
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     await act(async () => retry.resolve())
   }
 )
+
+it('explains an unconfirmed response after the request closes without offering retry', async () => {
+  const first = deferred()
+  const reply = vi.fn().mockReturnValue(first.promise)
+  const { rerender } = render(
+    <GbotHumanHelp
+      request={request}
+      taskState="waiting_for_human"
+      busy={false}
+      reply={reply}
+    />
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Decline' }))
+  const closed = { ...request, status: 'cancelled' as const }
+  rerender(
+    <GbotHumanHelp
+      request={closed}
+      taskState="interrupted"
+      busy={false}
+      reply={reply}
+    />
+  )
+  await act(async () => first.reject(new Error('Request already closed')))
+  expect(screen.getByText('Request cancelled')).toBeVisible()
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not confirm your response. This help request is no longer open. Check the task status.'
+  )
+  expect(within(alert).getByText('Request already closed')).not.toBeVisible()
+  expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute(
+    'open'
+  )
+  expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  expect(reply).toHaveBeenCalledExactlyOnceWith(null)
+  rerender(
+    <GbotHumanHelp
+      request={closed}
+      taskState="running"
+      busy={false}
+      reply={reply}
+    />
+  )
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
 
 it('does not submit an empty reply or claim to send during unrelated work', () => {
   const reply = vi.fn().mockResolvedValue(undefined)

@@ -190,13 +190,19 @@ describe('NavMain', () => {
 
   it('starts an empty New Chat without deleting the saved conversation draft', async () => {
     usePrompt.getState().setPrompt('Old home draft')
+    usePrompt.getState().setDraftSkill(TEMPORARY_CHAT_ID, 'pdf')
     usePrompt.getState().setActiveThread('saved-conversation')
     usePrompt.getState().setPrompt('Keep this reply')
+    usePrompt.getState().setDraftSkill('saved-conversation', 'slides')
     render(<NavMain />)
 
     fireEvent.click(screen.getByText('common:newChat'))
     await waitFor(() => expect(actions.navigate).toHaveBeenCalledWith({ to: '/', search: {} }))
     expect(usePrompt.getState().prompt).toBe('Keep this reply')
+    expect(usePrompt.getState().draftSkills).toEqual({
+      [TEMPORARY_CHAT_ID]: undefined,
+      'saved-conversation': 'slides',
+    })
     act(() => usePrompt.getState().setActiveThread(TEMPORARY_CHAT_ID))
     expect(usePrompt.getState().prompt).toBe('')
     act(() => usePrompt.getState().setActiveThread('saved-conversation'))

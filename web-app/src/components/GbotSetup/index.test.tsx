@@ -9,6 +9,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import GbotSetup from './index'
+import { settleConfirm, useConfirmStore } from '@/lib/confirm'
 import {
   gbot,
   gbotControlGrant,
@@ -39,6 +40,9 @@ vi.mock('@/services/gbot', () => ({
   getGbotServiceTarget: vi.fn(),
   selectGbotService: vi.fn(),
   gbotControlGrant: vi.fn(),
+}))
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: async () => () => {},
 }))
 beforeEach(() => {
   resources.ready = true
@@ -118,6 +122,130 @@ function fillConnection() {
   ])
     fireEvent.change(screen.getByLabelText(label), { target: { value } })
 }
+
+it.each(
+  (['create', 'start', 'stop', 'remove', 'use'] as const).flatMap((path) =>
+    (['success', 'failure'] as const).map((outcome) => [path, outcome] as const)
+  )
+)(
+  'keeps local %s navigation locked until its request and read return (%s)',
+  async (path, outcome) => {
+    let resolve!: (value: unknown) => void
+    let reject!: (reason: Error) => void
+    const response = new Promise((yes, no) => {
+      resolve = yes
+      reject = no
+    })
+    let finishRead!: (value: unknown) => void
+    const refresh = new Promise((yes) => {
+      finishRead = yes
+    })
+    const saved = {
+      id: 'writer-computer',
+      name: 'Writer',
+      stage: path === 'start' ? 'connecting' : 'ready',
+      issue: null,
+    }
+    let reads = 0
+    vi.mocked(gbot).mockImplementation((route) => {
+      if (route === 'setup/local-vm/preflight')
+        return Promise.resolve({
+          ready: true,
+          issues: [],
+          hypervisor: outcome === 'success' ? 'kvm' : 'hyper_v',
+        })
+      if (route === 'setup/local-vm/status')
+        return ++reads === 1
+          ? Promise.resolve(path === 'create' ? [] : [saved])
+          : refresh
+      return response
+    })
+    const cancel = vi.fn()
+    const save = vi.fn()
+    const localReady = vi.fn().mockReturnValue(response)
+    render(<GbotSetup save={save} localReady={localReady} cancel={cancel} />)
+    fireEvent.change(screen.getByLabelText('Bot name'), {
+      target: { value: 'Writer' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    fireEvent.click(await screen.findByLabelText(/A separate local VM/))
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    const label = {
+      create: 'Create Writer’s computer',
+      start: 'Resume setup',
+      stop: 'Stop computer',
+      remove: 'Remove owned computer',
+      use: 'Use this computer',
+    }[path]!
+    const action = await screen.findByRole('button', { name: label })
+    await waitFor(() => expect(action).toBeEnabled())
+    const back = screen.getByRole('button', { name: 'Back' })
+    const leave = screen.getByRole('button', { name: 'Cancel' })
+    const form = screen.getByRole('form', { name: 'Set up Gbot' })
+    if (path === 'remove') {
+      fireEvent.click(action)
+      expect(useConfirmStore.getState().pending).not.toBeNull()
+      expect(back).toBeEnabled()
+      expect(leave).toBeEnabled()
+      expect(gbot).not.toHaveBeenCalledWith(
+        'setup/local-vm/remove',
+        expect.anything()
+      )
+    }
+    await act(async () => {
+      if (path === 'remove') {
+        settleConfirm(true)
+        await Promise.resolve()
+      } else action.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      back.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      leave.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    expect(screen.getByText('Step 4 · Review and setup')).toBeInTheDocument()
+    expect(back).toBeDisabled()
+    expect(leave).toBeDisabled()
+    expect(cancel).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
+    const mutations = () =>
+      vi.mocked(gbot).mock.calls.filter(([route]) =>
+        /setup\/local-vm\/(start|stop|remove)$/.test(route)
+      )
+    expect(mutations()).toHaveLength(path === 'use' ? 0 : 1)
+    expect(localReady).toHaveBeenCalledTimes(path === 'use' ? 1 : 0)
+    await act(async () => {
+      if (outcome === 'failure') reject(new Error('Connection interrupted'))
+      else
+        resolve({
+          ...saved,
+          id:
+            path === 'create'
+              ? (mutations()[0][1] as { id: string }).id
+              : saved.id,
+          stage: path === 'remove' ? 'removed' : saved.stage,
+        })
+    })
+    if (path !== 'use') {
+      expect(back).toBeDisabled()
+      expect(leave).toBeDisabled()
+      await act(async () => finishRead(path === 'remove' ? [] : [saved]))
+    }
+    expect(back).toBeEnabled()
+    expect(leave).toBeEnabled()
+    expect(mutations()).toHaveLength(path === 'use' ? 0 : 1)
+    if (outcome === 'failure') {
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not')
+      fireEvent.click(leave)
+      expect(cancel).toHaveBeenCalledOnce()
+    } else {
+      fireEvent.click(back)
+      expect(screen.getByText('Step 3 · Computer')).toBeInTheDocument()
+    }
+  }
+)
 
 it('offers a separate Linux desktop using the service computer’s Linux or Windows virtualization', async () => {
   render(<GbotSetup save={vi.fn()} localReady={vi.fn()} cancel={vi.fn()} />)

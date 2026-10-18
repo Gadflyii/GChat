@@ -24,20 +24,43 @@ export function CredentialSetup({
   const [skipped, setSkipped] = useState(false)
   const [guide, setGuide] = useState(false)
   const [message, setMessage] = useState('')
+  const [installError, setInstallError] = useState<string>()
+  const [locking, setLocking] = useState(false)
+  const [lockError, setLockError] = useState<string>()
+  const [vaultError, setVaultError] = useState<{
+    action: 'create' | 'resume' | 'unlock'
+    details: string
+  }>()
   const [intent, setIntent] = useState<'create' | 'unlock'>()
   const [passphrase, setPassphrase] = useState('')
   const [confirmation, setConfirmation] = useState('')
   const check = useCallback(
-    async (interactive = false) => {
+    async (interactive = false, recoverVault = false) => {
       setBusy(true)
       onReady?.(false)
+      if (recoverVault) {
+        setPassphrase('')
+        setConfirmation('')
+      }
       try {
         const result = await engineCommand<Status>('credential_status', {
           check: interactive,
         })
         setStatus(result)
+        if (recoverVault)
+          setIntent(
+            result.migrating
+              ? 'create'
+              : result.tier === 'passphrase' && result.state === 'locked'
+                ? 'unlock'
+                : result.can_create
+                  ? 'create'
+                  : undefined
+          )
+        if (interactive) setLockError(undefined)
         onReady?.(result.ready === true)
       } catch (error) {
+        if (recoverVault) setIntent(undefined)
         setStatus({
           ready: false,
           platform: 'unknown',
@@ -54,7 +77,9 @@ export function CredentialSetup({
     void check()
   }, [check])
   const install = async () => {
+    setInstallError(undefined)
     setBusy(true)
+    onReady?.(false)
     setMessage(
       'Approve the system administrator prompt to install GNOME Keyring. GChat never receives your administrator password.'
     )
@@ -65,7 +90,9 @@ export function CredentialSetup({
       )
       await check(true)
     } catch (error) {
-      setMessage(String(error))
+      setMessage('')
+      setInstallError(String(error))
+      await check()
     } finally {
       setBusy(false)
     }
@@ -76,6 +103,7 @@ export function CredentialSetup({
       !status?.migrating &&
       passphrase !== confirmation
     ) {
+      setVaultError(undefined)
       setMessage('The passphrases do not match.')
       return
     }
@@ -83,6 +111,10 @@ export function CredentialSetup({
     setPassphrase('')
     setConfirmation('')
     setMessage('')
+    setInstallError(undefined)
+    setLockError(undefined)
+    setVaultError(undefined)
+    setLocking(action === 'lock')
     setBusy(true)
     onReady?.(false)
     try {
@@ -99,9 +131,15 @@ export function CredentialSetup({
       onReady?.(result.ready === true)
       setIntent(undefined)
     } catch (error) {
-      setMessage(String(error))
-      await check()
+      if (action === 'lock') setLockError(String(error))
+      else
+        setVaultError({
+          action: action === 'create' && status?.migrating ? 'resume' : action,
+          details: String(error),
+        })
+      await check(false, action !== 'lock')
     } finally {
+      setLocking(false)
       setBusy(false)
     }
   }
@@ -110,7 +148,74 @@ export function CredentialSetup({
     setPassphrase('')
     setConfirmation('')
     setMessage('')
+    setInstallError(undefined)
+    setLockError(undefined)
+    setVaultError(undefined)
   }
+  const installationFeedback = !busy && installError ? (
+    <div className="text-sm space-y-2" role="alert">
+      <p>Could not finish setting up secure storage.</p>
+      <p>
+        {status?.ready
+          ? 'Secure storage is now ready. You can continue setup.'
+          : status?.state === 'unchecked'
+            ? 'Choose Check secure storage to confirm whether it is ready. Your computer may ask you to unlock its password storage.'
+            : status?.can_install
+              ? 'Choose Set up secure storage to retry installation. Your computer will ask for administrator approval again.'
+              : 'Choose Check again to confirm the current state. If a keyring is already installed, unlock it using your desktop’s password or keyring app. You may need to sign out and back in.'}
+      </p>
+      <details className="text-xs">
+        <summary>Installation error details</summary>
+        <p className="break-words">{installError}</p>
+      </details>
+    </div>
+  ) : null
+  const vaultFeedback = !busy && vaultError ? (
+    <div className="text-sm space-y-2" role="alert">
+      <p>
+        {vaultError.action === 'create'
+          ? 'Could not finish creating the passphrase vault.'
+          : vaultError.action === 'resume'
+            ? 'Could not finish resuming the vault migration.'
+            : 'Could not finish unlocking the vault.'}
+      </p>
+      <p>
+        {status?.migrating
+          ? 'Your saved connections are still being moved. Enter the same passphrase and choose Resume migration.'
+          : status?.tier === 'passphrase' && status.ready
+            ? 'The vault is currently unlocked. If Gbot still cannot use your saved connections, choose Lock vault, then unlock it again.'
+            : status?.tier === 'passphrase' && status.state === 'locked'
+              ? 'The vault is currently locked. Enter your passphrase and choose Unlock vault to try again.'
+              : status?.can_create
+                ? 'Enter and confirm your passphrase, then choose Create passphrase vault to try again.'
+                : status?.tier === 'native' && status.ready
+                  ? 'Your computer’s password storage is still selected. Choose Use a passphrase vault to try again.'
+                  : 'The vault’s current state could not be confirmed. Choose Check again before trying again.'}
+      </p>
+      <details className="text-xs">
+        <summary>Vault error details</summary>
+        <p className="break-words">{vaultError.details}</p>
+      </details>
+    </div>
+  ) : null
+  const lockFeedback = locking ? (
+    <div className="text-sm" role="status">
+      <p>Locking the passphrase vault…</p>
+      <p>Wait for the result before continuing setup.</p>
+    </div>
+  ) : lockError ? (
+    <div className="text-sm space-y-2" role="alert">
+      <p>
+        {status?.ready && status.tier === 'passphrase'
+          ? 'Could not finish locking the vault. The vault is currently unlocked. Choose Lock vault to try again.'
+          : 'Could not finish locking the vault. Choose Check again to confirm whether the vault is locked before continuing.'}
+      </p>
+      <details className="text-xs">
+        <summary>Lock error details</summary>
+        <p className="break-words">{lockError}</p>
+      </details>
+    </div>
+  ) : null
   if (status?.ready && !intent)
     return (
       <section
@@ -118,13 +223,20 @@ export function CredentialSetup({
         aria-label="Secure storage setup"
       >
         <h3 className="font-medium">Secure storage</h3>
-        <p className="text-sm" role="status">
-          Secure storage is ready.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          GChat can now protect your connected accounts, Gbot access keys and
-          connections to other computers. You can continue setup.
-        </p>
+        {!locking && (
+          <>
+            <p className="text-sm" role="status">
+              Secure storage is ready.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              GChat can now protect your connected accounts, Gbot access keys and
+              connections to other computers. You can continue setup.
+            </p>
+          </>
+        )}
+        {lockFeedback}
+        {vaultFeedback}
+        {installationFeedback}
         {status.tier === 'passphrase' && (
           <Button
             variant="outline"
@@ -178,7 +290,12 @@ export function CredentialSetup({
         sure these connections can be saved safely. Local models do not need
         this step.
       </p>
-      {busy && <p role="status">Checking or setting up secure storage…</p>}
+      {busy && !locking && (
+        <p role="status">Checking or setting up secure storage…</p>
+      )}
+      {lockFeedback}
+      {vaultFeedback}
+      {installationFeedback}
       {!busy && status && !status.ready && (
         <p role={status.state === 'unchecked' ? 'status' : 'alert'}>
           {status.state === 'unchecked'
@@ -256,6 +373,8 @@ export function CredentialSetup({
                 setPassphrase('')
                 setConfirmation('')
                 setMessage('')
+                setLockError(undefined)
+                setVaultError(undefined)
               }}
             >
               Cancel
@@ -271,11 +390,13 @@ export function CredentialSetup({
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        {!intent && status?.tier === 'passphrase' && (
-          <Button disabled={busy} onClick={() => choose('unlock')}>
-            Unlock vault
-          </Button>
-        )}
+        {!intent &&
+          status?.tier === 'passphrase' &&
+          (!vaultError || status.state === 'locked') && (
+            <Button disabled={busy} onClick={() => choose('unlock')}>
+              Unlock vault
+            </Button>
+          )}
         {!intent && status?.migrating && (
           <Button disabled={busy} onClick={() => choose('create')}>
             Resume migration
@@ -299,7 +420,7 @@ export function CredentialSetup({
         <Button
           variant={status?.state === 'unchecked' ? 'default' : 'outline'}
           disabled={busy}
-          onClick={() => void check(true)}
+          onClick={() => void check(true, !!vaultError)}
         >
           {status?.state === 'unchecked'
             ? 'Check secure storage'

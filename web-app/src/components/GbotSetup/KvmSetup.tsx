@@ -24,10 +24,12 @@ export default function KvmSetup({
   name,
   connected,
   initialId,
+  busy: reportBusy,
 }: {
   name: string
   initialId?: string
   connected: (id: string) => Promise<void>
+  busy?: (value: boolean) => void
 }) {
   const [preflight, setPreflight] = useState<LocalVmPreflight | null>(null)
   const [records, setRecords] = useState<KvmSetupRecord[]>([])
@@ -41,6 +43,10 @@ export default function KvmSetup({
   const busy = !!action
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
+  const [actionError, setActionError] = useState<{
+    message: string
+    diagnostic: string
+  }>()
   const checkPending = useRef(false)
   const actionPending = useRef(false)
   const mounted = useRef(false)
@@ -101,6 +107,7 @@ export default function KvmSetup({
   ) => {
     if (actionPending.current || checkPending.current) return
     actionPending.current = true
+    reportBusy?.(true)
     const id = saved?.id ?? newId.current
     const botName = saved?.name ?? name.trim()
     setAction({
@@ -110,6 +117,7 @@ export default function KvmSetup({
       stopped: saved?.stage === 'stopped',
     })
     setError('')
+    setActionError(undefined)
     try {
       if (path === 'use') {
         await connected(id)
@@ -132,11 +140,22 @@ export default function KvmSetup({
       }
       await refresh()
     } catch (cause) {
-      setError(String(cause))
+      setActionError({
+        message:
+          path === 'use'
+            ? `Could not connect to ${botName}’s computer.`
+            : path === 'remove'
+              ? `Could not confirm that ${botName}’s computer was removed.`
+              : path === 'stop'
+                ? `Could not confirm that ${botName}’s computer stopped.`
+                : `Could not confirm ${botName}’s computer setup.`,
+        diagnostic: String(cause),
+      })
       if (path !== 'use') await refresh().catch(() => {})
     } finally {
       actionPending.current = false
       setAction(undefined)
+      reportBusy?.(false)
     }
   }
   const removeComputer = async (saved: KvmSetupRecord) => {
@@ -210,15 +229,20 @@ export default function KvmSetup({
       >
         {checking ? 'Checking prerequisites…' : 'Check prerequisites again'}
       </Button>
-      {!initialId && !current && (
-        <Button
-          type="button"
-          disabled={busy || checking || !preflight?.ready}
-          onClick={() => void act('start')}
-        >
-          {busy ? 'Starting setup…' : `Create ${name.trim()}’s computer`}
-        </Button>
-      )}
+      {!initialId &&
+        (!current || (current === newId.current && !record)) && (
+          <Button
+            type="button"
+            disabled={busy || checking || !preflight?.ready}
+            onClick={() => void act('start')}
+          >
+            {busy
+              ? 'Starting setup…'
+              : current
+                ? `Retry ${name.trim()}’s computer setup`
+                : `Create ${name.trim()}’s computer`}
+          </Button>
+        )}
       {visibleRecords.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium">Saved local computer setups</p>
@@ -310,6 +334,23 @@ export default function KvmSetup({
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
+      )}
+      {actionError && (
+        <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>{actionError.message}</p>
+          <p>
+            Check the service computer’s connection, then choose Check
+            prerequisites again to refresh this setup’s progress. Use the
+            controls above to retry if needed. Removing a computer still
+            requires confirmation.
+          </p>
+          <details>
+            <summary className="cursor-pointer">Details</summary>
+            <p className="whitespace-pre-wrap break-words">
+              {actionError.diagnostic}
+            </p>
+          </details>
+        </div>
       )}
     </div>
   )

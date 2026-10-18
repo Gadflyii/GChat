@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import {
@@ -278,6 +279,139 @@ const ready = {
   context_tokens: 262144,
 }
 
+it.each(['endpoint', 'paired_host'] as const)(
+  'guides an explicit retry after a failed %s brain save without losing entries',
+  async (kind) => {
+    call.mockResolvedValue([ready])
+    const configured: SavedAssignment =
+      kind === 'endpoint'
+        ? saved
+        : {
+            ...saved,
+            connection: { kind: 'paired_host', target: ready.target },
+            model: ready.model,
+            credential_ref: null,
+          }
+    const initial: Assignment = {
+      connection: configured.connection,
+      model: configured.model,
+      context_tokens: configured.context_tokens,
+      ...(kind === 'endpoint' ? { api_key: 'draft-key' } : {}),
+    }
+    const first = deferred()
+    const retry = deferred()
+    const save = vi
+      .fn()
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(retry.promise)
+    render(<Setup initial={initial} configured={configured} save={save} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+    const submit = screen.getByRole('button', { name: 'Save brain settings' })
+    await waitFor(() => expect(submit).toBeEnabled())
+    fireEvent.click(submit)
+    await act(async () => first.reject(new Error('vault transport: code 53')))
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/could not confirm.*brain settings.*saved/i)
+    expect(alert).toHaveTextContent(/entries are still here/i)
+    expect(alert).toHaveTextContent(/choose Save brain settings to try again/i)
+    const details = within(alert).getByText('Details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(alert).getByText('vault transport: code 53')).not.toBeVisible()
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(within(alert).getByText('vault transport: code 53')).toBeVisible()
+    expect(screen.getByLabelText('Model ID')).toHaveValue(initial.model)
+    expect(screen.getByLabelText('Model context tokens')).toHaveValue(262144)
+    if (kind === 'endpoint') {
+      expect(screen.getByLabelText('GInfer API URL')).toHaveValue('http://host/v1')
+      expect(screen.getByLabelText('API key')).toHaveValue('draft-key')
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh hosts' }))
+      await waitFor(() => expect(submit).toBeEnabled())
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /choose Save brain settings to try again/i
+      )
+      expect(
+        screen.getByRole('button', { name: 'Ready Host model' })
+      ).toHaveTextContent(ready.model)
+    }
+    expect(save).toHaveBeenCalledExactlyOnceWith(initial)
+
+    fireEvent.click(submit)
+    expect(save).toHaveBeenCalledTimes(2)
+    expect(save.mock.calls[1]).toEqual(save.mock.calls[0])
+    await act(async () => retry.resolve())
+    expect(screen.getByText('Brain configured')).toBeVisible()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(call.mock.calls).toEqual(
+      kind === 'paired_host'
+        ? [['assignments/models'], ['assignments/models']]
+        : []
+    )
+  }
+)
+
+it.each(['initial check', 'refresh'])(
+  'guides recovery from a failed Host %s without claiming no models are ready',
+  async (stage) => {
+    const failed = deferred()
+    const recovered = deferred()
+    if (stage === 'refresh') call.mockResolvedValueOnce([ready])
+    call
+      .mockReturnValueOnce(failed.promise.then(() => [ready]))
+      .mockReturnValueOnce(recovered.promise.then(() => [ready]))
+    const save = vi.fn()
+    const initial: Assignment = {
+      connection: { kind: 'paired_host', target: ready.target },
+      model: ready.model,
+      context_tokens: ready.context_tokens,
+    }
+    render(<Setup initial={initial} save={save} />)
+    const submit = screen.getByRole('button', { name: 'Save brain settings' })
+    const refresh = screen.getByRole('button', { name: 'Refresh hosts' })
+    if (stage === 'refresh') {
+      await waitFor(() => expect(submit).toBeEnabled())
+      fireEvent.click(refresh)
+    }
+    await act(async () => failed.reject('Host RPC: connection reset'))
+
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent(/could not check which Host models are ready/i)
+    expect(alert).toHaveTextContent(/choose Refresh hosts to try again/i)
+    expect(screen.queryByText(/No ready models/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/saved session is unavailable/)
+    ).not.toBeInTheDocument()
+    expect(submit).toBeDisabled()
+    expect(refresh).toBeEnabled()
+    expect(screen.getByLabelText('Model ID')).toHaveValue(initial.model)
+    expect(screen.getByLabelText('Model context tokens')).toHaveValue(262144)
+    const details = within(alert).getByText('Details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(within(alert).getByText('Host RPC: connection reset')).not.toBeVisible()
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(within(alert).getByText('Host RPC: connection reset')).toBeVisible()
+    expect(call).toHaveBeenCalledTimes(stage === 'refresh' ? 2 : 1)
+    expect(save).not.toHaveBeenCalled()
+
+    fireEvent.click(refresh)
+    expect(refresh).toBeDisabled()
+    expect(submit).toBeDisabled()
+    await act(async () => recovered.resolve())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(submit).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Ready Host model' })
+    ).toHaveTextContent(ready.model)
+    expect(save).not.toHaveBeenCalled()
+    expect(call.mock.calls).toEqual(
+      Array.from({ length: stage === 'refresh' ? 3 : 2 }, () => [
+        'assignments/models',
+      ])
+    )
+  }
+)
+
 it('keeps a failed brain save visible while refreshing ready Hosts', async () => {
   const firstSave = deferred()
   const refresh = deferred()
@@ -363,8 +497,8 @@ it('keeps a failed brain save when Host discovery fails and recovers', async () 
   fireEvent.click(reload)
   await act(async () => failedRefresh.reject('Host discovery unavailable'))
   expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([
-    'Host discovery unavailable',
-    'Brain settings not saved',
+    expect.stringContaining('Host discovery unavailable'),
+    expect.stringContaining('Brain settings not saved'),
   ])
   expect(submit).toBeDisabled()
   expect(screen.getByLabelText('Model ID')).toHaveValue(ready.model)

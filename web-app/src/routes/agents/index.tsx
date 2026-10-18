@@ -390,8 +390,32 @@ function AgentStudioPage() {
   const { skills } = useAgentSkills()
   const [view, setView] = useState<StudioView>(search.view ?? 'definitions')
   const [draft, setDraftState] = useState<AgentDefinition | null>(null)
+  const outputBudgetInput = useRef<HTMLInputElement>(null)
+  const draftNameInput = useRef<HTMLInputElement>(null)
+  const [templateFocusRequest, setTemplateFocusRequest] = useState(0)
+
+  useEffect(() => {
+    if (templateFocusRequest > 0) draftNameInput.current?.focus()
+  }, [templateFocusRequest])
   // The editable identifier does not determine which saved record this draft owns.
   const [draftSavedId, setDraftSavedId] = useState<string | null>(null)
+  const selectedDefinitionRef = useRef<HTMLButtonElement>(null)
+  const revealedDefinitionId = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (view !== 'definitions' || !draftSavedId) {
+      revealedDefinitionId.current = null
+      return
+    }
+    if (
+      draftSavedId !== revealedDefinitionId.current &&
+      selectedDefinitionRef.current
+    ) {
+      selectedDefinitionRef.current.scrollIntoView?.({ block: 'nearest' })
+      revealedDefinitionId.current = draftSavedId
+    }
+  }, [view, draftSavedId, definitions])
+
   const draftBaseline = useRef<string | null>(null)
   const draftRevision = useRef(0)
   const mutatingDraft = useRef(false)
@@ -571,6 +595,7 @@ function AgentStudioPage() {
     replaceDraft(() => {
       setDraft(copy, null)
       selectView('definitions')
+      setTemplateFocusRequest((request) => request + 1)
     })
   }
 
@@ -581,6 +606,15 @@ function AgentStudioPage() {
     const revision = draftRevision.current
     if (!draft.name.trim()) {
       toast.error('Give the agent a name before saving.')
+      return null
+    }
+    const budgetInput = outputBudgetInput.current
+    if (budgetInput && !budgetInput.checkValidity()) {
+      budgetInput.closest('details')?.setAttribute('open', '')
+      budgetInput.focus()
+      toast.error(
+        'Output budget must be Auto or a whole number from 256 to 262,144 tokens.'
+      )
       return null
     }
     const candidate = {
@@ -769,6 +803,7 @@ function AgentStudioPage() {
                 return (
                   <button
                     key={definition.id}
+                    ref={draftSavedId === definition.id ? selectedDefinitionRef : undefined}
                     type="button"
                     className={cn(
                       'w-full rounded-xl border p-3 text-left transition hover:bg-accent/60',
@@ -799,6 +834,8 @@ function AgentStudioPage() {
               <DefinitionEditor
                 key={draftSavedId === null ? 'unsaved' : `saved:${draftSavedId}`}
                 draft={draft}
+                nameRef={draftNameInput}
+                outputBudgetRef={outputBudgetInput}
                 modelInstances={modelInstances}
                 skills={skills
                   .filter((skill) => skill.enabled && skill.compatible)
@@ -904,11 +941,15 @@ function AgentStudioPage() {
 
 function DefinitionEditor({
   draft,
+  nameRef,
+  outputBudgetRef,
   skills,
   modelInstances,
   onChange,
 }: {
   draft: AgentDefinition
+  nameRef: React.Ref<HTMLInputElement>
+  outputBudgetRef: React.Ref<HTMLInputElement>
   skills: string[]
   modelInstances: AgentModelInstance[]
   onChange: (definition: AgentDefinition) => void
@@ -926,6 +967,7 @@ function DefinitionEditor({
         <div className="mt-2 grid gap-4 md:grid-cols-[1fr_0.8fr]">
           <Field label="Name">
             <Input
+              ref={nameRef}
               aria-label="Name"
               value={draft.name}
               onChange={(event) => common({ name: event.target.value })}
@@ -958,6 +1000,7 @@ function DefinitionEditor({
               <button
                 key={kind}
                 type="button"
+                aria-pressed={draft.kind === kind}
                 className={cn(
                   'rounded-xl border p-3 text-left transition hover:bg-accent',
                   draft.kind === kind && 'border-primary bg-primary/5'
@@ -1068,12 +1111,14 @@ function DefinitionEditor({
           <div className="mt-3">
             <Field
               label="Output budget per model call"
-              help="Auto balances reasoning effort and available context. This includes thinking and the answer/tool call, not the number of tool steps. An explicit limit is never automatically increased."
+              help="Leave blank for Auto, or enter a whole number from 256 to 262,144 tokens. Auto balances reasoning effort and available context. This includes thinking and the answer/tool call, not the number of tool steps. An explicit limit is never automatically increased."
             >
               <Input
+                ref={outputBudgetRef}
                 type="number"
                 min={256}
                 max={262144}
+                step={1}
                 placeholder="Auto"
                 value={draft.maxOutputTokens ?? ''}
                 onChange={(event) =>

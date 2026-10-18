@@ -150,13 +150,17 @@ it('preserves a failed control request while refreshing service computers', asyn
   )
   await act(async () => initialList.reject('Computer list unavailable'))
   expect(screen.getAllByRole('alert')).toHaveLength(2)
-  expect(screen.getByText('Error: Owner approval unavailable')).toBeVisible()
+  expect(
+    screen.getByText('Error: Owner approval unavailable').closest('details')
+  ).not.toHaveAttribute('open')
   expect(
     screen.getByRole('button', { name: 'Paired service computer' })
   ).toHaveTextContent('Service PC')
   expect(gbotControlGrant).toHaveBeenCalledTimes(2)
   fireEvent.click(screen.getByRole('button', { name: 'Refresh computers' }))
-  expect(screen.getByText('Error: Owner approval unavailable')).toBeVisible()
+  expect(
+    screen.getByText('Error: Owner approval unavailable').closest('details')
+  ).not.toHaveAttribute('open')
   expect(
     screen.getByRole('button', { name: 'Refreshing computers…' })
   ).toBeDisabled()
@@ -206,6 +210,19 @@ it.each(['success', 'failure'])(
         ? 'Gbot control approved for this device.'
         : 'Could not confirm Gbot control approval. Try again.'
     )
+    if (outcome === 'failure') {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'GChat could not check Gbot control approval. Check the connection to the service computer, then choose Request Gbot control to try again.'
+      )
+      const details = screen
+        .getByText('Error: Service computer unavailable')
+        .closest('details')!
+      expect(details).not.toHaveAttribute('open')
+      expect(gbotControlGrant).toHaveBeenCalledExactlyOnceWith('online', 'status')
+      expect(
+        screen.getByRole('button', { name: 'Request Gbot control' })
+      ).toBeEnabled()
+    }
   }
 )
 
@@ -255,8 +272,16 @@ it.each([
       pending.reject(new Error('Service computer unavailable'))
     )
     expect(screen.getByRole('alert')).toHaveTextContent(
-      'Service computer unavailable'
+      `GChat could not ${action === 'request' ? 'request Gbot control' : 'check Gbot control approval'}. Check the connection to the service computer, then choose ${label} to try again.`
     )
+    const details = screen
+      .getByText('Error: Service computer unavailable')
+      .closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByText('Details'))
+    expect(details).toHaveAttribute('open')
+    expect(screen.getByText('Error: Service computer unavailable')).toBeVisible()
+    expect(gbotControlGrant).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('button', { name: 'Paired service computer' })).toHaveTextContent('Service PC')
     expect(change).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: label }))

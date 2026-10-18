@@ -22,6 +22,221 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Saved-agent choices in Chat drafts — October 18
+
+A private Linux native pass selected a saved agent, typed a task, opened New
+Chat and returned to the saved conversation. The text returned but the agent
+selector reset to Chat. The selected saved agent now updates the existing
+conversation policy when chosen, so navigation restores that choice with the
+text. Choosing Chat clears only that conversation's saved-agent selection.
+Route suggestions seed the choice once, allowing later user changes to stick.
+Baseline: `/ai/gchat/out/gchat-chat-agents-pass-20261018-1700/`.
+
+Source `ce62d84b323c6141a081ff6285f6df140758b6ec` passes 75 focused tests,
+lint, one `make verify` (3,718 app, 127 extension and 1,311 Rust tests),
+and frontend/native builds. The rebuilt Linux debug desktop passes this
+navigation check: Control probe B and the exact draft return after
+New Chat; choosing Chat also survives the same navigation with the text intact.
+The test draft was cleared, and saved agent definitions, runs, chat metadata
+and messages remained byte-identical. Native actions used an isolated private
+profile, DBus, keyring and X display, with no model, Send or GPU. Receipts and
+viewed screenshots: `/ai/gchat/out/gchat-chat-agent-draft-20261018/`.
+
+This qualifies in-session navigation only. Clean-exit acceptance is excluded:
+Alt+F4 had no effect in bare Xvfb, and destroying the X window logged a GDK
+BadDrawable error during teardown. The container stopped and CPUs were returned
+at 17:17Z. Cold restart and Windows were not tested. After merging the
+skill-loading fix from main, 96 focused integration tests also pass; the
+combined check is retained as `integrated-focused.json` and its log.
+
+## Conversation draft skills — October 18
+
+A private Linux native Chat pass selected `/pdf`, typed a summary request,
+visited New Chat and returned. The text returned but the selected skill was
+lost. Baseline DOM observations and a viewed screenshot are retained in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1637/`.
+
+Draft skills now stay in memory with their conversation, alongside draft text.
+Navigation and reopening the composer restore both. Starting New Chat clears
+its own skill. A successful send clears the sending conversation's selected
+skill even when its composer has closed, while a different selection or another
+conversation's draft stays intact. Failed sends retain the skill for retry.
+
+Source `0deec944b` passes 75 focused tests, lint and one `make verify`
+(3,712 app, 127 extension and 1,309 Rust tests; six coverage floors), plus
+frontend and native builds. The rebuilt private Linux desktop restores `/pdf`
+and its text after New Chat and Agent Studio navigation. Backspace removes the
+selection, which stays removed on return; starting New Chat clears its own text
+and skill. Normal close completes cleanup, with saved chat and agent files
+unchanged. Pending attachment-send completion after switching or unmounting is
+covered by rendered regressions; the native pass starts no model or inference.
+Receipts: `/ai/gchat/out/gchat-chat-skill-draft-20261018/`.
+
+Reopening a composer also waits for its selected draft skill to resolve from
+the skill catalog. While that catalog is loading, Send shows a busy state and
+Enter retains the draft. Once the catalog arrives, submission uses the restored
+skill rather than the conversation's previous active skill. Ordinary Chat
+without a draft skill and `/compact` remain available while the catalog loads.
+Deferred-catalog rendered regressions cover both submission controls and a
+different previously active skill. Source `48d194f70` passes 69 focused tests,
+lint and one `make verify` (3,719 app, 127 extension and 1,311 Rust tests),
+plus frontend and native builds. The deferred response is exercised by rendered
+tests; this follow-up makes no additional native race or model-execution claim.
+Follow-up receipts: `/ai/gchat/out/gchat-chat-skill-draft-loading-20261018/`.
+
+## Finding a newly saved agent — October 18
+
+A private Linux native pass saved `Zebraweeklyplanner` in a long Agent Studio
+library. The editor showed the saved definition, but its selected library row
+stayed at y1,481–1,583 below the visible y105–800 list, with scrollTop 0.
+Baseline geometry and the viewed screenshot are retained in
+`/ai/gchat/out/gchat-agent-saved-selection-visibility-20261018/` and
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1617/`.
+
+The library now reveals a newly selected saved definition with nearest
+scrolling, including when its refreshed list arrives after save completion.
+It preserves focus and leaves manual scrolling alone when the same definition
+is refreshed or edited. Returning from another Studio section reveals the
+selected definition again.
+
+Source `63974c7ee` passes 117 focused tests, lint and one `make verify`
+(3,705 app, 127 extension and 1,309 Rust tests; six coverage floors). Frontend
+and native builds pass. The private 1,200×800 Linux desktop saved
+`ZZ Library Visibility` with its selected row fully visible at y698–800.
+Editing and saving after manually scrolling the library to the top preserved
+scrollTop 0. Returning from Templates revealed the selected row and kept focus
+on **Agents & flows**. All 13 earlier definitions, run records and chat files
+were unchanged. Normal window close completed cleanup; returned16:35Z.
+`native-result.json` and viewed screenshots are retained in the evidence folder
+above. This is a native editor check with no model run.
+
+## Finding a newly created skill — October 18
+
+A private Linux native pass created `weekly-status-report` with keyboard input.
+Its instructions opened, but the selected row and Skill actions stayed below
+the visible list (row y1,767 in an 800px viewport). Scrolling to the row exposed
+its highlight, and Try in chat correctly selected the skill in Chat. Baseline
+receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1557/`.
+
+The Skills list now reveals each new selection with the nearest scroll position.
+This includes a created or uploaded skill whose list refresh arrives after its
+details. Revealing the row preserves keyboard focus; later refreshes of the same
+selection preserve the user's manual scroll position.
+
+Source `cb4d28f9b` passes 56 focused tests, lint and one full `make verify`
+(3,683 app, 127 extension and 1,309 Rust tests; six coverage floors). The
+frontend and native builds pass. In the rebuilt private native app, keyboard
+creation selected a fully visible row (y735–800), kept focus on Create new,
+preserved a manual scroll through Refresh, and opened the correct skill via
+Try in chat. Normal close preserved existing agent definitions, runs and chat
+fixture files. This qualifies the Linux development app creation path; delayed
+import/list arrival is covered by the rendered regression. No model execution,
+Windows or installed-package acceptance is claimed.
+Receipts: `/ai/gchat/out/gchat-skill-created-selection-visibility-20261018/`.
+
+## Starting an agent from a template — October 18
+
+A private native keyboard pass activated Goal Loop's **Use template** button.
+The editor opened with focus on the page body; the next Tab returned to section
+navigation. Accepted template selection now focuses the draft's Name field,
+including when replacing an unsaved template. Typing and later Tab navigation
+keep their normal focus, and the existing discard confirmation still applies.
+
+Source `fc6a615f2` passed 110 focused tests, lint and one `make verify`
+(3,664 app, 127 extension and 1,309 Rust tests; six coverage floors). The frontend
+and Linux native build passed. Native keyboard input confirmed Name focus,
+ordinary Tab to Identifier, retained edits after Cancel, and Name focus after
+confirmed discard. The app closed normally with all four saved fixture files
+unchanged; no model or inference ran. Windows remains unqualified. Evidence:
+`/ai/gchat/out/gchat-agent-template-editor-focus-20261018/`.
+
+## Validating the agent output budget — October 18
+
+A private native pass entered `256.5` as the output budget and saved a new
+agent. The editor sent that value to Rust and displayed a raw integer parse
+error. Save definition and Save & run now check the field before saving,
+open Advanced generation settings and focus the invalid value with a readable
+correction. The guidance names Auto and the existing 256–262,144 whole-token
+range. Auto, valid integers and the backend limits keep their existing meaning.
+
+Source `26e221cdc` passes all 108 Agent Studio tests, lint and one full
+`make verify` (3659 web, 127 extension and 1309 Rust tests, plus all six
+coverage floors). The rebuilt Linux desktop passes native Tab/Enter on both
+Save actions while Advanced settings is collapsed: the invalid value remains,
+the section opens, focus returns to the budget and no run setup opens.
+Replacing the value with `4096` restores validity. Focused regressions also
+verify saving after correction and preserving Auto and both valid bounds.
+Normal close preserves all four saved chat/agent fixture files; returned
+15:34Z, without inference. This qualifies private source-native Linux behavior;
+installed packages and Windows were not exercised. Receipts:
+`/ai/gchat/out/gchat-agent-output-budget-validation-20261018/handoff.json`.
+
+## Closing a Chat HTML preview — October 18
+
+A private native pass found that keyboard activation of **Close HTML** lost
+focus; the next Tab jumped to Downloads in the sidebar. Explicit preview close
+now returns focus to the originating message's HTML preview button. This also
+applies to the standalone panel; route and layout closes leave focus alone.
+
+Source `cb61dcf42` passes 16 focused tests, lint and one full `make verify`
+(3646 web, 127 extension and 1309 Rust tests, plus all six coverage floors).
+The rebuilt Linux desktop passes Close HTML with Enter: focus returns to the
+original preview button, then Tab reaches that message's Copy action. Normal
+close preserves all four saved chat/agent fixture files; returned15:06Z, no GPU
+or inference. This qualifies private source-native Linux behavior, without an
+installed-package, Windows or screen-reader claim. Receipts:
+`/ai/gchat/out/gchat-chat-preview-close-focus-20261018/handoff.json`.
+
+## Agent composition selected state — October 18
+
+An isolated native keyboard pass selected Goal Loop with Tab and Space. Its
+fields and highlight changed, but none of the four composition buttons exposed
+a selected state. The Agent Studio source matched main `3dff672ee`; baseline
+DOM receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1434/`.
+
+Each composition button now exposes whether it is pressed. The state follows
+the current draft, including saved definitions and keyboard changes. Selection,
+draft contents and saving keep their existing behavior.
+
+Source `6fe30ffe4` passes all 99 Agent Studio tests, lint and one full
+`make verify` (3637 web tests, 127 extension tests and every supported Rust
+suite). The rebuilt Linux desktop passes native Tab/Space/Enter selection of
+all four compositions: exactly one button reports pressed and the activated
+card retains focus. Normal close preserves the two saved agent files and the
+two saved chat files. This checks DOM accessibility state, without claiming a
+live screen-reader or Windows run. Main `cbc1816d8` was merged afterward;
+its Gbot guidance changes leave these agent sources and tests identical.
+Receipts: `/ai/gchat/out/gchat-agent-composition-state-20261018/handoff.json`.
+
+## Sampling assistant fallback wording — October 18
+
+An isolated native pass opened Sampling, selected the assistant menu's “None”
+option and still saw GChat selected. The resolver intentionally falls back to
+the default assistant when an explicit choice is cleared. The menu now says
+“Use default (name)” and names that fallback, including the first available
+assistant if the saved default is missing. “None” remains accurate when there
+are no assistants. Selection, thread persistence and sampling behavior keep
+their existing contract. Baseline DOM receipts and viewed screenshots are in
+`/ai/gchat/out/gchat-chat-agents-pass-20261018-1412/`; the affected source matched
+main `fe17d90f6`.
+
+All 34 focused tests and workspace lint PASS. One `make verify` passed 3,634
+web tests, 127 extension tests and all six coverage floors, then failed the
+unchanged Gbot `scoped_media_policies_and_revocation` test at `media.rs:97`.
+The remaining Rust suites were not reached. Gchat 2 owns that teardown-test
+failure; this change does not claim an overall verification pass.
+
+Frontend and native Linux builds PASS on `cb85244ec`. The rebuilt private app
+shows “Use default (GChat)” without “None”; selecting it keeps GChat selected
+and preserves all seven sampling values. The screenshot was viewed. Normal
+close preserved the saved thread, messages, agent definitions and run history
+byte-for-byte; returned14:32Z. Receipts are in
+`/ai/gchat/out/gchat-chat-assistant-default-option-20261018/`.
+This qualifies private source-native Linux UI behavior; installed packages,
+Windows, screen readers and inference were outside this check.
+
 ## Sampling control labels — October 18
 
 A private native Chat pass opened Sampling and found all seven numeric inputs

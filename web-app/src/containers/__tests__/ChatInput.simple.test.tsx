@@ -37,7 +37,7 @@ const agentDefinitions = vi.hoisted(() => ({
   value: [] as AgentDefinition[],
   loading: false,
 }))
-const agentSkills = vi.hoisted(() => ({ value: [] as AgentSkill[] }))
+const agentSkills = vi.hoisted(() => ({ value: [] as AgentSkill[], loading: false }))
 const conversationPolicyState = vi.hoisted(() => ({
   activeDefinitions: {} as Record<string, string>,
   setActiveDefinition: vi.fn(),
@@ -83,7 +83,7 @@ vi.mock('@/hooks/useTools', () => ({
 }))
 
 vi.mock('@/hooks/useAgentSkills', () => ({
-  useAgentSkills: () => ({ skills: agentSkills.value, loading: false }),
+  useAgentSkills: () => ({ skills: agentSkills.value, loading: agentSkills.loading }),
 }))
 
 vi.mock('@/hooks/useAgentDefinitions', () => ({
@@ -181,6 +181,7 @@ describe('ChatInput', () => {
     agentDefinitions.value = []
     agentDefinitions.loading = false
     agentSkills.value = []
+    agentSkills.loading = false
     conversationPolicyState.activeDefinitions = {}
     conversationPolicyState.activeSkills = {}
     conversationPolicyState.approvalModes = {}
@@ -448,6 +449,75 @@ describe('ChatInput', () => {
     expect(input()).toHaveValue('Reply to conversation B')
   })
 
+  it('restores saved-agent choices with each conversation draft across New Chat and reopening', async () => {
+    const user = userEvent.setup()
+    agentDefinitions.value = ['researcher', 'reviewer'].map((id) => ({
+      id, name: id, kind: 'standard', schemaVersion: 2, skills: [], instructions: '',
+      description: '', outputContract: '', maxSteps: 25, modelInstanceId: null, builtIn: false,
+    }))
+    conversationPolicyState.setActiveDefinition.mockImplementation((threadId: string, definition?: string) => {
+      if (definition && definition !== 'general') conversationPolicyState.activeDefinitions[threadId] = definition
+      else delete conversationPolicyState.activeDefinitions[threadId]
+    })
+    useThreads.setState({ currentThreadId: 'agent-draft-a' })
+    const view = render(<ChatInput />)
+    const choice = () => screen.getByRole('button', { name: 'Invoke saved agent' })
+    const input = () => screen.getByTestId('chat-input')
+    const choose = async (name: string) => {
+      await user.click(choice())
+      await user.click(screen.getByRole('menuitemradio', { name, exact: true }))
+    }
+    await choose('researcher')
+    fireEvent.change(input(), { target: { value: 'Plan three weekly priorities' } })
+    view.rerender(<ChatInput initialMessage />)
+    expect(choice()).toHaveTextContent('Chat')
+    expect(input()).toHaveValue('')
+    view.rerender(<ChatInput />)
+    expect(choice()).toHaveTextContent('researcher')
+    expect(input()).toHaveValue('Plan three weekly priorities')
+
+    act(() => useThreads.setState({ currentThreadId: 'agent-draft-b' }))
+    expect(choice()).toHaveTextContent('Chat')
+    await choose('reviewer')
+    fireEvent.change(input(), { target: { value: 'Review the other plan' } })
+    view.unmount()
+    const reopened = render(<ChatInput />)
+    expect(choice()).toHaveTextContent('reviewer')
+    expect(input()).toHaveValue('Review the other plan')
+    act(() => useThreads.setState({ currentThreadId: 'agent-draft-a' }))
+    expect(choice()).toHaveTextContent('researcher')
+    expect(input()).toHaveValue('Plan three weekly priorities')
+    await choose('Chat')
+    reopened.rerender(<ChatInput initialMessage />)
+    reopened.rerender(<ChatInput />)
+    expect(choice()).toHaveTextContent('Chat')
+    act(() => useThreads.setState({ currentThreadId: 'agent-draft-b' }))
+    expect(choice()).toHaveTextContent('reviewer')
+  })
+
+  it('keeps a changed agent choice when a route preselection is still present', async () => {
+    const user = userEvent.setup()
+    agentDefinitions.value = ['researcher', 'reviewer'].map((id) => ({
+      id, name: id, kind: 'standard', schemaVersion: 2, skills: [], instructions: '',
+      description: '', outputContract: '', maxSteps: 25, modelInstanceId: null, builtIn: false,
+    }))
+    conversationPolicyState.setActiveDefinition.mockImplementation((threadId: string, definition?: string) => {
+      if (definition && definition !== 'general') conversationPolicyState.activeDefinitions[threadId] = definition
+      else delete conversationPolicyState.activeDefinitions[threadId]
+    })
+    const view = render(<ChatInput initialMessage preselectedAgentDefinitionId="researcher" />)
+    const choice = () => screen.getByRole('button', { name: 'Invoke saved agent' })
+    expect(choice()).toHaveTextContent('researcher')
+    await user.click(choice())
+    await user.click(screen.getByRole('menuitemradio', { name: 'reviewer', exact: true }))
+    view.rerender(<ChatInput initialMessage preselectedAgentDefinitionId="researcher" />)
+    expect(choice()).toHaveTextContent('reviewer')
+    await user.click(choice())
+    await user.click(screen.getByRole('menuitemradio', { name: 'Chat', exact: true }))
+    view.rerender(<ChatInput initialMessage preselectedAgentDefinitionId="researcher" />)
+    expect(choice()).toHaveTextContent('Chat')
+  })
+
   it('clears only the submitted conversation draft after a successful send', async () => {
     usePrompt.getState().setPrompt('Unsent home draft')
     useThreads.setState({ currentThreadId: 'sent-conversation' })
@@ -462,6 +532,160 @@ describe('ChatInput', () => {
     expect(screen.getByTestId('chat-input')).toHaveValue('Unsent home draft')
     view.rerender(<ChatInput />)
     expect(screen.getByTestId('chat-input')).toHaveValue('')
+  })
+
+  it('restores each draft skill with its text across New Chat, conversation switches and reopening', () => {
+    agentSkills.value = ['pdf', 'slides'].map((name) => ({
+      name, description: name, version: '1.0.0', requiresTools: [], requiresScripts: [],
+      dangerous: false, platforms: null, enabled: true, compatible: true,
+      reserved: false, unavailableReasons: [], error: null,
+    }))
+    useThreads.setState({ currentThreadId: 'skill-draft-a' })
+    const view = render(<ChatInput />)
+    const input = () => screen.getByTestId('chat-input')
+    const chooseSkill = (name: string) => {
+      fireEvent.change(input(), { target: { value: `/${name}` } })
+      fireEvent.keyDown(input(), { key: 'Enter' })
+      expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent(`/${name}`)
+    }
+    chooseSkill('pdf')
+    fireEvent.change(input(), { target: { value: 'Summarize the document' } })
+
+    view.rerender(<ChatInput initialMessage />)
+    expect(input()).toHaveValue('')
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    chooseSkill('slides')
+    fireEvent.change(input(), { target: { value: 'Prepare a presentation' } })
+
+    view.rerender(<ChatInput />)
+    expect(input()).toHaveValue('Summarize the document')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/pdf')
+    act(() => useThreads.setState({ currentThreadId: 'skill-draft-b' }))
+    expect(input()).toHaveValue('')
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    view.unmount()
+
+    const reopened = render(<ChatInput initialMessage />)
+    expect(input()).toHaveValue('Prepare a presentation')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/slides')
+    reopened.rerender(<ChatInput />)
+    act(() => useThreads.setState({ currentThreadId: 'skill-draft-a' }))
+    expect(input()).toHaveValue('Summarize the document')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/pdf')
+    fireEvent.change(input(), { target: { value: '' } })
+    fireEvent.keyDown(input(), { key: 'Backspace' })
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    reopened.rerender(<ChatInput initialMessage />)
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/slides')
+    reopened.rerender(<ChatInput />)
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { method: 'click', previousSkill: undefined },
+    { method: 'Enter', previousSkill: 'slides' },
+  ])('waits for a reopened draft skill catalog before submitting with $method', async ({ method, previousSkill }) => {
+    const threadId = 'loading-skill-draft'
+    const skills = ['pdf', 'slides'].map((name) => ({
+      name, description: name, version: '1.0.0', requiresTools: [], requiresScripts: [],
+      dangerous: false, platforms: null, enabled: true, compatible: true,
+      reserved: false, unavailableReasons: [], error: null,
+    }))
+    agentSkills.value = skills
+    useThreads.setState({ currentThreadId: threadId })
+    if (previousSkill) conversationPolicyState.activeSkills[threadId] = previousSkill
+    const first = render(<ChatInput />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: '/pdf' } })
+    fireEvent.keyDown(screen.getByTestId('chat-input'), { key: 'Enter' })
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Summarize the document' } })
+    first.unmount()
+
+    const catalog = deferred<AgentSkill[]>()
+    agentSkills.value = []
+    agentSkills.loading = true
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const view = render(<ChatInput onSubmit={onSubmit} />)
+    const loaded = catalog.promise.then((value) => {
+      agentSkills.value = value
+      agentSkills.loading = false
+      // The mock catalog is not reactive; change a prop to rerender the memoized composer.
+      view.rerender(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+    })
+    const input = screen.getByTestId('chat-input')
+    const send = document.querySelector('[data-test-id="send-message-button"]')!
+    expect(send).toBeDisabled()
+    expect(send).toHaveAccessibleName('Restoring selected skill')
+    expect(send).toHaveAttribute('aria-busy', 'true')
+    fireEvent.click(send)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(conversationPolicyState.setActiveSkill).not.toHaveBeenCalled()
+    expect(input).toHaveValue('Summarize the document')
+    expect(usePrompt.getState().draftSkills[threadId]).toBe('pdf')
+
+    await act(async () => {
+      catalog.resolve(skills)
+      await loaded
+    })
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/pdf')
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+    if (method === 'click') fireEvent.click(send)
+    else fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Summarize the document', undefined, 'pdf', undefined, []))
+    expect(input).toHaveValue('')
+    expect(usePrompt.getState().draftSkills[threadId]).toBeUndefined()
+  })
+
+  it('allows ordinary chat while the skill catalog loads when there is no draft skill to restore', async () => {
+    agentSkills.loading = true
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<ChatInput onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'An ordinary question' } })
+    const send = screen.getByRole('button', { name: 'Send message' })
+    expect(send).toBeEnabled()
+    fireEvent.click(send)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('An ordinary question', undefined, undefined, undefined, []))
+  })
+
+  it.each([false, true])('clears the sending thread skill after an attachment send finishes away from its composer (reopen=%s)', async (reopen) => {
+    agentSkills.value = ['pdf', 'slides'].map((name) => ({
+      name, description: name, version: '1.0.0', requiresTools: [], requiresScripts: [],
+      dangerous: false, platforms: null, enabled: true, compatible: true,
+      reserved: false, unavailableReasons: [], error: null,
+    }))
+    useThreads.setState({ currentThreadId: 'skill-send-a' })
+    const attachment = { ...createDocumentAttachment({ name: 'notes.pdf', path: '/docs/notes.pdf' }), id: 'skill-notes', processed: true }
+    useChatAttachments.getState().setAttachments('skill-send-a', [attachment])
+    const pending = deferred<void>()
+    const onSubmit = vi.fn().mockReturnValue(pending.promise)
+    let view = render(<ChatInput onSubmit={onSubmit} preselectedAgentSkillName="pdf" />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Summarize the document' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Summarize the document', undefined, 'pdf', undefined, [attachment])
+
+    act(() => useThreads.setState({ currentThreadId: 'skill-send-b' }))
+    if (reopen) {
+      view.unmount()
+      view = render(<ChatInput onSubmit={onSubmit} />)
+    } else {
+      view.rerender(<ChatInput onSubmit={onSubmit} />)
+    }
+    const input = screen.getByTestId('chat-input')
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    fireEvent.change(input, { target: { value: '/slides' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(input, { target: { value: 'Prepare a presentation' } })
+    await act(async () => {
+      pending.resolve(undefined)
+      await pending.promise
+    })
+
+    expect(input).toHaveValue('Prepare a presentation')
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/slides')
+    act(() => useThreads.setState({ currentThreadId: 'skill-send-a' }))
+    expect(input).toHaveValue('')
+    expect(screen.queryByTestId('agent-skill-inline-token')).not.toBeInTheDocument()
+    expect(useChatAttachments.getState().getAttachments('skill-send-a')).toEqual([])
   })
 
   it('renders the production input with its translated placeholder', () => {

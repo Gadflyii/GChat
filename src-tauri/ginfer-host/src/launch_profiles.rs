@@ -454,6 +454,54 @@ mod tests {
             .map(|(_, id, ..)| *id)
             .collect();
         let mut consumer_ids = BTreeSet::new();
+        let consumer_muse_settings = [
+            (
+                "linux-rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4.json",
+                "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+                "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 8,
+                15189450752, 1024, 328204288, 8336650240,
+            ),
+            (
+                "linux-rtx4090-muse-smol-q2g64-mix-dflash-q4.json",
+                "rtx4090-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
+                "NVIDIA GeForce RTX 4090", "8.9", 24, 24564, 131072, 8,
+                8717860864, 0, 706740224, 8643358720,
+            ),
+            (
+                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated",
+                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 131072, 1,
+                2163212288, 1024, 1117782016, 1042081280,
+            ),
+            (
+                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c2-115k-int8-calculated",
+                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 117760, 2,
+                1913651200, 1024, 1117782016, 1901222400,
+            ),
+            (
+                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c4-31k-int8-calculated",
+                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 31744, 4,
+                1458569216, 1024, 1117782016, 1438663680,
+            ),
+            (
+                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c7-4k-int8-calculated",
+                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 4096, 7,
+                995098624, 1024, 1117782016, 991411456,
+            ),
+        ];
+        let expected_muse_ids: BTreeSet<_> = consumer_muse_settings
+            .iter()
+            .filter(|(file, ..)| {
+                supplied_paths
+                    .iter()
+                    .any(|path| path.file_name().is_some_and(|name| name == *file))
+            })
+            .map(|(_, id, ..)| *id)
+            .collect();
+        let mut muse_ids = BTreeSet::new();
         let mut consumer_flash_found = false;
         let consumer_flash_supplied = supplied_paths.iter().any(|path| {
             path.file_name().is_some_and(|name| {
@@ -468,6 +516,15 @@ mod tests {
         for path in supplied_paths {
             let profiles = ProfileCatalog::read(&path).unwrap();
             assert!(!profiles.is_empty(), "{}", path.display());
+            let muse_catalog_ids: BTreeSet<_> = consumer_muse_settings
+                .iter()
+                .filter(|(file, ..)| path.file_name().is_some_and(|name| name == *file))
+                .map(|(_, id, ..)| *id)
+                .collect();
+            if !muse_catalog_ids.is_empty() {
+                let actual_ids: BTreeSet<_> = profiles.iter().map(|p| p.id.as_str()).collect();
+                assert_eq!(actual_ids, muse_catalog_ids, "{}", path.display());
+            }
             for p in profiles {
                 assert!(ids.insert(p.id.clone()), "duplicate {}", p.id);
                 if let Some((_, id, max_context)) = laptop_context_limits
@@ -513,6 +570,45 @@ mod tests {
                     assert_eq!(p.qualification.full_context_requests, 0);
                     assert_eq!(p.qualification.smoke_requests, Some(8));
                     assert!(p.qualification.calculation.is_none());
+                }
+                if let Some((_, id, gpu, cc, tier, memory, context, concurrency, arena, prefill, free, required)) = consumer_muse_settings
+                    .iter()
+                    .find(|(_, id, ..)| p.id == *id)
+                {
+                    muse_ids.insert(*id);
+                    assert_eq!(p.platform, "linux");
+                    assert_eq!(p.identity.model_id, "muse-glimmer-30b");
+                    assert_eq!(p.identity.weights_id, "smol-q2g64-mix-dflash-q4");
+                    assert_eq!(p.artifact_sha256, "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c");
+                    assert_eq!(p.artifact_bytes, 13838508544);
+                    assert_eq!((p.tp, p.draft_tp, p.concurrency), (1, 1, *concurrency));
+                    assert_eq!((p.gpu_name.as_str(), p.compute_capability.as_str()), (*gpu, *cc));
+                    assert_eq!((p.vram_tier_gib, p.min_memory_mib_per_gpu, p.max_context), (*tier, *memory, *context));
+                    assert_eq!(p.options, LaunchOptions {
+                        vision: false,
+                        structured_outputs: false,
+                        progressive_ready: false,
+                        spec: "dflash".into(),
+                        draft_policy: "fixed".into(),
+                        draft_tokens: 7,
+                        draft_tp: 1,
+                        kv_dtype: "int8".into(),
+                        kv_arena_bytes: Some(*arena),
+                        vram_budget_bytes: None,
+                        kv_arena_headroom_bytes: MIN_PROFILE_HEADROOM_BYTES,
+                        host_kv_cache_bytes: None,
+                        prefill_chunk: *prefill,
+                        no_cuda_graph: false,
+                        ..LaunchOptions::default()
+                    }, "{}", p.id);
+                    assert_eq!(p.qualification.tier, QualificationTier::CalculatedStartupSmoke);
+                    assert_eq!(p.qualification.engine_revision, "eb777ab9570fad1c8301635617f0923f2b820424");
+                    assert_eq!(p.qualification.free_bytes_per_gpu, Some(*free));
+                    assert_eq!(p.qualification.full_context_requests, 0);
+                    assert_eq!(p.qualification.smoke_requests, Some(*concurrency));
+                    let calculation = p.qualification.calculation.as_ref().unwrap();
+                    assert_eq!(calculation.required_kv_bytes_per_rank, *required);
+                    assert_eq!(calculation.available_kv_bytes_per_rank, Some(*arena));
                 }
                 if p.id == "rtx5090-flash-next-smol-q2g64-tp1-c8-256k-int8-screened" {
                     consumer_flash_found = true;
@@ -566,6 +662,7 @@ mod tests {
         assert_eq!(screened_pro_found, screened_pro_supplied);
         assert_eq!(laptop_ids, expected_laptop_ids);
         assert_eq!(consumer_ids, expected_consumer_ids);
+        assert_eq!(muse_ids, expected_muse_ids);
         assert_eq!(consumer_flash_found, consumer_flash_supplied);
     }
 

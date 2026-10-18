@@ -168,7 +168,6 @@ const ChatInput = memo(function ChatInput({
   const [rows, setRows] = useState(1)
   const [isSubmittingMessage, setIsSubmittingMessage] = useState(false)
   const submittingMessageRef = useRef(false)
-  const composerLifetimeRef = useRef({})
   const serviceHub = useServiceHub()
   const abortControllers = useAppState((state) => state.abortControllers)
   const loadingModel = useAppState((state) => state.loadingModel)
@@ -247,12 +246,6 @@ const ChatInput = memo(function ChatInput({
   useLayoutEffect(() => {
     usePrompt.getState().setActiveThread(conversationKey)
   }, [conversationKey])
-  useLayoutEffect(() => {
-    composerLifetimeRef.current = {}
-    return () => {
-      composerLifetimeRef.current = {}
-    }
-  }, [conversationKey])
   const activeSkill = useConversationPolicy((state) => state.activeSkills[conversationKey])
   const activeDefinition = useConversationPolicy((state) => state.activeDefinitions[conversationKey])
   const { skills: agentSkills, loading: agentSkillsLoading } =
@@ -262,8 +255,12 @@ const ChatInput = memo(function ChatInput({
   const [selectedAgentDefinitionId, setSelectedAgentDefinitionId] = useState(
     preselectedAgentDefinitionId ?? activeDefinition ?? 'general'
   )
-  const [selectedAgentSkill, setSelectedAgentSkill] =
-    useState<AgentSkill | null>(null)
+  const draftSkillName = usePrompt((state) => state.draftSkills[conversationKey])
+  const selectedAgentSkill = draftSkillName
+    ? findAvailableAgentSkill(agentSkills, draftSkillName)
+    : null
+  const isRestoringDraftSkill = Boolean(draftSkillName && agentSkillsLoading)
+  const setDraftSkill = usePrompt((state) => state.setDraftSkill)
   const preselectedAgentSkillAppliedRef = useRef<string | null>(null)
   const [agentSkillSlashQuery, setAgentSkillSlashQuery] =
     useState<AgentSkillSlashQuery | null>(null)
@@ -282,8 +279,26 @@ const ChatInput = memo(function ChatInput({
     setAgentSkillTokenWidth(agentSkillTokenRef.current?.offsetWidth ?? 0)
   }, [selectedAgentSkill])
 
+  const preselectedAgentDefinitionAppliedRef = useRef<string | null>(null)
   useEffect(() => {
-    setSelectedAgentDefinitionId(preselectedAgentDefinitionId ?? activeDefinition ?? 'general')
+    const preselectionKey = preselectedAgentDefinitionId
+      ? JSON.stringify([conversationKey, preselectedAgentDefinitionId])
+      : null
+    // A route suggestion seeds the choice once; later user choices own the draft.
+    if (
+      preselectedAgentDefinitionId &&
+      preselectionKey !== preselectedAgentDefinitionAppliedRef.current
+    ) {
+      preselectedAgentDefinitionAppliedRef.current = preselectionKey
+      setSelectedAgentDefinitionId(preselectedAgentDefinitionId)
+      useConversationPolicy.getState().setActiveDefinition(
+        conversationKey,
+        preselectedAgentDefinitionId
+      )
+      return
+    }
+    if (!preselectionKey) preselectedAgentDefinitionAppliedRef.current = null
+    setSelectedAgentDefinitionId(activeDefinition ?? 'general')
   }, [conversationKey, preselectedAgentDefinitionId, activeDefinition])
 
   useEffect(() => {
@@ -314,11 +329,13 @@ const ChatInput = memo(function ChatInput({
       preselectedAgentSkillName
     )
     preselectedAgentSkillAppliedRef.current = preselectedAgentSkillName
-    if (skill) setSelectedAgentSkill(skill)
+    if (skill) setDraftSkill(conversationKey, skill.name)
   }, [
     agentSkills,
     agentSkillsLoading,
+    conversationKey,
     preselectedAgentSkillName,
+    setDraftSkill,
   ])
 
   useEffect(() => {
@@ -642,7 +659,7 @@ const ChatInput = memo(function ChatInput({
     if (!agentSkillSlashQuery) return
     const next = removeAgentSkillSlashQuery(prompt, agentSkillSlashQuery)
     setPrompt(next.value)
-    setSelectedAgentSkill(skill)
+    setDraftSkill(conversationKey, skill.name)
     setAgentSkillSlashQuery(null)
     setAgentSkillMenuOpen(false)
     requestAnimationFrame(() => {
@@ -653,13 +670,18 @@ const ChatInput = memo(function ChatInput({
 
   const submitMessage = async (prompt: string) => {
     const submittedDraft = prompt
-    const submittedLifetime = composerLifetimeRef.current
     const clearSubmittedPrompt = () => {
       const state = usePrompt.getState()
       const currentDraft = state.activeThreadId === conversationKey
         ? state.prompt
         : state.drafts[conversationKey]
       if (currentDraft === submittedDraft) state.resetPrompt(conversationKey)
+    }
+    const clearSubmittedSkill = () => {
+      const state = usePrompt.getState()
+      if (selectedAgentSkill && state.draftSkills[conversationKey] === selectedAgentSkill.name) {
+        state.setDraftSkill(conversationKey)
+      }
     }
     if (isCompactCommand(prompt)) {
       if (attachments.length) {
@@ -754,9 +776,7 @@ const ChatInput = memo(function ChatInput({
         attachments.filter((attachment) => attachment.type === 'document')
       )
       clearSubmittedPrompt()
-      if (composerLifetimeRef.current === submittedLifetime) {
-        setSelectedAgentSkill((current) => current === selectedAgentSkill ? null : current)
-      }
+      clearSubmittedSkill()
       const submittedIds = new Set(attachments.map((attachment) => attachment.id))
       setAttachmentsForThread(attachmentsKey, (current) =>
         current.filter((attachment) => !submittedIds.has(attachment.id))
@@ -800,9 +820,7 @@ const ChatInput = memo(function ChatInput({
       // remain available for the next message rather than entering this one.
       const clearSubmittedDraft = () => {
         clearSubmittedPrompt()
-        if (composerLifetimeRef.current === submittedLifetime) {
-          setSelectedAgentSkill((current) => current === selectedAgentSkill ? null : current)
-        }
+        clearSubmittedSkill()
         const submittedIds = new Set(attachments.map((attachment) => attachment.id))
         setAttachmentsForThread(attachmentsKey, (current) =>
           current.filter((attachment) => !submittedIds.has(attachment.id))
@@ -984,7 +1002,11 @@ const ChatInput = memo(function ChatInput({
   }
 
   const handleSendMessage = async (draft: string) => {
-    if (!submissionReady || submittingMessageRef.current) return
+    if (
+      !submissionReady ||
+      submittingMessageRef.current ||
+      (!isCompactCommand(draft) && isRestoringDraftSkill)
+    ) return
     // A ref also blocks repeated Enter/click events before React renders.
     submittingMessageRef.current = true
     setIsSubmittingMessage(true)
@@ -2562,7 +2584,7 @@ const ChatInput = memo(function ChatInput({
                       prompt.length === 0
                     ) {
                       e.preventDefault()
-                      setSelectedAgentSkill(null)
+                      setDraftSkill(conversationKey)
                       return
                     }
                     if (
@@ -2607,7 +2629,7 @@ const ChatInput = memo(function ChatInput({
                         !isSubmittingMessage &&
                         (isCompactCommand(prompt) || !isStreaming) &&
                         prompt.trim() &&
-                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady))
+                        (isCompactCommand(prompt) || (!isAttachmentPipelineBusy && !blockSendUntilModelReady && !isRestoringDraftSkill))
                       ) {
                         handleSendMessage(prompt)
                       }
@@ -2750,7 +2772,8 @@ const ChatInput = memo(function ChatInput({
                         value={selectedAgentDefinitionId}
                         onValueChange={(value) => {
                           setSelectedAgentDefinitionId(value)
-                          setSelectedAgentSkill(null)
+                          useConversationPolicy.getState().setActiveDefinition(conversationKey, value)
+                          setDraftSkill(conversationKey)
                           useConversationPolicy.getState().setActiveSkill(conversationKey)
                         }}
                         options={[
@@ -2975,17 +2998,20 @@ const ChatInput = memo(function ChatInput({
                       isSubmittingMessage ||
                       !prompt.trim() ||
                       (!isCompactCommand(prompt) &&
-                        (isAttachmentPipelineBusy || blockSendUntilModelReady))
+                        (isAttachmentPipelineBusy || blockSendUntilModelReady || isRestoringDraftSkill))
                     }
                     data-test-id="send-message-button"
                     aria-label={
-                      isSubmittingMessage ? 'Preparing message' : 'Send message'
+                      isSubmittingMessage ? 'Preparing message' :
+                        isRestoringDraftSkill && !isCompactCommand(prompt)
+                          ? 'Restoring selected skill'
+                          : 'Send message'
                     }
-                    aria-busy={isSubmittingMessage}
+                    aria-busy={isSubmittingMessage || (isRestoringDraftSkill && !isCompactCommand(prompt))}
                     onClick={() => handleSendMessage(prompt)}
                     className="rounded-full mr-1 mb-1"
                   >
-                    {isSubmittingMessage ? (
+                    {isSubmittingMessage || (isRestoringDraftSkill && !isCompactCommand(prompt)) ? (
                       <IconLoader2 className="animate-spin" />
                     ) : (
                       <ArrowRight className="text-primary-fg" />

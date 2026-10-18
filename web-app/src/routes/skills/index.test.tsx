@@ -200,6 +200,78 @@ describe('SkillsPage', () => {
     expect(screen.getAllByText('common:writeSkillInstructions')).toHaveLength(2)
   })
 
+  it.each(['create', 'upload'] as const)(
+    'reveals a newly selected skill after %s refreshes the list without moving keyboard focus',
+    async (action) => {
+      const originalScroll = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'scrollIntoView'
+      )
+      const scroll = vi.fn()
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: scroll,
+      })
+      try {
+        const { rerender } = render(<SkillsPage />)
+        scroll.mockClear()
+        const opener = screen.getByRole('button', {
+          name: 'common:createNewSkill',
+        })
+        if (action === 'create') {
+          fireEvent.click(screen.getByText('common:writeSkillInstructions'))
+          fireEvent.change(screen.getByLabelText('common:skillName'), {
+            target: { value: otherSkill.name },
+          })
+          fireEvent.change(screen.getByLabelText('common:description'), {
+            target: { value: otherSkill.description },
+          })
+          fireEvent.change(screen.getByLabelText('common:instructions'), {
+            target: { value: otherSkill.body },
+          })
+          fireEvent.click(screen.getByRole('button', { name: 'common:create' }))
+          await waitFor(() => expect(hookState.value.addCreated).toHaveBeenCalledOnce())
+        } else {
+          dialogOpen.mockResolvedValue('/tmp/imported.skill')
+          fireEvent.click(screen.getByText('common:uploadASkill'))
+          fireEvent.click(screen.getByRole('button', { name: 'common:dropSkillToUpload' }))
+          await waitFor(() => expect(hookState.value.addImported).toHaveBeenCalledOnce())
+        }
+        await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+        await waitFor(() => expect(opener).toHaveFocus())
+
+        // The authoring response can select the detail before the list refresh arrives.
+        hookState.value = { ...hookState.value, selected: otherSkill, loading: true }
+        rerender(<SkillsPage />)
+        expect(scroll).not.toHaveBeenCalled()
+        hookState.value = {
+          ...hookState.value,
+          skills: [customSkill, otherSkill],
+          loading: false,
+        }
+        rerender(<SkillsPage />)
+        const newRow = screen.getByRole('button', {
+          name: `${otherSkill.name} ${otherSkill.description}`,
+        }).parentElement
+        expect(scroll).toHaveBeenCalledOnce()
+        expect(scroll.mock.contexts[0]).toBe(newRow)
+        expect(scroll).toHaveBeenCalledWith({ block: 'nearest' })
+        expect(opener).toHaveFocus()
+
+        // A later refresh must respect the user's manual scroll position.
+        hookState.value = { ...hookState.value, skills: [...hookState.value.skills] }
+        rerender(<SkillsPage />)
+        expect(scroll).toHaveBeenCalledOnce()
+      } finally {
+        if (originalScroll) {
+          Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScroll)
+        } else {
+          Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+        }
+      }
+    }
+  )
+
   it('keeps skill actions immediately left of the shared Studio navigation', () => {
     render(<SkillsPage />)
 

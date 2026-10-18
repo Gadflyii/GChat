@@ -788,7 +788,7 @@ it.each([
   }
 )
 
-it('explains a task runner issue before suggesting brain or task changes', async () => {
+it('explains how to reload tasks before suggesting brain or task changes', async () => {
   readyTaskBots(undefined, { assignments: [] })
   const call = mocks.call.getMockImplementation()!
   mocks.call.mockImplementation((path: string, body: Record<string, unknown>) =>
@@ -797,14 +797,128 @@ it('explains a task runner issue before suggesting brain or task changes', async
       : call(path, body)
   )
   render(<Page />)
-  await screen.findByText('Error: Task runner connection lost')
+  await screen.findByText('Could not load tasks and approval requests. Try again.')
+  const details = screen.getByText('Error: Task runner connection lost')
+  expect(details.closest('details')).not.toHaveAttribute('open')
+  expect(details).not.toBeVisible()
   expect(
     screen.getByText(
-      'The task runner is unavailable. Resolve the task runner issue above before running a task.'
+      'Choose Retry loading tasks above before running a task.'
     )
   ).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Retry loading tasks' })).toBeEnabled()
   expect(screen.getByRole('button', { name: 'Run', exact: true })).toBeDisabled()
   expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
+})
+
+it.each(['tasks', 'tasks/approvals'])(
+  'recovers a failed %s read only after an explicit retry, keeping the selected bot and draft',
+  async (failedRead) => {
+    const [, identity] = readyTaskBots()
+    const original = mocks.call.getMockImplementation()!
+    const history = [{
+      id: 'research-task', identity, state: 'awaiting_approval',
+      messages: [{ role: 'assistant', content: 'Saved research task' }],
+      help_requests: [],
+    }]
+    const approvals = [{
+      id: 'research-permission', task_id: 'research-task',
+      request: { operation: { kind: 'read', path: '/home/bot/research.txt' } },
+    }]
+    let result: 'failed' | 'pending' | 'ready' = 'failed'
+    let rejectRetry!: (cause: string) => void
+    const pending = new Promise<never>((_, reject) => { rejectRetry = reject })
+    mocks.call.mockImplementation((path: string, body: Record<string, unknown>) => {
+      if (path === failedRead) {
+        if (result === 'failed') return Promise.reject(new Error('Task history connection lost'))
+        if (result === 'pending') return pending
+      }
+      if (path === 'tasks') return Promise.resolve(history)
+      if (path === 'tasks/approvals') return Promise.resolve(approvals)
+      return original(path, body)
+    })
+    render(<Page />)
+    const guidance = 'Could not load tasks and approval requests. Try again.'
+    await screen.findByText(guidance)
+    fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Keep this research draft' },
+    })
+    const alert = screen.getByText(guidance).closest('[role="alert"]') as HTMLElement
+    const details = within(alert).getByText('Error: Task history connection lost')
+    expect(details).not.toBeVisible()
+    const reads = mocks.call.mock.calls.filter(([path]) => path === failedRead).length
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(details).toBeVisible()
+    expect(mocks.call.mock.calls.filter(([path]) => path === failedRead)).toHaveLength(reads)
+    expect(screen.queryByText('Saved research task')).not.toBeInTheDocument()
+
+    result = 'pending'
+    const retry = screen.getByRole('button', { name: 'Retry loading tasks' })
+    act(() => {
+      retry.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      retry.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(screen.getByRole('button', { name: 'Loading tasks…' })).toBeDisabled()
+    await waitFor(() => expect(
+      mocks.call.mock.calls.filter(([path]) => path === failedRead)
+    ).toHaveLength(reads + 1))
+    expect(screen.getByLabelText('Bot task')).toHaveValue('Keep this research draft')
+    await act(async () => rejectRetry('Task history is still unavailable'))
+    expect(await screen.findByText('Task history is still unavailable')).toBeInTheDocument()
+    expect(screen.getByText(guidance)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Retry loading tasks' })).toBeEnabled()
+
+    result = 'ready'
+    fireEvent.click(screen.getByRole('button', { name: 'Retry loading tasks' }))
+    expect(await screen.findByText('Saved research task')).toBeVisible()
+    expect(screen.getByRole('article', { name: 'Bot permission request' })).toHaveTextContent('/home/bot/research.txt')
+    expect(screen.queryByText(guidance)).not.toBeInTheDocument()
+    expect(screen.queryByText('Task history is still unavailable')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Researcher' })).toBeVisible()
+    expect(screen.getByLabelText('Bot task')).toHaveValue('Keep this research draft')
+    expect(mocks.call.mock.calls.filter(([path]) =>
+      path.startsWith('tasks/') && path !== 'tasks/approvals'
+    )).toEqual([])
+  }
+)
+
+it('keeps loaded history and approval requests when a later refresh fails', async () => {
+  const [identity] = readyTaskBots()
+  const original = mocks.call.getMockImplementation()!
+  let failed = false
+  mocks.call.mockImplementation((path: string, body: Record<string, unknown>) => {
+    if (path === 'tasks') return failed
+      ? Promise.reject(new Error('History refresh unavailable'))
+      : Promise.resolve([{
+        id: 'saved-task', identity, state: 'awaiting_approval',
+        messages: [{ role: 'assistant', content: 'Previously loaded task' }],
+        help_requests: [],
+      }])
+    if (path === 'tasks/approvals') return Promise.resolve([{
+      id: 'saved-permission', task_id: 'saved-task',
+      request: { operation: { kind: 'read', path: '/home/bot/saved.txt' } },
+    }])
+    return original(path, body)
+  })
+  render(<Page />)
+  expect(await screen.findByText('Previously loaded task')).toBeVisible()
+  const permission = screen.getByRole('article', { name: 'Bot permission request' })
+  failed = true
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh', exact: true }))
+  await screen.findByText('Could not load tasks and approval requests. Try again.')
+  expect(screen.getByText('Previously loaded task')).toBeVisible()
+  expect(permission).toBeVisible()
+  failed = false
+  fireEvent.click(screen.getByRole('button', { name: 'Retry loading tasks' }))
+  await waitFor(() => expect(screen.queryByText(
+    'Could not load tasks and approval requests. Try again.'
+  )).not.toBeInTheDocument())
+  expect(screen.getByText('Previously loaded task')).toBeVisible()
+  expect(permission).toBeVisible()
+  expect(mocks.call.mock.calls.filter(([path]) =>
+    path.startsWith('tasks/') && path !== 'tasks/approvals'
+  )).toEqual([])
 })
 
 it('explains empty, ready and busy task states without changing task submission', async () => {
