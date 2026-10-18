@@ -3970,6 +3970,24 @@ controls wrap onto additional rows inside the input border. The input grows
 to fit those rows, keeping the saved-agent choice, Approvals, reasoning and
 Send controls separate and available.
 
+## Preparing another agent run
+
+In **Agent Studio → Runs**, choose **Re-run** to reuse a finished run's task
+and workspace. **Continue as new run…** prepares the selected unfinished run's
+goal, saved result and output location. Cancel closes either setup without
+starting a run. Changing sections must not open an earlier setup later.
+
+Linux acceptance (`GUI-AGENT-RUN-SETUP-LIFETIME-NATIVE-20261018`): finished
+Private Host recovery → Re-run → Cancel, then incomplete General Agent →
+Continue → Cancel showed each run's own task and workspace, with no earlier
+task or reply in the continuation. Leaving and returning to Runs opened no
+late dialog. All 17 saved records, 45 skill files, two workspace inputs and
+disabled-state bytes/modes stayed unchanged; resources returned at 09:36Z.
+Retained `8f7d18f6f` matches the relevant chain at `81c453224`. Evidence:
+[`out/gchat-agent-run-setup-lifetime-native-20261018/`](../../out/gchat-agent-run-setup-lifetime-native-20261018/).
+The original 25 focused cases and ONE `make verify` PASS remain qualified.
+Delayed request ordering remains source-test coverage; Windows was not exercised.
+
 ## Reading workspace folders
 
 If GChat cannot read your workspace folder, the **Files** panel opens so you
