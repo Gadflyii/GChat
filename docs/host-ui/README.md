@@ -642,14 +642,14 @@ fresh walk, hardware candidate and merge review finish, then remove owned privat
 retain only result JSON and short summary. Read-only donor remains Claude's.
 ## Fresh first-time-user walk — C3, October 18
 
-**Requested controls exercised; twelve fixes merged.** The last changed-source
-native checks passed, and the private app, Host, keyring, D-Bus and Xvfb stopped
-at 06:18Z. The next owned defect is
-`GUI-RESET-STALE-LOCAL-HOST-CONNECTION`: after reset, an obsolete saved identity
-appears beside the new connected local Host at the same loopback endpoint.
-Its source cause is confirmed; the parent owns the fix. The stopped private
-fixture remains regression input. Support destination remains **WAITING ON RON**.
-This is not a claim that every prerequisite-dependent operation passed.
+**Requested controls exercised; thirteen fixes merged.** The final follow-up
+`GUI-RESET-STALE-LOCAL-HOST-CONNECTION` passed source gates and native acceptance;
+merge `4514dfc73` contains signed source `63f9e8a49`. Permission-refusal recovery,
+ordinary reset retry and exactly one connected replacement local Host passed.
+The private session stopped and CPU booking3100 returned at 07:01Z. Final
+candidate/profile retirement is with the parent; the separate local donor
+retired after all borrowers released it. Support destination remains
+**WAITING ON RON**. This does not qualify prerequisite-dependent operations.
 
 The requested scope was setup, Models, Downloads, Engine/Host settings,
 hardware-profile controls, Fleet/connections and Settings, with actual
@@ -674,7 +674,7 @@ installer, system installation, package publication, Windows acceptance or
 release-performance claim occurred. Build, payload and launch receipts are in
 `out/c3-current-main-release-20261018/`.
 
-All twelve rows below have source gates, changed-source native acceptance and
+All thirteen rows below have source gates, changed-source native acceptance and
 merged source. Packet paths are under `out/`; each packet retains its detailed
 counts, commands and screenshots.
 
@@ -692,6 +692,7 @@ counts, commands and screenshots.
 | `GUI-LINUX-AUTOSTART-XDG-PATH` | handoff `92868d3fd`, merged in main `d4ec7abab` | `c3-linux-autostart-xdg-20261018/result.json` |
 | `GUI-RESET-RELOCATED-DATA-RESURRECTION` | handoff `5693c8b8f`, merge `eebad02f2` | `c3-reset-relocated-data-20261018/result.json` |
 | `GUI-HOST-LOCATOR-DELETED-RUNTIME` | handoff `d262658e2`, merge `04866d698`; Arch signed 06:19:08Z | `c3-host-locator-deleted-runtime-20261018/result.json` |
+| `GUI-RESET-STALE-LOCAL-HOST-CONNECTION` | source `63f9e8a49`, merge `4514dfc73`; final handoff `4b451e91a` | `c3-reset-stale-host-connection-20261018/result.json` |
 
 Original failures remain visible in their packets. Setup's single verify hit a
 network-none Fleet self-route failure; the original native commands passed in
@@ -719,6 +720,41 @@ account-service Connect showed Google/Microsoft setup cards without signing in.
 See `out/c3-host-locator-deleted-runtime-20261018/` receipts
 `native-recovery.json`, `native-models-refresh.json`,
 `native-downloads-refresh.json` and `native-account-service.json`.
+
+The reset follow-up source `63f9e8a49` amends `7007c37fd`: exact deleted
+UUID/certificate retirement preserves paired remote Hosts and concurrent Manager
+edits; any returned reset error restores hidden windows. Arch signed the original
+at 06:26:43Z and the amendment at 06:34:34Z. Four focused Host tests and nine
+focused desktop tests passed, with one existing GPU ignore; these helper tests
+are unchanged by the outer-command amendment. Check, Clippy and lint passed.
+ONE `make verify` passed at 06:44:00Z: 3,406 app tests, 127 extension tests,
+1,270 native tests, six app skips, 28 native ignores and six coverage floors.
+The Vite build passed. The first default-desktop build lacked generated
+`icons/32x32.png`; standard `yarn build:icon` corrected fixture preparation, then
+only the failed native desktop/Host build resumed and passed at 06:46:48Z.
+No source change or second verify was used. Future archived default-desktop
+fixtures must run that existing icon-generation step before Cargo. Build
+booking3084 returned 06:47Z and both exited containers were removed.
+
+Native acceptance deliberately made the selected Host directory mode500. Actual
+Reset at 06:54:44Z returned a readable preserved-identity error and restored the
+same app process at Light 1024×800; saved local UUID `5a7f8db3…` and configuration
+SHA stayed unchanged. The first error observation missed the brief toast because
+the WebKit promise observation returned `{}`; only that inconclusive capture was
+repeated. The second screenshot was visually reviewed PASS. After restoring
+mode775, ordinary retry at 06:54:56Z restarted the app. At 06:54:59Z the old
+identity was absent, the saved registry empty and configuration bytes unchanged.
+At 06:59:51Z, the restarted app showed exactly one connected This computer.
+Replacement UUID `08d55660-11dc-471c-817c-b855428dff50` was the sole saved registry
+entry and matched the selected identity; both old UUIDs were absent. Selected
+configuration bytes and folder stayed unchanged (SHA `106ad635…`). The Light
+1024×800 refusal screenshot and Dark 1500×1000 replacement screenshot were
+visually reviewed PASS. The ended fixture D-Bus left secure-storage readiness
+unavailable, but did not prevent local attachment; no relaunch was needed.
+App, Host, Xvfb, guard and inspector forward stopped and CPU booking3100
+returned at 07:01Z. Evidence:
+`out/c3-reset-stale-host-connection-20261018/{result.json,native-result.json}`.
+These changed-source debug-candidate checks do not modify the pinned release.
 
 The completed control observations are:
 
@@ -761,7 +797,7 @@ The completed control observations are:
   Interface navigation remained responsive. Autostart passed XDG enable/reopen
   On/disable/remove/reopen Off with HOME/.config absent and packaged AppRun in
   the entry. Interface Reset restored Dark/Medium from Light/Extra Large;
-  wide/narrow screenshots were reviewed. Final stopped profile is Light/Medium.
+  wide/narrow screenshots were reviewed. The locator session left Light/Medium.
 - Workspace connections exercised the private account service, Google import/
   manual guide, Google/Microsoft service choices, Read only/Read write and
   unchanged Save without real credentials. Attachments, Shortcuts, Proxy and
@@ -801,10 +837,12 @@ Owner: Codex 3; worktree `/ai/gchat-worktrees/c3-first-user-setup-20261018`,
 branch `fix/c3-first-user-setup-20261018`. S1 root:
 `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`. Native isolation used
 private HOME/XDG700/Xauthority/Xvfb, D-Bus, an unlocked private keyring and
-WAYLAND unset; inspectors only observed state. Last native booking3073
-CPU88–95 returned 06:18Z; no private app/Host/session/display remains active.
-C7's AppDir read-copy ended 06:07Z and tools custody released 06:15Z. C4's
-copies/displays are also terminal; neither holds this stage.
+WAYLAND unset; inspectors only observed state. The locator app, Host, keyring,
+D-Bus and Xvfb stopped and native booking3073 CPU88–95 returned 06:18Z. C7's
+AppDir read-copy ended 06:07Z and tools custody released 06:15Z. C4's
+copies/displays are terminal. The separate reset-regression app, Host, Xvfb,
+guard and inspector forward stopped and booking3100 CPU64–71 returned 07:01Z.
+The parent owns final candidate/profile retirement after the verified merge.
 
 At 06:12Z, reference/link checks preceded retirement of owned `gchat`,
 `native-target`, `cargo-home`, `yarn-cache`, `status-candidate` and the release
@@ -814,18 +852,30 @@ free-space claim across reflinks. Receipt:
 merged candidate exports were retired with concise evidence retained in
 `merged-export-cleanup-0548.json` and `merged-reset-export-cleanup-0601.json`;
 Interface/CLI exports had already retired at 05:34:57Z. No shared build/cache
-stage or queued builder remains. The immutable `current-main-appdir`,
+stage remains in this broad root. The immutable `current-main-appdir`,
 `runnable`, `tools`, `current-main-home`, `downloads-home` and
-`host-locator-candidate` remain as inputs for the next reset regression. The
-external Claude donor is untouched.
+`host-locator-candidate` await the parent's authorized final reference checks
+and retirement. The separate reset build root is
+`/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018`; its source,
+Cargo cache, target and staging inputs were retired at 06:58Z (31,818,774,811
+logical bytes; `out/c3-reset-stale-host-connection-20261018/build-retirement.json`).
+No gate/build/native job remains. Its exported candidate resolves pre-install
+to the broad root's `runnable`; the parent owns their coordinated retirement.
+The external Claude donor is untouched.
 
-Next: parent fixes `GUI-RESET-STALE-LOCAL-HOST-CONNECTION`, preserving unrelated
-remote connections. Source tracing shows selected-root reset deletes local
-`host.json`, while the shared per-user `hosts.json` retains its old UUID; the
-new local UUID is added at the same URL. The final native
-`out/c3-host-locator-deleted-runtime-20261018/native-model-settings.json`
-records the two cards. Keep this stopped fixture until the scoped fix is
-accepted, then retire its remaining disposable exports/profile under rule9.
+The separate local donor `out/c3-chat-area-hands-on-20261017/runnable`
+retired at 07:04Z after C6, C7 and Claude Arch returned all loans. Its inbound SC
+resource link was confirmed to point into the C3 donor; no independent copy was
+needed after closure. Accessible process references, mounts and active Docker
+mounts were empty; inaccessible process fields were supplemented by explicit
+owner releases. Only the literal C3 runnable was removed: 4,122,204,474 logical
+bytes. SC/C6 trees and their released symlink files were untouched. The existing
+`out/c3-chat-area-hands-on-20261017/rule22-local-cleanup-20261018.json` records
+8,968,724,608 total logical bytes retired across that scoped cleanup.
+
+Next: parent completes merged-candidate/profile retirement and records cleanup. The original duplicate-card evidence
+remains in `out/c3-host-locator-deleted-runtime-20261018/native-model-settings.json`.
+No further native check is required for this completed control walk.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
