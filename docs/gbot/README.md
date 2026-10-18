@@ -1,5 +1,37 @@
 # Gbot design
 
+## Price refresh keeps cloud controls busy — Gchat 2
+
+`GBOT-CLOUD-PRICE-REFRESH-ACTION-OVERLAP`, based on main `e50055c37`,
+fixes cloud controls remaining active while prices refresh. Checking progress,
+deleting a computer or checking/preparing its tools could overlap with the
+price request and release the wizard's busy state before both requests ended.
+
+Price refresh now disables the cloud computer's controls and nested tool
+consent and actions. Their handlers also check the parent's synchronous
+pending guard before accepting a request, including rapid clicks before
+React renders the disabled state. Existing deployment, SSH verification and
+consent remain available after refresh completes or fails. An accepted child
+request keeps the wizard busy through its own completion.
+
+Both deferred regressions fail on unchanged main because a provider or tool
+request overlaps price refresh (11 tests filtered). All 25 focused CloudCosts,
+LanTools and LanSetup cases pass with the fix. The rendered checks cover
+success, failure, same-turn clicks, disabled controls, preserved consent,
+explicit recovery and accepted child completion.
+
+One isolated Linux/S1 `make verify` passes on 18 October, 07:32:40–07:40:18
+UTC: 3,462 app, 127 extension and 1,275 Rust tests pass; six app tests are
+skipped and 28 Rust tests ignored. Lint, type checking, quality guards and all
+six coverage floors pass. Source, test and documentation hashes match before
+and after the gate; this final receipt was added afterward. Evidence:
+`out/gchat2-cloud-price-refresh-action-overlap-20261018/{result.json,SUMMARY.md}`.
+No live provider, SSH, native Windows, VM, model or GPU action is part of this
+leaf. FRESH and OLD remain off with original XML and Gchat 2 custody. The
+private S1 build/cache was removed, the shared donor preserved, and CPUs
+96–103 returned at 07:41 UTC; booking 3130 canceled. Next: bubbs merges the
+fix and its evidence.
+
 ## Cloud actions keep tool controls busy — Gchat 2
 
 `GBOT-CLOUD-TOOLS-PARENT-ACTION-OVERLAP`, based on main `20244e007`,

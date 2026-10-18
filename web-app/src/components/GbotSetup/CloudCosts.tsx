@@ -340,6 +340,8 @@ export default function CloudCosts({
             review={review}
             updated={setReview}
             canCreate={valid && Boolean(review.confirmed && quote && matches)}
+            disabled={pending}
+            canStart={() => !pendingRef.current}
             busy={(value) => {
               pendingRef.current = value
               setPending(value)
