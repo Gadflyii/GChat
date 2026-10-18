@@ -1692,3 +1692,17 @@ Open: `GUI-JOURNEY-WELCOME-BELOW-FOLD`, `GUI-JOURNEY-MODEL-NOT-SELECTED`,
 Method note: release Host and frontend accept only commit-pinned Hugging Face package URLs, so the download
 steps used the release profile with debug assertions, a development frontend and the private loopback catalog
 (`c6a23a4d4`); the pure release build stops at 'No model downloads are available for these graphics cards'.
+
+## Setup action errors, October 18 (Gchat 2)
+
+`GUI-FIRST-RUN-ACTION-ERROR-PERSISTENCE`: a rejected Cancel profiling or folder change showed its error only
+until the next successful two-second status poll. Setup now keeps action errors visible until the user tries
+again. Temporary connection errors still clear when status reads recover; folder edits and retry controls are kept.
+
+Evidence on main baseline `624df980d`: two rendered regression cases failed after two successful polls; a
+connection-recovery control passed. After separating action errors from status-read errors, all 26 tests in
+`EngineFirstRun.test.tsx` passed, including successful Cancel and folder retries. One `make verify` passed:
+lint, type checking, quality checks, 3,220 app tests, 121 extension tests, 1,212 Rust tests and all six coverage
+floors (six app tests skipped, 28 Rust tests ignored). The two changed source/test hashes matched locally and
+on S1 before and after verification. These are rendered React tests with mocked Host responses; this change
+makes no new native VM or Windows acceptance claim.

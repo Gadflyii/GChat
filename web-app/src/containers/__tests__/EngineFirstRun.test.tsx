@@ -433,6 +433,75 @@ it('shows a failed Cancel and keeps its retry available while disabling offline 
   expect(screen.getByRole('button', { name: 'Cancel profiling' })).toBeDisabled()
 })
 
+it('keeps a rejected Cancel visible through status polls until the user retries', async () => {
+  vi.useFakeTimers()
+  try {
+    const saved = flow('profiling', { hardware_profile: hardwareStatus('running') })
+    let attempts = 0
+    mocks.command.mockImplementation(operation => {
+      if (operation !== 'hardware_profile') return Promise.resolve(saved)
+      if (++attempts === 1) return Promise.reject(new Error('Host could not stop profiling'))
+      return Promise.resolve(hardwareStatus('cancelling'))
+    })
+    await act(async () => { render(<EngineFirstRun />) })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel profiling' })) })
+    expect(screen.getByRole('alert')).toHaveTextContent('Host could not stop profiling')
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+    expect(mocks.command.mock.calls.filter(([operation]) => operation === 'first_run')).toHaveLength(3)
+    expect(screen.getByRole('alert')).toHaveTextContent('Host could not stop profiling')
+    expect(screen.getByRole('button', { name: 'Cancel profiling' })).toBeEnabled()
+    expect(attempts).toBe(1)
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancel profiling' })) })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByText('Stopping hardware profiling…')).toBeVisible()
+    expect(attempts).toBe(2)
+  } finally { vi.useRealTimers() }
+})
+
+it('keeps a rejected folder change and the edited path through status polls until retry succeeds', async () => {
+  vi.useFakeTimers()
+  try {
+    let saved = flow('storage')
+    let attempts = 0
+    mocks.command.mockImplementation((_operation, args) => {
+      if (args.action === 'storage') {
+        if (++attempts === 1) return Promise.reject(new Error('This folder is not writable. Choose another folder.'))
+        saved = flow('models', { storage: { path: args.path, available_bytes: 1024 ** 4 } })
+      }
+      return Promise.resolve(saved)
+    })
+    await act(async () => { render(<EngineFirstRun />) })
+    fireEvent.change(screen.getByLabelText('Model download folder'), { target: { value: '/chosen-models' } })
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use this folder' })) })
+    await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('This folder is not writable. Choose another folder.')
+    expect(screen.getByLabelText('Model download folder')).toHaveValue('/chosen-models')
+    expect(screen.getByRole('button', { name: 'Use this folder' })).toBeEnabled()
+    expect(attempts).toBe(1)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use this folder' })) })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Download selected models' })).toBeVisible()
+    expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'storage', path: '/chosen-models' })
+    expect(attempts).toBe(2)
+  } finally { vi.useRealTimers() }
+})
+
+it('clears a temporary setup connection error when the next status poll succeeds', async () => {
+  vi.useFakeTimers()
+  try {
+    mocks.command.mockRejectedValueOnce(new Error('Saved setup unavailable')).mockResolvedValue(flow('gpu'))
+    await act(async () => { render(<EngineFirstRun />) })
+    expect(screen.getByRole('alert')).toHaveTextContent('Saved setup unavailable')
+    await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
+    expect(screen.queryByText(/Saved setup unavailable/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry local setup' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Use selected graphics cards' })).toBeVisible()
+  } finally { vi.useRealTimers() }
+})
+
 it('shows only the manual progress controls while advanced options are open', async () => {
   mocks.command.mockResolvedValue(flow('profiling', { hardware_profile: hardwareStatus('running') }))
   render(<EngineFirstRun hardwareProfileControls={manualControls('running')} />)
