@@ -1,5 +1,46 @@
 # GInfer host UI
 
+## Packaged CLI terminal-install detection — Gchat 3, October 18
+
+`GUI-CLI-PACKAGED-PATH-DETECTION` corrects Settings → General → terminal
+command detection. The private current-main release `d0a8d06bf` reproduced
+**Installed at …/current-main-appdir/usr/bin//gchat-cli** with only Uninstall
+available, although the inherited terminal PATH had no `gchat-cli`. The
+packaged AppRun prepends its private directories to PATH; `which` therefore
+mistook the bundled executable for a terminal installation. Baseline receipt:
+`out/c3-current-main-release-20261018/cli-false-installed.json`.
+
+The candidate traverses PATH directly for the platform's CLI executable,
+excluding the private `resources/bin` directory and, on Linux, the AppDir
+captured by Tauri from `APPDIR`. The approved GTK AppRun hook also sets
+`APPDIR` when running an extracted AppDir. Directory canonicalization excludes
+aliases into the bundle while retaining an external installed file symlink;
+the executable target itself is not canonicalized. Detection continues past
+the bundle to the first external executable. Without an AppDir, a real system
+`/usr/bin` installation remains eligible. Windows checks `gchat-cli.exe` on
+PATH without `where`'s implicit current-directory lookup; the separate per-user
+desktop-linked launcher remains eligible. Install, uninstall and launcher
+ownership are unchanged; C4 owns the separate standalone-launcher work.
+
+Acceptance requires the packaged-only native case to offer Install, a real
+terminal installation to report its external path, and existing CLI install
+and uninstall behavior to remain intact. Five filesystem regressions cover
+bundle-only lookup, PATH ordering after AppRun, system installation without
+AppDir, directory aliases versus installed file symlinks, and missing or
+non-executable commands. Focused command:
+`cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli cli_install_detection -- --test-threads=1`.
+Focused Rust checks, supported Cargo check/Clippy, ONE `make verify`, a changed
+native build and parent-owned installed-layout acceptance are pending; no
+execution result is claimed. Windows is not built or exercised.
+
+Inventory: owner C3, branch
+`fix/c3-cli-packaged-path-detection-20261018`, baseline `bbc81c2ec`, worktree
+`/ai/gchat-worktrees/c3-cli-packaged-path-detection-20261018`. Only
+`src-tauri/src/core/system/commands.rs` and this authority change. No S1 stage,
+cache, running app, dependency or resource allocation is changed by this source
+task. The shared stage remains scheduled by the coordinator. Next: source
+handoff, then scheduled verification and native acceptance.
+
 ## Scheduled tasks brain setup guidance — October 18
 
 `GBOT-SCHEDULE-BRAIN-SETUP-GUIDANCE`: the disabled schedule form previously
