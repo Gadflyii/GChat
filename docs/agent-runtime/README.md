@@ -33,6 +33,24 @@ ThreadList and dialog source is unchanged from native `d7de423c2` through main
 `9ec7cd1e6`. Baseline receipts are in
 `/ai/gchat/out/gchat-thread-dialog-cancel-20261018/`.
 
+Chat callers now retain their opening menu button, and Rename/Delete return
+focus to that button when it remains connected. Delete still opens with Cancel
+focused. Fifteen real-menu regressions cover sidebar history, project subitems
+and project-page cards. The selected sidebar Rename Cancel test fails against
+the parent production files with focus on the body; all 40 related tests pass
+with frozen source `2df319ec8`. An initial fixture-only draft-selection/teardown
+failure was corrected before the full verification run; its log is retained.
+
+The single `make verify` passes: 3,452 frontend tests, 127 extension tests and
+1,271 Rust tests. The production frontend and offline locked native builds also
+pass. The private Linux native replay passes Rename Cancel/Escape and Delete
+Enter-on-Cancel/Escape, plus Rename Escape from a second chat returning to its
+own menu. Cancelled drafts reopen with the original title; Delete initially
+focuses Cancel. All 17 saved files remain byte-identical after shutdown. The
+receipts and two viewed focus screenshots are in
+`/ai/gchat/out/gchat-thread-dialog-focus-return-20261018/`. Windows was not built
+(dev phase).
+
 ## Project dialog keyboard focus — October 18
 
 A private native Linux pass found that cancelling project Edit or Delete left
