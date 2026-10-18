@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UIMessage } from 'ai'
 import { Chat } from '@ai-sdk/react'
@@ -130,6 +131,51 @@ describe('MessageItem inline editing', () => {
     expect(onEdit).not.toHaveBeenCalled()
     expect(screen.getByText('original text')).toBeInTheDocument()
   })
+
+  it.each(['user', 'assistant'] as const)(
+    'returns to the same %s message after Escape, Cancel and an unchanged Enter',
+    async (role) => {
+      const user = userEvent.setup()
+      render(
+        <>
+          {['First original', 'Second original'].map((text, index) => (
+            <MessageItem
+              key={index}
+              message={{ id: `message-${index}`, role, parts: [{ type: 'text', text }] }}
+              isFirstMessage={index === 0}
+              isLastMessage={index === 1}
+              status="ready"
+              onEdit={onEdit}
+            />
+          ))}
+        </>
+      )
+      const secondEdit = () =>
+        screen.getAllByRole('button', { name: 'common:editMessage' })[1]
+
+      await user.click(secondEdit())
+      await user.type(screen.getByTestId('inline-message-editor'), ' discarded')
+      await user.keyboard('{Escape}')
+
+      expect(secondEdit()).toHaveFocus()
+      expect(screen.getByText('Second original')).toBeInTheDocument()
+      await user.keyboard(' ')
+      expect(screen.getByTestId('inline-message-editor')).toHaveValue('Second original')
+      await user.type(screen.getByTestId('inline-message-editor'), ' also discarded')
+      await user.click(screen.getByRole('button', { name: 'common:cancel' }))
+
+      expect(secondEdit()).toHaveFocus()
+      await user.keyboard('{Enter}')
+      expect(screen.getByTestId('inline-message-editor')).toHaveValue('Second original')
+      await user.keyboard('{Enter}')
+
+      expect(secondEdit()).toHaveFocus()
+      expect(screen.queryByTestId('inline-message-editor')).not.toBeInTheDocument()
+      expect(screen.getByText('First original')).toBeInTheDocument()
+      expect(screen.getByText('Second original')).toBeInTheDocument()
+      expect(onEdit).not.toHaveBeenCalled()
+    }
+  )
 
   it('edits an assistant message in place too', () => {
     renderMessage({
