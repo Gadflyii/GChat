@@ -185,6 +185,41 @@ rejection remains covered by the focused native/rendered cases; no GUI rejection
 was injected. App/private session returned05:41Z; Xvfb remains for the next two
 checks. No login/reboot or Windows runtime is claimed. Next: coordinator merge.
 Packet: `out/c3-linux-autostart-xdg-20261018/{result.json,terminal.json,summary.md}`.
+## First-run Retry after background recovery — C4, October 18
+
+`GUI-FIRST-RUN-RETRY-FOLLOWUPS` fixes both follow-ups to merged `16a4b2f25`.
+Retry now wakes retained maintenance failures at GPU and complete as well as
+storage and models, preserving saved choices. If the monitor clears the error
+before the click arrives, Retry quietly returns current status without writing
+unchanged progress or waking maintenance. Explicit download, profiling and
+startup Resume actions retain their existing behavior.
+
+The two Host regressions cover GPU/complete recovery and the stale-click race
+at GPU/storage/models/complete; the latter prevents disk publication to verify
+that refreshing status needs no write. Focused native Linux Host tests passed
+19 cases (one existing disk-specific case ignored), with Cargo check and strict
+Clippy also passing. ONE `make verify` stopped at root coverage because the
+fresh private source stage omitted generated `core/dist`. Its preceding lint,
+typecheck and contract stages passed. After building core from the exact staged
+source, only the failed coverage stage and remaining Rust suites were run:
+3,378 app/core tests, 127 extension tests, all six coverage floors and 1,249
+Rust tests passed (28 ignored). The original failed invocation is retained in
+the result; no second `make verify` was run. Fresh isolated source stages must
+build core before these gates.
+
+Owner C4; branch `fix/c4-first-run-retry-followups-20261018`, baseline
+`50aa7e1cc`, local worktree
+`/ai/gchat-worktrees/c4-first-run-retry-followups-20261018`. Source hashes matched
+before and after the native gate. S1 used CPUs112–119, socket1 shared, nice10
+and offline dependencies in a private SSD source/cache copy. The inactive C3
+donor was unchanged and returned immediately after copying. Checks finished
+05:53:31Z; the two stopped containers and owned 21 GiB SSD root
+`/media/ron/SSD_RAID/ai/tmp-c4-first-run-retry-followups-20261018` were retired,
+and booking3047 returned. No GUI, Windows, GPU or model run was performed.
+No Engine source changed; Engine CTest is not required. Native test evidence:
+`out/c4-first-run-retry-followups-20261018/result.json`, with a short summary
+and exact commands beside it. Next: coordinator merge.
+
 ## Gbot companion task-load retry — October 18
 
 `GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously
