@@ -3549,6 +3549,22 @@ were retained. All 17 saved records, 45 Skills and two existing workspace inputs
 remained byte unchanged. The app stopped at 08:15Z. Evidence:
 `/ai/gchat/out/gchat-agent-nested-folder-read-native-20261018/summary.json`.
 
+An expanded empty folder shows **This folder is empty** inside that folder.
+Collapsing it hides the message; reopening shows it again. Choose **Refresh**
+after adding or removing files outside GChat to update the listing.
+
+`GUI-AGENT-EMPTY-FOLDER-NATIVE-20261018` passed private native Linux acceptance
+at 08:20–08:21Z on October 18. Space opened, collapsed and reopened an empty
+child, showing, hiding and restoring its local status. Refresh discovered
+`refresh-note.txt` and removed the empty status; after the input was moved
+outside the folder, Refresh removed the stale entry and restored that status.
+Refresh stayed enabled with no alerts. **Remove from Agent** removed the root
+reference while preserving the test input. The retained `8f7d18f6f` candidate
+has identical relevant folder sources to base `70606ac23`; this qualifies that
+Linux interaction, not a full latest-main binary, GPU or Windows run. The app
+stopped and booking 3157 was canceled at 08:21Z. Evidence:
+`/ai/gchat/out/gchat-agent-empty-folder-native-20261018/summary.json`.
+
 ## Choosing image or audio attachments
 
 If the image or audio file window fails, GChat shows an error and keeps your
