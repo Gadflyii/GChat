@@ -1,5 +1,38 @@
 # GInfer host UI
 
+## Models confirmed Stop and status recovery — C7, October 18
+
+`GUI-MODELS-STOP-STATUS-RECOVERY` corrects a confirmed Stop followed by a failed
+running-model read: the shared action catch currently reports that Stop failed
+and invites a duplicate Stop. Both desktop-loaded models and local Host instances
+must retain their confirmed stopped result, remove the confirmed session's ID
+from active UI state immediately, and preserve other active models. A failed follow-up read
+must explain the stopped result, keep diagnostics in closed Technical details,
+and offer **Refresh model status**. That recovery only reads running-model
+status, with duplicate-click protection; local Load/Stop controls wait for a
+successful read. A genuine rejected Stop keeps its existing explicit retry.
+Download inventory is unrelated and must not determine whether Stop succeeded.
+
+Owned branch `fix/c7-models-stop-status-recovery-20261018`, matching
+`/ai/gchat-worktrees/` tree, base `51dc678b9`. Parent owns the component and
+this authority; the test worker owns the existing rendered Models suite and
+independent S1 SSD fixture. Acceptance: both Stop routes, pending/failed then
+successful read-only recovery, immediate stopped-state publication, preservation
+of unrelated active models, repeated-click protection, true rejection/retry,
+focused tests, lint and exactly one `make verify`. No Engine, native backend,
+model run, installed-app or Windows qualification change. The accepted/read
+split and recovery are implemented. Desktop unload returns confirmation without
+publishing a new Host snapshot, so the read also refreshes that local snapshot
+before merging ready aliases. A matching file path does not prove that an alias
+belongs to the stopped session, so other aliases await that read. Until those reads succeed the affected row says
+Checking status or Status unavailable instead of trusting a stale Running label.
+The rendered regressions are preserved with this candidate. The higher-priority
+deletion revision correction passed its source gate and is with Codex 8 as
+`b3d27c2c4`; any review finding takes priority. Source-only integration of this
+next owned row now resumes. No Stop fixture or gate has launched and no resource
+is held. Next: integrate current main, freeze the Stop source/tests, then run
+the focused Models suite, lint and its single gate after deletion QC returns.
+
 ## Models accepted deletion and inventory recovery — C7, October 18
 
 `GUI-MODELS-DELETE-REFRESH-RECOVERY` fixes the shared local deletion path:
@@ -53,7 +86,8 @@ The independent S1 SSD fixture used booking3552 on CPU88–95; those CPUs return
 and its sole exited candidate container were retired at **21:00:24Z**, removing
 **28,879,998,976 allocated fixture bytes** after direct review. Only the result
 JSON and short summary remain; the inactive dependency donor and protected
-inputs are preserved. The verified branch is ready for merge. Evidence:
+inputs are preserved. The verified branch, final commit `68351bc28`, merged
+into GChat main as `51dc678b9`. Evidence:
 `out/c7-models-delete-refresh-recovery-20261018/test-result.json` and
 `test-summary.md`. No native resource hold exists.
 
