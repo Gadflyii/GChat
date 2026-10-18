@@ -38,7 +38,7 @@ default desktop debug build passed at 05:25:46Z. The exported source-native
 and retained resource linkage were verified. Installed-layout acceptance passed
 at 05:32Z with explicit APPDIR and bundled-first PATH: Install was offered, the
 CLI installed in private HOME/.local/bin, and reopening General retained the
-external Installed path. Uninstall removed the private launcher set; reopening
+external Installed path. Uninstall removed the private CLI executable; reopening
 General offered Install again. The system bin directory was unwritable. Viewed
 Light 1500×1000 and Dark 1024×800 screenshots show readable controls without
 horizontal overflow. Windows is not built or exercised.
