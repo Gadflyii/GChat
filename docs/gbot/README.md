@@ -16,6 +16,29 @@ native, account, model or VM acceptance.
 
 Validation pending focused checks and ONE `make verify`.
 
+## Queued scheduled work shows its retry — Gchat 2
+
+`GBOT-SCHEDULE-RETRY-GUIDANCE` distinguishes a Once schedule with no later
+occurrences from its queued task waiting for an automatic connection/readiness
+retry. The saved retry time and plain keep-connected guidance remain visible
+with Occurrences closed. Disabled schedules, a stopped scheduler and work held
+for review or already dispatched/finished do not promise an automatic retry.
+An explicit list read can clear the saved retry guidance without replaying the
+task or changing the schedule. This is source/rendered UI scope; scheduling
+and retry behavior are unchanged.
+
+
+Validation: the original production component failed the new queued-retry
+journey as expected; fixed focus passed 154 tests across schedules and the
+Gbot route. Lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 23:18:39–23:24:49 UTC) passed 3,892 app tests
+(six skipped), 130 extension tests, 1,323 Rust tests (28 ignored), all six
+coverage floors and lint/typecheck/quality guards. All 3,482 tracked inputs
+matched raw bytes and modes before and after verification with fresh tracked
+timestamps. Only this receipt was added afterward. Booking 3630 returned
+23:25Z; the private build cache was removed. Evidence:
+`/ai/gchat/out/gchat2-schedule-retry-guidance-20261018/SUMMARY.md`.
+
 ## Saved local computer action recovery — Gchat 2
 
 Saved local setups and connected local bots share Start/Stop error feedback.
