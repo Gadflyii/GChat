@@ -67,8 +67,10 @@ The small [native lifetime receipt](native-hardware-profile-lifetime-20261018.js
 and `E:\gchat7-hardware-profile-native-20261018\result.json` retain the result.
 Disposable runtime/provider copies and launcher bridges are removed; no owned
 native process, model copy, build or booking remains. The accepted Host, Engine
-ZIP and donor profile remain read-only. Next action: merge this acceptance
-packet and close the canonical row after verifying its ancestry on main.
+ZIP and donor profile remain read-only. Acceptance packet `827f036ec` is merged
+on main. The canonical GInfer row is closed in `docs/open-work` commit
+`e10a3e63d`, with governing source ancestry and this native acceptance recorded.
+No native Windows lifetime leaf remains for this row.
 
 ## C7 native profiling exit 2 — closed October 18
 
