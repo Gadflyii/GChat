@@ -49,6 +49,34 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Role identifiers retain keyboard focus — October 18
+
+An isolated native Linux Studio pass found that typing `review-stage` into a
+Workflow **Stage ID**, or `risk-reviewer` into a Coordinator **Specialist ID**,
+retained only the first `r` and moved focus to the page body. After refocusing,
+a trailing minus was discarded even while the input retained focus. The affected
+slug helper and role editors are byte-identical from the observed identifier
+candidate (`2264e2200f`, source `e2ff6de49`) through main `80424bb41`.
+
+The correction preserves focus as role IDs change, retains a trailing separator
+during typing, and normalizes on blur. Native Linux replay typed `review-stage`
+with ordinary keyboard input while retaining the same Stage ID control; adding
+`-` preserved it until Tab. The dependent stage followed both edits, and saving
+retained `review-stage` → `stage-2`. Coordinator replay likewise retained focus
+for `risk-reviewer`, preserved its trailing `-` until Tab, and saved it alongside
+`specialist-2`. Removing the first worker showed the remaining worker's own ID;
+renaming it to `evidence-reader` with display name `EvidenceReader` saved only
+that worker with maximum parallelism 1.
+
+The focused suite passed 48 tests; the sole `make verify`, frontend build and
+native build passed. Candidate SHA256 is
+`26608cb72d2f4b27b6b3f5586388022f114693c3b39b8003d57e6f64e63151c5`
+(base `80424bb41` plus this correction). Evidence and the viewed workflow and
+specialist screenshots are in
+`/ai/gchat/out/gchat-role-id-keyboard-20261018/`. This is an isolated Linux debug
+editor check with retained sidecars and no GPU or model requests, not a full
+sidecar rebuild or installer qualification. Windows: not built (dev phase).
+
 ## Uncollected Chat worker history — October 18
 
 A worker dispatched through Chat's `agent_spawn` could disappear from its

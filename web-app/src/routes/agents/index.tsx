@@ -346,12 +346,12 @@ function cloneDefinition(definition: AgentDefinition): AgentDefinition {
   return structuredClone(definition)
 }
 
-function slug(value: string): string {
+function slug(value: string, editing = false): string {
   return value
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
+    .replace(editing ? /^-/g : /^-|-$/g, '')
     .slice(0, 52)
 }
 
@@ -1447,7 +1447,7 @@ function CoordinatorEditor({
       <div className="space-y-3">
         {draft.workers.map((worker, index) => (
           <RoleEditor
-            key={`${worker.id}-${index}`}
+            key={index}
             role={worker}
             roleKind="specialist"
             skills={skills}
@@ -1555,7 +1555,7 @@ function WorkflowEditor({
             .join(', ')
           return (
             <div
-              key={`${node.id}-${index}`}
+              key={index}
               className="rounded-xl border bg-background p-4"
             >
               <RoleEditor
@@ -1587,7 +1587,7 @@ function WorkflowEditor({
                     onChange={(event) => {
                       const from = event.target.value
                         .split(',')
-                        .map(slug)
+                        .map((value) => slug(value))
                         .filter(Boolean)
                       onChange({
                         ...draft,
@@ -1675,6 +1675,9 @@ function RoleEditor({
             value={role.id}
             placeholder={isSpecialist ? 'risk-reviewer' : 'analyze'}
             onChange={(event) =>
+              onChange({ ...role, id: slug(event.target.value, true) })
+            }
+            onBlur={(event) =>
               onChange({ ...role, id: slug(event.target.value) })
             }
           />
