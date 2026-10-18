@@ -18,7 +18,18 @@ Arch signed the closed-enum/exit-code design; codes avoid the sysexits range.
 See the [startup-failure decision](../decisions/2026-10-18-report-typed-gbot-startup-failures.md).
 
 Next: focused Host, service-boundary and rendered account-connection regressions,
-then one `make verify`. No build, app, GPU or booking is live yet. Owned source:
+then one `make verify`. Frozen source `3444ff6d0` is staged in the retained
+private S1 cache. Booking 2975 grants CPUs 64–71 from 04:24–04:54 UTC,
+with eight build jobs, nice 10 and the shared socket-1 compile guard. The gate
+reproduced the defect against the old parser: the current generic child failure
+was displayed as `internal panic /private/old-attempt` from stale history.
+The image lacks `rg`; that checker-only stop was corrected with available
+`grep`, preserving the failed baseline result and continuing without rerunning it.
+The three Host cases and typed service-boundary case pass. The first rendered
+check exposed a test-fixture mismatch: a JavaScript `Error` adds a prefix absent
+from the native string rejection. The mock now uses that native contract; the
+focused frontend check resumes before the single full gate.
+No app, GPU or model is used. Owned source:
 `/ai/gchat-worktrees/c7-account-service-startup-reason-20261018`; retained owned
 S1 test cache: `/media/ron/SSD_RAID/ai/tmp-c7-private-catalog-gate-20261017`.
 

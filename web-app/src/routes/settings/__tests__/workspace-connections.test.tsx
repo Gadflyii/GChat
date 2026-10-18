@@ -156,10 +156,8 @@ describe('Workspace connections', () => {
     async ({ summary, exitStatus }) => {
       const technicalDetails = `the Gbot service exited before becoming ready (exit status: ${exitStatus}); log: /data/gbot/service.log`
       api.connectorAccounts
-        .mockRejectedValueOnce(new Error('Connect the account service first'))
-        .mockRejectedValueOnce(
-          new Error(`${summary}\n\nDetails: ${technicalDetails}`)
-        )
+        .mockRejectedValueOnce('Connect the account service first')
+        .mockRejectedValueOnce(`${summary}\n\nDetails: ${technicalDetails}`)
       render(<WorkspaceConnections />)
       await userEvent
         .setup()
