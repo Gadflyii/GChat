@@ -327,70 +327,59 @@ are sequential in this change. The W10 follow-up for catalog-declared formats
 requires a separate Engine format-list contract before they can run in parallel.
 See the [decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md).
 
-## CLI measured-storage review — active Codex 4 fix
+## CLI measured-storage review — Codex 4, merge-ready
 
-The novice Linux archive walk exposed `CLI-FIRST-RUN-MEASURED-STORAGE-REVIEW`:
-the initial folder choice precedes selected-artifact profiling, and the text
-wizard advances directly from profiling to startup without presenting the
-measured placement recommendation. The existing Host JSON has the ranking,
-but its capacity test uses the smallest catalog package instead of the selected
-packages. Source inspection confirms the current shared workflow has this gap.
+`CLI-FIRST-RUN-MEASURED-STORAGE-REVIEW` now requires a durable Host-owned
+placement review after selected-artifact profiling and before startup. CLI,
+Welcome and Manager show installed paths and sizes, measured disk rates, live
+space, eligibility reasons and the recommendation. Eligibility uses the selected
+packages, and explicit Keep persists. Choosing a future-download folder leaves
+installed files in place; a separate verified managed move preserves download
+and inventory identities, then refreshes artifact acceptance and startup quotes.
+Arch signed this shared correction on October18 at07:13:45Z.
 
-Arch signed the correction at 07:13:45Z on October 18: after accepted
-selected-artifact profiling, require one durable Host-owned placement review
-before startup. Show actual package locations, measured rates, eligibility
-reasons and the recommendation in every client. Explicitly keeping placement or
-choosing a writable native destination must persist across resume. Changing the
-future-download root leaves installed packages in place; relocating one remains
-a separate explicit verified managed move. After relocation, refresh artifact
-acceptance and startup quotes. Eligibility uses the selected packages' actual
-sizes and live free space. No new throughput probe or automatic move is allowed.
+Two reproduced native failures are corrected in the final source `998a72815`:
+optional remaining-format completion waits for durable `first_run.complete`
+(Arch08:52:23Z), and placement acceptance binds to the disk-profile section,
+selected GPU UUIDs, package identities/sizes/paths and managed root. Unrelated
+GPU timings and source metadata do not invalidate Keep; changed storage evidence
+still requires review (Arch09:17:34Z). The
+[decision](../decisions/2026-10-15-own-first-run-setup-and-measured-model-storage-in-host.md)
+defines the shared contract.
 
-Acceptance is shared CLI/GUI progression and resume, selected-size eligibility,
-keep without movement, explicit destination/move, and current artifact/quote
-state after relocation, supported by focused tests, one `make verify`, and an
-isolated native CLI replay. GInfer Engine code is excluded; measuring additional
-Linux filesystems is the separate `GINFER-LINUX-FASTEST-DISK-COVERAGE` row.
+[Checks](measured-storage-review-20261018.json) passed: focused Host first-run
+20/0failed/1ignored, ONE final `make verify`, and native Host build at09:24:49Z.
+Earlier unchanged storage/launcher/Welcome/Manager focused results are retained.
+All nine affected source/test files match the tested S1 stage. No GInfer Engine
+code changed; the separate Linux filesystem-probe fix is `278e94f63`.
 
-Owner C4; branch `fix/c4-first-run-measured-storage-20261018`, based on
-`6653b5bfd`, at `/ai/gchat-worktrees/c4-first-run-measured-storage-20261018`.
-The Host/CLI, Welcome and Manager implementation is source432108dbb.
-Focused first-run/storage/launcher, Welcome and Manager checks, one `make verify`
-and the native Host build passed07:35Z on S1 SSD. The retained build/cache is
-`/media/ron/SSD_RAID/ai/tmp-c4-first-run-measured-storage-20261018`; its inactive
-RC donor is released. [Checks](measured-storage-review-20261018.json) retain
-that evidence.
+[Linux native acceptance](measured-storage-review-native-20261018.json) passed
+with a fresh private HOME/XDG/DBus/keyring on S1 GPU1. The real installed Qwen
+NVFP4/Q4 package (21,707,145,472bytes, SHA `849fec1d…`) was reused without another
+transfer. The earlier replay verified a future-folder change without movement,
+stale-key rejection and the separate move to the owned
+`/mnt/ssd2/c4-cli-first-run-storage-20261018/models`, retaining both identities
+and removing the old source. The measured review displayed ssd2 and RAID rates
+and explained the unavailable root measurement.
 
-The private CLI continuation is
-`/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018` on S1.
-It uses its own HOME/XDG/DBus/keyring, tested Host432108dbb and coherent
-Engine278e94f63 CLI/server pair. The latter supplies the accepted Linux
-per-filesystem probes; this is a development continuation, separate from the
-original release archive. The installed849fec1d package is21,707,145,472bytes,
-with download UUIDb757c1ea-6d2f-44ff-b385-892942fadfe2. No second transfer is
-needed. The original release runtime remains retained.
+The final09:27–09:33Z replay accepted Keep, restarted Host normally, completed
+fresh selected-artifact Ensure in69.317seconds, and preserved the same review
+key without a second Keep. The unchanged ordinary C1/context262144/automatic
+GPU KV quote passed. Save defaults completed with wizard exit0; the saved
+instance was Stopped with no runtime PID, session or error. Host and lifecycle
+stopped normally, resources returned09:33Z and booking3210 was canceled.
 
-[Native evidence](measured-storage-review-native-20261018.json) records the
-08:43–08:52 replay. The ordinary wizard adopted that installed package, and its
-selected-artifact Ensure completed in122.29seconds. Optional idle
-remaining-format completion then started while storage review awaited input,
-and the busy gate hid the review. Resume produced a false interruption error
-and optional completion restarted. The session stopped normally08:52:11Z;
-GPU1/CPUs24–31 returned and booking3170 is canceled. The preceding plain Flash
-soak passed and merged as GInfer52c4db71e.
+This is Linux development-catalog acceptance, separate from the original release
+archive. A startup quote is an estimate; Ready/inference, full-context behavior
+and Windows native behavior are outside this replay. The public release catalog
+remains Ron W12-gated.
 
-Arch signed the reproduced correction08:52:23Z: optional completion must wait
-for durable `first_run.complete`. The guard and regression are implemented.
-Focused first-run (20 passed,1 ignored) and idle-completion checks passed. The
-one final `make verify` and corrected native Host build passed09:02:12Z on
-owned SSD CPUs112–119 with the socket-1 shared compile guard and no GPU use.
-Booking3183 is canceled. Native acceptance remains OPEN. Resume the same
-installed package/profile, show measured rates/eligibility/actual package paths,
-change the future folder without movement, reject the old review key, then
-explicitly move the verified package. A refreshed review must retain its UUID.
-Keep must advance to startup and survive normal Host restart; revalidate artifact
-acceptance and quote the unmodified ordinary startup defaults. No profile or
-context cap is invented for this replay.
+Owner C4; branch `fix/c4-first-run-measured-storage-20261018`, base `6653b5bfd`.
+Owned SSD build/cache `/media/ron/SSD_RAID/ai/tmp-c4-first-run-measured-storage-20261018`
+and fixture `/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018`
+are inactive and retained only through merge QC, then disposable owned copies
+are retired. Concise evidence is committed; shared model/quality inputs and
+other owners' donors are excluded from cleanup.
 
 ## Shared first-run setup — October 15
 
