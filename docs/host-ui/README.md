@@ -1,5 +1,36 @@
 # GInfer host UI
 
+## Downloads popover transfer status — C3, October 18
+
+`GUI-DOWNLOADS-POPOVER-STATUS`: the private native first-user walk reproduced
+a paused Host-managed transfer under the generic Downloading heading with no
+per-job status. Models Downloads correctly showed Paused and Resume for the
+same retained journal. Baseline evidence is
+`out/c3-first-user-setup-20261018/{downloads-popover-baseline.png,downloads-paused-baseline.png}`;
+the active row is222 in the GInfer open-work authority.
+
+The candidate labels the popover Downloads and shows each managed transfer's
+existing plain-language Models status: Waiting to download, Downloading model,
+Saving progress before pausing, Paused; resume to continue, Checking the
+downloaded file, or Download stopped. Each status is associated with its model
+for assistive technology. Host polling updates the label even when the byte
+count and number of jobs stay unchanged. Progress, transfer actions and the
+separate Manage destination fix are unchanged. No support URL change.
+
+Acceptance: rendered coverage for each managed state and polling transitions,
+existing Downloads/Models suites, lint and ONE `make verify`, followed by the
+parent's private native paused-transfer popover check. No network transfer,
+model load or GPU work is required. Source is prepared; no tests or build have
+run. The next action is to incorporate the separate Manage row after its merge,
+then run the focused suites when the parent releases the shared CPU fixture.
+
+Owner/source `/ai/gchat-worktrees/c3-downloads-popover-status-20261018`, branch
+`fix/c3-downloads-popover-status-20261018`, baseline `7b17e06da`. Only the
+popover, its existing managed rendered tests and this subject section change.
+The existing S1 root `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`
+remains with the active Manage owner; no shared-stage writes or new compute
+were used. Parent owns scheduling, native acceptance and retained-build cleanup.
+
 ## Conversation Rename keyboard — Gchat 3 native acceptance, October 18
 
 `GUI-THREAD-RENAME-KEYBOARD` passes its remaining native Linux leaf. Ordinary
