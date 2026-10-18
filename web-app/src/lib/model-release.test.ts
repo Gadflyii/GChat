@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { downloadFailureMessage, downloadStatusLabel, formatModelBytes, releaseReadiness, releaseVerified, validRelease, type ModelRelease } from './model-release'
+import { downloadFailureRecovery, downloadStatusLabel, formatModelBytes, releaseReadiness, releaseVerified, validRelease, type ModelRelease } from './model-release'
 
 const release: ModelRelease = { name: 'Fixture', identity: { model_id: 'fixture', weights_id: 'q4' },
   url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64),
@@ -142,29 +142,30 @@ describe('model download messages', () => {
     'There is not enough space on the disk. (os error 112)',
     'The disk is full.',
   ])('explains how to recover from a full disk: %s', (error) => {
-    expect(downloadFailureMessage(error)).toBe('There isn’t enough space in the model folder. Free some disk space, then resume the download.')
+    expect(downloadFailureRecovery(error).message).toBe('There isn’t enough space in the model folder. Free some disk space, then choose Retry download.')
   })
   it.each([
     'SHA256 mismatch; remove incomplete files and download again. Package was not installed.',
-    'SHA-256 mismatch', 'checksum mismatch',
+    'SHA-256 mismatch', 'checksum mismatch', 'not a GInfer version-3 container',
   ])('requires a fresh download when the saved file is damaged: %s', (error) => {
-    expect(downloadFailureMessage(error)).toBe('The downloaded file is damaged or incomplete. Remove this incomplete download, then download the model again.')
+    expect(downloadFailureRecovery(error).message).toBe('The downloaded file is damaged or isn’t a GInfer model. Choose Delete partial download, then download the model again from Recommended.')
+    expect(downloadFailureRecovery(error).retry).toBe(false)
   })
   it.each([
     'download server returned 404 Not Found', 'download server returned 503 Service Unavailable',
     'HTTP 403 Forbidden', 'HTTP/1.1 500 Internal Server Error', 'status code: 429',
   ])('explains download-site errors without exposing the response code: %s', (error) => {
-    expect(downloadFailureMessage(error)).toBe('The download site couldn’t provide this model. Refresh the model list or try again later.')
+    expect(downloadFailureRecovery(error).message).toBe('The download site couldn’t provide this model. Open Recommended and choose Refresh recommendations, or try again later.')
   })
   it.each([
     'download server did not respond; resume to retry', 'download stalled; resume to retry',
     'download ended before the declared size; resume to retry',
     'error sending request for url (https://huggingface.co/test/model)',
     'error decoding response body', 'connection reset by peer', 'DNS lookup failed',
-  ])('offers connection and resume steps after an interruption: %s', (error) => {
-    expect(downloadFailureMessage(error)).toBe('The download was interrupted. Check your internet connection, then resume the download.')
+  ])('offers connection and retry steps after an interruption: %s', (error) => {
+    expect(downloadFailureRecovery(error).message).toBe('The download was interrupted. Check your internet connection, then choose Retry download.')
   })
   it.each([null, '', 'payload identity 0x123 is not supported'])('keeps unknown details separate from the recovery message: %s', (error) => {
-    expect(downloadFailureMessage(error)).toBe('The download couldn’t finish. Try resuming it, or open the details below for more information.')
+    expect(downloadFailureRecovery(error).message).toBe('The download couldn’t finish. Choose Retry download, or open Technical details for more information.')
   })
 })

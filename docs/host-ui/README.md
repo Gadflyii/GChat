@@ -65,6 +65,45 @@ Only small evidence remains in
 [the result](../../out/gchat3-profile-missing-wording-20261018/result.json)
 and [short summary](../../out/gchat3-profile-missing-wording-20261018/summary.md).
 Next action is merging this evidence closure.
+## Failed-download recovery controls — C3, October 18
+
+`GUI-FAILED-DOWNLOAD-WORDING` is fixed on
+`fix/c3-failed-download-wording-20261018`, worktree
+`/ai/gchat-worktrees/c3-failed-download-wording-20261018`, base `16a63c18e`.
+Recoverable failed cards now name the visible **Retry download** button.
+Known checksum/invalid-format failures offer **Delete partial download**, then
+direct users to start again from **Recommended**. Paused jobs retain Resume;
+raw diagnostics remain inside closed Technical details.
+
+Host resume preserves partial bytes. A complete corrupt partial therefore skips
+HTTP and fails validation again; removing Retry on these cards prevents that
+ineffective action. Three rendered regressions fail against unchanged source.
+The candidate passes **98 focused checks**, including Retry preserving bytes
+and Delete followed by a fresh zero-byte download. Two initial fixture failures
+were corrected to match the mocked GPU; no production hardware gate changed.
+ONE `make verify` passes at source `203f80fa9`: **3,516 app / 6 skipped,
+127 extension, 1,276 native / 28 ignored**; lint (five existing warnings), types,
+quality, contracts/assets and six critical coverage floors pass.
+
+Native Linux saved-state cards pass the exact guidance/control check,
+Technical details expansion, initially focused Cancel, Cancel preserving both
+jobs, and confirmed Delete removing only the checksum journal entry. Dark
+1500×1000 and 1024×800 layouts are readable without horizontal overflow.
+Fixtures establish native wording and commands, not actual corruption,
+disk exhaustion or transfer correctness; no new light-theme or Windows claim.
+The initial native build omitted generated 32x32.png. Existing
+`build:icon:linux` supplied it before continuing only unfinished Rust/staging;
+the build then passed without repeating the frontend or verification gate.
+
+Evidence, screenshots, command receipts and binary hashes:
+[`out/c3-failed-download-wording-20261018/result.json`](../../out/c3-failed-download-wording-20261018/result.json).
+Original native baseline remains in `out/c7-models-plain-wording-20261018/`.
+Owner C3; no Host/Engine source, Chat/Agents, live transfer or model/GPU work.
+C7 owns the separate Downloads loading-state leaf with no failed-card overlap.
+The independent S1 private processes, forward, five stopped containers and
+`/media/ron/SSD_RAID/ai/tmp-c3-failed-download-wording-20261018` build/fixture root
+are removed; CPU80–87 returned **08:45Z**. Only small evidence remains.
+Source and regressions are merge-ready; no acceptance work remains.
 
 ## Advanced launch-field labels recovery — C3, October 18
 

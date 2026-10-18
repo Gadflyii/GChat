@@ -292,14 +292,66 @@ describe('host-scoped Models', () => {
     expect(screen.getByText(/only recommended once it has been tested on your graphics card/)).toBeInTheDocument()
     expect(document.body).not.toHaveTextContent(/CUDA_VISIBLE_DEVICES|\bTP\b|VRAM|Smol/)
   })
-  it('explains a failed download and offers a retry that matches it', async () => {
-    mocks.command.mockImplementation(async action => action === 'local_model_downloads'
-      ? [{ id: 'job', release, status: 'failed', received: 4096, bytes_per_second: 0, error: 'SHA256 mismatch', path: null }] : [])
+  it.each(['SHA256 mismatch', 'not a GInfer version-3 container'])('discards unusable saved bytes instead of retrying them: %s', async (error) => {
+    const usableRelease = { ...release, qualified_sm: ['8.6'], min_vram_mib_per_gpu: 8192 }
+    mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [usableRelease] }]
+    spyConfirm().mockReturnValueOnce(true)
+    let discarded = false
+    let fresh = false
+    mocks.command.mockImplementation(async (action, args) => {
+      if (action === 'local_model_download_action') {
+        expect(args).toEqual({ id: 'job', operation: 'discard' })
+        discarded = true
+      }
+      const job = { id: fresh ? 'new-job' : 'job', release: usableRelease, status: fresh ? 'queued' : 'failed', received: fresh ? 0 : 4096, bytes_per_second: 0, error: fresh ? null : error, path: null }
+      if (action === 'local_model_download') {
+        fresh = true
+        return { ...job, id: 'new-job', status: 'queued', received: 0, error: null }
+      }
+      return action === 'local_model_downloads' && (!discarded || fresh) ? [job] : []
+    })
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('The downloaded file is damaged or incomplete. Remove this incomplete download, then download the model again.')
-    expect(screen.getByRole('button', { name: 'Retry download' })).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('The downloaded file is damaged or isn’t a GInfer model. Choose Delete partial download, then download the model again from Recommended.')
+    expect(screen.queryByRole('button', { name: 'Retry download' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Resume download' })).not.toBeInTheDocument()
+    expect(screen.getByText(error)).not.toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete partial download' }))
+    expect(await screen.findByText('No downloads on this computer yet. Choose Recommended to find a model.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Download to this computer' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_download', { host_id: 'local', body: usableRelease }))
+    expect(await screen.findByText('Waiting to download')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '0')
+    expect(mocks.command.mock.calls.some(call => call[0] === 'local_model_download_action' && call[1]?.operation === 'resume')).toBe(false)
+  })
+  it.each([
+    ['connection reset by peer', 'The download was interrupted. Check your internet connection, then choose Retry download.'],
+    ['No space left on device (os error 28)', 'There isn’t enough space in the model folder. Free some disk space, then choose Retry download.'],
+    ['unrecognized failure', 'The download couldn’t finish. Choose Retry download, or open Technical details for more information.'],
+  ])('names and exercises the retry control for a failed download: %s', async (error, guidance) => {
+    let status = 'failed'
+    mocks.command.mockImplementation(async (action, args) => {
+      if (action === 'local_model_download_action') {
+        expect(args).toEqual({ id: 'job', operation: 'resume' })
+        status = 'queued'
+      }
+      return action === 'local_model_downloads'
+        ? [{ id: 'job', release, status, received: 1024, bytes_per_second: 0, error: status === 'failed' ? error : null, path: null }] : []
+    })
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(guidance)
+    expect(screen.getByText(error)).not.toBeVisible()
+    const details = screen.getByText('Technical details').closest('details')
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry download' }))
+    expect(await screen.findByText('Waiting to download')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause download' })).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toHaveAttribute('value', '1024')
+    expect(mocks.command).toHaveBeenCalledWith('local_model_download_action', { id: 'job', operation: 'resume' })
   })
   it('says it is checking, not that there are no downloads, until the Host has answered', async () => {
     useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
@@ -614,7 +666,7 @@ describe('host-scoped Models', () => {
     if (action) expect(screen.getByRole('button', { name: action })).toBeEnabled()
     else expect(screen.queryByRole('button', { name: /Pause download|Resume download|Retry download|Show in Installed/ })).not.toBeInTheDocument()
     if (status === 'failed') {
-      expect(screen.getByRole('alert')).toHaveTextContent('Check your internet connection, then resume the download.')
+      expect(screen.getByRole('alert')).toHaveTextContent('Check your internet connection, then choose Retry download.')
       expect(screen.getByText('connection reset by peer')).not.toBeVisible()
     }
   })
