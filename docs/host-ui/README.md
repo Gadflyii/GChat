@@ -4024,6 +4024,24 @@ Retained `8f7d18f6f` matches the relevant chain at `81c453224`. Evidence:
 The original 25 focused cases and ONE `make verify` PASS remain qualified.
 Delayed request ordering remains source-test coverage; Windows was not exercised.
 
+## Reading workspace instructions
+
+In run setup, enter a workspace and choose **View AGENTS.md** to read its
+instructions. Changing the workspace clears the previous result. A folder
+without that optional file shows **No AGENTS.md file; workspace instructions
+are optional.**
+
+Linux acceptance (`GUI-WORKSPACE-INSTRUCTIONS-SELECTION-NATIVE-20261018`):
+A → View showed exact file text; changing to file-free B cleared A, and View
+showed the optional-file message. Returning to A cleared B and restored A's
+exact text. Cancel and leaving/returning to Runs opened no late result. All
+17 saved records, 45 skill files, two existing inputs and disabled-state
+bytes/modes stayed unchanged; resources returned at 09:41Z. Retained
+`8f7d18f6f` matches the relevant chain at `a74eeace3`. Evidence:
+[`out/gchat-workspace-instructions-selection-native-20261018/`](../../out/gchat-workspace-instructions-selection-native-20261018/).
+The original 14 focused cases and ONE `make verify` PASS remain qualified.
+Delayed request ordering remains source-test coverage; Windows was not exercised.
+
 ## Reading workspace folders
 
 If GChat cannot read your workspace folder, the **Files** panel opens so you
