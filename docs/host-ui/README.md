@@ -3706,6 +3706,65 @@ are removed; the existing C7 private-catalog donor remains unchanged for its
 retained campaign. Only the result JSON and short summary are newly retained.
 No app, model, GPU, installer, Windows account or shared app data was involved.
 CPUs returned 01:15Z. Next: Codex 8 review and coordinator merge.
+## Local models under a symlinked data folder — C3, October 18
+
+`GUI-MODELS-SYMLINK-DATA-ROOT-20261018` fixes the empty Installed list after a
+successful external-model registration when the configured data folder uses a
+symlink. The installed-DEB walk used a short HOME alias for Gbot's libvirt socket
+path limit. Registration wrote `model.yml`, and catalog discovery returned its
+canonical SSD path; YAML reads compared that path against the lexical data root
+and failed, so provider discovery returned no models.
+
+YAML reads and writes now resolve the configured root and requested path before
+checking containment. Legitimate canonical, lexical and relative rooted paths
+remain usable. Existing dangling links fail resolution; outside paths and
+symlink escapes remain rejected. The regression uses actual model enumeration
+through a symlinked data folder, reads and updates the discovered manifest, and
+creates a new rooted YAML file. The containment fixture also verifies that
+outside files remain unchanged and outside destinations are not created.
+
+Eight focused filesystem tests, Rust check and library Clippy pass. One full
+`make verify` passes: 3,596 frontend tests, 127 extension tests and 1,290 native
+tests; six frontend skips and 28 native ignores. All six critical coverage
+floors pass; lint has zero errors and five existing warnings. An initial Clippy
+invocation selected unsupported desktop binary tests alongside CLI-only
+features and hit an existing unrelated test lint; the corrected library target
+passes without source changes or lint waivers. The full gate was not repeated.
+Evidence: `out/c3-models-symlink-data-root-20261018/{verification-result.json,
+summary.md,verify.log,focused.log,check.log,clippy-lib.log,clippy.log}`.
+
+The fresh Vite frontend and normal default-feature debug desktop build pass on
+S1 `AIS-2-8592-L01`, using seven frozen catalog inputs with 41 bundled profiles.
+The exported `native/bin/gchat` uses Tauri's sibling `../lib/GChat/resources`
+layout, with owned copied resources. Effective commands and the exported binary
+hash are in `native-build-command.json` and `native-export-result.json` beside
+the gate evidence. Native acceptance then used private HOME `/tmp/c3ym18/home`,
+an alias to the owned SSD fixture, with only the existing external-model
+manifest copied. Models → This computer → Installed shows
+`qwen38_27b_int_df2` before and after the native Refresh installed models action.
+Bundled runtime preparation and Refresh both completed; the refreshed control
+is enabled and the card remains visible. The coordinator inspected the final
+pixels. No model was copied, reimported or loaded, and no inference ran.
+Evidence: `native-acceptance-result.json`, `installed-after-refresh.json` and
+`installed-after-refresh.png` beside the gate evidence.
+
+The initial fixture launch failed because Xvfb was absent from PATH and DISPLAY
+was missing. An explicit copied Xvfb path and `DISPLAY=:175` repaired that
+private launch. The app then exited through native tray Quit, with completed
+cleanup in `native-lifecycle.log`. Refresh had started an idle private Host;
+it stopped through its supported SIGTERM shutdown handler, then the private
+Xvfb stopped. The private HOME and short alias are removed. The installed-DEB
+fixture, primary display, Hosts, GPU workloads and resource donors were not changed.
+
+C3 owns branch `fix/c3-models-symlink-data-root-20261018`, worktree
+`/ai/gchat-worktrees/c3-models-symlink-data-root-20261018`, based on main
+`585a854058ecbdc3e6923d7c5533cdd9778d1fd8`. The private S1 source, caches, build
+and native export are retained at
+`/media/ron/SSD_RAID/ai/tmp-c3-models-symlink-data-root-20261018` for coordinator
+merge, with no live jobs. CPUs88–95 returned 13:12Z; native acceptance CPUs104–111
+returned 13:24Z. Next: coordinator merge; remove disposable owned build bytes
+when the item closes.
+
 ## Installed dropdown acceptance — C7, October 18
 
 `GUI-DROPDOWN-THEME-CONSISTENCY-20261017` now replaces native select popups
@@ -4856,14 +4915,23 @@ scope, translations and success notification remain the contract.
 Acceptance: rendered keyboard, repeated activation, pending, success and retry
 tests, then one full `make verify`; commit and push an isolated merge-ready
 branch. No real conversation deletion, Engine, model or GPU operation.
-Installed confirmation belongs to Gchat 3's parent GUI qualification. Windows
-host-port collision remains pending Gchat 2's installed-app handoff.
+Gchat 3 completed the remaining Linux native keyboard/Cancel leaf on
+October 18. The ordinary project Conversation menu opens the
+confirmation with Cancel focused; Enter and Escape preserve the private dummy
+conversations; explicitly activating Delete all removes only that project's
+conversations and preserves an unrelated dummy conversation and the project.
+The existing rendered evidence covers pending/rejected operations; a fast
+native filesystem operation cannot establish those cases. No Windows or
+installed-package qualification is claimed by this source-native check.
+Windows host-port collision remains pending Gchat 2's installed-app handoff.
 
 | Owner / host | Path | Status / retention |
 | --- | --- | --- |
 | C7 / local | `/ai/gchat-worktrees/c7-project-threads-delete-single-submit-20261017`, branch `fix/c7-project-threads-delete-single-submit-20261017` | From main `a08e2b053`; dialog implementation and six dedicated regression cases frozen at `79b06e217` |
 | C7 / S1 | `/media/ron/SSD_RAID/ai/tmp-c7-project-threads-delete-single-submit-20261017/` | Private source/dependency/native cache retired after verification; booking 2563 canceled, returned 14:12Z |
 | C7 / evidence | `/ai/gchat/out/project-threads-delete-single-submit-20261017/{result.json,summary.md}` | Passing focused and full verification result retained here |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-project-delete-native-20261018`, branch `docs/gchat3-project-delete-native-20261018`, base `ec6d2ba1f` | Evidence-only native acceptance; no implementation changes |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-project-delete-native-20261018` | Native input acceptance PASS13:18Z; private runnable/HOME retired (8.52GB), returned13:19Z; no GPU/model |
 
 The six focused rendered regression cases pass. The single full `make verify`
 exited 0 at 14:10:39Z on S1 in pinned image `ad7f9bf020d7`: lint, frontend
@@ -4872,8 +4940,28 @@ types, contracts and critical coverage floors passed, with 2,796 frontend tests,
 27 Rust tests ignored. The gate used private offline caches and 22 retained
 profile catalogs; generated local-core archive references changed only inside
 the disposable copy. Source dependency files and the read-only donor are
-unchanged. The private build copy is retired. Next: coordinator merge of the
-isolated branch; installed confirmation remains with Gchat 3.
+unchanged. The private build copy is retired and the implementation is merged.
+The granted inactive desktop donor was built from `cf9124a1e`, binary SHA256
+`ce13ab7f462504eaf031448503e8332bd35164366acaaaae618bbd00cc11ee6b`.
+Its dialog, button/dialog/dropdown primitives, project route, thread hook,
+project/thread services, conversational extension and native thread storage
+match `ec6d2ba1f` (18 source files). The independent copy ran with private
+HOME, unlocked keyring, D-Bus and Xvfb `:202`, software rendering and no GPU.
+Through the ordinary project Conversation menu, native XTest input opened
+the confirmation with Cancel focused. Enter canceled and Escape dismissed a
+reopened confirmation; both times all three dummy thread files were unchanged.
+Tab moved focus from Cancel to Delete All; Enter removed the two project thread
+directories. The project remained in storage and the unrelated conversation
+retained its original file hash. Screenshots, DOM observations and filesystem
+receipts are retained in
+`/ai/gchat/out/project-delete-native-20261018/`. An initial X11 authorization
+failure stopped before app startup; the private Xauthority entry was corrected
+for the container hostname before this successful execution. The private fixture
+was retired and CPU booking3305 canceled at13:19Z; the donor is unchanged.
+
+The accepted focused/full gates above were reused. This evidence-only branch
+adds no implementation change and uses `git diff --check` only. Windows and
+installed-release package acceptance remain outside this source-native result.
 
 ## Disable OpenCode workspaces — C7
 
