@@ -1,5 +1,16 @@
 # Gbot design
 
+## Queued scheduled work shows its retry — Gchat 2
+
+`GBOT-SCHEDULE-RETRY-GUIDANCE` distinguishes a Once schedule with no later
+occurrences from its queued task waiting for an automatic connection/readiness
+retry. The saved retry time and plain keep-connected guidance remain visible
+with Occurrences closed. Disabled schedules, a stopped scheduler and work held
+for review or already dispatched/finished do not promise an automatic retry.
+An explicit list read can clear the saved retry guidance without replaying the
+task or changing the schedule. This is source/rendered UI scope; scheduling
+and retry behavior are unchanged. Parent queued gates remain pending.
+
 ## Recovering a failed Microsoft sign-in result — Gchat 2
 
 `GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names
