@@ -4460,7 +4460,64 @@ it.each([
   }
 )
 
-it('shows one plain not-connected message and hides it while the service starts', async () => {
+it.each(['local', 'paired_host'] as const)(
+  'offers bot-list recovery for %s while retaining the selected bot and task draft',
+  async (kind) => {
+    readyTaskBots()
+    mocks.getTarget.mockResolvedValue(
+      kind === 'local' ? { kind } : { kind, host_id: 'saved-service' }
+    )
+    const original = mocks.call.getMockImplementation()!
+    const cause = kind === 'local'
+      ? new Error('Read state failed: connection reset')
+      : 'gbot_command: saved service transport unavailable'
+    let failed = false
+    mocks.call.mockImplementation((path: string, body: Record<string, unknown>) =>
+      failed && path === 'state'
+        ? Promise.reject(cause)
+        : original(path, body)
+    )
+    render(<Page />)
+    await screen.findByRole('heading', { name: 'Writer' })
+    fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+    fireEvent.change(screen.getByLabelText('Bot task'), {
+      target: { value: 'Keep this research draft' },
+    })
+    failed = true
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh', exact: true }))
+    const alert = await screen.findByRole('alert')
+    const serviceAction = kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service'
+    expect(within(alert).getByText(
+      `Could not load your bots. Choose Refresh to try again. If Gbot is stopped or disconnected, choose ${serviceAction} above.`
+    )).toBeVisible()
+    expect(screen.getByRole('button', { name: serviceAction })).toBeEnabled()
+    const diagnostic = within(alert).getByText(String(cause))
+    expect(diagnostic).not.toBeVisible()
+    expect(diagnostic.closest('details')).not.toHaveAttribute('open')
+    const calls = mocks.call.mock.calls.length
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(diagnostic).toBeVisible()
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(diagnostic).not.toBeVisible()
+    expect(mocks.call).toHaveBeenCalledTimes(calls)
+    expect(screen.getByRole('heading', { name: 'Researcher' })).toBeVisible()
+    expect(screen.getByLabelText('Bot task')).toHaveValue('Keep this research draft')
+
+    failed = false
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh', exact: true }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Researcher' })).toBeVisible()
+    expect(screen.getByLabelText('Bot task')).toHaveValue('Keep this research draft')
+    expect(mocks.startService).not.toHaveBeenCalled()
+    expect(mocks.quitService).not.toHaveBeenCalled()
+    expect(mocks.selectService).not.toHaveBeenCalled()
+    expect(mocks.call.mock.calls.filter(([path]) =>
+      path.startsWith('control/') || (path.startsWith('tasks/') && path !== 'tasks/approvals')
+    )).toEqual([])
+  }
+)
+
+it('keeps one not-connected diagnostic and hides the alert while the service starts', async () => {
   const notConnected =
     'Gbot service is not running or is disconnected. Use the service button at the top of the Gbot page to start or connect it.'
   mocks.listen.mockResolvedValue(() => {})
