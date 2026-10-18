@@ -397,16 +397,16 @@ async fn ensure_desktop_host_unlocked<R: tauri::Runtime>(
 pub async fn prepare_installed_hardware_from_paths(
     data_folder: std::path::PathBuf,
     resource_directory: std::path::PathBuf,
-    gpu_uuids: Option<Vec<String>>,
+    request: ginfer_host::hardware_profile::HardwareProfileRequest,
 ) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
     let _access = data_folder_access().read().await;
-    prepare_installed_hardware_unlocked(data_folder, resource_directory, gpu_uuids).await
+    prepare_installed_hardware_unlocked(data_folder, resource_directory, request).await
 }
 
 async fn prepare_installed_hardware_unlocked(
     data_folder: std::path::PathBuf,
     resource_directory: std::path::PathBuf,
-    gpu_uuids: Option<Vec<String>>,
+    request: ginfer_host::hardware_profile::HardwareProfileRequest,
 ) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
     #[cfg(feature = "hardware")]
     require_local_hardware().await?;
@@ -419,13 +419,7 @@ async fn prepare_installed_hardware_unlocked(
         .await?
         .ok_or("Local Host is unavailable")?;
     client()
-        .hardware_profile(
-            host_id,
-            ginfer_host::hardware_profile::HardwareProfileRequest {
-                action: ginfer_host::hardware_profile::HardwareProfileAction::Ensure,
-                gpu_uuids,
-            },
-        )
+        .hardware_profile(host_id, request)
         .await
         .map_err(String::from)
 }

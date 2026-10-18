@@ -324,6 +324,21 @@ waits for it to be reaped. It never interrupts foreground Ensure. Ordinary nativ
 startup admission and a fresh capacity quote still apply. Explicit manual
 all-format Ensure remains available; an inventory refresh starts no calibration.
 
+The installed preparation command also accepts a selected local TP payload:
+
+```bash
+gchat-cli prepare-hardware --resource-directory /installed/GChat \
+  --app-data-directory /private/GChat --gpu GPU-uuid \
+  --artifact /models/selected.ginfer --tp 1 --spec auto
+```
+
+Repeat `--gpu` in startup rank order for TP2/TP4. Pass the startup
+`--draft-tp` and `--draft-tokens` when explicitly selected; omitted values use
+native resolution. Host validates the local version-3 payload and GPU group,
+derives its identity, and starts an asynchronous artifact-scoped Ensure. This
+local-administrator request does not create or start a model instance. Omitting
+`--artifact` retains the explicit all-format preparation command.
+
 This follows the signed GInfer `16267858e` contract. Download and selected Ensure
 are sequential in this change. The W10 follow-up for catalog-declared formats
 requires a separate Engine format-list contract before they can run in parallel.

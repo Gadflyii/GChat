@@ -29,9 +29,26 @@ pub struct HardwareProfileRequest {
     pub action: HardwareProfileAction,
     #[serde(default)]
     pub gpu_uuids: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<SelectedArtifactProfileRequest>,
 }
-/// Constructed by Host launch preparation after artifact verification, never from
-/// a browser-supplied profile request. The directory and package hashes differ.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedArtifactProfileRequest {
+    pub path: PathBuf,
+    pub tp: u32,
+    #[serde(default)]
+    pub draft_tp: u32,
+    #[serde(default = "automatic_spec")]
+    pub spec: String,
+    #[serde(default)]
+    pub draft_tokens: Option<u32>,
+}
+fn automatic_spec() -> String {
+    "auto".into()
+}
+/// Constructed by Host after inspecting the local payload, never deserialized
+/// from a profile request. The directory and package hashes differ.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ArtifactProfileIntent {
@@ -45,7 +62,7 @@ pub struct ArtifactProfileIntent {
     pub draft_tokens: Option<u32>,
 }
 impl ArtifactProfileIntent {
-    fn validate(&self, gpus: &[String]) -> Result<(), String> {
+    pub(crate) fn validate(&self, gpus: &[String]) -> Result<(), String> {
         let hash = |value: &str| value.len() == 64 && value.bytes().all(|b| b.is_ascii_hexdigit());
         if !self.path.is_absolute()
             || !self.path.is_file()
@@ -865,7 +882,7 @@ impl HardwareProfiles {
     ) -> Result<(), String> {
         self.start_with_scope(action, fallback, gpus, None)
     }
-    /// The caller resolves this intent through verified Host launch preparation.
+    /// The caller resolves this intent through verified Host payload inspection.
     pub fn start_scoped(
         self: &Arc<Self>,
         action: HardwareProfileAction,
@@ -1822,6 +1839,7 @@ mod tests {
                 serde_json::to_vec(&HardwareProfileRequest {
                     action,
                     gpu_uuids: Some(vec!["GPU-fixture".into()]),
+                    artifact: None,
                 })
                 .unwrap(),
             ))
@@ -3260,6 +3278,7 @@ mod tests {
                         serde_json::to_vec(&HardwareProfileRequest {
                             action: HardwareProfileAction::Ensure,
                             gpu_uuids: None,
+                            artifact: None,
                         })
                         .unwrap(),
                     ))

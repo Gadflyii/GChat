@@ -291,7 +291,7 @@ fn install_linux_resources_from(resource_directory: &Path, data_folder: &Path) -
 pub async fn prepare_installed_hardware_from_resources(
     resource_directory: PathBuf,
     app_data_directory: PathBuf,
-    gpu_uuids: Vec<String>,
+    request: ginfer_host::hardware_profile::HardwareProfileRequest,
 ) -> Result<ginfer_host::hardware_profile::HardwareProfileStatus, String> {
     if !resource_directory.is_absolute() {
         return Err("installed resource directory must be absolute".into());
@@ -310,7 +310,7 @@ pub async fn prepare_installed_hardware_from_resources(
         Ok::<(), std::io::Error>(())
     }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     crate::core::engine_hosts::prepare_installed_hardware_from_paths(
-        data_folder, resource_directory, (!gpu_uuids.is_empty()).then_some(gpu_uuids),
+        data_folder, resource_directory, request,
     ).await
 }
 

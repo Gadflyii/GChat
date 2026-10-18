@@ -1422,8 +1422,8 @@ impl Host {
             options,
         })
     }
-    /// Resolve the same validated TP payload as serving. Browser callers never
-    /// supply artifact paths, directory identities or package-verification claims.
+    /// Resolve the same validated TP payload as serving. Directory identities
+    /// and package-verification claims always come from Host inspection.
     pub(crate) async fn selected_profile_intent(
         &self,
         request: &LaunchRequest,
@@ -1439,17 +1439,32 @@ impl Host {
         let artifact = launch.artifact.clone();
         let artifact_set = launch.artifact_set;
         let tp = launch.tp;
-        let (path, directory_sha256) = tokio::task::spawn_blocking(move || {
-            let path = if artifact_set {
+        let path = tokio::task::spawn_blocking(move || {
+            if artifact_set {
                 artifact_set_members(&artifact)?.into_iter()
                     .find(|(_, metadata)| metadata.tp_size == tp)
                     .map(|(path, _)| path)
-                    .ok_or("artifact set no longer declares selected degree")?
+                    .ok_or_else(|| "artifact set no longer declares selected degree".to_string())
             } else {
-                artifact.canonicalize().map_err(|error| error.to_string())?
-            };
-            let (_, directory_sha256) = crate::engine_inventory::inspect_artifact_directory(&path)?;
-            Ok::<_, String>((path, directory_sha256))
+                Ok(artifact)
+            }
+        }).await.map_err(|error| error.to_string())??;
+        self.profile_intent_for_payload(path, tp, &launch.options,
+            (launch.options.draft_tokens != 0).then_some(launch.options.draft_tokens))
+            .await.map(|(_, intent)| intent)
+    }
+
+    async fn profile_intent_for_payload(
+        &self,
+        path: PathBuf,
+        tp: u32,
+        options: &LaunchOptions,
+        draft_tokens: Option<u32>,
+    ) -> Result<(ArtifactMetadata, crate::hardware_profile::ArtifactProfileIntent), String> {
+        let (path, metadata, directory_sha256) = tokio::task::spawn_blocking(move || {
+            let path = path.canonicalize().map_err(|error| error.to_string())?;
+            let (metadata, directory_sha256) = crate::engine_inventory::inspect_artifact_directory(&path)?;
+            Ok::<_, String>((path, metadata, directory_sha256))
         }).await.map_err(|error| error.to_string())??;
         let mut package_sha256 = None;
         for download in self.downloads.list().await {
@@ -1460,15 +1475,71 @@ impl Host {
                 break;
             }
         }
-        Ok(crate::hardware_profile::ArtifactProfileIntent {
+        Ok((metadata, crate::hardware_profile::ArtifactProfileIntent {
             path,
             directory_sha256,
             package_sha256,
-            tp: launch.tp,
-            draft_tp: launch.options.draft_tp,
-            spec: launch.options.spec.clone(),
-            draft_tokens: (launch.options.draft_tokens != 0).then_some(launch.options.draft_tokens),
-        })
+            tp,
+            draft_tp: options.draft_tp,
+            spec: options.spec.clone(),
+            draft_tokens,
+        }))
+    }
+
+    async fn requested_profile_intent(
+        &self,
+        request: &crate::hardware_profile::SelectedArtifactProfileRequest,
+        gpus: &[String],
+    ) -> Result<crate::hardware_profile::ArtifactProfileIntent, String> {
+        if !request.path.is_absolute() || request.path.extension().and_then(|value| value.to_str()) != Some("ginfer") {
+            return Err("Selected profiling requires an absolute local .ginfer payload path".into());
+        }
+        let architectures = self.gpus.iter().filter_map(|gpu|
+            gpu.compute_capability.as_ref().map(|architecture| (gpu.uuid.clone(), architecture.clone())))
+            .collect();
+        crate::hardware_profile::validate_gpu_group(gpus, &architectures)?;
+        let options = LaunchOptions {
+            vision: false,
+            spec: request.spec.clone(),
+            draft_tp: request.draft_tp,
+            draft_tokens: request.draft_tokens.unwrap_or(0),
+            ..LaunchOptions::default()
+        };
+        let (metadata, intent) = self.profile_intent_for_payload(
+            request.path.clone(), request.tp, &options, request.draft_tokens).await?;
+        if metadata.tp_size != request.tp || request.tp as usize != gpus.len() {
+            return Err("Selected artifact TP must match the requested TP and GPU count".into());
+        }
+        let registered = match metadata.identity.model_id.as_str() {
+            "qwen3.8-27b" => matches!(metadata.identity.weights_id.as_str(),
+                "groupwise-int-dflash2-q4" | "groupwise-int-dflash2-q4-g32"
+                | "smol-q2g64-dflash2-q4"
+                | "smol-q2g64-fullattn-gate-value-l51down-q4-dflash2-q4"
+                | "smol-q2g64-l51down-q4-dflash2-q4"
+                | "groupwise-int-dflash2-q4w8" | "groupwise-int-dflash2-w8"
+                | "nvfp4" | "nvfp4-dflash2-q4" | "nvfp4-dflash2-q4w8"
+                | "nvfp4-dflash2-w8" | "nvfp4-dflash2-nvfp4"),
+            "muse-glimmer-30b" => matches!(metadata.identity.weights_id.as_str(),
+                "groupwise-int" | "groupwise-int-dflash-q4" | "groupwise-int-dflash-q4-g32"
+                | "groupwise-int-dflash-q4w8" | "groupwise-int-dflash-w8"
+                | "nvfp4" | "nvfp4-dflash-q4w8" | "nvfp4-dflash-w8"
+                | "nvfp4-dflash-nvfp4" | "smol-q2g64-dflash-q4"),
+            "qwen3.8-flash-next" => matches!(metadata.identity.weights_id.as_str(),
+                "groupwise-int" | "smol-q2g64" | "nvfp4"),
+            _ => false,
+        };
+        if !registered {
+            return Err("Selected artifact is not a registered host launch identity".into());
+        }
+        for uuid in gpus {
+            let gpu = self.gpus.iter().find(|gpu| &gpu.uuid == uuid).ok_or("unknown GPU")?;
+            if !metadata.identity.supports_gpu(gpu.compute_capability.as_deref()) {
+                return Err("Select a supported GPU family; NVFP4 artifacts require Blackwell (sm_120)".into());
+            }
+        }
+        options.validate_target(&metadata.identity, metadata.tp_size, metadata.draft_tp)?;
+        intent.validate(gpus)?;
+        Ok(intent)
     }
     /// The caller owns lifecycle, but never the processes mutex while waiting.
     /// Only native acceptance in this Host process admits the selected artifact.
@@ -2444,7 +2515,18 @@ impl Host {
             ("POST", "/host/v1/hardware-profile") => {
                 let request: crate::hardware_profile::HardwareProfileRequest =
                     serde_json::from_value(body_json(req).await?).map_err(|e| e.to_string())?;
+                if request.artifact.is_some() && !self.local_administrator(req).await {
+                    return Ok(json(StatusCode::FORBIDDEN,
+                        serde_json::json!({"error":"local administrator credential required"})));
+                }
                 let _lifecycle = self.lifecycle.lock().await;
+                let selected = if let Some(artifact) = &request.artifact {
+                    if request.action != crate::hardware_profile::HardwareProfileAction::Ensure {
+                        return Err("Selected artifact profiling requires Ensure".into());
+                    }
+                    let gpus = request.gpu_uuids.as_ref().ok_or("Selected artifact profiling requires an explicit GPU group")?;
+                    Some(self.requested_profile_intent(artifact, gpus).await?)
+                } else { None };
                 let explicit_cancel =
                     request.action == crate::hardware_profile::HardwareProfileAction::Cancel;
                 // Explicit Cancel must persist its retry suppression before
@@ -2467,7 +2549,9 @@ impl Host {
                 {
                     processes.ensure_hardware_if_idle(saved)?;
                 }
-                let mut result = if request.action
+                let mut result = if let Some(intent) = selected {
+                    processes.selected_hardware_profile_action(request.gpu_uuids.unwrap(), intent)?
+                } else if request.action
                     == crate::hardware_profile::HardwareProfileAction::Ensure
                     && request.gpu_uuids.is_none()
                 {
@@ -3743,7 +3827,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
 pub(crate) fn write_selected_profile_fixture(path: &Path) {
     use std::os::unix::fs::PermissionsExt;
     std::fs::write(path, r#"#!/usr/bin/env python3
-import hashlib, json, pathlib, sys, time
+import hashlib, json, os, pathlib, sys, time
 root = pathlib.Path(__file__).parent
 args = sys.argv[1:]
 def arg(name, default=None):
@@ -3752,19 +3836,25 @@ assert args[0] == 'profile-hardware'
 with (root/'profile-calls.jsonl').open('a') as calls:
     calls.write(json.dumps(args)+'\n')
 (root/'profile-argv.json').write_text(json.dumps(args))
+(root/'profile-gpus').write_text(os.environ['CUDA_VISIBLE_DEVICES'])
+output = pathlib.Path(arg('--hardware-profile'))
+if output.exists():
+    (root/'profile-seed.json').write_bytes(output.read_bytes())
 (root/'profile-started').touch()
 while (root/'hold-profile').exists() and not (root/'release-profile').exists():
     time.sleep(.01)
 if (root/'fail-profile').exists():
     print('fixture selected calibration failed', file=sys.stderr)
     sys.exit(23)
+output.parent.mkdir(parents=True, exist_ok=True)
+output.write_text(json.dumps(dict(schema_version=2)))
+if '--model' not in args:
+    print(json.dumps(dict(schema_version=2)))
+    sys.exit(0)
 model = pathlib.Path(arg('--model'))
 contents = model.read_bytes()
 directory_size = int.from_bytes(contents[8:16], 'little')
 directory_sha = hashlib.sha256(contents[16:16+directory_size]).hexdigest()
-output = pathlib.Path(arg('--hardware-profile'))
-output.parent.mkdir(parents=True, exist_ok=True)
-output.write_text(json.dumps(dict(schema_version=2)))
 spec = arg('--spec', 'auto')
 artifact = dict(path=str(model), directory_sha256=directory_sha, tp=int(arg('--tp')),
     draft_tp=int(arg('--draft-tp', '0')), spec=spec,
@@ -3781,7 +3871,45 @@ mod resource_tests {
     use super::*;
     use std::{future::Future, os::unix::fs::PermissionsExt};
 
+    fn write_profile_payload(path: &Path, model: &str, weights: &str, tp: u32, draft_tp: u32) {
+        let directory = serde_json::to_vec(&serde_json::json!({
+            "identity":{"model_id":model,"weights_id":weights}, "tp_size":tp,"draft_tp":draft_tp,
+            "objects":[{"kind":"tensor","rank":"all","name":"fixture"}],
+        })).unwrap();
+        let mut bytes = b"NINFER\0\x03".to_vec();
+        bytes.extend((directory.len() as u64).to_le_bytes());
+        bytes.extend(directory);
+        bytes.resize(4096, 0);
+        std::fs::write(path, bytes).unwrap();
+    }
+
+    async fn post_hardware_profile(host: &Arc<Host>, token: &str, body: serde_json::Value) -> (StatusCode, serde_json::Value) {
+        let response = host.clone().route(Request::post("/host/v1/hardware-profile")
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::from(body.to_string())).unwrap()).await.unwrap();
+        let status = response.status();
+        let body = serde_json::from_slice(&hyper::body::to_bytes(response.into_body()).await.unwrap()).unwrap();
+        (status, body)
+    }
+
+    async fn wait_for_profile_file(path: &Path) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !path.is_file() { tokio::time::sleep(Duration::from_millis(5)).await; }
+        }).await.unwrap();
+    }
+
+    async fn wait_for_profile_completion(job: &crate::hardware_profile::HardwareProfiles) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while job.busy() { tokio::time::sleep(Duration::from_millis(5)).await; }
+        }).await.unwrap();
+        assert_eq!(job.status(None).status, "completed");
+    }
+
     async fn fixture() -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
+        fixture_with_architectures(["12.0"; 4]).await
+    }
+
+    async fn fixture_with_architectures(architectures: [&str; 4]) -> (tempfile::TempDir, Arc<Host>, LaunchRequest) {
         let dir = tempfile::tempdir().unwrap();
         let engine = dir.path().join("ginfer-serve");
         std::fs::write(&engine, r#"#!/usr/bin/env python3
@@ -3805,19 +3933,14 @@ time.sleep(60)
         super::write_selected_profile_fixture(&dir.path().join("ginfer"));
         let models = dir.path().join("models");
         std::fs::create_dir(&models).unwrap();
-        let metadata = serde_json::json!({"identity":{"model_id":"muse-glimmer-30b","weights_id":"nvfp4"},"tp_size":1,"draft_tp":0,"objects":[{"kind":"tensor","rank":"all","name":"fixture"}]}).to_string();
-        let mut bytes = b"NINFER\0\x03".to_vec();
-        bytes.extend((metadata.len() as u64).to_le_bytes());
-        bytes.extend(metadata.as_bytes());
-        bytes.resize(4096, 0);
-        std::fs::write(models.join("model.ginfer"), &bytes).unwrap();
+        write_profile_payload(&models.join("model.ginfer"), "muse-glimmer-30b", "nvfp4", 1, 0);
         let gpus = (0..4)
             .map(|index| Gpu {
                 uuid: format!("GPU-fixture-{index}"),
                 name: "Fixture GPU".into(),
                 display_name: None,
                 memory_mib: 32768,
-                compute_capability: Some("12.0".into()),
+                compute_capability: Some(architectures[index].into()),
             })
             .collect();
         let host = Host::open(
@@ -3841,6 +3964,286 @@ time.sleep(60)
             options: LaunchOptions::default(),
         };
         (dir, host, request)
+    }
+
+    #[tokio::test]
+    async fn selected_hardware_profile_http_handoff_revalidates_seed_without_quote_or_serve() {
+        let (dir, host, request) = fixture().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let path = dir.path().join("models/model.ginfer").canonicalize().unwrap();
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let configuration = job.configuration(Some(dir.path().join("ginfer")), &request.gpu_uuids).unwrap();
+        std::fs::create_dir_all(configuration.profile_path.parent().unwrap()).unwrap();
+        let seed = br#"{"schema_version":2,"retained_all_format_seed":"requires_native_revalidation"}"#;
+        std::fs::write(&configuration.profile_path, seed).unwrap();
+        std::fs::write(dir.path().join("hold-profile"), b"").unwrap();
+        let body = serde_json::json!({"action":"ensure","gpu_uuids":request.gpu_uuids,
+            "artifact":{"path":path,"tp":1}});
+        let (status, reply) = tokio::time::timeout(Duration::from_secs(2),
+            post_hardware_profile(&host, &token, body)).await.unwrap();
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        assert_eq!(reply["status"], "running");
+        assert_eq!(reply["scope"], "artifact");
+        let intent: crate::hardware_profile::ArtifactProfileIntent =
+            serde_json::from_value(reply["selected_artifact"].clone()).unwrap();
+        assert_eq!(intent.path, path);
+        assert_eq!(intent.directory_sha256, crate::engine_inventory::inspect_artifact_directory(&path).unwrap().1);
+        assert_eq!(intent.package_sha256, None);
+        assert_eq!((intent.tp, intent.draft_tp, intent.spec.as_str(), intent.draft_tokens), (1, 0, "auto", None));
+        assert!(!job.artifact_is_accepted(&request.gpu_uuids, &intent));
+        wait_for_profile_file(&dir.path().join("profile-started")).await;
+        assert!(job.busy());
+        assert_eq!(std::fs::read(dir.path().join("profile-seed.json")).unwrap(), seed);
+        let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
+        assert_eq!(args.len(), 10);
+        let output = args[2].clone();
+        assert_eq!(args, vec!["profile-hardware", "--hardware-profile", output.as_str(), "--model", path.to_str().unwrap(), "--tp", "1", "--spec", "auto", "--json"]);
+        assert_eq!(std::fs::read_to_string(dir.path().join("profile-gpus")).unwrap(), "GPU-fixture-0");
+        assert!(!dir.path().join("quote-started").exists());
+        assert!(!dir.path().join("serve-started").exists());
+        assert!(host.data.lock().await.profiles.is_empty());
+        assert!(host.snapshot().await["instances"].as_array().unwrap().is_empty());
+        std::fs::write(dir.path().join("release-profile"), b"").unwrap();
+        wait_for_profile_completion(&job).await;
+        assert!(job.artifact_is_accepted(&request.gpu_uuids, &intent));
+        assert_eq!(job.status(None).all_formats_complete, Some(false));
+        assert_eq!(std::fs::read_to_string(dir.path().join("profile-calls.jsonl")).unwrap().lines().count(), 1);
+        assert!(!dir.path().join("quote-started").exists());
+        assert!(!dir.path().join("serve-started").exists());
+    }
+
+    #[tokio::test]
+    async fn selected_hardware_profile_http_preserves_tp2_dflash_intent_and_ordered_gpu_group() {
+        let (dir, host, _) = fixture().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let path = dir.path().join("models/model.ginfer");
+        write_profile_payload(&path, "qwen3.8-27b", "nvfp4-dflash2-nvfp4", 2, 1);
+        let gpus = vec!["GPU-fixture-1".to_string(), "GPU-fixture-0".to_string()];
+        let body = serde_json::json!({"action":"ensure","gpu_uuids":gpus,
+            "artifact":{"path":path,"tp":2,"draft_tp":1,"spec":"dflash","draft_tokens":4}});
+        std::fs::write(dir.path().join("hold-profile"), b"").unwrap();
+        let (status, reply) = post_hardware_profile(&host, &token, body.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        wait_for_profile_file(&dir.path().join("profile-started")).await;
+        let (status, same) = post_hardware_profile(&host, &token, body.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{same}");
+        assert_eq!(same["job_id"], reply["job_id"]);
+        for changed in [
+            serde_json::json!({"gpu_uuids":["GPU-fixture-0","GPU-fixture-1"]}),
+            serde_json::json!({"gpu_uuids":["GPU-fixture-2","GPU-fixture-3"]}),
+            serde_json::json!({"artifact":{"path":path,"tp":2,"draft_tp":1,"spec":"dflash","draft_tokens":3}}),
+        ] {
+            let mut other = body.clone();
+            for (key, value) in changed.as_object().unwrap() { other[key] = value.clone(); }
+            let (status, error) = post_hardware_profile(&host, &token, other).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{error}");
+            assert!(error["error"].as_str().unwrap().contains("Another hardware profiling job"), "{error}");
+        }
+        let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
+        assert_eq!(args.len(), 14);
+        let output = args[2].clone();
+        let canonical_path = path.canonicalize().unwrap();
+        assert_eq!(args, vec!["profile-hardware", "--hardware-profile", output.as_str(), "--model", canonical_path.to_str().unwrap(), "--tp", "2", "--spec", "dflash", "--json", "--draft-tp", "1", "--draft-tokens", "4"]);
+        assert_eq!(std::fs::read_to_string(dir.path().join("profile-gpus")).unwrap(), gpus.join(","));
+        assert_eq!(std::fs::read_to_string(dir.path().join("profile-calls.jsonl")).unwrap().lines().count(), 1);
+        std::fs::write(dir.path().join("release-profile"), b"").unwrap();
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        wait_for_profile_completion(&job).await;
+        assert_eq!(job.status(None).selected_artifact.unwrap().draft_tokens, Some(4));
+        assert!(!dir.path().join("quote-started").exists());
+        assert!(!dir.path().join("serve-started").exists());
+    }
+
+    #[tokio::test]
+    async fn selected_hardware_profile_http_rejects_untrusted_credentials_fields_and_actions() {
+        let (dir, host, request) = fixture().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let path = dir.path().join("models/model.ginfer");
+        let body = serde_json::json!({"action":"ensure","gpu_uuids":request.gpu_uuids,
+            "artifact":{"path":path,"tp":1}});
+        let client_id = Uuid::new_v4();
+        let client_token = format!("{client_id}.selected-profile-client");
+        host.data.lock().await.clients.insert(client_id, ClientGrant {
+            name: "Paired profiling client".into(),
+            token_verifier: hex::encode(verifier(&client_token).finalize().into_bytes()),
+        });
+        let (status, rejected) = post_hardware_profile(&host, &client_token, body.clone()).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{rejected}");
+        assert!(rejected["error"].as_str().unwrap().contains("local administrator"));
+        for action in ["refresh", "resume", "cancel"] {
+            let mut invalid = body.clone(); invalid["action"] = action.into();
+            let (status, rejected) = post_hardware_profile(&host, &token, invalid).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+            assert!(rejected["error"].as_str().unwrap().contains("requires Ensure"));
+        }
+        for field in ["directory_sha256", "package_sha256", "sha256"] {
+            let mut invalid = body.clone(); invalid["artifact"][field] = "a".repeat(64).into();
+            let (status, rejected) = post_hardware_profile(&host, &token, invalid).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+            assert!(rejected["error"].as_str().unwrap().contains("unknown field"));
+        }
+        for group in [serde_json::Value::Null, serde_json::json!([]),
+            serde_json::json!(["GPU-fixture-0","GPU-fixture-0"]),
+            serde_json::json!(["GPU-unknown"]),
+            serde_json::json!(["GPU-fixture-0","GPU-fixture-1","GPU-fixture-2"]),
+            serde_json::json!(["GPU-fixture-0","GPU-fixture-1"])] {
+            let mut invalid = body.clone(); invalid["gpu_uuids"] = group;
+            let (status, rejected) = post_hardware_profile(&host, &token, invalid).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        }
+        assert!(!dir.path().join("profile-started").exists());
+        assert!(!dir.path().join("profile-calls.jsonl").exists());
+        assert!(!host.processes.lock().await.hardware_profile.as_ref().unwrap().busy());
+    }
+
+    #[tokio::test]
+    async fn selected_hardware_profile_http_rejects_invalid_payload_tp_and_speculation_before_native() {
+        let (dir, host, request) = fixture().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let path = dir.path().join("models/model.ginfer");
+        let original = std::fs::read(&path).unwrap();
+        let body = serde_json::json!({"action":"ensure","gpu_uuids":request.gpu_uuids,
+            "artifact":{"path":path,"tp":1}});
+        for invalid_path in [PathBuf::from("relative.ginfer"), dir.path().join("missing.ginfer"), dir.path().to_path_buf(), dir.path().join("model-set.json")] {
+            let mut invalid = body.clone(); invalid["artifact"]["path"] = serde_json::to_value(invalid_path).unwrap();
+            let (status, rejected) = post_hardware_profile(&host, &token, invalid).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        }
+        for bytes in [b"not a version-3 container".to_vec(),
+            serde_json::to_vec(&serde_json::json!({"schema":"ginfer-artifact-set-v1","packages":[]})).unwrap(),
+            original[..128].to_vec()] {
+            std::fs::write(&path, bytes).unwrap();
+            let (status, rejected) = post_hardware_profile(&host, &token, body.clone()).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        }
+        for (model, weights, tp, draft_tp) in [
+            ("muse-glimmer-30b", "nvfp4", 2, 0),
+            ("unregistered-model", "nvfp4", 1, 0),
+            ("qwen3.8-27b", "unregistered-weights", 1, 0),
+        ] {
+            write_profile_payload(&path, model, weights, tp, draft_tp);
+            let (status, rejected) = post_hardware_profile(&host, &token, body.clone()).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        }
+        std::fs::write(&path, original).unwrap();
+        for artifact in [
+            serde_json::json!({"tp":2}), serde_json::json!({"tp":3}),
+            serde_json::json!({"spec":"dflash"}), serde_json::json!({"spec":"invalid"}),
+            serde_json::json!({"draft_tp":1}), serde_json::json!({"draft_tokens":3}),
+            serde_json::json!({"spec":"mtp","draft_tokens":3}),
+        ] {
+            let mut invalid = body.clone();
+            for (key, value) in artifact.as_object().unwrap() { invalid["artifact"][key] = value.clone(); }
+            let (status, rejected) = post_hardware_profile(&host, &token, invalid).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        }
+        write_profile_payload(&path, "qwen3.8-27b", "nvfp4-dflash2-nvfp4", 1, 1);
+        for width in [0, 8, 16] {
+            let mut invalid = body.clone(); invalid["artifact"]["spec"] = "dflash".into();
+            invalid["artifact"]["draft_tokens"] = width.into();
+            let (status, rejected) = post_hardware_profile(&host, &token, invalid).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        }
+        assert!(!dir.path().join("profile-started").exists());
+        assert!(!dir.path().join("profile-calls.jsonl").exists());
+        assert!(!dir.path().join("quote-started").exists());
+        assert!(!dir.path().join("serve-started").exists());
+    }
+
+    #[tokio::test]
+    async fn selected_hardware_profile_http_rejects_incompatible_and_mixed_gpu_families() {
+        let (dir, host, _) = fixture_with_architectures(["8.6", "12.0", "12.0", "12.0"]).await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let path = dir.path().join("models/model.ginfer");
+        let (status, rejected) = post_hardware_profile(&host, &token, serde_json::json!({
+            "action":"ensure","gpu_uuids":["GPU-fixture-0"],"artifact":{"path":path,"tp":1},
+        })).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        assert!(rejected["error"].as_str().unwrap().contains("NVFP4 artifacts require Blackwell"));
+        write_profile_payload(&path, "muse-glimmer-30b", "groupwise-int", 2, 0);
+        let (status, rejected) = post_hardware_profile(&host, &token, serde_json::json!({
+            "action":"ensure","gpu_uuids":["GPU-fixture-0","GPU-fixture-1"],"artifact":{"path":path,"tp":2},
+        })).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        assert!(rejected["error"].as_str().unwrap().contains("one compute architecture"));
+        assert!(!dir.path().join("profile-started").exists());
+    }
+
+    #[tokio::test]
+    async fn selected_hardware_profile_http_refuses_live_model_children() {
+        let (dir, host, request) = fixture().await;
+        host.launch(request.clone()).await.unwrap();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let (status, rejected) = post_hardware_profile(&host, &token, serde_json::json!({
+            "action":"ensure","gpu_uuids":request.gpu_uuids,
+            "artifact":{"path":dir.path().join("models/model.ginfer"),"tp":1},
+        })).await;
+        host.processes.lock().await.shutdown().await.unwrap();
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        assert!(rejected["error"].as_str().unwrap().contains("Stop active model instances"));
+        assert_eq!(std::fs::read_to_string(dir.path().join("profile-calls.jsonl")).unwrap().lines().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn hardware_profile_http_explicit_all_formats_ensure_remains_unscoped() {
+        let (dir, host, request) = fixture().await;
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        std::fs::write(dir.path().join("hold-profile"), b"").unwrap();
+        let (status, reply) = post_hardware_profile(&host, &token, serde_json::json!({
+            "action":"ensure","gpu_uuids":request.gpu_uuids,
+        })).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        assert_eq!(reply["scope"], "all_formats");
+        assert!(reply["selected_artifact"].is_null());
+        wait_for_profile_file(&dir.path().join("profile-started")).await;
+        let (status, rejected) = post_hardware_profile(&host, &token, serde_json::json!({
+            "action":"ensure","gpu_uuids":request.gpu_uuids,
+            "artifact":{"path":dir.path().join("models/model.ginfer"),"tp":1},
+        })).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{rejected}");
+        assert!(rejected["error"].as_str().unwrap().contains("Another hardware profiling job"));
+        std::fs::write(dir.path().join("release-profile"), b"").unwrap();
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        wait_for_profile_completion(&job).await;
+        let args: Vec<String> = serde_json::from_slice(&std::fs::read(dir.path().join("profile-argv.json")).unwrap()).unwrap();
+        assert_eq!(args.len(), 3);
+        assert_eq!(&args[..2], ["profile-hardware", "--hardware-profile"]);
+        assert!(!dir.path().join("quote-started").exists());
+        assert!(!dir.path().join("serve-started").exists());
+    }
+
+    #[tokio::test]
+    async fn selected_hardware_profile_http_reaps_idle_completion_before_native_start() {
+        let (dir, host, request) = fixture().await;
+        let cli = dir.path().join("ginfer");
+        let pid_path = dir.path().join("idle-profile-pid");
+        std::fs::write(&cli, format!(
+            "#!/bin/sh\nprintf '%s' \"$$\" > '{}'\nexec /bin/sleep 600\n", pid_path.display()
+        )).unwrap();
+        let job = host.processes.lock().await.hardware_profile.clone().unwrap();
+        let configuration = job.configuration(Some(cli.clone()), &request.gpu_uuids).unwrap();
+        std::fs::create_dir_all(configuration.profile_path.parent().unwrap()).unwrap();
+        std::fs::write(&configuration.profile_path, r#"{"schema_version":2}"#).unwrap();
+        job.start_remaining_formats(Some(cli.clone()), request.gpu_uuids.clone()).unwrap();
+        wait_for_profile_file(&pid_path).await;
+        let pid = std::fs::read_to_string(&pid_path).unwrap();
+        write_selected_profile_fixture(&cli);
+        let source = std::fs::read_to_string(&cli).unwrap();
+        // Check in the replacement native command so a transient overlap fails.
+        std::fs::write(&cli, source.replace("args = sys.argv[1:]", &format!(
+            "try: os.kill({pid}, 0)\nexcept ProcessLookupError: pass\nelse: raise AssertionError('idle completion still alive at selected start')\nargs = sys.argv[1:]"
+        ))).unwrap();
+        let token = host.data.lock().await.pairing_admin_token.clone();
+        let (status, reply) = post_hardware_profile(&host, &token, serde_json::json!({
+            "action":"ensure","gpu_uuids":request.gpu_uuids,
+            "artifact":{"path":dir.path().join("models/model.ginfer"),"tp":1},
+        })).await;
+        assert_eq!(status, StatusCode::OK, "{reply}");
+        wait_for_profile_completion(&job).await;
+        assert_eq!(job.status(None).scope, "artifact");
+        assert_eq!(std::fs::read_to_string(dir.path().join("profile-calls.jsonl")).unwrap().lines().count(), 1);
+        assert!(!dir.path().join("quote-started").exists());
+        assert!(!dir.path().join("serve-started").exists());
     }
 
     #[tokio::test]

@@ -82,16 +82,58 @@ enum Commands {
     /// This entry never starts chat, a model, or the Local API Server.
     #[cfg(any(target_os = "windows", target_os = "linux"))]
     PrepareHardware {
-        /// Installed GChat resource directory, supplied by the per-user installer.
-        #[arg(long)]
-        resource_directory: PathBuf,
-        /// Effective per-user app-data directory supplied by the owning package.
-        #[arg(long)]
-        app_data_directory: PathBuf,
-        /// Exact ordered deployment GPU UUIDs; repeat for TP2/TP4.
-        #[arg(long = "gpu")]
-        gpu_uuids: Vec<String>,
+        #[command(flatten)]
+        args: PrepareHardwareArgs,
     },
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+#[derive(Args)]
+struct PrepareHardwareArgs {
+    /// Installed GChat resource directory, supplied by the per-user installer.
+    #[arg(long)]
+    resource_directory: PathBuf,
+    /// Effective per-user app-data directory supplied by the owning package.
+    #[arg(long)]
+    app_data_directory: PathBuf,
+    /// Exact ordered deployment GPU UUIDs; repeat for TP2/TP4.
+    #[arg(long = "gpu")]
+    gpu_uuids: Vec<String>,
+    /// Existing local version-3 TP payload to profile instead of all formats.
+    #[arg(long, requires_all = ["gpu_uuids", "tp"])]
+    artifact: Option<PathBuf>,
+    /// Artifact TP degree, matching the selected startup and ordered GPU count.
+    #[arg(long, requires = "artifact")]
+    tp: Option<u32>,
+    /// Startup speculation mode (defaults to auto for a selected artifact).
+    #[arg(long, requires = "artifact", value_parser = ["auto", "none", "dflash", "mtp"])]
+    spec: Option<String>,
+    /// Startup draft TP degree; omit for native artifact resolution.
+    #[arg(long, requires = "artifact")]
+    draft_tp: Option<u32>,
+    /// Explicit startup speculation width; omit for the native default.
+    #[arg(long, requires = "artifact")]
+    draft_tokens: Option<u32>,
+}
+
+#[cfg(any(target_os = "windows", target_os = "linux"))]
+impl PrepareHardwareArgs {
+    fn profile_request(&self) -> ginfer_host::hardware_profile::HardwareProfileRequest {
+        use ginfer_host::hardware_profile::{
+            HardwareProfileAction, HardwareProfileRequest, SelectedArtifactProfileRequest,
+        };
+        HardwareProfileRequest {
+            action: HardwareProfileAction::Ensure,
+            gpu_uuids: (!self.gpu_uuids.is_empty()).then(|| self.gpu_uuids.clone()),
+            artifact: self.artifact.as_ref().map(|path| SelectedArtifactProfileRequest {
+                path: path.clone(),
+                tp: self.tp.expect("clap requires --tp with --artifact"),
+                draft_tp: self.draft_tp.unwrap_or(0),
+                spec: self.spec.clone().unwrap_or_else(|| "auto".into()),
+                draft_tokens: self.draft_tokens,
+            }),
+        }
+    }
 }
 
 // ── Serve args ─────────────────────────────────────────────────────────────
@@ -286,8 +328,9 @@ async fn main() {
         Commands::Models { cmd } => handle_models(cmd),
         Commands::Server { cmd } => handle_server(cmd).await,
         #[cfg(any(target_os = "windows", target_os = "linux"))]
-        Commands::PrepareHardware { resource_directory, app_data_directory, gpu_uuids } => {
-            match app_lib::core::setup::prepare_installed_hardware_from_resources(resource_directory, app_data_directory, gpu_uuids).await {
+        Commands::PrepareHardware { args } => {
+            let request = args.profile_request();
+            match app_lib::core::setup::prepare_installed_hardware_from_resources(args.resource_directory, args.app_data_directory, request).await {
                 Ok(status) => println!("{}", serde_json::to_string(&status).unwrap_or_else(|e| fail(e.to_string()))),
                 Err(error) => fail(error),
             }
@@ -1299,6 +1342,57 @@ async fn start_model_server(
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn prepare_hardware_forwards_selected_artifact_startup_intent_and_gpu_order() {
+        let cli = Cli::try_parse_from([
+            "gchat-cli", "prepare-hardware", "--resource-directory", "/installed/resources",
+            "--app-data-directory", "/private/data", "--gpu", "GPU-second",
+            "--gpu", "GPU-first", "--artifact", "/models/selected-tp2.ginfer",
+            "--tp", "2", "--spec", "dflash", "--draft-tp", "1", "--draft-tokens", "5",
+        ]).unwrap();
+        let Commands::PrepareHardware { args } = cli.command else { panic!("wrong command") };
+        assert_eq!(serde_json::to_value(args.profile_request()).unwrap(), serde_json::json!({
+            "action":"ensure", "gpu_uuids":["GPU-second","GPU-first"],
+            "artifact":{"path":"/models/selected-tp2.ginfer","tp":2,"draft_tp":1,
+                "spec":"dflash","draft_tokens":5},
+        }));
+    }
+
+    #[test]
+    fn prepare_hardware_keeps_manual_all_formats_and_selected_native_defaults() {
+        let base = ["gchat-cli", "prepare-hardware", "--resource-directory", "/resources",
+            "--app-data-directory", "/data"];
+        let cli = Cli::try_parse_from(base).unwrap();
+        let Commands::PrepareHardware { args } = cli.command else { panic!("wrong command") };
+        assert_eq!(serde_json::to_value(args.profile_request()).unwrap(), serde_json::json!({
+            "action":"ensure", "gpu_uuids":null,
+        }));
+        let selected = base.into_iter().chain([
+            "--gpu", "GPU-first", "--artifact", "/models/model.ginfer", "--tp", "1",
+        ]);
+        let cli = Cli::try_parse_from(selected).unwrap();
+        let Commands::PrepareHardware { args } = cli.command else { panic!("wrong command") };
+        let artifact = args.profile_request().artifact.unwrap();
+        assert_eq!(artifact.spec, "auto");
+        assert_eq!(artifact.draft_tp, 0);
+        assert_eq!(artifact.draft_tokens, None);
+    }
+
+    #[test]
+    fn prepare_hardware_rejects_incomplete_or_orphaned_selected_settings() {
+        let base = ["gchat-cli", "prepare-hardware", "--resource-directory", "/resources",
+            "--app-data-directory", "/data"];
+        for tail in [
+            vec!["--artifact", "/models/model.ginfer"],
+            vec!["--artifact", "/models/model.ginfer", "--tp", "1"],
+            vec!["--artifact", "/models/model.ginfer", "--gpu", "GPU-first"],
+            vec!["--tp", "1"], vec!["--spec", "none"], vec!["--draft-tp", "1"],
+            vec!["--draft-tokens", "5"],
+        ] {
+            assert!(Cli::try_parse_from(base.into_iter().chain(tail)).is_err());
+        }
+    }
 
     #[test]
     fn cli_launch_uses_the_selected_managed_opencode_and_configuration() {
