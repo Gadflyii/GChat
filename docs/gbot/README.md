@@ -13,6 +13,85 @@ a named bot using Escape and Hide. Source is frozen for parent serial baseline,
 focused, lint and ONE `make verify` validation; none has run for this packet.
 This is rendered UI scope, with no native, task, desktop or service changes.
 
+## Refreshing accounts after Microsoft sign-in — Gchat 2
+
+`GBOT-M365-CONNECTED-ACCOUNT-REFRESH`, based on main `42759aafd`, keeps
+the connected sign-in result when the following account-list read fails. The
+message names the available Refresh Microsoft accounts action, with technical
+diagnostics in initially closed Details, instead of referring to the sign-in
+status check that is no longer shown.
+
+The rendered regression covers Error and native-string failures, explicit
+account refresh without replaying sign-in, and deliberate account selection
+before Cloud PC discovery becomes available. This is source and mocked-connector
+scope; no real sign-in, account, browser consent or native acceptance is claimed.
+
+Validation: both new journeys failed against original production; fixed focus
+passed 198 tests across three files. Lint passed with zero errors and five
+existing warnings. ONE `make verify` (2026-10-18 22:48:38–22:54:51 UTC)
+passed 3,869 app tests (six skipped), 130 extension tests, 1,323 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards. All
+3,481 tracked inputs matched raw bytes and modes before and after verification
+with fresh tracked timestamps. Only this receipt was added afterward.
+Booking3616 returned22:55Z. Evidence:
+`/ai/gchat/out/gchat2-m365-connected-account-refresh-20261018/SUMMARY.md`.
+
+## Recovering saved computer setup reads — Gchat 2
+
+`GBOT-SAVED-SETUP-READ-RECOVERY`, based on main `61e4ea300`, requires
+successful local, cloud and Microsoft saved-setup reads before automatically
+offering first-time setup. Previously, a failed cloud or Microsoft read counted
+as an empty list and could hide an unfinished setup behind a new setup form.
+
+A read failure now names the existing Refresh action with its diagnostic in
+closed Details, including when a bot is selected. Saved lists, bot selection
+and unsent task drafts remain available. Refresh discovers the saved setup;
+no setup or task starts automatically. Source/rendered mocked-service scope,
+with no provider, account, VM or native acceptance claim.
+
+Validation: all eight new journeys failed against original production; fixed
+focus passed 157 tests across two files. Lint passed with zero errors and five
+existing warnings. ONE `make verify` (2026-10-18 22:29:57–22:36:03 UTC)
+passed 3,838 app tests (six skipped), 130 extension tests, 1,323 Rust tests
+(28 ignored), all six coverage floors and lint/typecheck/quality guards.
+All 3,480 tracked inputs matched raw bytes and modes before and after
+verification with fresh tracked timestamps. Only this receipt was added
+afterward. Booking3606 returned22:36Z; private cache and both exports were
+removed by22:37:39Z. Evidence:
+`/ai/gchat/out/gchat2-saved-setup-read-recovery-20261018/SUMMARY.md`.
+
+Merged origin/main `8b25627e7` without rebasing, preserving both sides’ tests
+and documentation. Post-merge focused Gbot tests passed 181 tests across the
+route, setup wizard and schedules (2026-10-18 22:41:49–22:42:04 UTC).
+All 3,481 tracked inputs matched raw bytes and modes before and after the
+focused run. The accepted full verification above was not repeated.
+
+## Reviewing tasks after a local service restart — Gchat 2
+
+`GBOT-SERVICE-RESTART-RESUME-WORDING`, based on main `61e4ea300`, replaces
+local Quit/Stopped notices that falsely promised automatic task and schedule
+resumption. They now explain that unfinished tasks stop, name Start Gbot
+service and explicit Resume after review, and point to Scheduled tasks for
+schedules that need review. LAN disconnect notices still explain that work
+continues on the other computer.
+
+The existing rendered shutdown journey now follows restart with a saved task
+and a schedule awaiting review. Restart sends no task or schedule mutation;
+the local task requires an explicit Resume. The paired-LAN task stays running.
+Task-runner and scheduler behavior are unchanged. This is source/rendered
+mocked-service scope, with no native, VM, account or model acceptance.
+
+Validation: the local journey failed against the original production code,
+while the paired-LAN control passed. Fixed focus passed 150 tests across three
+files; lint passed with zero errors and five existing warnings. ONE
+`make verify` (2026-10-18 22:17:26–22:23:30 UTC) passed 3,831 app tests
+(six skipped), 130 extension tests, 1,323 Rust tests (28 ignored), all six
+coverage floors and lint/typecheck/quality guards. All 3,480 tracked inputs
+matched raw bytes and modes before and after verification with fresh tracked
+timestamps. Only this receipt was added afterward. Booking3600 returned22:25Z;
+private cache and both exports were removed by22:25:32Z. Evidence:
+`/ai/gchat/out/gchat2-service-restart-resume-wording-20261018/SUMMARY.md`.
+
 ## Recovering a failed Microsoft sign-in result — Gchat 2
 
 `GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names

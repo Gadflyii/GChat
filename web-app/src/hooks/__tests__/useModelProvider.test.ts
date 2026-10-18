@@ -44,7 +44,7 @@ describe('useModelProvider - displayName functionality', () => {
         providers: [],
         selectedProvider: 'ginfer',
         selectedModel: null,
-        deletedModels: [],
+        inventoryRevision: 0, modelMutations: {},
       })
     })
   })
@@ -97,7 +97,7 @@ describe('useModelProvider - displayName functionality', () => {
         ] as any,
         selectedProvider: 'ginfer',
         selectedModel: null,
-        deletedModels: [],
+        inventoryRevision: 0, modelMutations: {},
       })
     })
 
@@ -154,7 +154,7 @@ describe('useModelProvider - displayName functionality', () => {
         ] as any,
         selectedProvider: 'ginfer',
         selectedModel: null,
-        deletedModels: [],
+        inventoryRevision: 0, modelMutations: {},
       })
     })
 
@@ -213,7 +213,7 @@ describe('useModelProvider - displayName functionality', () => {
         providers: [persisted],
         selectedProvider: 'ginfer',
         selectedModel: null,
-        deletedModels: [],
+        inventoryRevision: 0, modelMutations: {},
       })
     })
 
@@ -293,7 +293,7 @@ describe('useModelProvider - displayName functionality', () => {
         providers: [providerWithDisplayName],
         selectedProvider: 'ginfer',
         selectedModel: null,
-        deletedModels: [],
+        inventoryRevision: 0, modelMutations: {},
       })
     })
 
@@ -329,7 +329,7 @@ describe('useModelProvider - displayName functionality', () => {
         providers: [provider],
         selectedProvider: 'ginfer',
         selectedModel: provider.models[0],
-        deletedModels: [],
+        inventoryRevision: 0, modelMutations: {},
       })
     })
 
@@ -394,7 +394,7 @@ describe('useModelProvider - displayName functionality', () => {
         providers: [provider],
         selectedProvider: 'ginfer',
         selectedModel: staleSelectedModel,
-        deletedModels: [],
+        inventoryRevision: 0, modelMutations: {},
       })
     })
 
@@ -424,6 +424,83 @@ describe('useModelProvider - displayName functionality', () => {
       result.current.selectedModel?.settings?.ctx_len?.controller_props?.value
     ).toBe(32768)
   })
+
+  it.each(['stale', 'omitted'] as const)(
+    'preserves newer local installations and deletions when a stamped read returns %s inventory',
+    (returned) => {
+      const oldModel = { id: 're-added', path: '/models/old.ginfer' } as Model
+      const retained = { id: 'retained' } as Model
+      const provider = {
+        provider: 'ginfer', active: true, persist: true, settings: [],
+        models: [oldModel, { id: 'deleted' }, retained],
+        api_key: 'saved-key', base_url: 'http://localhost:1337/v1',
+      } as ModelProvider
+      const readded = {
+        id: oldModel.id, path: '/models/new.ginfer', displayName: 'My re-added model',
+        settings: { temperature: { controller_props: { value: 0.25 } } },
+      } as Model
+      useModelProvider.setState({ providers: [provider] })
+      const readRevision = useModelProvider.getState().inventoryRevision
+      act(() => {
+        useModelProvider.getState().deleteModel('deleted')
+        useModelProvider.getState().setProviders([{ ...provider, models: [readded, retained] }])
+        useModelProvider.getState().selectModelProvider('ginfer', readded.id)
+      })
+      const acceptedReadd = useModelProvider.getState().selectedModel
+      act(() => useModelProvider.getState().setProviders([
+        { ...provider, models: [...(returned === 'stale' ? [oldModel] : []), { id: 'deleted' }, retained, { id: 'fresh' }] },
+        { provider: 'openai', active: true, persist: true, settings: [], models: [{ id: 'remote' }] } as ModelProvider,
+      ], readRevision))
+
+      const state = useModelProvider.getState()
+      expect(state.providers[0].models.find(model => model.id === readded.id)).toEqual(acceptedReadd)
+      expect(state.providers[0].models.some(model => model.id === 'deleted')).toBe(false)
+      expect(state.providers[0].models.map(model => model.id)).toEqual(expect.arrayContaining(['fresh', 'retained', readded.id]))
+      expect(state.providers[0]).toMatchObject({ api_key: 'saved-key', base_url: 'http://localhost:1337/v1' })
+      expect(state.selectedModel).toEqual(acceptedReadd)
+      expect(state.providers[1].models.map(model => model.id)).toEqual(['remote'])
+    }
+  )
+
+  it('records an accepted install before its read so older inventory cannot erase the replacement', () => {
+    const provider = {
+      provider: 'ginfer', active: true, persist: true, settings: [],
+      models: [{ id: 'reinstalled', path: '/models/original.ginfer' }],
+    } as ModelProvider
+    useModelProvider.setState({ providers: [provider] })
+    act(() => useModelProvider.getState().deleteModel('reinstalled'))
+    const olderRead = useModelProvider.getState().inventoryRevision
+    act(() => useModelProvider.getState().recordModelInstall('reinstalled'))
+    const installationRead = useModelProvider.getState().inventoryRevision
+    expect(installationRead).toBeGreaterThan(olderRead)
+    act(() => {
+      useModelProvider.getState().setProviders([{ ...provider, models: [{ id: 'reinstalled', path: '/models/reinstalled.ginfer' }] }], installationRead)
+      useModelProvider.getState().selectModelProvider('ginfer', 'reinstalled')
+      useModelProvider.getState().setProviders([{ ...provider, models: [] }], olderRead)
+    })
+
+    expect(useModelProvider.getState().providers[0].models).toEqual([
+      expect.objectContaining({ id: 'reinstalled', path: '/models/reinstalled.ginfer' }),
+    ])
+    expect(useModelProvider.getState().selectedModel?.path).toBe('/models/reinstalled.ginfer')
+  })
+
+  it('persists inventory and selection without carrying pending-read revisions into a new session', () => {
+    act(() => useModelProvider.getState().recordModelInstall('session-install'))
+    const options = useModelProvider.persist.getOptions()
+    const fresh = { ...useModelProvider.getState(), inventoryRevision: 0, modelMutations: {} }
+    expect(options.merge!(undefined, fresh)).toEqual(fresh)
+    const saved = options.partialize!(useModelProvider.getState())
+    expect(Object.keys(saved).sort()).toEqual(['providers', 'selectedModel', 'selectedProvider'])
+    const restored = options.merge!({
+      ...saved, inventoryRevision: 100,
+      modelMutations: { 'old-deletion': { revision: 100, deleted: true } },
+      deletedModels: ['old-deletion'],
+    }, fresh)
+    expect(restored.inventoryRevision).toBe(0)
+    expect(restored.modelMutations).toEqual({})
+    expect(restored).not.toHaveProperty('deletedModels')
+  })
 })
 
 describe('useModelProvider migrations', () => {
@@ -445,7 +522,7 @@ describe('useModelProvider migrations', () => {
       ],
       selectedProvider: 'llamacpp-upstream',
       selectedModel: null,
-      deletedModels: [],
+      inventoryRevision: 0, modelMutations: {},
     }
 
     const migratedState = migrate!(persistedState, 14)
@@ -483,7 +560,7 @@ describe('useModelProvider migrations', () => {
       ],
       selectedProvider: 'mistral',
       selectedModel: null,
-      deletedModels: [],
+      inventoryRevision: 0, modelMutations: {},
     }
 
     const migratedState = migrate!(persistedState, 8)
@@ -528,7 +605,7 @@ describe('useModelProvider migrations', () => {
       ],
       selectedProvider: 'mistral',
       selectedModel: null,
-      deletedModels: [],
+      inventoryRevision: 0, modelMutations: {},
     }
 
     const migratedState = migrate!(persistedState, 8)
@@ -571,7 +648,7 @@ describe('useModelProvider migrations', () => {
       ],
       selectedProvider: 'mistral',
       selectedModel: null,
-      deletedModels: [],
+      inventoryRevision: 0, modelMutations: {},
     }
 
     const migratedState = migrate!(persistedState, 8)

@@ -13,7 +13,12 @@ import type { ComponentType } from 'react'
 import { toast } from 'sonner'
 import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
 import { settleConfirm } from '@/lib/confirm'
-import type { BotState, CloudReview, KvmSetupRecord } from '@/services/gbot'
+import type {
+  BotState,
+  CloudReview,
+  KvmSetupRecord,
+  M365SetupRecord,
+} from '@/services/gbot'
 import { connectorAccounts } from '@/services/workspace-connectors'
 
 const mocks = vi.hoisted(() => ({
@@ -1463,47 +1468,139 @@ it('does not offer removed KVM setups and permits first-bot setup', async () => 
   )
 })
 
-it('retains a KVM status error instead of assuming no saved setup and discovers it on retry', async () => {
-  let unavailable = true
-  mocks.listen.mockResolvedValue(() => {})
-  mocks.call.mockImplementation(async (path: string) => {
-    if (path === 'state')
-      return {
-        workspaces: [],
-        live_sessions: [],
-        assignments: [],
-        controls: [],
-      }
-    if (path === 'setup/local-vm/status') {
-      if (unavailable) throw new Error('Saved setup status could not be read')
-      return [
-        {
-          id: 'saved-local',
-          name: 'Recovered researcher',
-          stage: 'connecting',
-          issue: null,
+it.each(
+  ([
+    [
+      'setup/local-vm/status',
+      'Local setup Recovered researcher',
+      {
+        id: 'saved-local',
+        name: 'Recovered researcher',
+        stage: 'connecting',
+        issue: null,
+      } satisfies KvmSetupRecord,
+    ],
+    [
+      'setup/cloud/status',
+      'Cloud setup Recovered researcher',
+      {
+        id: 'saved-cloud',
+        name: 'Recovered researcher',
+        provider: 'hetzner',
+        fetched_at: 1,
+        expires_at: 2,
+        confirmed: false,
+        quote: null,
+        catalog: { currency: 'EUR', tax: 'VAT', regions: [], plans: [] },
+      } satisfies CloudReview,
+    ],
+    [
+      'setup/m365/status',
+      'M365 setup Recovered researcher',
+      {
+        id: 'saved-m365',
+        name: 'Recovered researcher',
+        account_id: 'work-account',
+        cloud_pc: {
+          id: 'pc',
+          display_name: 'Dedicated PC',
+          image_name: 'Windows 11',
+          plan_name: '2 vCPU',
         },
-      ]
-    }
-    return []
-  })
-  render(<Page />)
-  await screen.findByText('Error: Saved setup status could not be read')
-  expect(
-    screen.queryByRole('form', { name: 'Set up Gbot' })
-  ).not.toBeInTheDocument()
-  unavailable = false
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
-  await screen.findByRole('region', {
-    name: 'Local setup Recovered researcher',
-  })
-  expect(
-    screen.queryByRole('form', { name: 'Set up Gbot' })
-  ).not.toBeInTheDocument()
-  expect(
-    screen.queryByText('Error: Saved setup status could not be read')
-  ).not.toBeInTheDocument()
-})
+        route: 'guest_worker',
+      } satisfies M365SetupRecord,
+    ],
+  ] as const).flatMap(([path, region, record]) => [
+    [path, region, record, new Error('Saved setup status could not be read')],
+    [path, region, record, 'Saved setup status could not be read'],
+  ] as const)
+)(
+  'recovers a saved setup status read from %s without offering first setup (%s)',
+  async (statusPath, region, record, cause) => {
+    let unavailable = true
+    mocks.listen.mockResolvedValue(() => {})
+    mocks.call.mockImplementation(async (path: string) => {
+      if (path === 'state')
+        return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+      if (path === statusPath) {
+        if (unavailable) throw cause
+        return [record]
+      }
+      return []
+    })
+    render(<Page />)
+    const notice = await screen.findByText(
+      'Could not check your saved computer setups. Choose Refresh to try again before starting another setup.'
+    )
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith('tasks/approvals', undefined)
+    )
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+    const alert = notice.closest('[role="alert"]') as HTMLElement
+    const details = within(alert).getByText('Details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    const diagnostic = within(alert).getByText(String(cause))
+    expect(diagnostic).not.toBeVisible()
+    const callsBeforeDetails = mocks.call.mock.calls.length
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(diagnostic).toBeVisible()
+    expect(mocks.call).toHaveBeenCalledTimes(callsBeforeDetails)
+    unavailable = false
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await screen.findByRole('region', { name: region })
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+    expect(notice).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === statusPath)
+    ).toHaveLength(2)
+    expect(
+      mocks.call.mock.calls.some(([path]) =>
+        ['setup/local-vm/start', 'setup/cloud/create', 'setup/m365/save', 'workspaces/ssh'].includes(path)
+      )
+    ).toBe(false)
+  }
+)
+
+it.each(['setup/cloud/status', 'setup/m365/status'])(
+  'keeps saved setup read recovery visible with a selected bot after %s fails',
+  async (statusPath) => {
+    readyTaskBots()
+    const fallback = mocks.call.getMockImplementation()!
+    let unavailable = false
+    mocks.call.mockImplementation(async (path: string, body: Record<string, unknown>) => {
+      if (path === statusPath && unavailable)
+        throw new Error('Saved setup lookup unavailable')
+      return fallback(path, body)
+    })
+    render(<Page />)
+    const prompt = await screen.findByRole('textbox', { name: 'Bot task' })
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith('tasks/approvals', undefined)
+    )
+    fireEvent.change(prompt, { target: { value: 'Keep this unsent task' } })
+    unavailable = true
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    const notice = await screen.findByText(
+      'Could not check your saved computer setups. Choose Refresh to try again before starting another setup.'
+    )
+    expect(prompt).toHaveValue('Keep this unsent task')
+    expect(screen.getByRole('heading', { name: 'Writer' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('form', { name: 'Set up Gbot' })
+    ).not.toBeInTheDocument()
+    unavailable = false
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(notice).not.toBeInTheDocument())
+    expect(prompt).toHaveValue('Keep this unsent task')
+    expect(
+      mocks.call.mock.calls.some(([path]) => path === 'tasks/start')
+    ).toBe(false)
+  }
+)
 
 it('resumes a saved cloud price review without creating a workspace or offering first setup', async () => {
   mocks.listen.mockResolvedValue(() => {})
@@ -3910,7 +4007,7 @@ it.each([
       const stopLabel = kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service'
       const startLabel = kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service'
       const stoppedMessage = kind === 'local'
-        ? 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+        ? 'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'
         : 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
       if (start) {
         fireEvent.click(await screen.findByRole('button', { name: stopLabel }))
@@ -3938,7 +4035,7 @@ it.each([
           ? 'Starting Gbot on this computer. First-time setup or an update may need several minutes to prepare files. The service will start automatically when preparation finishes. You can keep using GChat.'
           : 'Connecting to the Gbot service on your selected LAN computer. Please wait.'
         : kind === 'local'
-          ? 'Stopping the Gbot service. Tasks and schedules will resume when you start it again.'
+          ? 'Stopping the Gbot service. Unfinished tasks will stop. After restarting, review them before choosing Resume. Check Scheduled tasks for schedules that need review.'
           : 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.'
       expect(screen.getByText(progressMessage)).toHaveAttribute('role', 'status')
       expect(screen.getByText(progressMessage)).toBeVisible()
@@ -4118,7 +4215,7 @@ it('clears failed startup progress and allows an explicit retry', async () => {
   ).not.toBeInTheDocument()
   expect(
     screen.getByText(
-      'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+      'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'
     )
   ).toBeVisible()
   const retry = screen.getByRole('button', { name: 'Start Gbot service' })
@@ -4134,9 +4231,44 @@ it('clears failed startup progress and allows an explicit retry', async () => {
 })
 
 it.each(['local', 'paired_host'] as const)(
-  'shows %s shutdown progress without claiming the service has already stopped',
+  'shows %s shutdown progress and explicit task recovery after restarting',
   async (kind) => {
-    readyTaskBots()
+    const [identity] = readyTaskBots()
+    const fallback = mocks.call.getMockImplementation()!
+    const task = {
+      id: 'saved-before-quit',
+      identity,
+      state: 'running',
+      messages: [{ role: 'user', content: 'Finish my saved note' }],
+      help_requests: [],
+    }
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'tasks') return [task]
+        if (path === 'tasks/resume') {
+          task.state = 'running'
+          return task
+        }
+        if (path === 'schedules')
+          return {
+            stopped: null,
+            schedules: [
+              {
+                id: 'saved-schedule',
+                workspace_id: identity.workspace_id,
+                prompt: 'Check my saved note each morning',
+                enabled: true,
+                assignment: { model: 'qwen' },
+                timing: { kind: 'interval', every_seconds: 86400 },
+                next_at: null,
+                occurrences: [{ task_id: task.id, state: 'needs_review' }],
+              },
+            ],
+          }
+        return fallback(path, body)
+      }
+    )
+    mocks.startService.mockReset().mockResolvedValue(undefined)
     mocks.getTarget.mockResolvedValue(
       kind === 'local' ? { kind } : { kind, host_id: 'paired-host' }
     )
@@ -4157,7 +4289,7 @@ it.each(['local', 'paired_host'] as const)(
     )
     const progress = screen.getByText(
       kind === 'local'
-        ? 'Stopping the Gbot service. Tasks and schedules will resume when you start it again.'
+        ? 'Stopping the Gbot service. Unfinished tasks will stop. After restarting, review them before choosing Resume. Check Scheduled tasks for schedules that need review.'
         : 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.'
     )
     expect(progress).toHaveAttribute('role', 'status')
@@ -4170,6 +4302,7 @@ it.each(['local', 'paired_host'] as const)(
       })
     ).toBeDisabled()
     expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+    if (kind === 'local') task.state = 'cancelled'
     await act(async () => finish())
     await waitFor(() =>
       expect(
@@ -4186,10 +4319,59 @@ it.each(['local', 'paired_host'] as const)(
     expect(
       screen.getByText(
         kind === 'local'
-          ? 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+          ? 'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'
           : 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
       )
     ).toBeVisible()
+    const taskWrites = () =>
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    expect(taskWrites()).toEqual([])
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service',
+      })
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name: kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service',
+        })
+      ).toBeEnabled()
+    )
+    const card = (await screen.findByText('Finish my saved note')).closest(
+      'article'
+    )!
+    expect(
+      within(card).getByText(kind === 'local' ? 'cancelled' : 'running', {
+        exact: true,
+      })
+    ).toBeVisible()
+    expect(taskWrites()).toEqual([])
+    fireEvent.click(screen.getByText('Scheduled tasks'))
+    expect(
+      await screen.findByText('Needs review. Future occurrences are held.')
+    ).toBeVisible()
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path.startsWith('schedules/'))
+    ).toEqual([])
+    if (kind === 'local') {
+      const resume = within(card).getByRole('button', {
+        name: 'Resume',
+        exact: true,
+      })
+      expect(resume).toBeEnabled()
+      fireEvent.click(resume)
+      expect(await within(card).findByText('running', { exact: true })).toBeVisible()
+      expect(taskWrites()).toEqual([['tasks/resume', { id: task.id }]])
+    } else {
+      expect(
+        within(card).queryByRole('button', { name: 'Resume', exact: true })
+      ).not.toBeInTheDocument()
+    }
+    expect(mocks.quitService).toHaveBeenCalledTimes(1)
+    expect(mocks.startService).toHaveBeenCalledTimes(1)
   }
 )
 
@@ -4206,7 +4388,7 @@ it('explicitly stops the service without refreshing and starts it before reconne
   await screen.findByRole('form', { name: 'Set up Gbot' })
   fireEvent.click(screen.getByRole('button', { name: 'Quit Gbot service' }))
   await screen.findByText(
-    'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+    'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'
   )
   expect(mocks.quitService).toHaveBeenCalledTimes(1)
   const calls = mocks.call.mock.calls.length
@@ -4614,7 +4796,9 @@ it.each([
     render(<Page />)
     await screen.findByText('Computer setup is incomplete')
     if (scenario === 'unknown setup')
-      await screen.findByText('Error: Setup status unavailable')
+      await screen.findByText(
+        'Could not check your saved computer setups. Choose Refresh to try again before starting another setup.'
+      )
     else await screen.findByRole('button', { name: 'Resume setup' })
     for (const button of screen.queryAllByRole('button', {
       name: /^(Hand back|Take over)$/,
