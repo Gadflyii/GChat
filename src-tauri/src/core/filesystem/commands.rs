@@ -4,6 +4,7 @@ use super::helpers::resolve_path;
 use super::models::{DialogOpenOptions, FileStat};
 use rfd::AsyncFileDialog;
 use std::fs;
+use std::path::{Path, PathBuf};
 use tauri::Runtime;
 
 #[tauri::command]
@@ -204,22 +205,36 @@ pub fn readdir_sync<R: Runtime>(
     Ok(paths)
 }
 
+fn resolve_yaml_path(data_folder: &Path, path: &str) -> Result<PathBuf, String> {
+    // Catalog discovery returns canonical paths, while the configured data folder
+    // can use a symlink. Resolve both names, including files not yet created.
+    let data_folder = jan_utils::canonicalize_existing_prefix(data_folder);
+    let path = jan_utils::normalize_path(&data_folder.join(path));
+    let path = match fs::symlink_metadata(&path) {
+        Ok(_) => path.canonicalize().map_err(|error| error.to_string())?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            jan_utils::canonicalize_existing_prefix(&path)
+        }
+        Err(error) => return Err(error.to_string()),
+    };
+    if !path.starts_with(&data_folder) {
+        return Err(format!(
+            "Error: path {} is not under jan_data_folder {}",
+            path.to_string_lossy(),
+            data_folder.to_string_lossy(),
+        ));
+    }
+    Ok(path)
+}
+
 #[tauri::command]
 pub fn write_yaml(
     app: tauri::AppHandle<impl Runtime>,
     data: serde_json::Value,
     save_path: &str,
 ) -> Result<(), String> {
-    // TODO: have an internal function to check scope
     let jan_data_folder = crate::core::app::commands::get_jan_data_folder_path(app.clone());
-    let save_path = jan_utils::normalize_path(&jan_data_folder.join(save_path));
-    if !save_path.starts_with(&jan_data_folder) {
-        return Err(format!(
-            "Error: save path {} is not under jan_data_folder {}",
-            save_path.to_string_lossy(),
-            jan_data_folder.to_string_lossy(),
-        ));
-    }
+    let save_path = resolve_yaml_path(&jan_data_folder, save_path)?;
     let file = fs::File::create(&save_path).map_err(|e| e.to_string())?;
     let mut writer = std::io::BufWriter::new(file);
     serde_yaml::to_writer(&mut writer, &data).map_err(|e| e.to_string())?;
@@ -232,14 +247,7 @@ pub fn read_yaml<R: Runtime>(
     path: &str,
 ) -> Result<serde_json::Value, String> {
     let jan_data_folder = crate::core::app::commands::get_jan_data_folder_path(app.clone());
-    let path = jan_utils::normalize_path(&jan_data_folder.join(path));
-    if !path.starts_with(&jan_data_folder) {
-        return Err(format!(
-            "Error: path {} is not under jan_data_folder {}",
-            path.to_string_lossy(),
-            jan_data_folder.to_string_lossy(),
-        ));
-    }
+    let path = resolve_yaml_path(&jan_data_folder, path)?;
     let file = fs::File::open(&path).map_err(|e| e.to_string())?;
     let reader = std::io::BufReader::new(file);
     let data: serde_json::Value = serde_yaml::from_reader(reader).map_err(|e| e.to_string())?;
