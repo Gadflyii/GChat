@@ -539,10 +539,75 @@ async fn run_checked(command: &mut Command) -> io::Result<()> {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn session_hello_waits_for_booting_desktop_without_replaying_operations() {
+        let workspace = Uuid::new_v4();
+        let session = Uuid::new_v4();
+        let invocation = "12345678123456781234567812345678";
+        for (mode, ready_after, status, sleeps) in [
+            ("hello", 3, 0, 2),
+            ("hello", 100, 69, 40),
+            ("exec", 3, 69, 0),
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            let script = root.path().join("operation.sh");
+            std::fs::write(&script, include_str!("../guest/operation.sh")).unwrap();
+            let output = std::process::Command::new("bash")
+                .args([
+                    "-c",
+                    r#"
+systemctl() {
+  if [ "$2" = show ]; then
+    printf '%s\n' 12345678123456781234567812345678
+  else
+    count=0
+    [ ! -f "$HOME/checks" ] || read -r count < "$HOME/checks"
+    count=$((count + 1))
+    printf '%s\n' "$count" > "$HOME/checks"
+    [ "$count" -ge "$READY_AFTER" ]
+  fi
+}
+sleep() { printf '%s\n' "$1" >> "$HOME/sleeps"; }
+source "$@"
+"#,
+                    "fixture",
+                ])
+                .arg(&script)
+                .args([mode, &workspace.to_string(), &session.to_string()])
+                .env("HOME", root.path())
+                .env("READY_AFTER", ready_after.to_string())
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(status), "{mode}: {output:?}");
+            let sleep_log = std::fs::read_to_string(root.path().join("sleeps")).unwrap_or_default();
+            assert_eq!(sleep_log.lines().count(), sleeps);
+            assert!(sleep_log.lines().all(|line| line == "0.5"));
+            let binding = root
+                .path()
+                .join(format!(".local/state/gbot/{workspace}/{session}"));
+            if status == 0 {
+                assert_eq!(
+                    String::from_utf8(output.stdout).unwrap(),
+                    format!("GBOT-SSH-1\n{workspace}\n{session}\n")
+                );
+                assert_eq!(
+                    std::fs::read_to_string(binding.join("desktop")).unwrap(),
+                    invocation
+                );
+                assert_eq!(std::fs::read_dir(binding).unwrap().count(), 1);
+            } else {
+                assert!(
+                    !binding.exists(),
+                    "an unready desktop must not bind or claim work"
+                );
+            }
+        }
+    }
 
     fn spec() -> KvmSpec {
         let key = russh::keys::PrivateKey::random(

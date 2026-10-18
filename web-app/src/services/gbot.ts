@@ -39,7 +39,17 @@ export type SetupIssue = {
   message: string
   next_action: string
 }
+export type LocalVmPreflight = {
+  hypervisor: 'kvm' | 'hyper_v'
+  storage_path?: string
+  ready: boolean
+  issues: SetupIssue[]
+  cpus: number
+  memory_mib: number
+  disk_gib: number
+}
 export type KvmSetupRecord = {
+  vm_root?: string
   id: string
   name: string
   // Unknown payloads omit this; control recovery must stay blocked without it.

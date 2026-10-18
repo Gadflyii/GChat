@@ -25,13 +25,22 @@ def digest(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def guest_assets():
+def guest_assets(target_platform="linux"):
     # Immutable product data owned by the same setup service as runtime preflight.
     contract = Path(__file__).resolve().parent.parent / "src-tauri/gbot-service/guest-assets.json"
     inventory = json.loads(contract.read_text())
     if inventory["schema"] != "gbot-guest-assets-v1":
         raise ValueError("Unsupported compiled guest asset inventory")
-    return inventory["files"]
+    assets = inventory["files"]
+    if target_platform == "windows":
+        image = inventory["windows_image"]
+        source = image["source"]
+        if any(source[key] != assets[0][key] for key in ("filename", "algorithm", "digest")):
+            raise ValueError("Windows guest image provenance differs from the accepted Linux source")
+        if image["asset"]["algorithm"] != "sha256" or not image["asset"].get("bytes"):
+            raise ValueError("Windows guest image requires its own SHA256 and byte count")
+        assets = [image["asset"], *assets[1:]]
+    return assets
 
 
 def verify_guest_asset(path, asset):
@@ -43,14 +52,14 @@ def verify_guest_asset(path, asset):
         raise ValueError(f"Pinned guest asset digest mismatch: {path}")
 
 
-def check_guest_assets(destination):
-    for asset in guest_assets():
+def check_guest_assets(destination, target_platform="linux"):
+    for asset in guest_assets(target_platform):
         verify_guest_asset(destination / "assets" / asset["filename"], asset)
-    print(json.dumps({"status": "PASS", "guest_assets": len(guest_assets())}))
+    print(json.dumps({"status": "PASS", "guest_assets": len(guest_assets(target_platform))}))
 
 
-def stage_guest_assets(source, destination):
-    assets = guest_assets()
+def stage_guest_assets(source, destination, target_platform="linux"):
+    assets = guest_assets(target_platform)
     target = destination / "assets"
     # All exact accepted local inputs are required before any payload is copied.
     for asset in assets:
@@ -70,7 +79,7 @@ def stage_guest_assets(source, destination):
             temporary.replace(existing)
         elif temporary.exists():
             temporary.unlink()
-    check_guest_assets(destination)
+    check_guest_assets(destination, target_platform)
 
 
 def normalized(name):
@@ -226,14 +235,15 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, help="Accepted python-runtime closure directory")
     parser.add_argument("--destination", type=Path, required=True, help="Staged resources/gbot directory")
+    parser.add_argument("--platform", choices=("linux", "windows"), default="linux", help="Target guest asset platform")
     parser.add_argument("--guest-assets", type=Path, help="Accepted local guest payload directory; stage without downloads")
     parser.add_argument("--check-guest-assets", action="store_true", help="Verify the exact bundled guest payload pins")
     parser.add_argument("--check", action="store_true", help="Verify the existing package manifest without staging")
     args = parser.parse_args()
     if args.check_guest_assets:
-        check_guest_assets(args.destination.resolve(strict=True))
+        check_guest_assets(args.destination.resolve(strict=True), args.platform)
     elif args.guest_assets:
-        stage_guest_assets(args.guest_assets.resolve(strict=True), args.destination.resolve())
+        stage_guest_assets(args.guest_assets.resolve(strict=True), args.destination.resolve(), args.platform)
     elif args.check:
         check(args.destination.resolve(strict=True))
     elif args.source:

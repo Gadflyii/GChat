@@ -116,6 +116,14 @@ function GbotPage() {
     Record<string, string | undefined>
   >({})
   const connectionChange = useRef(false)
+  const localVmChange = useRef(false)
+  const [localVmAction, setLocalVmAction] = useState<{
+    id: string
+    kind: 'start' | 'stop'
+  }>()
+  const [localVmErrors, setLocalVmErrors] = useState<
+    Record<string, { kind: 'start' | 'stop'; details: string } | undefined>
+  >({})
   const [connectionErrors, setConnectionErrors] = useState<
     Record<string, { disconnecting: boolean; details: string } | undefined>
   >({})
@@ -158,7 +166,10 @@ function GbotPage() {
         setSetupError(String(cause))
       }
       try {
-        const records = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
+        const records = await gbot<KvmSetupRecord[]>(
+          'setup/local-vm/status',
+          {}
+        )
         if (stopped.current || version !== refreshVersion.current) return
         kvm = Array.isArray(records) ? records : []
         setSetups(kvm)
@@ -379,14 +390,62 @@ function GbotPage() {
       return next
     })
   }
-  const isKvm =
-    bot?.bot_pc?.kind === 'local_vm' && bot.bot_pc.hypervisor === 'kvm'
-  const setup = isKvm
+  const isLocalVm =
+    bot?.bot_pc?.kind === 'local_vm' &&
+    ['kvm', 'hyper_v'].includes(bot.bot_pc.hypervisor ?? '')
+  const setup = isLocalVm
     ? setups?.find((record) => record.id === bot.id)
     : undefined
   const setupBlocked = Boolean(
-    isKvm && (setups === undefined || (setup && setup.stage !== 'ready'))
+    isLocalVm && (setups === undefined || (setup && setup.stage !== 'ready'))
   )
+  const localVmErrorKey = JSON.stringify([serviceTarget, setup?.id])
+  const savedLocalVmError = localVmErrors[localVmErrorKey]
+  const localVmError =
+    savedLocalVmError &&
+    (savedLocalVmError.kind === 'start'
+      ? setup?.stage !== 'ready'
+      : setup?.stage !== 'stopped')
+      ? savedLocalVmError
+      : undefined
+  const changeLocalVm = async (
+    kind: 'start' | 'stop',
+    record: KvmSetupRecord
+  ) => {
+    if (busy || localVmChange.current) return
+    localVmChange.current = true
+    setBusy(true)
+    setLocalVmAction({ id: record.id, kind })
+    const key = JSON.stringify([serviceTarget, record.id])
+    setLocalVmErrors((previous) => ({
+      ...previous,
+      [key]: undefined,
+    }))
+    try {
+      await gbot(
+        `setup/local-vm/${kind}`,
+        kind === 'start'
+          ? { id: record.id, name: record.name }
+          : { id: record.id }
+      )
+    } catch (cause) {
+      setLocalVmErrors((previous) => ({
+        ...previous,
+        [key]: {
+          kind,
+          details: cause instanceof Error ? cause.message : String(cause),
+        },
+      }))
+    } finally {
+      try {
+        await refresh()
+      } finally {
+        localVmChange.current = false
+        setLocalVmAction(undefined)
+        setBusy(false)
+      }
+    }
+  }
   const canHandBackDuringSetup = Boolean(
     setupBlocked &&
       setup &&
@@ -866,12 +925,35 @@ function GbotPage() {
                     variant="outline"
                     disabled={busy || record.stage === 'removing'}
                     onClick={() => {
-                      setResuming({ id: record.id, name: record.name })
-                      setAdding(true)
+                      if (
+                        record.stage === 'stopped' ||
+                        record.stage === 'stopping_computer'
+                      ) {
+                        void changeLocalVm(
+                          record.stage === 'stopped' ? 'start' : 'stop',
+                          record
+                        )
+                      } else {
+                        setResuming({ id: record.id, name: record.name })
+                        setAdding(true)
+                      }
                     }}
                   >
-                    Resume setup
+                    {record.stage === 'stopped'
+                      ? localVmAction?.id === record.id
+                        ? 'Starting computer…'
+                        : 'Start computer'
+                      : record.stage === 'stopping_computer'
+                        ? localVmAction?.id === record.id
+                          ? 'Stopping computer…'
+                          : 'Stop computer'
+                        : 'Resume setup'}
                   </Button>
+                  {localVmErrors[JSON.stringify([serviceTarget, record.id])] && (
+                    <p role="alert" className="break-words text-destructive">
+                      {localVmErrors[JSON.stringify([serviceTarget, record.id])]?.details}
+                    </p>
+                  )}
                 </section>
               ))}
             {!adding &&
@@ -986,6 +1068,25 @@ function GbotPage() {
             )}
             {bot && (
               <>
+                {(setup?.stage === 'ready' ||
+                  setup?.stage === 'stopping_computer') && (
+                  <div className="space-y-2 rounded-md border p-3 text-sm">
+                    <p>
+                      Stopping this computer keeps its virtual disk and saved
+                      files.
+                    </p>
+                    <Button
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void changeLocalVm('stop', setup)}
+                    >
+                      {localVmAction?.id === setup.id &&
+                      localVmAction.kind === 'stop'
+                        ? 'Stopping computer…'
+                        : 'Stop computer'}
+                    </Button>
+                  </div>
+                )}
                 {recoverableControl && (
                   <div className="space-y-2 rounded-md border p-3 text-sm">
                     <p>
@@ -1049,7 +1150,19 @@ function GbotPage() {
                 )}
                 {setupBlocked && (
                   <div className="space-y-2 rounded-md border p-3 text-sm">
-                    <p role="status">Setup incomplete</p>
+                    <p role="status">
+                      {setup?.stage === 'stopped'
+                        ? 'Computer stopped'
+                        : setup?.stage === 'stopping_computer'
+                          ? 'Computer is stopping'
+                          : 'Setup incomplete'}
+                    </p>
+                    {setup?.stage === 'stopped' && (
+                      <p>
+                        Its virtual disk and saved files are kept. Start this
+                        computer to use it again.
+                      </p>
+                    )}
                     {setups === undefined && (
                       <p>{setupError || 'Checking setup status…'}</p>
                     )}
@@ -1059,16 +1172,25 @@ function GbotPage() {
                         <p>{setup.issue.next_action}</p>
                       </div>
                     )}
-                    {setup && (
+                    {setup && setup.stage !== 'stopping_computer' && (
                       <Button
                         variant="outline"
                         disabled={busy}
                         onClick={() => {
-                          setResuming({ id: setup.id, name: setup.name })
-                          setAdding(true)
+                          if (setup.stage === 'stopped') {
+                            void changeLocalVm('start', setup)
+                          } else {
+                            setResuming({ id: setup.id, name: setup.name })
+                            setAdding(true)
+                          }
                         }}
                       >
-                        Resume setup
+                        {setup.stage === 'stopped'
+                          ? localVmAction?.id === setup.id &&
+                            localVmAction.kind === 'start'
+                            ? 'Starting computer…'
+                            : 'Start computer'
+                          : 'Resume setup'}
                       </Button>
                     )}
                     {canHandBackDuringSetup && (
@@ -1086,6 +1208,18 @@ function GbotPage() {
                         </Button>
                       </div>
                     )}
+                  </div>
+                )}
+                {localVmError && (
+                  <div
+                    role="alert"
+                    className="space-y-1 text-sm text-destructive"
+                  >
+                    <p>
+                      Could not {localVmError.kind}{' '}
+                      this computer. Try again.
+                    </p>
+                    <p className="break-words">{localVmError.details}</p>
                   </div>
                 )}
                 {controlError && (

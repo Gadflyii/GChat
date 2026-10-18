@@ -138,11 +138,13 @@ export const useGbotCompanion = create<CompanionState>((set, get) => ({
       let setups: KvmSetupRecord[] | undefined
       if (
         snapshot.workspaces.some(
-          (b) => b.bot_pc?.kind === 'local_vm' && b.bot_pc.hypervisor === 'kvm'
+          (b) =>
+            b.bot_pc?.kind === 'local_vm' &&
+            ['kvm', 'hyper_v'].includes(b.bot_pc.hypervisor ?? '')
         )
       ) {
         try {
-          setups = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
+          setups = await gbot<KvmSetupRecord[]>('setup/local-vm/status', {})
         } catch {
           /* Hold admission when setup status is unavailable. */
         }

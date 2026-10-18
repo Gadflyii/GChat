@@ -351,14 +351,14 @@ impl ControlRecovery<'_> {
 }
 
 /// Hold the exact ownership/operation fence through saved-setup session renewal.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub(crate) struct SetupSessionRenewal<'a> {
     service: &'a Service,
     state: OwnedMutexGuard<RuntimeState>,
     previous: SessionIdentity,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 impl SetupSessionRenewal<'_> {
     pub(crate) async fn commit(self, hello: GuestHello) -> Result<(), ServiceError> {
         let identity = hello.identity;
@@ -389,7 +389,7 @@ pub(crate) struct OwnedWorkspaceRemoval<'a> {
 }
 
 impl OwnedWorkspaceRemoval<'_> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) fn detach_session(&mut self) {
         self.state.sessions.remove(&self.id);
     }
@@ -858,6 +858,29 @@ impl Service {
         owner: &crate::contract::BotPc,
         owned_session: Option<SessionIdentity>,
     ) -> Result<OwnedWorkspaceRemoval<'_>, ServiceError> {
+        self.begin_owned_workspace_lifecycle(id, owner, owned_session, true)
+            .await
+    }
+
+    /// Stop keeps account links, assignments and the brain; it fences in-flight work.
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    pub(crate) async fn begin_owned_workspace_stop(
+        &self,
+        id: WorkspaceId,
+        owner: &crate::contract::BotPc,
+        owned_session: Option<SessionIdentity>,
+    ) -> Result<OwnedWorkspaceRemoval<'_>, ServiceError> {
+        self.begin_owned_workspace_lifecycle(id, owner, owned_session, false)
+            .await
+    }
+
+    async fn begin_owned_workspace_lifecycle(
+        &self,
+        id: WorkspaceId,
+        owner: &crate::contract::BotPc,
+        owned_session: Option<SessionIdentity>,
+        removing: bool,
+    ) -> Result<OwnedWorkspaceRemoval<'_>, ServiceError> {
         let state = self.state.clone().lock_owned().await;
         if let Some(workspace) = state
             .durable
@@ -873,11 +896,12 @@ impl Service {
             .sessions
             .get(&id)
             .is_some_and(|hello| Some(hello.identity) != owned_session)
-            || state
-                .durable
-                .connector_accounts
-                .iter()
-                .any(|item| item.workspace_id == id && !item.account_ids.is_empty())
+            || (removing
+                && state
+                    .durable
+                    .connector_accounts
+                    .iter()
+                    .any(|item| item.workspace_id == id && !item.account_ids.is_empty()))
             || state.durable.controls.iter().any(|item| {
                 item.identity.workspace_id == id && item.state != SessionControlState::Bot
             })
@@ -898,7 +922,7 @@ impl Service {
         })
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub(crate) async fn begin_setup_session_renewal(
         &self,
         previous: SessionIdentity,
@@ -1712,6 +1736,12 @@ mod tests {
                             &owner,
                             Some(identity)
                         )
+                        .await,
+                    Err(ServiceError::WorkspaceInUse)
+                ));
+                assert!(matches!(
+                    service
+                        .begin_owned_workspace_stop(identity.workspace_id, &owner, Some(identity))
                         .await,
                     Err(ServiceError::WorkspaceInUse)
                 ));

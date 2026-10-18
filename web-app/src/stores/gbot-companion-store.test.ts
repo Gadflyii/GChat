@@ -42,6 +42,40 @@ beforeEach(() => {
 })
 
 describe('Gbot companion state', () => {
+  it.each(['kvm', 'hyper_v'])(
+    'refreshes %s computer lifecycle and discards stale readiness when status is unavailable',
+    async (hypervisor) => {
+      let stage = 'ready'
+      let unavailable = false
+      vi.mocked(gbot).mockImplementation(async (path) => {
+        if (path === 'state')
+          return {
+            ...snapshot,
+            workspaces: [
+              {
+                ...snapshot.workspaces[0],
+                bot_pc: { kind: 'local_vm', hypervisor },
+              },
+            ],
+          }
+        if (path === 'setup/local-vm/status') {
+          if (unavailable) throw new Error('Computer status unavailable')
+          return [{ id: 'a', name: 'A', stage, issue: null }]
+        }
+        return []
+      })
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().setups?.[0].stage).toBe('ready')
+      stage = 'stopped'
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().setups?.[0].stage).toBe('stopped')
+      unavailable = true
+      await useGbotCompanion.getState().refresh()
+      expect(useGbotCompanion.getState().setups).toBeUndefined()
+      expect(gbot).toHaveBeenCalledWith('setup/local-vm/status', {})
+    }
+  )
+
   it('tracks pending refreshes while retaining known bot names and drafts', async () => {
     await useGbotCompanion.getState().refresh()
     useGbotCompanion.getState().open('a')
