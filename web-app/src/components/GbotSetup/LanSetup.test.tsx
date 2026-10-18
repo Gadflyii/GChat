@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import LanSetup from './LanSetup'
@@ -85,7 +86,18 @@ it('explains the identity check, blocks duplicate activation and allows retry af
   expect(api).toHaveBeenCalledTimes(1)
   await act(async () => request.reject(new Error('Computer is unreachable')))
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
-  expect(screen.getByRole('alert')).toHaveTextContent('Computer is unreachable')
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Could not check this computer’s identity.')
+  expect(alert).toHaveTextContent(
+    'Choose Check computer identity to try again.'
+  )
+  expect(within(alert).getByText('Computer is unreachable')).not.toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  fireEvent.click(within(alert).getByText('Details'))
+  expect(within(alert).getByText('Computer is unreachable')).toBeVisible()
+  expect(api).toHaveBeenCalledTimes(1)
   expect(busy).toHaveBeenLastCalledWith(false)
   fireEvent.click(
     screen.getByRole('button', { name: 'Check computer identity' })
@@ -195,9 +207,24 @@ it('keeps connection and key drafts stable during import, then permits a correct
   await act(async () =>
     first.reject(new Error('The private key could not be unlocked'))
   )
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'The private key could not be unlocked'
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not confirm that the bot key was imported.'
   )
+  expect(alert).toHaveTextContent(
+    'Review the private key and passphrase, then choose Import bot key to try again.'
+  )
+  expect(
+    within(alert).getByText('The private key could not be unlocked')
+  ).not.toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  fireEvent.click(within(alert).getByText('Details'))
+  expect(
+    within(alert).getByText('The private key could not be unlocked')
+  ).toBeVisible()
+  expect(imports).toBe(1)
   expect(busy).toHaveBeenLastCalledWith(false)
   expect(mode).toBeEnabled()
   for (const label of ['SSH host', 'SSH port', 'SSH user'])
@@ -294,9 +321,22 @@ it('keeps fingerprint confirmation stable during Create and restores editing aft
   await act(async () =>
     first.reject(new Error('Secure storage is unavailable'))
   )
-  expect(screen.getByRole('alert')).toHaveTextContent(
-    'Secure storage is unavailable'
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent(
+    'Could not confirm that the bot key was created.'
   )
+  expect(alert).toHaveTextContent(
+    'Your fingerprint confirmation is still here. Choose Create bot key to try again.'
+  )
+  expect(
+    within(alert).getByText('Secure storage is unavailable')
+  ).not.toBeVisible()
+  expect(
+    within(alert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  fireEvent.click(within(alert).getByText('Details'))
+  expect(within(alert).getByText('Secure storage is unavailable')).toBeVisible()
+  expect(creates).toBe(1)
   expect(confirm).toBeEnabled()
   expect(confirm).toBeChecked()
   expect(busy).toHaveBeenLastCalledWith(false)
@@ -351,6 +391,56 @@ it('says why Create bot key is off until the identity is checked and the fingerp
   expect(create).not.toHaveAccessibleDescription()
 })
 
+it.each([false, true])(
+  'clears failed key guidance when switching existing-key mode from %s',
+  async (importing) => {
+    const api = vi.mocked(gbot).mockImplementation(async (path) => {
+      if (path === 'ssh/identity') return identity
+      throw new Error('Synthetic key storage failure')
+    })
+    setup()
+    const mode = screen.getByRole('checkbox', {
+      name: 'Use an existing SSH key (advanced)',
+    })
+    if (importing) {
+      fireEvent.click(mode)
+      fireEvent.change(screen.getByLabelText('SSH host public key'), {
+        target: { value: 'ssh-ed25519 verified-host-key' },
+      })
+      fireEvent.change(screen.getByLabelText('SSH private key'), {
+        target: { value: 'synthetic-private-key' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
+    } else {
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Check computer identity' })
+      )
+      fireEvent.click(
+        await screen.findByRole('checkbox', {
+          name: 'I verified this fingerprint on the bot computer',
+        })
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Create bot key' }))
+    }
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      importing
+        ? 'Could not confirm that the bot key was imported.'
+        : 'Could not confirm that the bot key was created.'
+    )
+    const calls = api.mock.calls.length
+    fireEvent.click(mode)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: importing ? 'Check computer identity' : 'Import bot key',
+      })
+    ).toBeInTheDocument()
+    expect(api).toHaveBeenCalledTimes(calls)
+    expect(screen.getByLabelText('SSH host')).toHaveValue('bot.example')
+  }
+)
+
 it('names new-key creation only after the user has verified the computer identity', async () => {
   const request = deferred<{ id: string }>()
   const api = vi
@@ -387,19 +477,62 @@ it('names new-key creation only after the user has verified the computer identit
 
 it('shows public-key loading and clears the pending state when the key arrives', async () => {
   const request = deferred<typeof publicKey>()
-  vi.mocked(gbot)
+  const retry = deferred<typeof publicKey>()
+  const api = vi
+    .mocked(gbot)
     .mockRejectedValueOnce(new Error('Key not yet available'))
     .mockReturnValueOnce(request.promise)
+    .mockReturnValueOnce(retry.promise)
   setup({ ...connection, workspaceId: 'saved-bot' })
-  await screen.findByRole('alert')
-  fireEvent.click(screen.getByRole('button', { name: 'Show bot public key' }))
+  const initialAlert = await screen.findByRole('alert')
+  expect(initialAlert).toHaveTextContent(
+    'Could not load the bot public key. Choose Show bot public key to try again.'
+  )
+  expect(
+    within(initialAlert).getByText('Key not yet available')
+  ).not.toBeVisible()
+  expect(
+    within(initialAlert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  fireEvent.click(within(initialAlert).getByText('Details'))
+  expect(within(initialAlert).getByText('Key not yet available')).toBeVisible()
+  expect(api).toHaveBeenCalledTimes(1)
+  const show = screen.getByRole('button', { name: 'Show bot public key' })
+  act(() => {
+    show.click()
+    show.click()
+  })
   expect(screen.getByRole('status')).toHaveTextContent(
     'Loading bot public key…'
   )
   expect(
     screen.getByRole('button', { name: 'Loading bot public key…' })
   ).toBeDisabled()
-  await act(async () => request.resolve(publicKey))
+  expect(api).toHaveBeenCalledTimes(2)
+  await act(async () => request.reject(new Error('Key storage is locked')))
+  const retryAlert = screen.getByRole('alert')
+  expect(retryAlert).toHaveTextContent(
+    'Could not load the bot public key. Choose Show bot public key to try again.'
+  )
+  expect(
+    within(retryAlert).getByText('Key storage is locked')
+  ).not.toBeVisible()
+  expect(
+    within(retryAlert).getByText('Details').closest('details')
+  ).not.toHaveAttribute('open')
+  fireEvent.click(within(retryAlert).getByText('Details'))
+  expect(within(retryAlert).getByText('Key storage is locked')).toBeVisible()
+  expect(api).toHaveBeenCalledTimes(2)
+  expect(
+    screen.getByRole('button', { name: 'Show bot public key' })
+  ).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Check SSH access' })
+  ).toBeDisabled()
+  fireEvent.click(screen.getByRole('button', { name: 'Show bot public key' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(api).toHaveBeenCalledTimes(3)
+  await act(async () => retry.resolve(publicKey))
   expect(
     screen.getByRole('textbox', { name: 'Bot SSH public key' })
   ).toHaveValue('ssh-ed25519 bot-key')
@@ -526,16 +659,30 @@ it.each([
     ])
     expect(api.mock.calls.filter(([path]) => path === route)).toHaveLength(0)
     expect(ssh).toBeDisabled()
-    expect(screen.queryByRole('button', { name: label })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: label })
+    ).not.toBeInTheDocument()
     expect(busy).toHaveBeenLastCalledWith(true)
     expect(ready).toHaveBeenLastCalledWith(false)
 
     await act(async () =>
       recheck.reject(new Error('The SSH host identity changed'))
     )
-    expect(screen.getByRole('alert')).toHaveTextContent(
-      'The SSH host identity changed'
+    const alert = screen.getByRole('alert')
+    expect(alert).toHaveTextContent('Could not confirm SSH access.')
+    expect(alert).toHaveTextContent(
+      'Review Details and check the bot computer’s SSH settings and public key. Choose Check SSH access to try again.'
     )
+    expect(
+      within(alert).getByText('The SSH host identity changed')
+    ).not.toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(
+      within(alert).getByText('The SSH host identity changed')
+    ).toBeVisible()
     expect(ssh).toBeEnabled()
     expect(busy).toHaveBeenLastCalledWith(false)
     expect(ready).toHaveBeenLastCalledWith(false)

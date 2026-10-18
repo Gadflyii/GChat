@@ -16,6 +16,18 @@ const actionLabels = {
   access: 'Checking SSH access…',
 } as const
 
+const actionErrors = {
+  identity:
+    'Could not check this computer’s identity. Check that the bot computer is on and SSH is enabled, then review SSH host, SSH port and SSH user. Choose Check computer identity to try again.',
+  import:
+    'Could not confirm that the bot key was imported. Your entries are still here. Review the private key and passphrase, then choose Import bot key to try again.',
+  create:
+    'Could not confirm that the bot key was created. Your fingerprint confirmation is still here. Choose Create bot key to try again.',
+  key: 'Could not load the bot public key. Choose Show bot public key to try again.',
+  access:
+    'Could not confirm SSH access. Review Details and check the bot computer’s SSH settings and public key. Choose Check SSH access to try again.',
+} as const
+
 export default function LanSetup({
   connection,
   change,
@@ -41,7 +53,10 @@ export default function LanSetup({
   const working = action !== undefined || toolsWorking
   const [locked, setLocked] = useState(Boolean(connection.workspaceId))
   const [publicKey, setPublicKey] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState<{
+    action: keyof typeof actionLabels
+    details: string
+  }>()
   const [checked, setChecked] = useState(false)
   const port = Number(connection.port)
   const validEndpoint = Boolean(
@@ -82,11 +97,14 @@ export default function LanSetup({
     pending.current = true
     setAction(nextAction)
     busy(true)
-    setError('')
+    setError(undefined)
     try {
       await perform()
     } catch (cause) {
-      setError(String(cause instanceof Error ? cause.message : cause))
+      setError({
+        action: nextAction,
+        details: cause instanceof Error ? cause.message : String(cause),
+      })
     } finally {
       pending.current = false
       setAction(undefined)
@@ -109,7 +127,11 @@ export default function LanSetup({
         if (active) setPublicKey(`${key.algorithm} ${key.public_key}`)
       })
       .catch((cause) => {
-        if (active) setError(String(cause))
+        if (active)
+          setError({
+            action: 'key',
+            details: cause instanceof Error ? cause.message : String(cause),
+          })
       })
     return () => {
       active = false
@@ -117,7 +139,7 @@ export default function LanSetup({
   }, [connection.workspaceId])
   const update = (field: keyof BotConnection, value: string) => {
     if (pending.current || toolsPending.current) return
-    setError('')
+    setError(undefined)
     setIdentity(undefined)
     setVerified(false)
     ready(false)
@@ -170,6 +192,7 @@ export default function LanSetup({
             disabled={working}
             onChange={(event) => {
               if (pending.current || toolsPending.current) return
+              setError(undefined)
               setImporting(event.target.checked)
               ready(false)
               change({ ...connection, key: '', passphrase: '', hostKey: '' })
@@ -380,9 +403,13 @@ export default function LanSetup({
         </p>
       )}
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="space-y-2 text-sm text-destructive">
+          <p>{actionErrors[error.action]}</p>
+          <details>
+            <summary className="cursor-pointer">Details</summary>
+            <p className="whitespace-pre-wrap break-words">{error.details}</p>
+          </details>
+        </div>
       )}
     </div>
   )
