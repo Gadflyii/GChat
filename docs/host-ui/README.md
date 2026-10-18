@@ -1,5 +1,43 @@
 # GInfer host UI
 
+## Missing saved-settings guidance — Gchat 3, October 18
+
+`GUI-PROFILE-MISSING-WORDING` passes its remaining Linux native leaf. With
+one real read-only Qwen 3.8 27B NVFP4 model and no saved settings, **Start a
+model with saved settings** explains that nothing fits yet and points to
+**Graphics-card setup**, adding matching saved settings and refreshing, or
+choosing the model settings below. **Saved model settings** and **Start model**
+are disabled. The old draft-format/TP prose is absent. Native dark captures
+at 1200×800 and 1024×800 show readable wrapping without horizontal overflow.
+
+Source `fc08e7cbb` merged as `3b4d46f8f`; later wording `2ca421a66` and
+selector `c6b7d2bb6` are included. The picker and its regression file are
+byte-identical at the passing gate `71abf1708`, native donor `8f7d18f6f`
+and closure base `f333b3b47`. Original focused 18 PASS and the later full
+gate are reused: 3,409 web/core, 127 extension and 1,267 Rust PASS, six frontend
+skips and 28 Rust ignores; lint, types and coverage floors PASS. This evidence-only
+branch uses `git diff --check`; no rebuild or repeated suite.
+
+Owner Gchat 3; branch `docs/gchat3-profile-missing-wording-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-profile-missing-wording-20261018`. Gchat 1's
+immutable output copy returned 08:30Z. The private S1 app connected to the
+real bundled Host through its supported installed-menu connection and native
+Refresh. Final Host state was one model, zero profiles/instances, no error and
+idle hardware preparation. The software-only fixture required that explicit
+connection because automatic desktop attach was hardware-guarded. The retained
+Host uses its original provider/engine configuration; this is a source-native
+frontend leaf, not current Host, multiarch or packaged-release qualification.
+
+The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-profile-missing-wording-20261018` stopped
+and CPU72–79 returned 08:40Z; its app/resources/private HOME were removed
+08:41Z. Protected model and donor stayed unchanged. No setup measurement,
+Ensure, model start, inference, Engine change or Windows work occurred.
+Only small evidence remains in
+[the result](../../out/gchat3-profile-missing-wording-20261018/result.json)
+and [short summary](../../out/gchat3-profile-missing-wording-20261018/summary.md).
+Next action is merging this evidence closure.
+
 ## Advanced launch-field labels recovery — C3, October 18
 
 `GUI-LAUNCH-FIELD-LABELS` passes its remaining Linux native leaf using the
