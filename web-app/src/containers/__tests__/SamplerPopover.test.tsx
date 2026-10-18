@@ -64,7 +64,7 @@ describe('Sampling assistant fallback option', () => {
     const user = await openAssistantMenu()
 
     expect(screen.queryByRole('menuitem', { name: /None/ })).not.toBeInTheDocument()
-    await user.click(screen.getByRole('menuitem', { name: 'Use default (GChat)' }))
+    await user.click(screen.getByRole('menuitem', { name: /Use default \(GChat\)$/ }))
 
     expect(screen.getByRole('button', { name: 'GChat' })).toBeInTheDocument()
     expect(useAssistant.getState().pendingAssistant).toBeUndefined()
@@ -83,7 +83,7 @@ describe('Sampling assistant fallback option', () => {
     useThreads.setState({ threads: { [thread.id]: thread }, currentThreadId: thread.id })
     const user = await openAssistantMenu()
 
-    await user.click(screen.getByRole('menuitem', { name: 'Use default (GChat)' }))
+    await user.click(screen.getByRole('menuitem', { name: /Use default \(GChat\)$/ }))
 
     expect(screen.getByRole('button', { name: 'GChat' })).toBeInTheDocument()
     expect(resolveAssistantForThread(thread.id)).toBe(fallback)
@@ -95,7 +95,7 @@ describe('Sampling assistant fallback option', () => {
     useAssistant.setState({ defaultAssistantId: 'deleted' })
     const user = await openAssistantMenu()
 
-    await user.click(screen.getByRole('menuitem', { name: 'Use default (Research helper)' }))
+    await user.click(screen.getByRole('menuitem', { name: /Use default \(Research helper\)$/ }))
 
     expect(screen.getByRole('button', { name: custom.name })).toBeInTheDocument()
     expect(resolveAssistantForThread()).toBe(custom)
@@ -106,10 +106,10 @@ describe('Sampling assistant fallback option', () => {
     const user = userEvent.setup()
     render(<SamplerPopover />)
     await user.click(screen.getByRole('button', { name: 'assistants:paramCategory.sampling' }))
-    await user.click(screen.getByRole('button', { name: 'None' }))
-    await user.click(screen.getByRole('menuitem', { name: 'None' }))
+    await user.click(screen.getByRole('button', { name: /None$/ }))
+    await user.click(screen.getByRole('menuitem', { name: /None$/ }))
 
-    expect(screen.getByRole('button', { name: 'None' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /None$/ })).toBeInTheDocument()
     expect(resolveAssistantForThread()).toBeUndefined()
   })
 
