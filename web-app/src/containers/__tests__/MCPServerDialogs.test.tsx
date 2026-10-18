@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { useState } from 'react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import AddEditMCPServer from '../dialogs/AddEditMCPServer'
 import EditJsonMCPserver from '../dialogs/EditJsonMCPserver'
@@ -48,21 +49,90 @@ describe('MCP server configuration dialogs', () => {
     })
   })
 
-  it('adds and removes rows with real, named buttons reachable from the keyboard', () => {
+  it('adds and removes rows with native, named keyboard buttons without saving', async () => {
+    const user = userEvent.setup()
+    const save = vi.fn()
     render(<AddEditMCPServer open editingKey="trusted" initialData={config}
-      onOpenChange={vi.fn()} onSave={vi.fn()} />)
+      onOpenChange={vi.fn()} onSave={save} />)
 
-    const rows = () => screen.getAllByLabelText('Reorder command option').length
-    const before = rows()
+    const rows = () => screen.getAllByRole('button', { name: 'Reorder command option' })
+    expect(rows()[0].tagName).toBe('BUTTON')
+    expect(rows()[0]).toHaveAttribute('type', 'button')
     const add = screen.getByRole('button', { name: 'Add command option' })
-    expect(add.tagName).toBe('BUTTON')
-    fireEvent.click(add)
-    expect(rows()).toBe(before + 1)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Remove command option' })[0])
-    expect(rows()).toBe(before)
-    expect(screen.getByRole('button', { name: 'Add extra setting' })).toBeVisible()
-    fireEvent.click(screen.getByRole('radio', { name: 'Web address (HTTP)' }))
-    expect(screen.getByRole('button', { name: 'Add header' })).toBeVisible()
+    add.focus()
+    await user.keyboard('{Enter}')
+    expect(rows()).toHaveLength(2)
+    await user.tab()
+    expect(rows()[0]).toHaveFocus()
+    const remove = screen.getAllByRole('button', { name: 'Remove command option' })[0]
+    remove.focus()
+    await user.keyboard(' ')
+    expect(rows()).toHaveLength(1)
+
+    const addSetting = screen.getByRole('button', { name: 'Add extra setting' })
+    addSetting.focus()
+    await user.keyboard(' ')
+    const removeSetting = screen.getAllByRole('button', { name: 'Remove extra setting' })[0]
+    removeSetting.focus()
+    await user.keyboard('{Enter}')
+    expect(screen.queryByRole('button', { name: 'Remove extra setting' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'Web address (HTTP)' }))
+    const addHeader = screen.getByRole('button', { name: 'Add header' })
+    addHeader.focus()
+    await user.keyboard('{Enter}')
+    const removeHeader = screen.getAllByRole('button', { name: 'Remove header' })[0]
+    removeHeader.focus()
+    await user.keyboard(' ')
+    expect(screen.queryByRole('button', { name: 'Remove header' })).not.toBeInTheDocument()
+    expect(save).not.toHaveBeenCalled()
+  })
+
+  it('keeps keyboard focus on the moved command option and saves its new order', async () => {
+    const user = userEvent.setup()
+    const save = vi.fn().mockResolvedValue(undefined)
+    const originalRect = HTMLElement.prototype.getBoundingClientRect
+    // JSDOM has no layout. Supply only the row geometry the real keyboard
+    // sensor needs to move between the three visible command options.
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        const handle = this.getAttribute('aria-label') === 'Reorder command option'
+          ? this
+          : this.firstElementChild?.getAttribute('aria-label') === 'Reorder command option'
+            ? this.firstElementChild
+            : null
+        if (!handle) return originalRect.call(this)
+        const handles = screen.getAllByRole('button', { name: 'Reorder command option' })
+        const top = 100 + handles.indexOf(handle as HTMLElement) * 50
+        return {
+          x: 0, y: top, top, bottom: top + 40, left: 0, right: 300,
+          width: 300, height: 40, toJSON: () => ({}),
+        }
+      })
+    try {
+      render(<AddEditMCPServer open editingKey="trusted"
+        initialData={{ ...config, args: ['alpha', 'beta', 'gamma'], active: false }}
+        onOpenChange={vi.fn()} onSave={save} />)
+
+      screen.getAllByRole('button', { name: 'Reorder command option' })[0].focus()
+      await user.keyboard('[Space][ArrowDown][Space]')
+
+      await waitFor(() => {
+        expect(screen.getAllByRole('button', { name: 'Reorder command option' })
+          .map((handle) => handle.parentElement?.querySelector('input')?.value))
+          .toEqual(['beta', 'alpha', 'gamma'])
+      })
+      expect(screen.getByDisplayValue('alpha').parentElement
+        ?.querySelector('button[aria-label="Reorder command option"]')).toHaveFocus()
+      expect(save).not.toHaveBeenCalled()
+
+      await user.click(screen.getByRole('button', { name: 'mcp-servers:save' }))
+      await waitFor(() => expect(save).toHaveBeenCalledExactlyOnceWith({
+        trusted: expect.objectContaining({ args: ['beta', 'alpha', 'gamma'], active: false }),
+      }))
+    } finally {
+      rect.mockRestore()
+    }
   })
 
   it('asks for the missing start command or web address in plain words without calling save', async () => {

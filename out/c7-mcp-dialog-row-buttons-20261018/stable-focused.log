@@ -1,0 +1,10 @@
+
+ RUN  v3.2.4 /work/gchat/web-app
+
+ ✓ src/containers/__tests__/MCPServerDialogs.test.tsx (11 tests) 1132ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  07:34:29
+   Duration  2.70s (transform 190ms, setup 213ms, collect 659ms, tests 1.13s, environment 414ms, prepare 80ms)
+

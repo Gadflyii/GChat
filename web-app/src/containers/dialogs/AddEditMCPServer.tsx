@@ -31,11 +31,14 @@ import {
   verticalListSortingStrategy,
   arrayMove,
   useSortable,
+  sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
 import CodeEditor from '@/components/JSONCodeEditor'
 import '@uiw/react-textarea-code-editor/dist.css'
+
+const createArg = (value = '') => ({ id: crypto.randomUUID(), value })
 
 // Sortable argument item component
 function SortableArgItem({
@@ -46,7 +49,7 @@ function SortableArgItem({
   canRemove,
   placeholder,
 }: {
-  id: number
+  id: string
   value: string
   onChange: (value: string) => void
   onRemove: () => void
@@ -57,6 +60,7 @@ function SortableArgItem({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -77,14 +81,16 @@ function SortableArgItem({
         isDragging ? 'z-10' : 'z-0'
       )}
     >
-      <div
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
         {...attributes}
         {...listeners}
         aria-label="Reorder command option"
-        className="size-6 cursor-move flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
+        className="size-6 cursor-move flex items-center justify-center rounded hover:bg-secondary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 transition-all duration-200 ease-in-out"
       >
         <IconGripVertical size={16} className="text-muted-foreground" />
-      </div>
+      </button>
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -113,7 +119,7 @@ function RowButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary transition-all duration-200 ease-in-out"
+      className="size-6 cursor-pointer flex items-center justify-center rounded hover:bg-secondary focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 transition-all duration-200 ease-in-out"
     >
       {children}
     </button>
@@ -141,7 +147,7 @@ export default function AddEditMCPServer({
   const { t } = useTranslation()
   const [serverName, setServerName] = useState('')
   const [command, setCommand] = useState('')
-  const [args, setArgs] = useState<string[]>([''])
+  const [args, setArgs] = useState(() => [createArg()])
   const [envKeys, setEnvKeys] = useState<string[]>([''])
   const [envValues, setEnvValues] = useState<string[]>([''])
   const [transportType, setTransportType] = useState<'stdio' | 'http' | 'sse'>(
@@ -163,7 +169,7 @@ export default function AddEditMCPServer({
       setCommand(initialData.command || '')
       setUrl(initialData.url || '')
       setTimeout(initialData.timeout ? initialData.timeout.toString() : '')
-      setArgs(initialData.args?.length > 0 ? initialData.args : [''])
+      setArgs((initialData.args?.length > 0 ? initialData.args : ['']).map(createArg))
       setTransportType(initialData?.type || 'stdio')
 
       // Initialize JSON content for toggle mode
@@ -204,7 +210,7 @@ export default function AddEditMCPServer({
     setCommand('')
     setUrl('')
     setTimeout('')
-    setArgs([''])
+    setArgs([createArg()])
     setEnvKeys([''])
     setEnvValues([''])
     setHeaderKeys([''])
@@ -216,18 +222,18 @@ export default function AddEditMCPServer({
   }
 
   const handleAddArg = () => {
-    setArgs([...args, ''])
+    setArgs([...args, createArg()])
   }
 
   const handleRemoveArg = (index: number) => {
     const newArgs = [...args]
     newArgs.splice(index, 1)
-    setArgs(newArgs.length > 0 ? newArgs : [''])
+    setArgs(newArgs.length > 0 ? newArgs : [createArg()])
   }
 
   const handleArgChange = (index: number, value: string) => {
     const newArgs = [...args]
-    newArgs[index] = value
+    newArgs[index] = { ...newArgs[index], value }
     setArgs(newArgs)
   }
 
@@ -243,7 +249,7 @@ export default function AddEditMCPServer({
         tolerance: 5,
       },
     }),
-    useSensor(KeyboardSensor)
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   )
 
   const handleAddEnv = () => {
@@ -400,7 +406,7 @@ export default function AddEditMCPServer({
       }
 
       // Filter out empty args
-      const filteredArgs = args.map((arg) => arg.trim()).filter((arg) => arg)
+      const filteredArgs = args.map((arg) => arg.value.trim()).filter((arg) => arg)
 
       const config: MCPServerConfig = {
         ...(initialData || {}),
@@ -596,22 +602,22 @@ export default function AddEditMCPServer({
                   collisionDetection={closestCenter}
                   onDragEnd={(event) => {
                     const { active, over } = event
-                    if (active.id !== over?.id) {
-                      const oldIndex = parseInt(active.id.toString())
-                      const newIndex = parseInt(over?.id.toString() || '0')
+                    if (over && active.id !== over.id) {
+                      const oldIndex = args.findIndex((arg) => arg.id === active.id)
+                      const newIndex = args.findIndex((arg) => arg.id === over.id)
                       handleReorderArgs(oldIndex, newIndex)
                     }
                   }}
                 >
                   <SortableContext
-                    items={args.map((_, index) => index)}
+                    items={args.map((arg) => arg.id)}
                     strategy={verticalListSortingStrategy}
                   >
                     {args.map((arg, index) => (
                       <SortableArgItem
-                        key={index}
-                        id={index}
-                        value={arg}
+                        key={arg.id}
+                        id={arg.id}
+                        value={arg.value}
                         onChange={(value) => handleArgChange(index, value)}
                         onRemove={() => handleRemoveArg(index)}
                         canRemove={args.length > 1}

@@ -1,0 +1,45 @@
+{
+  "pid": 4080923,
+  "argv": [
+    "taskset",
+    "-c",
+    "88-95",
+    "nice",
+    "-n",
+    "10",
+    "dbus-run-session",
+    "--",
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-c",
+    "printf '\n' | gnome-keyring-daemon --unlock --components=secrets; exec /media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018/donor-appdir/AppRun"
+  ],
+  "display": ":87",
+  "inspector": "127.0.0.1:19407",
+  "home": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018/native-home",
+  "runtime": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018/native-runtime",
+  "dbus": "own dbus-run-session",
+  "keyring": "own unlocked secrets",
+  "wayland_unset": true,
+  "input": "native XTest only; inspector read-only",
+  "fixture": "inactive /usr/bin/true with alpha beta gamma; mcp_version3 prevents remote default migration",
+  "binary": {
+    "gchat": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018/donor-appdir/usr/bin/gchat",
+      "sha256": "a07feabb4997ca91b12977201e3109b94e06d546cb0b14139c16b6b41f671142",
+      "bytes": 256549848,
+      "ldd": "PASS with private AppDir library closure"
+    },
+    "ginfer-host": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-mcp-dialog-row-buttons-20261018/donor-appdir/usr/lib/GChat/resources/bin/ginfer-host",
+      "sha256": "617e84282139756964bdba3af47ebda76bc54ee7a82cfae1221fde4213b591c9",
+      "bytes": 56673520,
+      "ldd": "PASS with private AppDir library closure"
+    }
+  },
+  "inspector_env": "WEBKIT_INSPECTOR_HTTP_SERVER",
+  "launch_correction": "Initial WEBKIT_INSPECTOR_SERVER exposed protocol rather than HTTP; stopped owned app3995224 and relaunched with existing helper HTTP convention.",
+  "candidate_component_sha256": "754029b178db7c0980f5de7bc06f28a4aa4ff30f7b5e966b0f9696476437c50b",
+  "booking": 3133
+}
