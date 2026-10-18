@@ -838,9 +838,9 @@ dependency donor at `tmp-claude-gchat-finish-20261017/tool-source` remains owned
 by Claude and untouched. Release command/dependency/copy, all-seven-stage PASS
 and AppDir payload receipts are in `out/c3-current-main-release-20261018/`.
 Source archives/raw release build logs and copied release cache remain retained
-until parent acceptance and scoped cleanup. The shared source/cache stage is
-currently owned by autostart gates/build on CPU80–87, booking3036, hard
-end05:49Z; reset and locator follow serially. No GPU is assigned.
+until parent acceptance and scoped cleanup. The shared source/cache stage returned05:39Z after autostart. C4 completed an
+independent read-copy05:41Z; the builder now owns the stage for reset and locator
+gates/builds serially. No GPU is assigned.
 
 
 The following changed-source rows are separate from the fixed release pin:
@@ -874,14 +874,22 @@ The following changed-source rows are separate from the fixed release pin:
   by contract. Light1500×1000 and Dark1024×800 screenshots were reviewed, readable
   without horizontal overflow. App/Host/session returned05:32Z. Evidence:
   `out/c3-cli-packaged-path-detection-20261018/result.json`.
-- `GUI-LINUX-AUTOSTART-XDG-PATH`: source `7e49b9d0d` passed shared-service10,
-  DataProvider12, General28, native focused5, check/Clippy and lint. The initial
-  General fixture spread dropped nonenumerable Window.document; its failure
-  remains retained and the fixture now preserves the real Window. The first and
-  only full verify began05:32:01Z; build and native acceptance remain pending.
-- `GUI-RESET-RELOCATED-DATA-RESURRECTION`: source `e51002acf` is queued for a
-  normal main merge, focused cases, check/Clippy/lint, ONE verify, changed build
-  and native selected-folder acceptance after autostart.
+- `GUI-LINUX-AUTOSTART-XDG-PATH`: tested source `7e49b9d0d`, handoff
+  `92868d3fd`, is **MERGE READY**. Focused50 frontend/native5, check/Clippy/lint,
+  ONE verify (3,380 app,127 extension,1,234 native, six floors) and build passed.
+  Native enable created the private XDG entry using packaged AppRun while
+  HOME/.config remained absent; reopen On/disable/remove/reopen Off passed.
+  Light1500×1000/Dark1024×800 were reviewed. The initial Window fixture failure
+  remains retained; no second full verify ran. App/session returned05:41Z.
+  Evidence: `out/c3-linux-autostart-xdg-20261018/result.json`.
+- `GUI-RESET-RELOCATED-DATA-RESURRECTION`: source `cb6f5c964` includes a normal
+  main merge preserving the four reset regressions and main folder-reveal and
+  first-run tests. Focused/check/Clippy/lint, ONE verify/build and private
+  selected-folder acceptance follow serially. Native acceptance will select
+  the already exercised relocated root in this disposable installation, seed
+  selected and old-default log sentinels, use ordinary Reset/confirmation, and
+  check selected sentinel deletion, old sentinel retention, identical installation
+  config bytes and the selected root after restart. No GPU repeat is planned.
 - `GUI-HOST-LOCATOR-DELETED-RUNTIME`: source `664a3b715` is pushed, self-checked
   and queued after reset. Four added behavioral cases join nine registry tests.
   Native acceptance must recover the retained stale Desktop owner without
@@ -932,8 +940,10 @@ process/file references and inbound links. Their concise results/screenshots
 remain. The immutable AppDir, pending folder/badge candidates, shared source and
 dependencies, runnable assets, tools and private profile are retained.
 
-Next: finish autostart's single verify/build and native enable/reopen/disable/
-reopen; then run selected-folder reset and stale-Desktop-locator gates/builds and
+Autostart native app/session returned05:41Z; all private auxiliary processes
+have ended. Xvfb remains for reset/locator.
+
+Next: run selected-folder reset and stale-Desktop-locator gates/builds and
 native checks serially. Finish the remaining nonconditional controls. Keep the
 immutable release and changed-source evidence distinct, preserve conditional
 prerequisites, and return resources when their fixtures stop.
