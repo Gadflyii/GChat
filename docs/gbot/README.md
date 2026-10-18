@@ -1,5 +1,32 @@
 # Gbot design
 
+## Continue explains the tools check — Gchat 2
+
+`GBOT-LAN-CONTINUE-TOOLS-HINT`, based on main `b12c7e98f`, fixes the
+LAN setup hint claiming that Check SSH access alone enables Continue. SSH
+success intentionally leaves Continue off until Check tools reports installed
+tools. The old hint sent users back to a step that had already succeeded.
+
+The disabled control now names Check SSH access and Check tools and says
+that the tools must be installed. The description remains while setup is
+incomplete and goes away when Continue becomes available. The existing
+readiness gates are unchanged.
+
+Both targeted assertions fail on unchanged main (23 cases filtered). All 25
+focused setup cases pass with the fix. They check the accessible description
+before SSH, after successful SSH and after a missing-tools response, then its
+removal when tools are installed. One isolated S1 `make verify` passes on
+18 October, 08:36:33–08:44:33 UTC: 3,514 app, 127 extension and 1,284
+Rust tests pass; six app tests are skipped and 28 Rust tests ignored. Lint
+(zero errors, five existing warnings), type checking, quality guards and all
+six coverage floors pass. The three changed-file hashes match before and
+after the gate; this final receipt was added afterward. The private SSD
+build/cache was removed and CPUs 96–103 returned at 08:47 UTC; booking
+3166 canceled. The shared donor was unchanged.
+Evidence: `out/gchat2-lan-continue-tools-hint-20261018/{result.json,SUMMARY.md}`.
+FRESH and OLD remain off with original XML and Gchat 2 custody. This wording
+leaf uses inert responses and does not qualify live SSH or native Windows.
+
 ## Saved bot names stay stable during requests — Gchat 2
 
 `GBOT-LAN-RENAME-FIELD-BUSY`, based on main `f5c78f40a`, fixes the bot
