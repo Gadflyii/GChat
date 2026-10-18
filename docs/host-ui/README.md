@@ -1,5 +1,54 @@
 # GInfer host UI
 
+## Models accepted download requests — C7, October 18
+
+`GUI-MODELS-DOWNLOAD-ACTION-REFRESH` corrects the observed Models path where
+Start download, Pause, Resume or Delete partial download succeeds, then the
+following inventory read rejects inside the shared action catch. The UI says
+the request failed and enables stale mutation controls. Preserve the accepted
+request separately from its unread status, keep diagnostics in closed
+Technical details and disable conflicting download requests for that computer
+until **Refresh downloads** reads fresh status. Recovery must not replay the
+mutation. An actual rejected request remains retryable. Do not claim a final
+paused/deleted state before a fresh snapshot supplies it.
+
+Owned branch `fix/c7-models-download-action-refresh-20261018`, matching
+`/ai/gchat-worktrees/` tree, base `d9103a3b4`. Parent owns the component and
+subject; the test worker owns rendered regressions and its independent S1 SSD
+fixture. Acceptance: local and paired-computer accepted/read-failure recovery,
+read-only failed then successful retry, per-computer isolation, repeated-click
+guard and true rejection behavior, focused tests, lint and exactly one
+`make verify`. Reuse the accepted first-run design above/below without
+retesting first-run or changing the download backend, registration, model
+load/Stop, Engine or native Windows behavior.
+Download status reads now target the selected paired computer's snapshot and
+publish it through the existing Host store; a fleet refresh can swallow a
+per-computer read failure or return before another refresh finishes, so it
+cannot establish this recovery. Local status retains its existing download
+store read. An accepted request with unavailable status also suppresses the
+empty-list claim and totals until the fresh read succeeds.
+Frozen source `9ee296e5f` passed all **59 focused Models tests** and lint
+(zero errors, five existing unrelated warnings). Exactly one `make verify`
+passed at **20:24:13Z**: **3,803 app tests / six skipped, 127 extension tests,
+65 Node contract tests and 1,318 native tests / 28 ignored** across 23 native
+summaries, all six critical coverage floors, typecheck and quality guards.
+The coordinator directly reviewed raw results, terminal state, source bytes
+against the frozen worktree and unchanged before/after source, 35 dependency
+and eleven catalog / 48 profile bindings. These checks cover the rendered
+local/paired recovery behavior and Linux source gate; no installed-app,
+native Windows, model or Engine qualification is claimed.
+
+Independent S1 SSD preparation and the gate used booking3536 on CPU88–95,
+with the inactive RC dependency donor and existing offline build image.
+CPU88–95 returned **20:26Z** and booking3536 was canceled. The owned fixture
+`/media/ron/SSD_RAID/ai/tmp-c7-models-download-action-refresh-20261018`
+and its sole exited candidate container were retired at **20:28:33Z**, removing
+**28,879,536,128 accounted fixture bytes** after direct review. The inactive
+donor and protected inputs remain unchanged. Small evidence:
+`out/c7-models-download-action-refresh-20261018/test-result.json` and
+`test-summary.md`. Next: merge the verified branch and continue the Models
+queue.
+
 ## Models accepted registration and refresh recovery — verified, C7, October 18
 
 `GUI-MODELS-REGISTRATION-REFRESH-RECOVERY` fixes an observed source path in
