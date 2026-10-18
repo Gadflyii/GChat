@@ -22,6 +22,23 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Unsaved Agent Studio draft replacement — October 18
+
+An isolated native pass on main `de74862d6` reproduced silent loss of edits
+when selecting another library agent, for both a template copy and a saved
+agent. No run was started; saved definitions and run history stayed
+byte-identical after normal shutdown. Baseline receipts and the viewed
+screenshot are in `/ai/gchat/out/gchat-chat-agents-pass-20261018-1102/`.
+
+Replacing an edited draft from the library, **New agent**, or **Use template**
+now asks **Discard unsaved agent changes?**. Cancel is the keyboard default;
+Cancel and Escape keep the draft. **Discard changes** explicitly opens the
+requested replacement without saving or deleting a definition. Selecting the
+current library row keeps its edits. A successful save resets the comparison
+baseline even before the saved library refreshes. A stale confirmation cannot
+replace newer edits. Switching Studio tabs preserves the draft without a prompt;
+leaving Studio or closing the application is outside this change.
+
 ## Run setup dialog keyboard focus — October 18
 
 A private Linux native pass on `8f21ab584` reproduced focus loss when
