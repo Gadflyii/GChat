@@ -1,0 +1,28 @@
+{
+  "source_hashes": {
+    "src-tauri/ginfer-host/src/engine_host.rs": "237b7a2d11ef29f7838c423e48dc02c39424de05a5c28b90d9729d04efe7935f",
+    "src-tauri/ginfer-host/src/service.rs": "1f2110c21655e7838f1d161bcdc96f66de63e8be1c7f91356da21e6f614c451a",
+    "src-tauri/ginfer-manager/ui/manager.js": "61c93acff7f5ef31111faa54a900e9dc8e1b4c401634419e0a7d3f5b9cb29171",
+    "tests/ginfer-manager-ui.test.mjs": "3575996ee70a2768d8ef2fd789624270a0ac3546061988ec63dbfece5a06aa8b",
+    "web-app/src/containers/EngineHostModels.tsx": "acbbdb9ad2272d55510033ec1843df0ce4a921870f49f0280381364751daedd7",
+    "web-app/src/containers/__tests__/EngineHostModels.test.tsx": "10d2cea6687270310dbb0632ad75b4cafd9c4ddb82bc689b98cb9f3b0a5cfae9",
+    "web-app/src/services/engines.ts": "3c5d1bec0f45e331fbd68f8d8353ba97cf92abe24f68fab5949714644d3e7b5b",
+    "web-app/src/stores/engine-hosts-store.ts": "84b0a03b334b49288e459691d8317c5206a5743ddb4b8fbe9208b18bbd370c6f",
+    "web-app/src/stores/engine-hosts-store.test.ts": "908ecc01d24369c5d4183459572bd6a427adc4d66dbdd083e139e3e65814540b"
+  },
+  "integration": {
+    "integration": {
+      "start": "2026-10-18T07:35:16Z",
+      "end": "2026-10-18T07:35:25Z",
+      "exit": "1"
+    },
+    "integration-types": {
+      "start": "2026-10-18T07:35:45Z",
+      "end": "2026-10-18T07:36:04Z",
+      "exit": "0"
+    },
+    "integration-focused.log": "\n RUN  v3.2.4 /work/gchat\n\n \u2713 |@gchat/web-app| src/stores/engine-hosts-store.test.ts (17 tests) 13ms\n \u2713 |@gchat/web-app| src/containers/__tests__/EngineHostModels.test.tsx (69 tests) 6066ms\n\n Test Files  2 passed (2)\n      Tests  86 passed (86)\n   Start at  07:35:17\n   Duration  7.23s (transform 462ms, setup 303ms, collect 656ms, tests 6.08s, environment 592ms, prepare 142ms)\n\n",
+    "integration-typecheck.log": "Usage Error: Couldn't find a script named \"typecheck\".\n\n$ yarn run [--inspect] [--inspect-brk] [-T,--top-level] [-B,--binaries-only] [--require #0] <scriptName> ...\n",
+    "integration-types.log": "yarn workspace @gchat/web-app run tsc -b\n"
+  }
+}

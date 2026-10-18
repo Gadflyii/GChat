@@ -343,6 +343,10 @@ pub struct LaunchOptions {
     pub kv_arena_bytes: Option<u64>,
     /// Flash weight residency only; KV and startup state are additional.
     pub vram_budget_bytes: Option<u64>,
+    /// None inherits the Engine's RAM floor; Some(0) explicitly reserves no floor.
+    pub flash_host_ram_headroom_gib: Option<u64>,
+    /// Periodic expert LFU admission; disabling it retains the device cache and miss routing.
+    pub expert_lfu: bool,
     pub kv_arena_headroom_bytes: u64,
     /// None uses AUTO; Some(0) disables the Host prefix pool.
     pub host_kv_cache_bytes: Option<u64>,
@@ -362,6 +366,8 @@ impl Default for LaunchOptions {
             kv_dtype: "auto".into(),
             kv_arena_bytes: None,
             vram_budget_bytes: None,
+            flash_host_ram_headroom_gib: None,
+            expert_lfu: true,
             kv_arena_headroom_bytes: crate::launch_profiles::HEADROOM_BYTES,
             host_kv_cache_bytes: None,
             prefill_chunk: 0,
@@ -475,6 +481,8 @@ impl LaunchOptions {
             self.draft_policy.clone(),
             "--kv-arena-headroom-bytes".into(),
             self.kv_arena_headroom_bytes.to_string(),
+            "--expert-lfu".into(),
+            if self.expert_lfu { "on" } else { "off" }.into(),
         ];
         if self.vision {
             args.push("--vision".into());
@@ -502,6 +510,9 @@ impl LaunchOptions {
         }
         if let Some(bytes) = self.vram_budget_bytes {
             args.extend(["--vram-budget-bytes".into(), bytes.to_string()]);
+        }
+        if let Some(gib) = self.flash_host_ram_headroom_gib {
+            args.extend(["--flash-host-ram-headroom-gib".into(), gib.to_string()]);
         }
         if let Some(bytes) = self.host_kv_cache_bytes {
             args.extend(["--host-kv-cache-bytes".into(), bytes.to_string()]);
@@ -1315,6 +1326,40 @@ mod runtime_dispatch_tests {
         std::fs::write(&set_path, serde_json::to_vec(&set).unwrap()).unwrap();
         std::fs::remove_file(root.join("sm89/bin/ginfer-serve.exe")).unwrap();
         assert!(crate::local_host::desktop_runtimes_for(provider, "windows").is_err());
+    }
+}
+
+#[cfg(test)]
+mod residency_options_tests {
+    use super::LaunchOptions;
+
+    #[test]
+    fn residency_options_inherit_headroom_and_forward_explicit_values_to_engine() {
+        let defaults: LaunchOptions = serde_json::from_str("{}").unwrap();
+        assert_eq!(defaults.flash_host_ram_headroom_gib, None);
+        assert!(defaults.expert_lfu);
+        assert!(!defaults.args().iter().any(|arg| arg == "--flash-host-ram-headroom-gib"));
+        assert!(defaults.args().windows(2).any(|pair| pair == ["--expert-lfu", "on"]));
+
+        // The Engine owns GiB limits and resource admission, including byte overflow.
+        for gib in [0, 10, u64::MAX] {
+            for expert_lfu in [false, true] {
+                let options = LaunchOptions {
+                    flash_host_ram_headroom_gib: Some(gib), expert_lfu, ..Default::default()
+                };
+                options.validate(1).unwrap();
+                let args = options.args();
+                assert!(args.windows(2).any(|pair| {
+                    pair[0] == "--flash-host-ram-headroom-gib" && pair[1] == gib.to_string()
+                }));
+                assert!(args.windows(2).any(|pair| {
+                    pair == ["--expert-lfu", if expert_lfu { "on" } else { "off" }]
+                }));
+                let round_trip: LaunchOptions =
+                    serde_json::from_value(serde_json::to_value(&options).unwrap()).unwrap();
+                assert_eq!(round_trip, options);
+            }
+        }
     }
 }
 

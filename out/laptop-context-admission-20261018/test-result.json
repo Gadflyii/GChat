@@ -1,0 +1,233 @@
+{
+  "row": "LAPTOP-CONTEXT-ADMISSION",
+  "status": "ROOT_REVIEWED_PASS",
+  "deliverable": "Four admitted context bounds and matching display names mirrored in generator inputs; selected live catalog retains only its two Text profiles. Existing supplied-catalog and packaging tests plus one full verification passed.",
+  "source": {
+    "gchat_worktree": "/ai/gchat-worktrees/gchat3-context-profile-bounds-20261018",
+    "gchat_branch": "fix/gchat3-context-profile-bounds-20261018",
+    "gchat_base": "cf670bced700183738370658f591a5704be56579",
+    "ginfer_worktree": "/ai/ginfer-worktrees/gchat3-context-profile-bounds-20261018",
+    "ginfer_base": "8c3911145",
+    "input_hashes": {
+      "files": {
+        "out/c7-managed-downloads-native-20261018/shared-fixture/inputs/versioned-profiles.json": "103ea747be3d4b12503111f3dd9378092c76c49986040b30f0727c423062daa5",
+        "src-tauri/ginfer-host/src/launch_profiles.rs": "c9da61c4a4e9caafeb341c4eb098de2425ba35ae1148f0f1d5c6293fcc687f61"
+      },
+      "catalogs": {
+        "linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json": "521d6f5ca793f5a89bd2a1a22c129a0d35d9bdd6971fa92f7e15cd01cba36010",
+        "linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json": "040af54a8e1885f595d93268df101e302a0adc99db589f92b4c8c57132486d9b",
+        "linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json": "0d84d625cbfbaf6642f96b89089e5a21cd1b97811b85262633363cd368921b28",
+        "linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json": "58603f767aa5b00d8181b139d4e62cc47e619e01133fb5d3c1186e4071110431"
+      }
+    },
+    "all_six_before_after_hashes_match": true,
+    "four_owning_catalogs_equal_generator_mirror": true,
+    "only_eight_mirror_leaves_changed": "four names and four max_context values; IDs/options/evidence unchanged"
+  },
+  "execution": {
+    "host": "AIS-2-8592-L01",
+    "ssh": "ron@192.168.1.109",
+    "root": "/media/ron/SSD_RAID/ai/tmp-gchat3-context-profile-bounds-tests-20261018",
+    "donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app",
+    "donor_access": "read-copy only; independent caches/reflinks, no hardlinks or donor writes",
+    "dependency_binding": {
+      "matched": 35,
+      "reference": "/ai/gchat/out/host-sharing-refresh-result-20261018/test-result.json#execution.dependency_binding.current"
+    },
+    "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+    "cpu": "120-127",
+    "booking": 3123,
+    "booking_returned": "2026-10-18T07:28Z",
+    "scheduling": "socket1 shared compile lock; nice10; max8 jobs; uid1000/capsALLdropped; offline dependencies; no GPU devices",
+    "command_argv": [
+      "docker",
+      "create",
+      "--init",
+      "--pull=never",
+      "--cpuset-cpus=120-127",
+      "--user",
+      "1000:1000",
+      "--cap-drop=ALL",
+      "--security-opt=no-new-privileges",
+      "--network=bridge",
+      "-v",
+      "/media/ron/SSD_RAID/ai/tmp-gchat3-context-profile-bounds-tests-20261018:/work",
+      "-w",
+      "/work/gchat",
+      "-e",
+      "HOME=/tmp",
+      "-e",
+      "XDG_CACHE_HOME=/work/build-xdg-cache",
+      "-e",
+      "XDG_DATA_HOME=/work/build-xdg-data",
+      "-e",
+      "COREPACK_ENABLE_NETWORK=0",
+      "-e",
+      "COREPACK_ENABLE_DOWNLOAD_PROMPT=0",
+      "-e",
+      "YARN_ENABLE_GLOBAL_CACHE=false",
+      "-e",
+      "YARN_CACHE_FOLDER=/work/gchat/.yarn/cache",
+      "-e",
+      "YARN_ENABLE_NETWORK=0",
+      "-e",
+      "IS_TAURI=true",
+      "-e",
+      "TAURI_ENV_PLATFORM=linux",
+      "-e",
+      "CARGO_HOME=/work/cargo-home",
+      "-e",
+      "CARGO_TARGET_DIR=/work/native-target",
+      "-e",
+      "CARGO_INCREMENTAL=0",
+      "-e",
+      "CARGO_PROFILE_DEV_DEBUG=0",
+      "-e",
+      "CARGO_PROFILE_TEST_DEBUG=0",
+      "-e",
+      "CARGO_BUILD_JOBS=8",
+      "-e",
+      "CARGO_NET_OFFLINE=true",
+      "-e",
+      "RUSTC_WRAPPER=",
+      "-e",
+      "OPENSSL_NO_VENDOR=1",
+      "-e",
+      "PROTOC=/usr/bin/protoc",
+      "-e",
+      "GINFER_PROFILE_CATALOGS=/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json",
+      "--name",
+      "gchat3-context-profile-bounds-verify-20261018",
+      "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+      "nice",
+      "-n",
+      "10",
+      "bash",
+      "--noprofile",
+      "--norc",
+      "-c",
+      "set -euo pipefail\nulimit -c 0\nunset VITE_MODEL_CATALOG_URL GINFER_MODEL_CATALOG_URL IS_DEV NODE_OPTIONS NODE_ENV FORCE_ONBOARDING FRESH_INSTALL FORCE_HARDWARE_TIER TAURI_CONFIG TAURI_DEV_HOST TAURI_ENV_DEBUG IS_IOS IS_ANDROID IS_CLEAN CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_TARGET RUSTFLAGS CUDA_VISIBLE_DEVICES NVIDIA_VISIBLE_DEVICES\nrun_stage() { stage=\"$1\"; shift; if \"$@\" > \"/work/${stage}.log\" 2>&1; then code=0; else code=$?; fi; printf '%s\\n' \"$code\" > \"/work/${stage}.exit\"; return \"$code\"; }\nrun_stage test-package python3 tests/test_ginfer_host_package.py\nrun_stage test-focused cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml --lib launch_profiles::tests::supplied_release_catalogs_validate_with_exact_admitted_settings -- --exact\nrun_stage test-verify make verify\n"
+    ],
+    "effective_command_matches_container": true,
+    "effective_shell_actual_newlines": 7,
+    "effective_shell_literal_backslash_quotes": 0,
+    "baseline": "not requested; focused test validates actual supplied catalogs directly",
+    "container": {
+      "id": "cea4ecb575bb3524a0774ba89a943864064caa95b8f56262bee3317cd83d502c",
+      "name": "/gchat3-context-profile-bounds-verify-20261018",
+      "state": {
+        "Status": "exited",
+        "Running": false,
+        "Paused": false,
+        "Restarting": false,
+        "OOMKilled": false,
+        "Dead": false,
+        "Pid": 0,
+        "ExitCode": 0,
+        "Error": "",
+        "StartedAt": "2026-10-18T07:19:22.93262122Z",
+        "FinishedAt": "2026-10-18T07:27:23.632115074Z"
+      }
+    }
+  },
+  "checks": {
+    "package": {
+      "command": "python3 tests/test_ginfer_host_package.py",
+      "exit": 0,
+      "passed": 5,
+      "skipped_windows_only": 5
+    },
+    "focused": {
+      "command": "cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml --lib launch_profiles::tests::supplied_release_catalogs_validate_with_exact_admitted_settings -- --exact",
+      "exit": 0,
+      "passed": 1,
+      "filtered": 280
+    },
+    "single_make_verify": {
+      "exit": 0,
+      "lint_errors": 0,
+      "existing_lint_warnings": 5,
+      "typecheck": "PASS",
+      "quality_files_scanned": 358,
+      "contracts_manager_assets": "PASS",
+      "app_passed": 3441,
+      "app_skipped": 6,
+      "app_files_passed": 340,
+      "app_files_skipped": 1,
+      "extension_passed": 127,
+      "extension_files": 5,
+      "coverage_critical_floors_passed": 6,
+      "native_summaries": 23,
+      "native_passed": 1275,
+      "native_failed": 0,
+      "native_ignored": 28,
+      "repeat_or_continuation": false
+    }
+  },
+  "staged_catalog": {
+    "path": "/media/ron/SSD_RAID/ai/tmp-gchat3-context-profile-bounds-tests-20261018/gchat/src-tauri/resources/bin/launch-profiles.json",
+    "sha256": "8f803413738afbaba522a402b824cb896e452449b3cb1db22a793a32eced66f7",
+    "schema": "ginfer-launch-profiles-v1",
+    "profile_count": 38,
+    "exact_ordered_source_merge": true,
+    "selected": [
+      {
+        "id": "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8",
+        "name": "Qwen3.8 Text \u00b7 158K context \u00b7 1 request",
+        "max_context": 161792
+      },
+      {
+        "id": "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8",
+        "name": "Qwen3.8 Text \u00b7 138,240 context \u00b7 1 request",
+        "max_context": 138240
+      },
+      {
+        "id": "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated",
+        "name": "Qwen3.8 27B Vision + DFlash \u00b7 82,944 context \u00b7 C1 \u00b7 calculated",
+        "max_context": 82944
+      },
+      {
+        "id": "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated",
+        "name": "Qwen3.8 27B Vision + DFlash \u00b7 60,416 context \u00b7 C1 \u00b7 calculated",
+        "max_context": 60416
+      }
+    ]
+  },
+  "private_catalog": {
+    "context_overlay": "private-catalog-overlay.json",
+    "name_overlay": "private-catalog-name-overlay.json",
+    "live_text_entries_updated": 2,
+    "vision_entries_remain_omitted": true,
+    "catalog_bytes": 263298,
+    "catalog_sha256": "fc0f30347188edb5b94d84441653cc890f8316768582e2ab58656bc1e4cba579",
+    "service_restart": false,
+    "payload_changes": false
+  },
+  "review": "ROOT independently reviewed actual full log, all23 native summaries, before/after6hashes, staged38-profile exact merge, corrected four names/bounds and terminal state/noOOM; cleanup authorized.",
+  "cleanup": {
+    "status": "PASS",
+    "started_at": "2026-10-18T07:30:23.446689+00:00",
+    "completed_at": "2026-10-18T07:30:39.509472+00:00",
+    "removed_root": "/media/ron/SSD_RAID/ai/tmp-gchat3-context-profile-bounds-tests-20261018",
+    "logical_bytes_removed": 42340113396,
+    "root_absent": true,
+    "removed_container": "gchat3-context-profile-bounds-verify-20261018",
+    "removed_container_id": "cea4ecb575bb3524a0774ba89a943864064caa95b8f56262bee3317cd83d502c",
+    "container_absent": true,
+    "donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app",
+    "donor_identity_preserved": true,
+    "donor_modified": false,
+    "local_disposable_files_removed": 15,
+    "local_disposable_bytes_removed": 288870084,
+    "local_retained": [
+      "private-catalog-name-overlay.json",
+      "private-catalog-overlay.json",
+      "summary.md",
+      "test-result.json"
+    ],
+    "local_completed_at": "2026-10-18T07:30:52.845826+00:00",
+    "booking_returned": "2026-10-18T07:28Z"
+  },
+  "limits": "Metadata admission and distribution proof only. No new model/device/Vision qualification, installed GUI, native Engine execution or Windows qualification. No source commit/push performed by execution agent.",
+  "next": "Paired merge handoff; coordinator owns source commits, integration and mail."
+}

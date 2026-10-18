@@ -750,7 +750,8 @@ test('custom reload can clear a failed profile\'s fixed KV pool without changing
   instance.status = 'failed'
   instance.active_requests = 0
   instance.profile = { ...instance.profile, max_context: 131072, concurrency: 1,
-    qualified_profile_id: 'muse-qualified', kv_arena_bytes: 12467568640, kv_arena_headroom_bytes: 314572800 }
+    qualified_profile_id: 'muse-qualified', kv_arena_bytes: 12467568640, kv_arena_headroom_bytes: 314572800,
+    flash_host_ram_headroom_gib: 0, expert_lfu: false }
   const saved = structuredClone(instance.profile)
   const app = await manager(t, view)
   button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Reload').click()
@@ -758,6 +759,9 @@ test('custom reload can clear a failed profile\'s fixed KV pool without changing
   pane.querySelector('input[name="launch_mode"][value="custom"]').click()
   const budget = pane.querySelector('input[name="kv_arena_bytes"]')
   assert.equal(budget.value, '12467568640')
+  assert.equal(pane.querySelector('input[name="flash_host_ram_headroom_gib"]').value, '0')
+  assert.equal(pane.querySelector('input[name="expert_lfu"]').checked, false)
+  assert.equal([...pane.querySelectorAll('p')].find(p => p.textContent.startsWith('0 removes')).hidden, false)
   assert.equal(requests(app).length, 0)
   budget.value = ''
   submit(app)
@@ -799,6 +803,48 @@ test('new custom launches default structured outputs ON and preserve Host KV AUT
   }
 })
 
+for (const [name, value, lfu] of [['inherited', '', true], ['zero with LFU off', '0', false], ['chosen', '8', true]]) {
+  test(`custom Flash ${name} settings are shared by startup checks and launch`, async (t) => {
+    const view = fixture()
+    view.hosts[0].snapshot.launch_profiles = []
+    const app = await manager(t, view, request => request.operation === 'quote'
+      ? { model_identity: { model_id: 'muse-glimmer-30b', weights_id: 'nvfp4' }, instance_count: 1, kv_arena_bytes: null, quote: {} }
+      : {})
+    button(app.document, 'Start a model…').click()
+    const pane = app.document.querySelector('[role="dialog"]')
+    pane.querySelector('input[name="gpu"]').checked = true
+    pane.querySelector('input[name="max_context"]').value = '131072'
+    const headroom = pane.querySelector('input[name="flash_host_ram_headroom_gib"]')
+    const expertLfu = pane.querySelector('input[name="expert_lfu"]')
+    assert.equal(headroom.value, '')
+    assert.equal(expertLfu.checked, true)
+    assert.match(pane.textContent, /Leave blank to use GInfer’s default \(4 GiB\)/)
+    assert.match(pane.textContent, /Turning this off stops those updates; it does not clear the cache or change where uncached experts are loaded from/)
+    const warning = [...pane.querySelectorAll('p')].find(p => p.textContent.startsWith('0 removes'))
+    assert.equal(warning.hidden, true)
+    headroom.value = '0'
+    headroom.dispatchEvent(new app.window.Event('input', { bubbles: true }))
+    assert.equal(warning.hidden, false)
+    headroom.value = value
+    headroom.dispatchEvent(new app.window.Event('input', { bubbles: true }))
+    expertLfu.checked = lfu
+    expertLfu.dispatchEvent(new app.window.Event('change', { bubbles: true }))
+    assert.equal(warning.hidden, value !== '0')
+    button(pane, 'Check startup settings').click()
+    await waitFor(() => pane.textContent.includes('Verified artifact:'), 'custom Flash settings must reach the startup check')
+    assert.equal(requests(app).length, 1)
+    assert.equal(requests(app)[0].operation, 'quote')
+    assert.equal(requests(app)[0].args.flash_host_ram_headroom_gib, value === '' ? null : Number(value))
+    assert.equal(requests(app)[0].args.expert_lfu, lfu)
+    submit(app)
+    await completed(app, calls => calls.length === 2)
+    assert.equal(requests(app)[1].operation, 'launch')
+    const { remaining_instances, ...configuration } = requests(app)[0].args
+    assert.equal(remaining_instances, 1)
+    assert.deepEqual(requests(app)[1].args, configuration)
+  })
+}
+
 test('installed local models can quote exact custom settings with an empty release catalog without starting or saving', async (t) => {
   const view = fixture()
   view.hosts[0].snapshot.launch_profiles = []
@@ -822,7 +868,8 @@ test('installed local models can quote exact custom settings with an empty relea
     instance_id: null, qualified_profile_id: null, model_id: 'installed-muse', gpu_uuids: ['GPU-local'],
     max_context: 131072, concurrency: 2, vision: true, structured_outputs: false,
     spec: 'auto', draft_policy: 'auto', draft_tokens: 0, kv_dtype: 'auto',
-    kv_arena_bytes: 4294967296, vram_budget_bytes: null, host_kv_cache_bytes: 0, remaining_instances: 2,
+    kv_arena_bytes: 4294967296, vram_budget_bytes: null, host_kv_cache_bytes: 0,
+    flash_host_ram_headroom_gib: null, expert_lfu: true, remaining_instances: 2,
   }
   assert.deepEqual(requests(app), [{ action: 'host', host_id: localId, operation: 'quote', args: expected }])
   assert.match(pane.textContent, /Verified artifact: muse-glimmer-30b \/ nvfp4/)
@@ -922,15 +969,45 @@ test('reload preserves saved structured-output OFF and Host KV zero or cleared A
 test('qualified profile controls preserve structured-output OFF without another custom setting', async (t) => {
   const view = fixture()
   view.hosts[0].snapshot.instances[0].profile.structured_outputs = false
+  const profile = view.hosts[0].snapshot.launch_profiles[0].profile
+  profile.options.flash_host_ram_headroom_gib = 8
+  profile.options.expert_lfu = false
+  const recorded = structuredClone(profile.options)
   const app = await manager(t, view)
   button(app.document.querySelector(`[data-instance="${readyId}"]`), 'Reload').click()
   const pane = app.document.querySelector('[role="dialog"]')
   assert.equal(pane.querySelector('input[name="structured_outputs"]').checked, false)
+  assert.equal(pane.querySelector('input[name="flash_host_ram_headroom_gib"]'), null)
+  assert.equal(pane.querySelector('input[name="expert_lfu"]'), null)
   submit(app)
   await completed(app, (calls) => calls.length === 1)
   assert.equal(requests(app)[0].operation, 'profile_launch')
   assert.equal(requests(app)[0].args.structured_outputs, false)
   assert.equal(Object.hasOwn(requests(app)[0].args, 'host_kv_cache_bytes'), false)
+  assert.equal(Object.hasOwn(requests(app)[0].args, 'flash_host_ram_headroom_gib'), false)
+  assert.equal(Object.hasOwn(requests(app)[0].args, 'expert_lfu'), false)
+  assert.deepEqual(profile.options, recorded, 'saved-profile starts retain the catalog’s own Flash settings')
+})
+
+test('custom Flash headroom rejects negative, fractional and unsafe GiB values before checks or launch', async (t) => {
+  const view = fixture()
+  view.hosts[0].snapshot.launch_profiles = []
+  const app = await manager(t, view)
+  button(app.document, 'Start a model…').click()
+  const pane = app.document.querySelector('[role="dialog"]')
+  pane.querySelector('input[name="gpu"]').checked = true
+  pane.querySelector('input[name="max_context"]').value = '131072'
+  const headroom = pane.querySelector('input[name="flash_host_ram_headroom_gib"]')
+  for (const value of ['-1', '1.5', '9007199254740992']) {
+    headroom.value = value
+    headroom.dispatchEvent(new app.window.Event('input', { bubbles: true }))
+    button(pane, 'Check startup settings').click()
+    await waitFor(() => /Flash computer-memory headroom must be a whole number of GiB/.test(pane.textContent), 'invalid headroom must explain the accepted input before checking')
+    assert.equal(requests(app).length, 0)
+    submit(app)
+    await waitFor(() => /Flash computer-memory headroom must be a whole number of GiB/.test(pane.querySelector('form > [role="alert"]').textContent), 'invalid headroom must explain the accepted input before launching')
+    assert.equal(requests(app).length, 0)
+  }
 })
 
 test('custom KV budgets reject zero, fractional and unsafe byte counts before contacting the host', async (t) => {

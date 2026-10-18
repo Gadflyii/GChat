@@ -4374,6 +4374,34 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
                 .map(|line| serde_json::from_str(line).unwrap())
                 .collect()
         };
+        let assert_residency = |instance: &serde_json::Value, headroom: Option<u64>, lfu: bool| {
+            let saved: serde_json::Value = serde_json::from_slice(
+                &std::fs::read(dir.path().join("state/host.json")).unwrap(),
+            )
+            .unwrap();
+            for settings in [
+                &instance["configuration"],
+                &instance["profile"],
+                &saved["profiles"][instance["instance_id"].as_str().unwrap()],
+            ] {
+                assert_eq!(
+                    settings["flash_host_ram_headroom_gib"],
+                    serde_json::json!(headroom)
+                );
+                assert_eq!(settings["expert_lfu"], lfu);
+            }
+        };
+        // Invalid JSON numbers must fail API deserialization before a quote
+        // or child is started. Numeric range policy remains with the Engine.
+        for headroom in [serde_json::json!(-1), serde_json::json!(1.5)] {
+            let mut invalid = serde_json::to_value(&request).unwrap();
+            invalid["flash_host_ram_headroom_gib"] = headroom;
+            for path in ["/host/v1/startup-quote", "/host/v1/instances"] {
+                let (status, response) = post(&host, &token, path, invalid.clone()).await;
+                assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
+                assert!(response["error"].as_str().unwrap().contains("u64"), "{response}");
+            }
+        }
         // A catalog's old explicit bytes and structured-output setting must
         // not replace the user's default Automatic + structured-ON selection.
         let (status, launched) = post(
@@ -4402,6 +4430,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         assert_eq!(first["configuration"]["concurrency"], 1);
         assert_eq!(first["configuration"]["structured_outputs"], true);
         assert_eq!(first["configuration"]["kv_arena_headroom_bytes"], headroom);
+        assert_residency(&first, None, true);
         assert!(first["profile"]
             .as_object()
             .unwrap()
@@ -4423,6 +4452,7 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         assert_ne!(restarted["session_id"], first["session_id"]);
         assert!(restarted["configuration"]["kv_arena_bytes"].is_null());
         assert!(restarted["profile"]["kv_arena_bytes"].is_null());
+        assert_residency(&restarted, None, true);
 
         memory(61440, 6144);
         let mut configuration = restarted["profile"].clone();
@@ -4430,6 +4460,8 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         configuration["concurrency"] = 2.into();
         configuration["structured_outputs"] = false.into();
         configuration["kv_arena_headroom_bytes"] = (headroom + 4096).into();
+        configuration["flash_host_ram_headroom_gib"] = 10.into();
+        configuration["expert_lfu"] = false.into();
         let reload_path = format!("/host/v1/instances/{id}/reload");
         let (status, response) = post(
             &host,
@@ -4442,8 +4474,17 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let reloaded = ready(&host, id).await;
         assert!(reloaded["configuration"]["kv_arena_bytes"].is_null());
         assert!(reloaded["profile"]["kv_arena_bytes"].is_null());
-        configuration = reloaded["profile"].clone();
+        assert_residency(&reloaded, Some(10), false);
+        let (status, response) = post(&host, &token, &restart_path, serde_json::json!({})).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        let explicit_residency = ready(&host, id).await;
+        assert_ne!(explicit_residency["session_id"], reloaded["session_id"]);
+        assert_residency(&explicit_residency, Some(10), false);
+
+        configuration = explicit_residency["profile"].clone();
         configuration["kv_arena_bytes"] = 4096.into();
+        configuration["flash_host_ram_headroom_gib"] = 0.into();
+        configuration["expert_lfu"] = true.into();
         let (status, response) = post(
             &host,
             &token,
@@ -4455,10 +4496,16 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
         let explicit = ready(&host, id).await;
         assert_eq!(explicit["configuration"]["kv_arena_bytes"], 4096);
         assert_eq!(explicit["profile"]["kv_arena_bytes"], 4096);
+        assert_residency(&explicit, Some(0), true);
+        let (status, response) = post(&host, &token, &restart_path, serde_json::json!({})).await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        let zero_residency = ready(&host, id).await;
+        assert_ne!(zero_residency["session_id"], explicit["session_id"]);
+        assert_residency(&zero_residency, Some(0), true);
 
         // An exact positive override is not silently shrunk when it cannot
-        // fit. Quote refusal must occur before a fifth model process exists.
-        configuration = explicit["profile"].clone();
+        // fit. Quote refusal must not start another model process.
+        configuration = zero_residency["profile"].clone();
         configuration["instance_id"] = serde_json::Value::Null;
         configuration["kv_arena_bytes"] = (1_u64 << 40).into();
         let (status, response) = post(&host, &token, "/host/v1/instances", configuration).await;
@@ -4469,15 +4516,41 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             "{error}"
         );
         let unchanged = ready(&host, id).await;
-        assert_eq!(unchanged["session_id"], explicit["session_id"]);
+        assert_eq!(unchanged["session_id"], zero_residency["session_id"]);
         assert_eq!(
             host.snapshot().await["instances"].as_array().unwrap().len(),
             1
         );
+
+        // A tested profile owns its residency choices; selecting it must not
+        // replace them with the custom-launch defaults or previous settings.
+        {
+            let mut profiles = host.launch_profiles.write().await;
+            let profile = profiles
+                .iter_mut()
+                .find(|profile| profile.id == "stale-arena")
+                .unwrap();
+            profile.options.flash_host_ram_headroom_gib = Some(10);
+            profile.options.expert_lfu = false;
+        }
+        let (status, response) = post(
+            &host,
+            &token,
+            "/host/v1/profile-launch",
+            serde_json::json!({
+                "profile_id":"stale-arena", "model_id":request.model_id,
+                "gpu_uuids":request.gpu_uuids, "instance_id":id,
+                "expected_session_id":zero_residency["session_id"], "structured_outputs":false
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{response}");
+        let selected = ready(&host, id).await;
+        assert_residency(&selected, Some(10), false);
         let quotes = logs("quotes.jsonl");
         let loads = logs("loads.jsonl");
-        assert_eq!(quotes.len(), 5);
-        assert_eq!(loads.len(), 4);
+        assert_eq!(quotes.len(), 8);
+        assert_eq!(loads.len(), 7);
         for (index, quote) in quotes.iter().enumerate() {
             let args = quote["args"].as_array().unwrap();
             let value = |flag: &str| {
@@ -4489,15 +4562,24 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             assert!(!args.contains(&serde_json::json!("--api-key")));
             assert_eq!(
                 value("--max-context"),
-                if index < 2 { "131072" } else { "65536" }
+                if index < 2 || index == 7 {
+                    "131072"
+                } else {
+                    "65536"
+                }
             );
             assert_eq!(
                 value("--max-concurrency"),
-                if index < 2 { "1" } else { "2" }
+                if index < 2 || index == 7 { "1" } else { "2" }
             );
             assert_eq!(
                 value("--kv-arena-headroom-bytes"),
-                if index < 2 { headroom } else { headroom + 4096 }.to_string()
+                if index < 2 || index == 7 {
+                    headroom
+                } else {
+                    headroom + 4096
+                }
+                .to_string()
             );
             assert_eq!(
                 args.contains(&serde_json::json!("--structured-outputs")),
@@ -4505,17 +4587,48 @@ http.server.HTTPServer(('127.0.0.1',int(arg('--port'))),Handler).serve_forever()
             );
             assert_eq!(
                 args.contains(&serde_json::json!("--kv-arena-bytes")),
-                index >= 3
+                (4..=6).contains(&index)
+            );
+            let residency = args
+                .iter()
+                .position(|arg| arg == "--flash-host-ram-headroom-gib");
+            if index < 2 {
+                assert!(residency.is_none(), "Engine must own the default RAM floor");
+            } else {
+                assert_eq!(
+                    args[residency.unwrap() + 1],
+                    if (4..=6).contains(&index) { "0" } else { "10" }
+                );
+            }
+            assert_eq!(
+                value("--expert-lfu"),
+                if index < 2 || (4..=6).contains(&index) { "on" } else { "off" }
             );
         }
         for (index, load) in loads.iter().enumerate() {
             let args = load.as_array().unwrap();
             let position = args.iter().position(|arg| arg == "--kv-arena-bytes");
-            if index < 3 {
+            if index < 4 || index == 6 {
                 assert!(position.is_none(), "Automatic must be resolved after startup");
             } else {
                 assert_eq!(args[position.unwrap() + 1], "4096");
             }
+            let residency = args
+                .iter()
+                .position(|arg| arg == "--flash-host-ram-headroom-gib");
+            if index < 2 {
+                assert!(residency.is_none(), "Engine must own the default RAM floor");
+            } else {
+                assert_eq!(
+                    args[residency.unwrap() + 1],
+                    if index < 4 || index == 6 { "10" } else { "0" }
+                );
+            }
+            let lfu = args.iter().position(|arg| arg == "--expert-lfu").unwrap();
+            assert_eq!(
+                args[lfu + 1],
+                if index < 2 || (4..6).contains(&index) { "on" } else { "off" }
+            );
         }
         host.processes.lock().await.shutdown().await.unwrap();
     }

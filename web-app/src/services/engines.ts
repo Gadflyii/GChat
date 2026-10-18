@@ -30,6 +30,7 @@ export type EngineLaunchOptions = {
   kv_dtype: 'auto' | 'bf16' | 'int8' | 'nvfp4'; kv_arena_bytes: number | null;
   kv_arena_headroom_bytes?: number;
   host_kv_cache_bytes: number | null; prefill_chunk: number; no_cuda_graph: boolean;
+  flash_host_ram_headroom_gib?: number | null; expert_lfu?: boolean;
 }
 export type EngineLaunchProfile = EngineLaunchOptions & {
   qualified_profile_id?: string | null;

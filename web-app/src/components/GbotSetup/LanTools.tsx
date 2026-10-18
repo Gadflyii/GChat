@@ -7,11 +7,15 @@ export default function LanTools({
   ready,
   busy,
   cloud = false,
+  disabled = false,
+  canStart,
 }: {
   workspaceId: string
   ready: (value: boolean) => void
   busy: (value: boolean) => void
   cloud?: boolean
+  disabled?: boolean
+  canStart?: () => boolean
 }) {
   const [consent, setConsent] = useState(false)
   const [action, setAction] = useState<'prepare' | 'check' | null>(null)
@@ -21,7 +25,7 @@ export default function LanTools({
   const [installed, setInstalled] = useState(false)
   const [issue, setIssue] = useState('')
   const run = async (prepare: boolean) => {
-    if (pending.current) return
+    if (pending.current || disabled || (canStart && !canStart())) return
     pending.current = true
     setAction(prepare ? 'prepare' : 'check')
     busy(true)
@@ -59,7 +63,7 @@ export default function LanTools({
           type="checkbox"
           className="mt-1 size-4 shrink-0 accent-primary"
           checked={consent}
-          disabled={working}
+          disabled={working || disabled}
           onChange={(event) => setConsent(event.target.checked)}
         />
         This computer is dedicated to Gbot. I authorize installing its desktop,
@@ -74,7 +78,7 @@ export default function LanTools({
         <Button
           type="button"
           variant="outline"
-          disabled={working || !consent}
+          disabled={working || disabled || !consent}
           onClick={() => void run(true)}
         >
           {action === 'prepare' ? 'Preparing tools…' : 'Prepare tools'}
@@ -82,7 +86,7 @@ export default function LanTools({
         <Button
           type="button"
           variant="outline"
-          disabled={working}
+          disabled={working || disabled}
           onClick={() => void run(false)}
         >
           {action === 'check' ? 'Checking tools…' : 'Check tools'}

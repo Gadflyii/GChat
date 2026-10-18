@@ -512,3 +512,145 @@ it('requires verified SSH, installed tools and a successful desktop connection b
     session_id: expect.any(String),
   })
 })
+
+it.each([
+  {
+    label: 'Check progress',
+    progress: 'Checking cloud computer…',
+    path: 'setup/cloud/check',
+    tool: 'Check tools',
+    toolProgress: 'Checking tools…',
+    toolPath: 'workspaces/ssh/tools',
+  },
+  {
+    label: 'Delete cloud computer',
+    progress: 'Deleting cloud computer…',
+    path: 'setup/cloud/delete',
+    tool: 'Prepare tools',
+    toolProgress: 'Preparing tools…',
+    toolPath: 'workspaces/ssh/prepare',
+  },
+])(
+  'blocks tool preparation and checks while cloud $label is pending',
+  async ({ label, progress, path, tool, toolProgress, toolPath }) => {
+    const initial = deployment(review(), 'running')
+    const parentAction = deferred<CloudReview>()
+    const tools = deferred<object>()
+    const busy = vi.fn()
+    vi.mocked(gbot).mockImplementation(async (request) => {
+      if (request === 'setup/cloud/identity')
+        return {
+          public_key: { algorithm: 'ssh-ed25519', public_key: 'fixture-key' },
+          fingerprint: 'SHA256:fixture',
+        }
+      if (request === path) return parentAction.promise
+      if (
+        request === 'workspaces/ssh/tools' ||
+        request === 'workspaces/ssh/prepare'
+      )
+        return tools.promise
+      return {}
+    })
+    render(
+      <CloudCosts
+        name="Research bot"
+        initial={initial}
+        busy={busy}
+        reviewed={vi.fn()}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Check SSH identity' }))
+    await screen.findByText('SHA256:fixture')
+    fireEvent.click(screen.getByRole('checkbox', { name: /fingerprint matches/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify SSH access' }))
+    const checkTools = await screen.findByRole('button', { name: 'Check tools' })
+    const consent = screen.getByRole('checkbox', { name: /dedicated to Gbot/ })
+    fireEvent.click(consent)
+    fireEvent.click(screen.getByRole('checkbox', { name: /Delete this setup/ }))
+    const prepareTools = screen.getByRole('button', { name: 'Prepare tools' })
+    const parent = screen.getByRole('button', { name: label })
+    expect(checkTools).toBeEnabled()
+    expect(prepareTools).toBeEnabled()
+    const toolCalls = () =>
+      vi.mocked(gbot).mock.calls.filter(([request]) =>
+        ['workspaces/ssh/tools', 'workspaces/ssh/prepare'].includes(request)
+      )
+    const parentCalls = () =>
+      vi.mocked(gbot).mock.calls.filter(([request]) => request === path)
+
+    act(() => {
+      parent.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      checkTools.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      prepareTools.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      parent.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(toolCalls()).toHaveLength(0)
+    expect(parentCalls()).toEqual([
+      [
+        path,
+        { id: 'review', ...(path.endsWith('/delete') ? { consent: true } : {}) },
+      ],
+    ])
+    expect(screen.getByRole('button', { name: progress })).toBeDisabled()
+    expect(
+      screen.getByText(progress, { selector: '[role="status"]' })
+    ).toBeVisible()
+    expect(checkTools).toBeDisabled()
+    expect(prepareTools).toBeDisabled()
+    expect(consent).toBeDisabled()
+    expect(consent).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeDisabled()
+    expect(busy).toHaveBeenLastCalledWith(true)
+
+    await act(async () =>
+      parentAction.reject(new Error('Cloud provider unavailable'))
+    )
+    await screen.findByText('Cloud provider unavailable', {
+      selector: '[role="alert"]',
+    })
+    expect(toolCalls()).toHaveLength(0)
+    expect(parentCalls()).toHaveLength(1)
+    expect(screen.getByRole('button', { name: label })).toBeEnabled()
+    expect(checkTools).toBeEnabled()
+    expect(prepareTools).toBeEnabled()
+    expect(consent).toBeEnabled()
+    expect(consent).toBeChecked()
+    expect(busy).toHaveBeenLastCalledWith(false)
+
+    fireEvent.click(screen.getByRole('button', { name: tool }))
+    expect(toolCalls()).toEqual([
+      [
+        toolPath,
+        {
+          workspace_id: 'review',
+          ...(toolPath.endsWith('/prepare') ? { consent: true } : {}),
+        },
+      ],
+    ])
+    expect(screen.getByRole('button', { name: toolProgress })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Check progress' })).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Delete cloud computer' })
+    ).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeDisabled()
+    expect(consent).toBeDisabled()
+    expect(busy).toHaveBeenLastCalledWith(true)
+    await act(async () =>
+      tools.resolve({ installed: true, command: null, issue: null })
+    )
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Connect bot desktop' })
+      ).toBeEnabled()
+    )
+    expect(screen.getByRole('button', { name: 'Check progress' })).toBeEnabled()
+    expect(
+      screen.getByRole('button', { name: 'Delete cloud computer' })
+    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Refresh prices' })).toBeEnabled()
+    expect(consent).toBeEnabled()
+    expect(busy).toHaveBeenLastCalledWith(false)
+    expect(parentCalls()).toHaveLength(1)
+    expect(toolCalls()).toHaveLength(1)
+  }
+)
