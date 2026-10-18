@@ -1,5 +1,35 @@
 # GInfer host UI
 
+## Models download-count wording — C3, October 18
+
+`GUI-DOWNLOADS-TRANSFER-COUNT-WORDING` is source-prepared; verification and native
+acceptance are pending. The accepted paused-status candidate `4e635c35a` showed
+**1 transfers** beside Models in both Light and Dark. Existing evidence:
+`out/c3-downloads-popover-status-20261018/{status-light-wide.png,status-dark-narrow.png}`.
+
+The badge now reads **1 download** or **2 downloads**, with the title **Active or
+incomplete model downloads**. Counting is unchanged: incomplete local journal
+entries count once, the mirrored local Host snapshot is excluded, remote entries
+count separately even for the same model, and installed entries do not count.
+Rendered NavMain regressions cover singular paused/verifying entries, the mixed
+local/remote plural including an installed remote entry, and removal when the
+local download installs while its Host snapshot remains stale. Chat, Gbot,
+transfer actions and routing are outside this wording change.
+
+Owner: Codex 3. Baseline `3bbea776c`; source
+`/ai/gchat-worktrees/c3-download-count-wording-20261018`, branch
+`fix/c3-download-count-wording-20261018`. Only NavMain, its existing rendered
+tests and this subject record change. No app, build, dependency copy, CPU/GPU
+allocation or shared-stage write has run for this row. The current-main release
+helper retains exclusive use of the S1 source/build stage and caches.
+
+Next, after coordinator GO: run the focused NavMain suite, lint and ONE
+`make verify`, then build the changed-source native candidate and check singular
+and plural wording at the requested Light/Dark sizes. Preserve the first failure
+and use only a justified narrow continuation; do not repeat the full verify.
+The source-prepared commit is not merge-ready until those gates and native
+acceptance pass.
+
 ## Google client ID validation — Gchat 3 native acceptance, October 18
 
 `GUI-GOOGLE-CLIENT-ID-SHAPE` passes its remaining native Linux negative leaf.

@@ -67,6 +67,7 @@ export function NavMain() {
   const remoteTransfers = useEngineHosts(s => s.hosts
     .filter(host => !host.local)
     .reduce((n, host) => n + (s.snapshots[host.host_id]?.model_management?.downloads.filter(j => j.status !== 'installed').length ?? 0), 0))
+  const downloadCount = localTransfers + remoteTransfers
 
   const handleNewChat = async () => {
     if (creatingConversation) return
@@ -206,7 +207,14 @@ export function NavMain() {
                 size={16}
               />
               <span>{t('common:models')}</span>
-              {localTransfers + remoteTransfers > 0 && <span className="ml-auto rounded bg-primary/10 px-1.5 font-mono text-[10px] text-primary" title="Active or incomplete model transfers">{localTransfers + remoteTransfers} transfers</span>}
+              {downloadCount > 0 && (
+                <span
+                  className="ml-auto rounded bg-primary/10 px-1.5 font-mono text-[10px] text-primary"
+                  title="Active or incomplete model downloads"
+                >
+                  {downloadCount} {downloadCount === 1 ? 'download' : 'downloads'}
+                </span>
+              )}
             </Link>
           </SidebarMenuButton>
         </SidebarMenuItem>
