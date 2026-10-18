@@ -1,5 +1,18 @@
 # Gbot design
 
+## Failed saved-bot renames keep recovery guidance — Gchat 2
+
+`GBOT-LAN-RENAME-INLINE-ERROR`, based on main `e16adae7d`, replaces
+Save name's temporary raw-error toast with persistent plain guidance and closed
+Details. The submitted name stays editable after failure and survives refreshed
+saved-bot data. Only explicit Save name retries the write; retry, successful Save
+and Cancel clear the warning. Existing pending-field protection is retained.
+
+Rendered Error and native-string regressions cover failure, refresh, retained
+draft, exact retry payload, confirmed saved name and Cancel. Source gates pending.
+Evidence: `out/gchat2-lan-rename-inline-error-20261018/result.json`.
+This source/rendered scope does not qualify live SSH, guests or native Windows.
+
 ## Refreshing accounts preserves failed link saves — Gchat 2
 
 `GBOT-LINKED-ACCOUNTS-REFRESH-SAVE-ERROR`, based on main `0f604653e`,
