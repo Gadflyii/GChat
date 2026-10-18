@@ -385,6 +385,155 @@ it('lists this bot schedules, states the background lifetime requirement and dis
   )
 })
 
+it('shows a queued Once retry outside collapsed occurrences and clears it after an explicit read without replay', async () => {
+  const dueAt = Math.floor(Date.now() / 1000) - 10
+  const retryAt = dueAt + 30
+  const queued = {
+    ...schedule,
+    timing: { kind: 'once', at: dueAt },
+    next_at: null,
+    occurrences: [
+      {
+        task_id: '74569aba-3734-4bda-b8ab-12044f7a114c',
+        due_at: dueAt,
+        state: 'queued',
+        note: 'SSH transport failed',
+        retry_at: retryAt,
+      },
+    ],
+  }
+  const started = {
+    ...queued,
+    occurrences: [
+      { ...queued.occurrences[0], state: 'dispatched', note: null, retry_at: null },
+    ],
+  }
+  const recovery = deferred<{ schedules: (typeof started)[]; stopped: null }>()
+  request
+    .mockResolvedValueOnce({ schedules: [queued], stopped: null })
+    .mockRejectedValueOnce(new Error('Schedule list unavailable'))
+    .mockReturnValueOnce(recovery.promise)
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+
+  const retryGuidance = await screen.findByText(
+    /Waiting to start\. Gbot will try again automatically after/
+  )
+  expect(retryGuidance).toBeVisible()
+  expect(retryGuidance).toHaveTextContent(
+    new Date(retryAt * 1000).toLocaleString()
+  )
+  expect(retryGuidance).toHaveTextContent(
+    'Keep the Gbot service, bot computer and model server on and connected.'
+  )
+  expect(screen.getByText(/No later scheduled occurrences/)).toBeVisible()
+  expect(screen.queryByText(/No future run/)).not.toBeInTheDocument()
+  const occurrences = screen.getByText('Occurrences').closest('details')
+  expect(occurrences).not.toHaveAttribute('open')
+  expect(screen.getByText(/SSH transport failed/)).not.toBeVisible()
+  expect(request.mock.calls).toEqual([['schedules']])
+
+  await act(async () => taskUpdate())
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Could not load scheduled tasks.'
+  )
+  expect(retryGuidance).toBeVisible()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Retry loading schedules' })
+  )
+  expect(screen.getByRole('status')).toHaveTextContent('Loading schedules…')
+  expect(retryGuidance).toBeVisible()
+  await act(async () =>
+    recovery.resolve({ schedules: [started], stopped: null })
+  )
+
+  expect(
+    screen.queryByText(/Gbot will try again automatically after/)
+  ).not.toBeInTheDocument()
+  expect(screen.getByText('Occurrences').closest('details')).not.toHaveAttribute(
+    'open'
+  )
+  expect(screen.getByText(/dispatched/)).not.toBeVisible()
+  expect(screen.queryByText(/SSH transport failed/)).not.toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(request.mock.calls).toEqual([
+    ['schedules'],
+    ['schedules'],
+    ['schedules'],
+  ])
+})
+
+it.each(['needs_review', 'completed', 'skipped', 'dispatched'])(
+  'does not promise an automatic retry for a %s occurrence',
+  async (state) => {
+    request.mockResolvedValue({
+      schedules: [
+        {
+          ...schedule,
+          next_at: null,
+          occurrences: [
+            {
+              task_id: '74569aba-3734-4bda-b8ab-12044f7a114c',
+              due_at: 2000000000,
+              state,
+              note: null,
+              retry_at: null,
+            },
+          ],
+        },
+      ],
+      stopped: null,
+    })
+    render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+    fireEvent.click(screen.getByText('Scheduled tasks'))
+    await screen.findByText('Check the calendar')
+
+    expect(
+      screen.queryByText(/Gbot will try again automatically after/)
+    ).not.toBeInTheDocument()
+    if (state === 'needs_review') {
+      expect(
+        screen.getByText('Needs review. Future occurrences are held.')
+      ).toBeVisible()
+    }
+    expect(request.mock.calls).toEqual([['schedules']])
+  }
+)
+
+it.each([
+  { name: 'disabled schedule', enabled: false, stopped: null },
+  { name: 'stopped scheduler', enabled: true, stopped: 'Schedule journal failed' },
+])('does not promise a queued retry for a $name', async ({ enabled, stopped }) => {
+  request.mockResolvedValue({
+    schedules: [
+      {
+        ...schedule,
+        enabled,
+        next_at: null,
+        occurrences: [
+          {
+            task_id: '74569aba-3734-4bda-b8ab-12044f7a114c',
+            due_at: 2000000000,
+            state: 'queued',
+            note: 'SSH transport failed',
+            retry_at: 2000000030,
+          },
+        ],
+      },
+    ],
+    stopped,
+  })
+  render(<GbotSchedules workspaceId="bot-one" assignment={assignment} />)
+  fireEvent.click(screen.getByText('Scheduled tasks'))
+  await screen.findByText('Check the calendar')
+
+  expect(
+    screen.queryByText(/Gbot will try again automatically after/)
+  ).not.toBeInTheDocument()
+  expect(request.mock.calls).toEqual([['schedules']])
+})
+
 it('creates an explicit interval prompt and missed-run policy for the selected bot', async () => {
   const create = deferred<unknown>()
   const refreshed = deferred<{
