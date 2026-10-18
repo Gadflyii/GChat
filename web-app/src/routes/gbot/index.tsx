@@ -1054,7 +1054,7 @@ function GbotPage() {
                       key={task.id}
                       className="space-y-2 rounded-lg border p-3"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-start justify-between gap-3">
                         <span className="text-sm capitalize">
                           {task.state.replaceAll('_', ' ')}
                         </span>
@@ -1067,8 +1067,9 @@ function GbotPage() {
                           resumeLabel="Resume"
                           size="default"
                           onAction={(action) =>
-                            perform(() =>
-                              gbot(`tasks/${action}`, { id: task.id })
+                            perform(
+                              () => gbot(`tasks/${action}`, { id: task.id }),
+                              true
                             )
                           }
                         />

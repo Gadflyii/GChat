@@ -1,5 +1,28 @@
 # GInfer host UI
 
+## Gbot task-control failure recovery — October 18
+
+`GBOT-TASK-ACTION-INLINE-ERRORS`: rejected **Stop** and **Resume** requests
+previously produced only a short raw-error toast. Each task now keeps plain,
+action-specific failure guidance beneath its controls, with technical details
+closed until requested. Settings and the companion pass errors to these
+controls while retaining their normal refresh. Explicit retry preserves the
+same task and action; pending requests still block duplicates and opposites.
+
+Baseline `e0a67a528`; all four rendered Stop/Resume regressions fail at the
+missing alert. Fixed focused tests pass 129 cases in three files. ONE
+`make verify` passed on S1 CPUs40–47, 05:39:10–05:46:53Z: lint, typecheck,
+quality guards, 3,386 app tests (six skipped), 127 extension tests, all six
+coverage floors and 1,247 Rust tests (28 ignored). Private offline caches,
+socket0 shared lock, nice10/max8 jobs; source, tests and documentation hashes
+matched before and after the gate. Private remote scratch was removed and
+booking3043 canceled; CPUs returned05:47Z. No task state, approval policy or
+backend behavior changed. No VM, native Windows, model or live task was run.
+FRESH/OLD remain OFF/original XML/custody Gchat2. Windows not built (dev phase).
+
+Result: `out/gchat2-task-action-inline-errors-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-task-action-inline-errors-20261018`.
+
 ## Gbot permission decision failure recovery — October 18
 
 `GBOT-APPROVAL-INLINE-ERRORS`: failed **Allow** and **Deny** requests previously
