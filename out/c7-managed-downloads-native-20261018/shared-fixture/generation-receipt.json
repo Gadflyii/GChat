@@ -1,0 +1,335 @@
+{
+  "purpose": "Shared private development fixture only; no publication or release-build reference",
+  "generated_at": "2026-10-18T06:16:40.660681Z",
+  "host": "AIS-2-8592-L01",
+  "origin": "http://192.168.1.109:18761",
+  "source_wave": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1",
+  "source_inventory": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/SHA256SUMS",
+  "source_inventory_sha256": "5dab5b36f6f214f6e3d795657042568f47eb3306d97fa0d10d1f7b82e9dd145e",
+  "profile_repository_revision": "db8ed37723eb097060d6d79982be95568b34e4d4",
+  "profile_sources_clean": true,
+  "flash_profile_source": {
+    "source": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir/usr/lib/GChat/resources/bin/launch-profiles.json",
+    "source_appdir_revision": "d0a8d06bf",
+    "source_bytes": 364548,
+    "source_sha256": "1eafbd0b510bd6cb9ba6f754af885fb2005d06f333b01d81f13faa42ccad862d"
+  },
+  "selected_packages": [
+    {
+      "file": "muse_glimmer_30b_int_df2.ginfer",
+      "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/muse_glimmer_30b_int_df2.ginfer",
+      "bytes": 19776776704,
+      "sha256": "46b5d54ee64ccd278f2a1a4d2c6d5aa9fc9097e8db0c3d165179aee5f2cb5b66",
+      "identity": {
+        "model_id": "muse-glimmer-30b",
+        "weights_id": "groupwise-int-dflash-q4"
+      },
+      "tp": 1,
+      "profile_count": 40,
+      "platform_counts": {
+        "linux": 32,
+        "windows": 8
+      },
+      "tier_counts": {
+        "full-context-tested": 40
+      },
+      "qualified_sm": [
+        "8.0",
+        "8.6",
+        "8.9",
+        "12.0"
+      ],
+      "min_vram_mib_per_gpu": 24123,
+      "profile_sources": [
+        "ginfer/config/launch-profiles/linux-cmp170hx-muse-groupwise-int-dflash-q4.json",
+        "ginfer/config/launch-profiles/linux-rtx3090-muse-groupwise-int-dflash-q4.json",
+        "ginfer/config/launch-profiles/linux-rtx4090-muse-groupwise-int-dflash-q4.json",
+        "ginfer/config/launch-profiles/linux-rtx5090-muse-groupwise-int-dflash-q4.json",
+        "ginfer/config/launch-profiles/windows-rtx4090-muse-groupwise-int-dflash-q4.json"
+      ]
+    },
+    {
+      "file": "muse_glimmer_30b_nvfp4_df2.ginfer",
+      "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/muse_glimmer_30b_nvfp4_df2.ginfer",
+      "bytes": 22447498752,
+      "sha256": "6d6cc348c75a75c60ca011d267eb389dcbb8530f6c51a680dad911d25365b61f",
+      "identity": {
+        "model_id": "muse-glimmer-30b",
+        "weights_id": "nvfp4-dflash-nvfp4"
+      },
+      "tp": 1,
+      "profile_count": 16,
+      "platform_counts": {
+        "linux": 8,
+        "windows": 8
+      },
+      "tier_counts": {
+        "full-context-tested": 16
+      },
+      "qualified_sm": [
+        "12.0"
+      ],
+      "min_vram_mib_per_gpu": 32606,
+      "profile_sources": [
+        "ginfer/config/launch-profiles/linux-rtx5090-muse-nvfp4-dflash-nvfp4.json",
+        "ginfer/config/launch-profiles/windows-rtx5090-muse-nvfp4-dflash-nvfp4.json"
+      ]
+    },
+    {
+      "file": "muse_glimmer_30b_nvfp4_df2q4.ginfer",
+      "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/muse_glimmer_30b_nvfp4_df2q4.ginfer",
+      "bytes": 22360828416,
+      "sha256": "878d6de4e0742f07fd7e10ca1efd819111a894325435d0297bf352ef72ae8d5c",
+      "identity": {
+        "model_id": "muse-glimmer-30b",
+        "weights_id": "nvfp4"
+      },
+      "tp": 1,
+      "profile_count": 7,
+      "platform_counts": {
+        "linux": 4,
+        "windows": 3
+      },
+      "tier_counts": {
+        "full-context-tested": 7
+      },
+      "qualified_sm": [
+        "12.0"
+      ],
+      "min_vram_mib_per_gpu": 32607,
+      "profile_sources": [
+        "ginfer/config/launch-profiles/linux-rtx5090-muse-nvfp4-dflash.json",
+        "ginfer/config/launch-profiles/windows-rtx5090-muse-nvfp4-dflash.json"
+      ]
+    },
+    {
+      "file": "qwen38_27b_int_df2.ginfer",
+      "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/qwen38_27b_int_df2.ginfer",
+      "bytes": 18424985856,
+      "sha256": "bcf29abd1598f5666c641da7c59ac28bd999aa98a8d6ba533ae7aa579abd06a7",
+      "identity": {
+        "model_id": "qwen3.8-27b",
+        "weights_id": "groupwise-int-dflash2-q4"
+      },
+      "tp": 1,
+      "profile_count": 29,
+      "platform_counts": {
+        "linux": 28,
+        "windows": 1
+      },
+      "tier_counts": {
+        "full-context-tested": 28,
+        "calculated-startup-smoke": 1
+      },
+      "qualified_sm": [
+        "8.6",
+        "8.9",
+        "12.0"
+      ],
+      "min_vram_mib_per_gpu": 24123,
+      "profile_sources": [
+        "ginfer/config/launch-profiles/linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json",
+        "ginfer/config/launch-profiles/linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json",
+        "ginfer/config/launch-profiles/linux-rtx5090-qwen38-groupwise-int-dflash2-q4.json",
+        "ginfer/config/launch-profiles/windows-rtx4090-qwen38-groupwise-int-dflash2-q4.json"
+      ]
+    },
+    {
+      "file": "qwen38_27b_nvfp4_df2.ginfer",
+      "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/qwen38_27b_nvfp4_df2.ginfer",
+      "bytes": 21767307520,
+      "sha256": "4689bdc908d989170106b07e91d81e0898bfe5c5e2cca98ae1d7350276d715a6",
+      "identity": {
+        "model_id": "qwen3.8-27b",
+        "weights_id": "nvfp4-dflash2-nvfp4"
+      },
+      "tp": 1,
+      "profile_count": 11,
+      "platform_counts": {
+        "linux": 8,
+        "windows": 3
+      },
+      "tier_counts": {
+        "full-context-tested": 8,
+        "calculated-startup-smoke": 3
+      },
+      "qualified_sm": [
+        "12.0"
+      ],
+      "min_vram_mib_per_gpu": 32606,
+      "profile_sources": [
+        "ginfer/config/launch-profiles/linux-rtx5090-qwen38-nvfp4-dflash2-nvfp4.json",
+        "ginfer/config/launch-profiles/windows-rtx5090-qwen38-nvfp4-dflash2-nvfp4.json"
+      ]
+    },
+    {
+      "file": "qwen38_27b_nvfp4_df2q4.ginfer",
+      "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/qwen38_27b_nvfp4_df2q4.ginfer",
+      "bytes": 21707145472,
+      "sha256": "849fec1d7797a53f03bf548ba03d8b7a6823fa1184577a08d4f7df42aafbd5d7",
+      "identity": {
+        "model_id": "qwen3.8-27b",
+        "weights_id": "nvfp4-dflash2-q4"
+      },
+      "tp": 1,
+      "profile_count": 8,
+      "platform_counts": {
+        "linux": 4,
+        "windows": 4
+      },
+      "tier_counts": {
+        "full-context-tested": 8
+      },
+      "qualified_sm": [
+        "12.0"
+      ],
+      "min_vram_mib_per_gpu": 32607,
+      "profile_sources": [
+        "ginfer/config/launch-profiles/linux-rtx5090-qwen38-nvfp4-dflash2-q4.json",
+        "ginfer/config/launch-profiles/windows-rtx5090-qwen38-nvfp4-dflash2-q4.json"
+      ]
+    },
+    {
+      "file": "qwen38_flash_next_180b_smol_mtp.ginfer",
+      "path": "/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1/qwen38_flash_next_180b_smol_mtp.ginfer",
+      "bytes": 70247086080,
+      "sha256": "8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08",
+      "identity": {
+        "model_id": "qwen3.8-flash-next",
+        "weights_id": "smol-q2g64"
+      },
+      "tp": 1,
+      "profile_count": 1,
+      "platform_counts": {
+        "linux": 1
+      },
+      "tier_counts": {
+        "screened-startup": 1
+      },
+      "qualified_sm": [
+        "12.0"
+      ],
+      "min_vram_mib_per_gpu": 97887,
+      "profile_sources": [
+        "inputs/flash-screened-profile.json"
+      ]
+    }
+  ],
+  "excluded_packages": [
+    {
+      "file": "muse_glimmer_30b_int_df2_tp2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "muse_glimmer_30b_int_df2_tp4.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "muse_glimmer_30b_nvfp4_df2_tp2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "muse_glimmer_30b_nvfp4_df2_tp4.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "muse_glimmer_30b_nvfp4_df2q4_tp2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "muse_glimmer_30b_nvfp4_df2q4_tp4.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "muse_glimmer_30b_smol_df2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_27b_int_df2_tp2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_27b_int_df2_tp4.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_27b_nvfp4_df2_tp2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_27b_nvfp4_df2_tp4.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_27b_nvfp4_df2q4_tp2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_27b_nvfp4_df2q4_tp4.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_27b_smol_df2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_flash_next_180b_int_mtp.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_flash_next_180b_nvfp4_mtp.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_flash_next_180b_nvfp4_mtp_tp2.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    },
+    {
+      "file": "qwen38_flash_next_180b_nvfp4_mtp_tp4.ginfer",
+      "reason": "No matching measured or screened launch profile in retained inputs",
+      "pending_profiles_omitted": 0
+    }
+  ],
+  "pending_profile_rows_omitted": 166,
+  "package_payloads_copied": false,
+  "package_payloads_rehashed": false,
+  "catalog_bytes": 263298,
+  "catalog_sha256": "d48f0bd9395276727ef289d14285bbd4c92d37a1b1df9d9fca4850d594249f15",
+  "http_policy": {
+    "bind": "192.168.1.109",
+    "port": 18761,
+    "methods": [
+      "GET",
+      "HEAD"
+    ],
+    "rate_bytes_per_second_per_get": 8388608,
+    "routes": [
+      "catalog.json",
+      "muse_glimmer_30b_int_df2.ginfer",
+      "muse_glimmer_30b_nvfp4_df2.ginfer",
+      "muse_glimmer_30b_nvfp4_df2q4.ginfer",
+      "qwen38_27b_int_df2.ginfer",
+      "qwen38_27b_nvfp4_df2.ginfer",
+      "qwen38_27b_nvfp4_df2q4.ginfer",
+      "qwen38_flash_next_180b_smol_mtp.ginfer"
+    ]
+  },
+  "validation": "Exact current SHA256SUMS membership, source metadata bytes, identity/TP/profile binding, original profile tiers and measured guards checked; no payload bytes read; native Host parsing remains consumer validation"
+}

@@ -1,0 +1,130 @@
+{
+  "pid": 3708693,
+  "started_at": "2026-10-18T06:33:29.344543Z",
+  "host": "AIS-2-8592-L01",
+  "user": "ron",
+  "script": "/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1/srv.py",
+  "url": "http://192.168.1.109:18761/catalog.json",
+  "log": "/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1/service.log",
+  "retention": "Shared read-only development catalog; retain for other lanes",
+  "checked_at": "2026-10-18T06:33:54.170179Z",
+  "catalog_release_count": 7,
+  "catalog_profile_count": 112,
+  "rate_bytes_per_second_per_get": 8388608,
+  "http_checks": [
+    {
+      "check": "canonical catalog",
+      "status": 200,
+      "content_length": "263298",
+      "content_range": null,
+      "accept_ranges": "bytes",
+      "received_bytes": 263298
+    },
+    {
+      "check": "frontend numeric cache-buster",
+      "status": 200,
+      "content_length": "263298",
+      "content_range": null,
+      "accept_ranges": "bytes",
+      "received_bytes": 263298
+    },
+    {
+      "check": "catalog nonnumeric query rejected",
+      "status": 404,
+      "content_length": "330",
+      "content_range": null,
+      "accept_ranges": null,
+      "received_bytes": 330
+    },
+    {
+      "check": "catalog extra query rejected",
+      "status": 404,
+      "content_length": "330",
+      "content_range": null,
+      "accept_ranges": null,
+      "received_bytes": 330
+    },
+    {
+      "check": "package query rejected",
+      "status": 404,
+      "content_length": "330",
+      "content_range": null,
+      "accept_ranges": null,
+      "received_bytes": 330
+    },
+    {
+      "check": "unknown route",
+      "status": 404,
+      "content_length": "330",
+      "content_range": null,
+      "accept_ranges": null,
+      "received_bytes": 330
+    },
+    {
+      "check": "fixture internals hidden",
+      "status": 404,
+      "content_length": "330",
+      "content_range": null,
+      "accept_ranges": null,
+      "received_bytes": 330
+    },
+    {
+      "check": "no directory listing",
+      "status": 404,
+      "content_length": "330",
+      "content_range": null,
+      "accept_ranges": null,
+      "received_bytes": 330
+    },
+    {
+      "check": "package HEAD",
+      "status": 200,
+      "content_length": "18424985856",
+      "content_range": null,
+      "accept_ranges": "bytes",
+      "received_bytes": 0
+    },
+    {
+      "check": "package range 0-15",
+      "status": 206,
+      "content_length": "16",
+      "content_range": "bytes 0-15/18424985856",
+      "accept_ranges": "bytes",
+      "received_bytes": 16
+    },
+    {
+      "check": "out-of-range rejected",
+      "status": 416,
+      "content_length": "0",
+      "content_range": "bytes */18424985856",
+      "accept_ranges": "bytes",
+      "received_bytes": 0
+    },
+    {
+      "check": "POST rejected",
+      "status": 501,
+      "content_length": "357",
+      "content_range": null,
+      "accept_ranges": null,
+      "received_bytes": 357
+    }
+  ],
+  "listener": "State  Recv-Q Send-Q Local Address:Port  Peer Address:PortProcess\nLISTEN 0      5      192.168.1.109:18761      0.0.0.0:*    users:((\"python3\",pid=3708693,fd=3))",
+  "effective_command": [
+    "python3",
+    "/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1/srv.py"
+  ],
+  "package_payload_bytes_read_for_acceptance": 32,
+  "package_payloads_copied": false,
+  "package_payloads_rehashed": false,
+  "status": "running; retained for shared lanes",
+  "limitations": "Only HTTP behavior and retained metadata checked; no new Engine/GPU/profile qualification or complete package transfer.",
+  "previous_instance": {
+    "pid": 3585871,
+    "started_at": "2026-10-18T06:18:08.014783Z",
+    "stopped_at": "2026-10-18T06:33:29.343724Z",
+    "reason": "Allow existing frontend numeric catalog cache-buster; package queries remain rejected"
+  },
+  "query_policy": "Only exact /catalog.json accepts one numeric t cache-buster; package and other queries remain rejected",
+  "catalog_unchanged": true
+}

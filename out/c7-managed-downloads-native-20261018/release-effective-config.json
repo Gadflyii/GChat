@@ -1,0 +1,25 @@
+{
+  "source": "71abf17084c8bbea0eb40da94cb5cfccb8e771f1",
+  "profile": "release",
+  "profile_text": "[profile.release]\nopt-level = \"z\"     # Optimize for size\nlto = \"fat\"         # Aggressive Link Time Optimization\nstrip = \"symbols\"   # Strip debug symbols from the SHIPPED binary (kept small)\ncodegen-units = 1   # Reduce parallel codegen for better optimization\npanic = \"abort\"     # Don't unwind on panic, saves space (panic hook runs first)\noverflow-checks = false  # Disable overflow checks for size\n# Keep local debug information separate from the shipped executable.\ndebug = 1           # line tables (enough for symbolication)\nsplit-debuginfo = \"packed\"\ndebug-assertions = false  # No debug assertions\nincremental = false # Disable incremental compilation for release\nrpath = false       # Don't include rpath\n",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+  "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)\n",
+  "cpu_affinity": [
+    104,
+    105,
+    106,
+    107,
+    108,
+    109,
+    110,
+    111
+  ],
+  "environment": {
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO_TARGET_DIR": "/work/native-target",
+    "CARGO_HOME": "/work/cargo-home",
+    "CARGO_BUILD_JOBS": "8",
+    "CARGO_INCREMENTAL": "0"
+  },
+  "cfg_proof": "First requested test is #[cfg(not(debug_assertions))]; admission requires it to execute exactly 1 test."
+}

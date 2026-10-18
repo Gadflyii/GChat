@@ -1,0 +1,89 @@
+{
+  "result": "PASS",
+  "source": "71abf17084c8bbea0eb40da94cb5cfccb8e771f1",
+  "host": "AIS-2-8592-L01",
+  "cpus": "104-111",
+  "booking_line": 3090,
+  "source_read_only": true,
+  "debug_stage_read_only": true,
+  "release_debug_assertions": false,
+  "cfg_evidence": "production_rejects_private_packages_even_with_a_catalog_argument is #[cfg(not(debug_assertions))] and executed exactly one passing test. Existing release profile debug-assertions=false; no RUSTFLAGS/CARGO_PROFILE_RELEASE overrides. Actual optimized release rustc invocation retained.",
+  "config_receipt": "release-effective-config.json",
+  "compiler_receipt": "release-rustc-invocation.json",
+  "launch_receipt": "release-command.json",
+  "tests": [
+    {
+      "name": "model_downloads::tests::production_rejects_private_packages_even_with_a_catalog_argument",
+      "command": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "-p",
+        "ginfer-host",
+        "--lib",
+        "model_downloads::tests::production_rejects_private_packages_even_with_a_catalog_argument",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "result": "PASS",
+      "passed": 1,
+      "failed": 0,
+      "start": "2026-10-18T06:34:19Z",
+      "end": "2026-10-18T06:37:34Z",
+      "log": "release-package-rejection.log"
+    },
+    {
+      "name": "model_downloads::tests::private_catalog_requires_explicit_debug_private_ipv4_url",
+      "command": [
+        "cargo",
+        "test",
+        "--release",
+        "--locked",
+        "--offline",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "-p",
+        "ginfer-host",
+        "--lib",
+        "model_downloads::tests::private_catalog_requires_explicit_debug_private_ipv4_url",
+        "--",
+        "--exact",
+        "--nocapture"
+      ],
+      "result": "PASS",
+      "passed": 1,
+      "failed": 0,
+      "start": "2026-10-18T06:37:34Z",
+      "end": "2026-10-18T06:37:35Z",
+      "log": "release-catalog-rejection.log"
+    }
+  ],
+  "wrapper": {
+    "pid": 3711751,
+    "state": "absent",
+    "exit": 0,
+    "terminal": "2026-10-18T06:37:35.225054+00:00"
+  },
+  "container": {
+    "name": "gchat-c7-managed-downloads-release-rejection-20261018",
+    "state": "absent"
+  },
+  "terminal_checked": "2026-10-18T06:39:37.280247+00:00",
+  "no_repeat_verify": true,
+  "cleanup": {
+    "authorized_by": "parent explicit release-cache cleanup instruction 06:39Z",
+    "path": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/native-target/release",
+    "bytes_before": 510504960,
+    "started": "2026-10-18T06:39:37.280292+00:00",
+    "finished": "2026-10-18T06:39:37.373711+00:00",
+    "state": "removed"
+  },
+  "cache_writer_terminal": true,
+  "booking_canceled": true,
+  "inventory_receipt": "release-scratch-inventory.json"
+}
