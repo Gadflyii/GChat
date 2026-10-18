@@ -183,6 +183,89 @@ it('attributes saved task messages to you or the selected bot in conversation or
   await expectConversation()
 })
 
+it('shows the latest interruption reason after reopening and resumes that task', async () => {
+  const [identity] = readyTaskBots()
+  const call = mocks.call.getMockImplementation()!
+  const reason = 'model returned no answer; resume the task to try again'
+  const previousReason = 'previous connection failed'
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) =>
+      path === 'tasks'
+        ? [
+            {
+              id: 'interrupted-task',
+              identity,
+              state: 'interrupted',
+              messages: [{ role: 'user', content: 'Write the saved note' }],
+              history: [
+                { state: 'interrupted', reason: previousReason, at: 42 },
+                { state: 'running', reason: 'started', at: 42 },
+                { state: 'interrupted', reason, at: 42 },
+              ],
+            },
+          ]
+        : call(path, body)
+  )
+  const expectInterruption = async () => {
+    const message = await screen.findByText(reason)
+    const card = message.closest('article')!
+    expect(message).toBeVisible()
+    expect(within(card).getByText('Write the saved note')).toBeVisible()
+    expect(within(card).getByRole('button', { name: 'Resume' })).toBeEnabled()
+    expect(screen.queryByText(previousReason)).not.toBeInTheDocument()
+    return card
+  }
+
+  render(<Page />)
+  await expectInterruption()
+  fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+  await expectInterruption()
+  cleanup()
+  render(<Page />)
+  const card = await expectInterruption()
+  fireEvent.click(within(card).getByRole('button', { name: 'Resume' }))
+  await waitFor(() =>
+    expect(mocks.call).toHaveBeenCalledWith('tasks/resume', {
+      id: 'interrupted-task',
+    })
+  )
+})
+
+it('does not show an old interruption reason after a task completes', async () => {
+  const [identity] = readyTaskBots()
+  const call = mocks.call.getMockImplementation()!
+  const reason = 'model returned no answer; resume the task to try again'
+  mocks.call.mockImplementation(
+    async (path: string, body: Record<string, unknown>) =>
+      path === 'tasks'
+        ? [
+            {
+              id: 'completed-task',
+              identity,
+              state: 'completed',
+              messages: [{ role: 'assistant', content: 'Saved the note' }],
+              history: [
+                { state: 'interrupted', reason, at: 42 },
+                { state: 'running', reason: 'started', at: 43 },
+                { state: 'completed', reason: 'completed', at: 44 },
+              ],
+            },
+          ]
+        : call(path, body)
+  )
+  render(<Page />)
+  const reply = await screen.findByText('Saved the note')
+  const card = reply.closest('article')!
+  expect(reply).toBeVisible()
+  expect(within(card).getByText('completed')).toBeVisible()
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  expect(
+    within(card).queryByRole('button', { name: 'Resume' })
+  ).not.toBeInTheDocument()
+})
+
 it('explains that a disconnected bot must connect before a task can run', async () => {
   readyTaskBots(undefined, { live_sessions: [] })
   render(<Page />)
@@ -1692,6 +1775,111 @@ it.each(['success', 'failure'] as const)(
     )
     expect(mocks.selectService).toHaveBeenCalledTimes(outcome === 'failure' ? 2 : 1)
     expect(mocks.selectService).toHaveBeenLastCalledWith({ kind: 'local' })
+  }
+)
+
+it.each(['Send reply', 'Decline'])(
+  'keeps a failed human-help %s visible and retryable in settings',
+  async (action) => {
+    const [identity] = readyTaskBots()
+    const call = mocks.call.getMockImplementation()!
+    const request = {
+      id: 'help',
+      question: 'Which folder?',
+      status: 'pending',
+      response: null as string | null,
+    }
+    const task = {
+      id: 'help-task',
+      identity,
+      state: 'waiting_for_human',
+      messages: [],
+      help_requests: [request],
+    }
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let rejectReply!: (cause: string) => void
+    const pending = new Promise<void>((_, reject) => {
+      rejectReply = reject
+    })
+    let attempts = 0
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'tasks') return [task]
+        if (path === 'tasks/help') {
+          if (++attempts === 1) return pending
+          task.state = 'interrupted'
+          request.status = body.response === null ? 'declined' : 'completed'
+          request.response = body.response as string | null
+          return {}
+        }
+        return call(path, body)
+      }
+    )
+    render(<Page />)
+    const card = (await screen.findByText('Which folder?')).parentElement!
+    const reply = within(card).getByLabelText('Your reply')
+    fireEvent.change(reply, { target: { value: 'Use Documents' } })
+    const submit = within(card).getByRole('button', { name: action })
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      action === 'Send reply' ? 'Sending reply…' : 'Declining request…'
+    )
+    expect(reply).toBeDisabled()
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    const payload = {
+      id: 'help-task',
+      request_id: 'help',
+      response: action === 'Send reply' ? 'Use Documents' : null,
+    }
+    expect(attempts).toBe(1)
+    expect(mocks.call).toHaveBeenCalledWith('tasks/help', payload)
+
+    await act(async () => rejectReply('Gbot service unavailable. Try again.'))
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      'Gbot service unavailable. Try again.'
+    )
+    expect(reply).toHaveValue('Use Documents')
+    expect(reply).toBeEnabled()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(within(card).queryByText('Request declined')).not.toBeInTheDocument()
+    expect(
+      within(card).queryByText('Your reply: Use Documents')
+    ).not.toBeInTheDocument()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => updates.forEach((update) => update()))
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([path]) => path === 'tasks').length
+      ).toBeGreaterThan(reads)
+    )
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      'Gbot service unavailable. Try again.'
+    )
+    fireEvent.click(within(card).getByRole('button', { name: action }))
+    expect(
+      await within(card).findByText(
+        action === 'Send reply' ? 'Your reply: Use Documents' : 'Request declined'
+      )
+    ).toBeVisible()
+    expect(attempts).toBe(2)
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks/help')
+    ).toEqual([
+      ['tasks/help', payload],
+      ['tasks/help', payload],
+    ])
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
   }
 )
 

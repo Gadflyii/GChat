@@ -133,15 +133,16 @@ describe('NavMain', () => {
     expect(screen.getByTestId('history-search')).toBeInTheDocument()
   })
 
-  it('counts a local verifying download once when the local Host snapshot mirrors it', () => {
-    useLocalModelDownloads.setState({ jobs: [verifyingDownload] })
+  it.each(['paused', 'verifying'] as const)('labels one local %s download once when the local Host snapshot mirrors it', (status) => {
+    const download = { ...verifyingDownload, status }
+    useLocalModelDownloads.setState({ jobs: [download] })
     useEngineHosts.setState({ snapshots: {
-      [localHost.host_id]: downloadSnapshot(localHost.host_id, [verifyingDownload]),
+      [localHost.host_id]: downloadSnapshot(localHost.host_id, [download]),
     } })
 
     render(<NavMain />)
 
-    expect(screen.getByTitle('Active or incomplete model transfers')).toHaveTextContent(/^1 transfers$/)
+    expect(screen.getByTitle('Active or incomplete model downloads')).toHaveTextContent(/^1 download$/)
   })
 
   it('counts an additional remote download of the same model separately', () => {
@@ -160,7 +161,7 @@ describe('NavMain', () => {
 
     render(<NavMain />)
 
-    expect(screen.getByTitle('Active or incomplete model transfers')).toHaveTextContent(/^2 transfers$/)
+    expect(screen.getByTitle('Active or incomplete model downloads')).toHaveTextContent(/^2 downloads$/)
   })
 
   it('removes an installed local transfer while its local Host snapshot remains stale', () => {
@@ -169,11 +170,11 @@ describe('NavMain', () => {
       [localHost.host_id]: downloadSnapshot(localHost.host_id, [verifyingDownload]),
     } })
     render(<NavMain />)
-    expect(screen.getByTitle('Active or incomplete model transfers')).toHaveTextContent(/^1 transfers$/)
+    expect(screen.getByTitle('Active or incomplete model downloads')).toHaveTextContent(/^1 download$/)
 
     act(() => useLocalModelDownloads.setState({ jobs: [{ ...verifyingDownload, status: 'installed' }] }))
 
-    expect(screen.queryByTitle('Active or incomplete model transfers')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Active or incomplete model downloads')).not.toBeInTheDocument()
   })
 
   it('starts ordinary Chat and resets selections without requiring a native task reset', async () => {

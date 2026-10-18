@@ -1,0 +1,157 @@
+Script started on 2026-10-17 23:45:34-05:00 [COMMAND="bash --noprofile --norc -i" TERM="xterm" TTY="/dev/pts/0" COLUMNS="80" LINES="24"]
+bash-5.2$ date -u +%FT%TZ
+
+2026-10-18T04:45:37Z
+bash-5.2$ python3 --version
+
+Python 3.12.3
+bash-5.2$ python3 setup.py
+
+Binaries [/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/lib/ginfer]:
+
+
+Models and state [/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/data/ginfer]: Launcher directory [/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/bin]: Install for this user? [y/N]: y
+Runtime: /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/lib/ginfer
+Models and host state: /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/data/ginfer
+Launcher: /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/bin/ginfer
+Hardware preparation: idle (owned by the shared Host).
+Choose GPU group in GChat or GInfer Manager. No calibration was started.
+
+Set up local GInfer — progress is shared with GChat and GInfer Manager.
+You can quit at any step. Profiling and downloads continue on the Host.
+
+Choose 1, 2 or 4 matching GPUs. Profiling starts after selection.
+  1. NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · GPU-5268c64e-5bc4-4be1-ed12-e731c3de56cf
+  2. NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · GPU-bb41307d-6d91-5de3-9e23-a4aec948c49c
+Select: GPU numbers separated by spaces (q to leave): 2
+
+Choose model storage. Recommended: /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/data/ginfer/models
+Absolute model folder (Enter = recommended, q to leave):
+
+Choose models to download:
+No compatible published models are available. Check the runtime, selected GPU group and model catalog, then refresh.
+Model numbers (Enter = recommended, r = refresh catalog, m = move existing, q = leave): r
+
+Choose models to download:
+No compatible published models are available. Check the runtime, selected GPU group and model catalog, then refresh.
+Model numbers (Enter = recommended, r = refresh catalog, m = move existing, q = leave): q
+Installed. Launch: /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/bin/ginfer
+Add /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/bin to your shell PATH to use the bare ginfer command.
+bash-5.2$ "$HOME/.local/lib/ginfer/bin/ginfer-host" first-run > /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/first-run-status.json
+
+bash-5.2$ "$HOME/.local/bin/ginfer"
+
+
+ ██████╗     ██╗███╗   ██╗███████╗███████╗██████╗
+██╔════╝     ██║████╗  ██║██╔════╝██╔════╝██╔══██╗
+██║  ███╗ ██╗██║██╔██╗ ██║█████╗  █████╗  ██████╔╝
+██║   ██║ ╚═╝██║██║╚██╗██║██╔══╝  ██╔══╝  ██╔══██╗
+╚██████╔╝    ██║██║ ╚████║██║     ███████╗██║  ██║
+ ╚═════╝     ╚═╝╚═╝  ╚═══╝╚═╝     ╚══════╝╚═╝  ╚═╝
+
+              by Sectile Research Labs
+
+
+GInfer — AIS-2-8592-L01
+
+  GPU 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · SM 12.0 · Available
+  GPU 1: NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · SM 12.0 · Available
+
+No local models registered. Download a model or add an existing local package.
+
+Instances:
+
+[l] Launch instance      [m] Manage instances
+[d] Download models      [a] Add a local model
+[s] Model storage        [t] Download progress
+[r] Refresh
+[q] Quit (keep serving)
+Select: d
+Checking published models…
+No published compatible models are available in the configured catalog yet.
+Use Add a local model to register an existing .ginfer package.
+
+GInfer — AIS-2-8592-L01
+
+  GPU 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · SM 12.0 · Available
+  GPU 1: NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · SM 12.0 · Available
+
+No local models registered. Download a model or add an existing local package.
+
+Instances:
+
+[l] Launch instance      [m] Manage instances
+[d] Download models      [a] Add a local model
+[s] Model storage        [t] Download progress
+[r] Refresh
+[q] Quit (keep serving)
+Select: s
+
+Model downloads: /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/data/ginfer/models
+Free space: 1534.5 GiB
+Changing this folder affects new downloads only. Existing models and transfers stay where they are.
+New absolute folder (blank to keep current):
+q
+
+GInfer — AIS-2-8592-L01
+
+  GPU 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · SM 12.0 · Available
+  GPU 1: NVIDIA RTX PRO 6000 Blackwell Workstation Edition · 97887 MiB · SM 12.0 · Available
+
+No local models registered. Download a model or add an existing local package.
+
+Instances:
+
+[l] Launch instance      [m] Manage instances
+[d] Download models      [a] Add a local model
+[s] Model storage        [t] Download progress
+[r] Refresh
+[q] Quit (keep serving)
+Select: Serving continues on the host. Stop instances from this menu or GChat.
+bash-5.2$ date -u +%FT%TZ
+
+2026-10-18T04:46:51Z
+bash-5.2$ python3 - <<'PY'
+
+> import os,pathlib,json,hashlib,signal,time
+
+> r=pathlib.Path('/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018')
+
+> base=r/'novice'; conf=base/'home/.local/lib/ginfer/bin/ginfer-launch.json'
+
+> print('CONFIG_EXISTS',conf.exists())
+
+> print('CONFIG_PATHS',list((base/'home/.local/lib/ginfer').rglob('ginfer-launch.json')))
+
+> pid=2781372; cmd=pathlib.Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0',b' ').decode()
+
+> assert cmd.startswith(str(base/'home/.local/lib/ginfer/bin/ginfer-host')+' --desktop-managed '),cmd
+
+> receipt={'pid':pid,'command':cmd,'stop':'SIGTERM to exact verified owned PID','stopped':False}
+
+> os.kill(pid,signal.SIGTERM)
+
+> for _ in range(100):
+
+>  p=pathlib.Path(f'/proc/{pid}')
+
+>  if not p.exists() or (p/'stat').read_text().split()[2]=='Z': receipt['stopped']=True;break
+
+>  time.sleep(.1)
+
+> print('OWN_HOST_STOPPED',receipt['stopped'])
+
+> (base/'host-process-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+
+> assert receipt['stopped']
+
+> PY
+
+CONFIG_EXISTS True
+CONFIG_PATHS [PosixPath('/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/novice/home/.local/lib/ginfer/bin/ginfer-launch.json')]
+OWN_HOST_STOPPED True
+bash-5.2$ exit
+
+exit
+
+Script done on 2026-10-17 23:46:51-05:00 [COMMAND_EXIT_CODE="0"]

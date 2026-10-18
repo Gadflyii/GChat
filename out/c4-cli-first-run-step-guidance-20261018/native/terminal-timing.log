@@ -1,0 +1,23 @@
+H 0.000000 START_TIME 2026-10-18 00:06:54-05:00
+H 0.000000 TERM dumb
+H 0.000000 TTY /dev/pts/1
+H 0.000000 COLUMNS 80
+H 0.000000 LINES 24
+H 0.000000 SHELL /bin/bash
+H 0.000000 COMMAND /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/step-guidance-native-pty/bin/ginfer-host first-run --interactive
+H 0.000000 TIMING_LOG /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/step-guidance-native-pty/terminal-timing.log
+H 0.000000 OUTPUT_LOG /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/step-guidance-native-pty/terminal-output.log
+H 0.000000 INPUT_LOG /media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/step-guidance-native-pty/terminal-input.log
+O 0.009282 150
+O 0.000755 420
+I 8.457272 2
+O 0.000062 3
+O 0.007830 198
+I 2.597368 1
+O 0.000055 2
+O 0.015654 30
+O 0.000413 206
+I 2.689870 2
+O 0.000064 3
+H 0.000000 DURATION 13.790121
+H 0.000000 EXIT_CODE 0

@@ -1,0 +1,49 @@
+{
+  "status": "PASS",
+  "make_verify_invocations": 1,
+  "verify_exit": 0,
+  "verify_start_utc": "2026-10-18T04:46:27Z",
+  "verify_end_utc": "2026-10-18T04:55:01Z",
+  "focused_setup": {
+    "passed": 4,
+    "failed": 0
+  },
+  "focused_package": {
+    "passed": 5,
+    "skipped": 5,
+    "skipped_reason": "PowerShell Windows release input tests unavailable on Linux",
+    "failed": 0
+  },
+  "frontend": {
+    "passed": 3478,
+    "skipped": 6,
+    "files_passed": 343,
+    "files_skipped": 1,
+    "lint_errors": 0,
+    "lint_warnings": 5,
+    "critical_coverage_files": 6
+  },
+  "rust": {
+    "passed": 1223,
+    "failed": 0,
+    "ignored": 28,
+    "result_groups": 23
+  },
+  "host": "AIS-2-8592-L01",
+  "cpus": "112-119",
+  "booking": 2995,
+  "priority": "nice10",
+  "cargo_jobs": 8,
+  "shared_lock": "/tmp/ginfer-s1-socket1-compile.lock",
+  "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+  "gpu_used": false,
+  "native_acceptance": "PASS; see native/result.json for scoped setup results and excluded olderHost first-run failure",
+  "raw_verify_log": "/media/ron/SSD_RAID/ai/tmp-c4-cli-driver-guidance-20261018/verify.log",
+  "verify_log_bytes": 485818,
+  "verify_log_sha256": "1592de65e0b43ec89b0c5641391c1f0531a8ba9f1cbe25648da2160493faab7e",
+  "verified_files": {
+    "scripts/setup-ginfer-linux.py": "fcf0fa0e3a1e0db5ad2093e1ebeaf2dd8cb1c1b05f5be34f95ba2ad904df51e0",
+    "tests/test_ginfer_linux_setup.py": "4ad1d7ae9ed3d62c3ecdd879b5c0dd96604b0c53cc5adb3c8eb109da71f0c5fb",
+    "tests/test_ginfer_host_package.py": "615455af54114308449d480ec8b12005d01d652f931369470ef12090b4912a9a"
+  }
+}

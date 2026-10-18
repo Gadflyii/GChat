@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Route as ProviderRoute } from '../$providerName'
 import { seedServiceHub } from '@/test/service-hub'
 
 const state = vi.hoisted(() => ({
   provider: undefined as unknown,
   name: 'openai',
+  navigate: vi.fn(),
+  updateProvider: vi.fn(),
+  updateSettings: vi.fn(),
+  stopAllModels: vi.fn(),
+  startModel: vi.fn(),
+  stopModel: vi.fn(),
 }))
 
 vi.mock('@/containers/SettingsMenu', () => ({ default: () => null }))
@@ -32,7 +38,17 @@ vi.mock('@/components/ModelSourceBadge', () => ({
   ModelSourceBadge: () => null,
   MissingModelBadge: () => null,
 }))
-vi.mock('@/containers/dynamicControllerSetting', () => ({ DynamicControllerSetting: () => null }))
+vi.mock('@/containers/dynamicControllerSetting', () => ({
+  DynamicControllerSetting: ({ title, controllerProps, onChange }: {
+    title: string
+    controllerProps: { value: string | boolean | number }
+    onChange: (value: string | boolean | number) => void
+  }) => <button onClick={() => onChange(
+    typeof controllerProps.value === 'boolean' ? !controllerProps.value
+      : typeof controllerProps.value === 'number' ? controllerProps.value + 1
+        : `${controllerProps.value}/changed`
+  )}>Save {title}</button>,
+}))
 vi.mock('@/containers/RenderMarkdown', () => ({
   RenderMarkdown: ({ content }: { content: string }) => <p>{content}</p>,
 }))
@@ -48,10 +64,12 @@ vi.mock('@/hooks/useModelLoad', () => ({
   }),
 }))
 vi.mock('@/hooks/useModelProvider', () => ({
-  useModelProvider: () => ({
+  useModelProvider: Object.assign(() => ({
     getProviderByName: () => state.provider,
     setProviders: vi.fn(),
-    updateProvider: vi.fn(),
+    updateProvider: state.updateProvider,
+  }), {
+    getState: () => ({ providers: state.provider ? [state.provider] : [] }),
   }),
 }))
 vi.mock('@/i18n/react-i18next-compat', () => ({
@@ -60,14 +78,23 @@ vi.mock('@/i18n/react-i18next-compat', () => ({
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (config: Record<string, unknown>) => ({ ...config }),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
-  useNavigate: () => vi.fn(),
+  useNavigate: () => state.navigate,
   useParams: () => ({ providerName: state.name }),
 }))
 
 describe('Provider detail route', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
+    state.name = 'openai'
+    state.updateSettings.mockResolvedValue(undefined)
     seedServiceHub({
-      models: { getActiveModels: vi.fn().mockResolvedValue([]) } as never,
+      providers: { updateSettings: state.updateSettings } as never,
+      models: {
+        getActiveModels: vi.fn().mockResolvedValue(['custom-host-model']),
+        stopAllModels: state.stopAllModels,
+        startModel: state.startModel,
+        stopModel: state.stopModel,
+      } as never,
     })
   })
 
@@ -98,50 +125,68 @@ describe('Provider detail route', () => {
     expect(screen.getByRole('button', { name: 'providers:start' })).toBeEnabled()
   })
 
-  it('keeps engine options behind Advanced with plain labels and has no second Start for GInfer', () => {
+  const appSettings = () => [
+    { key: 'model_path', title: 'Model Path', description: '', controller_type: 'input', controller_props: { value: '/private/models' } },
+    { key: 'binary_path', title: 'Binary Path', description: '', controller_type: 'input', controller_props: { value: '/private/ginfer-serve' } },
+    { key: 'timeout', title: 'Timeout', description: '', controller_type: 'input', controller_props: { value: 600, type: 'number' } },
+    { key: 'auto_unload', title: 'Auto Unload', description: '', controller_type: 'switch', controller_props: { value: true } },
+  ]
+
+  const renderGinfer = () => {
     state.name = 'ginfer'
-    try {
-      const setting = (key: string, title: string) => ({ key, title, description: '', controller_type: 'input', controller_props: { value: '' } })
-      state.provider = {
-        provider: 'ginfer', active: true, api_key: '', base_url: '',
-        settings: [setting('vision', 'Vision'), setting('spec', 'Speculative Decoding'), setting('kv_arena_bytes', 'KV Arena Size'), setting('auto_unload', 'Auto Unload')],
-        models: [{ id: 'model', capabilities: [] }],
-      }
-      const Component = (ProviderRoute as unknown as { component: React.ComponentType }).component
-      render(<Component />)
-      const advanced = screen.getByText('providers:ginferAdvanced').closest('details')!
-      expect(advanced).not.toHaveAttribute('open')
-      expect(advanced).toHaveTextContent('Speculative decoding')
-      expect(advanced).toHaveTextContent('Conversation memory size')
-      expect(advanced).not.toHaveTextContent('KV Arena Size')
-      expect(advanced).not.toHaveTextContent('Vision')
-      expect(screen.getByText('Vision').closest('details')).toBeNull()
-      expect(screen.getByText('Auto Unload').closest('details')).toBeNull()
-      expect(screen.queryByRole('button', { name: 'providers:start' })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'providers:manageInModels' })).toBeInTheDocument()
-    } finally { state.name = 'openai' }
+    state.provider = {
+      provider: 'ginfer', active: true, api_key: '', base_url: '',
+      settings: [
+        ...appSettings(),
+        ...['vision', 'spec', 'draft_tokens', 'draft_tp', 'kv_dtype', 'kv_arena_bytes', 'prefill_chunk', 'max_concurrency', 'no_cuda_graph'].map((key) => ({
+          key, title: `Old ${key}`, description: '', controller_type: 'input', controller_props: { value: 'stale override' },
+        })),
+      ],
+      models: [{ id: 'custom-host-model', capabilities: [] }],
+    }
+    const Component = (ProviderRoute as unknown as { component: React.ComponentType }).component
+    return render(<Component />)
+  }
+
+  it('directs model actions and custom startup settings to their owners, even with stale saved overrides', () => {
+    renderGinfer()
+
+    expect(screen.getByText('Model folder')).toBeVisible()
+    expect(screen.getByText('Engine program')).toBeVisible()
+    expect(screen.getByText('Model startup time limit')).toBeVisible()
+    expect(screen.getByText('Unload other models automatically')).toBeVisible()
+    expect(screen.queryByText(/^Old /)).not.toBeInTheDocument()
+    expect(screen.queryByText('providers:ginferAdvanced')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'providers:start' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'providers:reload' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'providers:stop' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Models' }))
+    expect(state.navigate).toHaveBeenLastCalledWith({ to: '/hub/' })
+    fireEvent.click(screen.getByRole('button', { name: 'Open GInfer Hosts' }))
+    expect(state.navigate).toHaveBeenLastCalledWith({ to: '/engines/' })
+    fireEvent.click(screen.getByRole('button', { name: 'providers:manageInModels' }))
+    expect(state.navigate).toHaveBeenLastCalledWith({ to: '/hub/' })
   })
 
-  it('explains draft and prompt processing sizes in tokens when Advanced is opened', () => {
-    state.name = 'ginfer'
-    try {
-      state.provider = {
-        provider: 'ginfer', active: true, api_key: '', base_url: '',
-        settings: [
-          { key: 'draft_tokens', title: 'Draft Tokens', description: '', controller_type: 'input', controller_props: { value: 0, placeholder: 'Auto', type: 'number', min: 0, max: 7, step: 1 } },
-          { key: 'prefill_chunk', title: 'Prefill Chunk', description: '', controller_type: 'input', controller_props: { value: 0, placeholder: 'Auto', type: 'number', min: 0, step: 128 } },
-        ],
-        models: [],
-      }
-      const Component = (ProviderRoute as unknown as { component: React.ComponentType }).component
-      render(<Component />)
+  it.each([
+    ['Model folder', 'model_path', '/private/models/changed'],
+    ['Engine program', 'binary_path', '/private/ginfer-serve/changed'],
+    ['Model startup time limit', 'timeout', 601],
+    ['Unload other models automatically', 'auto_unload', false],
+  ])('saves %s without disturbing an attached custom Host session', async (label, key, value) => {
+    renderGinfer()
 
-      fireEvent.click(screen.getByText('providers:ginferAdvanced'))
+    fireEvent.click(screen.getByRole('button', { name: `Save ${label}` }))
 
-      expect(screen.getByText('Helper draft length')).toBeVisible()
-      expect(screen.getByText('How many tokens (pieces of text) the speculative helper guesses ahead (1 to 7). Auto uses the model’s own recommendation.')).toBeVisible()
-      expect(screen.getByText('Prompt processing block size')).toBeVisible()
-      expect(screen.getByText('How many prompt tokens (pieces of text) GInfer processes in each block. Auto is fine for most computers; explicit values must be positive multiples of 128.')).toBeVisible()
-    } finally { state.name = 'openai' }
+    await waitFor(() => expect(state.updateSettings).toHaveBeenCalledOnce())
+    expect(state.updateSettings).toHaveBeenCalledWith('ginfer', expect.arrayContaining([
+      expect.objectContaining({ key, controller_props: expect.objectContaining({ value }) }),
+    ]))
+    expect(state.updateProvider).toHaveBeenCalledOnce()
+    expect(state.stopAllModels).not.toHaveBeenCalled()
+    expect(state.stopModel).not.toHaveBeenCalled()
+    expect(state.startModel).not.toHaveBeenCalled()
+    expect(screen.queryByText('Restart the model?')).not.toBeInTheDocument()
   })
 })

@@ -357,7 +357,7 @@ describe('DefaultModelsService', () => {
   })
 
   describe('startModel', () => {
-    it('auto-loads a freshly registered UUID with the artifact context from provider discovery', async () => {
+    it('auto-loads a freshly registered non-8192 UUID through tested profile selection', async () => {
       const id = '8d76994a-a344-4bb5-9e42-c643011f8d2a'
       vi.mocked(ensureRegistryLoaded).mockResolvedValue([])
       mockEngine.list.mockResolvedValue([
@@ -386,13 +386,13 @@ describe('DefaultModelsService', () => {
 
       expect(mockEngine.load).toHaveBeenCalledWith(
         id,
-        { max_context: 131_072 },
+        { use_profile_defaults: true },
         false,
         false
       )
     })
 
-    it('passes only GInfer-owned startup settings to GInfer', async () => {
+    it('selects a tested profile without forwarding per-model launch settings', async () => {
       const provider = {
         provider: 'ginfer',
         models: [
@@ -412,15 +412,19 @@ describe('DefaultModelsService', () => {
 
       expect(mockEngine.load).toHaveBeenCalledWith(
         'model1',
-        { max_context: 131072 },
+        { use_profile_defaults: true },
         false,
         false
       )
     })
 
-    it.each([undefined, null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
-      'retains the GInfer context maximum fallback without profile defaults (%s)',
-      async (value) => {
+    it.each([
+      { value: undefined, useProfileDefaults: undefined },
+      { value: 8192, useProfileDefaults: false },
+      { value: 131072, useProfileDefaults: undefined },
+    ])(
+      'does not constrain tested profile context from saved value $value or flag $useProfileDefaults',
+      async ({ value, useProfileDefaults }) => {
         const provider = {
           provider: 'ginfer',
           models: [
@@ -435,12 +439,18 @@ describe('DefaultModelsService', () => {
         mockEngine.getLoadedModels.mockResolvedValue({ includes: () => false })
         mockEngine.load.mockResolvedValue({ id: 'session1' })
 
-        const result = await modelsService.startModel(provider, 'model1')
+        const result = await modelsService.startModel(
+          provider,
+          'model1',
+          false,
+          undefined,
+          { useProfileDefaults }
+        )
 
         expect(result).toEqual({ id: 'session1' })
         expect(mockEngine.load).toHaveBeenCalledWith(
           'model1',
-          { max_context: 262144 },
+          { use_profile_defaults: true },
           false,
           false
         )
@@ -487,7 +497,7 @@ describe('DefaultModelsService', () => {
       }
     )
 
-    it('forwards selected GPUs with profile defaults and no saved context', async () => {
+    it('preserves explicit GPU order, operation ID and automatic-unload bypass for automatic starts', async () => {
       const provider = {
         provider: 'ginfer',
         models: [
@@ -499,23 +509,104 @@ describe('DefaultModelsService', () => {
           },
         ],
       } as any
-      mockEngine.getLoadedModels.mockResolvedValue({ includes: () => false })
+      mockEngine.getLoadedModels.mockResolvedValue(['model1'])
       mockEngine.load.mockResolvedValue({ id: 'session1' })
+      const gpuUuids = ['GPU-second', 'GPU-first']
 
       const result = await modelsService.startModel(
         provider,
         'model1',
         true,
-        ['GPU-selected'],
-        { useProfileDefaults: true, loadOperationId: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c' }
+        gpuUuids,
+        { loadOperationId: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c' }
       )
 
       expect(result).toEqual({ id: 'session1' })
       expect(mockEngine.load).toHaveBeenCalledWith(
         'model1',
-        { use_profile_defaults: true, gpu_uuids: ['GPU-selected'], load_operation_id: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c' },
+        {
+          use_profile_defaults: true,
+          gpu_uuids: ['GPU-second', 'GPU-first'],
+          load_operation_id: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c',
+        },
         false,
         true
+      )
+      expect(gpuUuids).toEqual(['GPU-second', 'GPU-first'])
+    })
+
+    it('preserves an explicit empty GPU constraint instead of reusing an attached session', async () => {
+      const provider = { provider: 'ginfer', models: [{ id: 'model1' }] } as any
+      mockEngine.getLoadedModels.mockResolvedValue(['model1'])
+      mockEngine.load.mockResolvedValue({ id: 'session1' })
+
+      await modelsService.startModel(provider, 'model1', false, [])
+
+      expect(mockEngine.load).toHaveBeenCalledWith(
+        'model1',
+        { use_profile_defaults: true, gpu_uuids: [] },
+        false,
+        false
+      )
+    })
+
+    it('rechecks an attached session when a load operation owns the request', async () => {
+      const provider = { provider: 'ginfer', models: [{ id: 'model1' }] } as any
+      mockEngine.getLoadedModels.mockResolvedValue(['model1'])
+      mockEngine.load.mockResolvedValue({ id: 'session1' })
+
+      await modelsService.startModel(provider, 'model1', false, undefined, {
+        loadOperationId: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c',
+      })
+
+      expect(mockEngine.load).toHaveBeenCalledWith(
+        'model1',
+        {
+          use_profile_defaults: true,
+          load_operation_id: 'c4c8f9f0-55ac-4a04-ad38-cd847cf1bb3c',
+        },
+        false,
+        false
+      )
+    })
+
+    it('keeps an attached custom GInfer session unchanged during ordinary auto-load', async () => {
+      const provider = {
+        provider: 'ginfer',
+        models: [{
+          id: 'model1',
+          settings: { ctx_len: { controller_props: { value: 65536, max: 262144 } } },
+        }],
+      } as any
+      mockEngine.getLoadedModels.mockResolvedValue(['model1'])
+
+      await expect(modelsService.startModel(provider, 'model1')).resolves.toBeUndefined()
+
+      expect(mockEngine.load).not.toHaveBeenCalled()
+      expect(mockEngine.unload).not.toHaveBeenCalled()
+      expect(mockEngine.updateSettings).not.toHaveBeenCalled()
+      expect(provider.models[0].settings.ctx_len.controller_props.value).toBe(65536)
+    })
+
+    it('propagates a missing tested profile without retrying with native context', async () => {
+      const provider = {
+        provider: 'ginfer',
+        models: [{
+          id: 'model1',
+          settings: { ctx_len: { controller_props: { value: 131072, max: 131072 } } },
+        }],
+      } as any
+      const error = new Error('No tested profile matches the selected graphics cards')
+      mockEngine.getLoadedModels.mockResolvedValue([])
+      mockEngine.load.mockRejectedValue(error)
+
+      await expect(modelsService.startModel(provider, 'model1')).rejects.toBe(error)
+
+      expect(mockEngine.load).toHaveBeenCalledExactlyOnceWith(
+        'model1',
+        { use_profile_defaults: true },
+        false,
+        false
       )
     })
 

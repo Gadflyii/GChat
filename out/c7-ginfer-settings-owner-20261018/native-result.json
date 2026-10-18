@@ -1,0 +1,66 @@
+{
+  "result": "PASS",
+  "scope": "Current native Linux debug shell with custom-protocol frontend: Settings > GInfer preferences and native navigation only.",
+  "source": {
+    "worktree_head": "dbb8ee2b971c50537a9152f3d40ed6b661217f77",
+    "app_code": "d3c3f77d6",
+    "binding": "Private build route, labels, extension source and settings exactly match the worktree; staged executable exactly matches native-target/debug/gchat.",
+    "executable_sha256": "d137cec32bf133be9f9c0675467df5486ca80041e64d3e49f0055afb90a4ca3c",
+    "extension_package": "Current @gchat/ginfer-extension 0.1.1 built with existing build:publish in the private tool-source; retained resource donor was read-only."
+  },
+  "environment": {
+    "host": "AIS-2-8592-L01 (S1)",
+    "cpu_affinity": "64-71",
+    "nice": 10,
+    "display": ":197",
+    "desktop_size": "1280x900",
+    "app_window": "1200x800 at (40,50)",
+    "isolation": "Private HOME/XDG/runtime700/Xauthority/dbus/unlocked keyring; private resource stage; software WebKit rendering. OpenCode and Hermes disabled before first launch and remained disabled."
+  },
+  "interaction_method": "Actual xdotool pointer clicks; inspector used only for read-only URL/text/geometry observations; native screenshots captured with ImageMagick import -window root.",
+  "checks": [
+    {
+      "action": "Sidebar Settings, then GInfer provider",
+      "url": "tauri://localhost/settings/providers/ginfer?step=undefined",
+      "observed_preferences": [
+        "Model folder",
+        "Engine program",
+        "Unload other models automatically",
+        "Model startup time limit"
+      ],
+      "observed_navigation": [
+        "Open Models",
+        "Open GInfer Hosts"
+      ],
+      "absent": "Global Vision/speculation/helper/TP/KV/prefill/concurrency/CUDA Graph overrides and a second Start action.",
+      "screenshot": "native-settings.png"
+    },
+    {
+      "action": "Native click Open Models",
+      "url": "tauri://localhost/hub",
+      "observed": "Models page, Installed selected, no installed models.",
+      "screenshot": "native-models.png"
+    },
+    {
+      "action": "Native return through Settings > GInfer, then click Open GInfer Hosts",
+      "url": "tauri://localhost/engines",
+      "observed": "GInfer Hosts page.",
+      "screenshot": "native-hosts.png"
+    }
+  ],
+  "verification_reused": "Existing focused tests and ONE make verify passed; existing web build passed. Missing generated icon repaired from retained donor without replacing tracked icon.png; native-only cargo continuation passed at05:04:23Z. No tests or web build repeated.",
+  "limits": [
+    "Native debug custom-protocol candidate with retained resource donor; no installed release claim.",
+    "Fresh fixture remained Preparing GInfer; navigation acceptance does not establish local Host readiness, engine startup, or model behavior.",
+    "No model loads, downloads, profiling, or inference were requested. No OpenCode/Hermes/npm provisioning appeared in the app log."
+  ],
+  "cleanup": {
+    "app_pid": 2988796,
+    "xvfb_pid": 2988793,
+    "dbus_wrapper_pid": 2988794,
+    "method": "SIGTERM by verified exact PID; app exit stopped private bus/daemons/renderers; Xvfb explicitly stopped; inspector forward closed.",
+    "terminal_return_utc": "2026-10-18T05:08:35Z",
+    "verified": "No live process using private HOME and no runtime mounts remained.",
+    "retention": "Build/tool-source/cache root retained for coordinator reuse; disposable native-home/native-stage removed after receipts copied."
+  }
+}

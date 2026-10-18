@@ -22,6 +22,33 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Chat search query selection — October 18
+
+An isolated native Linux pass reproduced a stale keyboard selection when a new
+search query returned the same number of chats. After selecting the second
+match for `a`, replacing the query with `v` kept the second position selected
+even though the matching chats changed. Enter opened that chat instead of the
+first match. The Search dialog and sidebar are unchanged between the observed
+native source `edcd74e49` and main `beee1f2f9`.
+
+Search now resets selection when its items change and scrolls the selected
+item into view when results change. Arrow navigation within the current results
+is preserved. Three focused regressions, one `make verify`, the frontend build
+and the native build passed on frozen source `3c0a8ba45`. The unchanged-source
+negative control failed the selection regression as expected; its other two
+tests passed.
+
+The corrected native Linux replay selected the first `v` result after changing
+an equal-count query, kept it visible, and opened the expected saved HTML chat
+with Enter. Recent-chat reopening and Clear also passed. All eight saved
+thread/session files were unchanged. Candidate SHA256:
+`4b15c5a4df9fd73d581bb931f8de890a74e5425031c5306668315b5a08861e98`.
+The isolated HOME/XDG, Xvfb, D-Bus and unlocked test-keyring replay used no model
+or GPU; CPUs were returned at 04:55Z. Evidence is in
+`/ai/gchat/out/gchat-chat-search-keyboard-20261018/`. This qualifies the Linux
+debug desktop interaction; Windows was not built (dev phase), and installer
+behavior was not checked.
+
 ## First-use duplicate agent names — October 17
 
 An isolated native Linux pass of main `9e75fc31e` reproduced silent replacement:
@@ -48,6 +75,62 @@ Evidence:
 `/ai/gchat/out/gchat1-chat-agents-pass-20261017/` (launch receipt, duplicate-name
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
+
+## Typing an agent identifier — October 18
+
+An isolated native Linux Studio pass reproduced the main **Identifier** field
+dropping a hyphen during ordinary typing: `keyboard-helper` became
+`keyboardhelper`, in both an existing draft and a new agent. Focus remained in
+the field. The affected editor is byte-identical from retained native source
+`edcd74e49` through main `25459ffc2`.
+
+The field now retains a trailing separator while editing and normalizes it on
+blur, matching the role identifier controls. Native baseline DOM captures and
+the viewed screenshot are in
+`/ai/gchat/out/gchat-agent-identifier-keyboard-20261018/`.
+The focused Studio suite passed 65 tests; the sole `make verify`, frontend
+build and native build passed on frozen source `6e6286019`. The first native
+build linked a stale Host dependency and stopped on missing imports. A bounded
+native-only recovery refreshed two staged source timestamps; all 3,151 frozen
+source hashes remained unchanged, and the rebuilt Host resolved both imports.
+
+The corrected native replay retained `keyboard-helper` and focus in both new
+and existing drafts, kept a trailing `-` while editing, and normalized it on
+Tab. Save and reselect preserved the identifier. All ten prior definitions were
+unchanged; only the private `IdentifierKeyboardProbe` fixture was added.
+Candidate SHA256 is
+`651c447194dcefdb12bd601c7fecbc7c37ec34465072f3807762151b54e8543c`.
+Both passes used a private HOME/XDG profile, authenticated Xvfb, D-Bus and an
+unlocked test keyring, with no model or GPU request. The corrected screenshot
+was viewed and CPUs were returned at 05:08Z. This qualifies the Linux debug
+editor interaction; installer behavior was not checked.
+Windows: not built (dev phase).
+
+## Skill slash-menu keyboard visibility — October 18
+
+An isolated native Linux Chat pass qualified the pending keyboard interaction
+for `GCHAT-SKILL-SLASH-KEYBOARD-VISIBILITY-20261017`. With 24 enabled private
+`keyboard-01` through `keyboard-24` skills, Up/Down wrapped between the first
+and last entries while keeping the selection visible. Twelve Down presses
+selected `keyboard-13` fully inside the scrolled menu. Filtering to
+`/keyboard-2` selected `keyboard-20` among five matches; adding `4` selected
+the sole `keyboard-24` match. Composer focus remained intact. Tab inserted the
+inline `/keyboard-24` token; Backspace removed it from the empty composer.
+Backspace after a bare `/` closed the menu, and Escape closed the menu while
+preserving the typed query. The private draft was cleared without sending.
+
+The original source stack `4d60afdf1`, merged by `5d153ae12`, passed 62 focused
+tests and one cumulative `make verify`; those existing receipts remain in
+`/ai/gchat/out/skill-slash-keyboard-visibility-20261017/result.json`.
+The native pass used retained binary source `edcd74e49`, SHA256
+`bba3976355aca7a8c8721866f2eb5f3376be33181ae067dc12e4efb82d1a63be`.
+Its four slash-menu surfaces are byte-identical through `59dfad250`.
+Native DOM receipts, the viewed scrolling screenshot and the stopped-session
+record are in `/ai/gchat/out/gchat-skill-slash-native-20261018/`. This qualifies
+the Linux debug interaction with retained sidecars and a private HOME/XDG,
+Xvfb, D-Bus and unlocked test keyring. No model or GPU was used; CPU resources
+were returned at 04:44Z. Installer behavior was not checked.
+Windows: not built (dev phase).
 
 ## Adding roles after removal — October 18
 

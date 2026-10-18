@@ -6,6 +6,7 @@ import { confirmAction } from '@/lib/confirm'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotTaskActions from '@/components/GbotTaskActions'
+import GbotTaskInterruption from '@/components/GbotTaskInterruption'
 import HumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
@@ -256,12 +257,16 @@ function GbotPage() {
       setBusy(false)
     }
   }
-  const perform = async (action: () => Promise<unknown>) => {
+  const perform = async (
+    action: () => Promise<unknown>,
+    propagateError = false
+  ) => {
     if (busy) return
     setBusy(true)
     try {
       await action()
     } catch (cause) {
+      if (propagateError) throw cause
       toast.error(String(cause))
     } finally {
       try {
@@ -1067,6 +1072,7 @@ function GbotPage() {
                           }
                         />
                       </div>
+                      <GbotTaskInterruption task={task} />
                       {task.messages
                         .filter(
                           (message) =>
@@ -1089,12 +1095,14 @@ function GbotPage() {
                           request={request}
                           busy={busy}
                           reply={(response) =>
-                            perform(() =>
-                              gbot('tasks/help', {
-                                id: task.id,
-                                request_id: request.id,
-                                response,
-                              })
+                            perform(
+                              () =>
+                                gbot('tasks/help', {
+                                  id: task.id,
+                                  request_id: request.id,
+                                  response,
+                                }),
+                              true
                             )
                           }
                         />

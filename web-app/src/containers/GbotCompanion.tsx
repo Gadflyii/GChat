@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotTaskActions from '@/components/GbotTaskActions'
+import GbotTaskInterruption from '@/components/GbotTaskInterruption'
 import GbotDesktopView, {
   type DesktopViewHandle,
 } from '@/components/GbotDesktopView'
@@ -189,12 +190,16 @@ export default function GbotCompanion() {
     wasVisible.current = visible
   }, [visible, workspaceId])
 
-  const perform = async (action: () => Promise<unknown>) => {
+  const perform = async (
+    action: () => Promise<unknown>,
+    propagateError = false
+  ) => {
     if (busy) return
     setBusy(true)
     try {
       await action()
     } catch (cause) {
+      if (propagateError) throw cause
       toast.error(String(cause))
     } finally {
       await useGbotCompanion.getState().refresh()
@@ -412,6 +417,7 @@ export default function GbotCompanion() {
                       }
                     />
                   </div>
+                  <GbotTaskInterruption task={task} />
                   {task.messages
                     .filter(
                       (m) =>
@@ -450,12 +456,14 @@ export default function GbotCompanion() {
                       request={request}
                       busy={busy}
                       reply={(response) =>
-                        perform(() =>
-                          gbot('tasks/help', {
-                            id: task.id,
-                            request_id: request.id,
-                            response,
-                          })
+                        perform(
+                          () =>
+                            gbot('tasks/help', {
+                              id: task.id,
+                              request_id: request.id,
+                              response,
+                            }),
+                          true
                         )
                       }
                     />
@@ -476,8 +484,9 @@ export default function GbotCompanion() {
               )}
               {!botHasControl && (
                 <p className="text-sm text-muted-foreground">
-                  The bot is paused for desktop control. Hand back in Desktop to
-                  continue.
+                  The bot is paused for desktop control. Choose Hand back in
+                  Desktop, then Resume task in Conversation to continue a paused
+                  task.
                 </p>
               )}
             </div>
@@ -692,9 +701,9 @@ export default function GbotCompanion() {
                     visible={visible && tab === 'desktop'}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Hiding this pane closes desktop input and audio. A bot
-                    paused for takeover stays paused until you hand back
-                    control.
+                    Hiding this pane closes desktop input and audio. Hand back
+                    returns control to the bot; paused tasks still need Resume
+                    task in Conversation.
                   </p>
                 </>
               ) : !preparing && !loading && !connectionError ? (

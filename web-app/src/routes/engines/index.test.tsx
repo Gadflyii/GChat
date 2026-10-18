@@ -1,6 +1,7 @@
 import { spyConfirm } from '@/test/confirm'
 import userEvent from '@testing-library/user-event'
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -14,12 +15,17 @@ import type { ComponentType, ReactNode } from 'react'
 import type {
   EngineInstance,
   EngineLaunchProfile,
+  EngineSnapshot,
   NearbyHost,
 } from '@/services/engines'
 
 const mocks = vi.hoisted(() => ({
   command: vi.fn(),
   refresh: vi.fn(),
+  publishSnapshot: vi.fn(),
+  snapshot: null as EngineSnapshot | null,
+  storeVersion: 0,
+  storeListeners: new Set<() => void>(),
   error: '',
   local: false,
   hasHost: true,
@@ -50,10 +56,16 @@ vi.mock('@/stores/engine-discovery-store', () => ({
 vi.mock('@/hooks/useBundledResources', () => ({
   useBundledResources: () => mocks.resources,
 }))
-vi.mock('@/stores/engine-hosts-store', () => ({
-  useEngineHosts: (
+vi.mock('@/stores/engine-hosts-store', async () => {
+  const { useSyncExternalStore } = await import('react')
+  const subscribe = (listener: () => void) => {
+    mocks.storeListeners.add(listener)
+    return () => { mocks.storeListeners.delete(listener) }
+  }
+  const useEngineHosts = (
     selector?: (state: { refresh: typeof mocks.refresh }) => unknown
   ) => {
+    useSyncExternalStore(subscribe, () => mocks.storeVersion)
     const state = {
       hosts: mocks.hasHost ? [
         {
@@ -66,10 +78,11 @@ vi.mock('@/stores/engine-hosts-store', () => ({
       nearby: mocks.nearby,
       errors: mocks.error ? { host: mocks.error } : {},
       refresh: mocks.refresh,
+      publishSnapshot: mocks.publishSnapshot,
       refreshing: mocks.refreshing,
       discoveryError: null,
       snapshots: {
-        host: {
+        host: mocks.snapshot ?? {
           host_id: 'host',
           display_name: 'Lab host',
           revision: 1,
@@ -98,10 +111,26 @@ vi.mock('@/stores/engine-hosts-store', () => ({
       },
     }
     return selector ? selector(state) : state
-  },
-}))
+  }
+  return { useEngineHosts }
+})
 import { Route } from './index'
 const Page = Route.options.component as ComponentType
+
+function publishHostSnapshot(snapshot: EngineSnapshot) {
+  mocks.snapshot = snapshot
+  mocks.error = ''
+  mocks.storeVersion++
+  mocks.storeListeners.forEach(listener => listener())
+}
+
+function sharingSnapshot(enabled: boolean, revision = 1): EngineSnapshot {
+  return {
+    host_id: 'host', display_name: 'Lab host', revision,
+    instances: [], gpus: [], models: [],
+    lan_sharing: { managed: true, enabled, active: enabled, port: 7444 },
+  }
+}
 
 function renderExpandedPage() {
   const view = render(<Page />)
@@ -120,9 +149,13 @@ beforeEach(() => {
   mocks.resources = { ready: true, error: '' }
   mocks.nearby = []
   mocks.instances = []
+  mocks.snapshot = null
+  mocks.storeVersion = 0
+  mocks.storeListeners.clear()
+  mocks.publishSnapshot.mockReset().mockImplementation((_hostId: string, snapshot: EngineSnapshot) => publishHostSnapshot(snapshot))
   mocks.command
     .mockReset()
-    .mockImplementation(async (action: string) =>
+    .mockImplementation(async (action: string, args?: { body?: { enabled?: boolean } }) =>
       action === 'credential_status'
         ? { ready: true, platform: 'linux', can_install: false }
         : action === 'first_run'
@@ -132,7 +165,9 @@ beforeEach(() => {
               storage: { path: '/models' },
               models: [],
             }
-          : {}
+          : action === 'lan_sharing'
+            ? sharingSnapshot(args?.body?.enabled ?? true, 2)
+            : {}
     )
   mocks.refresh.mockReset().mockResolvedValue(undefined)
 })
@@ -220,6 +255,151 @@ describe('Engines host intake and launch controls', () => {
       })
     )
     await waitFor(() => expect(share).toBeEnabled())
+  })
+
+  it.each([
+    { label: 'off', initiallyEnabled: true, acceptedEnabled: false },
+    { label: 'on', initiallyEnabled: false, acceptedEnabled: true },
+  ])('preserves network sharing $label after an accepted command and failed refresh', async ({ label, initiallyEnabled, acceptedEnabled }) => {
+    mocks.local = true
+    mocks.snapshot = sharingSnapshot(initiallyEnabled)
+    const accepted = sharingSnapshot(acceptedEnabled, 2)
+    const successMessage = `Network sharing turned ${label}.`
+    const refreshMessage = 'Could not refresh the host list. Choose Refresh above to try again.'
+    let finishSharing!: (snapshot: EngineSnapshot) => void
+    let rejectRefresh!: (reason: Error) => void
+    const original = mocks.command.getMockImplementation()!
+    mocks.command.mockImplementation((action: string, args: unknown) => action === 'lan_sharing'
+      ? new Promise<EngineSnapshot>((resolve) => { finishSharing = resolve })
+      : original(action, args))
+    render(<Page />)
+    await screen.findByText('Secure storage is ready.')
+    mocks.refresh.mockClear().mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+    const share = screen.getByRole('switch', { name: 'Share this host' })
+    if (initiallyEnabled) expect(share).toBeChecked()
+    else expect(share).not.toBeChecked()
+    fireEvent.click(share)
+    expect(share).toBeDisabled()
+    fireEvent.click(share)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'lan_sharing')).toEqual([
+      ['lan_sharing', { host_id: 'host', body: { enabled: acceptedEnabled } }],
+    ])
+    expect(mocks.publishSnapshot).not.toHaveBeenCalled()
+    expect(mocks.refresh).not.toHaveBeenCalled()
+
+    await act(async () => finishSharing(accepted))
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce())
+    if (acceptedEnabled) expect(share).toBeChecked()
+    else expect(share).not.toBeChecked()
+    expect(mocks.publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+    expect(screen.getByText(successMessage)).toHaveAttribute('role', 'status')
+    expect(share).toBeDisabled()
+    fireEvent.click(share)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'lan_sharing')).toHaveLength(1)
+
+    await act(async () => rejectRefresh(new Error('Host list unavailable')))
+    await waitFor(() => expect(share).toBeEnabled())
+    const feedback = screen.getByRole('alert')
+    expect(feedback).toHaveTextContent(refreshMessage)
+    expect(screen.getByText(successMessage)).toBeVisible()
+    const details = within(feedback).getByText('Error: Host list unavailable')
+    expect(details).not.toBeVisible()
+    fireEvent.click(within(feedback).getByText('Host refresh error details'))
+    expect(details).toBeVisible()
+    expect(screen.queryByText(/Could not change network sharing/)).not.toBeInTheDocument()
+
+    mocks.refresh.mockRejectedValueOnce(new Error('Host list still unavailable'))
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(feedback).toHaveTextContent('Error: Host list still unavailable'))
+    expect(feedback).toHaveTextContent(refreshMessage)
+    expect(screen.getByText(successMessage)).toBeVisible()
+    if (acceptedEnabled) expect(share).toBeChecked()
+    else expect(share).not.toBeChecked()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'lan_sharing')).toHaveLength(1)
+
+    mocks.refresh.mockImplementationOnce(async () => { publishHostSnapshot(sharingSnapshot(initiallyEnabled, 3)) })
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(feedback).not.toBeInTheDocument())
+    expect(mocks.refresh).toHaveBeenCalledTimes(3)
+    expect(screen.getByText(successMessage)).toBeVisible()
+    if (initiallyEnabled) expect(share).toBeChecked()
+    else expect(share).not.toBeChecked()
+    expect(mocks.publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'lan_sharing')).toHaveLength(1)
+  })
+
+  it('preserves network sharing failure through refresh and allows explicit switch retry', async () => {
+    mocks.local = true
+    mocks.snapshot = sharingSnapshot(true)
+    const sharingMessage = 'Could not change network sharing. Check that the model service on this computer is reachable, then try Share this host again.'
+    const refreshMessage = 'Could not refresh the host list. Choose Refresh above to try again.'
+    let rejectSharing!: (reason: Error) => void
+    let rejectRefresh!: (reason: Error) => void
+    const original = mocks.command.getMockImplementation()!
+    mocks.command.mockImplementation((action: string, args: unknown) => action === 'lan_sharing'
+      ? new Promise<EngineSnapshot>((_resolve, reject) => { rejectSharing = reject })
+      : original(action, args))
+    render(<Page />)
+    await screen.findByText('Secure storage is ready.')
+    mocks.refresh.mockClear().mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRefresh = reject }))
+    const share = screen.getByRole('switch', { name: 'Share this host' })
+    fireEvent.click(share)
+    expect(share).toBeDisabled()
+    fireEvent.click(share)
+    expect(share).toBeChecked()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'lan_sharing')).toHaveLength(1)
+    await act(async () => rejectSharing(new Error('Host policy refused sharing change')))
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce())
+    const sharingFeedback = screen.getByRole('alert')
+    expect(sharingFeedback).toHaveTextContent(sharingMessage)
+    const details = within(sharingFeedback).getByText('Error: Host policy refused sharing change')
+    expect(details).not.toBeVisible()
+    fireEvent.click(within(sharingFeedback).getByText('Network sharing error details'))
+    expect(details).toBeVisible()
+    expect(share).toBeChecked()
+    expect(share).toBeDisabled()
+    expect(mocks.publishSnapshot).not.toHaveBeenCalled()
+
+    await act(async () => rejectRefresh(new Error('Host list unavailable')))
+    await waitFor(() => expect(share).toBeEnabled())
+    expect(sharingFeedback).toHaveTextContent(sharingMessage)
+    expect(screen.getByText(refreshMessage)).toBeVisible()
+    expect(screen.getByText('Error: Host list unavailable')).not.toBeVisible()
+    expect(share).toBeChecked()
+    expect(screen.queryByText(/Network sharing turned/)).not.toBeInTheDocument()
+    mocks.refresh.mockRejectedValueOnce(new Error('Host list still unavailable'))
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }))
+    await waitFor(() => expect(screen.getByText('Error: Host list still unavailable')).toBeInTheDocument())
+    expect(sharingFeedback).toHaveTextContent(sharingMessage)
+    expect(details).toBeVisible()
+    expect(share).toBeChecked()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'lan_sharing')).toHaveLength(1)
+
+    let finishRetry!: (snapshot: EngineSnapshot) => void
+    mocks.command.mockImplementation((action: string, args: unknown) => action === 'lan_sharing'
+      ? new Promise<EngineSnapshot>((resolve) => { finishRetry = resolve })
+      : original(action, args))
+    await act(async () => {
+      fireEvent.click(share)
+      fireEvent.click(share)
+    })
+    expect(share).toBeDisabled()
+    expect(share).toBeChecked()
+    expect(screen.queryByText(sharingMessage)).not.toBeInTheDocument()
+    expect(screen.queryByText(refreshMessage)).not.toBeInTheDocument()
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'lan_sharing')).toEqual([
+      ['lan_sharing', { host_id: 'host', body: { enabled: false } }],
+      ['lan_sharing', { host_id: 'host', body: { enabled: false } }],
+    ])
+    const accepted = sharingSnapshot(false, 2)
+    await act(async () => finishRetry(accepted))
+    await waitFor(() => expect(share).toBeEnabled())
+    expect(share).not.toBeChecked()
+    expect(screen.getByText('Network sharing turned off.')).toHaveAttribute('role', 'status')
+    expect(screen.queryByText(sharingMessage)).not.toBeInTheDocument()
+    expect(screen.queryByText(refreshMessage)).not.toBeInTheDocument()
+    expect(mocks.refresh).toHaveBeenCalledTimes(3)
+    expect(mocks.publishSnapshot).toHaveBeenCalledExactlyOnceWith('host', accepted)
   })
 
   it('does not change sharing on a remote host', async () => {

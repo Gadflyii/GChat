@@ -40,6 +40,207 @@ Inventory: owner C3, branch
 cache, running app, dependency or resource allocation is changed by this source
 task. The shared stage remains scheduled by the coordinator. Next: source
 handoff, then scheduled verification and native acceptance.
+## Gbot human-help failure recovery — October 18
+
+`GBOT-HUMAN-HELP-INLINE-ERRORS`: Gbot settings and the companion previously
+caught failed **Send reply** and **Decline** requests before their help cards
+could display the error. Both views now pass these failures to the existing
+card handler. The error stays beside the request through normal task refreshes,
+the unsent reply remains available, and either action can be retried. Successful
+responses still refresh and show the saved reply or declined outcome.
+
+Four rendered integration regressions cover both actions in both views,
+including pending feedback, duplicate prevention, preserved drafts, refresh and
+retry with the original task/request/response. They fail on baseline
+`84d6b23f0` because the inline alert is absent. All 110 focused tests pass.
+One `make verify` passed lint, typecheck, quality, hardening, manager and assets
+checks, then stopped at an unrelated first-run folder-hydration test race.
+The failed coverage and unrun Rust stages pass with
+`make test-coverage-critical test-rust`: 3,361 app tests, 121 extension tests,
+1,228 Rust tests and all six coverage floors; six app skips and 28 Rust ignores.
+This continuation reused Codex 3’s exact timing correction `7fd01cf0a` as a test
+source overlay; that separately owned change must accompany integration.
+The human-help source hashes remained unchanged through verification.
+No backend, task-control or approval policy changed.
+No VM, native Windows, model or live task was run. FRESH/OLD remain OFF with
+original XML, in Gchat 2 custody. Windows: not built (dev phase).
+
+Result: `out/gchat2-human-help-inline-errors-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-human-help-inline-errors-20261018`.
+
+## Gbot Hand back and task resume guidance — October 18
+
+`GBOT-HAND-BACK-RESUME-GUIDANCE`: the desktop viewer and companion previously
+implied that **Hand back** continues a paused task. It restores bot control,
+while the task remains paused until explicitly resumed. The viewer now explains
+that distinction, and companion hints name **Hand back** in Desktop followed
+by **Resume task** in Conversation. The service contract and task controls are
+unchanged.
+
+All 100 existing settings and companion cases pass, including input closure
+and the requirement to resume tasks explicitly. ONE `make verify` passed on
+S1 CPUs96–103, 04:43:20–04:51:02Z: lint, typecheck, quality guards, 3,353 app
+tests (six skipped), 121 extension tests, all six coverage floors and 1,222
+Rust tests (28 ignored). Source hashes matched before and after the gate.
+Baseline `fdc7f3a96`; only three UI hints and the matching documentation changed.
+No VM, native Windows, model or live task was run.
+FRESH/OLD remain OFF/original XML/custody Gchat 2.
+Windows: not built (dev phase); shared frontend copy only.
+
+Result: `out/gchat2-hand-back-resume-guidance-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-hand-back-resume-guidance-20261018`.
+## Network sharing command and refresh feedback — Gchat 3, October 18
+
+`GUI-HOST-SHARING-REFRESH-RESULT-20261018`: a successful sharing change now
+publishes the command's authoritative Host snapshot before refreshing the host
+list. A failed read preserves the accepted switch setting and completed-action
+message, with separate persistent guidance for read and command failures.
+Refresh retries only the read; a later authoritative snapshot still controls the
+switch. Another sharing change requires an explicit action. No native sharing
+or Engine contract changes.
+
+The allocated base `4ba089a88` reproduces all three rendered defects (three
+failed, 21 skipped): accepted OFF/ON leave the old setting and a rejected command
+lacks persistent guidance. The fixed route passes all 24 focused cases, including
+pending duplicate prevention and explicit retry. Lint passes with zero errors
+and five existing warnings. ONE `make verify` passed: 3,359 app tests (six
+skipped), 121 extension tests, all six critical coverage floors and 1,222 Rust
+tests (28 ignored). Candidate chain: 04:49:11–04:57:18Z, exit zero; frozen
+source/test hashes match afterward. The coordinator reviewed the actual logs,
+effective commands and source/test diffs. Current main `70c61dfb0` has no
+intervening changes to either owned file.
+
+Owner: `/ai/gchat-worktrees/gchat3-host-sharing-refresh-result-20261018`, branch
+`fix/gchat3-host-sharing-refresh-result-20261018`, base `4ba089a88`.
+Retained evidence: `out/host-sharing-refresh-result-20261018/test-result.json`
+and adjacent `test-summary.md`. S1 AIS-2-8592-L01 CPUs104–111, booking 2996,
+used independent offline dependency/cache copies from the unchanged RC donor.
+The owned root `/media/ron/SSD_RAID/ai/tmp-gchat3-host-sharing-refresh-tests-20261018`
+(42.32 GB), two containers and local source archive were removed; returned
+04:59Z and booking canceled. Only concise result/summary evidence remains.
+Next: commit/push and merge review. Rendered mocked behavior and the Linux
+source gate are qualified; live sharing/network, installed GUI, account/pairing,
+Engine/GPU, Windows and installer qualification remain separate.
+## Folder reveal runtime crash — C3, October 18
+
+`GUI-FOLDER-REVEAL-NESTED-RUNTIME`: the pinned current-main release
+`d0a8d06bf` crashed at 04:38:54Z when General → Diagnostic logs →
+**Open Containing Folder** was clicked. Opener 2.5.3 executes synchronous Linux
+`zbus::blocking` inside its async command; Tokio's nested-runtime guard aborts
+the app. The app now owns a native reveal command that calls the same
+cross-platform opener from `spawn_blocking`, and the frontend uses that command.
+Folder selection semantics and file-manager errors are preserved.
+
+Acceptance: the real private folder handler receives the logs folder, GChat
+stays responsive, and an unavailable handler returns an error without panic.
+Frontend IPC2 and the real-opener Linux runtime-worker regression1 passed.
+Corrected library check/clippy and lint passed. The original check command
+incorrectly combined all targets with CLI features, disabling the desktop
+entry point; that failure is retained and corrected to library scope.
+
+The first/only `make verify` stopped at a new background disk-full test:
+3351 app tests passed, one failed, six skipped. Its alert renders directly from
+`flow`, while a later `useEffect([flow])` hydrates the retained folder. The test
+now waits for the same `/models` assertion before Retry; all assertions remain.
+This synchronization correction is pushed in `7fd01cf0a`; the original verify
+failure is retained. Authorized continuation passed the first-run file32, app
+coverage3352 (six skipped), extension121, all six coverage floors and1223 native
+tests (28 ignored). No second `make verify` ran and no passed stage was repeated.
+Vite/default desktop custom-protocol build passed05:00:08Z; checked candidate
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/folder-reveal-candidate/bin/gchat`.
+Native Linux acceptance passed05:04–05:08Z: ordinary pointer input opened
+private Nautilus in the correct data root with **logs** selected. Its HOME,
+runtime, display and D-Bus matched the isolated app. The screenshot was visually
+reviewed; subsequent ordinary Interface navigation proved responsiveness.
+The real-opener worker test covers an unavailable handler returning an ordinary
+error. No native GUI handler failure is claimed. The first direct candidate
+launch inherited AppRun libraries and failed before UI at a relative WebKit
+child path; using the host desktop environment corrected the fixture. This is
+a changed-source custom-protocol debug binary, not a fresh installer/Windows
+qualification. Source gates were not repeated. The result is merge-ready.
+No model, profile or GPU workload is needed.
+
+Owner/source: Codex 3,
+`/ai/gchat-worktrees/c3-folder-reveal-runtime-20261018`, branch
+`fix/c3-folder-reveal-runtime-20261018`, baseline `bbc81c2ec`.
+The shared S1 stage was handed off after download-count build04:41:46Z.
+CPU80–87 booking2993 returned05:01Z; all owned gate containers exited/removed.
+Local/remote disposable source archives were removed after checked candidate copy.
+The shared stage is handed to Interface; immutable folder candidate is retained.
+Execution used socket1 shared lock and nice10;
+all35 retained manifests/locks/config matched before exact source staging.
+The installed AppDir/home, badge candidate, downloads home, runnable resources
+and tools are protected. Evidence:
+`out/c3-current-main-release-20261018/{folder-reveal-crash.json,folder-reveal-panic.txt}`;
+fix result `out/c3-folder-reveal-runtime-20261018/result.json`.
+## GInfer settings ownership — C7, October 18
+
+`GUI-GINFER-PROVIDER-SETTINGS-ADVANCED` is implemented by source commits
+`d3c3f77d6` and `dbb8ee2b9`, based on main `25459ffc2`. Models owns ordinary
+Load/Stop and package management; GInfer Hosts owns custom startup settings
+and saved profiles. Settings retains four application preferences and direct
+links to Models and GInfer Hosts. Chat/API automatic loading selects complete
+tested profiles and preserves explicit GPU constraints. Superseded global
+startup overrides and their extension consumption are removed.
+
+Arch signed at04:46Z. Focused verification passed 57 web, 34 extension and one
+native screened-profile regression. ONE `make verify` passed 3,354 app,
+127 extension and 1,223 Rust tests, lint, types, guards and coverage floors.
+An incomplete focused-test mock was corrected before the full gate. The web
+build and native debug build passed; missing ignored generated icon inputs
+were supplied from a retained donor before continuing only the native build.
+
+The isolated native Linux check displayed exactly four preferences and used
+pointer clicks to reach Models and GInfer Hosts. Screenshots and concise
+receipts are in `out/c7-ginfer-settings-owner-20261018/` in this source branch.
+This qualifies Settings display/navigation; the fresh fixture remained
+Preparing GInfer, so no Host readiness, installed release or model-start claim
+is made. Windows was not built (development phase). No model/GPU was used.
+All private processes stopped and CPUs64–71 returned at05:08Z.
+
+C7 owns worktree `/ai/gchat-worktrees/c7-ginfer-settings-owner-20261018`, branch
+`fix/c7-ginfer-settings-owner-20261018`. The source and native evidence are
+ready for merge. Private S1 build/cache root
+`/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018` is retained only
+for immediate reuse by the assigned OpenCode provisioning fix; disposable GUI
+HOME/stage were removed after evidence capture.
+
+### Architecture decision — signed04:46Z
+
+Approved ownership: Models owns ordinary Load/Stop and package management;
+GInfer Hosts owns custom per-instance startup settings and saved hardware
+profiles. Settings > GInfer keeps application behavior (load timeout and
+automatic unloading), storage discovery and engine-program location, with
+direct links to Models and GInfer Hosts. Remove its global Vision/speculation,
+helper, KV, prefill, concurrency and CUDA-Graph controls and their extension
+configuration consumption rather than leaving invisible persisted overrides.
+The per-model GInfer settings gear is already absent.
+
+The decision also covers ordinary chat/API loading: these currently use
+global settings plus the model's native context, whereas Installed Load asks
+for a complete tested Host profile. Ordinary automatic starts
+use that same tested-profile selection and retain explicit GPU constraints;
+already attached running sessions keep their current saved Host settings.
+Models' explicit tested-profile Load retains its existing matching-resident
+rule. Custom settings remain available through Hosts and its existing
+instance attachment path. Do not silently start an unqualified custom profile
+or change any tested profile's context, concurrency or options.
+
+Relevant paths are `web-app/src/services/models/default.ts:startModel`,
+`extensions/ginfer-extension/src/index.ts:buildGinferConfig`, and
+`src-tauri/plugins/tauri-plugin-ginfer/src/managed.rs:load_on_control`.
+`use_profile_defaults` already discards provider launch options in native
+`options` and chooses an eligible complete profile. HostCard builds independent
+instance settings from its own form/saved profile and consumes no provider
+launch settings. CLI/native explicit `GinferConfig` remains supported; the
+obsolete desktop global configuration is the removed path.
+
+Risks to check: chat/API must not reject a valid non-native tested context;
+explicit GPU/order constraints and missing-profile rejection must survive;
+an existing custom Host session must not restart or change on a Settings save;
+storage/binary/timeout/unload settings must retain their existing behavior.
+Source tests should cover these supported transitions and Settings navigation.
+No HostCard edits are proposed because Gchat 3 owns its sharing-result work.
 
 ## Scheduled tasks brain setup guidance — October 18
 
@@ -61,6 +262,128 @@ Windows: not built (dev phase); shared frontend copy only.
 
 Result: `out/gchat2-schedule-brain-guidance-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-schedule-brain-guidance-20261018`.
+## Gbot task interruption reason — October 18
+
+`GBOT-TASK-HISTORY-INTERRUPTION-REASON`: task cards previously showed
+**Interrupted** and **Resume** without the cause saved by the service. The
+Gbot settings and companion conversation now display the latest persisted
+interruption reason beneath the task state through one shared component.
+For an empty model answer this includes “resume the task to try again.”
+The most recent matching event is selected by insertion order because event
+timestamps use whole seconds. Completed tasks do not retain stale interruption
+guidance, and older records without history still render normally.
+
+The rendered regression checks the latest reason across bot selection and
+reopening, preserves the saved prompt and dispatches Resume for the correct
+task. It fails on baseline `98a814b13`; the completed-task case passes there.
+The companion case also fails on the old code and checks Resume, clearing
+the message on completion and older records without history. All 100 focused
+settings/companion cases pass. ONE `make verify` passed the initial settings
+snapshot on S1 CPUs96–103, 04:27:57–04:35:45Z: lint, typecheck, quality guards,
+3,347 app cases (six skipped), 121 extension cases, six coverage floors and
+1,220 Rust cases (28 ignored). The final shared-component/companion change
+then passed a refreshed `make verify-fast` (3,348 app cases, six skipped;
+121 extension cases; six floors); Rust source was unchanged. Source hashes
+matched before and after each gate. This uses existing serialized task history;
+backend state and recovery behavior are unchanged. No VM, native Windows, model or live task
+was run. FRESH/OLD remain OFF/original XML/custody Gchat 2.
+Windows: not built (dev phase).
+
+Result: `out/gchat2-task-interruption-reason-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-task-interruption-reason-20261018`.
+## Remove connection survives list-refresh failure — Gchat 3, October 18
+
+`GUI-HOST-REMOVE-REFRESH-RESULT-20261018`: preserve a successful saved-connection
+removal when the following host-list read fails. On base `98a814b13`, both
+operations share one error boundary: the native command persists removal, but
+an unsuccessful list refresh reports removal failure and enables Remove again.
+The next removal then rejects because the host is no longer registered. A saved
+sign-in cleanup warning is also replaced by the unrelated list error.
+
+The candidate gives removal its own accepted state. A stale card confirms that
+the connection was removed, prevents further host actions and preserves any
+cleanup warning. A separate list error offers Refresh host list, which reads
+status without repeating removal. An actual removal rejection retains the
+connection and enables an explicit retry.
+
+Acceptance: reproduce the refresh-failure case against the base using the
+existing rendered HostCard tests; qualify preserved success, cleanup warning,
+read-only refresh retry and genuine removal-error retry. Run the focused suite,
+lint and ONE `make verify`. No Engine, native account, live pairing, model/GPU,
+Windows or installer qualification is claimed. The frozen regressions reproduce
+the base defect: both cases fail at the missing successful-removal status
+(2 failed, 37 skipped). Only the fixed component was then overlaid: all 39
+focused cases pass, and lint passes with zero errors and five existing warnings.
+ONE `make verify` passed lint, typecheck, quality guards, 3348 app cases
+(six skipped), 121 extension cases, six coverage floors and 1220 native cases
+(28 ignored). The candidate chain ran 04:29:09–04:37:04Z. The coordinator
+reviewed the actual logs, effective commands and unchanged frozen source hashes;
+no further gate is required before branch integration.
+
+Owner worktree `/ai/gchat-worktrees/gchat3-host-remove-refresh-result-20261018`,
+branch `fix/gchat3-host-remove-refresh-result-20261018`, allocated main
+`98a814b13`. Canonical local evidence:
+`out/host-remove-refresh-result-20261018/{test-result.json,test-summary.md}`.
+The private S1 test root was
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-remove-refresh-tests-20261018`,
+CPU112–119. Preparation booking 2976 returned at 04:27Z; gate booking 2979
+returned at 04:38Z and was canceled. The owned 42.32 GB SSD copy, two exited
+containers and disposable local source archive were removed. Concise results
+and logs remain; the retained RC dependency donor stayed read-only. No GPU use
+or newly built installed-GUI qualification is claimed.
+## Models download-count wording — C3, October 18
+
+`GUI-DOWNLOADS-TRANSFER-COUNT-WORDING` passes source verification, its changed
+build and native acceptance. The accepted paused-status candidate `4e635c35a` showed
+**1 transfers** beside Models in both Light and Dark. Existing evidence:
+`out/c3-downloads-popover-status-20261018/{status-light-wide.png,status-dark-narrow.png}`.
+
+The badge now reads **1 download** or **2 downloads**, with the title **Active or
+incomplete model downloads**. Counting is unchanged: incomplete local journal
+entries count once, the mirrored local Host snapshot is excluded, remote entries
+count separately even for the same model, and installed entries do not count.
+Rendered NavMain regressions cover singular paused/verifying entries, the mixed
+local/remote plural including an installed remote entry, and removal when the
+local download installs while its Host snapshot remains stale. Chat, Gbot,
+transfer actions and routing are outside this wording change.
+
+All 14 focused NavMain cases and lint pass (zero errors, five existing warnings).
+The ONE `make verify` passes typecheck, the 356-file quality guard, 3,338 app
+cases, 121 extension cases, 1,220 native cases and all six coverage floors. Six
+app cases are skipped and 28 native cases ignored. No failure or continuation
+occurred. The production Vite build takes 22.19 seconds and the debug
+custom-protocol shell builds in 54.22 seconds. Result and command:
+`out/c3-download-count-wording-20261018/{result.json,command.json,summary.md}`.
+
+Owner: Codex 3. Baseline `3bbea776c`; source commit `72c76c51a` in
+`/ai/gchat-worktrees/c3-download-count-wording-20261018`, branch
+`fix/c3-download-count-wording-20261018`. Only NavMain, its existing rendered
+tests and this subject record change. The current-main release helper handed
+over the S1 source/build stage and caches after its checked AppDir completed
+at 04:33Z. Its immutable AppDir and the coordinator's private installed-build
+walk stay separate from this changed-source candidate. No GPU or model is used.
+All 35 retained dependency manifests/locks/config files match before reuse;
+no dependencies were downloaded. S1 CPU 80–87 ran with nice 10 and the shared
+socket 1 lock from 04:34Z to build completion at 04:41:46Z, returned 04:42Z.
+The stopped container and disposable source archives are removed. The shared
+source, native target and caches pass to the next authorized owner. Candidate
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/badge-candidate`
+retains the checked Linux x86_64 binary, a resource link to immutable `runnable`
+and its own pre-install copy for coordinator acceptance. The private
+`downloads-home`, current-main AppDir/HOME, runnable and tools remain intact.
+
+Native acceptance passes on the exact changed build (SHA256
+`b88355fb5130d627400d3ccef6b5109e86aba5c13d1e30ca549b4e4290d3b878`).
+Actual xdotool input shows **1 download** in Light1500×1000 and Dark1024×800,
+then **2 downloads** in Dark1024×800. The tooltip is **Active or incomplete
+model downloads** and neither width overflows. All three retained screenshots
+were visually reviewed. The private journal contains inert paused entries;
+no transfer, model or GPU was used. App and idle private Host stopped at04:54Z.
+The shared isolated display/profile and immutable resources remain for the
+next acceptance; the stopped badge binary is disposable after integration.
+
+Next: coordinator integration. No further source gates are needed. This is
+Linux source-native acceptance, with no installed-release or Windows claim.
 
 ## Google client ID validation — Gchat 3 native acceptance, October 18
 
@@ -1035,10 +1358,10 @@ Windows, download, model or GPU acceptance is claimed. C7 owns documentation
 worktree `/ai/gchat-worktrees/c7-transfer-count-closure-20261018`, branch
 `docs/c7-transfer-count-closure-20261018`, baseline `24661cd22`. No new build,
 runtime or booking was allocated. The old exited test container and superseded
-source archive are retired. Existing private catalog baseline/dependency data
-at `/media/ron/SSD_RAID/ai/tmp-c7-private-catalog-gate-20261017` remains retained
-for that separate campaign; it has no live transfer-count job. Result JSON and
-a short summary retain the gate outcome.
+source archive are retired. The private catalog baseline/dependency cache
+at `/media/ron/SSD_RAID/ai/tmp-c7-private-catalog-gate-20261017` was reused for
+the account-service regression gate, then retired after its final passing gate
+on 18 October at 04:38 UTC. Result JSON and a short summary retain the outcomes.
 
 ## Readable installed model names — C7 native acceptance, closed October 18
 
@@ -1274,9 +1597,11 @@ retains its package context through provider discovery and auto-load.
 The Rust registration/reopen fixture checks the serialized identity. The
 extension regression uses an external UUID entry with Muse identity and a
 misleading Qwen filename/display label; list, get and context lookup all return
-131,072. The provider/model regression calls the real provider discovery and
-`DefaultModelsService.startModel`, asserting `max_context: 131072` reaches load.
-Existing explicit context settings retain their meaning.
+131,072. The original provider/model regression checked that this context
+reached auto-load. The October 18 settings-ownership decision above supersedes
+that startup forwarding: ordinary automatic loads now select a complete tested
+Host profile, whose context may differ from the artifact's native context.
+Manifest identity and native-context discovery remain preserved.
 
 All 81 focused cases pass (24 extension, 49 provider/model, eight Rust), as do
 Rust check and Clippy. One `make verify` exited 0: 3,199 frontend tests and
