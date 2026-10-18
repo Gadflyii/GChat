@@ -1,0 +1,263 @@
+{
+  "status": "PASS_MERGE_READY",
+  "owner": "Codex 4",
+  "row": "CLI-FIRST-RUN-MEASURED-STORAGE-REVIEW",
+  "base": "6653b5bfd",
+  "source_files": {
+    "src-tauri/ginfer-host/src/first_run.rs": "37dec1b27bcc8ca8d9fab4ab94f972e72bb65e13f720083259721e436c5a0e9b",
+    "src-tauri/ginfer-host/src/launcher.rs": "f8529c7848d7fc2c84b5904a08bc9f7713cd22d311bb4cede43e978abaa385f1",
+    "src-tauri/ginfer-host/src/main.rs": "f4f30b43a441f7ba5dbdbccbae44932c07ce8803d7871a3947d4104939c8d1ba",
+    "src-tauri/ginfer-host/src/model_storage.rs": "d49ae4e84e5c6ae50736d87971ba3075ba618d5d2d31845ea6ed32ced19c7815",
+    "src-tauri/ginfer-host/src/service.rs": "e39d22458ce01966aed85e5fe80edc068c43514519747cb2b9a1634153fe5bd1",
+    "src-tauri/ginfer-manager/ui/manager.js": "9a5268e4586139a875f68c3d5c189b3e10135308d3e19d3154251bc83af5ef74",
+    "tests/ginfer-manager-ui.test.mjs": "ab336ce5d042a300491c995f2a0c54a9060b839f4fdc94d259620767d2bb3f9a",
+    "web-app/src/containers/EngineFirstRun.tsx": "d2c3334a1d0008a727c875a294cd07c1ff944ab4925b3b3cc302b9545613b63a",
+    "web-app/src/containers/__tests__/EngineFirstRun.test.tsx": "8c458eaebdb562ab67bf0403cea1761ff11baada0393f22ebcc385d03fda29fb"
+  },
+  "s1_root": "/media/ron/SSD_RAID/ai/tmp-c4-first-run-measured-storage-20261018",
+  "checks": {
+    "host_first_run": {
+      "passed": 20,
+      "failed": 0,
+      "ignored": 1,
+      "regression": "reviewed_storage_is_bound_to_profile_selection_paths_and_root",
+      "log": "/ai/gchat/out/c4-first-run-measured-storage-20261018/storage-key-focused-host.log"
+    },
+    "make_verify": {
+      "exit": 0,
+      "invocations": 1,
+      "log": "/ai/gchat/out/c4-first-run-measured-storage-20261018/storage-key-verify.log"
+    },
+    "native_host_build": {
+      "exit": 0,
+      "bytes": 56930472,
+      "sha256": "720ef2cdc8ff3105760b465b7f8f702a9777e24e4be68b2109aa801b0f023208",
+      "log": "/ai/gchat/out/c4-first-run-measured-storage-20261018/storage-key-native-build.log"
+    },
+    "unchanged_scope": "Original storage/launcher/Welcome/Manager focused checks are retained under prior_candidate; all nine affected leaves match the final tested stage."
+  },
+  "execution": {
+    "start": "2026-10-18T09:19:41.866302+00:00",
+    "cpus": "80-87",
+    "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+    "lock": "/tmp/ginfer-s1-socket1-compile.lock",
+    "container": "c4-first-run-storage-key-20261018",
+    "container_id": "7d3d47f08c97aac13624283cfa42f9312216e98fc3985b0b386d31807efb5e94",
+    "state": {
+      "Status": "exited",
+      "Running": false,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "Error": "",
+      "StartedAt": "2026-10-18T09:19:42.107764298Z",
+      "FinishedAt": "2026-10-18T09:24:49.235928322Z"
+    },
+    "final_container_exit": 0,
+    "end": "2026-10-18T09:24:49.500272+00:00",
+    "exit": 0
+  },
+  "native_replay": {
+    "status": "PASS",
+    "evidence": "measured-storage-review-native-20261018.json",
+    "scope": "Isolated Linux development-catalog CLI; retained verified installed package and managed move, final Keep/restart/fresh quote/save-stopped acceptance.",
+    "booking": 3210,
+    "booking_canceled": true,
+    "returned_utc": "2026-10-18T09:33:00Z",
+    "completion_utc": "2026-10-18T09:30:52.446675+00:00",
+    "instance_id": "71f394f7-83c7-4934-be39-e28de327cf5d",
+    "instance_status": "stopped",
+    "runtime_pid": null,
+    "runtime_session_id": null,
+    "last_error": null,
+    "restart_ensure_ms": 69317,
+    "keep_persisted": true,
+    "second_keep_sent": false,
+    "lifecycle_exit": 0,
+    "terminal_utc": "2026-10-18T09:32:59.349353+00:00",
+    "limitations": [
+      "Startup quote is an estimate, not Ready/inference or full-context qualification.",
+      "Public release catalog publication remains Ron W12-gated; private DEV continuation does not qualify an unchanged archive.",
+      "Windows native behavior is not qualified by this Linux replay."
+    ]
+  },
+  "full_gate_logs": "/ai/gchat/out/c4-first-run-measured-storage-20261018",
+  "source": "998a72815dec393a7e15275ac90ebfadd31cbdfa",
+  "guard_correction": {
+    "authority": "Arch",
+    "signed_utc": "2026-10-18T08:52:23Z",
+    "observed_blocker": "Selected-artifact Ensure was accepted and first_run_pending() was false while storage review awaited input. Idle completion launched, hid review, and restarted after Resume.",
+    "behavior": "Optional remaining-format completion waits for durable first_run.complete; pending input does not authorize background profiling.",
+    "regression_scope": "Two idle-maintenance passes preserve the accepted selected job and recorded profiler command, keep storage review visible, and launch no background worker. The completed-setup idle-completion regression still passes."
+  },
+  "prior_candidate": {
+    "source": "432108dbbfd78748ef18d71bcc999b5576058fde",
+    "status": "CHECKS_PASS_NATIVE_REPLAY_BLOCKED",
+    "source_files": {
+      "src-tauri/ginfer-host/src/first_run.rs": "b26146bfeba780a4a4ffb3c52cd554ee2d9e97ef6f3448aaff7d0ac00f17ccee",
+      "src-tauri/ginfer-host/src/launcher.rs": "f8529c7848d7fc2c84b5904a08bc9f7713cd22d311bb4cede43e978abaa385f1",
+      "src-tauri/ginfer-host/src/main.rs": "f4f30b43a441f7ba5dbdbccbae44932c07ce8803d7871a3947d4104939c8d1ba",
+      "src-tauri/ginfer-host/src/model_storage.rs": "d49ae4e84e5c6ae50736d87971ba3075ba618d5d2d31845ea6ed32ced19c7815",
+      "src-tauri/ginfer-manager/ui/manager.js": "9a5268e4586139a875f68c3d5c189b3e10135308d3e19d3154251bc83af5ef74",
+      "tests/ginfer-manager-ui.test.mjs": "ab336ce5d042a300491c995f2a0c54a9060b839f4fdc94d259620767d2bb3f9a",
+      "web-app/src/containers/EngineFirstRun.tsx": "d2c3334a1d0008a727c875a294cd07c1ff944ab4925b3b3cc302b9545613b63a",
+      "web-app/src/containers/__tests__/EngineFirstRun.test.tsx": "8c458eaebdb562ab67bf0403cea1761ff11baada0393f22ebcc385d03fda29fb"
+    },
+    "checks": {
+      "host_first_run": {
+        "passed": 20,
+        "ignored": 1
+      },
+      "host_storage": {
+        "passed": 7,
+        "ignored": 1
+      },
+      "host_launcher": {
+        "passed": 13
+      },
+      "manager": {
+        "passed": 56
+      },
+      "welcome": {
+        "passed": 35
+      },
+      "make_verify": {
+        "exit": 0,
+        "invocations": 1
+      },
+      "native_host_build": {
+        "exit": 0,
+        "bytes": 56929168,
+        "sha256": "67306825f0e87c5cc3828f6686f63c696f4e8c5390c6bc961918d8b229b7bdbe"
+      }
+    },
+    "execution": {
+      "start": "2026-10-18T07:27:00.420878+00:00",
+      "cpus": "72-79",
+      "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+      "lock": "/tmp/ginfer-s1-socket1-compile.lock",
+      "container": "c4-first-run-measured-storage-20261018",
+      "container_id": "cf2968a0a40aa1558d6b4ee16a08f1c4fe36d32900095e7802ed3aa1c39ccbcb",
+      "state": {
+        "Status": "exited",
+        "Running": false,
+        "ExitCode": 0,
+        "OOMKilled": false,
+        "Error": "",
+        "StartedAt": "2026-10-18T07:27:00.572350304Z",
+        "FinishedAt": "2026-10-18T07:35:16.904338642Z"
+      },
+      "final_container_exit": 0,
+      "end": "2026-10-18T07:35:17.118781+00:00",
+      "exit": 0
+    },
+    "native_replay_evidence": "measured-storage-review-native-20261018.json",
+    "limitation": "The initial native replay exposed optional remaining-format completion hiding storage review before first-run completion; these original passing checks do not establish final native acceptance."
+  },
+  "fingerprint_correction": {
+    "source": "998a72815dec393a7e15275ac90ebfadd31cbdfa",
+    "arch_signed_utc": "2026-10-18T09:17:34Z",
+    "behavior": "Bind review to schema_version/disks plus selected GPU UUIDs, installed package identities/sizes/paths and managed root; ignore unrelated GPU timings and source metadata.",
+    "focused_first_run": {
+      "passed": 20,
+      "failed": 0,
+      "ignored": 1
+    },
+    "make_verify": {
+      "exit": 0,
+      "invocations": 1,
+      "log": "/ai/gchat/out/c4-first-run-measured-storage-20261018/storage-key-verify.log"
+    },
+    "native_host_build": {
+      "exit": 0,
+      "bytes": 56930472,
+      "sha256": "720ef2cdc8ff3105760b465b7f8f702a9777e24e4be68b2109aa801b0f023208"
+    },
+    "s1_booking": 3204,
+    "cpus": "80-87",
+    "native_replay": "PASS: Keep survived normal Host restart and fresh selected-artifact Ensure; ordinary startup quote passed, defaults saved with one stopped instance.",
+    "execution": {
+      "start": "2026-10-18T09:19:41.866302+00:00",
+      "cpus": "80-87",
+      "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+      "lock": "/tmp/ginfer-s1-socket1-compile.lock",
+      "container": "c4-first-run-storage-key-20261018",
+      "container_id": "7d3d47f08c97aac13624283cfa42f9312216e98fc3985b0b386d31807efb5e94",
+      "state": {
+        "Status": "exited",
+        "Running": false,
+        "ExitCode": 0,
+        "OOMKilled": false,
+        "Error": "",
+        "StartedAt": "2026-10-18T09:19:42.107764298Z",
+        "FinishedAt": "2026-10-18T09:24:49.235928322Z"
+      },
+      "final_container_exit": 0,
+      "end": "2026-10-18T09:24:49.500272+00:00",
+      "exit": 0
+    },
+    "booking_canceled": true,
+    "source_files_match_stage": true
+  },
+  "prior_guard_candidate": {
+    "source": "6a8dcdbb060a41c42c4a9a5adb833f83eb9850be",
+    "checks": {
+      "host_first_run": {
+        "passed": 20,
+        "failed": 0,
+        "ignored": 1,
+        "regression": "first_run::tests::engine_quotes_gate_completion_and_saved_instances_restart_stopped",
+        "log": "/ai/gchat/out/c4-first-run-measured-storage-20261018/transition-focused-host.log"
+      },
+      "host_idle_completion": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "test": "hardware_profile::tests::hardware_profile_explicit_cancel_parks_idle_completion_until_resume",
+        "log": "/ai/gchat/out/c4-first-run-measured-storage-20261018/transition-focused-idle.log"
+      },
+      "make_verify": {
+        "exit": 0,
+        "invocations": 1,
+        "scope": "One final full verification of the corrected guard source; original candidate verification is retained separately.",
+        "log": "/ai/gchat/out/c4-first-run-measured-storage-20261018/transition-verify.log"
+      },
+      "native_host_build": {
+        "exit": 0,
+        "bytes": 56929296,
+        "sha256": "00cb0fa2f13fe46a31c036563f430064232205e4a023a858df5af7ccf9a68279",
+        "log": "/ai/gchat/out/c4-first-run-measured-storage-20261018/transition-native-build.log"
+      }
+    },
+    "execution": {
+      "start": "2026-10-18T08:56:56.915854+00:00",
+      "cpus": "112-119",
+      "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+      "lock": "/tmp/ginfer-s1-socket1-compile.lock",
+      "container": "c4-first-run-storage-transition-20261018",
+      "container_id": "ea4146079ad06b0413dfd597fef0c5b3b6cff3b880fadb4f5ce959962e3c228c",
+      "state": {
+        "Status": "exited",
+        "Running": false,
+        "ExitCode": 0,
+        "OOMKilled": false,
+        "Error": "",
+        "StartedAt": "2026-10-18T08:56:57.105652635Z",
+        "FinishedAt": "2026-10-18T09:02:11.80002631Z"
+      },
+      "final_container_exit": 0,
+      "end": "2026-10-18T09:02:12.030872+00:00",
+      "exit": 0,
+      "receipt": "/ai/gchat/out/c4-first-run-measured-storage-20261018/transition-result.json"
+    },
+    "native_outcome": "Managed move and ordinary startup quote passed; restart invalidated Keep on unrelated profile changes, corrected by the storage-specific fingerprint."
+  },
+  "inventory": {
+    "owner": "Codex 4",
+    "host": "S1 AIS-2-8592-L01 (192.168.1.109)",
+    "build_root": "/media/ron/SSD_RAID/ai/tmp-c4-first-run-measured-storage-20261018",
+    "fixture_root": "/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018",
+    "moved_model_root": "/mnt/ssd2/c4-cli-first-run-storage-20261018/models",
+    "state": "Stopped; no booking or donor hold. Retained until merge QC; own build/cache/runtime copies are disposable after accepted evidence is preserved.",
+    "protected_inputs": "No shared model or quality inputs are cleanup targets."
+  }
+}

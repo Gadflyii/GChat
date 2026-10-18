@@ -8,10 +8,10 @@ import { plainModelName, plainStartupModelName, gpuCardName } from '@/lib/engine
 import { diskSpaceWarning, downloadStatusLabel, formatModelBytes, releaseVerified, type ModelDownload, type ModelRelease } from '@/lib/model-release'
 
 type FirstRun = {
-  step: 'gpu' | 'profiling' | 'storage' | 'models' | 'downloads' | 'startup' | 'complete'
+  step: 'gpu' | 'profiling' | 'storage' | 'models' | 'downloads' | 'storage_review' | 'startup' | 'complete'
   gpu_uuids: string[]
   hardware_profile: EngineHardwareProfile
-  storage: { path: string; requested_path?: string | null; accepted?: boolean; available_bytes: number | null; recommended_path?: string; error?: string; candidates?: { path: string; available_bytes: number | null; eligible?: boolean; reason?: string; measured_read_bytes_per_second?: number }[] }
+  storage: { path: string; requested_path?: string | null; accepted?: boolean; available_bytes: number | null; recommended_path?: string; required_bytes?: number; review_key?: string | null; selected_models?: { download_id: string; name: string; path: string; bytes: number }[]; error?: string; candidates?: { path: string; available_bytes: number | null; required_bytes?: number; eligible?: boolean; reason?: string; measured_read_bytes_per_second?: number }[] }
   models: { release_id?: string; release: ModelRelease; recommended: boolean; reason: string }[]
   selected_downloads: ModelDownload[]
   selected_release_ids?: string[]
@@ -56,6 +56,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const completed = useRef(false)
   const initializedGroup = useRef<string | undefined>(undefined)
   const pathEdited = useRef(false)
+  const previousStorageStep = useRef<string | undefined>(undefined)
   const releasesEdited = useRef(false)
   const step = flow?.step
   const card = useRef<HTMLElement>(null)
@@ -111,7 +112,9 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       releasesEdited.current = false
       setGpus(flow.gpu_uuids)
     }
-    if (!pathEdited.current) setPath(flow.storage.requested_path || flow.storage.recommended_path || flow.storage.path)
+    if (flow.step === 'storage_review' && previousStorageStep.current !== 'storage_review') pathEdited.current = false
+    previousStorageStep.current = flow.step
+    if (!pathEdited.current) setPath(flow.storage.requested_path || (flow.step === 'storage_review' ? flow.storage.path || flow.storage.recommended_path : flow.storage.recommended_path || flow.storage.path) || '')
     if (!releasesEdited.current) setReleases(flow.selected_release_ids?.length ? flow.selected_release_ids : flow.models.filter(model => model.recommended && releaseVerified(model.release)).map(model => model.release_id ?? model.release.sha256))
     // Polls update saved choices and recommendations without replacing edits.
   }, [flow])
@@ -149,6 +152,12 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const selectedScope = hardware?.scope === 'artifact'
   const choosing = step === 'storage' || step === 'models' || (profiling && !selectedScope && !flow?.selected_downloads.length)
   const selectedReady = selectedScope && hardware?.status === 'completed' && hardware.scope_complete === true
+  const storageRoot = flow?.storage.path ?? ''
+  const savedStoragePath = flow?.storage.requested_path || storageRoot
+  const isInStorage = (modelPath: string) => {
+    const root = storageRoot.replace(/[/\\]+$/, '')
+    return modelPath === root || modelPath.startsWith(`${root}/`) || modelPath.startsWith(`${root}\\`)
+  }
   const phase = hardware?.phase === 'gpu_experts' ? 'Measuring graphics card performance' : hardware?.phase === 'cpu_experts' ? 'Measuring processor and memory performance' : hardware?.phase === 'publishing' ? 'Checking and saving graphics-card settings' : 'Measuring and checking your hardware'
   const elapsed = hardware?.elapsed_ms
   const expected = hardware?.status === 'running' && (!hardware.scope || hardware.scope === 'all_formats') && hardware.duration_source === 'measured_history' ? hardware.expected_duration_ms : null
@@ -172,7 +181,7 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       {!known.length && <p role="alert">No supported NVIDIA graphics cards were found. Check that your card has a compatible NVIDIA driver. You can also use GInfer on another computer.</p>}
       <Button disabled={!validGroup} onClick={() => void act({ action: 'profile', gpu_uuids: gpus })}>Use selected graphics cards</Button>
     </fieldset>}
-    {selectedReady && <p role="status">Your graphics-card settings are ready for the selected models. GInfer will now check their startup memory needs.</p>}
+    {selectedReady && <p role="status">Your graphics-card settings are ready for the selected models. {step === 'storage_review' ? 'Review where to keep them before GInfer checks their startup memory needs.' : 'GInfer will now check their startup memory needs.'}</p>}
     {hardware?.all_formats_complete === false && <p className="text-sm text-muted-foreground">Other model types can be measured later. They do not need to be measured before you use your selected models.</p>}
     {hardware?.all_formats_complete === true && <p className="text-sm text-muted-foreground">These graphics-card settings are ready for all supported model types.</p>}
     {profiling && !manualOpen && <div className="space-y-3"><p role="status">{hardware?.status === 'running' ? 'Measuring graphics cards…' : hardware?.status === 'cancelling' ? 'Stopping graphics-card setup…' : hardware?.status === 'completed' ? 'Graphics-card settings ready' : hardware?.status === 'failed' ? 'Graphics-card setup could not finish' : hardware?.status === 'cancelled' ? 'Graphics-card setup stopped' : hardware?.status === 'interrupted' ? 'Graphics-card setup interrupted' : 'Preparing graphics-card setup…'}</p><p className="text-sm">{phase}{elapsed != null ? ` · Time so far: ${minutes(elapsed)}` : ''}</p>
@@ -207,6 +216,20 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     {step === 'downloads' && <div className="space-y-3"><h3 className="font-medium">Downloading models</h3>{flow?.selected_downloads.map(job => <div key={job.id} className="space-y-1"><p>{plainModelName(job.release.name)} · {downloadStatusLabel(job.status)} · {(100 * job.received / Math.max(1, job.release.bytes)).toFixed(1)}%</p><progress className="w-full" aria-label={`${plainModelName(job.release.name)} download`} max={job.release.bytes} value={job.received} /><p className="text-xs text-muted-foreground">{(job.bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s</p>{job.status === 'failed' && job.error && <FirstRunError message="This model download could not finish. Check your internet connection and free space, then select Try again or Choose a different model." details={job.error} label={`${plainModelName(job.release.name)} download error details`} />}</div>)}<p className="text-sm text-muted-foreground">You can close this window while downloads continue. GInfer checks the downloaded files, then measures the hardware needed by your selected models.</p>{flow?.selected_downloads.some(job => job.status === 'failed')
       ? <div className="space-y-2"><p className="text-sm">The download could not finish. You can try again or choose a different model.</p><div className="flex gap-2"><Button disabled={busy} onClick={() => void act({ action: 'resume' })}>Try again</Button><Button variant="outline" disabled={busy} onClick={() => void act({ action: 'reselect' })}>Choose a different model</Button></div></div>
       : <Button variant="outline" disabled={busy} onClick={() => void act({ action: 'resume' })}>Resume downloads</Button>}</div>}
+    {step === 'storage_review' && <div className="space-y-3"><h3 className="font-medium">Review model locations</h3>
+      <p className="text-sm text-muted-foreground">These models are downloaded and their graphics-card settings are ready. Review their current locations and the measured drive speeds before continuing.</p>
+      {flow?.storage.required_bytes != null && <p className="text-sm">Selected models: {formatModelBytes(flow.storage.required_bytes)} total.</p>}
+      {flow?.storage.selected_models?.map(model => <div key={model.download_id} className="space-y-2 rounded border p-3 text-sm"><p className="font-medium">{model.name} · {formatModelBytes(model.bytes)}</p><p className="break-all">Current location: {model.path}</p>{!isInStorage(model.path) && <Button variant="outline" disabled={busy} onClick={() => void act({ action: 'move', download_id: model.download_id })}>Move {model.name} to selected storage</Button>}</div>)}
+      <p className="break-all text-sm">Selected download folder: {storageRoot}</p>
+      <p className="text-sm text-muted-foreground">Choosing another folder saves a destination for downloads. Existing models stay at the locations shown until you select Move for each model.</p>
+      {flow?.storage.recommended_path && <p className="break-all text-sm">Recommended: {flow.storage.recommended_path}</p>}
+      {flow?.storage.error && <FirstRunError message="GInfer could not finish checking this model folder. Check the details or choose another folder." details={flow.storage.error} label="Folder error details" />}
+      {flow?.storage.candidates?.map(candidate => <div key={candidate.path} className="space-y-1 text-sm"><Button variant="outline" disabled={busy || candidate.eligible === false} onClick={() => { pathEdited.current = true; setPath(candidate.path) }}>{candidate.path} · {candidate.available_bytes == null ? 'free space unavailable' : `${formatModelBytes(candidate.available_bytes)} free`}</Button><p className="text-muted-foreground">{candidate.eligible ? 'Eligible' : 'Unavailable'}{candidate.measured_read_bytes_per_second != null ? ` · Measured read: ${(candidate.measured_read_bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s` : ' · Read speed unavailable'}{candidate.required_bytes != null ? ` · Additional space needed: ${formatModelBytes(candidate.required_bytes)}` : ''}</p>{candidate.reason && <p className="text-muted-foreground">{candidate.reason}</p>}</div>)}
+      <label className="block text-sm">Model download folder<Input value={path} onChange={event => { pathEdited.current = true; setPath(event.target.value) }} /></label>
+      <Button variant="outline" disabled={busy || !path.trim()} onClick={() => void act({ action: 'storage', path })}>Use this folder</Button>
+      {path.trim() !== savedStoragePath.trim() && <p className="text-sm">Select Use this folder to save the changed destination before continuing.</p>}
+      <Button disabled={busy || !flow?.storage.review_key || path.trim() !== savedStoragePath.trim()} onClick={() => void act({ action: 'accept_storage', review_key: flow?.storage.review_key })}>Keep these locations and continue</Button>
+    </div>}
     {step === 'startup' && <div className="space-y-3"><h3 className="font-medium">Review model startup settings</h3><p className="text-sm text-muted-foreground">The recommended settings are filled in for you. Wait for the memory check, then select Finish local setup. Open Advanced settings only if you want to change how much conversation a model remembers or how many requests it can answer together.</p>{!flow?.startup_profiles.length && <p role="status">Preparing settings and checking that each model has enough memory…</p>}{flow?.startup_profiles.map(profile => <div key={profile.download_id} className="space-y-3 rounded border p-3 text-sm"><p className="font-medium">{plainStartupModelName(profile.model_id)}</p>{!profile.quote && !profile.error && <p role="status">Checking that this model has enough memory to start…</p>}{profile.quote != null && !profile.error && <p role="status">Ready to start with these settings.</p>}{profile.error && <FirstRunError message="GInfer could not confirm that this model can start. Check the details and Advanced settings, then select Check startup settings. A shorter conversation limit or fewer simultaneous requests may help if memory is short." details={profile.error} label={`${plainStartupModelName(profile.model_id)} startup error details`} />}<details><summary className="cursor-pointer">Advanced settings and memory details</summary><p>{profile.instance_count} model copies · {profile.concurrency} replies at once · {profile.max_context.toLocaleString()} conversation tokens · {profile.kv_arena_bytes == null ? 'Automatic graphics-card conversation memory' : `${formatModelBytes(profile.kv_arena_bytes)} graphics-card conversation memory`}</p>
       <form className="space-y-2" onSubmit={event => { event.preventDefault(); const fields = new FormData(event.currentTarget); void act({ action: 'startup', download_id: profile.download_id, concurrency: Number(fields.get('concurrency')), max_context: Number(fields.get('max_context')), instance_count: Number(fields.get('instance_count')), kv_arena_bytes: fields.get('kv_arena_bytes') ? Number(fields.get('kv_arena_bytes')) : null }) }}>
         <p>Simultaneous requests controls how many messages this model can answer at once. A larger value uses more memory.</p><label className="block">Simultaneous requests<Input name="concurrency" aria-label={`${plainStartupModelName(profile.model_id)} simultaneous requests`} type="number" min={1} max={8} required defaultValue={profile.concurrency} /></label>

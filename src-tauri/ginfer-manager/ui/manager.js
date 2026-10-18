@@ -194,16 +194,17 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       flow?.load_error ? h('p', { class: 'section-error', role: 'alert' }, flow.load_error) : note('Reading saved setup…'),
       flow?.load_error ? button('Retry local setup', () => readFirstRun(host)) : null)
     let draft = state.firstRunDrafts.get(host.host_id)
+    const storagePath = flow.storage?.requested_path || (flow.step === 'storage_review' ? flow.storage?.path || flow.storage?.recommended_path : flow.storage?.recommended_path || flow.storage?.path) || ''
     if (!draft || draft.step !== flow.step) {
       draft = { step: flow.step, catalogLoaded: flow.catalog_loaded, gpus: [...array(flow.gpu_uuids)],
-        path: flow.storage?.recommended_path || flow.storage?.path || '',
+        path: storagePath,
         releases: array(flow.models).filter(model => model.recommended).map(model => model.release_id || model.release.sha256) }
       state.firstRunDrafts.set(host.host_id, draft)
     } else if (draft.catalogLoaded !== flow.catalog_loaded) {
       draft.catalogLoaded = flow.catalog_loaded
-      if (!draft.pathEdited) draft.path = flow.storage?.recommended_path || flow.storage?.path || ''
       draft.releases = array(flow.models).filter(model => model.recommended).map(model => model.release_id || model.release.sha256)
     }
+    if (!draft.pathEdited) draft.path = storagePath
     const content = []
     const choose = (values, value, checked) => checked ? [...values, value] : values.filter(entry => entry !== value)
     if (flow.step === 'gpu') {
@@ -246,6 +247,35 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         h('progress', { 'aria-label': `${job.release.name} download`, max: job.release.bytes, value: job.received }),
         job.error ? h('p', { class: 'section-error', role: 'alert' }, job.error) : null)),
       note('Downloads continue when Manager closes.'), button('Resume downloads', () => action({ action: 'resume' })))
+    } else if (flow.step === 'storage_review') {
+      const storageRoot = flow.storage?.path || ''
+      const savedPath = flow.storage?.requested_path || storageRoot
+      const root = storageRoot.replace(/[/\\]+$/, '')
+      const changedDestination = note('Select Use this folder to save the changed destination before continuing.')
+      changedDestination.hidden = draft.path.trim() === savedPath.trim()
+      const keep = button('Keep these locations and continue', () => action({ action: 'accept_storage', review_key: flow.storage.review_key }), !flow.storage?.review_key || draft.path.trim() !== savedPath.trim())
+      const save = button('Use this folder', () => action({ action: 'storage', path: draft.path }), !draft.path.trim())
+      const input = h('input', { value: draft.path, 'aria-label': 'Model download folder', oninput: event => {
+        draft.pathEdited = true; draft.path = event.target.value
+        keep.disabled = state.busy || !flow.storage?.review_key || draft.path.trim() !== savedPath.trim()
+        save.disabled = state.busy || !draft.path.trim()
+        changedDestination.hidden = draft.path.trim() === savedPath.trim()
+      } })
+      content.push(h('h3', {}, 'Review model locations'),
+        note('These models are downloaded and their graphics-card settings are ready. Review their current locations and the measured drive speeds before continuing.'),
+        flow.storage?.required_bytes != null ? h('p', {}, `Selected models: ${size(flow.storage.required_bytes)} total.`) : null,
+        array(flow.storage?.selected_models).map(model => h('div', { class: 'card' },
+          h('strong', {}, `${model.name} · ${size(model.bytes)}`), h('p', { class: 'mono' }, `Current location: ${model.path}`),
+          model.path === root || model.path.startsWith(`${root}/`) || model.path.startsWith(`${root}\\`) ? null : button(`Move ${model.name} to selected storage`, () => action({ action: 'move', download_id: model.download_id })))),
+        h('p', { class: 'mono' }, `Selected download folder: ${storageRoot}`),
+        note('Choosing another folder saves a destination for downloads. Existing models stay at the locations shown until you select Move for each model.'),
+        flow.storage?.recommended_path ? note(`Recommended: ${flow.storage.recommended_path}`) : null,
+        flow.storage?.error ? h('p', { class: 'section-error', role: 'alert' }, flow.storage.error) : null,
+        array(flow.storage?.candidates).map(candidate => h('div', {},
+          button(`${candidate.path} · ${candidate.available_bytes == null ? 'free space unavailable' : `${size(candidate.available_bytes)} free`}`, () => { draft.pathEdited = true; draft.path = candidate.path; render() }, candidate.eligible === false),
+          note(`${candidate.eligible ? 'Eligible' : 'Unavailable'} · ${candidate.measured_read_bytes_per_second != null ? `Measured read: ${(candidate.measured_read_bytes_per_second / 1024 ** 2).toFixed(1)} MiB/s` : 'Read speed unavailable'}${candidate.required_bytes != null ? ` · Additional space needed: ${size(candidate.required_bytes)}` : ''}`),
+          candidate.reason ? note(candidate.reason) : null)),
+        h('label', {}, 'Model download folder', input), save, changedDestination, keep)
     } else if (flow.step === 'startup') {
       content.push(h('h3', {}, 'Review startup defaults'), !array(flow.startup_profiles).length ? h('p', { role: 'status' }, 'Preparing startup settings and checking Engine memory…') : null, array(flow.startup_profiles).map(profile => h('div', { class: 'card' },
         h('strong', {}, profile.model_id), h('p', {}, `${profile.instance_count} instance(s) · ${profile.concurrency} concurrent requests · ${profile.max_context.toLocaleString()} tokens · ${profile.kv_arena_bytes == null ? 'Automatic GPU KV cache' : `${size(profile.kv_arena_bytes)} GPU KV cache`}`),

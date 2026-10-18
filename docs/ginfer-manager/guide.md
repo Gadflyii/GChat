@@ -79,18 +79,28 @@ and continue later without discarding progress.
    required by that artifact and its startup settings. Other formats can remain
    deferred. The first-run panel shows the reported phase and elapsed time, with
    completion time unknown for this selected scope. No model starts during this step.
-5. Under **Review startup defaults**, review each package's context, concurrency,
+5. Under **Review measured model storage**, compare the installed packages' current
+   paths and actual sizes with the measured read rates, live free space,
+   recommendation and candidate reasons. Choose **Keep these locations and
+   continue** to accept the current files. Saving another managed folder only
+   changes the destination; use the separate move action if you want to relocate
+   an installed package. Unavailable measurements remain visible and do not
+   prevent keeping the installed files. Reopening setup preserves an unchanged
+   decision; changed measurements, selection or placement require review again.
+6. Under **Review startup defaults**, review each package's context, concurrency,
    instance count and optional GPU KV budget. The Engine supplies a fresh startup
    estimate for that package. It does not prove that every selected package fits
    together or that full context is qualified.
-6. Choose **Finish local setup**. The Host saves stopped instances. Use **Start**
+7. Choose **Finish local setup**. The Host saves stopped instances. Use **Start**
    when you want to load a model.
 
 Choosing a storage folder does not relocate existing models. For an installed
 managed download, use its explicit move action after stopping active models. The
 Host copies and verifies the package, saves its new location durably, then removes
 the original; existing targets are rejected. Saved instances retain their model
-identity. Models registered from an external folder remain there.
+identity. For a selected first-run package, the Host validates profiling at the
+new path, then requests another placement review and fresh startup estimates.
+Models registered from an external folder remain there.
 
 For terminal continuation, run `ginfer-host first-run --interactive` from the
 installed Host's binary directory. Without `--interactive`, `ginfer-host first-run`
