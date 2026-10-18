@@ -1,5 +1,35 @@
 # Gbot design
 
+## Account-service startup cause — C7
+
+`GUI-ACCOUNT-SERVICE-ERROR-WORDING` is merge-ready on
+`fix/c7-account-service-startup-reason-20261018`, based on main `89024e1f2`.
+A new failed connection could previously display an earlier attempt's last
+log line as its cause. The regression reproduces this with an unrelated current
+exit and a stale internal path; the original parser fails its assertion.
+
+The private service now preserves typed credential-store and API vault errors
+through startup exit codes 201–205. The Host gives plain guidance from the
+current child's status and retains exit status/log location in the existing
+closed Details section. Generic failures use generic recovery guidance; logs
+remain diagnostic history. Concurrent-owner readiness, timeout, credential
+formats and automatic-connection behavior are unchanged. Arch signed this
+[decision](../decisions/2026-10-18-report-typed-gbot-startup-failures.md).
+
+Production source `3444ff6d0` and rendered test `7dbcecea2` pass three focused
+Host cases, one typed service-boundary case and 32 account-page cases, plus
+`cargo check` and strict Clippy. One `make verify` passes on Linux/S1 on
+18 October at 04:38 UTC: 3,345 app, 121 extension and 1,221 Rust tests pass;
+six app tests are skipped and 28 Rust tests ignored. The rendered mock uses
+the native string-rejection contract. No native GUI, Windows, installer,
+model or GPU acceptance is claimed.
+
+Evidence: `out/c7-account-service-startup-reason-20261018/{result.json,summary.md}`.
+Owned source: `/ai/gchat-worktrees/c7-account-service-startup-reason-20261018`.
+The exited containers and 36 GiB private S1 build/cache were retired after the
+gate; shared donor resources were preserved. CPUs 64–71 returned at 04:38 UTC,
+booking 2975 canceled. Next: bubbs merges the branch.
+
 ## SSH loopback fixture teardown
 
 The disposable SSH fixture joins its aborted listener tasks within the existing

@@ -1,10 +1,11 @@
 //! Native per-user service bootstrap. No webview, GUI lifetime, or secrets in discovery.
 use gbot_service::{
-    api::Api,
+    api::{Api, ApiError},
     executor::{ExecutorProcesses, ProcessSpec},
     service::Service,
-    vault::NativeVault,
+    vault::{NativeVault, VaultError},
 };
+use ginfer_host::gbot_bootstrap::{StartupError, StartupFailure};
 use ginfer_host::service_owner::ServiceOwner;
 use serde_json::Value;
 use std::{
@@ -158,14 +159,14 @@ async fn serve(
     root: PathBuf,
     resources: PathBuf,
     credential_session_stdin: bool,
-) -> Result<(), String> {
+) -> Result<(), StartupError> {
     if !root.is_absolute() || !resources.is_absolute() {
         return Err("Gbot requires absolute data and resource folders".into());
     }
-    let store = super::super::engine_hosts::initialize_credentials()?;
+    let store = ginfer_host::gbot_bootstrap::credential_store()?;
     #[cfg(target_os = "linux")]
     if credential_session_stdin {
-        tokio::task::spawn_blocking(move || -> Result<(), String> {
+        tokio::task::spawn_blocking(move || -> Result<(), StartupError> {
             use std::io::Read;
             let mut bytes = jan_utils::credential_store::Zeroizing::new(Vec::new());
             std::io::stdin()
@@ -173,9 +174,7 @@ async fn serve(
                 .read_to_end(&mut bytes)
                 .map_err(|_| "Gbot credential channel unavailable")?;
             if !bytes.is_empty() {
-                store
-                    .accept_session_key(&bytes)
-                    .map_err(|e| e.to_string())?;
+                store.accept_session_key(&bytes)?;
             }
             Ok(())
         })
@@ -197,38 +196,38 @@ async fn serve(
     )?);
     let mut api = Api::bind_with_connectors(service, Arc::new(NativeVault), 0, connectors)
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(api_startup_error)?;
     api = api
         .with_guest_assets(directory.join("vms/assets"))
-        .map_err(|error| error.to_string())?;
+        .map_err(api_startup_error)?;
     api = api
         .with_cloud_setup(
             directory.clone(),
             Arc::new(super::cloud::NativeCloudHost::new()?),
         )
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(api_startup_error)?;
     api = api
         .with_m365_setup(directory.clone())
         .await
-        .map_err(|error| error.to_string())?;
+        .map_err(api_startup_error)?;
     api = api
         .with_inference_host(Arc::new(
             super::inference::NativeInferenceHost::open().await?,
         ))
-        .map_err(|error| error.to_string())?;
+        .map_err(api_startup_error)?;
     #[cfg(target_os = "linux")]
     {
         api = api
             .with_kvm_setup(directory.clone())
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(api_startup_error)?;
     }
     if let Some(processes) = executor_processes(&resources)? {
         api = api
             .with_executor(directory.join("tasks"), processes)
             .await
-            .map_err(|error| error.to_string())?;
+            .map_err(api_startup_error)?;
     }
     let discovery = ginfer_host::gbot_bootstrap::Discovery {
         service_id,
@@ -244,10 +243,22 @@ async fn serve(
             let _ = tokio::signal::ctrl_c().await;
         })
         .await
-        .map_err(|error| error.to_string());
+        .map_err(api_startup_error);
     // Only this locked owner may retire its discovery, after tasks/workspaces have closed.
     let _ = tokio::fs::remove_file(directory.join("service.json")).await;
     result
+}
+
+fn api_startup_error(error: ApiError) -> StartupError {
+    let failure = match &error {
+        ApiError::Vault(VaultError::AccessDenied) => StartupFailure::SecureStorageLocked,
+        ApiError::Vault(VaultError::Unavailable) => StartupFailure::SecureStorageUnavailable,
+        ApiError::Vault(VaultError::InvalidData) => StartupFailure::InvalidCredentials,
+        ApiError::Vault(VaultError::Ambiguous) => StartupFailure::ConflictingCredentials,
+        ApiError::Vault(VaultError::Missing) => StartupFailure::MissingCredentials,
+        _ => StartupFailure::Other,
+    };
+    StartupError::new(failure, error.to_string())
 }
 
 /// Called before Tauri, its single-instance hook, or any webview is created.
@@ -259,35 +270,66 @@ pub fn run_service_mode() -> Option<std::process::ExitCode> {
         return None;
     }
     let parsed = ServiceArgs::try_parse_from(std::iter::once(executable).chain(args));
-    let result = parsed.map_err(|error| error.to_string()).and_then(|args| {
-        let resources = match (args.resources, args.appimage_resources) {
-            (Some(resources), None) => resources,
-            (None, Some(relative))
-                if !relative.is_absolute()
-                    && !relative
-                        .components()
-                        .any(|part| matches!(part, std::path::Component::ParentDir)) =>
-            {
-                PathBuf::from(std::env::var_os("APPDIR").ok_or("Gbot AppImage mount unavailable")?)
+    let result = parsed
+        .map_err(|error| StartupError::from(error.to_string()))
+        .and_then(|args| {
+            let resources = match (args.resources, args.appimage_resources) {
+                (Some(resources), None) => resources,
+                (None, Some(relative))
+                    if !relative.is_absolute()
+                        && !relative
+                            .components()
+                            .any(|part| matches!(part, std::path::Component::ParentDir)) =>
+                {
+                    PathBuf::from(
+                        std::env::var_os("APPDIR").ok_or("Gbot AppImage mount unavailable")?,
+                    )
                     .join(relative)
-            }
-            _ => return Err("Gbot requires its installed resource folder".into()),
-        };
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .map_err(|error| error.to_string())?
-            .block_on(serve(
-                args.data_folder,
-                resources,
-                args.credential_session_stdin,
-            ))
-    });
+                }
+                _ => return Err("Gbot requires its installed resource folder".into()),
+            };
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .map_err(|error| error.to_string())?
+                .block_on(serve(
+                    args.data_folder,
+                    resources,
+                    args.credential_session_stdin,
+                ))
+        });
     Some(match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("Gbot service failed: {error}");
-            std::process::ExitCode::FAILURE
+            std::process::ExitCode::from(error.failure.exit_code())
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn startup_exit_codes_preserve_typed_vault_failures() {
+        for (cause, code) in [
+            (VaultError::AccessDenied, 201),
+            (VaultError::Unavailable, 202),
+            (VaultError::InvalidData, 203),
+            (VaultError::Ambiguous, 204),
+            (VaultError::Missing, 205),
+            (VaultError::WorkerFailure, 1),
+        ] {
+            assert_eq!(
+                api_startup_error(ApiError::Vault(cause))
+                    .failure
+                    .exit_code(),
+                code
+            );
+        }
+        // Human-readable text cannot turn an unrelated failure into a vault cause.
+        let unrelated = ApiError::Listener(std::io::Error::other("Secure storage is locked"));
+        assert_eq!(api_startup_error(unrelated).failure.exit_code(), 1);
+    }
 }

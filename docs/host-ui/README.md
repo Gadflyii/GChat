@@ -1063,10 +1063,10 @@ Windows, download, model or GPU acceptance is claimed. C7 owns documentation
 worktree `/ai/gchat-worktrees/c7-transfer-count-closure-20261018`, branch
 `docs/c7-transfer-count-closure-20261018`, baseline `24661cd22`. No new build,
 runtime or booking was allocated. The old exited test container and superseded
-source archive are retired. Existing private catalog baseline/dependency data
-at `/media/ron/SSD_RAID/ai/tmp-c7-private-catalog-gate-20261017` remains retained
-for that separate campaign; it has no live transfer-count job. Result JSON and
-a short summary retain the gate outcome.
+source archive are retired. The private catalog baseline/dependency cache
+at `/media/ron/SSD_RAID/ai/tmp-c7-private-catalog-gate-20261017` was reused for
+the account-service regression gate, then retired after its final passing gate
+on 18 October at 04:38 UTC. Result JSON and a short summary retain the outcomes.
 
 ## Readable installed model names — C7 native acceptance, closed October 18
 

@@ -11,10 +11,117 @@ use std::{
 };
 use uuid::Uuid;
 
-pub fn credential_store() -> Result<&'static jan_utils::credential_store::Store, String> {
+/// Exit codes belong to the private `--gbot-service` child protocol. A log is
+/// diagnostic history, never the source of the current attempt's failure kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum StartupFailure {
+    Other,
+    SecureStorageLocked,
+    SecureStorageUnavailable,
+    InvalidCredentials,
+    ConflictingCredentials,
+    MissingCredentials,
+}
+
+impl StartupFailure {
+    pub fn exit_code(self) -> u8 {
+        match self {
+            Self::Other => 1,
+            Self::SecureStorageLocked => 201,
+            Self::SecureStorageUnavailable => 202,
+            Self::InvalidCredentials => 203,
+            Self::ConflictingCredentials => 204,
+            Self::MissingCredentials => 205,
+        }
+    }
+
+    fn from_exit_code(code: Option<i32>) -> Self {
+        match code {
+            Some(201) => Self::SecureStorageLocked,
+            Some(202) => Self::SecureStorageUnavailable,
+            Some(203) => Self::InvalidCredentials,
+            Some(204) => Self::ConflictingCredentials,
+            Some(205) => Self::MissingCredentials,
+            _ => Self::Other,
+        }
+    }
+
+    fn message(self) -> &'static str {
+        match self {
+            Self::Other => "Account connections could not start. Try connecting again. If this keeps happening, open Show details for more information.",
+            Self::SecureStorageLocked => "Account connections could not start because secure storage is locked. Choose Check secure storage in GChat, unlock it, then connect again.",
+            Self::SecureStorageUnavailable => "Account connections could not start because secure storage is unavailable. Choose Check secure storage in GChat, then connect again.",
+            Self::InvalidCredentials => "Account connections could not start because saved credentials could not be read. Choose Check secure storage in GChat to check the selected store.",
+            Self::ConflictingCredentials => "Account connections could not start because secure storage changed. Choose Check secure storage in GChat, then connect again.",
+            Self::MissingCredentials => "Account connections could not start because a saved credential is missing. Reconnect the affected account in Workspace connections.",
+        }
+    }
+}
+
+impl From<jan_utils::credential_store::Error> for StartupFailure {
+    fn from(error: jan_utils::credential_store::Error) -> Self {
+        use jan_utils::credential_store::Error;
+        match error {
+            Error::Locked => Self::SecureStorageLocked,
+            Error::MissingProvider | Error::Unavailable => Self::SecureStorageUnavailable,
+            Error::InvalidData | Error::InvalidCredential | Error::CredentialTooLarge => {
+                Self::InvalidCredentials
+            }
+            Error::Conflict => Self::ConflictingCredentials,
+            Error::Missing => Self::MissingCredentials,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct StartupError {
+    pub failure: StartupFailure,
+    detail: String,
+}
+
+impl StartupError {
+    pub fn new(failure: StartupFailure, detail: impl Into<String>) -> Self {
+        Self {
+            failure,
+            detail: detail.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for StartupError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.detail)
+    }
+}
+
+impl From<String> for StartupError {
+    fn from(detail: String) -> Self {
+        Self::new(StartupFailure::Other, detail)
+    }
+}
+
+impl From<&str> for StartupError {
+    fn from(detail: &str) -> Self {
+        detail.to_owned().into()
+    }
+}
+
+impl From<jan_utils::credential_store::Error> for StartupError {
+    fn from(error: jan_utils::credential_store::Error) -> Self {
+        Self::new(error.into(), error.to_string())
+    }
+}
+
+impl From<StartupError> for String {
+    fn from(error: StartupError) -> Self {
+        format!("{}\n\nDetails: {}", error.failure.message(), error.detail)
+    }
+}
+
+pub fn credential_store() -> Result<&'static jan_utils::credential_store::Store, StartupError> {
     let registry = crate::local_host_registry::locator_path()?;
     jan_utils::credential_store::initialize(registry.parent().ok_or("Host registry root missing")?)
-        .map_err(|e| e.to_string())
+        .map_err(StartupError::from)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -212,7 +319,7 @@ pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String
             command.arg("--credential-session-stdin");
             credential_store()?
                 .session_key()
-                .map_err(|e| e.to_string())?
+                .map_err(StartupError::from)?
         };
         let mut options = std::fs::OpenOptions::new();
         options.create(true).append(true);
@@ -270,24 +377,6 @@ pub async fn ensure_running(bootstrap: &Bootstrap) -> Result<LocalClient, String
     wait_for_service(root, child).await
 }
 
-/// The service writes its own failure reason as the last log line; show it so the
-/// person sees why it stopped without opening the file.
-fn last_log_reason(log: &Path) -> String {
-    let Ok(text) = std::fs::read_to_string(log) else {
-        return String::new();
-    };
-    let Some(line) = text
-        .lines()
-        .rev()
-        .map(str::trim)
-        .find(|line| !line.is_empty())
-    else {
-        return String::new();
-    };
-    let reason = line.strip_prefix("Gbot service failed: ").unwrap_or(line);
-    format!(": {}", reason.chars().take(300).collect::<String>())
-}
-
 async fn wait_for_service(
     root: &Path,
     mut child: Option<tokio::process::Child>,
@@ -314,8 +403,8 @@ async fn wait_for_service(
             // A concurrent starter may own the service after our child loses the lock.
             if let Ok(_owner) = ServiceOwner::acquire(&directory) {
                 return Err(format!(
-                    "Account connections could not start{}.\n\nDetails: the Gbot service exited before becoming ready ({status}); log: {}",
-                    last_log_reason(&directory.join("service.log")),
+                    "{}\n\nDetails: the Gbot service exited before becoming ready ({status}); log: {}",
+                    StartupFailure::from_exit_code(status.code()).message(),
                     directory.join("service.log").display()
                 ));
             }
@@ -360,34 +449,60 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn exit_error_shows_the_last_service_log_reason() {
+    async fn current_child_failure_controls_guidance_despite_stale_or_arbitrary_logs() {
         let root = tempfile::tempdir().unwrap();
         let directory = root.path().join("gbot");
         std::fs::create_dir_all(&directory).unwrap();
-        std::fs::write(
-            directory.join("service.log"),
-            "old line\nGbot service failed: Secure storage is unavailable\n\n",
-        )
-        .unwrap();
-        let child = tokio::process::Command::new("/bin/sh")
-            .args(["-c", "exit 1"])
-            .spawn()
-            .unwrap();
-        let error = tokio::time::timeout(
-            Duration::from_secs(3),
-            wait_for_service(root.path(), Some(child)),
-        )
-        .await
-        .unwrap()
-        .err()
-        .unwrap();
-        assert!(
-            error.contains(
-                "Account connections could not start: Secure storage is unavailable.\n\nDetails: the Gbot service exited before becoming ready (exit status: 1); log: "
+        let stale_log = "Gbot service failed: Secure storage is unavailable\ninternal panic /private/old-attempt\n";
+        std::fs::write(directory.join("service.log"), stale_log).unwrap();
+        for (code, summary) in [
+            (
+                1,
+                "Account connections could not start. Try connecting again.",
             ),
-            "{error}"
+            (
+                201,
+                "Account connections could not start because secure storage is locked.",
+            ),
+            (
+                202,
+                "Account connections could not start because secure storage is unavailable.",
+            ),
+            (
+                203,
+                "Account connections could not start because saved credentials could not be read.",
+            ),
+            (
+                204,
+                "Account connections could not start because secure storage changed.",
+            ),
+            (
+                205,
+                "Account connections could not start because a saved credential is missing.",
+            ),
+        ] {
+            let child = tokio::process::Command::new("/bin/sh")
+                .args(["-c", &format!("exit {code}")])
+                .spawn()
+                .unwrap();
+            let error = tokio::time::timeout(
+                Duration::from_secs(3),
+                wait_for_service(root.path(), Some(child)),
+            )
+            .await
+            .unwrap()
+            .err()
+            .unwrap();
+            let (message, details) = error.split_once("\n\nDetails: ").unwrap();
+            assert!(message.starts_with(summary), "{error}");
+            assert!(!message.contains("/private/old-attempt"), "{error}");
+            assert!(details.contains(&format!("exit status: {code}")), "{error}");
+            assert!(details.contains("service.log"), "{error}");
+        }
+        assert_eq!(
+            std::fs::read_to_string(directory.join("service.log")).unwrap(),
+            stale_log
         );
-        assert!(!error.contains("old line"), "{error}");
     }
 
     #[tokio::test]
