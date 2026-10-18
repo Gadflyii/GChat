@@ -454,6 +454,12 @@ mod tests {
             .map(|(_, id, ..)| *id)
             .collect();
         let mut consumer_ids = BTreeSet::new();
+        let mut consumer_flash_found = false;
+        let consumer_flash_supplied = supplied_paths.iter().any(|path| {
+            path.file_name().is_some_and(|name| {
+                name == "linux-rtx5090-flash-next-smol-q2g64.json"
+            })
+        });
         let screened_pro_supplied = supplied_paths.iter().any(|path| {
             path.file_name().is_some_and(|name| {
                 name == "linux-rtx-pro6000-flash-next-smol-q2g64.json"
@@ -508,6 +514,41 @@ mod tests {
                     assert_eq!(p.qualification.smoke_requests, Some(8));
                     assert!(p.qualification.calculation.is_none());
                 }
+                if p.id == "rtx5090-flash-next-smol-q2g64-tp1-c8-256k-int8-screened" {
+                    consumer_flash_found = true;
+                    assert_eq!(p.platform, "linux");
+                    assert_eq!(p.identity.model_id, "qwen3.8-flash-next");
+                    assert_eq!(p.identity.weights_id, "smol-q2g64");
+                    assert_eq!(p.artifact_sha256, "8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08");
+                    assert_eq!(p.artifact_bytes, 70247086080);
+                    assert_eq!((p.tp, p.draft_tp, p.concurrency), (1, 0, 8));
+                    assert_eq!((p.gpu_name.as_str(), p.compute_capability.as_str()), ("NVIDIA GeForce RTX 5090", "12.0"));
+                    assert_eq!((p.vram_tier_gib, p.min_memory_mib_per_gpu, p.max_context), (32, 32606, 262144));
+                    assert_eq!(p.options, LaunchOptions {
+                        vision: false,
+                        structured_outputs: false,
+                        progressive_ready: false,
+                        spec: "mtp".into(),
+                        draft_policy: "fixed".into(),
+                        draft_tokens: 3,
+                        draft_tp: 0,
+                        kv_dtype: "int8".into(),
+                        kv_arena_bytes: None,
+                        vram_budget_bytes: None,
+                        kv_arena_headroom_bytes: MIN_PROFILE_HEADROOM_BYTES,
+                        host_kv_cache_bytes: None,
+                        prefill_chunk: 0,
+                        no_cuda_graph: false,
+                        flash_host_ram_headroom_gib: Some(10),
+                        expert_lfu: true,
+                    }, "{}", p.id);
+                    assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
+                    assert_eq!(p.qualification.engine_revision, "aa1c480162683d6da344456e2ccf0c14d2d291a3");
+                    assert_eq!(p.qualification.free_bytes_per_gpu, Some(1051721728));
+                    assert_eq!(p.qualification.full_context_requests, 0);
+                    assert_eq!(p.qualification.smoke_requests, Some(8));
+                    assert!(p.qualification.calculation.is_none());
+                }
                 if p.id == "rtx-pro6000-flash-next-smol-q2g64-tp1-c8-128k-int8-screened" {
                     screened_pro_found = true;
                     assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
@@ -525,6 +566,7 @@ mod tests {
         assert_eq!(screened_pro_found, screened_pro_supplied);
         assert_eq!(laptop_ids, expected_laptop_ids);
         assert_eq!(consumer_ids, expected_consumer_ids);
+        assert_eq!(consumer_flash_found, consumer_flash_supplied);
     }
 
     #[test]

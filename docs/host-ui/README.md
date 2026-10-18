@@ -5801,3 +5801,70 @@ or existing profile was changed. The seven frozen inputs and
 with the other current Linux catalogs in the next RC. Codex3 owns that release
 build; this gate does not claim that an RC has already been rebuilt. Source
 and private DEV integration are complete and ready for coordinator merge.
+
+
+### Consumer Flash pure 2-bit RTX 5090 mirror — Gchat 3
+
+Current assignment: mirror the completed signed GInfer `9bfcec0bb` Flash
+profile into the GChat release catalog inputs and shared private DEV catalog,
+while preserving the three accepted Qwen profiles and four context lowerings.
+The exact Flash package is `8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`
+(70,247,086,080 bytes). Its RTX 5090 profile remains screened-startup,
+262,144 context/C8, TP1, fixed MTP3, INT8 KV, automatic placement/KV,
+300 MiB KV reserve, 10 GiB Host headroom, graphs/prefix/LFU on, Text with
+Vision and structured outputs off; zero full-context requests and eight smoke requests.
+Engine qualification remains bound to `aa1c48016`; this mirror makes no
+new hardware or full-context qualification claim.
+
+Acceptance: extend the existing supplied-catalog Host regression, focused
+test plus Host check/clippy and ONE `make verify` with eight explicit inputs;
+require the generated release catalog to preserve all 41 existing profiles
+and add the exact signed Flash object. Coordinate C7's idle/zero-GET service
+boundary, preserve old generator/inputs/www/receipts, run the existing DEV
+generator once, restart the unchanged service and accept exact catalog plus
+payload HEAD/Range routes. No payload mutation or numerical change.
+
+Candidate: `/ai/gchat-worktrees/gchat3-consumer-flash-profile-20261018`,
+branch `fix/gchat3-consumer-flash-profile-20261018`, base `e15807324`.
+Small evidence: `/ai/gchat/out/consumer-flash-profile-20261018/`.
+The independent test fixture launched at 13:27 UTC on S1 SSD at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-consumer-flash-profile-tests-20261018`,
+using eight booked socket-1 CPUs and the protected inactive RC read-copy
+donor; no GPU/model. The shared DEV root remains
+`/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1`; parent owns the
+bounded generator/input update and acceptance, C7 owns service stop/start.
+C3, C4 and Gchat2 confirmed consumer idle. C7 stopped the service at
+13:29 UTC after a fresh zero-GET check. The existing generator ran once at
+13:31 UTC, producing eight packages/116 profiles (277,094 bytes, SHA-256
+`2262186803e08a65d4fee4b99a8ba1f5e0ccbe87ef66b02a22c2bb5382a4931c`).
+All 115 existing profile objects, the other seven release records and all
+payload symlink targets are unchanged. The Flash release adds the signed
+profile, derives its 32,606 MiB minimum and uses the pure 2-bit package label.
+The prior generator, inputs, www and receipts are retained under the shared
+root at `mirror-before-flash5090-20261018T133140Z`; no payload was copied or
+rehashed. See `private-dev-deployment-result.json`. C7 restarted the unchanged
+service at 13:32 UTC. HTTP acceptance passed at 13:32:43 UTC: exact generated
+catalog, the signed Flash object and all 115 prior profiles; all eight payload
+routes passed exact-length HEAD and one-byte Range (206). Only eight payload
+bytes were read. See `private-dev-http-acceptance.json`. Consumers may resume.
+The frozen eighth input/source binding was handed to Codex3 for its pending
+Linux RC build, preserving the prior seven inputs and Engine. The accepted
+42-profile build binding followed at 13:39 UTC; Codex3 owns RC assembly.
+
+The focused supplied-catalog regression passed one test; Host check and final
+all-target clippy passed. ONE `make verify` completed at 13:35:35 UTC with
+3,603 app tests (six skipped), 127 extension tests and 1,288 native tests
+(28 ignored across 23 summaries); all six coverage floors passed. Lint has
+zero errors and five existing warnings. The final explicit Flash assertion
+removed a redundant default struct update before the native verification
+phase; final clippy was the only follow-up gate. The actual generated release
+catalog is 90,917 bytes with 42 profiles, exactly the ordered eight-input
+merge, preserving all 41 prior objects and the signed Flash object. SHA-256:
+`2da2c9adb6d2bf034e4b4e0a35a14a26eeeb0728f9119ab513ac3202142e0598`.
+See `catalog-staged-proof.json`, `terminal-result.json` and the retained raw
+logs. CPUs 112–119 booking 3310 returned at 13:38 UTC. The owned S1 fixture,
+prep log and both exited containers were retired at 13:39 UTC, removing
+28.05 GB of logical file bytes; the inactive RC donor remains protected.
+The retained generated JSON was reconstructed after cleanup from the eight
+frozen inputs and matches the original staged SHA-256 exactly. Source,
+private DEV publication and the Linux RC input handoff are complete.
