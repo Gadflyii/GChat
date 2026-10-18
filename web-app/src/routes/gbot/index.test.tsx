@@ -3150,6 +3150,156 @@ it('links existing accounts per bot without inherited selection', async () => {
   })
 })
 
+it.each([
+  ['local', true, 'Start', 'Could not start Gbot on this computer. Try Start Gbot service again.'],
+  ['local', false, 'Quit', 'Could not stop Gbot on this computer. Try Quit Gbot service again.'],
+  ['paired_host', true, 'Connect', 'Could not connect to the Gbot service on your LAN computer. Try Connect Gbot service again.'],
+  ['paired_host', false, 'Disconnect', 'Could not disconnect from the Gbot service on your LAN computer. Try Disconnect Gbot service again.'],
+] as const)(
+  'keeps a failed service action %s %s %s inline until its explicit retry succeeds',
+  async (kind, start, action, message) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      readyTaskBots()
+      const target = kind === 'local' ? { kind } : { kind, host_id: 'paired-host' }
+      mocks.getTarget.mockResolvedValue(target)
+      mocks.startService.mockReset().mockResolvedValue(undefined)
+      mocks.quitService.mockReset().mockResolvedValue(undefined)
+      const updates = new Set<() => void>()
+      mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+        if (event === 'gbot-task-update') updates.add(update)
+        return () => updates.delete(update)
+      })
+      const fallback = mocks.call.getMockImplementation()!
+      const snapshot = await fallback('state', {}) as BotState
+      let holdRefresh = false
+      let finishRefresh!: (state: BotState) => void
+      const refreshed = new Promise<BotState>((resolve) => {
+        finishRefresh = resolve
+      })
+      mocks.call.mockImplementation((request: string, body: Record<string, unknown>) =>
+        request === 'state' && holdRefresh ? refreshed : fallback(request, body)
+      )
+      render(<Page />)
+      await screen.findByRole('heading', { name: 'Writer' })
+      const stopLabel = kind === 'local' ? 'Quit Gbot service' : 'Disconnect Gbot service'
+      const startLabel = kind === 'local' ? 'Start Gbot service' : 'Connect Gbot service'
+      const stoppedMessage = kind === 'local'
+        ? 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'
+        : 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
+      if (start) {
+        fireEvent.click(await screen.findByRole('button', { name: stopLabel }))
+        await screen.findByText(stoppedMessage)
+        await waitFor(() => expect(screen.getByRole('button', { name: startLabel })).toBeEnabled())
+      }
+      const invoke = start ? mocks.startService : mocks.quitService
+      invoke.mockClear()
+      let fail!: (cause: unknown) => void
+      let finish!: () => void
+      invoke.mockImplementationOnce(() => new Promise<void>((_, reject) => {
+        fail = reject
+      })).mockImplementationOnce(() => new Promise<void>((resolve) => {
+        finish = resolve
+      }))
+      const original = screen.getByRole('button', { name: `${action} Gbot service` })
+      act(() => {
+        original.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        original.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(invoke).toHaveBeenCalledTimes(1)
+      expect(original).toBeDisabled()
+      const progressMessage = start
+        ? kind === 'local'
+          ? 'Starting Gbot on this computer. First-time setup or an update may need several minutes to prepare files. The service will start automatically when preparation finishes. You can keep using GChat.'
+          : 'Connecting to the Gbot service on your selected LAN computer. Please wait.'
+        : kind === 'local'
+          ? 'Stopping the Gbot service. Tasks and schedules will resume when you start it again.'
+          : 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.'
+      expect(screen.getByText(progressMessage)).toHaveAttribute('role', 'status')
+      expect(screen.getByText(progressMessage)).toBeVisible()
+      if (!start) {
+        expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+        expect(screen.queryByText(stoppedMessage)).not.toBeInTheDocument()
+      }
+      const cause = 'Service operation refused'
+      await act(async () => fail(kind === 'local' ? new Error(cause) : cause))
+      const alert = await screen.findByRole('alert')
+      expect(alert).toHaveAttribute('id', 'gbot-service-action-error')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText(cause)).not.toBeVisible()
+      expect(original).toBeEnabled()
+      expect(errorToast).not.toHaveBeenCalled()
+      if (start) {
+        expect(screen.getByText(stoppedMessage)).toBeVisible()
+        expect(screen.queryByRole('heading', { name: 'Writer' })).not.toBeInTheDocument()
+      } else {
+        expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+        expect(screen.queryByText(stoppedMessage)).not.toBeInTheDocument()
+        const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+        await act(async () => updates.forEach((update) => update()))
+        expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks').length).toBeGreaterThan(reads)
+        expect(screen.getByRole('alert')).toHaveTextContent(message)
+        mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+        await act(async () => updates.forEach((update) => update()))
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        mocks.getTarget.mockResolvedValue(target)
+        await act(async () => updates.forEach((update) => update()))
+        expect(screen.getByRole('alert')).toHaveTextContent(message)
+      }
+      expect(invoke).toHaveBeenCalledTimes(1)
+      const retry = screen.getByRole('button', { name: `${action} Gbot service` })
+      fireEvent.click(retry)
+      expect(invoke).toHaveBeenCalledTimes(2)
+      expect(retry).toBeDisabled()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(retry)
+      expect(invoke).toHaveBeenCalledTimes(2)
+      if (start) {
+        holdRefresh = true
+        await act(async () => finish())
+        const progress = screen.getByRole('button', {
+          name: kind === 'local' ? 'Starting Gbot service…' : 'Connecting Gbot service…',
+        })
+        expect(progress).toBeDisabled()
+        fireEvent.click(progress)
+        expect(invoke).toHaveBeenCalledTimes(2)
+        await act(async () => finishRefresh(snapshot))
+        await waitFor(() => expect(screen.getByRole('button', { name: stopLabel })).toBeEnabled())
+        expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+        expect(screen.queryByText(stoppedMessage)).not.toBeInTheDocument()
+      } else {
+        expect(screen.getByRole('heading', { name: 'Writer' })).toBeVisible()
+        expect(screen.queryByText(stoppedMessage)).not.toBeInTheDocument()
+        // The companion independently reads state/tasks after service actions.
+        // The stopped Settings route must not restart its setup/status refresh.
+        const setupReads = () => mocks.call.mock.calls.filter(([request]) =>
+          request === 'setup/cloud/status' || request === 'setup/m365/status' ||
+          request === 'setup/kvm/status'
+        ).length
+        const reads = setupReads()
+        await act(async () => finish())
+        await waitFor(() => expect(screen.getByRole('button', { name: startLabel })).toBeEnabled())
+        expect(screen.getByText(stoppedMessage)).toBeVisible()
+        expect(screen.queryByRole('heading', { name: 'Writer' })).not.toBeInTheDocument()
+        expect(setupReads()).toBe(reads)
+      }
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(invoke).toHaveBeenCalledTimes(2)
+      expect(mocks.selectService).not.toHaveBeenCalled()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request === 'connect' || request === 'disconnect' || request.startsWith('control/') ||
+        (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      mocks.startService.mockReset().mockResolvedValue(undefined)
+      mocks.quitService.mockReset().mockResolvedValue(undefined)
+      errorToast.mockRestore()
+    }
+  }
+)
+
 it.each(['local', 'paired_host'] as const)(
   'keeps %s service startup progress visible until connection completes',
   async (kind) => {

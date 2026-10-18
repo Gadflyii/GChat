@@ -78,6 +78,12 @@ function GbotPage() {
   })
   const [serviceReady, setServiceReady] = useState(false)
   const [serviceError, setServiceError] = useState('')
+  const serviceChange = useRef(false)
+  const [serviceActionErrors, setServiceActionErrors] = useState<
+    Record<string, { message: string; details: string } | undefined>
+  >({})
+  const serviceActionErrorKey = JSON.stringify(serviceTarget)
+  const serviceActionError = serviceActionErrors[serviceActionErrorKey]
   const serviceSelectionPending = useRef(false)
   const changeServiceDraft = useCallback(
     (target: ServiceTarget, ready: boolean) => {
@@ -208,17 +214,19 @@ function GbotPage() {
     }
   }, [refresh, gbotEnabled, serviceStopped])
   const changeService = async (start: boolean) => {
-    if (busy) return
+    if (busy || serviceChange.current) return
+    serviceChange.current = true
+    const key = serviceActionErrorKey
+    setServiceActionErrors((previous) => ({ ...previous, [key]: undefined }))
     const paired = serviceTarget.kind === 'paired_host'
-    setServiceAction(
-      start
-        ? paired
-          ? 'connecting'
-          : 'starting'
-        : paired
-          ? 'disconnecting'
-          : 'stopping'
-    )
+    const action = start
+      ? paired
+        ? 'connecting'
+        : 'starting'
+      : paired
+        ? 'disconnecting'
+        : 'stopping'
+    setServiceAction(action)
     try {
       if (start) {
         await startGbotService()
@@ -232,8 +240,24 @@ function GbotPage() {
       }
     } catch (cause) {
       if (!start) stopped.current = false
-      toast.error(String(cause))
+      setServiceActionErrors((previous) => ({
+        ...previous,
+        [key]: {
+          message: {
+            starting:
+              'Could not start Gbot on this computer. Try Start Gbot service again.',
+            connecting:
+              'Could not connect to the Gbot service on your LAN computer. Try Connect Gbot service again.',
+            stopping:
+              'Could not stop Gbot on this computer. Try Quit Gbot service again.',
+            disconnecting:
+              'Could not disconnect from the Gbot service on your LAN computer. Try Disconnect Gbot service again.',
+          }[action],
+          details: cause instanceof Error ? cause.message : String(cause),
+        },
+      }))
     } finally {
+      serviceChange.current = false
       setServiceAction(undefined)
       void useGbotCompanion.getState().refresh()
     }
@@ -608,6 +632,9 @@ function GbotPage() {
               variant="outline"
               size="sm"
               disabled={busy}
+              aria-describedby={
+                serviceActionError ? 'gbot-service-action-error' : undefined
+              }
               onClick={() =>
                 void changeService(serviceStopped || Boolean(error))
               }
@@ -645,6 +672,19 @@ function GbotPage() {
             }[serviceAction]
           }
         </p>
+      )}
+      {serviceActionError && (
+        <div
+          id="gbot-service-action-error"
+          role="alert"
+          className="space-y-1 border-b px-5 py-3 text-sm"
+        >
+          <p>{serviceActionError.message}</p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="break-words">{serviceActionError.details}</p>
+          </details>
+        </div>
       )}
       {choosingService && (
         <section
