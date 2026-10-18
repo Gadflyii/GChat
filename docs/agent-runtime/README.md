@@ -32,6 +32,21 @@ text. Choosing Chat clears only that conversation's saved-agent selection.
 Route suggestions seed the choice once, allowing later user changes to stick.
 Baseline: `/ai/gchat/out/gchat-chat-agents-pass-20261018-1700/`.
 
+Source `ce62d84b323c6141a081ff6285f6df140758b6ec` passes 75 focused tests,
+lint, one `make verify` (3,718 app, 127 extension and 1,311 Rust tests),
+and frontend/native builds. The rebuilt Linux debug desktop passes this
+navigation check: Control probe B and the exact draft return after
+New Chat; choosing Chat also survives the same navigation with the text intact.
+The test draft was cleared, and saved agent definitions, runs, chat metadata
+and messages remained byte-identical. Native actions used an isolated private
+profile, DBus, keyring and X display, with no model, Send or GPU. Receipts and
+viewed screenshots: `/ai/gchat/out/gchat-chat-agent-draft-20261018/`.
+
+This qualifies in-session navigation only. Clean-exit acceptance is excluded:
+Alt+F4 had no effect in bare Xvfb, and destroying the X window logged a GDK
+BadDrawable error during teardown. The container stopped and CPUs were returned
+at 17:17Z. Cold restart and Windows were not tested.
+
 ## Conversation draft skills — October 18
 
 A private Linux native Chat pass selected `/pdf`, typed a summary request,
