@@ -14,7 +14,8 @@ import { EngineFirstRun } from '@/containers/EngineFirstRun'
 import { hostInstanceLabel, hostModelLabel, identityLabel, weightsDrafterDetail } from '@/lib/engine-host-labels'
 import { formatModelBytes } from '@/lib/model-release'
 
-const advancedFieldLabels = { draft_tokens: 'Draft tokens', draft_tp: 'Draft TP', prefill_chunk: 'Prefill chunk' } as const
+const advancedFieldLabels = { draft_tokens: 'Draft ahead length (tokens)', draft_tp: 'Drafting graphics cards (TP)', prefill_chunk: 'Input batch size (tokens)' } as const
+const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', stopping: 'Stopping', stopped: 'Stopped', failed: 'Could not start' } as const
 
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
   const refresh = useEngineHosts((s) => s.refresh)
@@ -25,6 +26,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
   const [instanceCount, setInstanceCount] = useState(1)
   const [startupQuote, setStartupQuote] = useState<{ key: string; result?: EngineStartupQuote; error?: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<{ message: string; details: string } | null>(null)
   const [hostStopError, setHostStopError] = useState<string | null>(null)
   const [hostStopping, setHostStopping] = useState(false)
   const profiling = hardwareProfileBlocksLaunch(snapshot?.hardware_profile)
@@ -67,43 +69,59 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       .some((value) => !Number.isSafeInteger(value) || value < 0) ||
     (options.host_kv_cache_bytes !== null && (!Number.isSafeInteger(options.host_kv_cache_bytes) || options.host_kv_cache_bytes < 0)) ||
     (options.kv_arena_bytes !== null && (!Number.isSafeInteger(options.kv_arena_bytes) || options.kv_arena_bytes < 1))
-  const launchError = invalidNumbers ? 'Use whole numbers: positive context and instance count, 1–8 concurrent requests, and nonnegative advanced settings. GPU KV budget must be positive or blank.'
+  const launchError = invalidNumbers ? 'Use whole numbers. Conversation length and model copies must be at least 1. Requests at once must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
     : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
-      ? 'This artifact lacks NVFP4 KV calibration. Install a calibrated artifact or select INT8/BF16 KV.' : null
+      ? 'This model cannot use NVFP4 conversation memory. Choose INT8 or BF16, or add a model prepared for NVFP4 memory.' : null
   const act = async (action: string, args: Record<string, unknown> = {}) => {
     setBusy(true)
+    setActionError(null)
     try {
       const result = await engineCommand<{ credential_cleanup_warning?: string | null }>(action, { host_id: host.host_id, ...args })
-      if (result?.credential_cleanup_warning) toast.warning(`Host forgotten, but OS credential cleanup failed: ${result.credential_cleanup_warning}`)
+      if (result?.credential_cleanup_warning) {
+        setActionError({ message: 'The saved connection was removed, but its saved sign-in could not be cleared from this computer.', details: result.credential_cleanup_warning })
+        toast.warning('Connection removed. Its saved sign-in could not be cleared.')
+      }
       await refresh()
       return true
     }
-    catch (e) { toast.error(String(e)); return false } finally { setBusy(false) }
+    catch (e) {
+      const message = action === 'connect' ? 'Could not connect to this computer. Check that it is on and reachable, then try Connect again.'
+        : action === 'forget' ? 'Could not remove this saved connection. Try again.'
+          : action === 'scan' ? 'Could not refresh the model list. Check that the model files are available, then try again.'
+            : action === 'stop' ? 'Could not stop this model. Check its status and try again.'
+              : action === 'restart' || action === 'reload' ? 'Could not restart this model. Check the settings and try again.'
+                : action === 'hardware_profile' ? 'Could not change the graphics-card setup. Check the connection and try again.'
+                  : action === 'gbot_grant' ? 'Could not change this connection’s access. Check the connection and try again.'
+                    : 'Could not start this model. Check its settings and available graphics-card memory, then try again.'
+      setActionError({ message, details: String(e) })
+      toast.error(message)
+      return false
+    } finally { setBusy(false) }
   }
   const hardwareProfileControls = snapshot?.hardware_profile && <EngineHardwareProfile profile={snapshot.hardware_profile} calibrations={snapshot.draft_width_calibrations} gpus={snapshot.gpus} offline={!!error} disabled={busy}
     action={(action, gpu_uuids) => act('hardware_profile', { body: { action, ...(gpu_uuids ? { gpu_uuids } : {}) } })} />
   return <section className="rounded-xl border p-5 space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'GInfer offline' : snapshot ? 'Connected' : host.local ? 'Connecting' : 'Not connected'}</p></div>
+      <div><h2 className="font-semibold">{host.name}</h2><p className="text-sm text-muted-foreground">{host.base_url} · {error ? 'Computer not reachable' : snapshot ? 'Connected' : host.local ? 'Connecting' : 'Not connected'}</p></div>
       {!host.local && (error || !snapshot) && <Button variant="outline" disabled={busy} onClick={() => void act('connect')}>Connect</Button>}
       {active && snapshot && <div className="flex min-w-0 flex-1 flex-wrap items-end gap-3">
         <div className="min-w-0 flex-1">
-        {snapshot.instances.length > 1 ? <label className="min-w-0 text-xs font-medium">Server instance
+        {snapshot.instances.length > 1 ? <label className="min-w-0 text-xs font-medium">Model server
         <select aria-label={`${host.name} serving instance`} className="mt-1 block w-full min-w-0 rounded border bg-background p-2 text-sm font-normal" value={active.instance_id} onChange={e => setActiveId(e.target.value)}>
-          {snapshot.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{hostInstanceLabel(i, snapshot)} · {i.status}</option>)}
-        </select></label> : <p className="text-sm">{hostInstanceLabel(active, snapshot)} · {active.status}</p>}
+          {snapshot.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{hostInstanceLabel(i, snapshot)} · {instanceStatusLabels[i.status]}</option>)}
+        </select></label> : <p className="text-sm">{hostInstanceLabel(active, snapshot)} · {instanceStatusLabels[active.status]}</p>}
         </div>
         <div className="flex items-center gap-2">
-        <Button variant="outline" disabled={busy || profiling || !!error || !active.profile || !['stopped', 'failed'].includes(active.status)} onClick={() => void act('start', { instance_id: active.instance_id, body: {} })}>Start</Button>
-        <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(active.status)} onClick={() => void act('stop', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })}>Stop</Button>
+        <Button variant="outline" disabled={busy || profiling || !!error || !active.profile || !['stopped', 'failed'].includes(active.status)} onClick={() => void act('start', { instance_id: active.instance_id, body: {} })}>Start model</Button>
+        <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(active.status)} onClick={() => void act('stop', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })}>Stop model</Button>
         <Button variant="outline" disabled={busy || profiling || !!error || active.status !== 'ready'} onClick={async () => {
-          if (await confirmAction({ title: 'Reload this instance?', message: 'Reload this instance with its saved settings after current requests drain?', confirmLabel: 'Reload' })) void act('restart', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })
-        }}>Reload</Button>
+          if (await confirmAction({ title: 'Restart this model?', message: 'The model will finish its current replies, then restart with its saved settings. It will be unavailable for new chats while restarting.', confirmLabel: 'Restart model' })) void act('restart', { instance_id: active.instance_id, body: { force: false, expected_session_id: active.session_id } })
+        }}>Restart model</Button>
         </div>
       </div>}
-      {host.local ? <span className="text-sm text-muted-foreground">Local host</span> : <Button variant="outline" disabled={busy} onClick={async () => {
-        if (await confirmAction({ title: `Forget ${host.name}?`, message: 'This removes its saved connection from GChat. Running jobs stay on the host.', confirmLabel: 'Forget', destructive: true })) void act('forget')
-      }}>Forget</Button>}
+      {host.local ? <span className="text-sm text-muted-foreground">This computer</span> : <Button variant="outline" disabled={busy} onClick={async () => {
+        if (await confirmAction({ title: `Remove the connection to ${host.name}?`, message: 'GChat will remove this saved connection. Models and downloads on that computer will keep running.', confirmLabel: 'Remove connection', destructive: true })) void act('forget')
+      }}>Remove connection</Button>}
       {host.local && snapshot?.can_stop_host && <Button variant="outline" disabled={busy || hostStopping || !!error} onClick={async () => {
         setBusy(true)
         setHostStopError(null)
@@ -112,32 +130,34 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           setHostStopping(true)
         } catch (e) { setHostStopError(String(e)) }
         finally { setBusy(false) }
-      }}>{hostStopping ? 'Quitting…' : 'Stop Host and Quit'}</Button>}
+      }}>{hostStopping ? 'Quitting…' : 'Stop model service and quit'}</Button>}
     </div>
-    {hostStopError && <p role="alert" className="text-sm text-destructive">{hostStopError}</p>}
-    {!error && snapshot?.draft_width_calibrations?.some(job => job.status === 'running') && <p role="status" className="text-sm text-muted-foreground">Finishing GPU speed tuning (about 1 minute). Your graphics card is busy until it finishes. Starting a model stops the tuning.</p>}
-    {hostStopping && <p role="status" className="text-sm text-muted-foreground">Host is stopping. Quitting GChat…</p>}
-    {!host.local && !snapshot && <p className="text-sm text-muted-foreground">Choose Connect to use this saved host. Your desktop may ask you to unlock its stored credential.</p>}
+    {actionError && <div role="alert" className="text-sm text-destructive"><p>{actionError.message}</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{actionError.details}</p></details></div>}
+    {hostStopError && <div role="alert" className="text-sm text-destructive"><p>Could not stop the model service. Wait for any model loading or other work to finish, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{hostStopError}</p></details></div>}
+    {!error && snapshot?.draft_width_calibrations?.some(job => job.status === 'running') && <p role="status" className="text-sm text-muted-foreground">Finishing graphics-card speed tuning (about 1 minute). Your graphics card is busy until it finishes. Starting a model stops the tuning.</p>}
+    {hostStopping && <p role="status" className="text-sm text-muted-foreground">The model service is stopping. Quitting GChat…</p>}
+    {!host.local && !snapshot && <p className="text-sm text-muted-foreground">Choose Connect to use this saved computer. Your desktop may ask you to unlock the saved sign-in.</p>}
+    {snapshot && <p className="text-sm text-muted-foreground">A model server runs one model and makes it available for chats. Each server uses graphics-card memory on the computer running it.</p>}
     {host.local ? <EngineFirstRun hostId={host.host_id} hardwareProfileControls={hardwareProfileControls} /> : hardwareProfileControls}
     {host.local && snapshot && <EngineHostSharing sharing={snapshot.lan_sharing} managementNotice={snapshot.management_notice} />}
       {host.local && snapshot && <EngineGbotControl clients={snapshot.clients} disabled={busy || !!error} change={(client_id, action) => act('gbot_grant', { body: { client_id, action } })} />}
     {snapshot && <details className="rounded-lg border p-4 space-y-3">
-      <summary className="cursor-pointer font-medium">Launch Server Instance</summary>
+      <summary className="cursor-pointer font-medium">Start a model with saved settings</summary>
       <EngineProfilePicker hideHeading key={active?.instance_id ?? 'additional'} instanceId={active?.instance_id ?? ''} labelPrefix={host.name}
         snapshot={snapshot} disabled={busy || !!error || active?.status === 'starting' || active?.status === 'stopping'}
         launch={async body => { if (await act('profile_launch', { body })) setActiveId('') }} />
       {active && snapshot.gpus.some(gpu => !snapshot.instances.some(instance => instance.configuration.gpu_uuids.includes(gpu.uuid))) &&
-        <Button variant="outline" disabled={busy || !!error} onClick={() => setActiveId('additional')}>Add server on another GPU group</Button>}
-      {activeId === 'additional' && <Button variant="outline" onClick={() => setActiveId('')}>Cancel additional server</Button>}
+        <Button variant="outline" disabled={busy || !!error} onClick={() => setActiveId('additional')}>Use other graphics cards for another model</Button>}
+      {activeId === 'additional' && <Button variant="outline" onClick={() => setActiveId('')}>Cancel another model</Button>}
     </details>}
     {snapshot && <details className="rounded-lg border p-4 space-y-3">
-      <summary className="cursor-pointer font-medium">Server details</summary>
-      <div className="flex flex-wrap gap-2">{snapshot.gpus.map((gpu, index) => <span className="rounded border px-3 py-1 text-sm" key={gpu.uuid}>GPU {index + 1}: {gpu.display_name ?? gpu.name} · {(gpu.memory_mib / 1024).toFixed(0)} GB</span>)}</div>
-      {active?.status === 'stopped' && <p className="text-sm text-muted-foreground">Server stopped. Select a model and profile above to reuse this instance.</p>}
+      <summary className="cursor-pointer font-medium">Model and memory settings</summary>
+      <div className="flex flex-wrap gap-2">{snapshot.gpus.map((gpu, index) => <span className="rounded border px-3 py-1 text-sm" key={gpu.uuid}>Graphics card {index + 1}: {gpu.display_name ?? gpu.name} · {(gpu.memory_mib / 1024).toFixed(0)} GiB</span>)}</div>
+      {active?.status === 'stopped' && <p className="text-sm text-muted-foreground">This model is stopped. Choose a model and saved settings above to start it again.</p>}
       {!snapshot.instances.length && <p className="text-sm text-muted-foreground">No models are loaded. Choose an installed model below to start one.</p>}
       {(active ? [active] : []).map((instance) => <div key={instance.instance_id} className="rounded-lg bg-muted/40 p-3 space-y-2">
-        <details><summary className="cursor-pointer text-sm text-muted-foreground">Runtime details</summary><EngineInstanceSettings instance={instance} online={!error} /></details>
-        {instance.last_error && <p role="alert" className="text-sm text-destructive">{instance.last_error}</p>}
+        <details><summary className="cursor-pointer text-sm text-muted-foreground">Current model settings</summary><EngineInstanceSettings instance={instance} online={!error} /></details>
+        {instance.last_error && <div role="alert" className="text-sm text-destructive"><p>The model reported a problem. Check its settings and available graphics-card memory before trying again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{instance.last_error}</p></details></div>}
         <div className="flex gap-2">
           {instance.profile && <Button variant="outline" disabled={busy || !!error} onClick={() => {
             const profile = instance.profile!
@@ -150,17 +170,17 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
               prefill_chunk: profile.prefill_chunk, no_cuda_graph: profile.no_cuda_graph })
           }}>Edit settings</Button>}
           <Button variant="outline" disabled={busy || !!error || !['ready', 'starting'].includes(instance.status)} onClick={async () => {
-            if (await confirmAction({ title: 'Force stop this instance?', message: 'Force-stop this instance and cancel its active requests?', confirmLabel: 'Force stop', destructive: true })) void act('stop', { instance_id: instance.instance_id, body: { force: true, expected_session_id: instance.session_id } })
-          }}>Force stop</Button>
+            if (await confirmAction({ title: 'Stop this model immediately?', message: 'This stops the model now and cancels any replies it is generating. Other people using this model will also lose their current replies.', confirmLabel: 'Stop immediately', destructive: true })) void act('stop', { instance_id: instance.instance_id, body: { force: true, expected_session_id: instance.session_id } })
+          }}>Stop immediately</Button>
         </div>
       </div>)}
       <details ref={editor} open={settingsOpen} className="rounded-lg border p-4 space-y-3">
-      <summary className="cursor-pointer font-medium" onClick={event => { event.preventDefault(); setSettingsOpen(!settingsOpen) }}>{editing ? 'Edit server instance settings' : 'Custom server settings'}</summary>
-      {editingInstance && <p className="text-sm text-muted-foreground">Editing {hostInstanceLabel(editingInstance, snapshot)}. Apply below to save and reload.</p>}
+      <summary className="cursor-pointer font-medium" onClick={event => { event.preventDefault(); setSettingsOpen(!settingsOpen) }}>{editing ? 'Change model settings' : 'Choose model settings'}</summary>
+      {editingInstance && <p className="text-sm text-muted-foreground">Changing {hostInstanceLabel(editingInstance, snapshot)}. Save and restart below to apply your choices.</p>}
       <h3 className="font-medium">Installed models</h3>
-      {!!snapshot.inventory_errors?.length && <div role="alert" className="rounded border border-destructive/40 p-3 text-sm"><p className="font-medium">Some inventory paths could not be loaded</p>{snapshot.inventory_errors.map((item, index) => <p key={`${item.path}-${index}`} className="mt-1 break-all">{item.path}: {item.error}</p>)}<Button variant="outline" disabled={busy || !!error} onClick={() => void act('scan')}>Rescan models</Button></div>}
-      <p className="text-sm text-muted-foreground">Select an installed model and its GPU group. Check startup settings to verify its artifact identity and memory requirements before loading.</p>
-      <label className="block text-sm">Custom model<select className="mt-1 w-full rounded border bg-background p-2" value={modelId} onChange={(e) => {
+      {!!snapshot.inventory_errors?.length && <div role="alert" className="rounded border border-destructive/40 p-3 text-sm"><p className="font-medium">Some model files could not be read. Check that the files are available, then refresh the model list.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary>{snapshot.inventory_errors.map((item, index) => <p key={`${item.path}-${index}`} className="mt-1 break-all">{item.path}: {item.error}</p>)}</details><Button variant="outline" disabled={busy || !!error} onClick={() => void act('scan')}>Refresh model list</Button></div>}
+      <p className="text-sm text-muted-foreground">Choose an installed model and the graphics cards it will use. Check these settings to confirm which model file will be used and how much memory it needs before starting it.</p>
+      <label className="block text-sm">Installed model<select className="mt-1 w-full rounded border bg-background p-2" value={modelId} onChange={(e) => {
         setModelId(e.target.value)
         const model = snapshot.models.find(m => m.id === e.target.value)
         const target = model?.metadata.identity.model_id
@@ -171,32 +191,36 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
         setGpus(model?.metadata.tp_size === 1 && available.length === 1 ? [available[0].uuid] : [])
       }}>
         <option value="">Choose an installed model</option>
-        {snapshot.models.map((m) => <option key={m.id} value={m.id} title={weightsDrafterDetail(m.metadata.identity.weights_id)}>{hostModelLabel(m)} · TP{m.metadata.tp_size} · {(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GB{m.artifact_set ? ' · deployment set' : ''}</option>)}
+        {snapshot.models.map((m) => <option key={m.id} value={m.id} title={weightsDrafterDetail(m.metadata.identity.weights_id)}>{hostModelLabel(m)} · {m.metadata.tp_size} {m.metadata.tp_size === 1 ? 'graphics card' : 'graphics cards'} · {(m.metadata.size_bytes / 1024 ** 3).toFixed(1)} GiB{m.artifact_set ? ' · multi-file model' : ''}</option>)}
       </select></label>
-      <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />GPU {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
+      <div className="flex flex-wrap gap-3">{snapshot.gpus.map((gpu, index) => <label key={gpu.uuid} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={gpus.includes(gpu.uuid)} onChange={(e) => setGpus((ids) => e.target.checked ? [...ids, gpu.uuid] : ids.filter((id) => id !== gpu.uuid))} />Graphics card {index + 1}: {gpu.display_name ?? gpu.name}</label>)}</div>
       <div className="flex flex-wrap gap-4">
-        <label className="text-sm">Context tokens<Input type="number" min={1} value={context || ''} onChange={(e) => setContext(Number(e.target.value))} /></label>
-        <label className="text-sm">Concurrent requests<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
-        {!editing && <label className="text-sm">Instances<Input type="number" min={1} max={4294967295} value={instanceCount} onChange={(e) => setInstanceCount(Number(e.target.value))} /></label>}
+        <label className="text-sm">Conversation length (tokens)<Input type="number" min={1} value={context || ''} onChange={(e) => setContext(Number(e.target.value))} /></label>
+        <label className="text-sm">Requests at once<Input type="number" min={1} max={8} value={concurrency} onChange={(e) => setConcurrency(Number(e.target.value))} /></label>
+        {!editing && <label className="text-sm">Model copies<Input type="number" min={1} max={4294967295} value={instanceCount} onChange={(e) => setInstanceCount(Number(e.target.value))} /></label>}
       </div>
-      {snapshot.model_management?.engine_presets_available === false && <p className="text-sm text-muted-foreground">No qualified profiles are installed for these models. The controls below use custom launch settings. Reload drains this instance’s tracked requests before applying changes.</p>}
+      <p className="text-sm text-muted-foreground">Tokens are pieces of text. Conversation length includes your messages, earlier conversation and the reply. Requests at once limits how many replies can be generated together. Each model copy is a separate server and needs its own memory.</p>
+      {snapshot.model_management?.engine_presets_available === false && <p className="text-sm text-muted-foreground">There are no tested saved settings for these models yet. Choose your own settings below. When changing a running model, it finishes its current replies before restarting.</p>}
       <div className="flex flex-wrap gap-4">
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.vision} onChange={(e) => setOptions({ ...options, vision: e.target.checked })} />Vision</label>
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.structured_outputs} onChange={(e) => setOptions({ ...options, structured_outputs: e.target.checked })} />Structured outputs</label>
-        <label className="text-sm">Speculative decoding<select className="ml-2 rounded border bg-background p-2" value={options.spec} onChange={(e) => setOptions({ ...options, spec: e.target.value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })}><option value="none">Disabled</option><option value="auto">Automatic</option><option value="dflash">DFlash</option></select></label>
-        <label className="text-sm">KV format<select className="ml-2 rounded border bg-background p-2" value={options.kv_dtype} onChange={(e) => setOptions({ ...options, kv_dtype: e.target.value as EngineLaunchOptions['kv_dtype'] })}>{['auto', 'bf16', 'int8', 'nvfp4'].map((v) => <option key={v} value={v}>{v}</option>)}</select></label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.vision} onChange={(e) => setOptions({ ...options, vision: e.target.checked })} />Read images</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.structured_outputs} onChange={(e) => setOptions({ ...options, structured_outputs: e.target.checked })} />Follow a response format</label>
+        <label className="text-sm">Reply speedup<select className="ml-2 rounded border bg-background p-2" value={options.spec} onChange={(e) => setOptions({ ...options, spec: e.target.value as EngineLaunchOptions['spec'], draft_tokens: 0, draft_tp: 0 })}><option value="none">Off</option><option value="auto">Automatic</option><option value="dflash">DFlash</option></select></label>
+        <label className="text-sm">Conversation memory format<select className="ml-2 rounded border bg-background p-2" value={options.kv_dtype} onChange={(e) => setOptions({ ...options, kv_dtype: e.target.value as EngineLaunchOptions['kv_dtype'] })}>{['auto', 'bf16', 'int8', 'nvfp4'].map((v) => <option key={v} value={v}>{v === 'auto' ? 'Automatic' : v.toUpperCase()}</option>)}</select></label>
       </div>
+      <p className="text-sm text-muted-foreground">Read images lets the model understand pictures when supported. Follow a response format lets apps request replies in a set format, such as JSON. Reply speedup drafts text ahead for the model to check; DFlash is one method. Conversation memory stores earlier text; its format affects memory use.</p>
       {launchError && selected && <p role="alert" className="text-sm text-destructive">{launchError}</p>}
-      <details className="space-y-3"><summary className="cursor-pointer text-sm">Advanced launch settings</summary>
-        <p className="text-sm text-muted-foreground">Zero selects engine defaults for draft count, draft TP and prefill chunk. Draft TP must match the artifact. Memory budgets are bytes. Host KV cache is automatic when blank; zero disables it and a positive value sets its exact size.</p>
+      <details className="space-y-3"><summary className="cursor-pointer text-sm">Advanced model settings</summary>
+        <p className="text-sm text-muted-foreground">These settings control how GInfer, the program running your model, uses memory and drafts replies. Leave them at their defaults unless you need to adjust them.</p>
+        <p className="text-sm text-muted-foreground">Draft ahead length is how much text is drafted before the model checks it. Drafting graphics cards is the number of cards used for this work; it must match the model file. Input batch size is how much input text is processed at once. Set these to 0 to let GInfer choose.</p>
+        <p className="text-sm text-muted-foreground">Conversation memory stores earlier text. The limits below are measured in bytes. Computer conversation memory uses this computer’s main memory: leave it blank for automatic sizing, set 0 to turn it off, or enter a positive size. Graphics-card conversation memory limits memory on the graphics cards; leave it blank for automatic sizing. CUDA Graphs reduce repeated setup work on the graphics card.</p>
         <div className="grid grid-cols-2 gap-3">{(['draft_tokens', 'draft_tp', 'prefill_chunk'] as const).map((key) => <label className="text-sm" key={key}>{advancedFieldLabels[key]}<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options[key]} onChange={(e) => setOptions({ ...options, [key]: Number(e.target.value) })} /></label>)}
-          <label className="text-sm">Host KV cache (bytes, blank = automatic, 0 = disabled)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options.host_kv_cache_bytes ?? ''} onChange={(e) => setOptions({ ...options, host_kv_cache_bytes: e.target.value === '' ? null : Number(e.target.value) })} /></label>
-          <label className="text-sm">GPU KV budget (blank = automatic)<Input type="number" min={1} max={Number.MAX_SAFE_INTEGER} value={options.kv_arena_bytes ?? ''} onChange={(e) => setOptions({ ...options, kv_arena_bytes: e.target.value ? Number(e.target.value) : null })} /></label>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Disable CUDA Graphs</label>
+          <label className="text-sm">Computer conversation memory (bytes)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} value={options.host_kv_cache_bytes ?? ''} onChange={(e) => setOptions({ ...options, host_kv_cache_bytes: e.target.value === '' ? null : Number(e.target.value) })} /></label>
+          <label className="text-sm">Graphics-card conversation memory (bytes)<Input type="number" min={1} max={Number.MAX_SAFE_INTEGER} value={options.kv_arena_bytes ?? ''} onChange={(e) => setOptions({ ...options, kv_arena_bytes: e.target.value ? Number(e.target.value) : null })} /></label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Turn off CUDA Graphs</label>
         </div>
       </details>
       {!editing && <>
-        <p className="text-sm text-muted-foreground">The check does not load a model or reserve memory. For multiple instances, Automatic divides the remaining GPU KV memory equally. Startup checks the available memory again.</p>
+        <p className="text-sm text-muted-foreground">Checking settings does not start a model or set aside memory. When starting several copies, automatic sizing divides the available graphics-card conversation memory equally. Available memory is checked again when each model starts.</p>
         <Button variant="outline" disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={() => {
           const key = quoteKey
           const revision = quoteRevision.current
@@ -205,22 +229,22 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             .then(result => { if (quoteRevision.current === revision) setStartupQuote({ key, result }) })
             .catch(error => { if (quoteRevision.current === revision) setStartupQuote({ key, error: String(error) }) })
             .finally(() => setBusy(false))
-        }}>Check startup settings</Button>
-        {currentQuote?.result && <p role="status" className="text-sm">Verified artifact: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'instance' : 'instances'}. {currentQuote.result.kv_arena_bytes === null ? 'Automatic KV; a solo startup must measure graph memory before sharing.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of GPU memory for the conversation cache (KV) per instance.`} This check did not start a model.</p>}
-        {currentQuote?.error && <p role="alert" className="text-sm text-destructive">{currentQuote.error}</p>}
+        }}>Check model settings</Button>
+        {currentQuote?.result && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'model copy' : 'model copies'}. {currentQuote.result.kv_arena_bytes === null ? 'Conversation memory is automatic. Start one copy first so GInfer can measure its memory use before sharing the graphics cards.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of graphics-card conversation memory per model copy.`} This check did not start a model.</p>}
+        {currentQuote?.error && <div role="alert" className="text-sm text-destructive"><p>These model settings could not be checked. Review your choices and available graphics-card memory, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{currentQuote.error}</p></details></div>}
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {
-        if (editing && !await confirmAction({ title: 'Apply these settings?', message: 'Apply these model and launch settings? This restarts the selected instance after its current requests drain.', confirmLabel: 'Apply and restart' })) return
+        if (editing && !await confirmAction({ title: 'Save and restart this model?', message: 'The model will finish its current replies, then restart with your chosen settings. Other people using it will be affected while it restarts.', confirmLabel: 'Save and restart' })) return
         if (editing) void act('reload', { instance_id: editing, body: { configuration, expected_session_id: editingSession } })
         else void (async () => {
           for (let remaining = instanceCount; remaining > 0; remaining--) {
             if (!await act('launch', { body: { ...configuration, remaining_instances: remaining } })) {
-              if (remaining < instanceCount) toast.warning(`${instanceCount - remaining} of ${instanceCount} instances started. Manage these instances separately.`)
+              if (remaining < instanceCount) toast.warning(`${instanceCount - remaining} of ${instanceCount} model copies started. The started copies are still running; select each one above to manage it.`)
               break
             }
           }
         })()
-      }}>{editing ? 'Apply settings and reload' : 'Load model'}</Button>
+      }}>{editing ? 'Save and restart model' : 'Start model with these settings'}</Button>
         {editing && <Button variant="outline" onClick={() => { setEditing(null); setSettingsOpen(false) }}>Cancel editing</Button>}
       </div>
       </details>

@@ -299,19 +299,19 @@ it('asks the owner to confirm each device approval and revocation', async () => 
     <EngineGbotControl clients={clients} disabled={false} change={change} />
   )
   fireEvent.click(
-    screen.getByRole('button', { name: 'Approve Gbot control for Laptop' })
+    screen.getByRole('button', { name: 'Allow access for Laptop' })
   )
   await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1))
   expect(change).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)
   fireEvent.click(
-    screen.getByRole('button', { name: 'Approve Gbot control for Laptop' })
+    screen.getByRole('button', { name: 'Allow access for Laptop' })
   )
   await waitFor(() =>
     expect(change).toHaveBeenLastCalledWith('requested', 'approve')
   )
   fireEvent.click(
-    screen.getByRole('button', { name: 'Revoke Gbot control for Desk' })
+    screen.getByRole('button', { name: 'Remove access for Desk' })
   )
   await waitFor(() =>
     expect(change).toHaveBeenLastCalledWith('approved', 'revoke')

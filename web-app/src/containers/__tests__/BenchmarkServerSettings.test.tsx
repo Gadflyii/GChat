@@ -55,9 +55,9 @@ it('offers Max Perf separately and applies only after selection and confirmation
   expect(screen.getByLabelText('Host / Instance').compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   const applyGuidance = screen.getByText('Choose a Max Perf profile, then select Apply Max Perf & Restart Server. Wait for the server to be ready before selecting Run benchmark.')
   expect(applyGuidance.compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Show all' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Show all settings' }))
   expect(screen.getByRole('option', {
-    name: 'Untested · C1 · 128K context · Vision + text',
+    name: 'Not yet tested · 1 replies at once · 128K tokens · Images and text',
   })).toBeInTheDocument()
   expect(screen.getByText(/does not claim hardware qualification/)).toBeInTheDocument()
   expect(mocks.command).not.toHaveBeenCalled()

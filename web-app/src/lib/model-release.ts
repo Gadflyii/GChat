@@ -43,8 +43,8 @@ export const releaseVerified = (release: unknown): release is ModelRelease =>
   validRelease(release) && !!release.launch_profiles?.length
 
 export function releaseReadiness(release: unknown, gpus: ModelGpu[]) {
-  if (!releaseVerified(release)) return { available: false, reason: 'Release not published with verified compatibility, size and checksum.', gpuIds: [] as string[] }
-  if (!gpus.length) return { available: false, reason: 'No NVIDIA GPU detected on this host. Select a paired LAN host.', gpuIds: [] as string[] }
+  if (!releaseVerified(release)) return { available: false, reason: 'This model is not ready to download. The publisher still needs to provide verified download details and tested settings.', gpuIds: [] as string[] }
+  if (!gpus.length) return { available: false, reason: 'No NVIDIA graphics card was found on the selected computer. Choose a paired computer with a supported NVIDIA graphics card.', gpuIds: [] as string[] }
   const groups = new Map<string, ModelGpu[]>()
   for (const gpu of gpus) {
     if (!gpu.compute_capability || !release.qualified_sm.includes(gpu.compute_capability) || gpu.memory_mib < release.min_vram_mib_per_gpu) continue
@@ -52,19 +52,39 @@ export function releaseReadiness(release: unknown, gpus: ModelGpu[]) {
     groups.set(key, [...(groups.get(key) ?? []), gpu])
   }
   const group = [...groups.values()].find(g => g.length >= release.tp)
-  if (!group) return { available: false, reason: `Requires ${release.tp} matching GPU${release.tp > 1 ? 's' : ''}, SM ${release.qualified_sm.join(' / ')}, and at least ${(release.min_vram_mib_per_gpu / 1024).toFixed(0)} GiB on each GPU.`, gpuIds: [] as string[] }
-  return { available: true, reason: release.tp === 1 ? 'Qualified hardware match. The engine validates the package when loading.' : 'Hardware matches; peer connectivity must pass the engine’s TP check before loading.', gpuIds: group.slice(0, release.tp).map(g => g.uuid) }
+  if (!group) return { available: false, reason: `Needs ${release.tp} ${release.tp > 1 ? 'matching supported NVIDIA graphics cards, each' : 'supported NVIDIA graphics card'} with at least ${(release.min_vram_mib_per_gpu / 1024).toFixed(0)} GiB of memory.`, gpuIds: [] as string[] }
+  return { available: true, reason: release.tp === 1 ? 'Your graphics card has enough memory and is supported by this model. GChat will check the model file when you load it.' : `Your ${release.tp} matching graphics cards have enough memory. GChat will check that they can work together when you load the model.`, gpuIds: group.slice(0, release.tp).map(g => g.uuid) }
 }
 
 // Below 1 GiB, GiB with one decimal reads 0.0 for the first ~50 MiB of a download.
 export const formatModelBytes = (bytes: number) => bytes < 1024 ** 3
   ? `${Math.round(bytes / 1024 ** 2)} MiB` : `${(bytes / 1024 ** 3).toFixed(1)} GiB`
 
-const downloadStatusLabels: Record<string, string> = {
-  queued: 'Waiting to start', downloading: 'Downloading', pausing: 'Pausing', paused: 'Paused',
-  verifying: 'Checking the download', installed: 'Installed', failed: 'Failed',
+const downloadStatusLabels = new Map<string, string>([
+  ['queued', 'Waiting to download'], ['downloading', 'Downloading model'],
+  ['pausing', 'Saving progress before pausing'], ['paused', 'Paused; resume to continue'],
+  ['verifying', 'Checking the downloaded file'], ['installed', 'Download complete'],
+  ['failed', 'Download stopped'],
+])
+export const downloadStatusLabel = (status: string) => downloadStatusLabels.get(status) ?? 'Download status unavailable'
+
+/** Keep diagnostic details separate from the explanation and recovery action. */
+export function downloadFailureMessage(error: string | null): string {
+  const message = error ?? ''
+  if (/not enough (?:free )?(?:disk )?space|insufficient (?:disk )?space|no space left|disk (?:is )?full|os error (?:28|112)\b/i.test(message)) {
+    return 'There isn’t enough space in the model folder. Free some disk space, then resume the download.'
+  }
+  if (/checksum|sha-?256/i.test(message)) {
+    return 'The downloaded file is damaged or incomplete. Remove this incomplete download, then download the model again.'
+  }
+  if (/\bhttp(?:\/[\d.]+)?(?:\s+(?:status|error))?\s*:?\s*[45]\d\d\b|download server returned [45]\d\d\b|\bstatus(?: code)?\s*:?\s*[45]\d\d\b/i.test(message)) {
+    return 'The download site couldn’t provide this model. Refresh the model list or try again later.'
+  }
+  if (/network|connect|dns|timed? out|timeout|did not respond|stalled|error sending request|error decoding response body|request or response body|download ended before the declared size/i.test(message)) {
+    return 'The download was interrupted. Check your internet connection, then resume the download.'
+  }
+  return 'The download couldn’t finish. Try resuming it, or open the details below for more information.'
 }
-export const downloadStatusLabel = (status: string) => downloadStatusLabels[status] ?? status
 
 /** Hardware measurement and speed tuning write temporary files next to the models. */
 export const WORKING_SPACE_BYTES = 2 * 1024 ** 3

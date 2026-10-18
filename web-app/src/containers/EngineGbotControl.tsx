@@ -2,6 +2,13 @@ import { Button } from '@/components/ui/button'
 import { confirmAction } from '@/lib/confirm'
 import type { EngineSnapshot } from '@/services/engines'
 
+const controlStatusLabels = {
+  not_requested: 'No access requested',
+  pending: 'Waiting for your permission',
+  approved: 'Access allowed',
+  revoked: 'Access removed',
+}
+
 export function EngineGbotControl({
   clients = [],
   disabled,
@@ -20,10 +27,11 @@ export function EngineGbotControl({
   if (!devices.length) return null
   return (
     <details className="space-y-3 rounded-lg border p-4">
-      <summary className="cursor-pointer font-medium">Gbot control</summary>
+      <summary className="cursor-pointer font-medium">Access to bots and desktops</summary>
       <p className="text-sm text-muted-foreground">
-        Approve each paired device separately. Access controls this computer's
-        bots, accounts and desktops. Inference pairing alone does not grant it.
+        Give each paired computer permission separately. This lets it control
+        this computer's bots, accounts and desktops. Connecting to use models
+        does not give this access.
       </p>
       {devices.map((client) => (
         <div
@@ -31,7 +39,7 @@ export function EngineGbotControl({
           className="flex flex-wrap items-center justify-between gap-2"
         >
           <span className="text-sm">
-            {client.name} · {client.gbot_control!.status}
+            {client.name} · {controlStatusLabels[client.gbot_control!.status]}
           </span>
           {client.gbot_control!.status === 'pending' && (
             <Button
@@ -40,15 +48,15 @@ export function EngineGbotControl({
               onClick={async () => {
                 if (
                   await confirmAction({
-                    title: 'Allow Gbot control?',
-                    message: `Allow ${client.name} to control this computer's Gbot service, bots, accounts and desktops?`,
-                    confirmLabel: 'Allow',
+                    title: 'Allow access to bots and desktops?',
+                    message: `Allow ${client.name} to control this computer's bots, accounts and desktops?`,
+                    confirmLabel: 'Allow access',
                   })
                 )
                   void change(client.client_id, 'approve')
               }}
             >
-              Approve Gbot control for {client.name}
+              Allow access for {client.name}
             </Button>
           )}
           {client.gbot_control!.status === 'approved' && (
@@ -58,16 +66,16 @@ export function EngineGbotControl({
               onClick={async () => {
                 if (
                   await confirmAction({
-                    title: 'Revoke Gbot control?',
-                    message: `Revoke ${client.name}'s Gbot control? Its connected desktop views will close. Running bot tasks continue.`,
-                    confirmLabel: 'Revoke',
+                    title: 'Remove access to bots and desktops?',
+                    message: `Remove ${client.name}'s access to this computer's bots, accounts and desktops? Its open desktop views will close. Running bot tasks continue.`,
+                    confirmLabel: 'Remove access',
                     destructive: true,
                   })
                 )
                   void change(client.client_id, 'revoke')
               }}
             >
-              Revoke Gbot control for {client.name}
+              Remove access for {client.name}
             </Button>
           )}
         </div>

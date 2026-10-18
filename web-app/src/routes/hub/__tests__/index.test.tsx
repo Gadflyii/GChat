@@ -9,6 +9,7 @@ import type { LocalModelLoadProgress } from '@/services/engines'
 import type { DialogOpenOptions } from '@/services/dialog/types'
 type TestProvider = { provider: string; settings?: ProviderSetting[]; models: { id: string; displayName: string; path: string; source?: string }[] }
 const mocks = vi.hoisted(() => ({
+  refreshCatalog: vi.fn(async () => {}),
   command: vi.fn<(action: string, args?: Record<string, unknown>) => Promise<unknown>>(async () => []), refresh: vi.fn(async () => {}),
   switchModel: vi.fn<(params: { options?: { loadOperationId?: string }; signal?: AbortSignal }) => Promise<void>>(async () => {}),
   selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
@@ -31,7 +32,7 @@ vi.mock('@/containers/hub/DeleteModelAction', () => ({ DeleteModelAction: () => 
 vi.mock('@tanstack/react-router', () => ({ Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a> }))
 vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
 vi.mock('@/services/engines', () => ({ engineCommand: mocks.command, engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}` }))
-vi.mock('@/hooks/useServiceHub', () => ({ useServiceHub: () => ({
+vi.mock('@/hooks/useServiceHub', () => ({ isServiceHubInitialized: () => false, useServiceHub: () => ({
   models: () => ({ getActiveModels: async () => ['another-model'] }),
   providers: () => ({ getProviders: mocks.getProviders }),
   dialog: () => ({ open: mocks.open }),
@@ -47,7 +48,7 @@ vi.mock('@/hooks/useHardware', () => ({ useHardware: (selector: (s: unknown) => 
   selectedGpuUuids: mocks.selectedGpuUuids, setSelectedGpuUuids: mocks.setSelectedGpuUuids,
   hardwareReady: true, hardwareData: { gpus: [{ uuid: 'local-gpu', name: 'Local GPU', total_memory: 16384, nvidia_info: { compute_capability: '8.6' } }] },
 }) }))
-vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog, error: mocks.catalogError }) }))
+vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog, error: mocks.catalogError, refresh: mocks.refreshCatalog }) }))
 vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (s: unknown) => unknown) => selector({
   hosts: [{ host_id: 'remote', name: 'Lab server' }, ...(mocks.localSnapshot ? [{ host_id: 'local-host', name: 'This computer', local: true }] : [])], errors: mocks.errors, refresh: mocks.refresh,
   snapshots: { ...(mocks.localSnapshot ? { 'local-host': mocks.localSnapshot } : {}), remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: [] } } },
@@ -58,6 +59,7 @@ const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: '
 describe('host-scoped Models', () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null
+    useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
     mocks.resources = { ready: true, error: '' }
     mocks.command.mockResolvedValue([])
     mocks.switchModel.mockResolvedValue(undefined)
@@ -162,7 +164,7 @@ describe('host-scoped Models', () => {
     const add = screen.getByRole('button', { name: 'Add local model' })
     act(() => { fireEvent.click(add); fireEvent.click(add) })
     expect(mocks.open).toHaveBeenCalledOnce()
-    expect(screen.getByRole('button', { name: 'Choosing local model…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Choose a model file…' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Model destination' })).toBeDisabled()
     await act(async () => { choose('/external/model.ginfer') })
     expect(screen.getByRole('button', { name: 'Adding local model…' })).toBeDisabled()
@@ -197,7 +199,7 @@ describe('host-scoped Models', () => {
     render(<ModelManagement />)
     expect(screen.getByText('Installed locally')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
-    expect(screen.getByText('No published recommendation for this hardware yet')).toBeInTheDocument()
+    expect(screen.getByText('No recommended model for these graphics cards yet')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Download to/ })).not.toBeInTheDocument()
     await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
   })
@@ -213,7 +215,7 @@ describe('host-scoped Models', () => {
     await user.click(screen.getByRole('button', { name: 'Model destination' }))
     await user.click(screen.getByRole('menuitemradio', { name: 'Lab server' }))
     expect(screen.getByText('Installed on Lab server')).toBeInTheDocument()
-    expect(screen.queryByText('Preparing local model runtime…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Preparing GInfer to run models on this computer…')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
     expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeEnabled()
     fireEvent.click(screen.getByRole('button', { name: 'Download to Lab server' }))
@@ -226,10 +228,10 @@ describe('host-scoped Models', () => {
     mocks.command.mockImplementation(async action => action === 'local_model_downloads'
       ? [{ id: 'job', release, status: 'paused', received: 1024, bytes_per_second: 0, error: null, path: null }] : [])
     render(<ModelManagement />)
-    expect(screen.getByText(/Load uses the saved hardware profile for the selected graphics cards/)).toBeInTheDocument()
+    expect(screen.getByText(/Load model uses tested settings for your selected graphics cards/)).toBeInTheDocument()
     expect(screen.getByText(/Choose the graphics cards to load the model onto/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
-    expect(await screen.findByText('Paused')).toBeInTheDocument()
+    expect(await screen.findByText('Paused; resume to continue')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Resume download' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete partial download' })).toBeInTheDocument()
     expect(screen.getByText(/Only one model downloads at a time/)).toBeInTheDocument()
@@ -242,8 +244,8 @@ describe('host-scoped Models', () => {
       ? [{ id: 'job', release, status: 'failed', received: 4096, bytes_per_second: 0, error: 'SHA256 mismatch', path: null }] : [])
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('This download did not finish: SHA256 mismatch. Try again, or delete the partial download')
-    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+    expect(await screen.findByRole('alert')).toHaveTextContent('The downloaded file is damaged or incomplete. Remove this incomplete download, then download the model again.')
+    expect(screen.getByRole('button', { name: 'Retry download' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Resume download' })).not.toBeInTheDocument()
   })
   it('says it is checking, not that there are no downloads, until the Host has answered', async () => {
@@ -255,11 +257,11 @@ describe('host-scoped Models', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
     try {
       expect(screen.getByText('Checking for downloads…')).toBeInTheDocument()
-      expect(screen.queryByText('No downloads on this host.')).not.toBeInTheDocument()
+      expect(screen.queryByText('No downloads on this computer yet. Choose Recommended to find a model.')).not.toBeInTheDocument()
     } finally {
       await act(async () => { answer([]) })
     }
-    expect(await screen.findByText('No downloads on this host.')).toBeInTheDocument()
+    expect(await screen.findByText('No downloads on this computer yet. Choose Recommended to find a model.')).toBeInTheDocument()
   })
   it('moves between the model tabs with the arrow keys and keeps one tab stop', async () => {
     const user = userEvent.setup()
@@ -282,7 +284,10 @@ describe('host-scoped Models', () => {
     render(<ModelManagement />)
     fireEvent.click(screen.getByRole('button', { name: 'Load model' }))
     const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('Failed to load Qwen: Not enough graphics memory.')
+    expect(alert).toHaveTextContent('Could not load this model. Check that the selected graphics cards are available and have enough memory, then try again.')
+    expect(screen.getByText('Failed to load Qwen: Not enough graphics memory.')).not.toBeVisible()
+    fireEvent.click(screen.getByText('Technical details'))
+    expect(screen.getByText('Failed to load Qwen: Not enough graphics memory.')).toBeVisible()
     expect(alert).not.toHaveTextContent(/^Error:/)
     expect(alert).not.toHaveTextContent('Saved inventory may be out of date')
     mocks.switchModel.mockResolvedValue(undefined)
@@ -305,7 +310,7 @@ describe('host-scoped Models', () => {
       render(<ModelManagement />)
       expect(screen.getByText(/^Running · /)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
-      fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Stop model' }))
       await waitFor(() => expect(mocks.controlHost).toHaveBeenCalledWith('ginfer/local-host/inst', 'stop'))
     } finally { mocks.localSnapshot = null }
   })
@@ -317,7 +322,8 @@ describe('host-scoped Models', () => {
     await user.click(screen.getByRole('menuitemradio', { name: 'Lab server (offline)' }))
     fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
     expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Connection lost')
+    expect(screen.getByRole('alert')).toHaveTextContent('Cannot reach Lab server. Check that it is on and GInfer Host is running, then reconnect in GInfer Hosts.')
+    expect(screen.getByText('Connection lost')).not.toBeVisible()
   })
   it('loads an installed model with profile defaults and automatic GPU selection', async () => {
     spyConfirm().mockReturnValueOnce(true)
@@ -338,7 +344,7 @@ describe('host-scoped Models', () => {
     const view = render(<ModelManagement />)
     const loadButton = screen.getByRole('button', { name: 'Load model' })
     expect(loadButton).toBeDisabled()
-    expect(screen.getByRole('status')).toHaveTextContent('Preparing local model runtime…')
+    expect(screen.getByRole('status')).toHaveTextContent('Preparing GInfer to run models on this computer…')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     fireEvent.click(loadButton)
     expect(mocks.switchModel).not.toHaveBeenCalled()
@@ -362,8 +368,8 @@ describe('host-scoped Models', () => {
     const view = render(<ModelManagement />)
     const loadButton = screen.getByRole('button', { name: 'Load model' })
     expect(loadButton).toBeDisabled()
-    expect(screen.getByRole('alert')).toHaveTextContent('Local model runtime is unavailable: Runtime extraction failed')
-    expect(screen.queryByText('Preparing local model runtime…')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not prepare GInfer to run models on this computer. Restart GChat to try again.')
+    expect(screen.queryByText('Preparing GInfer to run models on this computer…')).not.toBeInTheDocument()
     fireEvent.click(loadButton)
     expect(mocks.switchModel).not.toHaveBeenCalled()
 
@@ -427,15 +433,17 @@ describe('host-scoped Models', () => {
         ...(phase === 'verification' ? { completed_bytes: 1024, total_bytes: 4096 } : {}) } : [])
     render(<ModelManagement />)
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load model' })) })
-    expect(screen.getByRole('status')).toHaveTextContent('Verifying installed model')
-    expect(screen.getByRole('progressbar', { name: 'Installed model verification' })).toHaveAttribute('value', '1024')
-    expect(screen.getByRole('checkbox', { name: 'Automatic (visible GPUs only)' })).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Checking the model file')
+    expect(screen.getByRole('progressbar', { name: 'Model file check' })).toHaveAttribute('value', '1024')
+    expect(screen.getByRole('checkbox', { name: 'Automatic (all available graphics cards)' })).toBeDisabled()
     phase = 'profiling'
     clock.mockReturnValue(602000)
     await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-    expect(screen.getByRole('status')).toHaveTextContent('Profiling installed model')
-    expect(screen.getByRole('status')).toHaveTextContent('Selected-model CPU experts')
-    expect(screen.getByRole('status')).toHaveTextContent('Load request elapsed: 601s')
+    expect(screen.getByRole('status')).toHaveTextContent('Finding settings for your graphics cards')
+    expect(screen.getByText('Selected-model CPU experts')).not.toBeVisible()
+    fireEvent.click(screen.getByText('Startup details'))
+    expect(screen.getByText('Selected-model CPU experts')).toBeVisible()
+    expect(screen.getByRole('status')).toHaveTextContent('Time since you chose Load model: 601 seconds')
     expect(screen.getByRole('status')).not.toHaveTextContent(/remaining|expected/i)
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
     await act(async () => { finish() })
@@ -457,14 +465,14 @@ describe('host-scoped Models', () => {
     })
     render(<ModelManagement />)
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Load model' })) })
-    expect(screen.getByRole('status')).toHaveTextContent('Startup status is temporarily unavailable')
+    expect(screen.getByRole('status')).toHaveTextContent('Cannot check progress right now')
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).not.toHaveTextContent('Private server response')
     await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
     expect(screen.getByRole('status')).not.toHaveTextContent('Waiting for model readiness')
     await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
-    expect(screen.getByRole('status')).toHaveTextContent('Starting installed model')
-    expect(screen.getByRole('status')).not.toHaveTextContent('temporarily unavailable')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading the model into memory')
+    expect(screen.getByRole('status')).not.toHaveTextContent('Cannot check progress right now')
     await act(async () => { finish() })
     const finishedPolls = polls
     await act(async () => { await vi.advanceTimersByTimeAsync(10000) })
@@ -482,7 +490,7 @@ describe('host-scoped Models', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel load' }))
     expect(request.signal!.aborted).toBe(true)
     expect(mocks.command).toHaveBeenCalledWith('local_model_load_cancel', { operation_id: request.options!.loadOperationId })
-    expect(screen.getByRole('status')).toHaveTextContent('Cancelling installed model load')
+    expect(screen.getByRole('status')).toHaveTextContent('Cancelling model startup…')
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
     await act(async () => { reject(new DOMException('Cancelled', 'AbortError')) })
     expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
@@ -516,6 +524,46 @@ describe('host-scoped Models', () => {
     expect(mocks.command.mock.calls.some(([action]) => action === 'local_model_load_cancel')).toBe(false)
     expect(mocks.switchModel.mock.calls[0][0].signal!.aborted).toBe(false)
     await act(async () => { finish() })
+  })
+
+  it('refreshes downloads without searching for installed files', async () => {
+    render(<ModelManagement />)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    mocks.command.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh downloads' }))
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+    expect(mocks.command.mock.calls.some(([action]) => action === 'local_model_adopt')).toBe(false)
+  })
+  it('explains a recommendation refresh failure and keeps diagnostics optional', async () => {
+    mocks.catalogError = 'HTTP 503 from catalog host'
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Could not get the latest model recommendations.')
+    expect(screen.getByText('HTTP 503 from catalog host')).not.toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh recommendations' }))
+    await waitFor(() => expect(mocks.refreshCatalog).toHaveBeenCalledOnce())
+  })
+  it.each([
+    ['queued', 'Waiting to download', 'Pause download'],
+    ['downloading', 'Downloading model', 'Pause download'],
+    ['pausing', 'Saving progress before pausing', null],
+    ['paused', 'Paused; resume to continue', 'Resume download'],
+    ['verifying', 'Checking the downloaded file', null],
+    ['installed', 'Download complete', 'Show in Installed'],
+    ['failed', 'Download stopped', 'Retry download'],
+  ])('explains a %s download and offers the supported next action', async (status, label, action) => {
+    mocks.command.mockImplementation(async command => command === 'local_model_downloads'
+      ? [{ id: 'job', release, status, received: 1024, bytes_per_second: 0, error: status === 'failed' ? 'connection reset by peer' : null, path: null }] : [])
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    expect(await screen.findByText(label!)).toBeVisible()
+    if (action) expect(screen.getByRole('button', { name: action })).toBeEnabled()
+    else expect(screen.queryByRole('button', { name: /Pause download|Resume download|Retry download|Show in Installed/ })).not.toBeInTheDocument()
+    if (status === 'failed') {
+      expect(screen.getByRole('alert')).toHaveTextContent('Check your internet connection, then resume the download.')
+      expect(screen.getByText('connection reset by peer')).not.toBeVisible()
+    }
   })
 
 })

@@ -5,40 +5,40 @@ export function EngineInstanceSettings({ instance, online }: { instance: EngineI
   const hasReported = typeof reported === 'number' && Number.isSafeInteger(reported) && reported > 0 && instance.status === 'ready'
   const config = instance.configuration
   const gpuCount = config.tp ?? config.gpu_uuids.length
-  const speculation = { auto: 'Automatic', none: 'Disabled', dflash: 'DFlash', mtp: 'MTP' }[config.spec ?? 'auto']
+  const speculation = { auto: 'Automatic', none: 'Off', dflash: 'DFlash', mtp: 'MTP' }[config.spec ?? 'auto']
   const kvFormat = config.kv_dtype === undefined || config.kv_dtype === 'auto' ? 'Automatic' : config.kv_dtype.toUpperCase()
 
   return <div className="space-y-3 text-sm text-muted-foreground">
-    <p>{hasReported ? `${online ? 'Engine-reported' : 'Last reported'} context: ${reported.toLocaleString()} tokens` : 'Effective context: not reported by a ready engine'}</p>
-    <p className="text-xs">Context is the space for input and generated text, measured in tokens (pieces of text).</p>
-    <section aria-label="Configured launch settings" className="space-y-2">
-      <p className="font-medium text-foreground">Configured launch settings</p>
-      <p className="text-xs">These are the requested settings, separate from what the Engine reports above.</p>
+    <p>{hasReported ? `${online ? 'Conversation length reported by the model' : 'Last reported conversation length'}: ${reported.toLocaleString()} tokens` : 'The model has not reported its conversation length yet.'}</p>
+    <p className="text-xs">Conversation length includes your messages, earlier conversation and the reply. It is measured in tokens (pieces of text).</p>
+    <section aria-label="Chosen model settings" className="space-y-2">
+      <p className="font-medium text-foreground">Chosen model settings</p>
+      <p className="text-xs">These are the settings you requested. The running model’s reported limit appears above.</p>
       <div>
-        <p>Model split (TP): {gpuCount} {gpuCount === 1 ? 'GPU' : 'GPUs'}</p>
-        <p className="text-xs">The number of GPUs sharing this model.</p>
+        <p>Graphics cards sharing this model: {gpuCount}</p>
+        <p className="text-xs">A model can use one graphics card or be split across several matching cards.</p>
       </div>
       <div>
-        <p>Parallel requests (C): {config.concurrency}</p>
-        <p className="text-xs">The maximum number of requests the model can process at the same time.</p>
+        <p>Requests at once: {config.concurrency}</p>
+        <p className="text-xs">The maximum number of replies the model can generate at the same time.</p>
       </div>
-      <p>Configured context limit: {config.max_context.toLocaleString()} tokens</p>
+      <p>Chosen conversation limit: {config.max_context.toLocaleString()} tokens</p>
       <div>
-        <p>Speculative decoding: {speculation}</p>
-        <p className="text-xs">Proposes tokens ahead for the model to check, which can speed up replies. Automatic lets the Engine choose at startup.</p>
+        <p>Reply speedup: {speculation}</p>
+        <p className="text-xs">Drafts text ahead for the model to check, which can speed up replies. DFlash and MTP are drafting methods. Automatic lets GInfer choose when the model starts.</p>
       </div>
       <div>
-        <p>Conversation memory (KV): {kvFormat}</p>
-        <p className="text-xs">Stores earlier tokens so the model can continue the conversation. Automatic lets the Engine choose the memory format at startup.</p>
+        <p>Conversation memory format: {kvFormat}</p>
+        <p className="text-xs">Stores earlier text so the model can continue the conversation. Automatic lets GInfer choose the memory format when the model starts.</p>
       </div>
-      <p className="text-xs">Automatic launch settings are not measured runtime values.</p>
+      <p className="text-xs">Automatic means GInfer chooses a value; it does not show which value the running model is using.</p>
     </section>
     <details className="space-y-1">
       <summary className="cursor-pointer">Technical details</summary>
-      <p>Vision {config.vision ? 'enabled' : 'disabled'}</p>
+      <p>Read images: {config.vision ? 'on' : 'off'}</p>
       <p>CUDA Graphs {config.no_cuda_graph ? 'disabled' : 'enabled'}</p>
-      <p>Structured outputs: {config.structured_outputs === undefined ? 'not reported' : config.structured_outputs ? 'enabled' : 'disabled'}</p>
-      <p className="text-xs">The engine does not currently report resolved KV format, draft window, or graph state through its model endpoint.</p>
+      <p>Follow a response format: {config.structured_outputs === undefined ? 'not reported' : config.structured_outputs ? 'on' : 'off'}</p>
+      <p className="text-xs">Response formats let apps request replies such as JSON. CUDA Graphs reduce repeated setup work on the graphics card. GInfer does not currently report the memory format, amount of text drafted ahead or CUDA Graphs setting actually in use.</p>
     </details>
   </div>
 }

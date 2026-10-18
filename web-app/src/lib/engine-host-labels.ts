@@ -67,7 +67,7 @@ export function hostInstanceLabel(instance: EngineInstance, snapshot: EngineSnap
     return index >= 0 ? String(index + 1) : 'unavailable'
   })
   const index = snapshot.instances.findIndex((candidate) => candidate.instance_id === instance.instance_id) + 1
-  const concurrency = config.concurrency > 0 ? `${config.concurrency} concurrent` : 'Automatic concurrency'
-  const context = config.max_context > 0 ? `${config.max_context.toLocaleString()} context` : 'Automatic context'
-  return `Instance ${index} · ${name} · ${concurrency} · ${context} · GPU ${gpuNumbers.join(', ') || 'automatic'}`
+  const concurrency = config.concurrency > 0 ? `${config.concurrency} requests at once` : 'Requests at once: automatic'
+  const context = config.max_context > 0 ? `${config.max_context.toLocaleString()} conversation tokens` : 'Conversation length: automatic'
+  return `Model server ${index} · ${name} · ${concurrency} · ${context} · Graphics cards ${gpuNumbers.join(', ') || 'chosen automatically'}`
 }

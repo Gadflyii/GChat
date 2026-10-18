@@ -216,8 +216,8 @@ it('defaults to the running local model, excludes unavailable targets and benchm
   await waitFor(() => expect(screen.getByLabelText('Host / Instance')).toHaveValue('ginfer/local/instance'))
   const selector = screen.getByLabelText('Host / Instance')
   expect(screen.queryByRole('option', { name: 'offline' })).not.toBeInTheDocument()
-  expect(screen.getByLabelText('Hardware profile')).toHaveValue('')
-  expect(screen.getByRole('option', { name: /Current settings · C1/ })).toBeInTheDocument()
+  expect(screen.getByLabelText('Saved model settings')).toHaveValue('')
+  expect(screen.getByRole('option', { name: /Current settings · 1 replies at once/ })).toBeInTheDocument()
   fireEvent.change(selector, { target: { value: 'ginfer/remote/instance' } })
   fireEvent.click(screen.getByRole('button', { name: /^Serving/ }))
   fireEvent.click(screen.getByRole('button', { name: /Run benchmark/ }))
@@ -226,24 +226,24 @@ it('defaults to the running local model, excludes unavailable targets and benchm
 
 it('blocks benchmarking for pending changes and confirms before restarting the selected server', async () => {
   render(<Page />)
-  await screen.findByRole('option', { name: /Current settings · C1/ })
+  await screen.findByRole('option', { name: /Current settings · 1 replies at once/ })
   fireEvent.click(screen.getByRole('button', { name: /^Serving/ }))
-  const option = screen.getByRole('option', { name: /Tested · C4 · 4K context/ }) as HTMLOptionElement
-  fireEvent.change(screen.getByLabelText('Hardware profile'), { target: { value: option.value } })
-  expect(screen.getByRole('alert')).toHaveTextContent('unloads the current model')
+  const option = screen.getByRole('option', { name: /Full conversations tested · 4 replies at once · 4K tokens/ }) as HTMLOptionElement
+  fireEvent.change(screen.getByLabelText('Saved model settings'), { target: { value: option.value } })
+  expect(screen.getByRole('alert')).toHaveTextContent('stops the current model and starts it again')
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
   const confirm = spyConfirm().mockReturnValue(false)
-  fireEvent.click(screen.getByRole('button', { name: 'Apply & Restart Server' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   expect(mocks.command).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)
-  fireEvent.click(screen.getByRole('button', { name: 'Apply & Restart Server' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Apply settings and restart' }))
   await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('profile_launch', { host_id: 'local', body: expect.objectContaining({ profile_id: 'c4', instance_id: 'instance', expected_session_id: 'session' }) }))
   await waitFor(() => expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeEnabled())
 })
 
 it('refuses a mismatched Standard session and pins the Max Perf session and all three points', async () => {
   const first = render(<Page />)
-  await screen.findByRole('option', { name: /Current settings · C1/ })
+  await screen.findByRole('option', { name: /Current settings · 1 replies at once/ })
   expect(screen.getByRole('button', { name: /Run benchmark/ })).toBeDisabled()
   fireEvent.click(screen.getByRole('button', { name: /Run benchmark/ }))
   expect(mocks.run).not.toHaveBeenCalled()

@@ -5,6 +5,8 @@ import { hardwareProfileBlocksLaunch, type EngineSnapshot } from '@/services/eng
 import { hostInstanceLabel, hostModelLabel } from '@/lib/engine-host-labels'
 import { profileOptionLabel, profilePresentation } from '../../../src-tauri/ginfer-manager/ui/profile-presentation.js'
 
+const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', stopping: 'Stopping', stopped: 'Stopped', failed: 'Could not start' } as const
+
 const selectStyle: CSSProperties = {
   appearance: 'none',
   WebkitAppearance: 'none',
@@ -72,16 +74,16 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
   const pending = currentSettings && (!!choice || (modelId !== (instance?.profile?.model_id ?? snapshot.models[0]?.id)))
   useEffect(() => { onPendingChange?.(pending) }, [pending, onPendingChange])
   return <div className="space-y-3 rounded-lg border p-4">
-    {!hideHeading && <h3 className="font-medium">{currentSettings ? 'Benchmark server' : 'Launch Server Instance'}</h3>}
-    <p className="text-sm text-muted-foreground">Choose a model, GPU or GPU group, then a profile. Existing instances keep their GPU group. Selections take effect only when you apply or start the profile.</p>
-    {snapshot.profile_error && <p role="alert" className="text-sm text-destructive">{snapshot.profile_error}</p>}
+    {!hideHeading && <h3 className="font-medium">{currentSettings ? 'Choose model settings to test' : 'Start a model'}</h3>}
+    <p className="text-sm text-muted-foreground">Choose a model, graphics cards and saved settings. A running model keeps its cards. Your choices take effect only when you start or restart the model.</p>
+    {snapshot.profile_error && <div role="alert" className="text-sm text-destructive"><p>Could not read the saved model settings. Refresh the model list and try again.</p><details><summary className="cursor-pointer">Saved settings technical details</summary><p className="whitespace-pre-wrap break-all">{snapshot.profile_error}</p></details></div>}
     <div className={`grid min-w-0 gap-3 ${hostSelector || controlledInstanceId === undefined ? 'sm:grid-cols-2 xl:grid-cols-4' : 'sm:grid-cols-3'}`}>
     {hostSelector}
-    {controlledInstanceId === undefined && <label className="min-w-0 text-sm">Server Host
+    {controlledInstanceId === undefined && <label className="min-w-0 text-sm">Model server
       <select style={selectStyle} className="mt-1 w-full rounded border bg-background p-2" disabled={controlsDisabled} value={instanceId}
         onChange={e => { setInstanceId(e.target.value); setModelChoice(null); setGpuChoice(null); setChoice(''); setShowAllProfiles(false) }}>
-        <option value="">{snapshot.display_name} · New instance</option>
-        {snapshot.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{snapshot.display_name} · {hostInstanceLabel(i, snapshot)} · {i.status}</option>)}
+        <option value="">{snapshot.display_name} · Start another model</option>
+        {snapshot.instances.map(i => <option key={i.instance_id} value={i.instance_id}>{snapshot.display_name} · {hostInstanceLabel(i, snapshot)} · {instanceStatusLabels[i.status]}</option>)}
       </select>
     </label>}
     <label className="min-w-0 text-sm">Model
@@ -91,56 +93,57 @@ export function EngineProfilePicker({ snapshot, disabled, launch, instanceId: co
         {snapshot.models.map(model => <option key={model.id} value={model.id}>{hostModelLabel(model)}</option>)}
       </select>
     </label>
-    <label className="min-w-0 text-sm">GPU / GPU group
+    <label className="min-w-0 text-sm">Graphics cards
       <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !!instance || !groups.length} value={gpuKey ?? ''}
         onChange={e => { setGpuChoice({ instanceId, key: e.target.value }); setChoice(''); setShowAllProfiles(false) }}>
-        {!gpuKey && <option value="">No available GPUs</option>}
+        {!gpuKey && <option value="">No available graphics cards</option>}
         {groups.map(group => <option key={groupKey(group)} value={groupKey(group)} disabled={group.some(gpu => occupied.has(gpu))}>
-          {group.map(id => { const index = snapshot.gpus.findIndex(gpu => gpu.uuid === id); const gpu = snapshot.gpus[index]; return gpu ? `GPU ${index + 1}: ${gpu.display_name ?? gpu.name} · ${(gpu.memory_mib / 1024).toFixed(0)} GB` : 'Unavailable GPU' }).join(' + ')}
+          {group.map(id => { const index = snapshot.gpus.findIndex(gpu => gpu.uuid === id); const gpu = snapshot.gpus[index]; return gpu ? `Graphics card ${index + 1}: ${gpu.display_name ?? gpu.name} · ${(gpu.memory_mib / 1024).toFixed(0)} GiB` : 'Graphics card unavailable' }).join(' + ')}
           {group.some(gpu => occupied.has(gpu)) ? ' · In use' : ''}
         </option>)}
       </select>
     </label>
-    <div className="min-w-0 text-sm"><label>Hardware profile
+    <div className="min-w-0 text-sm"><label>Saved model settings
       <select style={selectStyle} className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={controlsDisabled || !choices.length} value={selected?.key ?? ''} onChange={e => setChoice(e.target.value)}>
-        <option value="">{currentSettings && !pending ? `Current settings · C${instance?.configuration.concurrency ?? 1} · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} context` : 'Choose a profile'}</option>
+        <option value="">{currentSettings && !pending ? `Current settings · ${instance?.configuration.concurrency ?? 1} replies at once · ${instance?.configuration.max_context.toLocaleString() ?? 'Automatic'} tokens` : 'Choose saved settings'}</option>
         {visibleIndices.map(index => { const { entry, key } = choices[index]; return <option key={key} value={key}>
           {profileOptionLabel(entry.profile, index === recommendedIndex)}
         </option> })}
       </select>
     </label>
     {(choices.length > visibleIndices.length || showAllProfiles) && <button type="button" className="mt-1 text-muted-foreground underline" disabled={controlsDisabled}
-      aria-expanded={showAllProfiles} onClick={() => setShowAllProfiles(value => !value)}>{showAllProfiles ? 'Show less' : 'Show all'}</button>}
-    {!!choices.length && recommendedIndex < 0 && <p className="mt-1 text-muted-foreground">No tested profile is available for this GPU group.</p>}
+      aria-expanded={showAllProfiles} onClick={() => setShowAllProfiles(value => !value)}>{showAllProfiles ? 'Show fewer settings' : 'Show all settings'}</button>}
+    {!!choices.length && recommendedIndex < 0 && <p className="mt-1 text-muted-foreground">No settings with full-length conversation tests are available for these cards.</p>}
     </div>
     </div>
     <label className="flex items-center gap-2 text-sm"><input type="checkbox"
-      aria-label={labelPrefix ? `${labelPrefix} structured outputs` : undefined}
+      aria-label={labelPrefix ? `${labelPrefix} follow a response format` : undefined}
       checked={structuredOutputs} disabled={controlsDisabled || (currentSettings && !selected)}
-      onChange={e => setStructuredChoice({ instanceId, value: e.target.checked })} />Structured outputs</label>
-    {pending && <p role="alert" className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">Applying these settings unloads the current model and restarts this server instance. Other clients using it will be affected. Benchmarking is paused until the new instance is ready.</p>}
-    {changedStructured && <p className="text-sm text-muted-foreground">Changing the recorded structured output setting makes this launch custom and unqualified.</p>}
+      onChange={e => setStructuredChoice({ instanceId, value: e.target.checked })} />Follow a response format</label>
+    <p className="text-xs text-muted-foreground">Lets apps request replies in a specific format, such as JSON.</p>
+    {pending && <p role="alert" className="rounded border border-amber-500/40 bg-amber-500/10 p-3 text-sm">Applying these settings stops the current model and starts it again. Other people using it will be affected. Speed tests wait until the model is ready again.</p>}
+    {changedStructured && <p className="text-sm text-muted-foreground">You changed the saved response-format choice. These settings have not been tested together.</p>}
     {selected && <p className="text-sm text-muted-foreground">{selected.entry.profile.qualification.tier === 'full-context-tested'
-      ? 'Recorded profile: tested with full-length requests at this concurrency.'
+      ? 'Full-length conversations were tested with this many replies running at once.'
       : selected.entry.profile.qualification.tier === 'screened-startup'
-        ? 'Screened, not full-context qualified. Startup and short requests were checked; full-context capacity is unverified.'
+        ? 'Starting the model and short conversations were tested. Full-length conversations and whether they fit in memory have not been tested.'
       : selected.entry.profile.qualification.tier === 'calculated-startup-smoke'
-        ? 'Recorded profile: capacity calculated for the full context; startup and concurrent short requests checked. Full-length requests have not been tested.'
-        : 'Recorded profile: pending validation; capacity is calculated only. Startup, memory margin and inference are unverified; this profile may fail to load until the required engine support is available.'}</p>}
-    {selected && <p className="text-sm text-muted-foreground">Evidence applies to the recorded options and Engine {selected.entry.profile.qualification.engine_revision.slice(0, 8)}, for the recorded workload. A changed option or Engine needs separate validation.</p>}
+        ? 'Memory use was estimated for full-length conversations. Starting the model and short conversations running at once were tested. Full-length conversations have not been tested.'
+        : 'Memory use has only been estimated. Starting the model, available memory and replies have not been tested. These settings may fail to start until the installed GInfer program supports them.'}</p>}
+    {selected && <><p className="text-sm text-muted-foreground">These results apply to the saved settings and the GInfer version used for the tests. Changed settings or another GInfer version need their own tests.</p><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Saved settings technical details</summary><p>GInfer revision used for testing: {selected.entry.profile.qualification.engine_revision.slice(0, 8)}</p></details></>}
     {!choices.length && <p className="text-sm text-muted-foreground">{
-      !snapshot.models.length ? 'No installed models were found. Add a .ginfer model to this host’s model folder, then rescan.'
-        : currentSettings ? 'No alternate profiles match this model and GPU group. You can benchmark the current running settings, or select another installed model with a compatible profile.'
-        : matching.length ? 'No saved profile fits this model on the selected graphics cards. Choose a different group of cards or install a matching profile. A running instance keeps its cards; start a new instance to use another group.'
-          : 'No saved hardware profile fits this exact model on this computer yet. Build one in Advanced hardware profile options, or install the matching model and profile, then refresh. You can also start it now with the custom settings below.'
+      !snapshot.models.length ? 'No installed models were found on this computer. Add a .ginfer model file to its models folder, then refresh the model list.'
+        : currentSettings ? 'No other saved settings match this model and these graphics cards. You can test the current running settings or choose another installed model.'
+        : matching.length ? 'No saved settings fit this model on the selected graphics cards. Choose different cards or add matching saved settings. A running model keeps its cards; start another model to use different cards.'
+          : 'No saved settings fit this model on this computer yet. Use Graphics-card setup to measure the cards, or add matching saved settings and refresh the model list. You can also choose the model settings below.'
     }</p>}
     {(!currentSettings || pending) && <Button disabled={controlsDisabled || !selected || (!!instanceId && !snapshot.instances.some(i => i.instance_id === instanceId))} onClick={async () => {
       if (!selected || controlsDisabled) return
-      if (restarting && !await confirmAction({ title: 'Switch model?', message: 'Switch this instance to the selected model and profile? Serving restarts after its current requests drain.', confirmLabel: 'Switch and restart' })) return
+      if (restarting && !await confirmAction({ title: 'Restart with these model settings?', message: 'The current model will finish its replies, then restart with your choices. It will be unavailable for new chats while restarting. Other people using it will be affected.', confirmLabel: 'Restart model' })) return
       void launch({ profile_id: selected.entry.profile.id, model_id: selected.entry.model_id,
         gpu_uuids: selected.group, instance_id: instanceId || null, force: false, structured_outputs: structuredOutputs,
         ...(instanceId ? { expected_session_id: snapshot.instances.find(i => i.instance_id === instanceId)?.session_id } : {}) })
-    }}>{currentSettings ? 'Apply & Restart Server' : restarting ? 'Apply profile and restart' : 'Start Server Instance'}</Button>}
-    {pending && <Button variant="outline" disabled={controlsDisabled} onClick={() => { setModelChoice(null); setGpuChoice(null); setChoice(''); setStructuredChoice(null) }}>Keep running settings</Button>}
+    }}>{currentSettings || restarting ? 'Apply settings and restart' : 'Start model'}</Button>}
+    {pending && <Button variant="outline" disabled={controlsDisabled} onClick={() => { setModelChoice(null); setGpuChoice(null); setChoice(''); setStructuredChoice(null) }}>Keep current settings</Button>}
   </div>
 }

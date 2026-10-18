@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ComponentType, ReactNode } from 'react'
@@ -97,9 +98,9 @@ const Page = Route.options.component as ComponentType
 function renderExpandedPage() {
   const view = render(<Page />)
   fireEvent.click(
-    screen.getByText('Launch Server Instance', { selector: 'summary' })
+    screen.getByText('Start a model with saved settings', { selector: 'summary' })
   )
-  fireEvent.click(screen.getByText('Server details', { selector: 'summary' }))
+  fireEvent.click(screen.getByText('Model and memory settings', { selector: 'summary' }))
   return view
 }
 
@@ -132,10 +133,10 @@ afterEach(() => {
 describe('Engines host intake and launch controls', () => {
   it('keeps launch and details independently collapsed without hiding host controls', async () => {
     render(<Page />)
-    const launch = screen.getByText('Launch Server Instance', {
+    const launch = screen.getByText('Start a model with saved settings', {
       selector: 'summary',
     })
-    const details = screen.getByText('Server details', { selector: 'summary' })
+    const details = screen.getByText('Model and memory settings', { selector: 'summary' })
     expect(launch.closest('details')).not.toHaveAttribute('open')
     expect(details.closest('details')).not.toHaveAttribute('open')
     fireEvent.click(launch)
@@ -153,9 +154,9 @@ describe('Engines host intake and launch controls', () => {
   it('shows the automatic local host without a forget action', async () => {
     mocks.local = true
     renderExpandedPage()
-    expect(screen.getByText('Local host')).toBeInTheDocument()
+    expect(screen.getByText('This computer')).toBeInTheDocument()
     expect(
-      screen.queryByRole('button', { name: 'Forget' })
+      screen.queryByRole('button', { name: 'Remove connection' })
     ).not.toBeInTheDocument()
     await screen.findByText('Secure storage is ready.')
   })
@@ -290,13 +291,13 @@ describe('Engines host intake and launch controls', () => {
     const view = renderExpandedPage()
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
     expect(
-      screen.getByText('Edit server instance settings').closest('details')
+      screen.getByText('Change model settings').closest('details')
     ).toHaveAttribute('open')
-    expect(screen.getByLabelText('Custom model')).toHaveFocus()
-    expect(screen.getByLabelText('Context tokens')).toHaveValue(8192)
+    expect(screen.getByLabelText('Installed model')).toHaveFocus()
+    expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(8192)
     fireEvent.click(screen.getByRole('button', { name: 'Cancel editing' }))
-    expect(screen.getByRole('button', { name: 'Reload' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Start' }))
+    expect(screen.getByRole('button', { name: 'Restart model' })).toBeDisabled()
+    fireEvent.click(within(screen.getByRole('button', { name: 'Stop model', exact: true }).parentElement!).getByRole('button', { name: 'Start model', exact: true }))
     await waitFor(() =>
       expect(mocks.command).toHaveBeenCalledWith('start', {
         host_id: 'host',
@@ -306,12 +307,12 @@ describe('Engines host intake and launch controls', () => {
     )
     mocks.instances[0].status = 'ready'
     view.rerender(<Page />)
-    expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled()
+    expect(within(screen.getByRole('button', { name: 'Stop model', exact: true }).parentElement!).getByRole('button', { name: 'Start model', exact: true })).toBeDisabled()
     const confirmation = spyConfirm().mockReturnValue(false)
-    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restart model' }))
     expect(mocks.command).not.toHaveBeenCalledWith('restart', expect.anything())
     confirmation.mockReturnValue(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Restart model' }))
     await waitFor(() =>
       expect(mocks.command).toHaveBeenCalledWith('restart', {
         host_id: 'host',
@@ -320,14 +321,14 @@ describe('Engines host intake and launch controls', () => {
       })
     )
     expect(
-      screen.getByText(/Instance 1 · Saved model .* · ready/, { selector: 'p' })
+      screen.getByText(/Model server 1 · Saved model .* · Ready to chat/, { selector: 'p' })
     ).toBeInTheDocument()
-    fireEvent.click(screen.getByText('Server details', { selector: 'summary' }))
+    fireEvent.click(screen.getByText('Model and memory settings', { selector: 'summary' }))
     expect(
-      screen.getByText('Server details').closest('details')
+      screen.getByText('Model and memory settings').closest('details')
     ).not.toHaveAttribute('open')
-    expect(screen.getByRole('button', { name: 'Stop' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Reload' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Stop model' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Restart model' })).toBeEnabled()
   })
 
   it('labels adjacent selectors and resolves generated instance names without changing command IDs', async () => {
@@ -361,11 +362,11 @@ describe('Engines host intake and launch controls', () => {
       name: 'Lab host serving instance',
     })
     const model = screen.getByRole('combobox', { name: 'Lab host model' })
-    expect(instance.closest('label')).toHaveTextContent('Server instance')
+    expect(instance.closest('label')).toHaveTextContent('Model server')
     expect(model.closest('label')).toHaveTextContent('Model')
     expect(instance).toHaveValue('internal-id-1')
     const hardwareProfile = screen.getByRole('combobox', {
-      name: 'Hardware profile',
+      name: 'Saved model settings',
     })
     expect(model.parentElement?.parentElement).toContainElement(hardwareProfile)
     expect(
@@ -376,12 +377,12 @@ describe('Engines host intake and launch controls', () => {
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(instance).toHaveTextContent(
-      'Qwen 3.8 27B — NVFP4 · 4 concurrent · 131,072 context · GPU 1'
+      'Qwen 3.8 27B — NVFP4 · 4 requests at once · 131,072 conversation tokens · Graphics cards 1'
     )
     expect(instance).not.toHaveTextContent('internal-id')
     expect(model).toHaveTextContent('Qwen 3.8 27B — NVFP4')
     fireEvent.change(instance, { target: { value: 'internal-id-0' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Start', exact: true }))
+    fireEvent.click(within(screen.getByRole('button', { name: 'Stop model', exact: true }).parentElement!).getByRole('button', { name: 'Start model', exact: true }))
     await waitFor(() =>
       expect(mocks.command).toHaveBeenCalledWith('start', {
         host_id: 'host',
@@ -424,27 +425,27 @@ describe('Engines host intake and launch controls', () => {
 
   it('blocks fractional launch values but allows Qwen Vision with speculation', async () => {
     renderExpandedPage()
-    fireEvent.click(screen.getByText('Custom server settings'))
-    fireEvent.change(screen.getByLabelText('Custom model'), {
+    fireEvent.click(screen.getByText('Choose model settings'))
+    fireEvent.change(screen.getByLabelText('Installed model'), {
       target: { value: 'model' },
     })
-    expect(screen.getByLabelText('GPU 1: RTX 5090')).toBeChecked()
-    const load = screen.getByRole('button', { name: 'Load model' })
+    expect(screen.getByLabelText('Graphics card 1: RTX 5090')).toBeChecked()
+    const load = screen.getByRole('button', { name: 'Start model with these settings' })
     expect(load).toBeEnabled()
-    fireEvent.change(screen.getByLabelText('Concurrent requests'), {
+    fireEvent.change(screen.getByLabelText('Requests at once'), {
       target: { value: '1.5' },
     })
     expect(load).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent('Use whole numbers')
-    fireEvent.change(screen.getByLabelText('Concurrent requests'), {
+    fireEvent.change(screen.getByLabelText('Requests at once'), {
       target: { value: '4' },
     })
-    fireEvent.change(screen.getByLabelText('Speculative decoding'), {
+    fireEvent.change(screen.getByLabelText('Reply speedup'), {
       target: { value: 'auto' },
     })
     expect(load).toBeEnabled()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Speculative decoding'), {
+    fireEvent.change(screen.getByLabelText('Reply speedup'), {
       target: { value: 'none' },
     })
     fireEvent.click(load)
@@ -465,13 +466,13 @@ describe('Engines host intake and launch controls', () => {
     mocks.error =
       'error sending request for url (https://192.168.1.111:7444/host/v1/snapshot): tcp connect error: connection refused (os error 10061)'
     renderExpandedPage()
-    fireEvent.click(screen.getByText('Custom server settings'))
-    fireEvent.change(screen.getByLabelText('Custom model'), {
+    fireEvent.click(screen.getByText('Choose model settings'))
+    fireEvent.change(screen.getByLabelText('Installed model'), {
       target: { value: 'model' },
     })
-    fireEvent.click(screen.getByLabelText('GPU 1: RTX 5090'))
-    expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
-    expect(screen.getByText(/GInfer offline/)).toHaveClass(
+    fireEvent.click(screen.getByLabelText('Graphics card 1: RTX 5090'))
+    expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeDisabled()
+    expect(screen.getByText(/Computer not reachable/)).toHaveClass(
       'text-muted-foreground'
     )
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -481,19 +482,19 @@ describe('Engines host intake and launch controls', () => {
   })
   it('launches structured outputs by default and preserves explicit OFF and Host KV AUTO or zero', async () => {
     renderExpandedPage()
-    fireEvent.click(screen.getByText('Custom server settings'))
-    fireEvent.click(screen.getByText('Advanced launch settings'))
-    fireEvent.change(screen.getByLabelText('Custom model'), {
+    fireEvent.click(screen.getByText('Choose model settings'))
+    fireEvent.click(screen.getByText('Advanced model settings'))
+    fireEvent.change(screen.getByLabelText('Installed model'), {
       target: { value: 'model' },
     })
     const structured = screen.getByRole('checkbox', {
-      name: 'Structured outputs',
+      name: 'Follow a response format',
       exact: true,
     })
     const cache = screen.getByLabelText(
-      'Host KV cache (bytes, blank = automatic, 0 = disabled)'
+      'Computer conversation memory (bytes)'
     )
-    const load = screen.getByRole('button', { name: 'Load model' })
+    const load = screen.getByRole('button', { name: 'Start model with these settings' })
     expect(structured).toBeChecked()
     expect(cache).toHaveValue(null)
     fireEvent.click(load)
@@ -564,17 +565,17 @@ describe('Engines host intake and launch controls', () => {
     spyConfirm().mockReturnValue(true)
     renderExpandedPage()
     fireEvent.click(screen.getByRole('button', { name: 'Edit settings' }))
-    fireEvent.click(screen.getByText('Advanced launch settings'))
+    fireEvent.click(screen.getByText('Advanced model settings'))
     expect(
-      screen.getByRole('checkbox', { name: 'Structured outputs', exact: true })
+      screen.getByRole('checkbox', { name: 'Follow a response format', exact: true })
     ).not.toBeChecked()
     expect(
       screen.getByLabelText(
-        'Host KV cache (bytes, blank = automatic, 0 = disabled)'
+        'Computer conversation memory (bytes)'
       )
     ).toHaveValue(0)
     fireEvent.click(
-      screen.getByRole('button', { name: 'Apply settings and reload' })
+      screen.getByRole('button', { name: 'Save and restart model' })
     )
     await waitFor(() =>
       expect(mocks.command).toHaveBeenCalledWith('reload', {

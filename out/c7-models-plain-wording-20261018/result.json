@@ -1,0 +1,111 @@
+{
+  "row": "GUI-MODELS-PLAIN-WORDING",
+  "branch": "fix/c7-models-plain-wording-20261018",
+  "baseline": "19e9064ab",
+  "scope": [
+    "Installed, Recommended and Downloads state/action/error copy",
+    "embedded local and remote Host setup, saved settings, sharing and access controls",
+    "raw diagnostics retained in closed details",
+    "Refresh downloads refreshes transfer jobs rather than rescanning installed models"
+  ],
+  "verification": {
+    "final_focused_frontend": {
+      "passed": 245,
+      "files": 13
+    },
+    "manager_ui": {
+      "passed": 54
+    },
+    "final_lint": {
+      "errors": 0,
+      "existing_warnings": 5
+    },
+    "final_typecheck": "PASS",
+    "one_make_verify": {
+      "exit": 2,
+      "reason": "Four benchmark assertions still expected old shared-control labels. Corrected without removing behavior, payload or session checks.",
+      "frontend_passed_before_fix": 3252
+    },
+    "failed_and_remaining_stages": {
+      "command": "make test-coverage-critical test-rust",
+      "exit": 0,
+      "frontend_passed": 3256,
+      "frontend_skipped": 6,
+      "extension_passed": 121,
+      "rust_passed": 1210,
+      "rust_ignored": 27,
+      "critical_coverage_floors_passed": 6
+    },
+    "final_native_build": {
+      "status": "PASS",
+      "frontend_seconds": 22.89,
+      "native_seconds": 39.03,
+      "binary_sha256": "8703671ac2502eb69268a9cbeda2371cbc7b12e3ef2e6ce02a77f958e8c2be7d",
+      "container_image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14"
+    },
+    "final_header_focused_frontend": {
+      "passed": 79,
+      "files": 2,
+      "reason": "Two final static-text corrections for local versus selected computer."
+    }
+  },
+  "native": {
+    "status": "PASS: seven screenshots visually inspected",
+    "host": "AIS-2-8592-L01",
+    "display": ":78",
+    "isolation": "Private HOME, XDG directories, dbus session, unlocked keyring and X11; WAYLAND_DISPLAY unset.",
+    "inputs": "Loopback private catalog and saved paused/failed transfer fixtures; private external registration of a read-only real package. No download or model load.",
+    "package": {
+      "display_name": "Qwen 27B 2-bit mix",
+      "sha256": "ab1ddc96b0f43e772468059567262d4dcc0fd38e9f402d589ad697070a83ad61"
+    },
+    "input_method": "Trusted native X11 input; WebKit observation and snapshots only.",
+    "screenshots": [
+      {
+        "file": "installed.png",
+        "scope": "Installed actions and graphics-card guidance; external package registration."
+      },
+      {
+        "file": "recommended.png",
+        "scope": "One-card release eligibility and plain capability labels; private catalog fixture."
+      },
+      {
+        "file": "downloads.png",
+        "scope": "Saved paused, interrupted network and full-disk error fixtures; diagnostics initially closed."
+      },
+      {
+        "file": "download-technical-details.png",
+        "scope": "Native click expands the original diagnostic without replacing the plain explanation."
+      },
+      {
+        "file": "remove-confirmation.png",
+        "scope": "External entry removal confirmation; canceled, original file preserved."
+      },
+      {
+        "file": "setup.png",
+        "scope": "Final build: selected-computer labels, connected local Host, graphics-card setup and sharing guidance."
+      },
+      {
+        "file": "saved-settings.png",
+        "scope": "Final build: expanded saved-settings picker, response-format explanation and no-model recovery guidance."
+      }
+    ],
+    "source_note": "The first five captures precede only the final two computer-location text corrections, outside their visible copy. Setup and saved-settings captures use the final native binary."
+  },
+  "limitations": [
+    "Native screenshots demonstrate rendered saved-state fixtures, not live download transitions.",
+    "Queued/downloading/pausing/verifying, multi-card eligibility, older remote Host and startup failures are covered by rendered tests; no real model/GPU work was run.",
+    "Linux private development build; no Windows or installer acceptance."
+  ],
+  "cleanup": {
+    "status": "complete",
+    "returned_utc": "2026-10-18T02:32Z",
+    "private_processes": "Stopped by verified owned PIDs, including app, Host, session services, Xvfb, catalog and forwarding.",
+    "removed_build_runtime": "/media/ron/SSD_RAID/ai/tmp-c7-models-plain-wording-20261018",
+    "removed_bytes": 41221278054,
+    "terminal_containers_removed": 9,
+    "booking": "s1 line2860 canceled",
+    "preserved": "Read-only retained catalog/Engine donors and original external model package.",
+    "retained": "Source worktree, result JSON, short summary and seven PNGs; no live job or booking."
+  }
+}
