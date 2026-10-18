@@ -36,18 +36,21 @@ containing the Host, launch catalog and all three runtime stages. Models stay
 at their immutable donor paths; no model copy is needed. Copy and metadata
 checks passed at **19:05:03Z**: 378 files / 1,945,578,902 bytes match the donor.
 The copy receipt is `out/windows-consumer-launch-profiles-20261018/local5090-package-copy.json`.
-Codex 4's queued full package/hash/catalog acceptance and delivery takes the
-next boundary (revised forecast five to ten minutes); native model timing
+Codex 4's package/hash/catalog acceptance and unsigned delivery returned
+**19:08:49Z PASS** (reported at 19:14Z). Codex 7's queued two-minute Gbot
+incremental rebuild takes the next returned boundary; native model timing
 starts only after its actual return and a fresh schedule check.
 
 Native hardware is confirmed as RON-9950X3D2 / RTX 5090,
 GPU UUID `GPU-92a61cb1-6b5e-cc7b-b669-72b2662d9d6e`, physical RAM
-137,052,852,224 bytes. **Model admission is blocked**: the native available
-memory counter reported 7,589,867,520 bytes, then 4,483,530,752 bytes, below
-the required 17,131,606,528-byte floor. PowerShell PID45328 holds about 82 GB
-working set and its command identifies Codex 4's packaging observer; its owner
-has been notified. No process was stopped here. Recheck available RAM after
-that owner returns the boundary; never launch below the signed floor.
+137,052,852,224 bytes. The earlier RAM admission blocker is resolved:
+Codex 4 retired its owned packaging observer PID45328 at **19:07:58Z**,
+restoring **96.32 GB AvailableBytes**. No model or build was stopped.
+Fresh native admission must still exceed the 17,131,606,528-byte emergency
+floor before launch. All eight bound standard operations pass native
+PowerShell 5.1 parsing; the owned bootstrap, private packaged Host,
+all three runtime maps, model and six same-card Linux reference files are
+staged. No Host or model operation has run.
 Codex 5 returned both laptop booking408 and Ada booking776 at 18:48Z.
 Ada's C1 gate and the laptop's corrected quotes, Qwen Download and paired
 naturals remain queued; fresh per-host clearance is required before native work.
@@ -86,12 +89,12 @@ stop on any actual mismatch. No Host identity-logging feature is needed.
 The prepared operation bindings are in
 `out/windows-consumer-launch-profiles-20261018/native-binding-note.md`.
 The coordinator checked the existing API receipts and normal stdin-close route;
-effective standard commands still need their final package path and settings
-checked against the saved controls before execution.
+effective standard commands are bound to the private package and saved controls,
+with parser results in `local5090-qwen-command-preparation/prepared-bindings.json`.
 
-Next unresolved action: finish the existing Host/Job command bindings while
-Codex 4 validates packages and resolves the memory-heavy observer, then pass
-fresh native memory admission before booking a model slot. Policy ancestry and
+Next unresolved action: take the returned boundary after Codex 7, book the
+prepared standard gate, verify fresh native hardware/RAM and execute the
+existing private Host/Job operations. Policy ancestry and
 local5090 hardware are verified. No qualification launch or model copy has
 started. Codex 6 granted read-only use after 1489 of the immutable
 Muse artifact at
