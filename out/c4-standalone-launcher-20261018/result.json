@@ -1,5 +1,5 @@
 {
-  "status": "source focused PASS; incremental release/package and native replay pending",
+  "status": "launcher fix and native install/menu/wizard-to-catalog PASS; published-catalog downstream blocked",
   "source_base": "bca080b7166f1f1dbdb70b07a6116e98e2ada6e5",
   "initial_source_commit": "576449a5cf168eabbf7269a63db9a517d73cdd1a",
   "engine_source_unchanged": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
@@ -47,17 +47,24 @@
     "full_verify_repeated": false
   },
   "packaging": {
-    "status": "pending final actionable-error binary",
-    "guide": "Frozen launcher guide plus only Python command/prerequisite diff65df08dda; ownership paragraph preserved",
-    "intermediate_archives": "distribution and distribution-final superseded; retire after validated final archive"
+    "status": "PASS",
+    "receipt": "archive-result.json",
+    "archive": "/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution-actionable-recovery/ginfer-bundle-0.1.0-linux-x86_64.tar.gz",
+    "sha256": "8239716c9055b9ba210dfb77c9ecf3554fcc6eb455673500f79f81def902f8e0",
+    "guide": "Both runtime ownership and65df Python command correction retained",
+    "superseded_archives": "Three exact owned old/partial archives retired; archive-retirement.json"
   },
   "native": {
-    "status": "unexecuted fresh replay",
-    "gpu_calibration_or_model_started": false
+    "status": "PASS through published-catalog boundary; downstream BLOCKED",
+    "receipt": "novice/result.json",
+    "gpu_calibration_or_model_started": false,
+    "downstream_blocker": "No public release-bearing catalog; waiting W12/Ron publication"
   },
   "inventory": {
-    "cpu_booking": "S1 CPU120\u2013127 04:39\u201304:54Z",
-    "job_pid": 2761081,
-    "retention": "Own caches pending final archive/replay; shared donor untouched"
-  }
+    "cpu_booking": 2986,
+    "cpus_returned": "2026-10-18T04:46Z",
+    "all_owned_jobs_terminal": true,
+    "retention": "Final archive594MiB and private native evidence retained; native-target25GiB, cargo-home2.3GiB and own source/deps2.2GiB temporarily retained pending merge/cleanup coordination. Shared donor untouched."
+  },
+  "source_commit": "05f60c5d56a47bbb8fa1c5bfe08bb3a1fab1fd40"
 }

@@ -1,77 +1,89 @@
 # GChat installer refresh
 
-## Standalone launcher runtime ownership — source gates and release PASS; archive/native replay pending, October 18
+## Standalone launcher runtime ownership — repaired native install/menu PASS; publication boundary, October 18
 
-The private novice installation recorded on `test/c4-cli-first-run-20261018`
-at `7f8e9a61e` copied the accepted single-image archive and registered its Host,
-then both the interactive first-run wizard and no-argument menu failed because
-the menu unconditionally required a desktop runtime-set manifest. Help, invalid
-model-path and unavailable inventory-tool checks completed; no calibration or
-model ran. That blocked walk remains evidence, not a passing installation.
+The private novice installation at `7f8e9a61e` copied the accepted single-image
+archive and registered its Host, then the first-run wizard and no-argument menu
+failed because they required a desktop runtime-set manifest. The fix on
+`fix/c4-standalone-launcher-20261018`, source `05f60c5d5` after `576449a5c`,
+repairs that installed route. Engine source/runtime `e2282c336` is unchanged.
 
-The fix on `fix/c4-standalone-launcher-20261018` makes the existing installed
-configuration require `desktop.runtime_set`. Linux and Windows standalone setup
-write `false`; the desktop writer writes `true`. Hardware preparation and menu
-bootstrap share that selection. Desktop manifests remain strict, and a supplied
-installed configuration cannot be overridden with `--runtime-set`. Existing
-registrations retain their current owner. Engine source and accepted Engine
-runtime `e2282c336` are unchanged. The
-[decision record](../decisions/2026-10-18-declare-installed-launcher-runtime-ownership.md)
-describes the contract. Arch conditionally signed `576449a5c` at 04:35:34Z and
-accepted the supported fresh-install/desktop-repair scope at 04:37:07Z. The
-shared configuration reader now supplies actionable reinstall guidance for an
-old document missing `runtime_set`, and preparation uses that same reader.
-Standalone installers intentionally reject existing destinations; no overwrite
-upgrade was added. The desktop install/repair writer atomically rewrites `true`.
+The installed configuration requires `desktop.runtime_set`: Linux/Windows
+standalone setup writes `false`, desktop installation/repair writes `true`.
+Preparation and menu bootstrap share the declaration and strict reader. Desktop
+manifests stay required; installed configuration cannot be overridden by
+`--runtime-set`. Missing fields report the owning setup/reinstall commands.
+Standalone installers reject existing paths; no overwrite upgrade was added.
+The desktop writer replaces its configuration atomically. Arch conditionally
+signed `576449a5c` at 04:35:34Z and accepted this supported scope at 04:37:07Z.
+See the [decision](../decisions/2026-10-18-declare-installed-launcher-runtime-ownership.md).
 
-Acceptance is focused installed-launcher/setup regressions, one full verification,
-a refreshed archive containing the current Host/setup and accepted runtime, and
-continuation of the blocked private novice wizard/menu and its remaining error
-paths. GPU calibration or model execution requires its own actual-start booking;
-installation outside the private test root is excluded. Source is frozen from
-`bca080b7166f` plus the owned patch.
+The final combined archive was packaged at **04:44:08Z**:
 
-The S1 offline gate ran **04:22:22–04:26:18Z** on booked CPUs 120–127, nice 10,
-eight Cargo jobs and the shared socket-1 compile guard. Linux setup, five installed
-launcher cases, installed preparation argument ownership, the desktop writer and
-Host clippy passed. The single `make verify` invocation passed lint, typecheck and
-its early contract checks, then failed root Vitest because the source archive had
-no generated `core/dist/index.js`: every reported error is unresolved `@gchat/core`.
-This is an invalid cache prerequisite, not a passing full gate. No release build
-or packaging ran. Booking 2973 was canceled at **04:27Z**. The authorized recovery
-started at **04:28:22Z**, booking 2980 on the same CPUs through 04:46Z. The existing
-core build and explicit generated-entry check passed, then the failed root
-coverage command, unexecuted extension coverage and coverage floors passed. The
-previously unexecuted Rust suite passed at **04:32:42Z** (1,223 tests passed,
-28 ignored), and the release Host build passed at **04:34:12Z**. No full
-`make verify` or passed focused, lint, type or contract stage was repeated. Keep
-the generated core entry as a checked prerequisite for archived-source gates.
-The first package and the subsequent whole-guide replacement package completed
-at 04:35:25Z and 04:36:44Z. Both are intermediate: the latter replaced the new
-runtime-ownership paragraph with an older guide. Booking 2980 was canceled at
-04:38Z after all jobs were terminal. The two new shared-reader and preparation
-regressions each executed one case and passed; affected Host check and clippy
-also passed. The incremental release build and packaging are running under
-booking 2985 (CPUs 120–127, 04:39–04:54Z), recovery PID 2761081. No full verification or previously
-passing suite is repeated. The first follow-up overlay retained epoch mtimes, so Cargo
-reused cached test binaries and both new exact filters matched zero tests. That
-container was stopped; its receipts are invalid. The recovery advances the two
-changed source mtimes and requires each exact test name plus a one-test PASS
-before continuing. This prevents stale-cache and zero-test results from being
-accepted. The final packaging guide combines this branch's
-runtime-ownership text with only the Python command/prerequisite change from
-`65df08dda`; both source inputs are recorded. It must retain both fixes.
-Next: finish the archive and replay the private installation through GPU intent,
-storage and the actual published catalog. Empty/unavailable catalogs must remain
-reported as such. Calibration/Ready wait for Arch startup-path sign-off and a
-separate actual-start GPU booking. Fastest-disk recommendations still require
-real eligible measurements.
+```text
+/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution-actionable-recovery/ginfer-bundle-0.1.0-linux-x86_64.tar.gz
+```
+
+It contains 178 members, the current Host, setup, the accepted SM120a runtime and
+qualified profile catalog. The existing packager verified 171 runtime payloads;
+Host `ldd` has no missing dependency. Archive SHA256 is
+`8239716c9055b9ba210dfb77c9ecf3554fcc6eb455673500f79f81def902f8e0`.
+The packaged guide preserves the runtime-ownership paragraph and combines only
+the Python command/prerequisite correction from `65df08dda`. Its literal
+`python3 setup.py` command succeeded using S1 Python 3.12.3.
+[Archive receipt](../../out/c4-standalone-launcher-20261018/archive-result.json).
+
+The native replay ran **04:45:34–04:46:51Z** in a fresh private HOME/XDG,
+DBus session and unlocked keyring, on CPUs 120–127. It accepted the three default
+private installation paths, selected GPU 1 by UUID, accepted the managed SSD
+model root, and reached the actual model catalog. One Refresh still returned an
+empty catalog. Installed no-argument `ginfer` then opened the real main menu;
+Download models reported no published compatible packages and offered Add a
+local model. Storage showed 1534.5 GiB free. The configuration declares
+`runtime_set=false`, and installed Host bytes match the packaged Host. The exact
+owned Host and keyring are stopped; CPU booking **2986** was canceled at **04:46Z**.
+No model, download, calibration or GPU measurement ran.
+[Native result and transcript links](../../out/c4-standalone-launcher-20261018/novice/result.json).
+
+This establishes the repaired installer/wizard/menu route through the catalog
+boundary. It does **not** establish model recommendation, download admission,
+profiling or Ready. Arch confirmed at 04:45Z that no public release-bearing
+catalog exists and publication waits for W12/Ron. No URL, private fixture or local
+registration was invented to bypass that prerequisite. There is no hardware
+profile: native status has no measured storage candidates/rates, so the shown
+managed-root recommendation is a fallback, not a measured fastest-disk result.
+No-space download admission remains blocked on an actual published release.
+The parent's separate unchanged-runtime no-visible-GPU/driver receipts are at
+`16628ae92`; those checks were not repeated here.
+
+A separate novice wording defect was observed: the GPU prompt says **“Profiling
+starts after selection.”** Selecting the GPU actually advances to storage and
+then the catalog while hardware profiling remains `idle`. This wording was
+reported to the parent and is excluded from the runtime-ownership source fix.
+The profiling page was not reached, so its duration wording has no native result.
+Next: parent reviews/merges this fix; release-bearing publication remains the
+prerequisite for the downstream novice walk. A separate wording branch may use
+the retained owned cache after merge. GPU execution needs its own actual booking.
+
+Verification is complete for this change. The original focused Linux setup,
+installed-launcher, argument-ownership and desktop-writer cases passed. The one
+`make verify` invocation passed lint/typecheck/early contracts, then failed root
+Vitest because archived source lacked generated `core/dist/index.js`. Authorized
+recovery built that prerequisite, ran only the failed/unexecuted stages, and
+passed root coverage (3344 tests, 6 skipped), extension coverage (121), six critical
+coverage floors and Rust (1223 passed, 28 ignored). No full verification or
+previously passing suites were repeated. The two new actionable-reader/preparation
+regressions each executed exactly one case and passed, followed by affected Host
+check/clippy and incremental release. First follow-up epoch mtimes had reused
+stale test binaries and matched zero tests; those invalid receipts remain.
+Recovery advances changed-source mtimes and requires each named one-test result
+before continuation. [Current result](../../out/c4-standalone-launcher-20261018/result.json).
 
 | Owner / host | Path | State / retention |
 | --- | --- | --- |
-| Codex 4 / local | `/ai/gchat-worktrees/c4-standalone-launcher-20261018` | Frozen launcher source, current authority and `out/c4-standalone-launcher-20261018/command.json` |
-| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | Recovery PID 2648729 terminal PASS; both intermediate packages terminal. CPUs 120–127 returned at 04:38Z. Follow-up exact two regressions/check/clippy PASS; recovery PID 2761081 release/package active, CPUs 120–127 booked 04:39–04:54Z. Original invalid gate and per-stage receipts retained; no Engine build |
-| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018` | Retained failed private install, original archive and owned release cache until fix acceptance; no live job |
+| Codex 4 / local | `/ai/gchat-worktrees/c4-standalone-launcher-20261018` | Source, authority and concise tracked archive/native receipts; no active job |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | Final archive 594 MiB; native-target 25 GiB, cargo-home 2.3 GiB, source/dependencies 2.2 GiB and private replay 1.7 GiB temporarily retained for parent merge and next wording fix. All jobs terminal; CPU 120–127 returned. Three exact superseded/partial archives retired; shared donor untouched |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018` | Failed baseline install and owned release cache retained until parent cleanup decision; no live job |
 
 ## Windows RC refresh — release installer delivered, October 18
 
