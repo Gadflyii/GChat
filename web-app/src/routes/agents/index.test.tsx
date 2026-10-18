@@ -905,7 +905,15 @@ describe('AgentStudioPage', () => {
     ))
   })
 
-  it('offers every GInfer reasoning effort', async () => {
+  it.each([
+    ['Off', 'none'], ['Minimal', 'minimal'], ['Low', 'low'], ['Medium', 'medium'],
+    ['High', 'high'], ['Extra high', 'xhigh'], ['Maximum', 'max'], ['Model default', null],
+  ] as const)('offers every GInfer reasoning effort and saves %s', async (label, value) => {
+    definitionState.value.createDraft.mockResolvedValue({
+      ...editableDraft,
+      reasoningEffort: value === null ? 'max' : null,
+    })
+    definitionState.value.save.mockImplementation(async (definition) => definition)
     render(<AgentStudioPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
 
@@ -915,19 +923,12 @@ describe('AgentStudioPage', () => {
     expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
       'Model default', 'Off', 'Minimal', 'Low', 'Medium', 'High', 'Extra high', 'Maximum',
     ])
-    await user.keyboard('{Escape}')
-    definitionState.value.save.mockImplementation(async (value) => value)
-    for (const [label, value] of [
-      ['Off', 'none'], ['Minimal', 'minimal'], ['Low', 'low'], ['Medium', 'medium'],
-      ['High', 'high'], ['Extra high', 'xhigh'], ['Maximum', 'max'], ['Model default', null],
-    ] as const) {
-      await user.click(selector)
-      await user.click(screen.getByRole('menuitemradio', { name: label }))
-      await user.click(screen.getByRole('button', { name: 'Save definition' }))
-      await waitFor(() => expect(definitionState.value.save).toHaveBeenLastCalledWith(
-        expect.objectContaining({ reasoningEffort: value })
-      ))
-    }
+    await user.click(screen.getByRole('menuitemradio', { name: label }))
+    expect(selector).toHaveTextContent(label)
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({ reasoningEffort: value })
+    ))
   })
 
   it('routes a swarm worker and synthesizer independently', async () => {
