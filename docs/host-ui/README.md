@@ -479,8 +479,10 @@ Acceptance: every requested control and sentence is exercised or its concrete
 prerequisite is recorded. Each new source fix needs focused checks, one
 `make verify` and native acceptance using its changed build. The baseline and
 candidates use optimized bundled Vite frontends in debug Rust shells with custom
-protocol. This is Linux source-native evidence; installer/release qualification
-and release performance remain outside this walk. GChat and Manager builds pass.
+protocol. This is Linux source-native evidence; the requested installed-current-main
+walk remains pending. GChat and Manager builds pass. The next private release
+refresh will reuse the accepted Linux AppDir runtime closure without changing
+Ron's installation or publishing packages; release performance is not claimed.
 No model, hardware profile or GPU workload has run during the walk.
 
 Three reproduced defects now have tested, merged source fixes:
@@ -522,8 +524,9 @@ Debug preparation duration is not a release speed claim.
 Welcome → Choose a model navigated to Models and completed onboarding. Returning
 to New Chat showed the expected unloaded-model composer; no inference was sent.
 The separate retained preparing profile passed Welcome → Continue without
-loading a model and reached the unloaded composer. The alternate Connect network
-onboarding path remains unexercised; its Hosts screen was exercised separately.
+loading a model and reached the unloaded composer. A fresh native profile at
+03:37:38Z also exercised Welcome → Connect a network host and reached Hosts
+with address and secure-storage guidance; no pairing or credentials submitted.
 Hosts Refresh returned to connected with its button enabled.
 
 Models Installed/Recommended/Downloads, searches, card selection,
@@ -563,7 +566,8 @@ Settings → Open an issue launched the exact private browser at
 main uses the same URL; OI110 designates the repository artifacts-only, and no
 supported public issue URL is known. This is tracked separately as
 `GUI-SETTINGS-SUPPORT-LINK-404`, **WAITING ON RON**. Bubbs confirmed that Ron
-selects the public destination; the unchanged URL will use one constant. Evidence:
+selects the public destination; unchanged URL constant `5b8cff5ae` merged through
+`78ce5f45f`. Evidence:
 `out/c3-first-user-setup-20261018/private-browser-after-cancel.png`. The private
 browser keyring prompt was canceled without secrets, then the browser received
 normal TERM.
@@ -577,8 +581,22 @@ file-manager links remain unexercised. Existing reset regression and engine-sett
 acceptance packets are retained under their own rows; this walk does not relabel
 them as fresh execution. The updater 404 remains its existing separate row.
 
-Next action: fix the Downloads popover Manage navigation, which currently opens
-Installed instead of Downloads. The support destination waits on Ron.
+Downloads Manage is fixed in `f928613b1`, merged through `d4b0b9c8c`. Focused48,
+lint, ONE verify, changed-source build and private native history/theme/layout
+checks pass. See `out/c3-downloads-manage-tab-20261018/{result.json,native-result.json,summary.md}`.
+The next defect is `GUI-DOWNLOADS-POPOVER-STATUS`: a paused journal entry is
+presented as Downloading. Its source is prepared; focused/lint/ONE verify and
+changed-source native acceptance come next. No real transfer or model is needed.
+
+After that source fix merges, pin current main for a private release AppDir
+refresh and finish the installed-build walk at the requested sizes/themes.
+The accepted `ed68c7443` Linux release predates current GUI changes; its
+GIO/Gbot/four-family Engine closure is a read-only donor, not current-main
+evidence. Reuse approved `e2282c336` Engine payloads and existing release commands;
+refresh the frontend/core/extensions, CLI/Host/app and bundled skills/catalogs.
+Keep Cargo release settings unchanged. S1 has1.5TiB free; no duplicate Engine
+build or package publication is needed. Conditional model/account/Fleet actions
+retain their stated prerequisites. Support destination remains waiting on Ron.
 
 Owner: Codex 3. Source `/ai/gchat-worktrees/c3-first-user-setup-20261018`, branch
 `fix/c3-first-user-setup-20261018`; baseline `201f46712`. Private apps, Hosts and
@@ -587,8 +605,10 @@ private mounts remain. Closed candidate binaries, source archives and private ho
 after evidence retention. The S1 root
 `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains `runnable`,
 `gchat`, `native-target`, `cargo-home`, `yarn-cache`, resources and launch profiles
-as the active next-fix stage, used exclusively by the support-constant gate until
-it finishes and then by the Downloads fix. Dependency donor remains owned by
+as the active next-fix stage, now exclusively assigned to the paused-status
+gate/build. The stopped `downloads-home` is retained for that native check;
+`downloads-manage-candidate` remains read-only until C4 finishes donor copying.
+Manage apps/Host/display stopped and CPUs returned03:50Z; no GUI job remains. Dependency donor remains owned by
 Claude at `tmp-claude-gchat-finish-20261017/tool-source` and is untouched. No
 model/profile/GPU job ran in this walk.
 
