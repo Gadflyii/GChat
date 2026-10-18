@@ -242,6 +242,8 @@ export default function CloudComputer({
                 <LanTools
                   workspaceId={review.id}
                   cloud
+                  disabled={working}
+                  canStart={() => !pending.current}
                   ready={setTools}
                   busy={(value) => {
                     pending.current = value
