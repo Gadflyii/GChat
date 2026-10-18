@@ -272,6 +272,78 @@ it.each(['tasks', 'tasks/approvals'] as const)(
 )
 
 it.each(['Stop', 'Resume'] as const)(
+  'clears an obsolete task-action %s error after confirmed service progress in the companion',
+  async (action) => {
+    const path = action === 'Stop' ? 'tasks/cancel' : 'tasks/resume'
+    const outcome = action === 'Stop' ? 'cancelled' : 'running'
+    const prompt = 'Continue my saved notes'
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'paused',
+        messages: [{ role: 'user', content: prompt }],
+        help_requests: [],
+      },
+    ]
+    let fail!: (cause: Error) => void
+    const request = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject
+        })
+    )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((calledPath: string, body?: unknown) =>
+      calledPath === path ? request(body) : fallback(calledPath, body)
+    )
+    await mount()
+    const conversation = screen.getByRole('region', { name: 'Bot conversation' })
+    const card = (await within(conversation).findByText(prompt)).closest('article')!
+    fireEvent.click(within(card).getByRole('button', { name: `${action} task` }))
+    expect(request).toHaveBeenCalledExactlyOnceWith({ id: 'atlas-task' })
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      action === 'Stop' ? 'Stopping this task…' : 'Resuming this task…'
+    )
+
+    // The service accepted the action, but its response was lost.
+    tasks = [{ ...tasks[0], state: outcome }]
+    await act(async () => fail(new Error('Task response unavailable')))
+    expect(await within(card).findByText(outcome, { exact: true })).toBeVisible()
+    await waitFor(() =>
+      expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    )
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      within(card).queryByRole('button', { name: `${action} task` })
+    ).not.toBeInTheDocument()
+    expect(
+      within(card).getByRole('button', {
+        name: action === 'Stop' ? 'Resume task' : 'Stop task',
+      })
+    ).toBeEnabled()
+
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(within(card).getByText(outcome, { exact: true })).toBeVisible()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    tasks = [{ ...tasks[0], state: 'interrupted' }]
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(
+      await within(card).findByText('interrupted', { exact: true })
+    ).toBeVisible()
+    expect(within(card).getByRole('button', { name: 'Resume task' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Stop task' })).toBeEnabled()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([calledPath]) =>
+          calledPath.startsWith('tasks/') && calledPath !== 'tasks/approvals'
+      )
+    ).toEqual([[path, { id: 'atlas-task' }]])
+  }
+)
+
+it.each(['Stop', 'Resume'] as const)(
   'keeps a failed task action %s inline through refresh and retries it in the companion',
   async (action) => {
     const path = action === 'Stop' ? 'tasks/cancel' : 'tasks/resume'

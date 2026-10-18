@@ -1,5 +1,33 @@
 # Gbot design
 
+## Task controls discard errors after confirmed progress — Gchat 2
+
+`GBOT-TASK-ACTION-ERROR-RECONCILIATION`, based on main `d67e8fdb2`,
+fixes stale Stop and Resume errors after the service has accepted the action
+but its response is lost. Both views refresh task state before propagating
+the request failure, so a confirmed running task could still say “Could not
+resume this task. Try again.” with no Resume control. Old errors could also
+reappear after a later interruption.
+
+The shared task controls permanently clear an error once the confirmed task
+state no longer offers that action. Reconciliation observes both the error
+and state so a late rejection cannot restore an obsolete failure. Errors
+remain available for explicit retry while the action is still applicable;
+there is no automatic retry or service change.
+
+Component regressions cover Stop and Resume with both update/rejection
+orders, and preserve genuine failures across a paused-to-interrupted update.
+Settings and companion regressions cover the real refresh-before-rejection
+order, remaining controls, subsequent task updates, no stale resurrection
+and exactly one write. Six component/settings regressions fail on the old code;
+all 157 affected tests pass with the fix. One full `make verify` passed on
+18 October, 09:38:39–09:46:29 UTC: lint, type checking, quality guards,
+3,531 app tests (6 skipped), 127 extension tests, all six coverage checks
+and 1,284 Rust tests (28 ignored). All five frozen file hashes match the
+tested source; this receipt was added afterward. FRESH and
+OLD remain off with original XML and Gchat 2 custody; these inert responses
+do not qualify live task execution or native Windows.
+
 ## Saved human replies keep recovery errors visible — Gchat 2
 
 `GBOT-HUMAN-HELP-SAVED-REPLY-RECOVERY`, based on main `f15627195`,

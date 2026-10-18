@@ -184,6 +184,92 @@ it('attributes saved task messages to you or the selected bot in conversation or
 })
 
 it.each(['Stop', 'Resume'] as const)(
+  'clears an obsolete task-action %s error after confirmed service progress in settings',
+  async (action) => {
+    const [identity] = readyTaskBots()
+    const fallback = mocks.call.getMockImplementation()!
+    const path = action === 'Stop' ? 'tasks/cancel' : 'tasks/resume'
+    const outcome = action === 'Stop' ? 'cancelled' : 'running'
+    const prompt = 'Continue my saved notes'
+    const task = {
+      id: 'writer-task',
+      identity,
+      state: 'paused',
+      messages: [{ role: 'user', content: prompt }],
+      help_requests: [],
+    }
+    const updates = new Set<() => void>()
+    mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+      if (event === 'gbot-task-update') updates.add(update)
+      return () => updates.delete(update)
+    })
+    let fail!: (cause: string) => void
+    const request = vi.fn().mockImplementation(
+      () =>
+        new Promise<void>((_, reject) => {
+          fail = reject
+        })
+    )
+    mocks.call.mockImplementation(
+      async (calledPath: string, body: Record<string, unknown>) => {
+        if (calledPath === 'tasks') return [task]
+        if (calledPath === path) return request(body)
+        return fallback(calledPath, body)
+      }
+    )
+    render(<Page />)
+    const card = (await screen.findByText(prompt)).closest('article')!
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(request).toHaveBeenCalledExactlyOnceWith({ id: 'writer-task' })
+    expect(within(card).getByRole('status')).toHaveTextContent(
+      action === 'Stop' ? 'Stopping this task…' : 'Resuming this task…'
+    )
+
+    // Refresh confirms the accepted action before its lost response rejects.
+    task.state = outcome
+    await act(async () => fail('Task response unavailable'))
+    expect(await within(card).findByText(outcome, { exact: true })).toBeVisible()
+    await waitFor(() =>
+      expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    )
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      within(card).queryByRole('button', { name: action, exact: true })
+    ).not.toBeInTheDocument()
+    expect(
+      within(card).getByRole('button', {
+        name: action === 'Stop' ? 'Resume' : 'Stop',
+        exact: true,
+      })
+    ).toBeEnabled()
+
+    await act(async () => updates.forEach((update) => update()))
+    expect(within(card).getByText(outcome, { exact: true })).toBeVisible()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    task.state = 'interrupted'
+    await act(async () => updates.forEach((update) => update()))
+    expect(
+      await within(card).findByText('interrupted', { exact: true })
+    ).toBeVisible()
+    expect(
+      within(card).getByRole('button', { name: 'Resume', exact: true })
+    ).toBeEnabled()
+    expect(
+      within(card).getByRole('button', { name: 'Stop', exact: true })
+    ).toBeEnabled()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([calledPath]) =>
+          calledPath.startsWith('tasks/') && calledPath !== 'tasks/approvals'
+      )
+    ).toEqual([[path, { id: 'writer-task' }]])
+  }
+)
+
+it.each(['Stop', 'Resume'] as const)(
   'keeps a failed task action %s inline through refresh and retries it in settings',
   async (action) => {
     const [identity] = readyTaskBots()

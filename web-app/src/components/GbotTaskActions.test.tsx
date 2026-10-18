@@ -119,7 +119,7 @@ it.each([
     .fn()
     .mockRejectedValueOnce(new Error('The bot is disconnected'))
     .mockResolvedValueOnce(undefined)
-  render(
+  const view = render(
     <GbotTaskActions {...available} taskState="paused" onAction={onAction} />
   )
   const control = screen.getByRole('button', { name: button })
@@ -134,11 +134,121 @@ it.each([
   expect(screen.getByText('Details').closest('details')).not.toHaveAttribute('open')
   expect(screen.getByText('The bot is disconnected')).not.toBeVisible()
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  view.rerender(
+    <GbotTaskActions
+      {...available}
+      taskState="interrupted"
+      onAction={onAction}
+    />
+  )
+  expect(screen.getByRole('alert')).toBe(alert)
+  expect(screen.getByRole('button', { name: button })).toBeEnabled()
+  expect(onAction).toHaveBeenCalledExactlyOnceWith(action)
   fireEvent.click(control)
   await waitFor(() => expect(onAction).toHaveBeenCalledTimes(2))
   expect(onAction.mock.calls).toEqual([[action], [action]])
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
+
+it.each([
+  {
+    action: 'resume',
+    button: 'Resume task',
+    confirmedState: 'running',
+    remainingButton: 'Stop task',
+    updateBeforeRejection: true,
+    order: 'before the response rejects',
+  },
+  {
+    action: 'resume',
+    button: 'Resume task',
+    confirmedState: 'running',
+    remainingButton: 'Stop task',
+    updateBeforeRejection: false,
+    order: 'after the response rejects',
+  },
+  {
+    action: 'cancel',
+    button: 'Stop task',
+    confirmedState: 'cancelled',
+    remainingButton: 'Resume task',
+    updateBeforeRejection: true,
+    order: 'before the response rejects',
+  },
+  {
+    action: 'cancel',
+    button: 'Stop task',
+    confirmedState: 'cancelled',
+    remainingButton: 'Resume task',
+    updateBeforeRejection: false,
+    order: 'after the response rejects',
+  },
+])(
+  'clears a stale $action error when $confirmedState is confirmed $order',
+  async ({
+    action,
+    button,
+    confirmedState,
+    remainingButton,
+    updateBeforeRejection,
+  }) => {
+    let reject!: (cause: unknown) => void
+    const onAction = vi.fn(
+      () =>
+        new Promise<void>((_resolve, fail) => {
+          reject = fail
+        })
+    )
+    const view = render(
+      <GbotTaskActions {...available} taskState="paused" onAction={onAction} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: button }))
+    expect(onAction).toHaveBeenCalledExactlyOnceWith(action)
+    if (updateBeforeRejection) {
+      view.rerender(
+        <GbotTaskActions
+          {...available}
+          taskState={confirmedState}
+          onAction={onAction}
+        />
+      )
+    }
+    await act(async () => reject(new Error('The action response was lost')))
+    await waitFor(() =>
+      expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    )
+    if (!updateBeforeRejection) {
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        action === 'cancel'
+          ? 'Could not stop this task. Try again.'
+          : 'Could not resume this task. Try again.'
+      )
+      view.rerender(
+        <GbotTaskActions
+          {...available}
+          taskState={confirmedState}
+          onAction={onAction}
+        />
+      )
+    }
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    )
+    expect(screen.getByRole('button', { name: remainingButton })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: button })).not.toBeInTheDocument()
+    view.rerender(
+      <GbotTaskActions
+        {...available}
+        taskState="interrupted"
+        onAction={onAction}
+      />
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Stop task' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Resume task' })).toBeEnabled()
+    expect(onAction).toHaveBeenCalledExactlyOnceWith(action)
+  }
+)
 
 it.each(['completed', 'needs_review'])(
   'does not offer task controls for %s',
