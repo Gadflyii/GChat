@@ -160,9 +160,9 @@ it('explains the typed RAM shortfall before opening details and resumes only on 
     host_memory_admission_failure: failure, error: 'Native RAM admission warning with exact bytes' }}
     offline={false} disabled={false} action={action} />)
   expect(screen.getByText('Graphics-card setup needs more free system memory.')).toBeVisible()
-  expect(screen.getByText(/Close other applications to free at least 2,049 MiB/)).toBeVisible()
-  expect(screen.getByText(/System-memory reserve: 16.0 GiB. Measurement buffers: 8.0 GiB. Available: 22.0 GiB; required: 24.0 GiB/)).toBeVisible()
-  expect(screen.getByText(/Memory node 0: 7.0 GiB available; 8.0 GiB needed.*Free at least 1,024 MiB/)).toBeVisible()
+  expect(screen.getByText(/Close apps to free at least 2.15 GB, then retry/)).toBeVisible()
+  expect(screen.getByText(/System-memory reserve: 17.18 GB. Measurement buffers: 8.59 GB. Available: 23.63 GB; required: 25.77 GB/)).toBeVisible()
+  expect(screen.getByText(/Memory node 0: 7.52 GB available; 8.59 GB needed.*Free at least 1.08 GB/)).toBeVisible()
   expect(screen.getByText('Native RAM admission warning with exact bytes')).not.toBeVisible()
   expect(action).not.toHaveBeenCalled()
   fireEvent.click(screen.getByRole('button', { name: 'Continue setup' }))

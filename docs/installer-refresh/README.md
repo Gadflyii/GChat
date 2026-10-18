@@ -18,7 +18,11 @@ Implementation is ready for coordinated verification. The Host preserves the
 Engine's typed failure and native warning on exit 1; Welcome and manual setup
 show the global shortfall, unchanged reserve and per-node buffer requirements,
 with the ordinary Continue setup action. The recommendation rounds the reported
-shortfall upward to MiB rather than understating it. Existing accepted profile
+shortfall upward to decimal GB at two decimal places rather than understating it.
+Arch's 23:11Z UI condition requires the plain instruction ‘Close apps to free at
+least X GB, then retry’; global and node facts use readable GB, while raw native
+byte amounts stay inside collapsed details. This final UI delta is awaiting its
+two affected regressions before check/clippy and the ONE `make verify`. Existing accepted profile
 bytes are not replaced by the failed run. Focused regressions cover the failed
 native job/persist/resume path in both all-format and artifact scopes and both
 visible screens. All-format profiling now requests the existing JSON result so
@@ -27,7 +31,7 @@ exact shape. Source **97755dd8c** is committed and pushed. Authorized verificati
 started at **23:02:30Z** on S1, using a private copy of retained
 dependencies/build cache under
 `/media/ron/SSD_RAID/ai/tmp-c4-profile-ram-message-20261018` on S1, with disjoint
-booked socket-1 CPUs **72–79** (through23:32Z) and the shared compile guard.
+booked socket-1 CPUs **72–79** and the shared compile guard.
 The durable run owns `launch.log`, per-stage logs/exits and
 `validation-command.json` there. Its donor
 `/media/ron/SSD_RAID/ai/tmp-gchat3-windows-consumer-host-20261018` remains read-only.
@@ -37,12 +41,20 @@ the new typed-failure regression in both scopes. The two failing shell-only
 launch fixtures inherited `CUDA_VISIBLE_DEVICES=''`, so `Host::open` correctly
 created an empty visible GPU inventory and rejected `GPU-fixture` before the
 intended fingerprint/cancel-resume checks. This was a fixture assumption, not
-an AllFormats JSON command failure. The preventive correction gives this fixture
-an explicit synthetic process inventory, preserving the production visibility
-mask, real command construction and profiling-job activity link. Its final
-launch assertion now exposes the rejection message. Rerun only those two failed
-cases first; inspect their outputs before check/clippy and the still-unrun ONE
-`make verify`. Booking3626 returned23:07Z and is canceled. The small local command
+an AllFormats JSON command failure. The first attempted correction replaced the
+initialized `HostProcesses` and lost its GPU architecture/runtime configuration
+and the activity links shared with draft-width calibration and downloads. Its
+fingerprint rerun therefore stopped with “No native profiling CLI configured for
+this GPU group”; cancel/resume was not run. That replacement is removed. Keep
+`Host::open`'s complete fixture setup and unset `CUDA_VISIBLE_DEVICES` for these
+shell-only fixtures. Docker has no GPU flags or device mounts, so physical GPU
+isolation does not require a visibility mask that filters the synthetic
+inventory. Production visibility behavior and command construction are unchanged;
+the launch assertion retains the useful rejection message. Inspect this complete
+setup before rerunning only those two failed cases, then inspect both outputs
+before the affected GB UI assertions, check/clippy and the still-unrun ONE
+`make verify`. Booking3626 returned23:07Z and is canceled; current booking3628
+owns72–79 through23:34Z. The small local command
 receipt is `out/profile-ram-message-20261018/validation-command.json`. Existing RC execution
 remains parent-owned. Ada retry is **pending Ron via Bubbs**, per the23:01Z
 instruction. Arch withdrew the cache-reclaim suggestion at23:02Z; this task
