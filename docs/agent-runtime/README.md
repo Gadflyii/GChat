@@ -22,6 +22,37 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Message memory dialog keyboard focus — October 18
+
+A private Linux native chat pass reproduced focus loss after **Save to
+Memory** was dismissed with Escape or its Close button. Focus moved from the
+review form to the document body. The affected message, memory, workspace and
+shared UI components and dependency files are byte-identical between retained
+native source `8f7d18f6f` and main `925f99195`. Baseline DOM receipts and the
+viewed chat screenshot are in
+`/ai/gchat/out/message-memory-focus-20261018/`.
+
+The message's existing button now acts as the dialog trigger, so the dialog
+returns focus to the same message after dismissal or saving. Opening still
+resets the title and content from that message. Rendered regressions use two
+messages to cover Escape, Close, keyboard reopening with the cancelled draft
+discarded, and focus return after the existing save/source-origin check.
+
+The focused file passes all three tests; its save/focus regression fails once
+against unchanged parent production source with focus on the body. Workspace
+lint and one `make verify` pass: 3,536 web, 127 extension and 1,288 Rust tests.
+The production frontend and Linux native build also pass. Gate receipts are in
+`/ai/gchat/out/gchat-message-memory-focus-20261018/`.
+
+The rebuilt private native candidate (`bb896f18707b…`) passes Escape, Close
+and reviewed Save, returning focus to the exact message button. Space reopens
+the original message draft after cancellation; switching between two messages
+returns to each one's button. Both viewed screenshots show focus on the second
+message. After normal shutdown, both saved chat files remain byte-identical and
+exactly one personal note contains the reviewed text and correct message origin.
+This qualifies Linux chat keyboard behavior; Windows and inference were outside
+this pass. Native receipts are in the baseline packet above.
+
 ## Skill dialog keyboard focus — October 18
 
 A private Linux native pass found that dismissing skill Create, Upload, Edit
