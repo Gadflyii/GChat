@@ -1,5 +1,31 @@
 # GInfer host UI
 
+## Failed-download recovery controls — C3, October 18
+
+`GUI-FAILED-DOWNLOAD-WORDING` is active on
+`fix/c3-failed-download-wording-20261018`, worktree
+`/ai/gchat-worktrees/c3-failed-download-wording-20261018`, base `16a63c18e`.
+The requested outcome is plain failed-download guidance that names the visible
+recovery controls. Acceptance requires clear error copy, raw diagnostics kept
+in Technical details, Retry for failed jobs, Resume for paused jobs, and a
+rendered transition exercising the offered Retry control.
+
+Original source `096169414` is merged. Retained native Linux screenshots
+`out/c7-models-plain-wording-20261018/downloads.png` and
+`download-technical-details.png` reveal a remaining mismatch introduced in
+later wording: failed network/full-disk cards instruct Resume beside a
+Retry download button. A damaged file instructs Remove without naming
+Delete partial download. These saved-state native fixtures establish wording,
+not actual corruption, disk exhaustion or transfer correctness.
+
+Next: correct guidance to the visible controls, verify the rendered recovery
+path, then focused tests and ONE make verify. C7 owns the separate small-size
+leaf; no shared fixture, catalog or Chat/Agents source is touched. C3 will
+use an independent S1 SSD dependency copy under
+`/media/ron/SSD_RAID/ai/tmp-c3-failed-download-wording-20261018`; donor is the
+inactive Gchat3 RC app. No model/profile/GPU or Windows work is planned.
+Retain only small results and screenshots; remove owned build copies at return.
+
 ## Advanced launch-field labels recovery — C3, October 18
 
 `GUI-LAUNCH-FIELD-LABELS` passes its remaining Linux native leaf using the

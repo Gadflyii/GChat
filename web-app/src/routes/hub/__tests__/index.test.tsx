@@ -301,6 +301,33 @@ describe('host-scoped Models', () => {
     expect(screen.getByRole('button', { name: 'Retry download' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Resume download' })).not.toBeInTheDocument()
   })
+  it.each([
+    ['connection reset by peer', 'The download was interrupted. Check your internet connection, then choose Retry download.'],
+    ['No space left on device (os error 28)', 'There isn’t enough space in the model folder. Free some disk space, then choose Retry download.'],
+    ['unrecognized failure', 'The download couldn’t finish. Choose Retry download, or open Technical details for more information.'],
+  ])('names and exercises the retry control for a failed download: %s', async (error, guidance) => {
+    let status = 'failed'
+    mocks.command.mockImplementation(async (action, args) => {
+      if (action === 'local_model_download_control') {
+        expect(args).toEqual({ id: 'job', operation: 'resume' })
+        status = 'queued'
+      }
+      return action === 'local_model_downloads'
+        ? [{ id: 'job', release, status, received: 1024, bytes_per_second: 0, error: status === 'failed' ? error : null, path: null }] : []
+    })
+    render(<ModelManagement />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(guidance)
+    expect(screen.getByText(error)).not.toBeVisible()
+    const details = screen.getByText('Technical details').closest('details')
+    expect(details).not.toHaveAttribute('open')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry download' }))
+    expect(await screen.findByText('Waiting to download')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause download' })).toBeInTheDocument()
+    expect(mocks.command).toHaveBeenCalledWith('local_model_download_control', { id: 'job', operation: 'resume' })
+  })
   it('says it is checking, not that there are no downloads, until the Host has answered', async () => {
     useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
     let answer!: (jobs: unknown[]) => void
