@@ -1,0 +1,53 @@
+{
+  "row": "GUI-PROFILE-READY-NOTES",
+  "status": "PASS: native completed-state rendering",
+  "captured_utc": "2026-10-18T10:12Z",
+  "host": "AIS-2-8592-L01",
+  "platform": "Linux x86_64 / native WebKitGTK",
+  "theme": "Dark",
+  "viewport": {
+    "width": 1200,
+    "height": 800
+  },
+  "screenshot": "completed-card.png",
+  "native_observation": "native-card.json",
+  "input": "xdotool native pointer and wheel; inspector read-only DOM and screenshot",
+  "checks": {
+    "ready_text_visible": true,
+    "model_memory_reminder_visible": true,
+    "duration_paragraph_absent": true,
+    "wait_paragraph_absent": true,
+    "whole_card_in_viewport": true
+  },
+  "fixture": {
+    "saved_state": "completed-job-fixture.json",
+    "synthetic": true,
+    "engine_assets": "Private copy uses /usr/bin/true inert executables with truthful size/hash in runtime manifests; existing installer-test fixture pattern. Real ginfer-host handles the persisted state.",
+    "source_code_changes": false,
+    "hardware_measurement_started": false,
+    "model_started": false,
+    "gpu_work": false,
+    "gpu_selection_empty": true,
+    "pending_groups_empty": true,
+    "artifact_receipts_empty": true,
+    "isolation": "Independent HOME/XDG/runtime700/dbus/unlocked keyring; private Xvfb; WAYLAND_DISPLAY unset"
+  },
+  "verification": {
+    "full_gate_reused": "1062ba9f85653a25f7371d9ea03f807e3d48009b",
+    "app_passed": 3523,
+    "extension_passed": 127,
+    "native_passed": 1284,
+    "critical_floors_passed": 6,
+    "new_gate": "git diff --check only (evidence-only branch)"
+  },
+  "limits": [
+    "Synthetic completed-state rendering, not hardware-profile validity or a new end-to-end profile completion.",
+    "Linux Dark 1200x800 only; Windows and other themes/viewports not qualified."
+  ],
+  "cleanup": {
+    "owned_fixture_removed": true,
+    "private_processes_stopped_by_pid": true,
+    "booking": "s1 line3229 canceled",
+    "donor_hold": false
+  }
+}

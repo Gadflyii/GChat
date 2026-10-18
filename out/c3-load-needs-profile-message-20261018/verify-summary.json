@@ -1,0 +1,125 @@
+{
+  "status": "PASS",
+  "exit": 0,
+  "full_verify_attempts": 1,
+  "lint": {
+    "errors": 0,
+    "warnings": 5
+  },
+  "typecheck": "PASS",
+  "test_quality_guard": "PASS (360 files scanned)",
+  "registry_contracts": {
+    "passed": 4
+  },
+  "manager_ui": {
+    "passed": 58
+  },
+  "tauri_assets": {
+    "passed": 1
+  },
+  "frontend": {
+    "passed": 3523,
+    "skipped": 6,
+    "files_passed": 342,
+    "files_skipped": 1
+  },
+  "extension": {
+    "passed": 127,
+    "files_passed": 5
+  },
+  "coverage": {
+    "critical_floor_files": 6,
+    "status": "PASS",
+    "overall_rows": [
+      "All files          |   67.33 |    85.25 |   68.77 |   67.33 |",
+      "All files          |   65.63 |    78.65 |   64.28 |   65.63 |"
+    ]
+  },
+  "native": {
+    "summaries": 23,
+    "passed": 1284,
+    "failed": 0,
+    "ignored": 28,
+    "scopes": [
+      {
+        "command": "cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli -- --test-threads=1",
+        "summaries": [
+          "test result: ok. 762 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 31.88s"
+        ],
+        "passed": 762,
+        "failed": 0,
+        "ignored": 8
+      },
+      {
+        "command": "cargo test --manifest-path src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml",
+        "summaries": [
+          "test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.58s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ],
+        "passed": 21,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "command": "cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml",
+        "summaries": [
+          "test result: ok. 277 passed; 0 failed; 13 ignored; 0 measured; 0 filtered out; finished in 16.71s",
+          "test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.75s",
+          "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.53s",
+          "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.61s",
+          "test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s",
+          "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ],
+        "passed": 309,
+        "failed": 0,
+        "ignored": 19
+      },
+      {
+        "command": "cargo test --manifest-path src-tauri/Cargo.toml -p ginfer-manager",
+        "summaries": [
+          "test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ],
+        "passed": 4,
+        "failed": 0,
+        "ignored": 1
+      },
+      {
+        "command": "cargo test --manifest-path src-tauri/Cargo.toml -p gbot-service",
+        "summaries": [
+          "test result: ok. 103 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.66s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+          "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s",
+          "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.55s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ],
+        "passed": 124,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "command": "cargo test --manifest-path src-tauri/plugins/tauri-plugin-hardware/Cargo.toml",
+        "summaries": [
+          "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ],
+        "passed": 16,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "command": "cargo test --manifest-path src-tauri/utils/Cargo.toml",
+        "summaries": [
+          "test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.63s",
+          "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+        ],
+        "passed": 48,
+        "failed": 0,
+        "ignored": 0
+      }
+    ]
+  }
+}

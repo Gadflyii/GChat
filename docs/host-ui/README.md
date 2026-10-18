@@ -1,5 +1,145 @@
 # GInfer host UI
 
+## Completed graphics-card setup note — C7, October 18
+
+`GUI-PROFILE-READY-NOTES` passes its remaining Linux completed-state
+rendering leaf. Source `d5841351d`, merged `54c378d03`, hides the duration
+and wait paragraph once setup is completed. The [native screenshot](../../out/c7-profile-ready-notes-20261018/completed-card.png)
+shows “Graphics-card settings ready” and the reminder that every model still
+needs a memory check. The entire card is visible in Dark 1200×800, with
+neither “Allow 10 minutes to an hour” nor “Wait for setup to stop”. Native
+pointer input opened the card; the inspector only read the DOM and captured
+pixels.
+
+This is an explicitly synthetic presentation fixture: an independent
+retained `11ce0355d` desktop reads a saved completed job with no pending
+work, GPU selection or artifact receipts. Its private resource copy uses the
+existing installer-test pattern of inert `/usr/bin/true` engines, with their
+actual sizes and hashes in the runtime manifests. The real Host reads the
+saved state. No Measure, model load or GPU execution was started. This
+qualifies the completed-card rendering, not profile validity or a new
+end-to-end hardware measurement. Windows and other themes/viewports remain
+unqualified. The old `hp7.png` and ed68 desktop predate the fix.
+
+The component and its running-to-completed regression are identical between
+the retained desktop source, this branch's base `3de78b829` and the reused
+ONE full gate `1062ba9f8`: **3,523 app / 6 skipped, 127 extension,
+1,284 native / 28 ignored**, all six critical floors. This evidence-only
+branch passes `git diff --check`; no duplicate build or test run.
+[Result](../../out/c7-profile-ready-notes-20261018/result.json),
+[source binding](../../out/c7-profile-ready-notes-20261018/source-binding.json)
+and [saved fixture](../../out/c7-profile-ready-notes-20261018/completed-job-fixture.json)
+retain the observations and limits.
+
+Owned worktree `/ai/gchat-worktrees/c7-profile-ready-notes-20261018`, branch
+`docs/c7-profile-ready-notes-20261018`, base `3de78b829`. The private S1 root
+`/media/ron/SSD_RAID/ai/tmp-c7-profile-ready-notes-20261018` was removed after
+its processes stopped by PID; CPU88–95 booking3229 canceled. No donor hold;
+only small JSON/PNG evidence remains. Next: coordinator integration and row
+closure.
+
+## Progress bars — C3, October 18
+
+`GUI-PROGRESS-BARS` passes its remaining Linux native leaf. The original
+fix `01caea779` (merge `836f7f4e9`) is delivered. Retained frames of a real
+RTX 5090 profile show the turquoise indeterminate segment at different
+positions while both report 70 seconds elapsed: [first](../../out/c3-progress-bars-20261018/hp5.png)
+and [second](../../out/c3-progress-bars-20261018/hp6.png). The original author
+confirmed movement in live WebKitGTK. Those frames precede the source commit
+by seconds; no exact executable pin survives. Their file timestamps are
+retention metadata, not independently verified capture times.
+
+C7's already committed [real transfer](../../out/c7-managed-downloads-native-20261018/native/downloading-popover.png)
+at `71abf1708` shows the Models determinate bar with a turquoise fill and
+neutral track in Dark 1280×900. The retained [Light capture](../../out/c3-progress-bars-20261018/lt3.png)
+is a synthetic native-control preview, not an actual download card. The
+progress CSS, including the reduced-motion rule, is unchanged from the
+original fix through both native sources and current main `925f99195`.
+The existing three native-control CSS checks pass in the retained ONE full
+gate at `1062ba9f8`: **3,523 app, 127 extension, 1,284 native**, six floors.
+This evidence-only closure reuses those checks and passes `git diff --check`.
+No fresh profile, transfer or build is needed. Runtime reduced-motion,
+Windows and current-package acceptance are unqualified.
+
+[Result](../../out/c3-progress-bars-20261018/result.json) binds the source,
+captures, receipts and limits. Owned worktree
+`/ai/gchat-worktrees/c3-progress-bars-20261018`, branch
+`docs/c3-progress-bars-20261018`, base `925f99195`; only small JSON/PNG evidence,
+no new resources, dependency copies or private state. C7's transfer fixture
+and build are already retired. Next: coordinator integration and row closure.
+
+## Plain Models error banner — C3, October 18
+
+`GUI-MODELS-ERROR-BANNER` passes its remaining Linux native leaf. The
+original source `15be971ff` (merge `44615416d`) is already delivered. C4's
+retained native Add-file → Load failure shows a readable model-name alert
+and Hosts link in Dark 1200×800, without an `Error:` prefix or the unrelated
+“Saved inventory may be out of date” claim. The metadata-only fixture was
+rejected before Engine startup. [Native screenshot](../../out/c4-journey-native-20261018/load-without-profile-guidance.png)
+is already committed in `5a83d81e7`; no duplicate fixture is needed.
+
+The error normalizer, plain-problem renderer, action error handling and
+separate action/offline alert rendering are unchanged from the native donor
+through current main `e80e4fd11` and tested source `1062ba9f8`. The existing
+plain-failed-load regression matches the passing **51-case Models suite**;
+ONE full gate passes **3,523 app, 127 extension, 1,284 native**, six floors.
+This evidence-only closure reuses those gates and passes `git diff --check`.
+The screenshot's old recovery instructions are superseded by the separate
+Models-without-automatic-settings correction above; this leaf qualifies the
+plain banner only. Generic Technical details expansion and separate offline
+warnings have rendered tests, without fresh native acceptance. Windows and
+additional themes/viewports are unqualified.
+
+[Result](../../out/c3-models-error-banner-20261018/result.json) and
+[source binding](../../out/c3-models-error-banner-20261018/source-binding.json)
+record the reused evidence. Owned worktree
+`/ai/gchat-worktrees/c3-models-error-banner-20261018`, branch
+`docs/c3-models-error-banner-20261018`, base `e80e4fd11`. No new resources,
+copies or private state; C4's prior native root is already retired. Next:
+coordinator integration and canonical row closure.
+
+## Models without automatic settings — C3, October 18
+
+`GUI-LOAD-NEEDS-PROFILE-MESSAGE` is merge-ready. The original named-model
+correction `68cfa4204` (merged `7f549eef6`) is retained, but the subsequent
+startup-settings ownership change made its recovery advice obsolete. Models
+Load selects tested settings and deliberately rejects custom resident
+settings; choosing custom settings cannot make retrying that Load succeed.
+The native diagnostic also names the removed Custom server settings section.
+Gchat 3 reported this mismatch and retains separate ownership of the Host
+launch-validation diagnostic in `engine_host.rs`.
+
+The candidate directs both error surfaces to GInfer Hosts → Model and memory
+settings → Choose model settings → Check model settings → Start model with
+these settings. Acceptance: the Models alert retains the readable model name
+and Hosts link, and the real native automatic-load rejection gives this
+working manual-start route while preserving the existing custom resident.
+The focused rendered Models suite passes all 51 cases. The first native
+lifecycle run stopped before the changed rejection: the container set
+`CUDA_VISIBLE_DEVICES` to an empty string, which correctly removes the test's
+synthetic GPU from Host inventory. This was an execution-environment error.
+The retained recipe leaves that variable unset; Docker has no GPU devices.
+The corrected native continuation passes its one lifecycle case, including
+preservation of the existing custom resident. The 51 passing frontend cases
+were not repeated. ONE `make verify` passes: **3,523 app / 6 skipped,
+127 extension, 1,284 native / 28 ignored**, all six critical coverage floors,
+lint, types and quality guards. The initial environment failure and corrected
+continuation are retained. No startup/admission behavior changes.
+
+Owned worktree `/ai/gchat-worktrees/c3-load-needs-profile-message-20261018`,
+branch `fix/c3-load-needs-profile-message-20261018`, base `163025d3c`.
+Independent S1 cache/build root
+`/media/ron/SSD_RAID/ai/tmp-c3-load-needs-profile-message-20261018`
+was removed after the gate; CPU96–103 booking3218 canceled, returned09:53Z.
+Donor unchanged; only small evidence remains.
+No model/GPU work was used. Retained ed68 native visible wording establishes
+the original name/destination correction only; it does not qualify the new
+guidance. Fresh installed-GUI and Windows acceptance are not claimed.
+[Result](../../out/c3-load-needs-profile-message-20261018/result.json),
+[source binding](../../out/c3-load-needs-profile-message-20261018/source-binding.json)
+and [full gate](../../out/c3-load-needs-profile-message-20261018/verify-summary.json)
+retain the focused and full checks. Next: coordinator integration.
+
 ## MCP duplicate-name protection — C3, October 18
 
 `GUI-MCP-DUPLICATE-NAME` passes Linux native acceptance. Original fix
@@ -100,6 +240,33 @@ booking3214 returned 09:36Z. Parent inspected the raw results; the 38.22GB owned
 containers were retired at 09:39Z, retaining only result JSON and short summary.
 No GPU, shared catalog or Ron install was used. Next: merge the patch; native
 Windows SM86/SM89 bundled-Host qualification has priority over catalog mirror.
+## Pairing storage prerequisite — Gchat 3, October 18 hourly evidence batch
+
+`GUI-PAIR-NEEDS-STORAGE-HINT` passes the retained Linux visible-hint leaf.
+The inspected [native Hosts capture](../../out/host-address-native-20261018/storage-hint.png)
+shows both discovered **Pair** controls and manual **Pair host** disabled,
+each with: “Pairing needs secure storage. Choose Check secure storage above
+first.” **Check secure storage** is visible above them. The English Dark
+1200×800 capture is from release `ed68c7443`, after source fix `7fb91b098`
+(merge `086a037f0`). It establishes readable guidance beside the controls;
+no pairing action was taken.
+
+The current route, its tests and `CredentialSetup` match passing gate
+`d16521c19` at this batch's base `121977256`. Retained tests cover discovered
+and manual controls, accessible descriptions, readiness enabling pairing and
+dispatch, and Skip preserving the prerequisite. The discovered-control test
+also checks removal of its description after readiness. The existing ONE
+`make verify` passed **3,469 app, 127 extension and 1,276 native tests**, with
+six frontend skips and 28 Rust ignores. No suite or app was repeated.
+
+This closes the observed visible-hint defect. It does not claim a complete
+native Check-to-Pair transition, pairing success, screen-reader speech,
+Light appearance or Windows acceptance. The cited isolated fixtures are
+already stopped and retired. This documentation-only hourly batch uses
+`git diff --check`; no new build, HOME, booking or SSD root was allocated.
+Owner Gchat 3; branch `docs/gchat3-gui-evidence-batch-20261018-09`, worktree
+`/ai/gchat-worktrees/gchat3-gui-evidence-batch-20261018-09`. The visible-hint
+result is ready for the hourly evidence handoff.
 
 ## Select appearance in Light — Gchat 3, October 18
 ## Collapsed-section spacing recovery — C3, October 18

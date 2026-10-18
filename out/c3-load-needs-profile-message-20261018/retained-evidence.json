@@ -1,0 +1,20 @@
+{
+  "copied_logs_and_receipts_match_remote": true,
+  "source_binding_serialization": "Retained equivalent compact JSON normalized to remote indent2; data unchanged",
+  "hashes": {
+    "verify.log": "4abc8b58673ac4588c80284ad11f1e0beac20f36165c218ff73b1c68466eb1ce",
+    "focused_frontend.log": "d149a6006993d066a18c96841ad4a03a33cc41066e8678633fa563663b85fb5e",
+    "focused_native.log": "bae92d63455fbfd854eaccdeb1907d0cbfe0e2557afaf0b1947da7e50210b6a1",
+    "focused_native_corrected.log": "13c90d72b35dd76ec51947bb5db60c9702d02260a1bc4f512ef1e3b7e8fab4b5",
+    "effective-environment.json": "0f2fa6d4f4c82832ec06e83c4dda66cc8c7bb551a8be172f6e9750bf3428c696",
+    "source-binding.json": "ce8115e0c821f2df8cb541efdb25ea936b32f40b10c361854082f956d7906a67"
+  },
+  "committed_log_normalization": {
+    "operation": "Strip trailing line whitespace and excess EOF blank lines only; original exact copies/hashes remain in /ai/gchat/out/c3-load-needs-profile-message-20261018.",
+    "committed_hashes": {
+      "focused_frontend.log": "e7cec6c3b7d536e11c34990bd6b4e470397066aaaecbcabf50d2bd1afc1fa0f5",
+      "focused_native_corrected.log": "c37fc37ac1df3058249c675389f44954ecbcf335f25b7dbfeff445c9b485cd00"
+    }
+  },
+  "raw_verify_log": "/ai/gchat/out/c3-load-needs-profile-message-20261018/verify.log; summarized by committed verify-summary.json"
+}
