@@ -18,6 +18,90 @@ maintainers' selected Python 3.11 build environment is unchanged. Evidence is
 This documentation-only fix needs `git diff --check`. Next: include the corrected
 guide in the standalone-launcher archive refresh and continue that same novice
 walk; there is no new build or model execution for this wording change.
+## Standalone launcher runtime ownership — repaired native install/menu PASS; publication boundary, October 18
+
+The private novice installation at `7f8e9a61e` copied the accepted single-image
+archive and registered its Host, then the first-run wizard and no-argument menu
+failed because they required a desktop runtime-set manifest. The fix on
+`fix/c4-standalone-launcher-20261018`, source `05f60c5d5` after `576449a5c`,
+repairs that installed route. Engine source/runtime `e2282c336` is unchanged.
+
+The installed configuration requires `desktop.runtime_set`: Linux/Windows
+standalone setup writes `false`, desktop installation/repair writes `true`.
+Preparation and menu bootstrap share the declaration and strict reader. Desktop
+manifests stay required; installed configuration cannot be overridden by
+`--runtime-set`. Missing fields report the owning setup/reinstall commands.
+Standalone installers reject existing paths; no overwrite upgrade was added.
+The desktop writer replaces its configuration atomically. Arch conditionally
+signed `576449a5c` at 04:35:34Z and accepted this supported scope at 04:37:07Z.
+See the [decision](../decisions/2026-10-18-declare-installed-launcher-runtime-ownership.md).
+
+The final combined archive was packaged at **04:44:08Z**:
+
+```text
+/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018/distribution-actionable-recovery/ginfer-bundle-0.1.0-linux-x86_64.tar.gz
+```
+
+It contains 178 members, the current Host, setup, the accepted SM120a runtime and
+qualified profile catalog. The existing packager verified 171 runtime payloads;
+Host `ldd` has no missing dependency. Archive SHA256 is
+`8239716c9055b9ba210dfb77c9ecf3554fcc6eb455673500f79f81def902f8e0`.
+The packaged guide preserves the runtime-ownership paragraph and combines only
+the Python command/prerequisite correction from `65df08dda`. Its literal
+`python3 setup.py` command succeeded using S1 Python 3.12.3.
+[Archive receipt](../../out/c4-standalone-launcher-20261018/archive-result.json).
+
+The native replay ran **04:45:34–04:46:51Z** in a fresh private HOME/XDG,
+DBus session and unlocked keyring, on CPUs 120–127. It accepted the three default
+private installation paths, selected GPU 1 by UUID, accepted the managed SSD
+model root, and reached the actual model catalog. One Refresh still returned an
+empty catalog. Installed no-argument `ginfer` then opened the real main menu;
+Download models reported no published compatible packages and offered Add a
+local model. Storage showed 1534.5 GiB free. The configuration declares
+`runtime_set=false`, and installed Host bytes match the packaged Host. The exact
+owned Host and keyring are stopped; CPU booking **2986** was canceled at **04:46Z**.
+No model, download, calibration or GPU measurement ran.
+[Native result and transcript links](../../out/c4-standalone-launcher-20261018/novice/result.json).
+
+This establishes the repaired installer/wizard/menu route through the catalog
+boundary. It does **not** establish model recommendation, download admission,
+profiling or Ready. Arch confirmed at 04:45Z that no public release-bearing
+catalog exists and publication waits for W12/Ron. No URL, private fixture or local
+registration was invented to bypass that prerequisite. There is no hardware
+profile: native status has no measured storage candidates/rates, so the shown
+managed-root recommendation is a fallback, not a measured fastest-disk result.
+No-space download admission remains blocked on an actual published release.
+The parent's separate unchanged-runtime no-visible-GPU/driver receipts are at
+`16628ae92`; those checks were not repeated here.
+
+A separate novice wording defect was observed: the GPU prompt says **“Profiling
+starts after selection.”** Selecting the GPU actually advances to storage and
+then the catalog while hardware profiling remains `idle`. This wording was
+reported to the parent and is excluded from the runtime-ownership source fix.
+The profiling page was not reached, so its duration wording has no native result.
+Next: parent reviews/merges this fix; release-bearing publication remains the
+prerequisite for the downstream novice walk. A separate wording branch may use
+the retained owned cache after merge. GPU execution needs its own actual booking.
+
+Verification is complete for this change. The original focused Linux setup,
+installed-launcher, argument-ownership and desktop-writer cases passed. The one
+`make verify` invocation passed lint/typecheck/early contracts, then failed root
+Vitest because archived source lacked generated `core/dist/index.js`. Authorized
+recovery built that prerequisite, ran only the failed/unexecuted stages, and
+passed root coverage (3344 tests, 6 skipped), extension coverage (121), six critical
+coverage floors and Rust (1223 passed, 28 ignored). No full verification or
+previously passing suites were repeated. The two new actionable-reader/preparation
+regressions each executed exactly one case and passed, followed by affected Host
+check/clippy and incremental release. First follow-up epoch mtimes had reused
+stale test binaries and matched zero tests; those invalid receipts remain.
+Recovery advances changed-source mtimes and requires each named one-test result
+before continuation. [Current result](../../out/c4-standalone-launcher-20261018/result.json).
+
+| Owner / host | Path | State / retention |
+| --- | --- | --- |
+| Codex 4 / local | `/ai/gchat-worktrees/c4-standalone-launcher-20261018` | Source, authority and concise tracked archive/native receipts; no active job |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-standalone-launcher-20261018` | Final archive 594 MiB; native-target 25 GiB, cargo-home 2.3 GiB, source/dependencies 2.2 GiB and private replay 1.7 GiB temporarily retained for parent merge and next wording fix. All jobs terminal; CPU 120–127 returned. Three exact superseded/partial archives retired; shared donor untouched |
+| Codex 4 / S1 | `/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-20261018` | Failed baseline install and owned release cache retained until parent cleanup decision; no live job |
 
 ## Windows RC refresh — release installer delivered, October 18
 

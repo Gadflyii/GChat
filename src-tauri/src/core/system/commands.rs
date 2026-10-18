@@ -764,7 +764,7 @@ fn install_desktop_launcher_config(directory: &std::path::Path, provider: &std::
     let configuration = serde_json::json!({
         "data_dir": provider.join("host"),
         "host_url": "https://127.0.0.1:7443",
-        "desktop": { "provider": provider, "engine": engine },
+        "desktop": { "provider": provider, "engine": engine, "runtime_set": true },
     });
     let temporary = directory.join(format!(".ginfer-launch-{}", uuid::Uuid::new_v4()));
     let result = (|| -> Result<(), String> {
@@ -5255,6 +5255,7 @@ mod tests {
         assert_eq!(config.host_url, "https://127.0.0.1:7443");
         let desktop = config.desktop.unwrap();
         assert_eq!(desktop.provider, replacement);
+        assert!(desktop.runtime_set);
         let executable = if cfg!(windows) { "ginfer-serve.exe" } else { "ginfer-serve" };
         #[cfg(target_os = "linux")]
         let expected = replacement.join("linux/sm120a/bin").join(executable);

@@ -1,0 +1,14 @@
+{
+  "source_base": "576449a5cf168eabbf7269a63db9a517d73cdd1a",
+  "working_patch_sha256": "096852e45aba1259c5f23451f7ea9f0ead69fc2c16b70dfced88ebde9281d243",
+  "guide_base": "576449a5cf168eabbf7269a63db9a517d73cdd1a",
+  "guide_python_diff_commit": "65df08dda152089801bfb4eeb76d2a9578da53af",
+  "combined_guide_sha256": "f41aee785c2d14c9f9a13ce7e09b0ff404ee7e1e159413fb48c7b9272d4d492a",
+  "runtime_source": "e2282c336d114b7dcebdfa1a179bfb342731a8b8",
+  "status": "exact source files verified; focused2/check/clippy/release/package PASS",
+  "source_commit": "05f60c5d56a47bbb8fa1c5bfe08bb3a1fab1fd40",
+  "source_files": {
+    "src-tauri/ginfer-host/src/launcher.rs": "f10f7941a9a7e257cfb13e8c88cb3eb37e03c4144c723c635c47745893b86ab8",
+    "src-tauri/ginfer-host/src/main.rs": "50836378aed695a55d38545688c7e1738995863c56d1af48428f5f01ebdfda8a"
+  }
+}

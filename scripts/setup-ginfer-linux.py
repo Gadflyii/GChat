@@ -70,7 +70,8 @@ def install(bundle, destination, provider, config_root, link_dir, apply=False, g
     shutil.copy2(runtime / 'runtime-manifest.json', destination / 'runtime-manifest.json')
     if not registered:
         configuration = {'data_dir': str(provider / 'host'), 'host_url': 'https://127.0.0.1:7443',
-                         'desktop': {'provider': str(provider), 'engine': str(destination / 'bin/ginfer-serve')}}
+                         'desktop': {'provider': str(provider), 'engine': str(destination / 'bin/ginfer-serve'),
+                                     'runtime_set': False}}
         path = destination / 'bin/ginfer-launch.json'
         with path.open('x') as stream:
             os.fchmod(stream.fileno(), 0o600)

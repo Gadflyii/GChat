@@ -68,6 +68,7 @@ class LinuxSetup(unittest.TestCase):
             self.assertEqual((links / 'ginfer').resolve(), target / 'bin/ginfer')
             launch = json.loads((target / 'bin/ginfer-launch.json').read_text())
             self.assertEqual(launch['desktop']['provider'], str(provider))
+            self.assertIs(launch['desktop']['runtime_set'], False)
             self.assertFalse(provider.exists())
             self.assertEqual((target / 'bin/launch-profiles.json').read_text(), catalog)
             for name in documents:
