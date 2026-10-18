@@ -72,16 +72,17 @@ Its CPU booking returned at 12:30Z. Engine source/build/runtime data (11 GiB)
 and the AppImage extraction (3.9 GiB) remain on S1 pending package acceptance.
 
 The candidate DEB installation **PASS** at 12:27Z: private `dpkg -i` reports
-`g-chat` 2.0.42 installed. The installed-candidate native walk is active on CPUs 24–31
-through 14:33Z, using a fresh private HOME under the short SSD alias
-`/tmp/c3rc18`. The GPU1-only model walk has the authorized backstop active. The first
+`g-chat` 2.0.42 installed. The installed-candidate native walk uses CPUs 24–31
+and a fresh private HOME under the short SSD alias
+`/tmp/c3rc18`. The GPU1-only model walk used the authorized backstop. The first
 Check model settings correctly requests a fresh hardware profile before load;
 no model started. GPU1 returned at 12:55Z for C6’s short correctness/capture
 window while Gbot continued on CPUs 24–31. C6 returned at 13:03Z; normal
 Measure graphics cards started at 13:03:50Z on GPU1 only, using the shipped
 all-format profiler and unchanged defaults. The normal profiler completed successfully in 660.563 seconds (13:14:49Z), with
 the saved profile present and the native UI showing Graphics-card settings
-ready. CPU24–31 and GPU1 remain booked for the default-settings model walk.
+ready. The subsequent default-settings model walk passed Chat and Agent Studio;
+GPU1 returned at 13:46Z after normal Stop server.
 The observed process used CPUs 24–31; prior full-install history was 22–73 minutes. See the
 [effective profile launch](/ai/gchat/out/c3-linux-rc-20261018/final-profile-start.json), the
 [final installation command](/ai/gchat/out/c3-linux-rc-20261018/deb-final-install-command.json)
@@ -162,7 +163,7 @@ Installed and completed Refresh; the current package hashes above remain the ret
 pre-fix candidate until the accepted correction is rebuilt into both packages.
 Start launched native `ginfer-serve` PID1521286 at 13:23Z, with the exact
 registered artifact, SM120a runtime and unchanged settings. Its CPU affinity
-is 24–31; the private backstop is active. At 13:28Z the native Host reports
+was 24–31; the private backstop remained active during inference. At 13:28Z the native Host reports
 Ready to chat, with one request and 262,144 conversation tokens. The native
 Chat selector discovers the ready Qwen session. A normal chat request passed: the
 reply is “C3 Linux RC chat ready.” The visible response completed normally, with
@@ -185,11 +186,24 @@ input is frozen from source `9bfcec0bba2c8c25321c973308dbcb45b70a1bb1`, SHA256
 42-profile ordered eight-input binding, focused checks, native check/Clippy and
 sole verify passed at 13:38Z; the [binding proof](/ai/gchat/out/consumer-flash-profile-20261018/catalog-staged-proof.json)
 records JSON SHA256 `2da2c9adb6d2bf034e4b4e0a35a14a26eeeb0728f9119ab513ac3202142e0598`.
-The prior 41 signed profiles and seven files remain unchanged. A normal saved-agent run is
-active against the same ready Qwen session, with the default limits unchanged.
+The prior 41 signed profiles and seven files remain unchanged. The saved Standard
+agent run passed with the reply “C3 Linux RC agent ready.” Refresh runs displayed
+its saved FINISHED record, one model step, stage trace and final result. Limits
+were unchanged. See the [native Agent Studio result](/ai/gchat/out/c3-linux-rc-20261018/final-agent-result.json).
+Normal Stop server completed, the model process exited, and GPU1 returned at
+13:46Z. Quit Gbot service and desktop shutdown then completed; the private
+Host stopped before the next binary update. CPUs 24–31 returned at 13:52Z.
+The private HOME, hardware profile and saved VM remain for affected final
+acceptance. The authorized backstop did not
+trigger; minimum MemAvailable was 686,667,743,232 bytes. Its
+[receipt](/ai/gchat/out/c3-linux-rc-20261018/final-memory-backstop.json) is retained.
 
-Next: finish the native Chat, agent run and Gbot brain setup; refresh both
-installers from accepted main and verify the installed model-list correction. Bubbs named authorization at 12:48Z permits an inline, unsaved private-PID
+Next: finish the isolated Gbot correction and its one verification gate, then
+refresh both installers from accepted main. Verify the installed model-list
+correction, Gbot ready-model selection and saved brain execution. The final
+private restart will remove the HTTP catalog fixture override and check the
+published catalog. Reuse the accepted hardware profile; no full recalibration
+is needed for the unchanged Engine. Bubbs named authorization at 12:48Z permits an inline, unsaved private-PID
 MemAvailable backstop on native S1: below 3 GiB it may stop only this private
 test process tree by exact PID, SIGTERM first; any trigger is recorded. The
 backstop must be active before the GPU/model phase. AppImage payload acceptance does not complete this
