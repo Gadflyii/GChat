@@ -13,8 +13,8 @@ description names the defaults that Reset restores.
 Outcome and acceptance: ordinary Reset from Light with a larger text size
 restores Dark/Medium, reports success after completion, and preserves the
 chosen settings on a rejected theme operation. Existing hook and rendered-route
-tests cover those behaviors. Native acceptance remains pending and no passing
-native result is inferred from source inspection.
+tests cover those behaviors. The changed-source Linux native acceptance is
+**PASS** and the row is **MERGE READY**.
 
 Owner Codex 3; worktree
 `/ai/gchat-worktrees/c3-interface-reset-theme-20261018`, branch
@@ -25,24 +25,43 @@ the alert can commit before the folder hydration effect. This branch includes
 only the same one-line `waitFor` before Retry, preserving all assertions; the
 unrelated folder-reveal runtime fix is excluded.
 
-Focused Interface hook/route/theme and first-run suites passed 60 cases;
-lint passed with zero errors and five existing warnings. The first and only
-`make verify` stopped at typecheck: the new default constant narrowed
-`initialState.activeTheme` to literal Dark, making the existing Auto comparison
-fail TS2367. The original failure is retained. The bounded correction annotates
-`initialState: ThemeState`, preserving the supported theme union. Next: affected
-theme tests, failed typecheck, the original unrun quality/hardening/manager UI/
-asset/coverage/native stages, then Vite and default desktop/custom-protocol debug
-build. Passed lint and focused stages are reused; no second full verify runs. No Rust source is changed by this row; separate native
-check/clippy is not required. Parent owns ordinary native Reset acceptance in
-Light/Dark and narrow/wide layouts. Packet:
-`out/c3-interface-reset-theme-20261018/{result.json,summary.md}`. Shared source,
-private cargo/yarn caches and native target are reused under
-`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`; the new immutable
-`interface-candidate` must preserve the installed current-main AppDir/home,
-folder-reveal and badge candidates, runnable resources and private GUI tools.
-No dependencies, model/profile, GPU or native settings service change.
-The source candidate is not merge-ready.
+Source `5c53a6cc2` is pushed. Focused Interface hook/route/theme and first-run
+suites passed 60 cases; lint passed with zero errors and five existing warnings.
+The first and only `make verify` stopped at TS2367: the new default constant
+narrowed `initialState.activeTheme` to Dark. The original failure is retained.
+The approved correction annotates `initialState: ThemeState`, preserving Auto.
+Affected theme9/typecheck and every original unrun guard/coverage/native stage
+passed: 3,367 app/core tests (six skipped), 121 extension tests, six floors,
+1,228 native tests (28 ignored). Passed stages were reused; no second full
+verify ran. Vite and default desktop/custom-protocol debug build passed.
+
+The parent launched the checked candidate at 05:14:21Z with the private
+`current-main-home`, preserving Light/Extra Large. Actual Settings → Interface
+showed those values. An ordinary Reset click changed them to Dark/Medium; the
+retained post-action DOM has the root `dark` class, `--font-size-base: 16px`,
+visible Dark/Medium controls and no horizontal overflow at 1500×1000.
+The parent reviewed all three screenshots: Light/Extra Large before Reset at
+1500×1000, then Dark/Medium at 1500×1000 and 1024×800. Wording and controls are
+readable without overflow. Evidence:
+`out/c3-interface-reset-theme-20261018/{native-after-reset-wide.json,native-before-light-xl-wide.png,native-after-dark-medium-wide.png,native-after-dark-medium-narrow.png}`.
+Packet:
+`out/c3-interface-reset-theme-20261018/{result.json,summary.md}`. Immutable
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/interface-candidate/bin/gchat`
+is 255,482,456 bytes, SHA256
+`81e922c84d7912bbb239ac3c7f11ba30790f5fbf564eeace2ef7adaea4463eaa`.
+Its private pre-install and runnable-resource link were checked at 05:13:59Z.
+Both terminal containers and disposable local/remote source archives are
+removed; booking3010 returned. Candidate, concise logs and existing shared
+source/dependency/target caches remain for parent integration and serial CLI
+gates. Native app PID3080914 stopped at 05:15:22Z and its private session ended;
+no Host launched. The parent's Xvfb:79 remains retained under booking3001 through
+05:32Z. Launch and stop receipts are `native-launch.json` and
+`native-terminal.json` in the same packet; only the completed build booking3010
+is claimed returned here.
+Installed current-main AppDir/home, folder/badge candidates and runnable
+resources were preserved. This debug build does not refresh installer qualification.
+No dependencies, model/profile, GPU or native settings service change. Next:
+merge integration; no further test or build is needed.
 
 ## Gbot Hand back and task resume guidance — October 18
 
