@@ -670,7 +670,7 @@ manifests matched before reuse. The checked AppDir was ready at 04:33:05Z, then
 the shared stage was handed back; its exited build container was removed and
 booking2969 returned at 04:33Z. Build success does not complete the native walk.
 
-Five reproduced defects have tested, merged source fixes:
+Seven reproduced defects now have tested, merged source fixes; the original five and the two new completions are recorded below:
 
 - `GUI-SETUP-RUNTIME-INSTALL-PROGRESS`: Welcome's false connection failure after
   30 seconds and Hosts' unexplained disabled Refresh now follow native resource
@@ -723,7 +723,7 @@ Cancel by Enter, language list, empty-token Show/Hide, spellcheck/default-model
 toggles and Interface font sizes/themes. Small, Medium, Large, Extra Large and
 System/Light/Dark selections were readable; Medium was restored in that earlier
 source-native profile. The release's later General actions and reproduced
-failures are recorded below; private CLI installation remains pending.
+failures and the passing changed-source private CLI installation are recorded below.
 Settings → Open Logs passed
 at 04:03:57Z: its separate 800×600 Light app window displays wrapped, readable
 activity lines without horizontal overflow. This is an app window, so it does
@@ -769,7 +769,7 @@ state are in
 requiring a published descriptor, installed model, owned account credentials,
 prepared/booked GPU group or configured Fleet coordinator were not invoked.
 General's autostart, relocation/reset and Open Containing Folder have now been
-exercised with the outcomes below; private CLI installation remains pending.
+exercised with the outcomes below; changed-source CLI installation and removal passed.
 Existing reset regression and engine-settings acceptance packets are retained
 under their own rows; this walk does not relabel them as fresh execution. The
 updater 404 remains its existing separate row.
@@ -823,14 +823,12 @@ The release helper handed back the shared `gchat`/`native-target`/dependency
 stage after its terminal payload checks. `current-main-appdir` is the checked
 release payload for the fixed pin above, copied from the accepted read-only
 ed68/e228 donor and refreshed with current GChat components. It remains immutable
-and protected. The changed-source `folder-reveal-candidate` app PID2980547 and
-private Host/session stopped around 05:11Z after native acceptance; its private
-file-manager fixture used Nautilus PID2984066. Private `current-main-home`
-retains Light/Extra Large as the
-Interface candidate's precondition. Xvfb:79 PID2633590 remains live on CPU88–95,
-booking3001, hard end 05:32Z, waiting for the Interface candidate. Keep `tools`:
-the parent's private Xvfb:79 uses them. C4's
-read-only dependency/debug copy and Xvfb:196 are fully terminal at 04:29Z;
+and protected. The changed-source folder, Interface and CLI private app/Host sessions have
+stopped after their native checks. Private `current-main-home` now retains
+Dark/Medium at General; its stale Desktop Host locator is preserved as the
+locator candidate's regression input. Xvfb:79 PID2633590 remains live on
+CPU88–95, booking3039 through06:02Z. Keep `tools`: this display uses them.
+C4's read-only dependency/debug copy and display196 were terminal04:29Z;
 C4 no longer uses this display or stage.
 
 All 35 dependency manifests matched; normal Cargo release settings, approved
@@ -841,8 +839,8 @@ by Claude and untouched. Release command/dependency/copy, all-seven-stage PASS
 and AppDir payload receipts are in `out/c3-current-main-release-20261018/`.
 Source archives/raw release build logs and copied release cache remain retained
 until parent acceptance and scoped cleanup. The shared source/cache stage is
-currently owned by the Interface continuation on CPU80–87, booking3010, hard
-end 05:28Z; no GPU is assigned.
+currently owned by autostart gates/build on CPU80–87, booking3036, hard
+end05:49Z; reset and locator follow serially. No GPU is assigned.
 
 
 The following changed-source rows are separate from the fixed release pin:
@@ -859,19 +857,36 @@ The following changed-source rows are separate from the fixed release pin:
   the selected data root with `logs` selected, then ordinary Interface navigation
   confirmed the app remained responsive. Evidence:
   `out/c3-folder-reveal-runtime-20261018/{result.json,native-location.json,native-responsive-navigation.json}`.
-- `GUI-INTERFACE-RESET-KEEPS-THEME`: release baseline reproduced Light/Extra
-  Large → Reset → Light/Medium. Candidate `5c53a6cc2` retains the supported
-  `ThemeState` annotation after the original single verify caught TS2367.
-  Focused/lint passed; the authorized bounded continuation passed frontend
-  3,367 app cases, 121 extension cases and all six coverage floors. Seven native
-  suites and the build are running under booking3010 above. Changed-source
-  native acceptance is **PENDING**, with Light/Extra Large persisted. Evidence:
-  `out/c3-interface-reset-theme-20261018/{result.json,native-persisted-precondition.json}`.
-- `GUI-CLI-PACKAGED-PATH-DETECTION` at `8ddecce4c`,
-  `GUI-LINUX-AUTOSTART-XDG-PATH` at `cc010be49` and
-  `GUI-RESET-RELOCATED-DATA-RESURRECTION` at `e51002acf` have frozen source and
-  are queued serially after Interface; their gates and changed-source native
-  acceptance remain pending.
+- `GUI-INTERFACE-RESET-KEEPS-THEME`: tested source `5c53a6cc2`, handoff
+  `1aaa4bab1`, **MERGED** in main `5c00b46ea`. Focused/lint passed. The original
+  single verify TS2367 failure is retained with its bounded corrected/unrun
+  continuation: 3,367 app,121 extension,1,228 native cases and six coverage
+  floors passed, followed by the build. Native Reset restored Dark/Medium from
+  Light/Extra Large; wide/narrow screenshots were reviewed. Evidence:
+  `out/c3-interface-reset-theme-20261018/result.json`.
+- `GUI-CLI-PACKAGED-PATH-DETECTION`: tested source `86c3068ad`, handoff
+  `54f7734ca`, **MERGED** in main `5bf460fa8`. Focused five, check/Clippy/lint,
+  ONE complete verify (3,369 app,127 extension,1,234 native and six floors) and
+  build passed. In the private profile with the immutable AppDir first on PATH,
+  bundled-only state offered Install. Install created `~/.local/bin/gchat-cli`;
+  reopened Settings retained Installed. Uninstall removed that CLI binary and
+  reopened Settings offered Install. Existing Host/launcher support files remain
+  by contract. Light1500×1000 and Dark1024×800 screenshots were reviewed, readable
+  without horizontal overflow. App/Host/session returned05:32Z. Evidence:
+  `out/c3-cli-packaged-path-detection-20261018/result.json`.
+- `GUI-LINUX-AUTOSTART-XDG-PATH`: source `7e49b9d0d` passed shared-service10,
+  DataProvider12, General28, native focused5, check/Clippy and lint. The initial
+  General fixture spread dropped nonenumerable Window.document; its failure
+  remains retained and the fixture now preserves the real Window. The first and
+  only full verify began05:32:01Z; build and native acceptance remain pending.
+- `GUI-RESET-RELOCATED-DATA-RESURRECTION`: source `e51002acf` is queued for a
+  normal main merge, focused cases, check/Clippy/lint, ONE verify, changed build
+  and native selected-folder acceptance after autostart.
+- `GUI-HOST-LOCATOR-DELETED-RUNTIME`: source `664a3b715` is pushed, self-checked
+  and queued after reset. Four added behavioral cases join nine registry tests.
+  Native acceptance must recover the retained stale Desktop owner without
+  editing its locator by hand; discovery and foreign/Service ownership remain
+  strict. Evidence: `out/c3-current-main-release-20261018/remainder-runtime-locator-diagnosis.json`.
 
 General's ordinary Launch at startup toggle displayed an error and restored Off
 with a valid private HOME and `XDG_CONFIG_HOME`, while `$HOME/.config` was absent.
@@ -893,11 +908,35 @@ installation configuration and existing Agent/Host drain ordering; tests/gates
 are still queued. No unselected path deletion, model/profile execution or GPU
 work is claimed.
 
-Next: complete the Interface native acceptance after its continuation/build,
-then run the queued CLI, autostart and selected-folder reset gates and actual
-native checks serially. Keep the immutable release and historical source-native
-evidence distinct, preserve conditional prerequisites, and return live resources
-only after the parent stops the corresponding fixtures.
+The release remainder walk reached Models/Downloads refresh and account-service
+Connect, but the selected Desktop locator still referenced all four executables
+under the relocated data root deleted by reset. All four replacement packaged
+runtime paths under the current root exist and are executable. Both locator
+selection and connected refresh rejected obsolete paths before replacement.
+This is a recorded shared root cause, not a completed model/catalog/account
+operation. The selected fix allows an explicit valid Desktop seed to replace
+only its prior Desktop registration under lock; unseeded discovery stays strict.
+The private profile and invalid locator remain unchanged for native acceptance.
+
+Hardware Refresh showed two cards. The actual System Monitor window was checked
+at Light1024×800 with readable CPU/RAM/two-card details and plain unavailable-stat
+explanations; `remainder-monitor-native-light-narrow.png` was visually reviewed.
+The saved model-start dialog was opened with no installed model: model/GPU
+selectors were exercised and guarded Save/Start stayed disabled. Its **Model
+and memory settings** summary remains a next control to open; prior receipts
+show it closed and do not count as acceptance of that control. No model/profile
+or GPU execution occurred.
+
+Merged Interface/CLI exported native copies were removed05:34:57Z after checking
+process/file references and inbound links. Their concise results/screenshots
+remain. The immutable AppDir, pending folder/badge candidates, shared source and
+dependencies, runnable assets, tools and private profile are retained.
+
+Next: finish autostart's single verify/build and native enable/reopen/disable/
+reopen; then run selected-folder reset and stale-Desktop-locator gates/builds and
+native checks serially. Finish the remaining nonconditional controls. Keep the
+immutable release and changed-source evidence distinct, preserve conditional
+prerequisites, and return resources when their fixtures stop.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
