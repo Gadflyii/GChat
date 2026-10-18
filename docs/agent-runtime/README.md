@@ -22,6 +22,37 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Unavailable assignment in run setup — October 18
+
+An isolated native Linux **Re-run** pass at 1200×800 reproduced horizontal
+overflow when the saved instance was unavailable. Its long assignment label
+expanded the dialog's implicit grid column to about 836 pixels inside a
+672-pixel dialog, clipping **Browse**, **Cancel** and **Run**. Editing the task,
+cancelling and reopening restored the original task with the save-defaults
+checkbox unchecked; the layout defect was separate. The affected setup, dialog,
+choice and workspace components are unchanged from retained native source
+`f1c7c73b0` through branch base `df96d39bd`.
+
+Run setup now uses one grid column with a zero minimum width, allowing the
+existing assignment-label truncation to constrain the content to the dialog.
+The baseline used a private HOME/XDG, Xvfb, D-Bus and unlocked test keyring,
+without a model or GPU. The viewed screenshot `reopened.png` and DOM bounds
+(`setup-layout-rects`) are in
+`/ai/gchat/out/gchat-agent-rerun-cancel-20261018/`.
+
+All ten existing focused `AgentRunSetup` tests, one `make verify` and the
+frontend/native builds passed on frozen source `2a3ff696b`. The full gate passed
+3,397 app, 127 extension and 1,258 Rust tests (6 skipped, 28 ignored). The
+corrected native replays at 1200×800 and 1024×740 both have matching 670-pixel
+client and scroll widths. Browse, the assignment and footer controls fit
+horizontally; ordinary vertical scrolling exposes the smaller-window footer.
+The complete unavailable identifier remains in the selected-label title and
+keyboard-opened menu. Cancel returns to history, with all 17 saved definition,
+run/context and thread/session/message files byte-identical. The viewed
+screenshots and receipts are in
+`/ai/gchat/out/gchat-agent-run-setup-overflow-20261018/`. This qualifies the Linux
+debug candidate; Windows not built (dev phase).
+
 ## Chat creation date during history actions — October 18
 
 An isolated native Linux pass found that favoriting a saved chat, adding it to
