@@ -1,5 +1,46 @@
 # GInfer host UI
 
+## First-run refresh feedback — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-REFRESH-LIFETIME` extends the existing setup request lifetime
+to Host discovery errors. An initial or Retry refresh can finish after a newer
+setup command has accepted the current state, restoring an obsolete connection
+warning. Discovery started before that command must not replace its feedback.
+Current discovery errors without a newer command, and rejected setup commands,
+must remain visible. This follows the existing status-read ordering contract;
+it does not treat a successful setup read as proof of a successful Host-list
+refresh or change the shared refresh store.
+
+Acceptance: deferred rendered tests reproduce the initial-refresh and Retry
+orderings, retain current failures, then focused tests and ONE `make verify`
+pass. The unchanged base with only the new tests reproduced **2 expected
+failures / 1 passed / 44 skipped** at 12:53:20Z: both older discovery failures
+restored the warning after Retry accepted the folder setup. Current discovery
+failures remained visible. The coordinator inspected the actual failing log.
+The candidate applies the existing setup revision and pending-command guards
+to both refresh catches; obsolete and unmounted requests cannot publish.
+Candidate focused tests pass **47/47** (12:53Z, 10.48s). ONE `make verify`
+passed at 13:01:37Z: **3,599 app / 6 skipped, 127 extension, all six coverage
+floors, 1,288 native / 28 ignored** across 23 native summaries. Lint has zero
+errors and five existing unrelated warnings; typecheck and quality guards
+pass. The coordinator inspected the actual baseline, focused and full-gate
+logs, terminal exit0/noOOM and unchanged tested source/catalog bindings. No
+gate was repeated. The independent fixture is retired; next: coordinator
+integration. No Host, Engine, GPU, native GUI or Windows qualification changes
+are claimed.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-first-run-refresh-lifetime-20261018`, branch `fix/gchat3-first-run-refresh-lifetime-20261018`, base `585a85405` | Candidate component/tests and current authority; independent of main |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-refresh-lifetime-tests-20261018` | Independent inactive RC dependency read-copy, CPU96–103 booking3291 returned 13:02Z, nice10/max8 jobs and socket-1 shared compile lock; preparation passed all 35 dependency and seven frozen catalog bindings at 12:51:42Z; no GPU; owned fixture, prep log and two exited containers removed 13:04Z after raw-log review and no-reader check; donor preserved |
+
+The [result](../../out/first-run-refresh-lifetime-20261018/test-result.json)
+and [summary](../../out/first-run-refresh-lifetime-20261018/test-summary.md)
+retain the commands, bindings and outcomes. Cleanup removed 28,050,273,434
+logical bytes from the owned fixture; only these two small evidence files
+remain locally. This is deterministic rendered-control verification; it does
+not require a native desktop fixture.
+
 ## First-run edited startup settings — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-UNCHECKED-SETTINGS` fixes a confirmed first-run control defect:

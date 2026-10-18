@@ -97,6 +97,92 @@ it('starts a new first-run request lifetime when Welcome discovers a replacement
   ])
 })
 
+it('keeps accepted Retry setup when an older initial refresh request rejects', async () => {
+  vi.useFakeTimers()
+  try {
+    let rejectRefresh!: (reason: Error) => void
+    const initialRefresh = new Promise<void>((_resolve, reject) => { rejectRefresh = reject })
+    mocks.refresh.mockReturnValueOnce(initialRefresh)
+    mocks.command.mockRejectedValueOnce(new Error('Saved setup unavailable'))
+      .mockResolvedValue(flow('storage', { gpu_uuids: ['GPU-one'] }))
+    await act(async () => { render(<EngineFirstRun />) })
+    expect(screen.getByRole('button', { name: 'Retry local setup' })).toBeEnabled()
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry local setup' })) })
+    expect(mocks.refresh).toHaveBeenCalledTimes(2)
+    expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast')
+    expect(screen.getByRole('button', { name: 'Use this folder' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    await act(async () => { rejectRefresh(new Error('Older Host discovery failed')) })
+    expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast')
+    expect(screen.getByRole('button', { name: 'Use this folder' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry local setup' })).not.toBeInTheDocument()
+    expect(mocks.command.mock.calls).toEqual([
+      ['first_run', { host_id: 'local' }],
+      ['first_run', { host_id: 'local' }],
+    ])
+  } finally { vi.useRealTimers() }
+})
+
+it('keeps accepted Retry setup when its earlier refresh request rejects', async () => {
+  vi.useFakeTimers()
+  try {
+    let rejectRefresh!: (reason: Error) => void
+    const retryRefresh = new Promise<void>((_resolve, reject) => { rejectRefresh = reject })
+    mocks.refresh.mockResolvedValueOnce(undefined).mockReturnValueOnce(retryRefresh)
+    mocks.command.mockRejectedValueOnce(new Error('Saved setup unavailable'))
+      .mockResolvedValue(flow('storage', { gpu_uuids: ['GPU-one'] }))
+    await act(async () => { render(<EngineFirstRun />) })
+    expect(screen.getByRole('button', { name: 'Retry local setup' })).toBeEnabled()
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry local setup' })) })
+    expect(mocks.refresh).toHaveBeenCalledTimes(2)
+    expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    await act(async () => { rejectRefresh(new Error('Retry Host discovery failed')) })
+    expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast')
+    expect(screen.getByRole('button', { name: 'Use this folder' })).toBeEnabled()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry local setup' })).not.toBeInTheDocument()
+    expect(mocks.command.mock.calls).toEqual([
+      ['first_run', { host_id: 'local' }],
+      ['first_run', { host_id: 'local' }],
+    ])
+  } finally { vi.useRealTimers() }
+})
+
+it('keeps current refresh request failures visible when no local Host exists', async () => {
+  vi.useFakeTimers()
+  try {
+    let rejectInitialRefresh!: (reason: Error) => void
+    let rejectRetryRefresh!: (reason: Error) => void
+    const initialRefresh = new Promise<void>((_resolve, reject) => { rejectInitialRefresh = reject })
+    const retryRefresh = new Promise<void>((_resolve, reject) => { rejectRetryRefresh = reject })
+    mocks.refresh.mockReturnValueOnce(initialRefresh).mockReturnValueOnce(retryRefresh)
+    mocks.state = { ...mocks.state, hosts: [], snapshots: {} }
+    await act(async () => { render(<EngineFirstRun />) })
+    expect(screen.getByText('Starting GInfer on this computer…')).toBeVisible()
+
+    await act(async () => { rejectInitialRefresh(new Error('Initial Host discovery failed')) })
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    fireEvent.click(screen.getByText('Connection error details'))
+    expect(screen.getByText('Error: Initial Host discovery failed')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Retry local setup' })).toBeEnabled()
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Retry local setup' })) })
+    await act(async () => { rejectRetryRefresh(new Error('Current retry discovery failed')) })
+    expect(screen.getByRole('alert')).toHaveTextContent('GChat could not read or update setup on this computer.')
+    expect(screen.getByText('Error: Current retry discovery failed')).toBeVisible()
+    expect(screen.queryByText('Error: Initial Host discovery failed')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry local setup' })).toBeEnabled()
+    expect(mocks.refresh).toHaveBeenCalledTimes(2)
+    expect(mocks.command).not.toHaveBeenCalled()
+  } finally { vi.useRealTimers() }
+})
+
 it('saves explicit GPU selection before choosing storage without starting profiling', async () => {
   mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action ? flow('storage', { gpu_uuids: ['GPU-one'], hardware_profile: { status: 'idle' } }) : flow('gpu')))
   // Finish restoring the saved GPU group before simulating the user's edit.
