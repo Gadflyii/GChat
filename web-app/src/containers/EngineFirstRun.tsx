@@ -32,16 +32,24 @@ function FirstRunError({ message, details, label }: { message: string; details: 
   </div>
 }
 
-export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: {
+type EngineFirstRunProps = {
   hostId?: string; onComplete?: () => void; hardwareProfileControls?: ReactNode
-}) {
+}
+
+export function EngineFirstRun(props: EngineFirstRunProps) {
   const hosts = useEngineHosts(s => s.hosts)
+  const localId = props.hostId ?? hosts.find(host => host.local)?.host_id
+  // Welcome can discover a replacement local Host without unmounting its setup
+  // screen. Drafts and pending commands belong to the selected Host alone.
+  return <HostFirstRun key={localId} {...props} hostId={localId} />
+}
+
+function HostFirstRun({ hostId: localId, onComplete, hardwareProfileControls }: EngineFirstRunProps) {
   const snapshots = useEngineHosts(s => s.snapshots)
   const errors = useEngineHosts(s => s.errors)
   const refresh = useEngineHosts(s => s.refresh)
   const resources = useBundledResources()
   const resourcesReady = resources.ready === true && !resources.error
-  const localId = hostId ?? hosts.find(host => host.local)?.host_id
   const snapshot = localId ? snapshots[localId] : undefined
   const [flow, setFlow] = useState<FirstRun>()
   const [error, setError] = useState('')
@@ -53,6 +61,12 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
   const [path, setPath] = useState('')
   const [releases, setReleases] = useState<string[]>([])
   const revision = useRef(0)
+  const active = useRef(true)
+  const pendingAction = useRef(false)
+  useEffect(() => {
+    active.current = true
+    return () => { active.current = false }
+  }, [])
   const completed = useRef(false)
   const initializedGroup = useRef<string | undefined>(undefined)
   const pathEdited = useRef(false)
@@ -94,10 +108,14 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
       let complete = false
       try {
         const next = await engineCommand<FirstRun>('first_run', { host_id: localId })
-        complete = next.step === 'complete'
         // Reading status again does not mean a rejected user action succeeded.
-        if (!stopped && requestRevision === revision.current) { setFlow(next); setPollError('') }
-      } catch (e) { if (!stopped && requestRevision === revision.current) setPollError(String(e)) }
+        // Only an accepted read can end polling. Reads made during a command
+        // may describe its old state even if they finish after its response.
+        if (!stopped && !pendingAction.current && requestRevision === revision.current) {
+          complete = next.step === 'complete'
+          setFlow(next); setPollError('')
+        }
+      } catch (e) { if (!stopped && !pendingAction.current && requestRevision === revision.current) setPollError(String(e)) }
       if (!stopped && !complete) timer = setTimeout(() => void poll(), 2000)
     }
     void poll()
@@ -119,27 +137,39 @@ export function EngineFirstRun({ hostId, onComplete, hardwareProfileControls }: 
     // Polls update saved choices and recommendations without replacing edits.
   }, [flow])
   const act = async (args: Record<string, unknown>) => {
-    if (!localId) return
+    if (!localId || pendingAction.current) return
     revision.current++
+    pendingAction.current = true
     setBusy(true); setError('')
     try {
       const next = await engineCommand<FirstRun>('first_run', { host_id: localId, ...args })
+      if (!active.current) return
       setFlow(next)
       setPollError('')
       if (next.step === 'complete') await refresh().catch(() => undefined)
       else if (args.action) requestAnimationFrame(showCard)
-    } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    } catch (e) { if (active.current) setError(String(e)) } finally {
+      revision.current++
+      pendingAction.current = false
+      if (active.current) setBusy(false)
+    }
   }
   const profileAction = async (action: 'cancel' | 'resume') => {
-    if (!localId) return
+    if (!localId || pendingAction.current) return
     revision.current++
+    pendingAction.current = true
     setBusy(true); setError('')
     try {
       const hardware = await engineCommand<EngineHardwareProfile>('hardware_profile', { host_id: localId, body: { action } })
+      if (!active.current) return
       setFlow(current => current ? { ...current, hardware_profile: hardware } : current)
       setPollError('')
       await refresh().catch(() => undefined)
-    } catch (e) { setError(String(e)) } finally { setBusy(false) }
+    } catch (e) { if (active.current) setError(String(e)) } finally {
+      revision.current++
+      pendingAction.current = false
+      if (active.current) setBusy(false)
+    }
   }
   if (step === 'complete') return <>{hardwareProfileControls}</>
   const known = snapshot?.gpus.filter(gpu => ['8.0', '8.6', '8.9', '12.0'].includes(gpu.compute_capability ?? '')) ?? []

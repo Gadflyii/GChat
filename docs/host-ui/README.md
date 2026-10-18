@@ -1,5 +1,56 @@
 # GInfer host UI
 
+## First-run request lifetime — verified, Gchat 3, October 18
+
+`GUI-FIRST-RUN-REQUEST-LIFETIME` fixes confirmed response-order races in
+`EngineFirstRun`: status reads can snapshot the old state before an action,
+then finish after its accepted response. The accepted step must remain visible.
+An invalidated completed poll must not stop future polling, and replacing the
+local Host in Welcome must discard the former Host's pending responses and
+draft/busy state. Existing rejected-action errors must remain visible across
+successful status reads.
+
+Acceptance: reproduce these orderings with deferred responses in the existing
+rendered component tests, implement one Host-owned request lifetime, pass the
+focused suite and ONE `make verify`. No Host/Engine startup, admission, sampling,
+native Windows or GUI screenshot qualification is changed or claimed. Next:
+coordinator final evidence review and commit/push; the focused file passed all
+39 tests, lint passed with five existing warnings and ONE `make verify` passed.
+
+| Owner / host | Exact path | Purpose / status |
+| --- | --- | --- |
+| Gchat 3 / local | `/ai/gchat-worktrees/gchat3-first-run-request-lifetime-20261018`, branch `fix/gchat3-first-run-request-lifetime-20261018`, base `f414a35bc` | Candidate component/tests and this authority; no main mutation |
+| Gchat 3 / S1, verified `AIS-2-8592-L01` | `/media/ron/SSD_RAID/ai/tmp-gchat3-first-run-request-lifetime-tests-20261018` | Independent inactive RC donor read-copy; CPU104–111 booked 11:16–11:41Z, returned 11:30:25Z after terminal PASS; socket-1 shared compile lock, nice10/max8 jobs; owned fixture and two exited containers removed 11:32Z; no GPU or model work |
+
+Both Gchat 2 and C3 confirmed no component/test ownership overlap. The exact
+base plus only the new tests reproduced **3 expected failures / 36 skipped**:
+a late status replaced accepted Stop, an invalidated completed read prevented
+the next poll, and a former Host response restored its folder after replacement.
+The coordinator reviewed the actual failing log. The candidate keys setup state
+to its Host, prevents pending-command reads from publishing and invalidates
+them again when the command settles. Only accepted completed reads stop polling;
+action errors remain separate from status errors.
+
+All 35 dependency inputs match the retained offline donor recipe. The four
+explicit catalog inputs match accepted `5825c2e39` objects and the prior 38-profile
+receipt. Independent preparation passed 11:17:42Z. Candidate commands use the
+existing offline image, protected inputs and copied caches. Small gate receipts
+live in `out/first-run-request-lifetime-20261018/`. The single full gate passed:
+**3,547 app / 6 skipped, 127 extension, all six coverage floors, 1,288 native /
+28 ignored** across 23 native summaries. Container exit0/noOOM at 11:30:10Z;
+both frozen source hashes match after execution. No gate retry or continuation.
+A subsequent Gchat2 gate exposed a separate placement-test hydration race:
+the heading can render before the saved folder initializes. The existing test
+now waits for `/models` before clicking `/fast`, matching its neighboring test.
+The component remains unchanged; Gchat2 will continue only its failed case
+with this one-line fixture correction and its remaining stages. Cleanup removed 38,232,500,574 logical bytes
+and the owned prep log after confirming no readers; the RC donor remains intact.
+No native fixture is needed for these deterministic response-order regressions.
+
+The Windows SM86/SM89 qualification remains the lane priority and is recorded
+in [installer refresh](../installer-refresh/README.md). This bounded GUI repair
+uses its resource wait; it does not replace either pending Linux comparison.
+
 ## Completed graphics-card setup note — C7, October 18
 
 `GUI-PROFILE-READY-NOTES` passes its remaining Linux completed-state
