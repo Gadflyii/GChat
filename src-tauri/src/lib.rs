@@ -323,6 +323,8 @@ pub fn run() {
         core::extensions::commands::install_extensions,
         core::extensions::commands::get_active_extensions,
         // System commands
+        core::system::autostart::is_launch_at_startup_enabled,
+        core::system::autostart::set_launch_at_startup_enabled,
         core::system::commands::relaunch,
         core::system::commands::open_app_directory,
         core::system::commands::open_file_explorer,

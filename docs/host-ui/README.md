@@ -5,9 +5,10 @@
 `GUI-LINUX-AUTOSTART-XDG-PATH` has a source candidate; verification and native
 acceptance are pending. The installed Linux release `d0a8d06bf` launched through
 its normal AppRun with a private HOME, `XDG_CONFIG_HOME=$HOME/config`, and no
-`$HOME/.config`. Enabling **Settings → General → Launch at startup** failed at
-04:50:19Z with `No such file or directory (os error 2)`. The saved console
-observation is
+`$HOME/.config`. Enabling **Settings → General → Launch at startup** produced
+a visible failure. The exact console error at 04:50:19Z, `No such file or
+directory (os error 2)`, was captured from badge candidate `72c76c51a`, whose
+startup source is identical to that release. The saved console observation is
 `out/c3-current-main-release-20261018/autostart-console.json`. The cached
 `auto-launch 0.5.0` implementation ignores XDG config and calls nonrecursive
 `create_dir` for `HOME/.config/autostart`, establishing the missing-parent cause.
