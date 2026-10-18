@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Pairing storage prerequisite — Gchat 3, October 18 hourly evidence batch
+
+`GUI-PAIR-NEEDS-STORAGE-HINT` passes the retained Linux visible-hint leaf.
+The inspected [native Hosts capture](../../out/host-address-native-20261018/storage-hint.png)
+shows both discovered **Pair** controls and manual **Pair host** disabled,
+each with: “Pairing needs secure storage. Choose Check secure storage above
+first.” **Check secure storage** is visible above them. The English Dark
+1200×800 capture is from release `ed68c7443`, after source fix `7fb91b098`
+(merge `086a037f0`). It establishes readable guidance beside the controls;
+no pairing action was taken.
+
+The current route, its tests and `CredentialSetup` match passing gate
+`d16521c19` at this batch's base `121977256`. Retained tests cover discovered
+and manual controls, accessible descriptions, readiness enabling pairing and
+dispatch, and Skip preserving the prerequisite. The discovered-control test
+also checks removal of its description after readiness. The existing ONE
+`make verify` passed **3,469 app, 127 extension and 1,276 native tests**, with
+six frontend skips and 28 Rust ignores. No suite or app was repeated.
+
+This closes the observed visible-hint defect. It does not claim a complete
+native Check-to-Pair transition, pairing success, screen-reader speech,
+Light appearance or Windows acceptance. The cited isolated fixtures are
+already stopped and retired. This documentation-only hourly batch uses
+`git diff --check`; no new build, HOME, booking or SSD root was allocated.
+Owner Gchat 3; branch `docs/gchat3-gui-evidence-batch-20261018-09`, worktree
+`/ai/gchat-worktrees/gchat3-gui-evidence-batch-20261018-09`. The visible-hint
+result is ready for the hourly evidence handoff.
+
 ## Select appearance in Light — Gchat 3, October 18
 
 `GUI-NATIVE-SELECT-LOOK` is closed by the later shared dropdown replacement
