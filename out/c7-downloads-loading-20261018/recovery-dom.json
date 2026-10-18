@@ -1,0 +1,274 @@
+{
+  "loc": "/hub",
+  "text": "Toggle Sidebar\n\nWORK\n\nNew Chat\nCode\nAgent Studio\nRESOURCES\nGInfer Hosts\nMemory\nModels\n\nNew Project\nIntegrations\nNEW\nDIAGNOSTICS\nBenchmark\n\nNo local model running\nSettings\n\nModels\nComputer\nThis computer\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition · 96 GiB memory\nNVIDIA RTX PRO 6000 Blackwell Workstation Edition · 96 GiB memory\nManage models on this computer. A model must fit the memory available on each graphics card it uses.\n\nInstalled\nRecommended\nDownloads\nRefresh downloads\n0 MiB of unfinished downloads · 0 MiB of downloaded models. Only one model downloads at a time on each computer.\n\nNo downloads on this computer yet. Choose Recommended to find a model.",
+  "links": [
+    {
+      "text": "Code\n",
+      "href": "/code",
+      "rect": {
+        "x": 17,
+        "y": 229.421875,
+        "width": 214,
+        "height": 32,
+        "top": 229.421875,
+        "right": 231,
+        "bottom": 261.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "Agent Studio\n",
+      "href": "/agents",
+      "rect": {
+        "x": 17,
+        "y": 265.421875,
+        "width": 214,
+        "height": 32,
+        "top": 265.421875,
+        "right": 231,
+        "bottom": 297.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "GInfer Hosts\n",
+      "href": "/engines",
+      "rect": {
+        "x": 17,
+        "y": 336.421875,
+        "width": 214,
+        "height": 32,
+        "top": 336.421875,
+        "right": 231,
+        "bottom": 368.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "Memory\n",
+      "href": "/memory",
+      "rect": {
+        "x": 17,
+        "y": 372.421875,
+        "width": 214,
+        "height": 32,
+        "top": 372.421875,
+        "right": 231,
+        "bottom": 404.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "Models\n",
+      "href": "/hub",
+      "rect": {
+        "x": 17,
+        "y": 408.421875,
+        "width": 214,
+        "height": 32,
+        "top": 408.421875,
+        "right": 231,
+        "bottom": 440.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "Integrations\nNEW\n",
+      "href": "/launch",
+      "rect": {
+        "x": 17,
+        "y": 480.421875,
+        "width": 214,
+        "height": 32,
+        "top": 480.421875,
+        "right": 231,
+        "bottom": 512.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "Benchmark\n",
+      "href": "/benchmark",
+      "rect": {
+        "x": 17,
+        "y": 551.421875,
+        "width": 214,
+        "height": 32,
+        "top": 551.421875,
+        "right": 231,
+        "bottom": 583.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "Settings\n",
+      "href": "/settings/general",
+      "rect": {
+        "x": 17,
+        "y": 751,
+        "width": 214,
+        "height": 32,
+        "top": 751,
+        "right": 231,
+        "bottom": 783,
+        "left": 17
+      }
+    }
+  ],
+  "buttons": [
+    {
+      "text": "",
+      "disabled": false,
+      "rect": {
+        "x": 173,
+        "y": 17,
+        "width": 28,
+        "height": 28,
+        "top": 17,
+        "right": 201,
+        "bottom": 45,
+        "left": 173
+      }
+    },
+    {
+      "text": "Toggle Sidebar",
+      "disabled": false,
+      "rect": {
+        "x": 203,
+        "y": 15,
+        "width": 32,
+        "height": 32,
+        "top": 15,
+        "right": 235,
+        "bottom": 47,
+        "left": 203
+      }
+    },
+    {
+      "text": "New Chat\n",
+      "disabled": false,
+      "rect": {
+        "x": 17,
+        "y": 193.421875,
+        "width": 214,
+        "height": 32,
+        "top": 193.421875,
+        "right": 231,
+        "bottom": 225.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "New Project\n",
+      "disabled": false,
+      "rect": {
+        "x": 17,
+        "y": 444.421875,
+        "width": 214,
+        "height": 32,
+        "top": 444.421875,
+        "right": 231,
+        "bottom": 476.421875,
+        "left": 17
+      }
+    },
+    {
+      "text": "No local model running\n",
+      "disabled": false,
+      "rect": {
+        "x": 17,
+        "y": 715,
+        "width": 214,
+        "height": 32,
+        "top": 715,
+        "right": 231,
+        "bottom": 747,
+        "left": 17
+      }
+    },
+    {
+      "text": "",
+      "disabled": false,
+      "rect": {
+        "x": 231,
+        "y": 9,
+        "width": 16,
+        "height": 782,
+        "top": 9,
+        "right": 247,
+        "bottom": 791,
+        "left": 231
+      }
+    },
+    {
+      "text": "This computer\n",
+      "disabled": false,
+      "rect": {
+        "x": 1039.96875,
+        "y": 12,
+        "width": 144.03125,
+        "height": 36,
+        "top": 12,
+        "right": 1184,
+        "bottom": 48,
+        "left": 1039.96875
+      }
+    },
+    {
+      "text": "Installed",
+      "disabled": false,
+      "rect": {
+        "x": 260,
+        "y": 208,
+        "width": 89.859375,
+        "height": 36,
+        "top": 208,
+        "right": 349.859375,
+        "bottom": 244,
+        "left": 260
+      }
+    },
+    {
+      "text": "Recommended",
+      "disabled": false,
+      "rect": {
+        "x": 353.859375,
+        "y": 208,
+        "width": 130.375,
+        "height": 36,
+        "top": 208,
+        "right": 484.234375,
+        "bottom": 244,
+        "left": 353.859375
+      }
+    },
+    {
+      "text": "Downloads",
+      "disabled": false,
+      "rect": {
+        "x": 488.234375,
+        "y": 208,
+        "width": 105.96875,
+        "height": 36,
+        "top": 208,
+        "right": 594.203125,
+        "bottom": 244,
+        "left": 488.234375
+      }
+    },
+    {
+      "text": "Refresh downloads",
+      "disabled": false,
+      "rect": {
+        "x": 1018.171875,
+        "y": 208,
+        "width": 161.828125,
+        "height": 36,
+        "top": 208,
+        "right": 1180,
+        "bottom": 244,
+        "left": 1018.171875
+      }
+    }
+  ]
+}

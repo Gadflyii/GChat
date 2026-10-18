@@ -1,0 +1,116 @@
+
+ RUN  v3.2.4 /work/gchat/web-app
+
+ ❯ src/routes/hub/__tests__/index.test.tsx (47 tests | 2 failed | 45 skipped) 180ms
+   ↓ host-scoped Models > opens a direct Downloads link with its transfer controls and preserves later tab choices through history
+   ↓ host-scoped Models > defaults to Installed without a supported tab (/hub/)
+   ↓ host-scoped Models > defaults to Installed without a supported tab (/hub/?tab=unknown)
+   ↓ host-scoped Models > adds an existing file with empty Installed and no release catalog (null)
+   ↓ host-scoped Models > adds an existing file with empty Installed and no release catalog (Catalog is unavailable)
+   ↓ host-scoped Models > leaves inventory alone when the file chooser is cancelled
+   ↓ host-scoped Models > passes the configured GInfer catalog when checking duplicate registration
+   ↓ host-scoped Models > shows a rejected registration and lets the user choose another file
+   ↓ host-scoped Models > guards repeated clicks before the chooser, registration and inventory refresh finish
+   ↓ host-scoped Models > offers local registration only on This computer > Installed
+   ↓ host-scoped Models > uses local inventory and never offers the remote GPU package locally
+   ↓ host-scoped Models > keeps the host selector clear of the window edge
+   ↓ host-scoped Models > downloads to the selected host without invoking a local transfer (local runtime ready: true)
+   ↓ host-scoped Models > downloads to the selected host without invoking a local transfer (local runtime ready: null)
+   ↓ host-scoped Models > downloads to the selected host without invoking a local transfer (local runtime ready: false)
+   ↓ host-scoped Models > describes downloads and recommendations in plain words
+   ↓ host-scoped Models > explains a failed download and offers a retry that matches it
+   × host-scoped Models > says it is checking, not that there are no downloads, until the Host has answered 135ms
+     → [2mexpect([22m[31melement[39m[2m).not.toBeInTheDocument()[22m
+
+[31mexpected document not to contain element, found <p
+  class="text-sm text-muted-foreground"
+>
+  0 MiB
+   of unfinished downloads · 
+  0 MiB
+   of downloaded models. Only one model downloads at a time on each computer.
+</p> instead[39m
+   × host-scoped Models > keeps the first failed inventory unknown until Refresh downloads succeeds 43ms
+     → [2mexpect([22m[31melement[39m[2m).not.toBeInTheDocument()[22m
+
+[31mexpected document not to contain element, found <p
+  class="rounded-xl border p-6 text-center text-muted-foreground"
+>
+  No downloads on this computer yet. Choose Recommended to find a model.
+</p> instead[39m
+   ↓ host-scoped Models > moves between the model tabs with the arrow keys and keeps one tab stop
+   ↓ host-scoped Models > shows a failed load as a plain message, without the stale-inventory note
+   ↓ host-scoped Models > explains a model with no saved startup settings by name and links to GInfer Hosts
+   ↓ host-scoped Models > shows a model started from GInfer Hosts as running and stops that Host instance
+   ↓ host-scoped Models > disables mutations against an offline host even with saved inventory
+   ↓ host-scoped Models > loads an installed model with profile defaults and automatic GPU selection
+   ↓ host-scoped Models > waits for local runtime preparation before loading an installed model (ready: null)
+   ↓ host-scoped Models > waits for local runtime preparation before loading an installed model (ready: false)
+   ↓ host-scoped Models > keeps Load disabled after a local runtime error until readiness recovers (ready: null)
+   ↓ host-scoped Models > keeps Load disabled after a local runtime error until readiness recovers (ready: true)
+   ↓ host-scoped Models > shows an unavailable selected GPU error and restores Load after forwarding the choice
+   ↓ host-scoped Models > disables Load for unavailable explicit selection []
+   ↓ host-scoped Models > disables Load for unavailable explicit selection [ 'missing-gpu' ]
+   ↓ host-scoped Models > does not switch away from another local model without confirmation
+   ↓ host-scoped Models > shows scoped verification, profiling and elapsed progress while a long Load stays pending
+   ↓ host-scoped Models > ignores another operation status and keeps the load alive through a polling error
+   ↓ host-scoped Models > cancels only its own load and waits for native cleanup before restoring Load
+   ↓ host-scoped Models > cancels a pending operation when the Models route unmounts
+   ↓ host-scoped Models > does not cancel a Ready operation when the route unmounts
+   ↓ host-scoped Models > refreshes downloads without searching for installed files
+   ↓ host-scoped Models > explains a recommendation refresh failure and keeps diagnostics optional
+   ↓ host-scoped Models > explains a queued download and offers the supported next action
+   ↓ host-scoped Models > explains a downloading download and offers the supported next action
+   ↓ host-scoped Models > explains a pausing download and offers the supported next action
+   ↓ host-scoped Models > explains a paused download and offers the supported next action
+   ↓ host-scoped Models > explains a verifying download and offers the supported next action
+   ↓ host-scoped Models > explains a installed download and offers the supported next action
+   ↓ host-scoped Models > explains a failed download and offers the supported next action
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/routes/hub/__tests__/index.test.tsx > host-scoped Models > says it is checking, not that there are no downloads, until the Host has answered
+Error: [2mexpect([22m[31melement[39m[2m).not.toBeInTheDocument()[22m
+
+[31mexpected document not to contain element, found <p
+  class="text-sm text-muted-foreground"
+>
+  0 MiB
+   of unfinished downloads · 
+  0 MiB
+   of downloaded models. Only one model downloads at a time on each computer.
+</p> instead[39m
+ ❯ src/routes/hub/__tests__/index.test.tsx:314:65
+    312|       expect(screen.getByText('Checking for downloads…')).toBeInTheDoc…
+    313|       expect(screen.queryByText('No downloads on this computer yet. Ch…
+    314|       expect(screen.queryByText(/of unfinished downloads/)).not.toBeIn…
+       |                                                                 ^
+    315|     } finally {
+    316|       await act(async () => { answer([]) })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/routes/hub/__tests__/index.test.tsx > host-scoped Models > keeps the first failed inventory unknown until Refresh downloads succeeds
+Error: [2mexpect([22m[31melement[39m[2m).not.toBeInTheDocument()[22m
+
+[31mexpected document not to contain element, found <p
+  class="rounded-xl border p-6 text-center text-muted-foreground"
+>
+  No downloads on this computer yet. Choose Recommended to find a model.
+</p> instead[39m
+ ❯ src/routes/hub/__tests__/index.test.tsx:327:110
+    325|     expect(await screen.findByText('Could not check your downloads. Op…
+    326|     expect(screen.queryByText('Checking for downloads…')).not.toBeInTh…
+    327|     expect(screen.queryByText('No downloads on this computer yet. Choo…
+       |                                                                                                              ^
+    328|     expect(screen.queryByText(/of unfinished downloads/)).not.toBeInTh…
+    329| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 45 skipped (47)
+   Start at  08:34:37
+   Duration  2.53s (transform 336ms, setup 211ms, collect 1.57s, tests 180ms, environment 331ms, prepare 70ms)
+

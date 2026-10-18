@@ -1,0 +1,58 @@
+{
+  "at": "2026-10-18T08:38:00.131014+00:00",
+  "root": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018",
+  "source": "6b7f42daf + candidate ModelManagement diff",
+  "launcher_pid": 254392,
+  "xvfb_pid": 254379,
+  "argv": [
+    "taskset",
+    "-c",
+    "88-95",
+    "nice",
+    "-n",
+    "10",
+    "dbus-run-session",
+    "--",
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-c",
+    "printf \"\\n\" | gnome-keyring-daemon --unlock --components=secrets; exec \"$1\"",
+    "_",
+    "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/donor-appdir/AppRun"
+  ],
+  "xvfb_argv": [
+    "taskset",
+    "-c",
+    "88-95",
+    "nice",
+    "-n",
+    "10",
+    "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/tools/usr/bin/Xvfb",
+    ":87",
+    "-screen",
+    "0",
+    "1440x1000x24",
+    "-auth",
+    "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/xauth",
+    "-nolisten",
+    "tcp"
+  ],
+  "env": {
+    "HOME": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/home",
+    "XDG_RUNTIME_DIR": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/runtime",
+    "XDG_CONFIG_HOME": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/config",
+    "XDG_DATA_HOME": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/data",
+    "XDG_CACHE_HOME": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/cache",
+    "DISPLAY": ":87",
+    "XAUTHORITY": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018/xauth",
+    "WEBKIT_INSPECTOR_HTTP_SERVER": "127.0.0.1:19407"
+  },
+  "wayland_unset": true,
+  "private_dbus_keyring": true,
+  "input": "native xdotool/XTest; inspector read-only",
+  "binaries": {
+    "gchat": "b21a94e92792e3f34c9caadb2f468e29e460e42168475b3b335252af2c8e3df9",
+    "ginfer-host": "301da57704a22d4e5080fb10f2b70025431fd2018467f9903c6fcc3c810ed866"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "at": "2026-10-18T08:45:49.870894+00:00",
+  "app_closed_first": 290058,
+  "host_pid": 306929,
+  "retained_parent": 1,
+  "host_paused": true,
+  "purpose": "fresh app initial inventory fails with own Host unavailable"
+}

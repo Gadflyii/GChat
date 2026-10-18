@@ -1,0 +1,60 @@
+{
+  "row": "GUI-DOWNLOADS-LOADING-STATE",
+  "owner": "Codex 7",
+  "source_base": "6b7f42daf42c47a25205970312b067fc365c9d67",
+  "branch": "test/c7-downloads-loading-native-20261018",
+  "status": "PASS; source and native evidence merge-ready",
+  "defect": "Unanswered initial inventory rendered zero byte totals; first failure also rendered an empty inventory.",
+  "fix": "Use the successful-inventory flag for summary totals and empty state; retain the existing actionable error until Refresh succeeds.",
+  "verification": {
+    "baseline_regressions": "2 expected failures against unchanged source",
+    "focused": 50,
+    "affected_eslint": "PASS",
+    "frontend_host_desktop_build": "PASS",
+    "make_verify": {
+      "invocations": 1,
+      "exit": 0,
+      "app_passed": 3513,
+      "app_skipped": 6,
+      "extension_passed": 127,
+      "rust_passed": 1284,
+      "rust_ignored": 28,
+      "critical_coverage_floors": 6,
+      "existing_lint_warnings": 5,
+      "receipt": "verify-result.json",
+      "log": "verify.log"
+    },
+    "external_profile_catalogs": "catalog-inputs.json; exact GInfer5825c2e39 private inputs"
+  },
+  "native": {
+    "platform": "Linux x86_64, AIS-2-8592-L01",
+    "display": ":87 private Xvfb, app1200x800",
+    "input": "native XTest only; inspector reads/snapshots only; background polling also remains enabled, so recovery is not attributed exclusively to the click",
+    "pending": "PASS pending.png/pending-dom.json; checking message without zero totals/empty claim",
+    "first_failure": "PASS failure.png/failure-dom.json; readable actionable error, no empty-list claim, zero totals or checking message",
+    "refresh_recovery": "PASS recovery.png/recovery-dom.json; native Refresh click followed by own Host resume at 08:52:09Z, confirmed empty inventory and zero totals by 08:52:17Z, error cleared",
+    "fixture": "native-failure-fixture.json: close app first, confirm running Host reparented to PID1, pause own Host then open fresh app",
+    "invalid_attempt": "native-interruption.json records the rejected pause-before-close attempt and corrected order",
+    "models_gpu": "No download, model load, inference or GPU work",
+    "acceptance_screenshots": [
+      "pending.png",
+      "failure.png",
+      "recovery.png"
+    ]
+  },
+  "limitations": [
+    "Windows not exercised",
+    "No transfer/payload integrity or inference qualification"
+  ],
+  "inventory": {
+    "disposable_root": "/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018",
+    "booking": 3164,
+    "cpus": "88-95",
+    "cleanup": "PASS: own processes stopped by verified PID; disposable root removed; booking3164 canceled; read-only donors unchanged",
+    "returned": "2026-10-18T08:53:13Z"
+  },
+  "source_files": {
+    "web-app/src/containers/ModelManagement.tsx": "bdc689a9ae35abaa8913b8f4b879dd3bbc69c035759d4717cfdec527be3e253b",
+    "web-app/src/routes/hub/__tests__/index.test.tsx": "b1c38332782d76808881a85516ab6c7d45844ec0031be006632eb8288d5d9e63"
+  }
+}

@@ -1,5 +1,36 @@
 # GInfer host UI
 
+## Downloads initial inventory — C7, October 18
+
+`GUI-DOWNLOADS-LOADING-STATE` is fixed on
+`test/c7-downloads-loading-native-20261018` from `6b7f42daf`.
+Before the first successful Host inventory, Models → Downloads now withholds
+byte totals and empty-list claims. Checking remains visible while waiting;
+an initial failure shows the existing readable error and Refresh downloads.
+After a successful refresh, the real inventory and totals appear.
+
+Both regressions fail against unchanged source and pass with the fix:
+**50 focused Models/store tests**, affected ESLint and the matching
+frontend/Host/desktop build pass. ONE `make verify` passes:
+**3,513 app / 6 skipped, 127 extension, 1,284 native / 28 ignored**, lint
+(five existing warnings), types, quality guards and six critical coverage floors.
+Native Linux screenshots cover [pending](../../out/c7-downloads-loading-20261018/pending.png),
+[first failure](../../out/c7-downloads-loading-20261018/failure.png) and
+[recovery](../../out/c7-downloads-loading-20261018/recovery.png).
+The failure fixture pauses only its own detached private Host; a native
+Refresh click followed by resuming that Host recovers the confirmed empty
+inventory. Background polling remains enabled, so this does not attribute
+recovery exclusively to the click; the focused regression proves that button path.
+[Result and limits](../../out/c7-downloads-loading-20261018/result.json).
+
+Owner C7; worktree `/ai/gchat-worktrees/c7-downloads-loading-native-20261018`.
+Independent AppDir/HOME/XDG/runtime700, D-Bus/keyring and Xvfb ran on S1
+CPU88–95 booking3164. Owned processes stopped by verified PIDs; the disposable root
+`/media/ron/SSD_RAID/ai/tmp-c7-downloads-loading-20261018` was removed.
+CPU88–95 returned08:53Z and booking3164 canceled.
+Read-only donors remain unchanged. Windows, model transfers, payload integrity
+and inference are outside this inventory leaf. Next: merge the source/evidence branch.
+
 ## Benchmark plain intro — C7, October 18
 
 `GUI-BENCHMARK-PLAIN-INTRO` passes its remaining Linux native wording leaf.
