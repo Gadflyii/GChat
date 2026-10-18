@@ -1,0 +1,264 @@
+{
+  "models": [
+    {
+      "artifact_set": false,
+      "id": "c37797c3-2d94-40a2-a622-9478dfaff956",
+      "metadata": {
+        "draft_tp": 1,
+        "identity": {
+          "model_id": "qwen3.8-27b",
+          "weights_id": "smol-q2g64-mix-dflash2-q4"
+        },
+        "nvfp4_kv_available": true,
+        "object_count": 1193,
+        "size_bytes": 10667321600,
+        "tp_size": 1
+      },
+      "path": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4/model.ginfer"
+    }
+  ],
+  "launch_profiles": [
+    {
+      "compatible_gpu_groups": [],
+      "gpu_groups": [],
+      "model_id": "c37797c3-2d94-40a2-a622-9478dfaff956",
+      "profile": {
+        "artifact_bytes": 10667321600,
+        "artifact_sha256": "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+        "compute_capability": "8.6",
+        "concurrency": 8,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 3080 Ti Laptop GPU",
+        "id": "rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-52k-int8-screened",
+        "identity": {
+          "model_id": "qwen3.8-27b",
+          "weights_id": "smol-q2g64-mix-dflash2-q4"
+        },
+        "max_context": 53248,
+        "min_memory_mib_per_gpu": 16384,
+        "name": "Qwen 27B 2-bit mix \u00b7 483343c2 \u00b7 52K context \u00b7 8 requests \u00b7 screened",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": null,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 0,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "engine_revision": "aa1c480162683d6da344456e2ccf0c14d2d291a3",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/laptop/qwen-combined-capacity-default-prefill/: clean aa1c SM86, Text/INT8/fixedDFlash7/graphs+prefix; auto context53478 rounded down to53248 at C8, final arena2089811968 bytes, automatic KV with314572800 reserve. Four short C8 waves,32x500 IDs exact, minimum sampled GPU free1117782016 and Host MemAvailable22158290944 bytes, native/health0. Expected noncanonical validator3 is diagnostic. Arch signed2026-10-18T11:19:25Z; conditional minimum GPU free exceeds reserve. Canonical8181 standard passed52x500 exact, native/runner/lifecycle/health0; see qwen-combined-standard/evidence-summary.json, including power and brief thermal-throttle telemetry. Signed-bound natural C1/C4 passed601.473/623.002seconds,83 HTTP200/native ID joins and79 exact per-seed comparisons, all stop_token; native/runner/lifecycle/health0. See qwen-combined-natural/evidence-summary.json. Returned11:46Z. Screened startup with full_context_requests0; no simultaneous maximum-length cohort claim.",
+          "free_bytes_per_gpu": 1117782016,
+          "full_context_requests": 0,
+          "smoke_requests": 8,
+          "tier": "screened-startup"
+        },
+        "tp": 1,
+        "vram_tier_gib": 16
+      }
+    },
+    {
+      "compatible_gpu_groups": [
+        [
+          "GPU-799bff3c-3038-b799-a3f1-0fe9842c7e4c"
+        ]
+      ],
+      "gpu_groups": [
+        [
+          "GPU-799bff3c-3038-b799-a3f1-0fe9842c7e4c"
+        ]
+      ],
+      "model_id": "c37797c3-2d94-40a2-a622-9478dfaff956",
+      "profile": {
+        "artifact_bytes": 10667321600,
+        "artifact_sha256": "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+        "compute_capability": "8.9",
+        "concurrency": 8,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 4090",
+        "id": "rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened",
+        "identity": {
+          "model_id": "qwen3.8-27b",
+          "weights_id": "smol-q2g64-mix-dflash2-q4"
+        },
+        "max_context": 131072,
+        "min_memory_mib_per_gpu": 24563,
+        "name": "Qwen 27B 2-bit mix \u00b7 483343c2 \u00b7 128K context \u00b7 8 requests \u00b7 screened",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": null,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 0,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "engine_revision": "aa1c480162683d6da344456e2ccf0c14d2d291a3",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/ada4090/qwen-combined-capacity/: clean aa1c SM89, Text/INT8/fixedDFlash7/graphs+prefix; auto context131072 at C8, final arena10112466944 bytes, automatic KV with314572800 reserve. Four short C8 waves,32x500 IDs exact, minimum sampled GPU free662700032 and Host MemAvailable35981414400 bytes, native/health0. Expected noncanonical validator3 is diagnostic. Arch signed2026-10-18T11:21:06Z, superseding old receipt. Canonical8181 standard passed52x500 exact, native/runner/lifecycle/health0; see qwen-combined-standard/evidence-summary.json. Signed-bound natural C1/C4 passed602.838/615.643seconds,208 HTTP200/native ID joins and204 exact per-seed comparisons, all stop_token; native/driver/lifecycle/health0. See qwen-combined-natural/evidence-summary.json. Returned11:45Z. Screened startup with full_context_requests0; no simultaneous maximum-length cohort claim.",
+          "free_bytes_per_gpu": 662700032,
+          "full_context_requests": 0,
+          "smoke_requests": 8,
+          "tier": "screened-startup"
+        },
+        "tp": 1,
+        "vram_tier_gib": 24
+      }
+    },
+    {
+      "compatible_gpu_groups": [],
+      "gpu_groups": [],
+      "model_id": "c37797c3-2d94-40a2-a622-9478dfaff956",
+      "profile": {
+        "artifact_bytes": 10667321600,
+        "artifact_sha256": "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4",
+        "compute_capability": "12.0",
+        "concurrency": 8,
+        "draft_tp": 1,
+        "gpu_name": "NVIDIA GeForce RTX 5090",
+        "id": "rtx5090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened",
+        "identity": {
+          "model_id": "qwen3.8-27b",
+          "weights_id": "smol-q2g64-mix-dflash2-q4"
+        },
+        "max_context": 131072,
+        "min_memory_mib_per_gpu": 32606,
+        "name": "Qwen 27B 2-bit mix 483343c2 \u00b7 128K context \u00b7 8 requests \u00b7 INT8 KV \u00b7 screened",
+        "options": {
+          "draft_policy": "fixed",
+          "draft_tokens": 7,
+          "draft_tp": 1,
+          "expert_lfu": true,
+          "flash_host_ram_headroom_gib": null,
+          "host_kv_cache_bytes": null,
+          "kv_arena_bytes": null,
+          "kv_arena_headroom_bytes": 314572800,
+          "kv_dtype": "int8",
+          "no_cuda_graph": false,
+          "prefill_chunk": 0,
+          "progressive_ready": false,
+          "spec": "dflash",
+          "structured_outputs": false,
+          "vision": false,
+          "vram_budget_bytes": null
+        },
+        "platform": "linux",
+        "qualification": {
+          "engine_revision": "aa1c480162683d6da344456e2ccf0c14d2d291a3",
+          "evidence": "bench/reports/consumer-launch-profiles-20261018/rtx5090/qwen-capacity-aa1c48016/summary.json; bench/reports/consumer-launch-profiles-20261018/rtx5090/qwen-standard/{evidence-summary.json,performance-matrix-import.json}; bench/reports/consumer-launch-profiles-20261018/rtx5090/qwen-natural/{evidence-summary.json,guard.json,identity.json}. Arch signed131072/C8 at2026-10-18T10:02:44Z; clean aa1c48016 SM120a re-witness completed11:06:24Z. Text TP1, fixedDFlash7, INT8 KV, automatic arena16564293632 bytes, graphs/prefix on,300MiB reserve. Capacity C8 returned32 arrays/16000 exact IDs; controller3 is the expected noncanonical-context validator limitation, native/health0. Canonical8181-context C1/C4/C8 ladder returned52 arrays/26000 exact IDs against retained same-phase/wave/lane references and across concurrency. Unchanged uncapped natural600sC1 then600sC4 completed11:30:35Z:208HTTP200,221500IDs,204exact seeded comparisons including shared C1/C4 seed. Standard and natural native/controller/lifecycle/health exits0; sampled owned VmSwap0. Recorded free bytes use the lower448790528-byte standard minimum; natural five-second MiB-derived minimum684720128 bytes. Screened startup and short requests, zero full-context requests; no simultaneous full-length cohort guarantee. Greedy smoke sampling is not imposed by this profile.",
+          "free_bytes_per_gpu": 448790528,
+          "full_context_requests": 0,
+          "smoke_requests": 8,
+          "tier": "screened-startup"
+        },
+        "tp": 1,
+        "vram_tier_gib": 32
+      }
+    }
+  ],
+  "gpus": [
+    {
+      "compute_capability": "8.9",
+      "memory_mib": 24564,
+      "name": "NVIDIA GeForce RTX 4090",
+      "uuid": "GPU-799bff3c-3038-b799-a3f1-0fe9842c7e4c"
+    }
+  ],
+  "instances": [
+    {
+      "active_requests": 0,
+      "configuration": {
+        "artifact": "/home/ron/tmp-c5-consumer-first-use-20261018/home/data/GChat/data/ginfer/models/483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4/model.ginfer",
+        "artifact_set": false,
+        "concurrency": 8,
+        "draft_policy": "fixed",
+        "draft_tokens": 7,
+        "draft_tp": 1,
+        "expert_lfu": true,
+        "flash_host_ram_headroom_gib": null,
+        "gpu_uuids": [
+          "GPU-799bff3c-3038-b799-a3f1-0fe9842c7e4c"
+        ],
+        "host_kv_cache_bytes": null,
+        "instance_id": "1ee7a7be-a54d-489f-8c7e-ddff27d50716",
+        "kv_arena_bytes": null,
+        "kv_arena_headroom_bytes": 314572800,
+        "kv_dtype": "int8",
+        "max_context": 131072,
+        "model_id": "qwen3.8-27b/smol-q2g64-mix-dflash2-q4",
+        "no_cuda_graph": false,
+        "port": 45009,
+        "prefill_chunk": 0,
+        "progressive_ready": false,
+        "spec": "dflash",
+        "structured_outputs": false,
+        "tp": 1,
+        "vision": false,
+        "vram_budget_bytes": null
+      },
+      "display_name": "qwen3.8-27b/smol-q2g64-mix-dflash2-q4",
+      "instance_id": "1ee7a7be-a54d-489f-8c7e-ddff27d50716",
+      "last_error": null,
+      "model_metadata": {
+        "created": 1792338007,
+        "id": "qwen3.8-27b/smol-q2g64-mix-dflash2-q4",
+        "max_model_len": 131072,
+        "object": "model",
+        "owned_by": "ginfer"
+      },
+      "profile": {
+        "concurrency": 8,
+        "draft_policy": "fixed",
+        "draft_tokens": 7,
+        "draft_tp": 1,
+        "expert_lfu": true,
+        "flash_host_ram_headroom_gib": null,
+        "gpu_uuids": [
+          "GPU-799bff3c-3038-b799-a3f1-0fe9842c7e4c"
+        ],
+        "host_kv_cache_bytes": null,
+        "instance_id": "1ee7a7be-a54d-489f-8c7e-ddff27d50716",
+        "kv_arena_bytes": null,
+        "kv_arena_headroom_bytes": 314572800,
+        "kv_dtype": "int8",
+        "max_context": 131072,
+        "model_id": "c37797c3-2d94-40a2-a622-9478dfaff956",
+        "no_cuda_graph": false,
+        "prefill_chunk": 0,
+        "progressive_ready": false,
+        "qualified_profile_id": "rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened",
+        "spec": "dflash",
+        "structured_outputs": false,
+        "vision": false,
+        "vram_budget_bytes": null
+      },
+      "session_id": "b92faee0-2e12-4709-99ba-0b231bf38b20",
+      "status": "ready",
+      "upstream_model_id": "qwen3.8-27b/smol-q2g64-mix-dflash2-q4"
+    }
+  ],
+  "inventory_errors": [],
+  "profile_error": null,
+  "observed_utc": "2026-10-18T15:40:20.496535+00:00"
+}
