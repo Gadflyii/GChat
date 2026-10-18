@@ -1,5 +1,190 @@
 # GChat installer refresh
 
+## Native Windows SM86 / SM89 qualification — PASS, October 18
+
+**SM86 and SM89 Windows are qualified for the exact released images, Qwen
+artifact and C1 workload below.** Both native bundled-Host gates and both
+same-device Linux ID comparisons passed. The
+released bundled Host selected the actual SM86/SM89 executables, completed one
+C1 request on each Windows machine and shut down normally. Owner: Gchat 3, branch
+`test/gchat3-windows-sm86-sm89-native-20261018`, worktree
+`/ai/gchat-worktrees/gchat3-windows-sm86-sm89-native-20261018`.
+
+### Deliverable and fixed acceptance
+
+Qualify the released Windows images on the physical RTX3080Ti laptop `.153`
+and RTX4090 `.143`, using GChat `c75096fad`, bundled Host `276d89183` and clean
+Engine `b76ce57a3cc4823f127a1ce718da454ef1f3510f`. Verify packaged inventory,
+sizes and hashes for all three runtimes and the actual GPU-selected child.
+Compare the four generated-token lists from one native C1 request per host
+with the matching same-SM Linux b76 reference. An ID mismatch fails the gate;
+no tuning, sampling change or context reduction is authorized.
+
+Arch approved Qwen 27B **2-bit mix**, SHA256
+`483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4`,
+10,667,321,600 bytes, with Text TP1, fixed DFlash four, draft TP1, INT8 KV,
+Automatic KV and 300MiB headroom, full context262144, graphs/prefix/thinking
+and structured outputs enabled, Vision off and prefill auto. The C1 corpus is
+`qwen3_8_27b-max-perf-tail2048-v1`: 2,048 prompt tokens, 500 output tokens,
+concurrency1, one warmup and one measured round. The benchmark forces greedy
+sampling. Compare all 500 IDs in each of
+`cold_prefill.{warmup,measured}[0].lanes[0].generated_token_ids` and
+`warm_generation.{warmup,measured}[0].lanes[0].generated_token_ids`.
+
+Use private Windows app/data paths, exclusive GPU bookings with WSL quiet,
+normal Engine Stop, optional background-profile Cancel and identity-bound
+Host Stop. At c750 `/instances` performs artifact-scoped Ensure; the newer
+selected-artifact API is absent. Ron permits user-profile installation on these
+two test machines; his main PC install stays off limits. No elevation, Windows
+settings changes, signing or publication. No performance, other-model,
+current-main Host or desktop GUI acceptance is implied.
+
+### Retained native results
+
+| Physical host | Actual packaged child SHA256 | C1 / normal lifecycle | Returned |
+| --- | --- | --- | --- |
+| `RON-X17R2`, RTX3080Ti Laptop, SM86 | `8a8f6fc261f804fd13d3d41992076bac8b5d84514db98b133da26847d2599d18` | PASS / owned Job empty | 10:48:59Z; Linux-preparation slot379 returned10:59Z |
+| `DESKTOP-DG588BU`, RTX4090, SM89 | `14f7d0bd75475ef27f601673ef0ea68596b661e6eaf5973066cd6a98e2bd44de` | PASS / owned Job empty | 11:05:20Z; slot739 canceled |
+
+Both complete runtime inventories passed before the sole instance creation.
+The actual children were `windows/sm86/bin/ginfer-serve.exe` and
+`windows/sm89/bin/ginfer-serve.exe`, matching their manifests. Both native
+builds report clean b76, CUDA13.3.73 and Release. All four native lists contain
+500 IDs and have compact-JSON SHA256
+`a5ec0932c1b653a9817f54fc3372c9bb52b138b84c0a39263e8f238ccda57605`.
+The independent Linux comparisons below also pass.
+
+The owned-process guards passed without emergency or elapsed-time kills.
+Arch's native emergency floor is max(4GiB, 12.5% physical RAM): 4,294,967,296
+bytes on the laptop and 6,422,114,304 on Ada. Both phases used normal Engine
+Stop, normal Cancel for resumed optional remaining-format profiling, then
+Host Stop. The laptop's first Host Stop correctly returned busy409 before
+Cancel; that receipt is retained.
+
+Evidence root: `/ai/gchat/out/windows-sm86-sm89-native-20261018/`.
+Laptop raw request/response and session are under
+`laptop-native/api-evidence/`; child and guard receipts are under
+`laptop-native/evidence/`. Ada's reviewed
+[summary](../../out/windows-sm86-sm89-native-20261018/ada-command-preparation/native-summary.md)
+and [result](../../out/windows-sm86-sm89-native-20261018/ada-command-preparation/native-result.json)
+link its sanitized `native-evidence/` packet. All 20 copied Ada receipts passed
+size/hash checks. No private Host credentials were copied.
+
+### Matching Linux references
+
+The immutable, same-GPU Linux hardware profiles both record CUDA runtime
+`13030`. The first exact-source b76 Linux images used CUDA13.1 (`13010`), so
+the laptop exited naturally before Ready with a typed profile-inventory
+mismatch and sent **no request**. This is an invalid reference, not an ID
+failure. Preserve the raw `c1/` and `c1.lifecycle/` receipts. Do not alter or
+regenerate either donor profile. The earlier dependency precheck also found
+DT_RPATH choosing installed FFmpeg ahead of LD_LIBRARY_PATH; the prepared
+cards now preload the verified owned dependency closure and assert actual
+resolved paths without changing the ELF.
+
+Both replacement `ginfer-serve` images are built from the same clean b76 source
+with S1's existing CUDA13.3.73 toolchain. The durable build ran11:03:46–11:22:48Z,
+container `gchat3-b76-cuda133-linux-sm86-sm89-20261018`, on S1
+CPUs96–103/booking3251. It used the shared socket1 compile lock,
+eight-CPU affinity, compile6/link1/Cargo1 pools, `cmake --build -j`, the existing
+release image and read-only `/usr/local/cuda-13.3`. No S1 GPU/model work.
+[Command and launch receipts](../../out/windows-sm86-sm89-native-20261018/linux-build-cuda13.3-command.json)
+record the effective build. SM86 passed11:13:44Z: clean b76, Release,
+CUDA13.3.73, architecture86, 323,274,136 bytes, SHA256
+`9259f4aab6b2ada5bbe6339066e8c0f9aea425c1ebb4f5756387f220236a7376`.
+SM89 passed11:22:48Z: 298,446,808 bytes, SHA256
+`1b433a3fe8735305d28c7b0997e3711d256778bfb3726bc5c7b450de21592ad2`.
+Both six-library closures and runtime13030 passed. The full job exited0
+without OOM; booking3251 returned11:24Z. No build remains live.
+
+After terminal builds, relay only each new ELF, matching libcudart and small
+command/control files during an agreed untimed local5090 boundary. Reuse the
+five already verified private FFmpeg libraries. Rebook each target after its
+current owner's actual return; no idle hold or preemption. Verify fresh host,
+GPU, memory, input hashes, clean b76 version and actual target library closure
+before either sole Linux C1 request. Prepared cards/controls are under
+`out/windows-sm86-sm89-native-20261018/linux-reference-preparation/`, named
+`{laptop,ada}-cuda13.3-{command.txt,controls.json}`. Both cards are bound to the finished ELF hashes. The small command/control
+files were staged and verified at11:29Z. The relay waited for actual local
+copy/build and destination returns; C1 Ada742 returned12:00Z, then C6 canceled
+its unlaunched local1459 to permit the shared untimed boundary. The exact
+623,285,104-byte stream (two ELFs plus matching libcudart) passed both target
+size/SHA checks and returned12:02:17Z. No binary was retained locally; see
+`out/windows-sm86-sm89-native-20261018/linux-relay-result.json`.
+
+Both sole reference cards launched durably after fresh host/GPU and memory
+admission: laptop12:03:00Z, booking382/CPUs0–19; Ada12:03:16Z,
+CPUs0–31 through12:11Z. Fresh available WSL memory was27,848,900,608 and
+41,902,755,840 bytes respectively, above22,478,481,664; no compute apps were
+present. Command cards retain ordered build/GPU locks, exact input/library
+checks and the Ready-before-stop rule. Laptop reached Ready12:04:06Z and
+finished12:04:16Z with normal Engine exit0. Its four 500-ID lists exactly
+equal Windows; raw build, source, GPU UUID, workload and startup settings match.
+The compiler and private profile path differ; native runtime telemetry reports
+13.4 versus Linux13.3. See `laptop-linux-cuda13.3/{result,comparison}.json`.
+Booking382 returned12:04Z and C5 received the retained profile reuse path.
+
+Ada reached Ready12:05:26Z and finished12:05:31Z with normal Engine exit0.
+Its four 500-ID lists also exactly equal Windows; raw build, clean b76 source,
+CUDA13.3.73, SM89, GPU UUID, workload and all startup settings match. The
+compiler and private profile path differ. Both runtime telemetry records
+report13.3. See `ada-linux-cuda13.3/{result,comparison}.json`. The coordinator
+read both pairs of raw responses and independently confirmed all eight exact
+500-ID comparisons. Both helpers
+reported only the expected historical context-summary diagnostic described
+below, with no anomalies. Ada743 was canceled after terminal receipt review;
+Gchat2's CPU/RAM Hyper-V guest check follows, then C5 Flash. No bulk local relay
+or Gchat3 compute hold remains. C6 local timing1460 returned12:08Z.
+
+Bubbs assigned the current-main/current-dev-next Linux RC rebuild and installed
+DEB walk to Codex3 at11:14Z. The inactive RC cache grant, exact retained
+packages and prior walk limitations were handed over in
+`out/linux-rc-final-20261017/linux-rc-c3-takeover-20261018.md`. No Gchat3 Linux
+RC build or fixture hold remains; Windows qualification stays here.
+
+Arch's10:44:20Z Linux policy requires Windows and Linux sequentially and WSL
+MemAvailable at least22,478,481,664 bytes before start: the19,257,256,192-byte
+startup plan plus a3GiB floor. **Never stop a WSL model before Ready**, including
+for memory-floor or booking cutoff. Once Ready, the existing resident runner
+enforces its3GiB floor and normal owned-process cleanup; the lifecycle
+subreaper retains the build/GPU locks until children are reaped.
+
+Use existing `run_resident_std.py` and `scoreboard_lifecycle.py` from the
+retained C5 first-use matrix; both match b76. `resident_report.py` is the
+retained compatible helper. This ID-only gate uses full262144 context;
+the historical runner's aggregate expects8181/32768 and may report
+`INCOMPLETE`/exit3 for `reported TP/KV/context differs` **after saving the raw
+response**. Inspect raw source/device/settings/workload and compare four ID
+lists directly. Do not call that aggregate a performance PASS or repeat a
+completed request to change its status.
+
+### Owned inventory and retention
+
+| Host / owner | Exact root or payload | State / retention |
+| --- | --- | --- |
+| S1 / Gchat3 | `/media/ron/SSD_RAID/ai/tmp-gchat3-windows-sm86-sm89-native-20261018` | Ten disposable source/build/cache/library children and two exited containers retired12:11Z after both ID gates; 5,573,704,752 logical bytes released. Only 208,384 bytes of root receipts remain, also copied locally with hashes |
+| Laptop / Gchat3 | `C:\gchat3-windows-sm86-20261018` | Disposable installer/package/model/ELF/library/tool copies retired12:16Z after C5 returned; 14,965,889,578 logical bytes released. Retains 6,198,169 bytes of immutable profile donor and small receipts |
+| Ada / Gchat3 | `F:\gchat3-windows-sm89-20261018` | Disposable installer/package/model/ELF/library copies retired12:12Z in Gchat2's granted untimed gap; 14,915,974,088 logical bytes released. Retains 14,709,917 bytes of immutable profile donor and small receipts |
+| Local / Gchat3 | `/ai/gchat/out/windows-sm86-sm89-native-20261018` | Small command/result/evidence files only; no installer, ELF or model retention |
+
+Laptop's original C5 donor path was retired. Exact profile bytes remain at
+`/mnt/c/gchat3-windows-sm86-20261018/linux-reference/profile-source.json`,
+SHA256 `4ecd1669b73b2066580d8da43b0f2d02db84377f341af9936b18c6c47a24cc72`;
+C5 has the immutable reuse path. Ada's owned
+`/mnt/f/gchat3-windows-sm89-20261018/linux-reference/profile-source.json`
+retains SHA256
+`e86245581d6dd3bb8234f5f46f8380fd9a7d8884730c57831154663bc3cb208f`.
+Keep both until dependent owners finish. Both images are qualified at the
+fixed scope above. Small raw responses and lifecycle receipts are retained
+locally. S1 and both target disposable builds, RC copies, models and ELFs are
+retired; cleanup used the owners' returned untimed boundaries and preserved
+both donor hashes. The small `linux-build-cleanup.json`, `ada-cleanup.json`
+and `laptop-cleanup.json` receipts record the removed owned paths. Neither
+target has a Gchat3 resource hold. Ron's install and the accepted release
+packages are preserved. Release RC archive/path/SHA remains recorded below.
+This qualification is complete and ready for merge; the lane returns to
+Hosts/first-run GUI rows while Ron's main-PC sign-in gate remains outstanding.
+
 ## Installed selected-artifact preparation — Gchat 3, October 18
 
 `GCHAT-PREPARE-SELECTED-ARTIFACT` **merged as `d0e107da6`** from
@@ -526,11 +711,10 @@ Accepted Engine ZIPs under
 `E:\gchat3-windows-multiarch-20261017\accepted\runtimes`, read-only dependency
 and Linux AppDir donors, the previous RC and delivered NSIS remain retained.
 
-**SM86 and SM89 Windows are physically unqualified** until a native Windows
-RTX 30-series or 40-series machine is available. The fleet 4090 is WSL-only;
-Linux/WSL results cannot qualify native Windows. Native compilation and dispatch
-are established separately. Next: Ron's installer/sign-in gate; Gchat 3 continues
-owned Hosts/first-run GUI rows under rule 21 while that gate waits.
+**SM86 and SM89 Windows passed the native qualification recorded above.**
+Ron corrected the earlier WSL-only inventory: the fleet 4090 and laptop both
+have native Windows. This qualification binds the tested release images,
+artifact and workload; Ron's main-PC installer/sign-in gate remains separate.
 
 ## WINDOWS-MULTIARCH — accepted and merged as c75096fad
 
@@ -629,9 +813,9 @@ effective command, memory telemetry and normal server-exit result). Exact ID
 equality passed for cold-prefill warmup/measured and warm-generation
 warmup/measured, 500 IDs each. The retained Linux ELF was source-bound to
 `b76ce57a3` by its existing SHA receipt; its embedded revision is unknown.
-The temporary local ELF was removed after exit. Native SM86/SM89 requests
-remain physically unqualified, and the separate Windows Flash qualification
-row remains open.
+The temporary local ELF was removed after exit. At that initial merge gate,
+native SM86/SM89 requests were still unqualified; the October18 physical gates
+above now pass. The separate Windows Flash qualification row remains open.
 
 Accepted, unsigned installers are retained under
 `E:\gchat3-windows-multiarch-20261017\accepted\packages`:
@@ -681,7 +865,8 @@ The private fixture used
 `--ensure-running` did not register a locator; control read only this fixture’s
 `data/ginfer/host/host.json`. Its disposable data is removed after shutdown.
 Ron's account, settings and installation remain untouched. Native SM86/SM89
-physical requests remain outstanding; builds/mocked dispatch do not qualify them.
+physical requests were outstanding at that stage and passed the October18
+gates above; builds/mocked dispatch alone do not qualify them.
 
 At 01:58Z Arch changed this ID-only gate to a registered GPU-resident
 Qwen3.8-27B NVFP4/DFlash2 package. The earlier Flash plan left only 9.32 GB
