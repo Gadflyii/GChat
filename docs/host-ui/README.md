@@ -36,6 +36,43 @@ or build. The exact owned root
 (3.45 GB and 3.42 GB of disposable app data released). The retained read-only
 AppDir donor remains in place.
 Docs-only acceptance is recorded; merge is pending.
+## Support issue destination — C3, October 18
+
+`GUI-SETTINGS-SUPPORT-LINK-404` is **WAITING ON RON** for the supported public
+support destination. The private first-user walk opened Settings → Open an
+issue through the native browser at `https://github.com/SectileLabs/gchat/issues`
+and observed GitHub 404. OI110 designates the repository artifacts-only; no
+replacement public issue URL has been supplied. The browser keyring prompt was
+canceled without secrets, then the private browser received normal TERM.
+Evidence: `out/c3-first-user-setup-20261018/private-browser-after-cancel.png`.
+
+The active link now shares one named `GCHAT_ISSUES_URL` constant between its
+`href` and external-opener action. The destination and observable behavior are
+unchanged; the 404 is not fixed. Hidden links and unrelated support targets are
+outside this change. Reuse the existing native 404 observation; no fresh native
+build or GUI run is required for this constant extraction.
+
+Acceptance: existing General route tests, lint and one `make verify`; no test
+for private constant shape. All 26 General cases pass. Lint passes with zero
+errors and five existing warnings. The ONE `make verify` passes 3297 app cases,
+121 extension cases, 1220 native cases and all six coverage floors; six app cases
+are skipped and 28 native cases ignored. No failure, retry or continuation was
+needed. Reuse the existing native 404 evidence; the URL is still unresolved.
+Results: `out/c3-support-url-constant-20261018/{result.json,summary.md}`.
+
+Owner/source:
+`/ai/gchat-worktrees/c3-support-url-constant-20261018`, branch
+`fix/c3-support-url-constant-20261018`, baseline `80424bb41`. Reuse the retained
+S1 root `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`, dependency cache
+and native target under the pinned routed, dependency-offline build fixture.
+All 35 dependency manifests/locks match before reuse. S1 CPUs 88–95 used nice 10
+and the shared socket 1 lock; returned 03:38Z. The container and both disposable
+source archives are removed. The runnable baseline binary is unchanged; the
+coordinator removed the closed older candidates independently. Source,
+dependencies, native target and caches pass to the next owned GUI gate. No new
+build, model, GPU, browser or dependency-install work. This bounded source change
+is merge-ready for coordinator integration. Next: Ron chooses the supported
+public support destination; do not claim that the 404 is fixed.
 
 ## Physical graphics-card inventory — C3, October 18
 

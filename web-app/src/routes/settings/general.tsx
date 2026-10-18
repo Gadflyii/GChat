@@ -35,6 +35,7 @@ import { isRootDir } from '@/utils/path'
 import { setLaunchAtStartup } from '@/lib/launchAtStartup'
 const TOKEN_VALIDATION_TIMEOUT_MS = 10_000
 const GCHAT_CLI_COMMAND = 'gchat-cli'
+const GCHAT_ISSUES_URL = 'https://github.com/SectileLabs/gchat/issues'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.settings.general as any)({
@@ -374,14 +375,12 @@ function General() {
                 description="Report a problem or request a feature."
                 actions={
                   <a
-                    href="https://github.com/SectileLabs/gchat/issues"
+                    href={GCHAT_ISSUES_URL}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(event) => {
                       event.preventDefault()
-                      void handleOpenContactLink(
-                        'https://github.com/SectileLabs/gchat/issues'
-                      )
+                      void handleOpenContactLink(GCHAT_ISSUES_URL)
                     }}
                     className="text-foreground font-medium hover:underline"
                   >
