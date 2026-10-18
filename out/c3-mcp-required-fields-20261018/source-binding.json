@@ -1,0 +1,142 @@
+{
+  "row": "GUI-MCP-REQUIRED-FIELDS",
+  "status": "SOURCE_BINDING_PASS",
+  "checked_utc": "2026-10-18T09:23:19.021864+00:00",
+  "scope": "Source and retained evidence reads only; no tests, build or GUI executed for this binding.",
+  "worktree": "/ai/gchat-worktrees/c3-mcp-required-fields-20261018",
+  "source": {
+    "current": "f1562719583161e23c9f0678bef873e3307afa22",
+    "retained_native_source": "ed68c7443d3d782869dad89736ca049631f8a157",
+    "original_fix": "bbd2b13583d7d7294922ff2dd09bfc6b82744088",
+    "original_merge": "d47f0805133b1f47b671035fd82a125ef63a9959",
+    "original_fix_is_ancestor": {
+      "f1562719583161e23c9f0678bef873e3307afa22": true,
+      "ed68c7443d3d782869dad89736ca049631f8a157": true
+    }
+  },
+  "current_file_binding_to_existing_full_gate": {
+    "web-app/src/containers/dialogs/AddEditMCPServer.tsx": {
+      "current_sha256": "754029b178db7c0980f5de7bc06f28a4aa4ff30f7b5e966b0f9696476437c50b",
+      "current_matches_committed_source": true,
+      "retained_verify_terminal_sha256": "754029b178db7c0980f5de7bc06f28a4aa4ff30f7b5e966b0f9696476437c50b",
+      "matches_retained_verified_file": true
+    },
+    "web-app/src/containers/__tests__/MCPServerDialogs.test.tsx": {
+      "current_sha256": "f03f4d4396360eb6ebcf626d7f39a994321feafa2608b37ed877179b7ac71251",
+      "current_matches_committed_source": true,
+      "retained_verify_terminal_sha256": "f03f4d4396360eb6ebcf626d7f39a994321feafa2608b37ed877179b7ac71251",
+      "matches_retained_verified_file": true
+    }
+  },
+  "ed68_to_current_semantic_sections": {
+    "required_field_rejection": {
+      "equal": true,
+      "ed68_sha256": "4a4f8ba1c6b1443d4075d27fbedaff1822f4bc5259a1dcffc08ad0188630ddfb",
+      "current_sha256": "4a4f8ba1c6b1443d4075d27fbedaff1822f4bc5259a1dcffc08ad0188630ddfb"
+    },
+    "name_connection_type_command_and_address_fields": {
+      "equal": true,
+      "ed68_sha256": "d64b1d1f37d10c10c55b3f3db6cfb0e32947fd1ece58ab7e63d33e3eb502ab8b",
+      "current_sha256": "d64b1d1f37d10c10c55b3f3db6cfb0e32947fd1ece58ab7e63d33e3eb502ab8b"
+    },
+    "alert_and_save_cancel_controls": {
+      "equal": true,
+      "ed68_sha256": "5f80cbd8701e1bea60ae4306b8dfbc5fdac97acc805d3fa3d366d33076632888",
+      "current_sha256": "5f80cbd8701e1bea60ae4306b8dfbc5fdac97acc805d3fa3d366d33076632888"
+    },
+    "required_field_behavioral_test": {
+      "equal": true,
+      "ed68_sha256": "d05ab584dd0518b05d1dabed0fe06b6caeaab880685cff6b00112f6b83ef26cd",
+      "current_sha256": "d05ab584dd0518b05d1dabed0fe06b6caeaab880685cff6b00112f6b83ef26cd"
+    }
+  },
+  "english_field_and_save_copy": {
+    "locale_file": "web-app/src/locales/en/mcp-servers.json",
+    "keys": {
+      "serverName": {
+        "ed68": "Connection name",
+        "current": "Connection name",
+        "equal": true
+      },
+      "enterServerName": {
+        "ed68": "A name you will recognize, such as My calendar",
+        "current": "A name you will recognize, such as My calendar",
+        "equal": true
+      },
+      "command": {
+        "ed68": "Start command",
+        "current": "Start command",
+        "equal": true
+      },
+      "enterCommand": {
+        "ed68": "Paste the command from the tool provider",
+        "current": "Paste the command from the tool provider",
+        "equal": true
+      },
+      "save": {
+        "ed68": "Save connection",
+        "current": "Save connection",
+        "equal": true
+      }
+    },
+    "unchanged_literal_labels": [
+      "How to connect",
+      "Local program (STDIO)",
+      "Web address (HTTP)",
+      "Event stream (SSE)",
+      "Tool server address",
+      "Paste the tool provider’s server address"
+    ]
+  },
+  "observable_rejection_contract": {
+    "stdio": "Enter the start command from the tool provider’s setup instructions.",
+    "http_and_sse": "Enter the web address from the tool provider’s setup instructions.",
+    "behavior": "A named ordinary-form draft with blank command/address returns before onSave; role=alert shows the plain prompt. Save remains available, dialog/input retained. Advanced JSON mode is outside this leaf.",
+    "current_component_lines": {
+      "rejection": [
+        399,
+        406
+      ],
+      "alert": 729,
+      "save": [
+        735,
+        739
+      ]
+    },
+    "current_regression_lines": [
+      138,
+      148
+    ],
+    "regression": "asks for the missing start command or web address in plain words without calling save; checks STDIO and HTTP and asserts onSave never called; SSE shares the same non-STDIO guard."
+  },
+  "unrelated_later_changes": {
+    "component": "ed68 to current changes are command-option row identity, native reorder button/focus, sortable keyboard coordinates and stable argument objects. Arg serialization now reads arg.value; rejection guards, required name/type/command/address labels, error role and Save/Cancel controls are unchanged.",
+    "tests": "Later row-control keyboard/focus regressions expand the suite; the required-field regression is byte-identical."
+  },
+  "retained_verification": {
+    "focused_passed": 11,
+    "focused_receipts": [
+      "/ai/gchat/out/c7-mcp-dialog-row-buttons-20261018/native-result.json",
+      "/ai/gchat/out/c7-mcp-dialog-row-buttons-20261018/summary.md"
+    ],
+    "full_gate_receipt": "/ai/gchat/out/c7-mcp-dialog-row-buttons-20261018/verify-result.json",
+    "full_gate_status": "VERIFY_PASS",
+    "full_gate_exit": 0,
+    "full_gate_start": "2026-10-18T07:40:43.172379+00:00",
+    "full_gate_end": "2026-10-18T07:48:32.503007+00:00",
+    "automatic_retry": false,
+    "counts": {
+      "app_passed": 3459,
+      "app_skipped": 6,
+      "extension_passed": 127,
+      "native_passed": 1275,
+      "native_ignored": 28,
+      "critical_coverage_floors": 6
+    },
+    "original_focused": {
+      "passed": 9,
+      "mailbox": "/ai/coordination/mailbox/bubbs.log:11496"
+    }
+  },
+  "native_evidence_boundary": "C7 row-button native packet proves populated-form row/keyboard actions, not blank-field rejection. Parent owns the separate required-field native capture; this file makes no new GUI acceptance claim."
+}

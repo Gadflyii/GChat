@@ -1,0 +1,27 @@
+{
+  "config": {
+    "mcpServers": {
+      "GChat Browser MCP": {
+        "active": false,
+        "args": [
+          "-y",
+          "search-mcp-server@latest"
+        ],
+        "command": "npx",
+        "env": {
+          "BRIDGE_HOST": "127.0.0.1",
+          "BRIDGE_PORT": "17389"
+        },
+        "official": true
+      }
+    },
+    "mcpSettings": {
+      "toolCallTimeoutSeconds": 30
+    }
+  },
+  "sha256": "3dbcc10950c34316ad4dd3f1c1063a635da925f6e15fb9bc84cf1c913aade02f",
+  "accepted_mcp_log_lines": [
+    "[2026-10-18][09:19:28][app_lib::core::mcp::helpers][INFO] MCP server initialization complete: 0 successful, 0 failed"
+  ],
+  "matches_after_dark_sha256": true
+}

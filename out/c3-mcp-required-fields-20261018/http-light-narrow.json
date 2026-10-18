@@ -1,0 +1,91 @@
+{
+ "utc": "2026-10-18T09:24:16.272Z",
+ "size": [
+  1024,
+  800
+ ],
+ "theme": "bg-app",
+ "dialog": "Add tool connection\n\nUse the connection details supplied by the tool provider. Give the connection a name, choose how it connects, then select Save connection.\nConnection name\nHow to connect\nChoose the connection type named in the tool provider’s setup instructions.\n\n\nLocal program (STDIO)\n\nWeb address (HTTP)\n\nEvent stream (SSE)\nTool server address\nExtra connection details (headers)\n\nLeave these empty unless the tool provider supplies them, for example to sign in with an access key.\n\n\nConnection time limit (seconds)\nSet this only if the provider recommends a longer wait when connecting.\nEnter the web address from the tool provider’s setup instructions.\nCancel\nSave connection\n",
+ "alerts": [
+  {
+   "text": "Enter the web address from the tool provider’s setup instructions.",
+   "rect": {
+    "x": 201,
+    "y": 640.5,
+    "width": 622,
+    "height": 20,
+    "top": 640.5,
+    "right": 823,
+    "bottom": 660.5,
+    "left": 201
+   }
+  }
+ ],
+ "inputs": [
+  {
+   "placeholder": "A name you will recognize, such as My calendar",
+   "value": "C3 light field probe"
+  },
+  {
+   "placeholder": "Paste the tool provider’s server address",
+   "value": ""
+  },
+  {
+   "placeholder": "Header name",
+   "value": ""
+  },
+  {
+   "placeholder": "Header value",
+   "value": ""
+  },
+  {
+   "placeholder": "Leave empty to use the default",
+   "value": ""
+  }
+ ],
+ "radios": [
+  {
+   "state": "unchecked",
+   "rect": {
+    "x": 201,
+    "y": 318.5,
+    "width": 16,
+    "height": 16,
+    "top": 318.5,
+    "right": 217,
+    "bottom": 334.5,
+    "left": 201
+   }
+  },
+  {
+   "state": "checked",
+   "rect": {
+    "x": 387.375,
+    "y": 318.5,
+    "width": 16,
+    "height": 16,
+    "top": 318.5,
+    "right": 403.375,
+    "bottom": 334.5,
+    "left": 387.375
+   }
+  },
+  {
+   "state": "unchecked",
+   "rect": {
+    "x": 560.90625,
+    "y": 318.5,
+    "width": 16,
+    "height": 16,
+    "top": 318.5,
+    "right": 576.90625,
+    "bottom": 334.5,
+    "left": 560.90625
+   }
+  }
+ ],
+ "overflow": [
+  1024,
+  1024
+ ]
+}

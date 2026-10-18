@@ -1,0 +1,16 @@
+{
+ "utc": "2026-10-18T09:24:32.057Z",
+ "path": "/settings/mcp-servers",
+ "size": [
+  1024,
+  800
+ ],
+ "theme": "bg-app",
+ "dialogOpen": false,
+ "emptyInventory": true,
+ "draftNamePresent": false,
+ "overflow": [
+  1024,
+  1024
+ ]
+}

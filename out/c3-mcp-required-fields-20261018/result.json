@@ -1,0 +1,102 @@
+{
+  "row": "GUI-MCP-REQUIRED-FIELDS",
+  "status": "LINUX_NATIVE_ACCEPTANCE_PASS",
+  "source_fix": "bbd2b1358",
+  "source_merge": "d47f08051",
+  "native_source": "ed68c7443",
+  "branch_base": "f15627195",
+  "host": "AIS-2-8592-L01",
+  "input": "Native XTest pointer/key events only; inspector read-only DOM/screenshots.",
+  "cases": [
+    {
+      "transport": "stdio",
+      "layout": "dark-wide",
+      "size": [
+        1500,
+        1000
+      ],
+      "alert": "Enter the start command from the tool provider\u2019s setup instructions.",
+      "draft_preserved": true,
+      "overflow": false,
+      "observation": "stdio-dark-wide.json",
+      "screenshot": "stdio-dark-wide.png"
+    },
+    {
+      "transport": "stdio",
+      "layout": "light-narrow",
+      "size": [
+        1024,
+        800
+      ],
+      "alert": "Enter the start command from the tool provider\u2019s setup instructions.",
+      "draft_preserved": true,
+      "overflow": false,
+      "observation": "stdio-light-narrow.json",
+      "screenshot": "stdio-light-narrow.png"
+    },
+    {
+      "transport": "http",
+      "layout": "dark-wide",
+      "size": [
+        1500,
+        1000
+      ],
+      "alert": "Enter the web address from the tool provider\u2019s setup instructions.",
+      "draft_preserved": true,
+      "overflow": false,
+      "observation": "http-dark-wide.json",
+      "screenshot": "http-dark-wide.png"
+    },
+    {
+      "transport": "http",
+      "layout": "light-narrow",
+      "size": [
+        1024,
+        800
+      ],
+      "alert": "Enter the web address from the tool provider\u2019s setup instructions.",
+      "draft_preserved": true,
+      "overflow": false,
+      "observation": "http-light-narrow.json",
+      "screenshot": "http-light-narrow.png"
+    },
+    {
+      "transport": "sse",
+      "layout": "dark-wide",
+      "size": [
+        1500,
+        1000
+      ],
+      "alert": "Enter the web address from the tool provider\u2019s setup instructions.",
+      "draft_preserved": true,
+      "overflow": false,
+      "observation": "sse-dark-wide.json",
+      "screenshot": "sse-dark-wide.png"
+    },
+    {
+      "transport": "sse",
+      "layout": "light-narrow",
+      "size": [
+        1024,
+        800
+      ],
+      "alert": "Enter the web address from the tool provider\u2019s setup instructions.",
+      "draft_preserved": true,
+      "overflow": false,
+      "observation": "sse-light-narrow.json",
+      "screenshot": "sse-light-narrow.png"
+    }
+  ],
+  "cancel": "Both drafts canceled; narrow terminal receipt shows dialog closed, no draft name, empty visible inventory.",
+  "saved_state": "No probe name saved. After-dark and final config SHA256 identical (3dbcc10950c34316ad4dd3f1c1063a635da925f6e15fb9bc84cf1c913aade02f). App-generated inactive official Browser entry only; no active MCP child.",
+  "setup_correction": "Initial seed was one directory high; initial app initialized default Exa without tool calls. Stopped and corrected actual data directory before accepted launch. Accepted log: MCP initialization 0 successful, 0 failed.",
+  "reused_gates": {
+    "focused": 11,
+    "verify": "PASS 3459 app, 127 extension, 1275 native, six coverage floors",
+    "receipt": "/ai/gchat/out/c7-mcp-dialog-row-buttons-20261018/verify-result.json",
+    "binding": "source-binding.json"
+  },
+  "verification": "Evidence-only; git diff --check. No repeated build/test gates.",
+  "limits": "Linux ordinary Add form only. No valid tool connection, model, GPU, account or Windows qualification.",
+  "cleanup": "Private app/Host/keyring/D-Bus/Xvfb/observer stopped; owned S1 scratch removed; booking3202 canceled; returned09:25Z. Donor unchanged, no hold."
+}
