@@ -30,6 +30,39 @@ are stopped; CPU88–95 returned07:49Z. The inactive40G SSD build/cache root
 07:51Z. Only small results, logs and four screenshots remain. Windows is
 unqualified. Source, regression tests and native evidence are merge-ready
 together on the named branch.
+## First-run download status recovery — C3, October 18
+
+`GUI-FIRST-RUN-DOWNLOAD-STATUS` passes the remaining Linux native card-rendering
+leaf. A real partial transfer displayed **Downloading model · 0.5%** with speed;
+native Models Pause and Welcome navigation then displayed **Paused; resume to
+continue · 1.5%**. Evidence and scope are in
+[`out/c3-first-run-download-status-20261018/result.json`](../../out/c3-first-run-download-status-20261018/result.json)
+and its two native screenshots/DOM observations. Original source `94c43ef24`
+and corrected tests `80a2aa885` are merged. The original 20 focused cases and
+later full gate (3,470 app, 127 extension, 1,275 native, 28 ignored; lint,
+types and coverage pass) remain valid; failed/retry/verifying are covered by
+retained rendered regressions. This documentation-only closure repeats no gate.
+
+Source-compatible development desktop `11ce0355d` and debug Host `71abf1708`
+were copied independently on S1. Their affected UI/Host sources are unchanged
+against base `9bc105c26`; hashes and comparisons are retained. The desktop embeds
+a production frontend that rejects private HTTP package URLs. Therefore the
+authenticated private Host first-run API admitted the real transfer as fixture
+setup; this qualifies native status rendering, not the frontend model-choice
+or download-admission flow. Private HOME/XDG, D-Bus/keyring, Xauthority/Xvfb and
+native pointer input were used; inspector access observed only. No Windows,
+complete-download integrity, hardware profile, model load or GPU claim is made.
+
+The paused card also showed misleading failure guidance pointing at absent
+buttons. That separate defect is recorded as `GUI-FIRST-RUN-PAUSED-ERROR` and
+is the next source fix. Owner C3; branch
+`fix/c3-first-run-download-status-20261018`, worktree
+`/ai/gchat-worktrees/c3-first-run-download-status-20261018`. Private app, Host and
+helpers stopped, the 297 MB partial and own S1 root
+`/media/ron/SSD_RAID/ai/tmp-c3-first-run-download-status-20261018` were removed,
+and CPUs returned 08:01Z. Donors/shared catalog remain untouched. Only small
+evidence and source remain. Check: `git diff --check`; next merge this closure.
+
 ## Secure-storage Check-first recovery — C3, October 18
 
 `GUI-SECURE-STORAGE-CHECK-FIRST` passes its remaining Linux installed leaf using
