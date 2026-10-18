@@ -1,5 +1,19 @@
 # Gbot design
 
+## Microsoft setup explains failed actions — Gchat 2
+
+`GBOT-M365-SETUP-ERROR-GUIDANCE`, based on main `d306935f2`, replaces
+raw service and native-opener errors with plain guidance for the failed step.
+Initial account loading, Refresh, sign-in actions, Cloud PC discovery, Save and
+client opening name the next action; technical diagnostics remain in closed
+Details. An accepted Save followed by a failed computer-list refresh still
+reports that the setup was saved. No request is retried automatically.
+
+Rendered regressions cover initial and explicit account reads, an unconfirmed
+Save, accepted Save with failed list refresh, and native-client failure/retry.
+Baseline, focused tests, lint and one `make verify` are pending. This is a
+source change; native Microsoft sign-in and Cloud PC control remain unqualified.
+
 ## Refreshing Hosts preserves failed brain saves — Gchat 2
 
 `GBOT-BRAIN-HOST-REFRESH-SAVE-ERROR`, based on main `73d9d4b9c`,

@@ -53,6 +53,29 @@ const pendingActions = {
 
 type PendingAction = keyof typeof pendingActions
 
+const failureMessages = {
+  load: 'Could not load your Microsoft accounts. Choose Refresh Microsoft accounts to try again.',
+  refresh:
+    'Could not refresh your Microsoft accounts. Choose Refresh Microsoft accounts to try again.',
+  signIn: 'Could not open Microsoft sign-in. Try signing in again.',
+  checkSignIn:
+    'Could not check Microsoft sign-in. Choose Check sign-in status to try again.',
+  cancelSignIn:
+    'Could not confirm Microsoft sign-in was cancelled. Choose Cancel sign-in to try again.',
+  checkPcs:
+    'Could not check your assigned Cloud PCs. Choose Check assigned Cloud PCs to try again.',
+  save: 'Could not confirm your Cloud PC setup was saved. Choose Save Cloud PC setup to try again.',
+  refreshSaved:
+    'Your Cloud PC setup was saved, but the computer list could not be refreshed. Close setup to try refreshing the list again.',
+  openClient:
+    'Could not open Microsoft’s client. Choose Open Microsoft client to try again.',
+} satisfies Record<PendingAction | 'load' | 'refreshSaved', string>
+
+type SetupFailure = {
+  action: keyof typeof failureMessages
+  detail: string
+}
+
 export default function M365Setup({
   name,
   initial,
@@ -76,7 +99,7 @@ export default function M365Setup({
   const [record, setRecord] = useState(initial)
   const [flow, setFlow] = useState<ConnectorAuthFlow>()
   const [pendingAction, setPendingAction] = useState<PendingAction>()
-  const [error, setError] = useState('')
+  const [error, setError] = useState<SetupFailure>()
   const [notice, setNotice] = useState('')
   const active = useRef(true)
   const locked = useRef(false)
@@ -100,7 +123,7 @@ export default function M365Setup({
         )
       })
       .catch((cause) => {
-        if (active.current) setError(String(cause))
+        if (active.current) setError({ action: 'load', detail: String(cause) })
       })
       .finally(() => {
         if (active.current) setLoadingAccounts(false)
@@ -166,12 +189,12 @@ export default function M365Setup({
     locked.current = true
     setPendingAction(action)
     busy(true)
-    setError('')
+    setError(undefined)
     setNotice('')
     try {
       await operation()
     } catch (cause) {
-      if (active.current) setError(String(cause))
+      if (active.current) setError({ action, detail: String(cause) })
     } finally {
       locked.current = false
       if (active.current) {
@@ -307,7 +330,7 @@ export default function M365Setup({
                 setPcId('')
                 setPcs(undefined)
                 setDedicated(false)
-                setError('')
+                setError(undefined)
                 setNotice('')
               }}
               options={[
@@ -567,7 +590,12 @@ export default function M365Setup({
               setNotice(
                 'Cloud PC setup saved. Desktop control is not connected yet.'
               )
-              await saved()
+              try {
+                await saved()
+              } catch (cause) {
+                if (active.current)
+                  setError({ action: 'refreshSaved', detail: String(cause) })
+              }
             })
           }
         >
@@ -606,9 +634,15 @@ export default function M365Setup({
       </div>
       {notice && <p role="status">{notice}</p>}
       {error && (
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
+        <div className="space-y-2">
+          <p role="alert" className="text-destructive">
+            {failureMessages[error.action]}
+          </p>
+          <details>
+            <summary>Details</summary>
+            <p className="break-words text-muted-foreground">{error.detail}</p>
+          </details>
+        </div>
       )}
     </section>
   )
