@@ -1,0 +1,71 @@
+{
+  "row": "GUI-PROJECT-EMPTY-ABOVE",
+  "owner": "Codex 7",
+  "status": "PASS; retained native acceptance closes remaining leaf",
+  "branch": "test/c7-project-empty-above-native-20261018",
+  "base": "23d0f3236d7a105c88de0a3903540cbd8263dc64",
+  "fix": {
+    "source": "df86386aa4d464ff42d0aeed9458e5e43bf93e49",
+    "merge": "d7bfbb629",
+    "behavior": "Empty project points to the message box above in 14 locales"
+  },
+  "native": {
+    "screenshot": "empty-project.png",
+    "observed": "Composer appears above the empty card; instruction says Start a new conversation with ProjectMembershipProbe above",
+    "original_result": "original-native-result.json",
+    "original_launch_receipt": "/ai/gchat/out/gchat-project-dialog-focus-return-20261018/native/gui-session.json",
+    "source": "d7de423c2a98393c156ce3ee0b8afb10ad61c963",
+    "input": "Native XTest; inspector reads only",
+    "platform": "isolated Linux native debug",
+    "isolation": "Private HOME/XDG/runtime, D-Bus, unlocked keyring, Xvfb; no inherited display/keyring",
+    "stopped": "2026-10-18T06:52:16Z",
+    "new_fixture": false
+  },
+  "source_binding": {
+    "route_and_test_identical_at_native_gate_and_base": [
+      "web-app/src/routes/project/$projectId.tsx",
+      "web-app/src/__tests__/project-empty-state-copy.test.ts"
+    ],
+    "all_14_direction_strings_identical_at_native_gate_and_base": [
+      "cs",
+      "de-DE",
+      "en",
+      "es",
+      "fr",
+      "id",
+      "ja",
+      "ko",
+      "pl",
+      "pt-BR",
+      "ru",
+      "vn",
+      "zh-CN",
+      "zh-TW"
+    ]
+  },
+  "verification": {
+    "reused_make_verify": {
+      "source_base": "6b7f42daf42c47a25205970312b067fc365c9d67",
+      "result": "../c7-downloads-loading-20261018/verify-result.json",
+      "log": "../c7-downloads-loading-20261018/verify.log",
+      "exit": 0,
+      "app": 3513,
+      "extension": 127,
+      "native": 1284,
+      "project_empty_state_test": "1 PASS; verify.log line3790"
+    },
+    "this_docs_only_branch": "git diff --check; no new build or gate"
+  },
+  "limits": [
+    "English native empty-project state at 1200x800",
+    "Other locale strings are source-checked, not individually rendered",
+    "No populated-project, Windows, model or inference claim"
+  ],
+  "inventory": {
+    "worktree": "/ai/gchat-worktrees/c7-project-empty-above-native-20261018",
+    "retained": "Small PNG/JSON/Markdown evidence only",
+    "compute": "None launched; no booking or SSD root allocated",
+    "original_fixture": "STOPPED per original native result; no custody or donor hold acquired"
+  },
+  "next": "Merge evidence closure; take next open row under rule13"
+}

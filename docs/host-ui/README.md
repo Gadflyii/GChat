@@ -1,5 +1,29 @@
 # GInfer host UI
 
+## Empty project direction — C7, October 18
+
+`GUI-PROJECT-EMPTY-ABOVE` passes its remaining Linux native empty-project
+leaf. The [retained screenshot](../../out/c7-project-empty-above-20261018/empty-project.png)
+shows the message box above the card and the instruction “Start a new
+conversation with ProjectMembershipProbe above”. Original fix `df86386aa`
+merged as `d7bfbb629`; its 14 translated direction strings need no further
+change. [Result and limits](../../out/c7-project-empty-above-20261018/result.json).
+
+The project route/test and all 14 direction strings match native source
+`d7de423c2`, passing gate base `6b7f42daf` and this branch base `23d0f3236`.
+That existing ONE `make verify` includes the project copy/order test and
+passes 3,513 app, 127 extension and 1,284 native tests, lint/types/guards and
+coverage floors. This evidence-only closure uses `git diff --check`; no
+repeated fixture, build or suite. Only English native empty-project rendering
+is claimed; other locale strings are source-checked. Windows, populated
+projects, model loading and inference are outside this leaf.
+
+Owner C7; branch `test/c7-project-empty-above-native-20261018`, worktree
+`/ai/gchat-worktrees/c7-project-empty-above-native-20261018`. Only small
+PNG/JSON/Markdown evidence remains. No new compute, app, booking, SSD root or
+donor custody was allocated. The original isolated native fixture was stopped
+06:52Z. Next: merge this closure and take the next open row under rule13.
+
 ## Downloads initial inventory — C7, October 18
 
 `GUI-DOWNLOADS-LOADING-STATE` is fixed on
