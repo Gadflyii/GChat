@@ -21,6 +21,9 @@ also passes visible failure after abrupt Host death during inference, followed
 by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
+The [installed Unix PTY check](remaining-acceptance.md#current-unix-pty-window-geometry-correction)
+also passes whole-window pixel reporting, a one-pixel resize at an unchanged
+grid, and ordinary Code model-menu mouse selection on native Linux.
 
 ## Unsaved skill instructions — October 18
 
