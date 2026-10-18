@@ -3716,6 +3716,28 @@ or **Saving skill…** until the request finishes. Wait for the dialog to close
 before using the saved skill. If saving fails, your entries stay in the dialog
 and the button becomes available so you can try again.
 
+## Importing a skill
+
+In **Agent Studio → Skills**, choose **Create new → Upload a skill**, then
+**Drag and drop or click to upload**. Choose a Markdown skill definition or a
+`.zip` or `.skill` archive containing `SKILL.md`. Canceling the native file
+window returns to Upload without an error. If import fails, the error appears
+and Upload stays open so you can choose another file.
+
+Linux acceptance (`GUI-AGENT-SKILL-IMPORT-NATIVE-20261018`): the native
+**Skill files** chooser showed **Choose a skill file…** while open. Cancel
+cleared that status silently and enabled the chooser button. Selecting the
+owned `lifecycle-probe` export showed **A skill named `lifecycle-probe` already
+exists**; Upload stayed open with its button enabled and `aria-busy=false`.
+Reopening the native chooser and canceling again passed. All 17 saved records,
+45 `SKILL.md` files, two workspace inputs and the 231-byte archive stayed
+unchanged. Retained build `8f7d18f6f` matches the relevant import source at
+`b12c7e98f`; resources returned at 08:38Z. Evidence:
+[`out/gchat-agent-skill-import-native-20261018/`](../../out/gchat-agent-skill-import-native-20261018/).
+This covers ordinary Linux cancellation and duplicate-name rejection/retry
+readiness; chooser exceptions, successful import recovery and Windows were
+not exercised.
+
 ## Downloading a skill
 
 In **Agent Studio → Skills**, open the skill's **Skill actions** menu and choose
