@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Sidebar transfer count — C7 closure, October 18
+
+`GUI-TRANSFER-COUNT` is complete in merged source `39174a0eb`. The sidebar
+previously added local model jobs to all Host snapshots, counting the local
+Host's mirror a second time. It now adds only registered remote Host jobs to
+the local count. Separate computers downloading the same model remain separate
+transfers; installed jobs are excluded.
+
+The original exact-source 13 rendered tests passed, including one mirrored
+local job, a separate remote same-model job, and removal despite a stale local
+snapshot. One `make verify` completed October 17 at16:52:40Z with exit0:
+3,043 frontend tests (six skipped),119 extension tests and1,075 Rust tests
+(27 ignored); all six critical coverage floors passed. Lint had zero errors
+and five existing warnings. These stored logs and exit files were recovered;
+`NavMain.tsx` is unchanged through main `24661cd22`. This documentation-only
+closure uses `git diff --check`; no gate was repeated. Evidence:
+`out/c7-model-transfer-count-20261017/{result.json,summary.md}`.
+
+This closes the source/rendered regression row. No additional installed-app,
+Windows, download, model or GPU acceptance is claimed. C7 owns documentation
+worktree `/ai/gchat-worktrees/c7-transfer-count-closure-20261018`, branch
+`docs/c7-transfer-count-closure-20261018`, baseline `24661cd22`. No new build,
+runtime or booking was allocated. The old exited test container and superseded
+source archive are retired. Existing private catalog baseline/dependency data
+at `/media/ron/SSD_RAID/ai/tmp-c7-private-catalog-gate-20261017` remains retained
+for that separate campaign; it has no live transfer-count job. Result JSON and
+a short summary retain the gate outcome.
+
 ## Readable installed model names — C7 native acceptance, closed October 18
 
 `GUI-MODEL-READABLE-NAME` passes its remaining Linux installed leaf in retained
