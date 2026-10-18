@@ -24,6 +24,84 @@ FRESH/OLD remain OFF/original XML/custody Gchat2. Windows not built (dev phase).
 Result: `out/gchat2-approval-inline-errors-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-approval-inline-errors-20261018`.
 
+## Linux Launch at startup XDG path — October 18
+
+`GUI-LINUX-AUTOSTART-XDG-PATH` is merge ready with focused, full-gate, build
+and private native acceptance passing. The installed Linux release `d0a8d06bf` launched through
+its normal AppRun with a private HOME, `XDG_CONFIG_HOME=$HOME/config`, and no
+`$HOME/.config`. Enabling **Settings → General → Launch at startup** produced
+a visible failure. The exact console error at 04:50:19Z, `No such file or
+directory (os error 2)`, was captured from badge candidate `72c76c51a`, whose
+startup source is identical to that release. The saved console observation is
+`out/c3-current-main-release-20261018/autostart-console.json`. The cached
+`auto-launch 0.5.0` implementation ignores XDG config and calls nonrecursive
+`create_dir` for `HOME/.config/autostart`, establishing the missing-parent cause.
+
+The candidate owns Linux's `autostart/GChat.desktop` beneath Tauri's resolved
+configuration directory and recursively creates its parents. Enable records
+the AppImage, extracted AppDir's AppRun, or ordinary executable as one quoted
+Exec argument. Read and disable use that same entry; failures identify the
+affected directory or file. Settings and startup reconciliation share the
+native commands, read back the actual state, and save the preference only after
+success. Windows keeps the existing plugin registry owner. The existing opt-in
+policy remains in force. See the
+[ownership decision](../decisions/2026-10-18-own-linux-xdg-autostart-registration.md).
+
+Acceptance: in a disposable private installed Linux session with the reported
+HOME/XDG layout, enable must create only the selected XDG startup entry, show
+enabled after reopening General, and record the packaged launch target.
+Disable must remove only GChat's entry and show disabled after reopening.
+Filesystem rejection must report failure and restore
+actual state without persisting success. No login/reboot, Windows runtime,
+fresh installer, GPU or model qualification is claimed by this source change.
+
+Five native regressions cover fresh missing parents, a supplied XDG config
+root, filesystem failures, packaged/ordinary launch targets, and literal Exec
+escaping. Shared-service tests cover command routing, readback and failure
+without saving success; rendered General tests exercise enable/disable and
+failed-toggle recovery. The focused commands were:
+
+```bash
+yarn workspace @gchat/web-app test src/lib/__tests__/launchAtStartup.test.ts src/routes/settings/__tests__/general.test.tsx src/providers/__tests__/DataProvider.test.tsx
+cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli linux_autostart -- --test-threads=1
+```
+
+Inventory: C3 worktree
+`/ai/gchat-worktrees/c3-linux-autostart-xdg-20261018`, branch
+`fix/c3-linux-autostart-xdg-20261018`. Current main `4ead3f88f` was merged
+normally before gates. The first focused run retained 48 passes and two failures:
+the existing General fixture replaced JSDOM's real Window with an object spread,
+which drops its non-enumerable `document`; the new asynchronous startup checks
+therefore had no default container. The fixture now assigns only the mocked
+`core` property onto the real Window. Product code and assertions are unchanged.
+Original log: `out/c3-linux-autostart-xdg-20261018/focused-frontend-first-failure.log`.
+
+Corrected source `7e49b9d0d` is pushed. All 50 focused frontend cases and five
+native cases pass; scoped library check/Clippy and lint pass. ONE `make verify`
+ran05:32:01–05:37:04Z and passed 3,380 app tests (six skipped), 127 extension
+tests, all six coverage floors and 1,234 native tests (28 ignored). No second
+full verify ran. Vite/default desktop build passed05:38:41Z.
+
+The immutable `autostart-candidate/bin/gchat` beneath the existing S1 root is
+255,728,432 bytes, SHA256
+`6110349de61393d7022452a0757157630f73200f65882c135c223dff29136889`.
+ELF, private pre-install and runnable-resource link were checked05:38:54Z;
+46 source/dependency bindings still matched. Both exited containers and local/
+remote disposable source archives are removed; booking3036 returned. Shared
+source/dependency/target caches remain for the serial reset/locator work.
+The tested candidate is retained pending merge; AppDir/home, tools and runnable
+assets remain protected. No GPU or model ran in these gates.
+
+Private native acceptance passed05:40–05:41Z using that export and the original
+HOME/XDG layout. Enable created `XDG_CONFIG_HOME/autostart/GChat.desktop` with
+the immutable AppDir/AppRun target while `HOME/.config` remained absent.
+Reopening General retained On. Disable removed the entry, and reopening retained
+Off; the installation preference is restored to disabled. Reviewed Light1500×1000
+and Dark1024×800 views are readable without horizontal overflow. Filesystem
+rejection remains covered by the focused native/rendered cases; no GUI rejection
+was injected. App/private session returned05:41Z; Xvfb remains for the next two
+checks. No login/reboot or Windows runtime is claimed. Next: coordinator merge.
+Packet: `out/c3-linux-autostart-xdg-20261018/{result.json,terminal.json,summary.md}`.
 ## Gbot companion task-load retry — October 18
 
 `GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously
