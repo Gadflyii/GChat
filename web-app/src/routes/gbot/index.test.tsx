@@ -627,6 +627,134 @@ it('explains empty, ready and busy task states without changing task submission'
   expect(await screen.findByText('Enter a task, then choose Run.')).toBeVisible()
 })
 
+it.each(['Error', 'native string'] as const)(
+  'keeps a failed desktop recovery %s inline until its explicit retry succeeds',
+  async (failureKind) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      const owner = 'durable-current-owner'
+      const previousOwner = 'previous-app-owner'
+      localStorage.setItem('gbot-control-owner', owner)
+      const [identity, other] = readyTaskBots()
+      let session = identity
+      let expectedOwner = previousOwner
+      let recovered = false
+      let accepted = false
+      let fail!: (cause: unknown) => void
+      let finish!: () => void
+      let finishRefresh!: (state: BotState) => void
+      const refreshedState = new Promise<BotState>((resolve) => { finishRefresh = resolve })
+      const change = vi.fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => { fail = reject }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+      const fallback = mocks.call.getMockImplementation()!
+      const snapshot = async (): Promise<BotState> => {
+        const control = { identity: session, owner: recovered ? owner : expectedOwner, state: 'paused' as const }
+        return {
+          ...await fallback('state', undefined) as BotState,
+          live_sessions: [session, other],
+          controls: [control],
+          recoverable_controls: recovered ? [] : [control],
+        }
+      }
+      mocks.call.mockImplementation(async (request: string, body: Record<string, unknown>) => {
+        if (request === 'state') return accepted ? refreshedState : snapshot()
+        if (request === 'control/recover') return change(body)
+        return fallback(request, body)
+      })
+      const updates = new Set<() => void>()
+      mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+        if (event === 'gbot-task-update') updates.add(update)
+        return () => updates.delete(update)
+      })
+      render(<Page />)
+      const recovery = await screen.findByRole('button', { name: 'Recover control' })
+      expect(recovery.closest('fieldset')).toBeNull()
+      fireEvent.click(recovery)
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel recovery' }))
+      expect(change).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: 'Recover control' }))
+      const confirm = screen.getByRole('button', { name: 'Confirm recovery' })
+      const payload = { identity, expected_owner: previousOwner, owner }
+      act(() => {
+        confirm.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        confirm.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(change).toHaveBeenCalledExactlyOnceWith(payload)
+      expect(confirm).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Cancel recovery' })).toBeDisabled()
+      await act(async () => fail(failureKind === 'Error'
+        ? new Error('Media close failed') : 'Media close failed'))
+      const message = 'Could not recover control of this desktop. Try Confirm recovery again.'
+      const alert = await screen.findByRole('alert')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText('Media close failed')).not.toBeVisible()
+      expect(confirm).toBeEnabled()
+      expect(screen.getByText('Bot paused', { exact: true })).toBeVisible()
+      expect(expectedOwner).toBe(previousOwner)
+      expect(recovered).toBe(false)
+      expect(errorToast).not.toHaveBeenCalled()
+
+      const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+      await act(async () => updates.forEach((update) => update()))
+      expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks').length).toBeGreaterThan(reads)
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      session = { ...identity, session_id: 'replacement' }
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      session = identity
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expectedOwner = 'another-previous-owner'
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expectedOwner = previousOwner
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      mocks.getTarget.mockResolvedValue({ kind: 'local' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+
+      const retry = screen.getByRole('button', { name: 'Confirm recovery' })
+      fireEvent.click(retry)
+      expect(change.mock.calls).toEqual([[payload], [payload]])
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(retry).toBeDisabled()
+      expect(screen.getByText('Bot paused', { exact: true })).toBeVisible()
+      recovered = true
+      accepted = true
+      await act(async () => finish())
+      const pendingRefresh = screen.getByRole('button', { name: 'Recover control' })
+      expect(pendingRefresh).toBeDisabled()
+      fireEvent.click(pendingRefresh)
+      expect(change).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('Bot paused', { exact: true })).toBeVisible()
+      await act(async () => finishRefresh(await snapshot()))
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Recover control' })).not.toBeInTheDocument())
+      expect(screen.getByRole('button', { name: 'Hand back' })).toBeEnabled()
+      expect(screen.getByText('Bot paused', { exact: true })).toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request.startsWith('control/') || request.startsWith('view/') || request === 'connect' || request === 'disconnect' ||
+        request === 'setup/kvm/start' || (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([['control/recover', payload], ['control/recover', payload]])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      errorToast.mockRestore()
+    }
+  }
+)
+
 it('explicitly recovers an orphaned paused owner while keeping hand-back and setup resume separate', async () => {
   const identity = { workspace_id: 'orphaned-kvm', session_id: 'saved-session' }
   const owner = 'durable-current-owner'

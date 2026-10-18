@@ -106,6 +106,9 @@ function GbotPage() {
   const [controlErrors, setControlErrors] = useState<
     Record<string, { returning: boolean; details: string } | undefined>
   >({})
+  const [recoveryErrors, setRecoveryErrors] = useState<
+    Record<string, string | undefined>
+  >({})
   const connectionChange = useRef(false)
   const [connectionErrors, setConnectionErrors] = useState<
     Record<string, { disconnecting: boolean; details: string } | undefined>
@@ -375,6 +378,8 @@ function GbotPage() {
   const recoveryKey = recoverableControl
     ? `${recoverableControl.identity.workspace_id}:${recoverableControl.identity.session_id}:${recoverableControl.owner}`
     : ''
+  const recoveryErrorKey = JSON.stringify([serviceTarget, recoveryKey])
+  const recoveryError = recoveryErrors[recoveryErrorKey]
   const controlErrorKey = JSON.stringify([
     serviceTarget,
     identity?.workspace_id,
@@ -421,15 +426,36 @@ function GbotPage() {
       })
   }
   const recoverControl = () => {
-    if (!recoverableControl || recoveryConfirmation !== recoveryKey) return
-    void perform(async () => {
-      await gbot('control/recover', {
-        identity: recoverableControl.identity,
-        expected_owner: recoverableControl.owner,
-        owner,
+    if (
+      busy ||
+      controlChange.current ||
+      !recoverableControl ||
+      recoveryConfirmation !== recoveryKey
+    )
+      return
+    controlChange.current = true
+    const key = recoveryErrorKey
+    setRecoveryErrors((previous) => ({ ...previous, [key]: undefined }))
+    void perform(
+      async () => {
+        await gbot('control/recover', {
+          identity: recoverableControl.identity,
+          expected_owner: recoverableControl.owner,
+          owner,
+        })
+        setRecoveryConfirmation('')
+      },
+      true
+    )
+      .catch((cause) =>
+        setRecoveryErrors((previous) => ({
+          ...previous,
+          [key]: cause instanceof Error ? cause.message : String(cause),
+        }))
+      )
+      .finally(() => {
+        controlChange.current = false
       })
-      setRecoveryConfirmation('')
-    })
   }
   const changeControl = () => {
     if (
@@ -921,13 +947,27 @@ function GbotPage() {
                     </p>
                     {recoveryConfirmation === recoveryKey ? (
                       <div className="flex flex-wrap gap-2">
-                        <Button disabled={busy} onClick={recoverControl}>
+                        <Button
+                          disabled={busy}
+                          aria-describedby={
+                            recoveryError
+                              ? 'gbot-settings-recovery-error'
+                              : undefined
+                          }
+                          onClick={recoverControl}
+                        >
                           Confirm recovery
                         </Button>
                         <Button
                           variant="outline"
                           disabled={busy}
-                          onClick={() => setRecoveryConfirmation('')}
+                          onClick={() => {
+                            setRecoveryConfirmation('')
+                            setRecoveryErrors((previous) => ({
+                              ...previous,
+                              [recoveryErrorKey]: undefined,
+                            }))
+                          }}
                         >
                           Cancel recovery
                         </Button>
@@ -940,6 +980,22 @@ function GbotPage() {
                       >
                         Recover control
                       </Button>
+                    )}
+                    {recoveryError && (
+                      <div
+                        id="gbot-settings-recovery-error"
+                        role="alert"
+                        className="space-y-1"
+                      >
+                        <p>
+                          Could not recover control of this desktop. Try Confirm
+                          recovery again.
+                        </p>
+                        <details className="text-muted-foreground">
+                          <summary className="cursor-pointer">Details</summary>
+                          <p className="break-words">{recoveryError}</p>
+                        </details>
+                      </div>
                     )}
                   </div>
                 )}
