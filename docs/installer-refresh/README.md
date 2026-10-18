@@ -2,7 +2,7 @@
 
 ## Installed selected-artifact preparation — Gchat 3, October 18
 
-`GCHAT-PREPARE-SELECTED-ARTIFACT` is **merge-ready** on
+`GCHAT-PREPARE-SELECTED-ARTIFACT` **merged as `d0e107da6`** from
 `fix/gchat3-prepare-selected-artifact-20261018`, implementation `600343062`,
 based on `bd10e0e66`. Installed `gchat-cli prepare-hardware` now accepts a
 selected local artifact and its startup TP/speculation intent. Host validates
@@ -47,17 +47,16 @@ accepted scopes. No Engine change, model inference or GPU/Windows qualification
 is claimed.
 
 Owned inventory: source worktree
-`/ai/gchat-worktrees/gchat3-prepare-selected-artifact-20261018` is retained for
-Bubbs's merge. The S1 fixture
+`/ai/gchat-worktrees/gchat3-prepare-selected-artifact-20261018` retains the
+merged source. The S1 fixture
 `/media/ron/SSD_RAID/ai/tmp-gchat3-prepare-selected-artifact-tests-20261018`
 and two terminal containers were removed at 08:17:52Z, releasing 47,530,681,024
 logical bytes. The private runtime/profile root
 `/mnt/e/gchat3-prepare-selected-artifact-20261018` was removed after review,
 releasing 450,941,063 logical bytes. Protected payload and inactive RC donors
 remain unchanged. All bookings returned; local5090 returned 08:18Z. Only the
-consolidated result and short summary remain as run evidence. Next action is
-Bubbs's merge; the lane continues unowned Hosts/first-run GUI work while RCs
-await Ron's Windows sign-in result.
+consolidated result and short summary remain as run evidence. The lane continues
+`GUI-PROFILE-MISSING-WORDING` while RCs await Ron's Windows sign-in result.
 
 ## Linux missing-driver guidance — Codex 4, October 18
 
