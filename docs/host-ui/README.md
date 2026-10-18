@@ -1855,151 +1855,247 @@ fresh walk, hardware candidate and merge review finish, then remove owned privat
 retain only result JSON and short summary. Read-only donor remains Claude's.
 ## Fresh first-time-user walk — C3, October 18
 
-The native first-user walk uses main `201f46712` with a private first-run
-profile. Scope: setup, Models, Downloads, Engine/Host settings, Hardware profile,
-Fleet/connections and Settings, in narrow/wide windows and Light/Dark themes.
-Real pointer/keyboard input exercises visible controls and wording. Reproducible
-defects are recorded on `docs/open-work` and fixed in separate source branches.
-Chat/agents belongs to Gchat 1 and Gbot to Gchat 2; existing GUI rows retain
-their owners.
+**Requested controls exercised; thirteen fixes merged.** The final follow-up
+`GUI-RESET-STALE-LOCAL-HOST-CONNECTION` passed source gates and native acceptance;
+merge `4514dfc73` contains signed source `63f9e8a49`. Permission-refusal recovery,
+ordinary reset retry and exactly one connected replacement local Host passed.
+The private session stopped and CPU booking3100 returned at 07:01Z. Both
+owned S1 roots and eight exited containers retired at 07:06:23Z; concise
+evidence is retained locally. The separate local donor retired after all
+borrowers released it. Support destination remains
+**WAITING ON RON**. This does not qualify prerequisite-dependent operations.
 
-Acceptance: every requested control and sentence is exercised or its concrete
-prerequisite is recorded. Each new source fix needs focused checks, one
-`make verify` and native acceptance using its changed build. The baseline and
-candidates use optimized bundled Vite frontends in debug Rust shells with custom
-protocol. This is Linux source-native evidence; the requested installed-current-main
-walk remains pending. GChat and Manager builds pass. The next private release
-refresh will reuse the accepted Linux AppDir runtime closure without changing
-Ron's installation or publishing packages; release performance is not claimed.
-No model, hardware profile or GPU workload has run during the walk.
+The requested scope was setup, Models, Downloads, Engine/Host settings,
+hardware-profile controls, Fleet/connections and Settings, with actual
+pointer/keyboard input, readable wording and narrow/wide Light/Dark layouts.
+Chat/agents belongs to Gchat 1 and Gbot to Gchat 2. Existing GUI rows retain
+their owners. Current control outcomes and individual evidence paths are in
+`out/c3-first-user-setup-20261018/{result.json,summary.md}`.
 
-Three reproduced defects now have tested, merged source fixes:
+The earlier source-native baseline was main `201f46712`, using an optimized
+Vite frontend in a debug Rust custom-protocol shell. The installed-layout
+release baseline is pinned once at
+`d0a8d06bf0592b4b2d522c7e3385f08375558124`; later changed-source debug candidates
+have separate evidence and are not included in that immutable AppDir. Its one
+release sequence passed all seven stages at 04:31:29Z; the checked AppDir was
+ready at 04:33:05Z and packaged `AppRun` launched at 04:33:32Z. All 35 dependency
+manifests matched before reuse. The private refresh retained the accepted
+ed68/e228 GIO, Gbot and four-family Engine closure and unchanged release
+profile/AppRun hooks, while refreshing frontend, core/extensions, CLI/Host/app,
+32 skill files and 23 catalogs/175 profile metadata entries. These metadata
+counts do not qualify models or hardware profiles. No Engine rebuild, fresh
+installer, system installation, package publication, Windows acceptance or
+release-performance claim occurred. Build, payload and launch receipts are in
+`out/c3-current-main-release-20261018/`.
 
-- `GUI-SETUP-RUNTIME-INSTALL-PROGRESS`: Welcome's false connection failure after
-  30 seconds and Hosts' unexplained disabled Refresh now follow native resource
-  preparation state. The changed-source private launch retained preparation
-  beyond 30 seconds, then connected its Host and cleared the message. Focused
-  48 plus 3 resource-state cases and lint passed. The single `make verify`
-  retained its network-none Fleet route failure; all seven original native
-  commands passed in the routed, dependency-offline continuation, followed by
-  the candidate build. Merge `ed40f2579` preserves both first-run suites
-  (31 cases) and landed in main through `a7dadf6c2`.
-- `GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED`: matching model/memory tuples no
-  longer collapse the two physical S1 PRO 6000 cards. PCI identity reconciliation
-  passes rendered/plugin checks and changed-source Hardware/System Monitor
-  acceptance at wide and narrow sizes. The original single verify's stale-label
-  failure and subsequent missing-PCI fixture compile failure remain retained;
-  corrected focused and remaining native/build stages passed. Normal merge
-  `8913bc14f` of main `394ba2f1f` was pushed, mailed and integrated through
-  `ae6f5992f`. All 31 first-run cases pass after the merge; no full verify was
-  repeated.
-- `GUI-GINFER-SETTINGS-TOKEN-UNITS`: `293f49538` was pushed, mailed and merged
-  through `22033ee11`. The two advanced descriptions now explain model tokens.
-  Four focused rendered cases, lint, one complete `make verify` and the native build
-  passed: 3,279 frontend cases, 121 extension cases, all six coverage floors and
-  1,216 native cases (28 ignored). Real pointer input opened Advanced; both
-  descriptions were readable in Light 1500×1000 and Dark 1024×740 with scrolling
-  and no horizontal overflow. No setting values changed. The structural provider
-  redesign remains a separate row.
+All thirteen rows below have source gates, changed-source native acceptance and
+merged source. Packet paths are under `out/`; each packet retains its detailed
+counts, commands and screenshots.
 
-Fix evidence is retained in
-`out/c3-setup-runtime-progress-20261018/{runtime-progress-result.json,summary.md,merge-focused-result.json}`,
-`out/c3-hardware-card-identity-20261018/{result.json,summary.md,merge-focused-result.json}`
-and `out/c3-ginfer-token-units-20261018/{result.json,summary.md}`. The original
-hardware incident is `out/c3-first-user-setup-20261018/hardware-result.json`.
-Debug preparation duration is not a release speed claim.
+| Row | Merged source | Evidence packet |
+| --- | --- | --- |
+| `GUI-SETUP-RUNTIME-INSTALL-PROGRESS` | `a7dadf6c2` | `c3-setup-runtime-progress-20261018/runtime-progress-result.json` |
+| `GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED` | `ae6f5992f` | `c3-hardware-card-identity-20261018/result.json` |
+| `GUI-GINFER-SETTINGS-TOKEN-UNITS` | `22033ee11` | `c3-ginfer-token-units-20261018/result.json` |
+| `GUI-DOWNLOADS-MANAGE-WRONG-TAB` | `d4b0b9c8c` | `c3-downloads-manage-tab-20261018/result.json` |
+| `GUI-DOWNLOADS-POPOVER-STATUS` | `3bbea776c` | `c3-downloads-popover-status-20261018/result.json` |
+| `GUI-DOWNLOADS-TRANSFER-COUNT-WORDING` | handoff `1d07d8848`, verified in main `d4ec7abab` | `c3-download-count-wording-20261018/result.json` |
+| `GUI-FOLDER-REVEAL-NESTED-RUNTIME` | handoff `ab8d451e9`, verified in main `d4ec7abab` | `c3-folder-reveal-runtime-20261018/result.json` |
+| `GUI-INTERFACE-RESET-KEEPS-THEME` | `5c00b46ea` | `c3-interface-reset-theme-20261018/result.json` |
+| `GUI-CLI-PACKAGED-PATH-DETECTION` | `5bf460fa8` | `c3-cli-packaged-path-detection-20261018/result.json` |
+| `GUI-LINUX-AUTOSTART-XDG-PATH` | handoff `92868d3fd`, merged in main `d4ec7abab` | `c3-linux-autostart-xdg-20261018/result.json` |
+| `GUI-RESET-RELOCATED-DATA-RESURRECTION` | handoff `5693c8b8f`, merge `eebad02f2` | `c3-reset-relocated-data-20261018/result.json` |
+| `GUI-HOST-LOCATOR-DELETED-RUNTIME` | handoff `d262658e2`, merge `04866d698`; Arch signed 06:19:08Z | `c3-host-locator-deleted-runtime-20261018/result.json` |
+| `GUI-RESET-STALE-LOCAL-HOST-CONNECTION` | source `63f9e8a49`, merge `4514dfc73`; final handoff `4b451e91a` | `c3-reset-stale-host-connection-20261018/result.json` |
 
-Welcome → Choose a model navigated to Models and completed onboarding. Returning
-to New Chat showed the expected unloaded-model composer; no inference was sent.
-The separate retained preparing profile passed Welcome → Continue without
-loading a model and reached the unloaded composer. A fresh native profile at
-03:37:38Z also exercised Welcome → Connect a network host and reached Hosts
-with address and secure-storage guidance; no pairing or credentials submitted.
-Hosts Refresh returned to connected with its button enabled.
+Original failures remain visible in their packets. Setup's single verify hit a
+network-none Fleet self-route failure; the original native commands passed in
+a routed, dependency-offline continuation. Hardware retained its stale Stop
+setup label failure and missing-PCI fixture compile failure, followed only by
+corrected focused and remaining stages. Folder reveal retained its check-scope
+and single-verify failures. Interface retained TS2367 before its corrected
+remaining-stage continuation; autostart retained its initial Window fixture
+failure. Each bounded correction and final build/native outcome is recorded;
+no second full verify was run for those failures.
 
-Models Installed/Recommended/Downloads, searches, card selection,
-unavailable-model explanations and the idle Downloads popover were exercised.
-Published releases have no qualified download descriptor, so no live download
-is available. Private secure storage succeeded at 02:33:48Z with an unlocked
-keyring. Settings exercised computer-name Save, data-path Copy, reset-dialog
-Cancel by Enter, language list, empty-token Show/Hide, spellcheck/default-model
-toggles and Interface font sizes/themes. Small, Medium, Large, Extra Large and
-System/Light/Dark selections were readable; Medium was restored. Factory reset
-and OS startup/CLI installation were not invoked.
+Locator source `82f17a1ac` initially reused a five-test Rust executable despite
+nine frozen registry cases, because archived source mtimes preceded retained
+Cargo fingerprints. That Rust/build qualification is invalid. Frontend 3,393,
+extension 127 and six coverage floors remain valid. The bounded correction
+normalized tracked-input mtimes without changing content, then passed all nine
+registry cases, check/Clippy, seven native suites (1,256 passed, 28 existing
+ignores) and desktop/Host builds. Builder booking3062 returned 06:07Z. The
+candidate-only resource overlay supplied the corrected Host through the normal
+startup installer; this was explicit fixture preparation. Native acceptance
+replaced the stale Desktop locator without editing it manually, while all four
+old runtime paths stayed absent and the selected-root replacements were
+executable. Models and Downloads Refresh then completed without alerts, and
+account-service Connect showed Google/Microsoft setup cards without signing in.
+See `out/c3-host-locator-deleted-runtime-20261018/` receipts
+`native-recovery.json`, `native-models-refresh.json`,
+`native-downloads-refresh.json` and `native-account-service.json`.
 
-Workspace connections connected its private account service and displayed the
-Google guide through import/manual registration. Google/Microsoft service
-checkboxes and Read only/Read write selections were restored. Actual account
-import/sign-in requires owned credentials; credential-dependent leaves remain
-with Gchat 3. The proxy remained off. An input-command mistake entered follow-on
-command text into its private address field; that text was cleared, and all
-four fields and proxy/certificate switches were verified empty/off. This was an
-execution error, not a product defect.
+The reset follow-up source `63f9e8a49` amends `7007c37fd`: exact deleted
+UUID/certificate retirement preserves paired remote Hosts and concurrent Manager
+edits; any returned reset error restores hidden windows. Arch signed the original
+at 06:26:43Z and the amendment at 06:34:34Z. Four focused Host tests and nine
+focused desktop tests passed, with one existing GPU ignore; these helper tests
+are unchanged by the outer-command amendment. Check, Clippy and lint passed.
+ONE `make verify` passed at 06:44:00Z: 3,406 app tests, 127 extension tests,
+1,270 native tests, six app skips, 28 native ignores and six coverage floors.
+The Vite build passed. The first default-desktop build lacked generated
+`icons/32x32.png`; standard `yarn build:icon` corrected fixture preparation, then
+only the failed native desktop/Host build resumed and passed at 06:46:48Z.
+No source change or second verify was used. Future archived default-desktop
+fixtures must run that existing icon-generation step before Cargo. Build
+booking3084 returned 06:47Z and both exited containers were removed.
 
-The native data-folder and local-model import choosers opened on the verified
-private GTK portal. Cancel preserved the data path and imported no model.
-Installed is readable in Light and Downloads in Dark at 1024×740. Manager's
-private window passed Pair → Check secure storage → Cancel and Secure storage
-→ Check again → Cancel. Fleet and the coordinator dialog are reachable; pool,
-assignment and enrollment actions require a configured instance/coordinator.
-Manager is readable in Dark at 1500×1000 and 800×650 without horizontal overflow.
-Show available downloads refreshed and reported no published package for this
-GPU group. Sharing stayed off; Rename → Cancel preserved the private name.
-Paired clients showed one local administrator and zero active requests. No
-nearby Host was paired or changed. Model-dependent Manager actions remain gated
-by an installed model and prepared hardware.
+Native acceptance deliberately made the selected Host directory mode500. Actual
+Reset at 06:54:44Z returned a readable preserved-identity error and restored the
+same app process at Light 1024×800; saved local UUID `5a7f8db3…` and configuration
+SHA stayed unchanged. The first error observation missed the brief toast because
+the WebKit promise observation returned `{}`; only that inconclusive capture was
+repeated. The second screenshot was visually reviewed PASS. After restoring
+mode775, ordinary retry at 06:54:56Z restarted the app. At 06:54:59Z the old
+identity was absent, the saved registry empty and configuration bytes unchanged.
+At 06:59:51Z, the restarted app showed exactly one connected This computer.
+Replacement UUID `08d55660-11dc-471c-817c-b855428dff50` was the sole saved registry
+entry and matched the selected identity; both old UUIDs were absent. Selected
+configuration bytes and folder stayed unchanged (SHA `106ad635…`). The Light
+1024×800 refusal screenshot and Dark 1500×1000 replacement screenshot were
+visually reviewed PASS. The ended fixture D-Bus left secure-storage readiness
+unavailable, but did not prevent local attachment; no relaunch was needed.
+App, Host, Xvfb, guard and inspector forward stopped and CPU booking3100
+returned at 07:01Z. Evidence:
+`out/c3-reset-stale-host-connection-20261018/{result.json,native-result.json}`.
+These changed-source debug-candidate checks do not modify the pinned release.
 
-Settings → Open an issue launched the exact private browser at
-`https://github.com/SectileLabs/gchat/issues`, which rendered GitHub 404. Current
-main uses the same URL; OI110 designates the repository artifacts-only, and no
-supported public issue URL is known. This is tracked separately as
-`GUI-SETTINGS-SUPPORT-LINK-404`, **WAITING ON RON**. Bubbs confirmed that Ron
-selects the public destination; unchanged URL constant `5b8cff5ae` merged through
-`78ce5f45f`. Evidence:
-`out/c3-first-user-setup-20261018/private-browser-after-cancel.png`. The private
-browser keyring prompt was canceled without secrets, then the browser received
-normal TERM.
+The completed control observations are:
 
-The final control/theme/window matrix is retained in
-`out/c3-first-user-setup-20261018/{result.json,summary.md}`. Conditional actions
-requiring a published descriptor, installed model, owned account credentials,
-prepared/booked GPU group or configured Fleet coordinator were not invoked.
-General's OS autostart/CLI installation, destructive reset/relocation and
-file-manager links remain unexercised. Existing reset regression and engine-settings
-acceptance packets are retained under their own rows; this walk does not relabel
-them as fresh execution. The updater 404 remains its existing separate row.
+- Welcome preparation, Choose a model, Continue without loading a model and
+  Connect a network host reached the expected unloaded/connection pages. No
+  pairing or inference was submitted. The pinned release's visually reviewed
+  Dark 1500×1000 `secure-storage-ready-dark-wide.png` explicitly shows “Secure
+  storage is ready”, readable continuation guidance and both physical cards.
+- Models Installed/Recommended/Downloads, searches, card selection, unavailable
+  model explanations and native import chooser/Cancel were exercised. Downloads
+  Manage now selects Downloads, closes the popover and preserves real Back/
+  Forward tab history. Paused status and singular/plural transfer counts passed
+  reviewed Light/Dark layouts. The paused native journal was never resumed or
+  deleted; no real transfer ran.
+- Hosts' **Model and memory settings** and nested **Choose model settings**
+  were actually expanded in the final session. Model/GPU selectors,
+  conversation/request/copies controls, image/format switches, Off/Automatic/
+  DFlash and Automatic/BF16/INT8/NVFP4 menus were exercised and restored. The
+  expanded Advanced guide, draft-ahead, drafting GPUs, input batch, CPU/GPU
+  conversation-memory controls and CUDA Graph switch were exercised/restored.
+  Check/Start remained disabled without an installed model. Dark 1500×1000 and
+  Light 1024×800 ordinary/advanced screenshots were reviewed as readable without
+  horizontal overflow: `native-model-settings.json` and the four model-settings/
+  advanced PNGs in `out/c3-host-locator-deleted-runtime-20261018/`.
+- Hardware Refresh and the actual System Monitor showed both physical PRO 6000
+  cards, readable CPU/RAM values and unavailable-stat explanations, including
+  reviewed `remainder-monitor-native-light-narrow.png`. No profile was launched.
+  Manager passed private Pair/secure-storage/Cancel, GPU select/clear,
+  Fleet/coordinator dialog/Cancel, Models Scan, unchanged Storage Save, available
+  downloads refresh, Sharing off, Rename/Cancel and paired-client/request
+  inspection. Dark 1500×1000 and 800×650 were readable; Manager Light was not
+  available. No nearby Host or Fleet membership was changed.
+- General exercised computer-name Save, data-path Copy, private data chooser/
+  Cancel, Open Logs, language list, empty-token Show/Hide/Verify, spellcheck and
+  default-model switches, reset Cancel by Enter and the separate confirmed
+  reset regressions. Changed-source CLI Install/reopen/Uninstall/reopen passed
+  with the AppDir first on PATH; only the private user-bin CLI was installed.
+  Uninstall retains existing Host/launcher support files by contract. Folder
+  reveal selected `logs` through the private FileManager1 handler and subsequent
+  Interface navigation remained responsive. Autostart passed XDG enable/reopen
+  On/disable/remove/reopen Off with HOME/.config absent and packaged AppRun in
+  the entry. Interface Reset restored Dark/Medium from Light/Extra Large;
+  wide/narrow screenshots were reviewed. The locator session left Light/Medium.
+- Workspace connections exercised the private account service, Google import/
+  manual guide, Google/Microsoft service choices, Read only/Read write and
+  unchanged Save without real credentials. Attachments, Shortcuts, Proxy and
+  MCP controls/instructions were read and reversible settings restored. No new
+  npx tool was launched; the app's bundled exa HTTP MCP connects automatically.
+  Two input-command mistakes entered follow-on command text into private fields;
+  the fields were cleared and defaults verified. These were execution errors,
+  not product defects; bad intermediate evidence is excluded.
 
-Downloads Manage is fixed in `f928613b1`, merged through `d4b0b9c8c`. Focused48,
-lint, ONE verify, changed-source build and private native history/theme/layout
-checks pass. See `out/c3-downloads-manage-tab-20261018/{result.json,native-result.json,summary.md}`.
-The next defect is `GUI-DOWNLOADS-POPOVER-STATUS`: a paused journal entry is
-presented as Downloading. Its source is prepared; focused/lint/ONE verify and
-changed-source native acceptance come next. No real transfer or model is needed.
+Pinned release General reproduced the bundled-CLI false Installed state,
+Interface Reset retaining Light, folder-reveal abort, autostart failure and
+reset returning to the retained original default data folder after relocation.
+Exact autostart ENOENT console evidence at 04:50:19Z came from badge candidate
+`72c76c51a`, whose startup source matched the release; the release click had the
+same visible failure. Native relocation copied/restarted at the selected root
+and retained its old copy. The changed-source reset then deleted the selected
+sentinel, preserved the old-default sentinel and configuration bytes, and
+restarted at the same selected root. No seeded-chat resurrection was exercised.
+Historical failure receipts remain in `out/c3-current-main-release-20261018/`:
+`cli-false-installed.json`, `autostart-console.json`,
+`factory-reset-relocation.json`, `folder-reveal-crash.json` and
+`remainder-runtime-locator-diagnosis.json`.
 
-After that source fix merges, pin current main for a private release AppDir
-refresh and finish the installed-build walk at the requested sizes/themes.
-The accepted `ed68c7443` Linux release predates current GUI changes; its
-GIO/Gbot/four-family Engine closure is a read-only donor, not current-main
-evidence. Reuse approved `e2282c336` Engine payloads and existing release commands;
-refresh the frontend/core/extensions, CLI/Host/app and bundled skills/catalogs.
-Keep Cargo release settings unchanged. S1 has1.5TiB free; no duplicate Engine
-build or package publication is needed. Conditional model/account/Fleet actions
-retain their stated prerequisites. Support destination remains waiting on Ron.
+The remaining prerequisite-dependent leaves need a published download
+descriptor, installed model, prepared/booked GPU group, owned account credentials
+or configured Fleet coordinator. No model load, inference, profiling, GPU work,
+OAuth/account sign-in or conditional enrollment/assignment was performed.
+Earlier saved-instance settings acceptance remains separately attributed in
+`out/c3-engine-settings-native-20261018/result.json`. The structural GInfer
+provider redesign and updater404 retain their existing owners/rows. Settings →
+Open an issue opened the private browser at the current public issue URL and
+rendered GitHub404. `GUI-SETTINGS-SUPPORT-LINK-404` waits for Ron's destination
+decision; the URL constant was merged through `78ce5f45f` without inventing a
+replacement. Evidence: `private-browser-after-cancel.png` in the broad packet.
 
-Owner: Codex 3. Source `/ai/gchat-worktrees/c3-first-user-setup-20261018`, branch
-`fix/c3-first-user-setup-20261018`; baseline `201f46712`. Private apps, Hosts and
-services stopped; returned03:30Z. Displays and inspector forwards stopped; no
-private mounts remain. Closed candidate binaries, source archives and private homes were removed
-after evidence retention. The S1 root
-`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains `runnable`,
-`gchat`, `native-target`, `cargo-home`, `yarn-cache`, resources and launch profiles
-as the active next-fix stage, now exclusively assigned to the paused-status
-gate/build. The stopped `downloads-home` is retained for that native check;
-`downloads-manage-candidate` remains read-only until C4 finishes donor copying.
-Manage apps/Host/display stopped and CPUs returned03:50Z; no GUI job remains. Dependency donor remains owned by
-Claude at `tmp-claude-gchat-finish-20261017/tool-source` and is untouched. No
-model/profile/GPU job ran in this walk.
+Owner: Codex 3; worktree `/ai/gchat-worktrees/c3-first-user-setup-20261018`,
+branch `fix/c3-first-user-setup-20261018`. S1 root:
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`. Native isolation used
+private HOME/XDG700/Xauthority/Xvfb, D-Bus, an unlocked private keyring and
+WAYLAND unset; inspectors only observed state. The locator app, Host, keyring,
+D-Bus and Xvfb stopped and native booking3073 CPU88–95 returned 06:18Z. C7's
+AppDir read-copy ended 06:07Z and tools custody released 06:15Z. C4's
+copies/displays are terminal. The separate reset-regression app, Host, Xvfb,
+guard and inspector forward stopped and booking3100 CPU64–71 returned 07:01Z.
+Final candidate/profile retirement completed at 07:06:23Z after the verified merge.
 
+At 06:12Z, reference/link checks preceded retirement of owned `gchat`,
+`native-target`, `cargo-home`, `yarn-cache`, `status-candidate` and the release
+source archive: 37,217,689,600 allocated bytes (34.7 GiB), not a physical
+free-space claim across reflinks. Receipt:
+`out/c3-current-main-release-20261018/build-cache-cleanup-0610.json`. Earlier
+merged candidate exports were retired with concise evidence retained in
+`merged-export-cleanup-0548.json` and `merged-reset-export-cleanup-0601.json`;
+Interface/CLI exports had already retired at 05:34:57Z. No shared build/cache
+stage remained after that step. The separate reset build root was
+`/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018`; its source,
+Cargo cache, target and staging inputs retired at 06:58Z (31,818,774,811 logical
+bytes; `out/c3-reset-stale-host-connection-20261018/build-retirement.json`).
+
+Final reference checks found no live process or inbound dependency. At
+07:06:23Z both literal C3 S1 roots were removed, including the immutable AppDir,
+runnable/tools, private profiles and accepted candidate exports. This final
+step retired 21,675,034,149 logical bytes and eight exited C3 containers;
+reflink sharing means this is not a physical free-space claim. The coordinator
+preserved 127 small metadata, failure and native/Host-locator evidence files
+locally. Receipt:
+`out/c3-reset-stale-host-connection-20261018/final-retirement.json`. All paths
+above now identify historical fixtures; no campaign build/native job or S1
+resource remains. External donors and model inputs were untouched.
+
+The separate local donor `out/c3-chat-area-hands-on-20261017/runnable`
+retired at 07:04Z after C6, C7 and Claude Arch returned all loans. Its inbound SC
+resource link was confirmed to point into the C3 donor; no independent copy was
+needed after closure. Accessible process references, mounts and active Docker
+mounts were empty; inaccessible process fields were supplemented by explicit
+owner releases. Only the literal C3 runnable was removed: 4,122,204,474 logical
+bytes. SC/C6 trees and their released symlink files were untouched. The existing
+`out/c3-chat-area-hands-on-20261017/rule22-local-cleanup-20261018.json` records
+8,968,724,608 total logical bytes retired across that scoped cleanup.
+
+The walk and its owned resource retirement are complete. Support destination
+selection remains with Ron; prerequisite-dependent operations remain excluded.
+The original duplicate-card evidence remains in `out/c3-host-locator-deleted-runtime-20261018/native-model-settings.json`.
+No further native check is required for this completed control walk.
 
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
