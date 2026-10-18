@@ -11,6 +11,14 @@ import { MediaSession, type MediaStatus } from '@/vendor/cua-media/mediaSession'
 
 export type DesktopViewHandle = { stopInput: () => void }
 
+const statusLabels: Record<MediaStatus, string> = {
+  connecting: 'Connecting to the desktop…',
+  streaming: 'Desktop view connected',
+  reconnecting: 'Reconnecting to the desktop…',
+  ended: 'Desktop view ended',
+  failed: 'Desktop view could not connect',
+}
+
 const GbotDesktopView = forwardRef<
   DesktopViewHandle,
   {
@@ -81,8 +89,11 @@ const GbotDesktopView = forwardRef<
           },
           interactive: ticket.interactive,
           audio,
-          onStatus: (value) => {
-            if (!cancelled) setStatus(value)
+          onStatus: (value, detail) => {
+            if (!cancelled) {
+              setStatus(value)
+              setError(value === 'failed' ? (detail ?? '') : '')
+            }
           },
           onInputEscape: () => returnKeyboard.current?.focus(),
         })
@@ -94,7 +105,7 @@ const GbotDesktopView = forwardRef<
           ticket = null
         }
         if (!cancelled) {
-          setError(String(cause))
+          setError(cause instanceof Error ? cause.message : String(cause))
           setStatus('failed')
         }
       }
@@ -120,7 +131,7 @@ const GbotDesktopView = forwardRef<
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <span>{interactive ? 'You have control' : 'View only'}</span>
         <span role="status" className="text-muted-foreground">
-          {status}
+          {statusLabels[status]}
         </span>
         {interactive && (
           <Button
@@ -153,9 +164,23 @@ const GbotDesktopView = forwardRef<
           </Button>
         )}
       </div>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
+      {status === 'failed' && (
+        <div role="alert" className="space-y-1 text-sm text-destructive">
+          <p>
+            Could not connect to the bot’s desktop. Choose Reconnect view to try
+            again.
+          </p>
+          {error && (
+            <details>
+              <summary className="cursor-pointer">Details</summary>
+              <p className="break-words">{error}</p>
+            </details>
+          )}
+        </div>
+      )}
+      {status === 'ended' && (
+        <p className="text-sm text-muted-foreground">
+          Choose Reconnect view to open the desktop again.
         </p>
       )}
       <canvas
