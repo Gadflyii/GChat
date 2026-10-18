@@ -143,10 +143,16 @@ function WorkspaceSchedules({
   return (
     <div className="rounded-lg border p-3">
       {stopped && (
-        <p role="alert" className="mb-3 text-sm text-destructive">
-          Scheduling has stopped: {stopped}. Restart the Gbot service on the
-          computer where it runs before scheduled tasks can run again.
-        </p>
+        <div role="alert" className="mb-3 space-y-2 text-sm text-destructive">
+          <p>
+            Scheduling has stopped. Restart the Gbot service on the computer
+            where it runs before scheduled tasks can run again.
+          </p>
+          <details className="text-muted-foreground">
+            <summary>Details</summary>
+            <p className="whitespace-pre-wrap break-words">{stopped}</p>
+          </details>
+        </div>
       )}
       {error && (
         <div role="alert" className="mb-3 space-y-2 text-sm text-destructive">
