@@ -1,5 +1,52 @@
 # GInfer host UI
 
+## Model deletion confirmation — Gchat 3 native acceptance, October 18
+
+`GUI-MODEL-DELETE-RESULT-20261017` passes its remaining native Linux
+confirmation leaf. In Settings → GInfer → Models, the dialog initially focused
+Cancel. Ordinary Cancel closed it and preserved both inert fixture files,
+including their bytes and modification times. With the owned directory set to
+0500, an actual uid-1000 unlink failed with EACCES; native Delete showed
+“Permission denied (os error 13)”, retained the dialog, files and model row,
+and reenabled Delete. Restoring 0700 and retrying in that same dialog removed
+the fixture, closed the dialog, removed its row and showed the success toast.
+Four Dark-theme screenshots at 1200×800 app size were visually reviewed.
+
+Allocated main `7b17e06da`; source `625eceba0` merged `95b351d54`.
+The retained `ed68c7443` release AppDir has identical DeleteModel, shared deletion,
+model service, provider inventory and provider-store source. Main adds an
+external-registration branch; this `source: local` fixture has no managed
+journal and uses the unchanged direct-directory deletion route. Provider layout
+changes do not alter this dialog call. The accepted 11 focused cases and full
+source gates in `out/c4-model-delete-result-20261017/result.json` were reused,
+including their recorded command-environment correction; no gates were rerun.
+This observation qualifies the private native Linux confirmation workflow,
+not valid-model loading, external/managed registrations, pending/double-submit
+timing, Windows or a fresh installer. No product source change or real model,
+shared cache, account, Host pairing, GPU or inference action occurred.
+
+The initial synthetic manifest contained literal newline escapes and discovery
+rejected it; that setup is excluded. The owned manifest was corrected and
+ordinary Refresh installed models confirmed discovery before deletion. An early
+Cancel observation captured the closing animation and cannot prove closure.
+Only that missing observation was repeated with an identical inert fixture;
+the settled dialog-absent state, retained row and unchanged files establish
+Cancel. Future checks must parse the fixture and wait for settled dialog state.
+
+Canonical result, short summary, four screenshots, source binding, permission
+proof and state/cleanup receipts: `out/model-delete-native-20261018/{result.json,summary.md}`.
+Owner worktree `/ai/gchat-worktrees/gchat3-model-delete-native-20261018`, branch
+`test/gchat3-model-delete-native-20261018`. Verified S1 `AIS-2-8592-L01` used
+CPU 112–119, private HOME/runtime0700, D-Bus/unlocked keyring, Xvfb and a
+uid-1000 container; native pointer/keyboard drove controls and WebKit only
+observed. At 03:50Z the exact owned root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-model-delete-native-20261018` and all owned
+session processes, sockets and inspector forward were absent; 3.45 GB was
+released and booking 2938 canceled. The donor remains read-only at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`.
+Coordinator reviewed the evidence and docs diff; docs-only `git diff --check`
+passes. This acceptance is ready for branch integration.
+
 ## Conversation Rename keyboard — Gchat 3 native acceptance, October 18
 
 `GUI-THREAD-RENAME-KEYBOARD` passes its remaining native Linux leaf. Ordinary
@@ -73,6 +120,71 @@ dependencies, native target and caches pass to the next owned GUI gate. No new
 build, model, GPU, browser or dependency-install work. This bounded source change
 is merge-ready for coordinator integration. Next: Ron chooses the supported
 public support destination; do not claim that the 404 is fixed.
+## Gbot tools and SSH checks — Gchat2, October 18
+
+`GBOT-LAN-TOOLS-SSH-CHECK-OVERLAP`: Rechecking SSH while Check tools or Prepare
+tools was pending could detach that work; its late result could enable Continue
+beside an SSH failure.
+[LanSetup](../../web-app/src/components/GbotSetup/LanSetup.tsx) now tracks child
+tool work synchronously and disables SSH rechecking until it finishes.
+The [LAN setup
+regressions](../../web-app/src/components/GbotSetup/LanSetup.test.tsx) cover Check
+and Prepare overlap, and the [wizard
+regression](../../web-app/src/components/GbotSetup/index.test.tsx) keeps Continue
+unavailable until SSH and tools checks finish in order.
+The unfixed regression run had **3 failures / 29 skipped**; the fixed focused run
+passed **36 tests**:
+`yarn test web-app/src/components/GbotSetup/LanSetup.test.tsx web-app/src/components/GbotSetup/LanTools.test.tsx web-app/src/components/GbotSetup/index.test.tsx`.
+Qualification on main `1d80da074`: **ONE `make verify` passed** on S1
+CPU96–103, 03:38:26–03:46:12 UTC: 3,303 application tests (6 skipped),
+121 extension tests, 1,220 Rust tests (28 ignored), all six coverage floors,
+lint (0 errors, 5 existing warnings), type checking and quality checks.
+Changed source hashes matched before and after the gate.
+Evidence:
+[`out/gchat2-lan-tools-ssh-overlap-20261018/result.json`](../../out/gchat2-lan-tools-ssh-overlap-20261018/result.json).
+These rendered tests use a mocked service. FRESH/OLD remained OFF with original
+XML; this records no native, Windows or live-service qualification.
+## Downloads Manage destination — C3, October 18
+
+`GUI-DOWNLOADS-MANAGE-WRONG-TAB` is fixed. The sidebar Downloads popover's
+**Manage** action opens `/hub/?tab=Downloads`, exposing the transfer controls.
+The validated Models route owns the selected tab: direct links and browser
+Back/Forward select the corresponding panel, and later user tab choices update
+that route state. Missing or invalid tab values default to Installed. Existing
+model search parameters are preserved; transfer actions and payloads are
+unchanged.
+
+All 48 focused Models/control cases and lint pass (zero errors, five existing
+warnings). The ONE `make verify` passes typecheck, the 355-file quality guard,
+3304 app cases, 121 extension cases, 1220 native cases and all six critical
+coverage floors. Six app cases are skipped and 28 native cases ignored. The
+changed-source frontend/native candidate builds. No failure or retry occurred.
+
+Native Linux acceptance passes with real pointer/keyboard input. The baseline
+`201f46712` reproduces Manage opening Installed with Resume absent; selecting
+Downloads manually exposes the same paused journal's controls. The candidate
+opens Downloads with enabled Resume visible and closes the popover. Actual
+Alt+Left/Right preserves later tab choices. Reviewed screenshots cover Dark
+1500×1000 and Light 1024×740 without horizontal overflow. No Resume/Delete,
+actual transfer, model or GPU execution occurred. This is English source-native
+Vite/debug custom-protocol evidence; Windows, installers and release builds
+remain unqualified. The separate paused-status wording row remains unchanged.
+
+Owner/source `/ai/gchat-worktrees/c3-downloads-manage-tab-20261018`, branch
+`fix/c3-downloads-manage-tab-20261018`, base `be69f9190`. Results, native receipt,
+command/dependency receipts, candidate screenshots and a short summary are in
+`out/c3-downloads-manage-tab-20261018`; baseline screenshots remain in
+`out/c3-first-user-setup-20261018`. S1 fixture:
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018`, candidate
+`downloads-manage-candidate/bin/gchat`. CPU-only gates used the pinned offline
+image/cache, nice 10 and shared socket 1 compile lock. Build CPUs 88–95 returned
+03:44Z. The container and owned local/remote source archives are removed. The
+private native app, Host and Xvfb 79 are stopped and GUI CPUs 64–71 returned.
+The parent retains the shared stage, candidate/resources, private
+`downloads-home` and remote passing logs for the next paused-status candidate,
+then retires those disposable outputs. The private launch/config receipt is
+`downloads-native-launch.json` under the S1 root. No active job remains for
+this navigation fix.
 
 ## Physical graphics-card inventory — C3, October 18
 
@@ -367,8 +479,10 @@ Acceptance: every requested control and sentence is exercised or its concrete
 prerequisite is recorded. Each new source fix needs focused checks, one
 `make verify` and native acceptance using its changed build. The baseline and
 candidates use optimized bundled Vite frontends in debug Rust shells with custom
-protocol. This is Linux source-native evidence; installer/release qualification
-and release performance remain outside this walk. GChat and Manager builds pass.
+protocol. This is Linux source-native evidence; the requested installed-current-main
+walk remains pending. GChat and Manager builds pass. The next private release
+refresh will reuse the accepted Linux AppDir runtime closure without changing
+Ron's installation or publishing packages; release performance is not claimed.
 No model, hardware profile or GPU workload has run during the walk.
 
 Three reproduced defects now have tested, merged source fixes:
@@ -410,8 +524,9 @@ Debug preparation duration is not a release speed claim.
 Welcome → Choose a model navigated to Models and completed onboarding. Returning
 to New Chat showed the expected unloaded-model composer; no inference was sent.
 The separate retained preparing profile passed Welcome → Continue without
-loading a model and reached the unloaded composer. The alternate Connect network
-onboarding path remains unexercised; its Hosts screen was exercised separately.
+loading a model and reached the unloaded composer. A fresh native profile at
+03:37:38Z also exercised Welcome → Connect a network host and reached Hosts
+with address and secure-storage guidance; no pairing or credentials submitted.
 Hosts Refresh returned to connected with its button enabled.
 
 Models Installed/Recommended/Downloads, searches, card selection,
@@ -451,7 +566,8 @@ Settings → Open an issue launched the exact private browser at
 main uses the same URL; OI110 designates the repository artifacts-only, and no
 supported public issue URL is known. This is tracked separately as
 `GUI-SETTINGS-SUPPORT-LINK-404`, **WAITING ON RON**. Bubbs confirmed that Ron
-selects the public destination; the unchanged URL will use one constant. Evidence:
+selects the public destination; unchanged URL constant `5b8cff5ae` merged through
+`78ce5f45f`. Evidence:
 `out/c3-first-user-setup-20261018/private-browser-after-cancel.png`. The private
 browser keyring prompt was canceled without secrets, then the browser received
 normal TERM.
@@ -465,8 +581,22 @@ file-manager links remain unexercised. Existing reset regression and engine-sett
 acceptance packets are retained under their own rows; this walk does not relabel
 them as fresh execution. The updater 404 remains its existing separate row.
 
-Next action: fix the Downloads popover Manage navigation, which currently opens
-Installed instead of Downloads. The support destination waits on Ron.
+Downloads Manage is fixed in `f928613b1`, merged through `d4b0b9c8c`. Focused48,
+lint, ONE verify, changed-source build and private native history/theme/layout
+checks pass. See `out/c3-downloads-manage-tab-20261018/{result.json,native-result.json,summary.md}`.
+The next defect is `GUI-DOWNLOADS-POPOVER-STATUS`: a paused journal entry is
+presented as Downloading. Its source is prepared; focused/lint/ONE verify and
+changed-source native acceptance come next. No real transfer or model is needed.
+
+After that source fix merges, pin current main for a private release AppDir
+refresh and finish the installed-build walk at the requested sizes/themes.
+The accepted `ed68c7443` Linux release predates current GUI changes; its
+GIO/Gbot/four-family Engine closure is a read-only donor, not current-main
+evidence. Reuse approved `e2282c336` Engine payloads and existing release commands;
+refresh the frontend/core/extensions, CLI/Host/app and bundled skills/catalogs.
+Keep Cargo release settings unchanged. S1 has1.5TiB free; no duplicate Engine
+build or package publication is needed. Conditional model/account/Fleet actions
+retain their stated prerequisites. Support destination remains waiting on Ron.
 
 Owner: Codex 3. Source `/ai/gchat-worktrees/c3-first-user-setup-20261018`, branch
 `fix/c3-first-user-setup-20261018`; baseline `201f46712`. Private apps, Hosts and
@@ -475,8 +605,10 @@ private mounts remain. Closed candidate binaries, source archives and private ho
 after evidence retention. The S1 root
 `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` retains `runnable`,
 `gchat`, `native-target`, `cargo-home`, `yarn-cache`, resources and launch profiles
-as the active next-fix stage, used exclusively by the support-constant gate until
-it finishes and then by the Downloads fix. Dependency donor remains owned by
+as the active next-fix stage, now exclusively assigned to the paused-status
+gate/build. The stopped `downloads-home` is retained for that native check;
+`downloads-manage-candidate` remains read-only until C4 finishes donor copying.
+Manage apps/Host/display stopped and CPUs returned03:50Z; no GUI job remains. Dependency donor remains owned by
 Claude at `tmp-claude-gchat-finish-20261017/tool-source` and is untouched. No
 model/profile/GPU job ran in this walk.
 

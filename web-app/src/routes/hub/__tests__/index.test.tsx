@@ -2,7 +2,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { spyConfirm } from '@/test/confirm'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { ModelManagement } from '@/containers/ModelManagement'
+import { useState } from 'react'
+import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } from '@tanstack/react-router'
+import { ModelManagement as ModelManagementView, type ModelManagementTab } from '@/containers/ModelManagement'
+import { Route } from '../index'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
 import type { ModelRelease } from '@/lib/model-release'
 import type { LocalModelLoadProgress } from '@/services/engines'
@@ -29,7 +32,10 @@ vi.mock('@/utils/localHostModel', () => ({ controlLocalHostModel: mocks.controlH
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: React.ReactNode }) => <header>{children}</header> }))
 vi.mock('@/containers/EngineHostModels', () => ({ HostCard: ({ host }: { host: { name: string } }) => <section>Installed on {host.name}</section> }))
 vi.mock('@/containers/hub/DeleteModelAction', () => ({ DeleteModelAction: () => null }))
-vi.mock('@tanstack/react-router', () => ({ Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a> }))
+vi.mock('@tanstack/react-router', async importOriginal => ({
+  ...await importOriginal<typeof import('@tanstack/react-router')>(),
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => <a href={to}>{children}</a>,
+}))
 vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
 vi.mock('@/services/engines', () => ({ engineCommand: mocks.command, engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}` }))
 vi.mock('@/hooks/useServiceHub', () => ({ isServiceHubInitialized: () => false, useServiceHub: () => ({
@@ -56,6 +62,26 @@ vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (s: u
 const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: 'muse', weights_id: 'nvfp4' },
   url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64), bytes: 4096,
   tp: 1, qualified_sm: ['12.0'], min_vram_mib_per_gpu: 32768, capabilities: ['tools'], launch_profiles: [{ id: 'c1' }] }
+
+function ModelManagement({ initialQuery }: { initialQuery?: string }) {
+  const [tab, setTab] = useState<ModelManagementTab>('Installed')
+  return <ModelManagementView initialQuery={initialQuery} tab={tab} onTabChange={setTab} />
+}
+
+function renderModelsRoute(initialEntry: string) {
+  const root = createRootRoute()
+  const models = Route.update({
+    id: '/hub/', path: '/hub/', getParentRoute: () => root,
+  })
+  const router = createRouter({
+    routeTree: root.addChildren([models]),
+    history: createMemoryHistory({ initialEntries: [initialEntry] }),
+    defaultPendingMs: 0,
+  })
+  render(<RouterProvider router={router} />)
+  return router
+}
+
 describe('host-scoped Models', () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null
@@ -72,6 +98,33 @@ describe('host-scoped Models', () => {
     mocks.catalog = [{ library_name: 'ginfer', model_name: 'test/model', releases: [release] }]
   })
   afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
+  it('opens a direct Downloads link with its transfer controls and preserves later tab choices through history', async () => {
+    mocks.command.mockImplementation(async action => action === 'local_model_downloads'
+      ? [{ id: 'job', release, status: 'paused', received: 1024, bytes_per_second: 0, error: null, path: null }] : [])
+    const router = renderModelsRoute('/hub/?tab=Downloads&q=Blackwell')
+    expect(await screen.findByRole('button', { name: 'Resume download' })).toBeVisible()
+    expect(screen.getByRole('tab', { name: 'Downloads' })).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Installed' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Installed' })).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.queryByRole('button', { name: 'Resume download' })).not.toBeInTheDocument()
+    expect(router.state.location.search).toMatchObject({ tab: 'Installed', q: 'Blackwell' })
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Recommended' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Recommended' })).toHaveAttribute('aria-selected', 'true'))
+    await act(async () => { router.history.back() })
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Installed' })).toHaveAttribute('aria-selected', 'true'))
+    await act(async () => { router.history.back() })
+    expect(await screen.findByRole('button', { name: 'Resume download' })).toBeVisible()
+    await act(async () => { router.history.forward() })
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Installed' })).toHaveAttribute('aria-selected', 'true'))
+  })
+  it.each(['/hub/', '/hub/?tab=unknown'])('defaults to Installed without a supported tab (%s)', async entry => {
+    renderModelsRoute(entry)
+    expect(await screen.findByRole('tab', { name: 'Installed' })).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(screen.getByRole('tab', { name: 'Downloads' }))
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Downloads' })).toHaveAttribute('aria-selected', 'true'))
+  })
   it.each([null, 'Catalog is unavailable'])('adds an existing file with empty Installed and no release catalog (%s)', async catalogError => {
     mocks.providers = [{ provider: 'ginfer', models: [] }]
     mocks.catalog = []
