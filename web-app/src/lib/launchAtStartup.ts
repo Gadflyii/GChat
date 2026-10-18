@@ -1,8 +1,4 @@
-import {
-  disable as disableAutostart,
-  enable as enableAutostart,
-  isEnabled as isAutostartEnabled,
-} from '@tauri-apps/plugin-autostart'
+import { invoke } from '@tauri-apps/api/core'
 import type { AppService } from '@/services/app/types'
 import type { AutostartPreference } from '@gchat/core'
 
@@ -14,16 +10,22 @@ type AutostartPreferenceStore = Pick<
 const preferenceForState = (enabled: boolean): AutostartPreference =>
   enabled ? 'enabled' : 'disabled'
 
+export const getLaunchAtStartup = (): Promise<boolean> =>
+  invoke<boolean>('is_launch_at_startup_enabled')
+
+export const setLaunchAtStartupState = (enabled: boolean): Promise<void> =>
+  invoke<void>('set_launch_at_startup_enabled', { enabled })
+
 export async function reconcileLaunchAtStartup(
   appService: AutostartPreferenceStore
 ): Promise<boolean> {
   const preference = await appService.getAutostartPreference()
-  let enabled = await isAutostartEnabled()
+  let enabled = await getLaunchAtStartup()
 
   if (preference === 'pending_default_on') {
     if (!enabled) {
-      await enableAutostart()
-      enabled = await isAutostartEnabled()
+      await setLaunchAtStartupState(true)
+      enabled = await getLaunchAtStartup()
     }
     if (!enabled) {
       throw new Error('Operating system did not enable launch at startup')
@@ -42,13 +44,9 @@ export async function setLaunchAtStartup(
   appService: AutostartPreferenceStore,
   enabled: boolean
 ): Promise<boolean> {
-  if (enabled) {
-    await enableAutostart()
-  } else {
-    await disableAutostart()
-  }
+  await setLaunchAtStartupState(enabled)
 
-  const actualState = await isAutostartEnabled()
+  const actualState = await getLaunchAtStartup()
   if (actualState !== enabled) {
     throw new Error('Operating system did not apply launch-at-startup setting')
   }

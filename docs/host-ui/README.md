@@ -48,6 +48,108 @@ subject/decision records change. No new runtime fixture, build tree, process,
 resource booking, dependency or GPU/model work was created; the parent retains
 the installed AppDir and native fixture in its existing release packet.
 
+## Gbot permission decision failure recovery — October 18
+
+`GBOT-APPROVAL-INLINE-ERRORS`: failed **Allow** and **Deny** requests previously
+produced only a short raw-error toast, leaving the permission card without
+persistent recovery guidance. The card now explains which decision failed,
+keeps the error beside the original request and offers the same decision for
+an explicit retry. Technical details stay closed until requested. Settings and
+the companion pass failures to this card while retaining their normal refresh.
+Pending decisions still prevent duplicate or opposite submissions.
+
+Baseline `4ead3f88f`; all four rendered Allow/Deny regressions fail on the
+missing alert. The fixed focused run passes 123 tests in three files. ONE
+`make verify` passed on S1 CPUs40–47, 05:26:40–05:34:20Z: lint, typecheck,
+quality guards, 3,379 app tests (six skipped), 127 extension tests, all six
+coverage floors and 1,229 Rust tests (28 ignored). Private offline caches,
+socket0 shared lock, nice10/max8 jobs; source, test and documentation hashes
+matched before and after the gate. The private remote tree was removed and
+booking3033 canceled; CPUs returned05:35Z. No approval policy or backend
+behavior changed. No VM, native Windows, model or live permission was exercised.
+FRESH/OLD remain OFF/original XML/custody Gchat2. Windows not built (dev phase).
+
+Result: `out/gchat2-approval-inline-errors-20261018/result.json`, with
+`SUMMARY.md` beside it. Branch `fix/gchat2-approval-inline-errors-20261018`.
+
+## Linux Launch at startup XDG path — October 18
+
+`GUI-LINUX-AUTOSTART-XDG-PATH` is merge ready with focused, full-gate, build
+and private native acceptance passing. The installed Linux release `d0a8d06bf` launched through
+its normal AppRun with a private HOME, `XDG_CONFIG_HOME=$HOME/config`, and no
+`$HOME/.config`. Enabling **Settings → General → Launch at startup** produced
+a visible failure. The exact console error at 04:50:19Z, `No such file or
+directory (os error 2)`, was captured from badge candidate `72c76c51a`, whose
+startup source is identical to that release. The saved console observation is
+`out/c3-current-main-release-20261018/autostart-console.json`. The cached
+`auto-launch 0.5.0` implementation ignores XDG config and calls nonrecursive
+`create_dir` for `HOME/.config/autostart`, establishing the missing-parent cause.
+
+The candidate owns Linux's `autostart/GChat.desktop` beneath Tauri's resolved
+configuration directory and recursively creates its parents. Enable records
+the AppImage, extracted AppDir's AppRun, or ordinary executable as one quoted
+Exec argument. Read and disable use that same entry; failures identify the
+affected directory or file. Settings and startup reconciliation share the
+native commands, read back the actual state, and save the preference only after
+success. Windows keeps the existing plugin registry owner. The existing opt-in
+policy remains in force. See the
+[ownership decision](../decisions/2026-10-18-own-linux-xdg-autostart-registration.md).
+
+Acceptance: in a disposable private installed Linux session with the reported
+HOME/XDG layout, enable must create only the selected XDG startup entry, show
+enabled after reopening General, and record the packaged launch target.
+Disable must remove only GChat's entry and show disabled after reopening.
+Filesystem rejection must report failure and restore
+actual state without persisting success. No login/reboot, Windows runtime,
+fresh installer, GPU or model qualification is claimed by this source change.
+
+Five native regressions cover fresh missing parents, a supplied XDG config
+root, filesystem failures, packaged/ordinary launch targets, and literal Exec
+escaping. Shared-service tests cover command routing, readback and failure
+without saving success; rendered General tests exercise enable/disable and
+failed-toggle recovery. The focused commands were:
+
+```bash
+yarn workspace @gchat/web-app test src/lib/__tests__/launchAtStartup.test.ts src/routes/settings/__tests__/general.test.tsx src/providers/__tests__/DataProvider.test.tsx
+cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli linux_autostart -- --test-threads=1
+```
+
+Inventory: C3 worktree
+`/ai/gchat-worktrees/c3-linux-autostart-xdg-20261018`, branch
+`fix/c3-linux-autostart-xdg-20261018`. Current main `4ead3f88f` was merged
+normally before gates. The first focused run retained 48 passes and two failures:
+the existing General fixture replaced JSDOM's real Window with an object spread,
+which drops its non-enumerable `document`; the new asynchronous startup checks
+therefore had no default container. The fixture now assigns only the mocked
+`core` property onto the real Window. Product code and assertions are unchanged.
+Original log: `out/c3-linux-autostart-xdg-20261018/focused-frontend-first-failure.log`.
+
+Corrected source `7e49b9d0d` is pushed. All 50 focused frontend cases and five
+native cases pass; scoped library check/Clippy and lint pass. ONE `make verify`
+ran05:32:01–05:37:04Z and passed 3,380 app tests (six skipped), 127 extension
+tests, all six coverage floors and 1,234 native tests (28 ignored). No second
+full verify ran. Vite/default desktop build passed05:38:41Z.
+
+The immutable `autostart-candidate/bin/gchat` beneath the existing S1 root is
+255,728,432 bytes, SHA256
+`6110349de61393d7022452a0757157630f73200f65882c135c223dff29136889`.
+ELF, private pre-install and runnable-resource link were checked05:38:54Z;
+46 source/dependency bindings still matched. Both exited containers and local/
+remote disposable source archives are removed; booking3036 returned. Shared
+source/dependency/target caches remain for the serial reset/locator work.
+The tested candidate is retained pending merge; AppDir/home, tools and runnable
+assets remain protected. No GPU or model ran in these gates.
+
+Private native acceptance passed05:40–05:41Z using that export and the original
+HOME/XDG layout. Enable created `XDG_CONFIG_HOME/autostart/GChat.desktop` with
+the immutable AppDir/AppRun target while `HOME/.config` remained absent.
+Reopening General retained On. Disable removed the entry, and reopening retained
+Off; the installation preference is restored to disabled. Reviewed Light1500×1000
+and Dark1024×800 views are readable without horizontal overflow. Filesystem
+rejection remains covered by the focused native/rendered cases; no GUI rejection
+was injected. App/private session returned05:41Z; Xvfb remains for the next two
+checks. No login/reboot or Windows runtime is claimed. Next: coordinator merge.
+Packet: `out/c3-linux-autostart-xdg-20261018/{result.json,terminal.json,summary.md}`.
 ## Gbot companion task-load retry — October 18
 
 `GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously
@@ -74,6 +176,106 @@ original XML, in Gchat 2 custody. Windows: not built (dev phase).
 
 Result: `out/gchat2-companion-task-load-retry-20261018/result.json`, with
 `SUMMARY.md` beside it. Branch `fix/gchat2-companion-task-load-retry-20261018`.
+## Packaged CLI terminal-install detection — C3, October 18
+
+`GUI-CLI-PACKAGED-PATH-DETECTION` corrects Settings → General → terminal
+command detection. The private current-main release `d0a8d06bf` reproduced
+**Installed at …/current-main-appdir/usr/bin//gchat-cli** with only Uninstall
+available, although the inherited terminal PATH had no `gchat-cli`. The
+packaged AppRun prepends its private directories to PATH; `which` therefore
+mistook the bundled executable for a terminal installation. Baseline receipt:
+`out/c3-current-main-release-20261018/cli-false-installed.json`.
+
+The candidate traverses PATH directly for the platform's CLI executable,
+excluding the private `resources/bin` directory and, on Linux, the AppDir
+captured by Tauri from `APPDIR`. The approved GTK AppRun hook also sets
+`APPDIR` when running an extracted AppDir. Directory canonicalization excludes
+aliases into the bundle while retaining an external installed file symlink;
+the executable target itself is not canonicalized. Detection continues past
+the bundle to the first external executable. Without an AppDir, a real system
+`/usr/bin` installation remains eligible. Windows checks `gchat-cli.exe` on
+PATH without `where`'s implicit current-directory lookup; the separate per-user
+desktop-linked launcher remains eligible. Install, uninstall and launcher
+ownership are unchanged; C4 owns the separate standalone-launcher work.
+
+Acceptance requires the packaged-only native case to offer Install, a real
+terminal installation to report its external path, and existing CLI install
+and uninstall behavior to remain intact. Five filesystem regressions cover
+bundle-only lookup, PATH ordering after AppRun, system installation without
+AppDir, directory aliases versus installed file symlinks, and missing or
+non-executable commands. Focused command:
+`cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli cli_install_detection -- --test-threads=1`.
+The five focused Rust regressions, library-scope Cargo check/Clippy and lint
+passed. ONE `make verify` passed on S1 CPUs80–87 (booking3025): 3,369 app tests
+(six skipped), 127 extension tests, all six coverage floors and 1,234 native
+tests (28 ignored). There was no gate failure or continuation. Vite and the
+default desktop debug build passed at 05:25:46Z. The exported source-native
+`cli-candidate/bin/gchat` is bound to source `86c3068ad`; ELF, private pre-install
+and retained resource linkage were verified. Installed-layout acceptance passed
+at 05:32Z with explicit APPDIR and bundled-first PATH: Install was offered, the
+CLI installed in private HOME/.local/bin, and reopening General retained the
+external Installed path. Uninstall removed the private CLI executable; reopening
+General offered Install again. The system bin directory was unwritable. Viewed
+Light 1500×1000 and Dark 1024×800 screenshots show readable controls without
+horizontal overflow. Windows is not built or exercised.
+
+Current main `b9a56c96c` was merged normally before gates. Its retained
+first-run disk-full test already includes the exact folder hydration wait;
+all first-run regressions are preserved without another source correction.
+The Interface candidate is immutable and excluded from this CLI source.
+
+Inventory: owner C3, branch
+`fix/c3-cli-packaged-path-detection-20261018`, baseline `bbc81c2ec`, worktree
+`/ai/gchat-worktrees/c3-cli-packaged-path-detection-20261018`. Only
+`src-tauri/src/core/system/commands.rs` and this authority are owned by this
+row. The shared S1 source/dependencies/native target were returned at 05:26Z; app,
+idle Host and private session returned at 05:32Z. The tested CLI export is retained
+for integration, and shared private Xvfb remains in use for the next candidate.
+Next: coordinator integration, then retire this candidate. Native acceptance
+used private HOME and explicit APPDIR/bundled PATH; no GPU,
+model, profile, host install or shared terminal PATH mutation. Reuse pinned
+routed-offline dependencies only after all retained manifests match. Preserve
+current-main AppDir/home, Interface/folder/badge candidates and runnable assets.
+Packet: `out/c3-cli-packaged-path-detection-20261018/{result.json,summary.md}`.
+## Saved-host connection and refresh feedback — Gchat 3, October 18
+
+`GUI-HOST-CONNECT-REFRESH-RESULT-20261018`: on base `c63557f3b`, Connect
+discards its successful Host snapshot and catches a subsequent list-read failure
+as a connection failure. The candidate publishes that authoritative snapshot,
+preserves the accepted result and gives a separate read-only Refresh host list
+retry. A genuine Connect rejection retains its existing recovery/details
+and requires an explicit Connect retry. Pending actions cannot duplicate.
+
+Acceptance: rendered baseline reproduction, authoritative publication before
+the read, distinct persistent command/read outcomes, read-only retry and pending
+protection, then focused tests, lint and ONE `make verify`. No native/protocol,
+Engine, installed GUI, network, GPU, Windows or installer changes/qualification.
+Owner: `/ai/gchat-worktrees/gchat3-host-connect-refresh-result-20261018`, branch
+`fix/gchat3-host-connect-refresh-result-20261018`. Execution uses an independent
+booked eight-CPU S1 fixture at
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-connect-refresh-tests-20261018`, then
+removes owned copies/builds after results are reviewed. Retain only
+`out/host-connect-refresh-result-20261018/test-result.json` and adjacent
+`test-summary.md`. Source and two rendered regressions are frozen for the
+baseline comparison and gate. The independent fixture preparation passed;
+booking3031 returned 05:23Z. Baseline execution started 05:26Z on S1
+AIS-2-8592-L01 CPUs120–127, booking3035, with the socket-1 shared compile lock.
+Only the frozen tests were overlaid on the exact base for that phase. Both
+regressions failed as expected (38 skipped): accepted Connect followed by a
+failed read never published its snapshot, and an explicit successful retry
+still left the card Not connected. The coordinator reviewed the actual log.
+All 40 focused cases pass with the frozen fix; lint passes with zero errors
+and five existing warnings. ONE `make verify` passes: 3,374 app tests (six
+skipped), 127 extension tests, all six critical coverage floors and 1,229 Rust
+tests (28 ignored). The candidate ran 05:27:43–05:35:38Z, exit zero without OOM.
+The coordinator reviewed actual logs, terminal states, source/test diffs and
+matching post-gate source bindings. Current main has no intervening changes
+to either owned source/test file. Booking3035 is canceled; returned 05:37Z.
+The owned SSD fixture (42.33 GB), two exited containers and local source archive
+were removed by 05:39Z. The RC donor is untouched and only the concise result
+and summary remain. Status: MERGE READY; next unresolved action is Bubbs's merge.
+These checks establish rendered mocked-command behavior and the Linux source
+gate; they do not establish native connection, installed GUI or Windows acceptance.
 
 ## Gbot human-help failure recovery — October 18
 

@@ -412,6 +412,127 @@ it.each([
   }
 )
 
+it.each([
+  [
+    'Allow',
+    true,
+    'Allowing this action…',
+    'Could not allow this action. Try again.',
+  ],
+  [
+    'Deny',
+    false,
+    'Denying this action…',
+    'Could not deny this action. Try again.',
+  ],
+] as const)(
+  'keeps a failed permission %s inline through refresh and retries it in the companion',
+  async (action, allow, progress, message) => {
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [],
+        help_requests: [],
+      },
+    ]
+    let approvals = [
+      {
+        id: 'atlas-permission',
+        task_id: 'atlas-task',
+        request: { operation: { kind: 'read', path: '/home/bot/notes.txt' } },
+      },
+    ]
+    let fail!: (cause: Error) => void
+    let finish!: () => void
+    const reply = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) => {
+      if (path === 'tasks/approvals') return Promise.resolve(approvals)
+      if (path === 'tasks/approval') return reply(body)
+      return fallback(path, body)
+    })
+    await mount()
+    const card = screen.getByRole('article', { name: 'Bot permission request' })
+    const submit = within(card).getByRole('button', { name: action, exact: true })
+    act(() => {
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    const payload = { id: 'atlas-permission', allow }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    expect(card).toHaveAttribute('aria-busy', 'true')
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+
+    await act(async () => fail(new Error('Permission decision unavailable')))
+    const alert = await within(card).findByRole('alert')
+    expect(within(alert).getByText(message)).toBeVisible()
+    expect(
+      within(alert).getByText('Details').closest('details')
+    ).not.toHaveAttribute('open')
+    expect(
+      within(alert).getByText('Permission decision unavailable')
+    ).not.toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(within(card).getByText('/home/bot/notes.txt')).toBeVisible()
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(card).toHaveAttribute('aria-busy', 'false')
+    expect(within(card).getByRole('button', { name: 'Allow' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Deny' })).toBeEnabled()
+
+    const reads = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks')
+    ).toHaveLength(reads + 1)
+    expect(
+      within(within(card).getByRole('alert')).getByText(message)
+    ).toBeVisible()
+    expect(within(card).getByText(/Allow permits this action once/)).toBeVisible()
+    expect(reply).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(reply.mock.calls).toEqual([[payload], [payload]])
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    for (const button of within(card).getAllByRole('button'))
+      expect(button).toBeDisabled()
+    approvals = []
+    await act(async () => finish())
+    await waitFor(() => expect(card).not.toBeInTheDocument())
+    expect(
+      screen.queryByRole('article', { name: 'Bot permission request' })
+    ).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(
+        ([path]) => path.startsWith('tasks/') && path !== 'tasks/approvals'
+      )
+    ).toEqual([
+      ['tasks/approval', payload],
+      ['tasks/approval', payload],
+    ])
+  }
+)
+
 it('sends a permission decision for the selected bot and shows its pending state', async () => {
   tasks = [
     {

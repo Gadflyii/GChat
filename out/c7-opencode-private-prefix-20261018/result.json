@@ -1,0 +1,86 @@
+{
+  "row": "GUI-FIRST-USER-OPENCODE-PROVISIONING",
+  "status": "PASS_SCOPED",
+  "source": {
+    "repository": "GChat",
+    "branch": "fix/c7-opencode-private-prefix-20261018",
+    "revision": "13125b2ab",
+    "base": "d31e328d6"
+  },
+  "authority": "claude-arch signed 2026-10-18T04:58:46Z",
+  "defect": "Automatic archive startup ran npm install --global opencode-ai and failed EACCES creating /usr/local/lib/node_modules.",
+  "baseline": "baseline-result.json",
+  "change": [
+    "Install with npm --global=false and explicit prefix <selected-data>/code/opencode/runtime and cache <selected-data>/code/opencode/npm-cache.",
+    "Use one custom > managed > native resolver for readiness, PTY/external launch, CLI and offline session deletion; retain the executable bound to existing sessions.",
+    "Managed updates use the same local prefix. External/custom updates show their own command; switching requires explicit Use managed copy.",
+    "Missing or broken Node/npm asks for Node.js LTS; OpenCode never bootstraps system tools."
+  ],
+  "verification": {
+    "host": "S1 AIS-2-8592-L01",
+    "cpu": "0-7",
+    "gpu": false,
+    "container": "gchat-s1-verify:20261015",
+    "focused_frontend": {
+      "passed": 39,
+      "suites": [
+        "CodeTerminalHost",
+        "EmbeddedIntegrationProvisioner",
+        "terminal/tauri"
+      ]
+    },
+    "focused_rust": {
+      "passed": 32,
+      "opencode_filter": 19,
+      "code_update_filter": 4,
+      "code_sessions_filter": 8,
+      "gchat_cli": 1
+    },
+    "rust_check": "PASS; --lib --bin gchat-cli --no-default-features --features test-tauri,cli",
+    "rust_clippy": "PASS; same explicit library/CLI targets, -D warnings",
+    "make_verify": {
+      "invocations": 1,
+      "result": "PASS",
+      "completed_at": "2026-10-18T05:24:32Z",
+      "app_passed": 3367,
+      "app_skipped": 6,
+      "extension_passed": 121,
+      "rust_passed": 1241,
+      "rust_ignored": 28,
+      "coverage_floors": 6,
+      "lint": "PASS",
+      "typecheck": "PASS",
+      "quality_guards": "PASS"
+    },
+    "frontend_build": {
+      "result": "PASS",
+      "completed_at": "2026-10-18T05:25:24Z"
+    },
+    "native_build": {
+      "result": "PASS",
+      "completed_at": "2026-10-18T05:26:18Z"
+    },
+    "invocation_correction": "The initial cargo check incorrectly included the desktop binary under CLI-only features and failed before make verify. Continued only unfinished steps with explicit --lib --bin gchat-cli; desktop built separately with default features. No source change or make verify retry.",
+    "coverage": "Focused regressions cover selected data paths with spaces/quotes, local install/update/cache/proxy/HOME/config, missing/broken prerequisites, failed or incomplete installation, version mismatch, authoritative custom path, external manual update/adoption, actual CLI/PTTY launch and bound/offline session deletion."
+  },
+  "native": "candidate-result.json",
+  "limits": [
+    "Linux debug archive-style native replay; installer packaging and Windows not qualified.",
+    "No model loading, inference, performance or GInfer engine qualification."
+  ],
+  "inventory": {
+    "build_root": "S1 /media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018",
+    "status": "DELETED after native evidence capture and no-live-reference/mount checks; approximately 25 GiB released.",
+    "donors": "C3 first-user failure fixture and ed68 resource donor read-only; never removed or modified.",
+    "cleanup": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-ginfer-settings-owner-20261018",
+      "deleted_at": "2026-10-18T05:33:05Z",
+      "exists_after": false,
+      "live_references_before": [],
+      "mounts_before": [],
+      "scope": "Owned source copy, build/dependency caches and disposable baseline/candidate profiles/stages only; read-only donor symlinks not followed."
+    }
+  },
+  "native_summary": "Clean automatic npm installation to the app-owned prefix/cache completed; actual managed --version returned 1.19.3 with no native OpenCode on PATH. Native Code recognizes it and asks for a model; global-prefix guard and ambient cache remained empty. Root viewed both candidate screenshots.",
+  "resources_returned_at": "2026-10-18T05:31:02Z"
+}

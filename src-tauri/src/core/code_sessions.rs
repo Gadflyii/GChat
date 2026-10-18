@@ -419,16 +419,20 @@ pub async fn delete_reference(data: &Path, thread: &Value) -> Result<(), String>
         )
         .await?;
     } else {
-        let executable =
-            code.get("executable")
-                .and_then(Value::as_str)
-                .unwrap_or(if cfg!(windows) {
-                    "opencode.cmd"
-                } else {
-                    "opencode"
-                });
-        let output = tokio::process::Command::new(executable)
-            .args(["session", "delete", id])
+        // A saved reference keeps the executable that owns its offline protocol.
+        // New launches resolve independently, so adopting GChat's managed copy
+        // does not silently rebind an older session's deletion command.
+        let executable = super::system::opencode_runtime::resolve(
+            data,
+            code.get("executable").and_then(Value::as_str),
+        )?
+        .ok_or("OpenCode is not installed. Set up Code before deleting this session.")?
+        .executable;
+        let mut command = tokio::process::Command::from(super::system::opencode_runtime::command(
+            &executable,
+            &["session", "delete", id],
+        ));
+        let output = command
             .current_dir(directory)
             .envs(super::system::opencode_config::child_env(
                 &super::system::opencode_config::config_directory(data),
@@ -596,7 +600,7 @@ mod tests {
 
     #[cfg(unix)]
     #[tokio::test]
-    async fn offline_session_delete_uses_selected_managed_config_and_preserves_home() {
+    async fn offline_session_delete_keeps_its_bound_executable_after_managed_adoption() {
         use std::os::unix::{ffi::OsStrExt, fs::PermissionsExt};
 
         let data = tempfile::tempdir().unwrap();
@@ -610,6 +614,10 @@ printf '%s\0' "$1" "$2" "$3" "$HOME" "$XDG_CONFIG_HOME" "$OPENCODE_CONFIG_DIR" "
         )
         .unwrap();
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let managed = super::super::system::opencode_runtime::managed_executable(data.path());
+        std::fs::create_dir_all(managed.parent().unwrap()).unwrap();
+        std::fs::write(&managed, "#!/bin/sh\nexit 71\n").unwrap();
+        std::fs::set_permissions(&managed, std::fs::Permissions::from_mode(0o700)).unwrap();
         let home = std::env::var_os("HOME").unwrap_or_default();
         let row = write_reference(
             data.path(),
@@ -645,6 +653,61 @@ printf '%s\0' "$1" "$2" "$3" "$HOME" "$XDG_CONFIG_HOME" "$OPENCODE_CONFIG_DIR" "
             .unwrap()
             .is_none());
         assert_eq!(std::env::var_os("HOME").unwrap_or_default(), home);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn offline_unbound_session_delete_uses_the_selected_managed_runtime() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("Selected GChat data");
+        let project = root.path().join("Code workspace");
+        std::fs::create_dir_all(&project).unwrap();
+        let executable = super::super::system::opencode_runtime::managed_executable(&data);
+        std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s\\n' \"$1\" \"$2\" \"$3\" > delete-witness\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let row = write_reference(
+            &data,
+            &json!({"id":"ses_managed_delete","title":"Managed runtime"}),
+            project.to_str().unwrap(),
+            None,
+        )
+        .unwrap();
+
+        delete_reference(&data, &row).await.unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(project.join("delete-witness")).unwrap(),
+            "session\ndelete\nses_managed_delete\n",
+        );
+        assert!(get_reference(&data, "code-ses_managed_delete")
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn offline_delete_retains_a_reference_when_its_bound_executable_is_missing() {
+        let data = tempfile::tempdir().unwrap();
+        let project = tempfile::tempdir().unwrap();
+        let missing = project.path().join("missing-opencode");
+        let row = write_reference(
+            data.path(),
+            &json!({"id":"ses_missing_executable","title":"Keep this reference"}),
+            project.path().to_str().unwrap(),
+            Some(missing.to_str().unwrap()),
+        )
+        .unwrap();
+
+        assert!(delete_reference(data.path(), &row).await.is_err());
+        assert!(get_reference(data.path(), "code-ses_missing_executable")
+            .unwrap()
+            .is_some());
     }
 
     #[tokio::test]

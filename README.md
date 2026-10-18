@@ -165,7 +165,13 @@ GChat can detect, install, configure, and launch external coding agents against 
 OpenCode, Codex, Claude Code, Cline, Goose, OpenHands, Kilo Code, and other supported clients share
 the model already managed by GChat rather than starting a second inference backend.
 
-The Code tab embeds a persistent PTY running the real OpenCode TUI. Code sessions are saved in
+The Code tab embeds a persistent PTY running the real OpenCode TUI. GChat
+reuses a custom or existing native installation. Otherwise it installs a managed
+copy inside its data folder, without global npm writes. Node.js and npm must
+already be available; if they are missing, install Node.js LTS and retry setup.
+Managed updates stay in that folder. For an external installation, Update Code
+shows its own update command and offers **Use managed copy** without changing
+the external files. Code sessions are saved in
 the shared sidebar history and reopen in their original workspace. OpenCode owns their transcripts;
 GChat saves references to them. Conversations use a Chat icon, Code sessions a Code icon, and
 delegated work adds an agent activity badge. `/compact` works in conversations, active agent

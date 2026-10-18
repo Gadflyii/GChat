@@ -5,6 +5,7 @@ import { useThreads } from '@/hooks/useThreads'
 import { useCodeTerminalStore } from '@/stores/code-terminal-store'
 import { useConversationPolicy } from '@/hooks/useConversationPolicy'
 import { useToolAvailable } from '@/hooks/useToolAvailable'
+import { useLaunchSettings } from '@/stores/launch-settings-store'
 import { CodeTerminalHost } from '@/containers/CodeTerminalHost'
 import type { OpenCodeReadiness, TerminalSpawnRequest, TerminalStatus } from '@/types/terminal'
 
@@ -201,10 +202,6 @@ vi.mock('@/services/terminal/code-sessions', () => ({
   newCodeSession: mocks.newCodeSession,
   updateCodeBridgePolicy: mocks.updateCodeBridgePolicy,
 }))
-vi.mock('@/stores/launch-settings-store', () => ({
-  useLaunchSettings: (selector: (state: unknown) => unknown) =>
-    selector({ customPaths: {} }),
-}))
 vi.mock('@/lib/platform/utils', () => ({
   isPlatformTauri: () => true,
   isIOS: () => false,
@@ -251,6 +248,8 @@ describe('CodeTerminalHost', () => {
     vi.clearAllMocks()
     useCodeTerminalStore.setState({ enabled: true, disabling: false, workspace: undefined, selectedThreadId: undefined })
     useThreads.setState({ threads: {} })
+    useLaunchSettings.setState({ customPaths: {} })
+    mocks.updateCode.mockReset().mockResolvedValue({ kind: 'updated', logPath: '/code/gchat-update.log' })
     useConversationPolicy.getState().clearAll()
     useToolAvailable.setState({ disabledTools: {}, defaultDisabledTools: [] })
     mocks.listen.mockResolvedValue(vi.fn())
@@ -405,7 +404,7 @@ describe('CodeTerminalHost', () => {
     mocks.getTerminalStatus.mockImplementationOnce(() => new Promise<TerminalStatus>(resolve => {
       finishStatus = resolve
     }))
-    mocks.updateCode.mockReset().mockResolvedValue({ logPath: '/code/gchat-update.log' })
+    mocks.updateCode.mockReset().mockResolvedValue({ kind: 'updated', logPath: '/code/gchat-update.log' })
     render(<CodeTerminalHost visible />)
     await waitFor(() => expect(screen.getByLabelText('code:status.running')).toBeInTheDocument())
     if (operation === 'update') {
@@ -434,7 +433,7 @@ describe('CodeTerminalHost', () => {
   it('updates Code in the background with confirmation and returns to the TUI', async () => {
     mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
     mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
-    let finishUpdate!: (value: { logPath: string }) => void
+    let finishUpdate!: (value: { kind: 'updated'; logPath: string }) => void
     mocks.updateCode.mockImplementation((_path, progress) => {
       progress('Downloading and installing updates')
       return new Promise(resolve => { finishUpdate = resolve })
@@ -447,13 +446,63 @@ describe('CodeTerminalHost', () => {
     await waitFor(() => expect(screen.getByText('Downloading and installing updates')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Open Code' })).toBeDisabled()
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
-    finishUpdate({ logPath: '/code/gchat-update.log' })
+    finishUpdate({ kind: 'updated', logPath: '/code/gchat-update.log' })
     await waitFor(() => expect(screen.getByText('Update Successful')).toBeInTheDocument())
     expect(screen.queryByText('Diagnostics')).not.toBeInTheDocument()
     expect(screen.queryByText(/theme will be applied/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Open Code' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Update Code' })).toBeInTheDocument())
     expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2)
+  })
+
+  it('shows the external update command and switches only after explicit managed installation succeeds', async () => {
+    useLaunchSettings.setState({ customPaths: { opencode: '/user/Open Code/opencode' } })
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.updateCode.mockResolvedValueOnce({ kind: 'external', command: "'/user/Open Code/opencode' upgrade" })
+    let finishInstall!: (value: { kind: 'updated'; logPath: string }) => void
+    mocks.updateCode.mockImplementationOnce(() => new Promise(resolve => { finishInstall = resolve }))
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Update Code' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and update' }))
+    await screen.findByText('Update your OpenCode installation')
+    expect(screen.getByText("'/user/Open Code/opencode' upgrade")).toBeInTheDocument()
+    expect(mocks.updateCode).toHaveBeenCalledTimes(1)
+    expect(mocks.updateCode.mock.calls[0][2]).toBe(false)
+    expect(useLaunchSettings.getState().customPaths.opencode).toBe('/user/Open Code/opencode')
+    expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use managed copy' }))
+    await waitFor(() => expect(mocks.updateCode).toHaveBeenCalledTimes(2))
+    expect(mocks.updateCode.mock.calls[1][2]).toBe(true)
+    expect(useLaunchSettings.getState().customPaths.opencode).toBe('/user/Open Code/opencode')
+    await act(async () => finishInstall({ kind: 'updated', logPath: '/code/gchat-update.log' }))
+    await screen.findByText('Update Successful')
+    expect(useLaunchSettings.getState().customPaths.opencode).toBeUndefined()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Code' }))
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(2))
+    expect(mocks.spawnTerminal.mock.calls[1][0].executable).toBeUndefined()
+  })
+
+  it('keeps the custom selection when managed installation fails and retries the same requested action', async () => {
+    useLaunchSettings.setState({ customPaths: { opencode: '/user/opencode' } })
+    mocks.stopTerminal.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.getTerminalStatus.mockResolvedValue({ phase: 'exited', generation: 1, sequence: 3, replayComplete: true })
+    mocks.updateCode.mockResolvedValueOnce({ kind: 'external', command: "'/user/opencode' upgrade" })
+      .mockRejectedValueOnce(new Error('Install Node.js LTS, then try setup again.'))
+      .mockResolvedValueOnce({ kind: 'updated', logPath: '/code/gchat-update.log' })
+    render(<CodeTerminalHost visible />)
+    await waitFor(() => expect(mocks.spawnTerminal).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole('button', { name: 'Update Code' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop and update' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Use managed copy' }))
+    await screen.findByText('Update needs attention')
+    expect(useLaunchSettings.getState().customPaths.opencode).toBe('/user/opencode')
+    fireEvent.click(screen.getByRole('button', { name: 'Retry update' }))
+    await screen.findByText('Update Successful')
+    expect(mocks.updateCode.mock.calls[2][2]).toBe(true)
+    expect(useLaunchSettings.getState().customPaths.opencode).toBeUndefined()
   })
 
   it.each(['before', 'after'])('settles Stop when exit arrives %s its command reply and restarts with live output', async (order) => {
