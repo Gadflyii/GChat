@@ -1265,12 +1265,13 @@ describe('AgentStudioPage', () => {
   it.each(['edit', 'select'] as const)('rejects an older delete approval after a newer draft %s', async (action) => {
     await renderSavedAgents()
     render(<ConfirmDialogHost />)
+    const nextAgent = screen.getByRole('button', { name: new RegExp(secondAgent.name) })
     fireEvent.click(screen.getByRole('button', { name: 'Delete', exact: true }))
     const dialog = await screen.findByRole('dialog', { name: 'Delete saved agent?' })
     if (action === 'edit') {
       fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep newer edits' } })
     } else {
-      fireEvent.click(screen.getByRole('button', { name: new RegExp(secondAgent.name) }))
+      fireEvent.click(nextAgent)
       await screen.findByDisplayValue(secondAgent.name)
     }
     await userEvent.setup().click(within(dialog).getByRole('button', { name: 'Delete agent' }))
