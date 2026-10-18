@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog'
 import { useServiceHub } from '@/hooks/useServiceHub'
 import { deleteLocalModel } from '@/lib/model-deletion'
+import { notifyModelDeletion } from '@/containers/hub/notifyModelDeletion'
 
 import { IconTrash } from '@tabler/icons-react'
 
@@ -43,17 +44,15 @@ export const DialogDeleteModel = ({
     // Keep the result bound to the submitted model even if inventory refreshes.
     const deletingModelId = selectedModelId
     try {
-      await deleteLocalModel(serviceHub, deletingModelId, provider.provider)
+      const refreshError = await deleteLocalModel(serviceHub, deletingModelId, provider.provider)
       setOpen(false)
-      toast.success(
-        t('providers:deleteModel.title', { modelId: deletingModelId }),
-        {
-          id: `delete-model-${deletingModelId}`,
-          description: t('providers:deleteModel.success', {
-            modelId: deletingModelId,
-          }),
-        }
-      )
+      notifyModelDeletion({
+        serviceHub,
+        modelId: deletingModelId,
+        title: t('providers:deleteModel.title', { modelId: deletingModelId }),
+        description: t('providers:deleteModel.success', { modelId: deletingModelId }),
+        refreshError,
+      })
     } catch (error) {
       setError(error instanceof Error ? error.message : String(error))
       console.error('[DialogDeleteModel] deleteModel failed:', error)

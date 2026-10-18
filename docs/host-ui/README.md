@@ -1,5 +1,33 @@
 # GInfer host UI
 
+## Models accepted deletion and inventory recovery — C7, October 18
+
+`GUI-MODELS-DELETE-REFRESH-RECOVERY` fixes the shared local deletion path:
+the backend accepts deletion and local caches remove the model, then an
+inventory read rejects and both entry points incorrectly report deletion
+failure. Preserve accepted deletion separately from that read failure. A
+persistent notification must survive the removed row/dialog, explain the
+accepted result (including original-file preservation for external references),
+keep diagnostics in closed Technical details and offer **Refresh model list**.
+That recovery only reads provider inventory; it never deletes, adopts, loads
+or stops a model. Rejected deletion keeps the existing retryable confirmation.
+
+Owned branch `fix/c7-models-delete-refresh-recovery-20261018`, matching
+`/ai/gchat-worktrees/` tree, base `a69c6ba20`. Parent owns the shared deletion
+helper, shared notification and both callers; the test worker owns the two
+existing rendered deletion suites and independent S1 SSD fixture. Acceptance:
+ordinary/external accepted-delete/read-failure, notice surviving row removal,
+failed then successful read-only refresh with duplicate-click protection and
+no stale-response resurrection, true rejection and explicit deletion retry,
+focused tests, lint and exactly one `make verify`. The existing Models refresh
+button also adopts files, so it is not a substitute for this read-only retry.
+Accepted deletion also clears a selection of the removed model immediately;
+that must not depend on the inventory read succeeding. No backend, Engine,
+model run, installed-app or Windows qualification changes.
+The accepted/read split and persistent recovery notice are implemented. Next:
+run rendered regressions and the independent SSD source gate against the
+frozen commit. No native resource hold exists.
+
 ## Models accepted download requests — C7, October 18
 
 `GUI-MODELS-DOWNLOAD-ACTION-REFRESH` corrects the observed Models path where
@@ -46,8 +74,8 @@ and its sole exited candidate container were retired at **20:28:33Z**, removing
 **28,879,536,128 accounted fixture bytes** after direct review. The inactive
 donor and protected inputs remain unchanged. Small evidence:
 `out/c7-models-download-action-refresh-20261018/test-result.json` and
-`test-summary.md`. Next: merge the verified branch and continue the Models
-queue.
+`test-summary.md`. Merged into `origin/main` as `a69c6ba20`; the next owned
+Models item is deletion/inventory recovery above.
 
 ## Models accepted registration and refresh recovery — verified, C7, October 18
 
