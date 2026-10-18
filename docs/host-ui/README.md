@@ -3706,6 +3706,65 @@ are removed; the existing C7 private-catalog donor remains unchanged for its
 retained campaign. Only the result JSON and short summary are newly retained.
 No app, model, GPU, installer, Windows account or shared app data was involved.
 CPUs returned 01:15Z. Next: Codex 8 review and coordinator merge.
+## Local models under a symlinked data folder — C3, October 18
+
+`GUI-MODELS-SYMLINK-DATA-ROOT-20261018` fixes the empty Installed list after a
+successful external-model registration when the configured data folder uses a
+symlink. The installed-DEB walk used a short HOME alias for Gbot's libvirt socket
+path limit. Registration wrote `model.yml`, and catalog discovery returned its
+canonical SSD path; YAML reads compared that path against the lexical data root
+and failed, so provider discovery returned no models.
+
+YAML reads and writes now resolve the configured root and requested path before
+checking containment. Legitimate canonical, lexical and relative rooted paths
+remain usable. Existing dangling links fail resolution; outside paths and
+symlink escapes remain rejected. The regression uses actual model enumeration
+through a symlinked data folder, reads and updates the discovered manifest, and
+creates a new rooted YAML file. The containment fixture also verifies that
+outside files remain unchanged and outside destinations are not created.
+
+Eight focused filesystem tests, Rust check and library Clippy pass. One full
+`make verify` passes: 3,596 frontend tests, 127 extension tests and 1,290 native
+tests; six frontend skips and 28 native ignores. All six critical coverage
+floors pass; lint has zero errors and five existing warnings. An initial Clippy
+invocation selected unsupported desktop binary tests alongside CLI-only
+features and hit an existing unrelated test lint; the corrected library target
+passes without source changes or lint waivers. The full gate was not repeated.
+Evidence: `out/c3-models-symlink-data-root-20261018/{verification-result.json,
+summary.md,verify.log,focused.log,check.log,clippy-lib.log,clippy.log}`.
+
+The fresh Vite frontend and normal default-feature debug desktop build pass on
+S1 `AIS-2-8592-L01`, using seven frozen catalog inputs with 41 bundled profiles.
+The exported `native/bin/gchat` uses Tauri's sibling `../lib/GChat/resources`
+layout, with owned copied resources. Effective commands and the exported binary
+hash are in `native-build-command.json` and `native-export-result.json` beside
+the gate evidence. Native acceptance then used private HOME `/tmp/c3ym18/home`,
+an alias to the owned SSD fixture, with only the existing external-model
+manifest copied. Models → This computer → Installed shows
+`qwen38_27b_int_df2` before and after the native Refresh installed models action.
+Bundled runtime preparation and Refresh both completed; the refreshed control
+is enabled and the card remains visible. The coordinator inspected the final
+pixels. No model was copied, reimported or loaded, and no inference ran.
+Evidence: `native-acceptance-result.json`, `installed-after-refresh.json` and
+`installed-after-refresh.png` beside the gate evidence.
+
+The initial fixture launch failed because Xvfb was absent from PATH and DISPLAY
+was missing. An explicit copied Xvfb path and `DISPLAY=:175` repaired that
+private launch. The app then exited through native tray Quit, with completed
+cleanup in `native-lifecycle.log`. Refresh had started an idle private Host;
+it stopped through its supported SIGTERM shutdown handler, then the private
+Xvfb stopped. The private HOME and short alias are removed. The installed-DEB
+fixture, primary display, Hosts, GPU workloads and resource donors were not changed.
+
+C3 owns branch `fix/c3-models-symlink-data-root-20261018`, worktree
+`/ai/gchat-worktrees/c3-models-symlink-data-root-20261018`, based on main
+`585a854058ecbdc3e6923d7c5533cdd9778d1fd8`. The private S1 source, caches, build
+and native export are retained at
+`/media/ron/SSD_RAID/ai/tmp-c3-models-symlink-data-root-20261018` for coordinator
+merge, with no live jobs. CPUs88–95 returned 13:12Z; native acceptance CPUs104–111
+returned 13:24Z. Next: coordinator merge; remove disposable owned build bytes
+when the item closes.
+
 ## Installed dropdown acceptance — C7, October 18
 
 `GUI-DROPDOWN-THEME-CONSISTENCY-20261017` now replaces native select popups
