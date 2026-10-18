@@ -13,7 +13,7 @@ import type { ComponentType } from 'react'
 import { toast } from 'sonner'
 import { ConfirmDialogHost } from '@/containers/dialogs/ConfirmDialogHost'
 import { settleConfirm } from '@/lib/confirm'
-import type { BotState, KvmSetupRecord } from '@/services/gbot'
+import type { BotState, CloudReview, KvmSetupRecord } from '@/services/gbot'
 import { connectorAccounts } from '@/services/workspace-connectors'
 
 const mocks = vi.hoisted(() => ({
@@ -1518,6 +1518,131 @@ it('resumes a saved cloud price review without creating a workspace or offering 
     )
   ).toBe(false)
 })
+
+it.each(['deleting', 'check_required'] as const)(
+  'offers saved deployment issue recovery for %s from the computer list',
+  async (phase) => {
+    const plan = {
+      id: '22',
+      name: 'cpx11',
+      region: 'fsn1',
+      vcpus: 2,
+      memory_mib: 4096,
+      disk_gb: 40,
+      included_traffic_bytes: 20e12,
+      recommended: true,
+      compute: {
+        monthly: { net: '4.1', gross: '4.879' },
+        hourly: { net: '0.0061', gross: '0.007259' },
+      },
+      ipv4: {
+        monthly: { net: '0.5', gross: '0.595' },
+        hourly: { net: '0.0007', gross: '0.000833' },
+      },
+      traffic_per_tb: { net: '1', gross: '1.19' },
+    }
+    const diagnostic =
+      'Provider operation failed: saved cloud resource could not be checked.'
+    let current: CloudReview = {
+      id: 'saved-review',
+      name: 'Cloud researcher',
+      provider: 'hetzner',
+      fetched_at: 1,
+      expires_at: 2,
+      confirmed: false,
+      quote: null,
+      catalog: { currency: 'EUR', tax: 'VAT', regions: [], plans: [] },
+      deployment: {
+        phase,
+        plan,
+        source_cidrs: ['203.0.113.10/32'],
+        resources: [
+          {
+            kind: 'server',
+            id: '42',
+            name: 'owned-bot',
+            ready: false,
+            address: '203.0.113.7',
+            actions: [],
+          },
+        ],
+        pending: null,
+        issue: diagnostic,
+      },
+    }
+    mocks.listen.mockResolvedValue(() => {})
+    mocks.call.mockImplementation(async (path: string) => {
+      if (path === 'state')
+        return { workspaces: [], live_sessions: [], assignments: [], controls: [] }
+      if (path === 'setup/cloud/status') return [current]
+      if (path === 'setup/cloud/check') {
+        current = {
+          ...current,
+          deployment: {
+            ...current.deployment!,
+            phase: phase === 'deleting' ? 'deleted' : 'running',
+            resources: phase === 'deleting' ? [] : current.deployment!.resources,
+            issue: null,
+          },
+        }
+        return current
+      }
+      return []
+    })
+    const writes = () =>
+      mocks.call.mock.calls.filter(
+        ([path]) =>
+          path.startsWith('setup/cloud/') && path !== 'setup/cloud/status'
+      )
+    render(<Page />)
+    const card = await screen.findByRole('region', {
+      name: 'Cloud setup Cloud researcher',
+    })
+    const alert = within(card).getByRole('alert')
+    expect(alert).toHaveTextContent(
+      phase === 'deleting'
+        ? 'Could not confirm the cloud computer was deleted. Provider charges may continue. Choose Resume setup, then Check progress to check its state before trying Delete cloud computer again.'
+        : 'The cloud computer needs attention. Review Details. Choose Resume setup, then Check progress to check its state before continuing.'
+    )
+    const details = within(alert).getByText('Details')
+    const raw = within(alert).getByText(diagnostic)
+    expect(details.closest('details')).not.toHaveAttribute('open')
+    expect(raw).not.toBeVisible()
+    fireEvent.click(details)
+    expect(raw).toBeVisible()
+    fireEvent.click(details)
+    expect(raw).not.toBeVisible()
+    expect(
+      within(card).getByRole('button', { name: 'Remove saved setup' })
+    ).toBeDisabled()
+    expect(writes()).toEqual([])
+    fireEvent.click(within(card).getByRole('button', { name: 'Resume setup' }))
+    const computer = await screen.findByRole('region', {
+      name: 'Cloud computer',
+    })
+    expect(within(computer).getByRole('alert')).toHaveTextContent(
+      'Choose Check progress'
+    )
+    expect(within(computer).getByText(diagnostic)).not.toBeVisible()
+    expect(writes()).toEqual([])
+    fireEvent.click(
+      within(computer).getByRole('button', { name: 'Check progress' })
+    )
+    await waitFor(() =>
+      expect(within(computer).queryByRole('alert')).not.toBeInTheDocument()
+    )
+    expect(writes()).toEqual([['setup/cloud/check', { id: 'saved-review' }]])
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const reopened = await screen.findByRole('region', {
+      name: 'Cloud setup Cloud researcher',
+    })
+    await waitFor(() =>
+      expect(within(reopened).queryByRole('alert')).not.toBeInTheDocument()
+    )
+    expect(within(reopened).queryByText(diagnostic)).not.toBeInTheDocument()
+    expect(writes()).toHaveLength(1)
+  }
+)
 
 function savedCloudSetup(remove: () => Promise<void> = async () => {}) {
   let saved = true

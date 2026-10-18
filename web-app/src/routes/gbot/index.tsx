@@ -19,6 +19,7 @@ import GbotSetup, {
 } from '@/components/GbotSetup'
 import { BrainSetup } from '@/components/GbotSetup/BrainSetup'
 import ServiceSetup from '@/components/GbotSetup/ServiceSetup'
+import { CloudDeploymentIssue } from '@/components/GbotSetup/CloudComputer'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
   type DesktopViewHandle,
@@ -1004,7 +1005,7 @@ function GbotPage() {
                         ? 'Cost review saved'
                         : 'Cost review incomplete · No VM created'}
                   </p>
-                  {review.deployment?.issue && <p>{review.deployment.issue}</p>}
+                  <CloudDeploymentIssue deployment={review.deployment} saved />
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
