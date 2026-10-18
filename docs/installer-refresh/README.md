@@ -1,5 +1,39 @@
 # GChat installer refresh
 
+## Active Windows first-run RAM message correction — Codex 4
+
+Arch's **22:47:42Z October 18** `WINDOWS-RC-ADA-PROFILE-RAM-FLOOR`
+decision requires an actionable hardware-profiling RAM admission error. Preserve
+the existing RAM reserve and admission policy. The Engine supplies typed global
+and per-NUMA-node retained-buffer, available-memory and shortfall amounts; GChat
+must retain those facts through the Host and explain how much memory to free
+before continuing setup. The same message belongs in Welcome and manual
+graphics-card setup, with focused regressions for the actual failed-job path.
+
+Owned candidate: `/ai/gchat-worktrees/c4-profile-ram-message-20261018`, branch
+`fix/c4-profile-ram-message-20261018`, base `origin/main` **8b72b4916**. The
+coordinator authorizes source commit/push and private S1 CPU verification; this
+change owns no native app process, target copy or user-data change.
+Implementation is ready for coordinated verification. The Host preserves the
+Engine's typed failure and native warning on exit 1; Welcome and manual setup
+show the global shortfall, unchanged reserve and per-node buffer requirements,
+with the ordinary Continue setup action. The recommendation rounds the reported
+shortfall upward to MiB rather than understating it. Existing accepted profile
+bytes are not replaced by the failed run. Focused regressions cover the failed
+native job/persist/resume path in both all-format and artifact scopes and both
+visible screens. All-format profiling now requests the existing JSON result so
+the typed failure reaches first-run setup; its Windows command guard admits that
+exact shape. No build or test has run yet. The authorized verification uses a
+private copy of retained dependencies/build cache under
+`/media/ron/SSD_RAID/ai/tmp-c4-profile-ram-message-20261018` on S1, with disjoint
+booked socket-1 CPUs and the shared compile guard. Focused tests, Rust check/clippy
+and ONE `make verify` remain pending. Existing RC execution remains parent-owned.
+
+Prepared focused checks (not run):
+`yarn workspace @gchat/web-app test src/containers/__tests__/EngineHardwareProfile.test.tsx src/containers/__tests__/EngineFirstRun.test.tsx`
+and `cargo test --manifest-path src-tauri/ginfer-host/Cargo.toml --lib hardware_profile::tests::hardware_profile_retains_typed_ram_failure_and_clears_it_after_resume`.
+The repository's applicable lint/typecheck/Rust checks remain pending.
+
 Current priority (21:47Z): the driver-bound Host and ordinary actual-Start receipt marker are complete. The driver-key delta passed four focused regressions, check, clippy and standalone Host build at21:33:09Z; the marker continuation passed the same delta checks at21:44:19Z. Parent review confirms the raw Flash/Qwen/Muse sequence: unknown/0 before a matching Ready receipt, then receipt/1200 on the second actual Start. Retain the completed ONE make verify (frontend3751, extension127, six coverage floors, Rust1318) and request-log focused2/check/clippy/Host317/build. C1's ac53611e0 implements Arch21:36's total physical startup overhead minus weight/state ledger, with at most2MiB total rounding and separate cuda_graph_observed_bytes diagnostics. The first/second laptop53248 Automatic app gates remain held for its corrected Engine donor, six secondReady controls and residual clearance. GINFER_HOST_REQUEST_LOG_JSONL remains an absolute owned spawn-only control; no catalog graph field. Unknown or changed NVIDIA drivers prevent receipt reuse, and unknown drivers prevent saving; first solo Automatic remains available.
 
 Ada788 returned21:35Z and is canceled. The single successful private packaged-Host Qwen launch selected SM89 and matched all52 arrays/26000 same-card Linux IDs across C1/C4/C8, directly reviewed before advancing. Normal model Stop and idle Host Stop exited0 with an empty Job. All911 GPU samples were valid, minimum316669952B exceeded the314572800B reserve, and last native available RAM was29672243200B. Context8181 canonical standard is independent of the later admitted profile-bound smoke/natural. C1's Ada789 b47 pair returned21:38Z with both Ready/native0. The next native Ada phase is the prepared Qwen profile-bound smoke plus short natural, followed by Muse canonical standard. C5 owns the released laptop gap for its prepared72153 lower-Muse controls and will signal normal return before native staging. Preserve the prior canonical UNC validator and pre-Job CIM timeout evidence; neither is a model retry. Both5090 Windows profiles and the laptop residency prerequisite are signed complete and must not be repeated.

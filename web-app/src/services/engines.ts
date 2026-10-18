@@ -55,6 +55,22 @@ export type EngineMaxPerfProfile = {
   compatible_gpu_groups: string[][]
 }
 export type EngineHardwareProfileAction = 'ensure' | 'refresh' | 'resume' | 'cancel'
+export type HostMemoryAdmissionFailure = {
+  resource: 'host_ram'
+  phase: string
+  total_bytes: number
+  reserve_bytes: number
+  available_bytes: number
+  required_available_bytes: number
+  retained_buffer_bytes: number
+  bytes_to_free: number
+  nodes: {
+    numa_node: number
+    retained_buffer_bytes: number
+    available_bytes: number
+    bytes_to_free: number
+  }[]
+}
 export type EngineHardwareProfile = {
   status: 'idle' | 'running' | 'cancelling' | 'interrupted' | 'cancelled' | 'completed' | 'failed'
   job_id: string | null
@@ -93,6 +109,7 @@ export type EngineHardwareProfile = {
   checkpoint_available: boolean
   diagnostic_tail: string
   error: string | null
+  host_memory_admission_failure?: HostMemoryAdmissionFailure | null
   available: boolean
 }
 export const hardwareProfileBusy = (profile?: EngineHardwareProfile) =>

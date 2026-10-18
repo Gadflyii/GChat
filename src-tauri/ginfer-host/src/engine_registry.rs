@@ -309,6 +309,7 @@ mod tests {
                 expected_duration_ms: Some(1_800_000),
             }],
             diagnostic_tail: "Measuring".into(), error: None, available: true,
+            host_memory_admission_failure: None,
         });
         apply(&mut registry, selection.host_id, snapshot.clone()).unwrap();
         snapshot.hardware_profile.as_mut().unwrap().status = "completed".into();
