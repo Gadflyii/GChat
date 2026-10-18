@@ -93,6 +93,65 @@ three terminal containers and 286MB disposable local archive/raw files were
 removed after review; only the concise result and summary remain. Fix
 `a346be937` merged as `2c9b06ba4`. The inactive RC source/node/cargo/debug donor was separately
 granted to C7 for independent read-copy and is retained unchanged.
+## Retire the reset local Host connection — C3, October 18
+
+`GUI-RESET-STALE-LOCAL-HOST-CONNECTION`: the completed private installed walk
+found a stale saved Host beside **This computer**. Reset deletes the selected
+`ginfer/host/host.json`, while the per-user `ginfer/hosts.json` is outside App
+Data and retains that UUID and certificate. The next local Host receives a new
+identity. An obsolete connection cannot authenticate to the replacement.
+
+Acceptance: a successful reset removes only the selected deleted identity from
+the shared saved registry; the replacement appears once, and unrelated paired
+Hosts and concurrent Manager edits survive. An incomplete or refused reset
+preserves the saved connection. Missing identity must never trigger URL-based
+removal, discovery, bootstrap or vault access. Keep the existing Agent drain,
+Host/Engine teardown and relocation fence. No GPU/model/profile rerun is needed.
+See the [registration ownership decision](../decisions/2026-10-18-retire-deleted-local-host-registration-after-reset.md).
+
+The reset reservation captures UUID and certificate only after the selected
+Host releases ownership. Completion first verifies its identity file is gone,
+then locks and reloads the shared registry before removing an exact match and
+its in-memory routes/credentials. It preserves a concurrently changed pin and
+all other records. The system reset calls completion after its existing data
+deletion and binary restoration. Failures return an actionable error instead
+of claiming restart completed. The command restores its windows on failure so
+errors after window hiding remain visible and the user can retry.
+
+Owner/inventory: `/ai/gchat-worktrees/c3-reset-stale-host-connection-20261018`,
+branch `fix/c3-reset-stale-host-connection-20261018`, baseline `04866d698`.
+Evidence is `out/c3-reset-stale-host-connection-20261018/`. Source
+`63f9e8a49` is pushed. Arch signed the registry lifecycle (`7007c37fd`)
+at06:26Z and window recovery at06:34Z. Focused Host regressions pass4;
+reset cases pass9 with one existing live-GPU ignore. Library check/Clippy
+and lint pass. ONE make verify passes:3,406 app tests (six skipped),127
+extension tests, all six coverage floors, and1,270 native tests (28 ignored).
+Production web and desktop/Host builds pass. Missing generated icons were
+prepared using existing `yarn build:icon`; only the failed native build was
+continued. All3,239 source and35 dependency bindings matched; exported
+binaries matched their built targets. No passed gate was repeated.
+
+Isolated native acceptance passes at06:59Z. Ordinary UI removed the prior
+orphan. Making only the private selected Host directory non-writable forced
+cleanup refusal: GChat restored its window, showed the exact actionable error,
+and retained the identity, saved registration and configuration. Restoring
+permissions and ordinary retry restarted GChat. The registry now has exactly
+one connected local identity, `08d55660-11dc-471c-817c-b855428dff50`; both prior
+UUIDs are absent, and selected App Data configuration is byte-identical.
+Reviewed screenshots cover Light1024×800 refusal and Dark1500×1000 replacement.
+Remote/concurrent registry preservation is covered by focused tests.
+
+The native debug candidate is distinct from the earlier installed release;
+bundled-file preparation is not a release startup speed measurement. Its
+restart outlived the private DBus fixture, so the post-restart secure-storage
+card was unavailable; local attachment still succeeded without vault access.
+No GPU/model/profile or real account/remote enrollment was run. All private
+native processes stopped and CPUs64–71 returned07:03Z (build CPUs80–87
+returned06:47Z). Inactive independent source/build/cache copies under
+`/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018` were retired
+(31.82GB logical bytes). The tested candidate and required stopped resources
+under `tmp-c3-first-user-setup-20261018` remain only until source merge, then
+retire. Next: Bubbs merges the signed branch; C3 retires those owned copies.
 
 ## Gbot task-control failure recovery — October 18
 

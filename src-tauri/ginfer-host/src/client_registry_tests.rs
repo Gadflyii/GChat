@@ -45,6 +45,123 @@ fn desktop_owner_for_stop(directory: &Path) -> crate::local_host_registry::Owner
 }
 
 #[tokio::test]
+async fn local_reset_retires_deleted_identity_and_preserves_concurrent_remote_hosts() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("data/ginfer/host");
+    let path = root.path().join("shared/hosts.json");
+    let _host = crate::service::Host::open(directory.clone(), "Reset fixture".into(),
+        root.path().join("must-not-load"), vec![], vec![], vec![]).await.unwrap();
+    let mut private: crate::service::Persistent = serde_json::from_slice(
+        &std::fs::read(directory.join("host.json")).unwrap()).unwrap();
+    private.management_origin = Some("https://127.0.0.1:17443".into());
+    let old_id = private.host_id;
+    let client = Client::new(Some(path.clone()), Arc::new(MetadataOnlyVault));
+    client.initialize().await.unwrap();
+    publish_local_owner(&mut *client.state.lock().await, private).unwrap();
+    let old = client.registered().await.unwrap().pop().unwrap();
+    let reset = client.prepare_local_reset(&directory).await.unwrap();
+
+    // A separate Manager writes while reset owns the local root. Its entry
+    // deliberately shares the URL: identity, not address, governs retirement.
+    let manager = Client::new(Some(path.clone()), Arc::new(MetadataOnlyVault));
+    manager.initialize().await.unwrap();
+    let remote = SavedHost { host_id: Uuid::new_v4(), name: "Remote".into(),
+        base_url: old.base_url.clone(), certificate_sha256: "ab".repeat(32),
+        client_id: Uuid::new_v4() };
+    {
+        let _lock = manager.lock_registry().await.unwrap();
+        publish_registration(&mut *manager.state.lock().await, remote.clone()).unwrap();
+    }
+    std::fs::remove_file(directory.join("host.json")).unwrap();
+    reset.complete().await.unwrap();
+    assert_eq!(client.registered().await.unwrap(), vec![remote.clone()]);
+    assert!(!client.state.lock().await.local_credentials.contains_key(&old.client_id));
+    assert!(client.secret(old.client_id).await.is_err());
+    assert!(client.state.lock().await.registry.connect(old_id).is_err());
+
+    let _replacement = crate::service::Host::open(directory.clone(), "Replacement".into(),
+        root.path().join("must-not-load"), vec![], vec![], vec![]).await.unwrap();
+    let mut private: crate::service::Persistent = serde_json::from_slice(
+        &std::fs::read(directory.join("host.json")).unwrap()).unwrap();
+    private.management_origin = Some(old.base_url);
+    let new_id = private.host_id;
+    assert_ne!(old_id, new_id);
+    publish_local_owner(&mut *client.state.lock().await, private).unwrap();
+    let saved = manager.registered().await.unwrap();
+    assert_eq!(saved.len(), 2);
+    assert!(saved.contains(&remote));
+    assert!(saved.iter().any(|host| host.host_id == new_id));
+    assert!(!saved.iter().any(|host| host.host_id == old_id));
+}
+
+#[tokio::test]
+async fn local_reset_preserves_registration_until_identity_is_deleted() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("host");
+    let _host = crate::service::Host::open(directory.clone(), "Reset fixture".into(),
+        root.path().join("must-not-load"), vec![], vec![], vec![]).await.unwrap();
+    let mut private: crate::service::Persistent = serde_json::from_slice(
+        &std::fs::read(directory.join("host.json")).unwrap()).unwrap();
+    private.management_origin = Some("https://127.0.0.1:17443".into());
+    let path = root.path().join("hosts.json");
+    let client = Client::new(Some(path.clone()), Arc::new(MetadataOnlyVault));
+    client.initialize().await.unwrap();
+    publish_local_owner(&mut *client.state.lock().await, private).unwrap();
+    let before = std::fs::read(&path).unwrap();
+    drop(client.prepare_local_reset(&directory).await.unwrap());
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let error = client.prepare_local_reset(&directory).await.unwrap()
+        .complete().await.unwrap_err();
+    assert!(error.contains("not deleted"), "{error}");
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert_eq!(client.registered().await.unwrap().len(), 1);
+}
+
+#[tokio::test]
+async fn local_reset_without_identity_never_initializes_or_guesses_a_registration() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("hosts.json");
+    let manager = Client::new(Some(path.clone()), Arc::new(MetadataOnlyVault));
+    manager.initialize().await.unwrap();
+    let remote = SavedHost { host_id: Uuid::new_v4(), name: "Remote".into(),
+        base_url: "https://127.0.0.1:17443".into(),
+        certificate_sha256: "ab".repeat(32), client_id: Uuid::new_v4() };
+    publish_registration(&mut *manager.state.lock().await, remote).unwrap();
+    let before = std::fs::read(&path).unwrap();
+    let client = Client::new(Some(path.clone()), Arc::new(MetadataOnlyVault));
+    client.prepare_local_reset(&root.path().join("absent/host")).await.unwrap()
+        .complete().await.unwrap();
+    assert!(client.state.lock().await.path.is_none());
+    assert_eq!(std::fs::read(path).unwrap(), before);
+    assert!(!root.path().join("absent").exists());
+}
+
+#[tokio::test]
+async fn local_reset_preserves_a_concurrently_replaced_certificate() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("host");
+    let path = root.path().join("hosts.json");
+    let _host = crate::service::Host::open(directory.clone(), "Reset fixture".into(),
+        root.path().join("must-not-load"), vec![], vec![], vec![]).await.unwrap();
+    let mut private: crate::service::Persistent = serde_json::from_slice(
+        &std::fs::read(directory.join("host.json")).unwrap()).unwrap();
+    private.management_origin = Some("https://127.0.0.1:17443".into());
+    let client = Client::new(Some(path.clone()), Arc::new(MetadataOnlyVault));
+    client.initialize().await.unwrap();
+    publish_local_owner(&mut *client.state.lock().await, private).unwrap();
+    let mut replacement = client.registered().await.unwrap().pop().unwrap();
+    let reset = client.prepare_local_reset(&directory).await.unwrap();
+    let manager = Client::new(Some(path), Arc::new(MetadataOnlyVault));
+    manager.initialize().await.unwrap();
+    replacement.certificate_sha256 = "cd".repeat(32);
+    replacement.client_id = Uuid::new_v4();
+    publish_registration(&mut *manager.state.lock().await, replacement.clone()).unwrap();
+    std::fs::remove_file(directory.join("host.json")).unwrap();
+    reset.complete().await.unwrap();
+    assert_eq!(client.registered().await.unwrap(), vec![replacement]);
+}
+
+#[tokio::test]
 async fn cached_stop_never_initializes_or_follows_a_foreign_owner() {
     use crate::local_host_registry::Owner;
     let directory = tempfile::tempdir().unwrap();
