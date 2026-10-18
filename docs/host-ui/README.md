@@ -86,6 +86,43 @@ booking line2901 was canceled at 03:07:29Z; no GPU/model/build was used. The
 read-only donor under
 `/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage`
 remains untouched. The documentation-only gate is `git diff --check`.
+## GInfer advanced option units — C3, October 18
+
+Settings → GInfer → **Advanced engine options** described **Helper draft
+length** and **Prompt processing block size** as word counts. Both values
+are token counts: the extension forwards `draft_tokens` and `prefill_chunk`
+to the corresponding GInfer launch arguments without a word conversion.
+The copy now calls tokens pieces of text, retains Auto guidance and the
+existing draft range, and states the positive-multiple-of-128 constraint for
+an explicit prompt block size. Controls, stored values and launch payloads
+are unchanged. The separately owned
+`GUI-GINFER-PROVIDER-SETTINGS-ADVANCED` structural work remains outside this fix.
+
+The rendered provider route opens Advanced and shows both token descriptions
+with their labels, Auto guidance and constraints. All4 focused cases and lint
+pass (zero errors, five existing warnings). One `make verify` passes3279 app
+cases,121 extension cases,1216 native cases and all six coverage floors; six app
+cases are skipped and28 native cases ignored. The native candidate builds.
+No repeat gate or retry was needed.
+
+Native acceptance passes on private Linux at1500×1000 Light and1024×740 Dark.
+Real pointer input opens Advanced engine options; both descriptions are readable
+and the page has no horizontal overflow. The narrow page scrolls to reveal the
+prompt-block description. Inputs remain at their existing values; no model is
+loaded or restarted. This is an English source-native custom-protocol build,
+not installer, Windows or inference qualification. Source evidence is
+`extensions/ginfer-extension/src/index.ts` (`buildGinferConfig`) and
+`src-tauri/ginfer-host/src/engine_host.rs` (`LaunchOptions` command arguments).
+
+Owned source `/ai/gchat-worktrees/c3-ginfer-token-units-20261018`, branch
+`fix/c3-ginfer-token-units-20261018`, baseline `a7dadf6c2`. Results are in
+`out/c3-ginfer-token-units-20261018/{result.json,summary.md}`. S1 CPU64–71,
+nice10/shared socket1 lock, pinned offline image and retained dependencies;
+returned03:20Z. The container is removed. Private candidate
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/token-units-candidate`
+and profile remain only while the parent walk continues, then owned disposable
+copies are removed. Three earlier candidate/baseline binaries remain unchanged.
+Next: push this source branch for coordinator integration.
 
 ## Google setup credential save/import — Gchat 3 native acceptance, October 18
 
