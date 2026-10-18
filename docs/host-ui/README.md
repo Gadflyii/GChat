@@ -1,5 +1,27 @@
 # GInfer host UI
 
+## Models accepted registration and refresh recovery — C7, October 18
+
+`GUI-MODELS-REGISTRATION-REFRESH-RECOVERY` fixes an observed source path in
+`ModelManagement.tsx`: `local_model_register` can succeed before provider or
+Host inventory refresh rejects, but the shared catch says the model could not
+be added and recommends choosing a different file. The accepted operation
+must remain accepted. Show that the model was added, retain the read failure
+in closed Technical details, and let **Refresh installed models** reread the
+provider/Host inventories without repeating registration, adoption or load.
+An unsuccessful reread retains that recovery path; a successful reread clears
+it. Actual chooser/registration rejection keeps its existing retry guidance.
+
+Owned source: branch `fix/c7-model-registration-refresh-recovery-20261018`,
+matching `/ai/gchat-worktrees/` tree, base `9314546cd`. Parent owns the component
+and this subject; the test worker owns the rendered Models regressions and
+independent S1 SSD verification fixture. Acceptance: both post-registration
+read failures, failed then successful read-only recovery, existing repeated
+click guards, focused tests and exactly one `make verify`. No Engine change,
+model run, installed-app or native Windows qualification is claimed. Next:
+implement the separate accepted/read-failure state and freeze source for the
+focused rendered gate. No fixture or booking is allocated yet.
+
 ## First-run cleared choices — verified, Gchat 3, October 18
 
 `GUI-FIRST-RUN-CLEARED-CHOICE-REMOUNT` follows Bubbs's approved unset/empty

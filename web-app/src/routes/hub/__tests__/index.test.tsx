@@ -88,6 +88,7 @@ describe('host-scoped Models', () => {
     useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
     mocks.resources = { ready: true, error: '' }
     mocks.command.mockResolvedValue([])
+    mocks.refresh.mockReset().mockResolvedValue(undefined)
     mocks.switchModel.mockResolvedValue(undefined)
     mocks.providers = [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally', path: '/models/local.ginfer' }] }]
     mocks.getProviders.mockImplementation(async () => mocks.providers)
@@ -204,6 +205,85 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled())
     expect(mocks.open).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('alert')).toHaveTextContent('This file is not a valid .ginfer model.')
+  })
+  it.each(['provider inventory', 'Host status'] as const)('recovers an accepted registration after a failed %s read without adding or loading again', async failedRead => {
+    mocks.providers = [{ provider: 'ginfer', models: [] }]
+    mocks.catalog = []
+    const path = '/external/Added model.ginfer'
+    const registered = [{ provider: 'ginfer', models: [{ id: 'registered-model', displayName: 'Added local model', path, source: 'external' }] }]
+    const guidance = 'The model was added, but the model list could not be refreshed. Choose Refresh installed models to try again.'
+    const initialError = `${failedRead} request failed`
+    const retryError = `${failedRead} retry failed`
+    let rejectInitial!: (error: Error) => void
+    mocks.open.mockResolvedValue(path)
+    mocks.getProviders.mockResolvedValue(registered)
+    render(<ModelManagement />)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce())
+    mocks.refresh.mockClear()
+    if (failedRead === 'provider inventory') {
+      mocks.getProviders.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectInitial = reject }))
+    } else {
+      mocks.refresh.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectInitial = reject }))
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
+    await waitFor(() => expect(failedRead === 'provider inventory' ? mocks.getProviders : mocks.refresh).toHaveBeenCalledOnce())
+    expect(screen.getByRole('button', { name: 'Adding local model…' })).toBeDisabled()
+    await act(async () => { rejectInitial(new Error(initialError)) })
+    expect(await screen.findByText(guidance)).toBeVisible()
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Could not add this model.')
+    expect(screen.getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText(initialError)).not.toBeVisible()
+    expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled()
+    if (failedRead === 'Host status') expect(screen.getByText('Added local model')).toBeVisible()
+
+    let finishInventory!: (providers: TestProvider[]) => void
+    let rejectInventory!: (error: Error) => void
+    let rejectHosts!: (error: Error) => void
+    mocks.getProviders.mockImplementationOnce(() => new Promise((resolve, reject) => {
+      finishInventory = resolve
+      rejectInventory = reject
+    }))
+    if (failedRead === 'Host status') {
+      mocks.refresh.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectHosts = reject }))
+    }
+    const refresh = screen.getByRole('button', { name: 'Refresh installed models' })
+    act(() => { fireEvent.click(refresh); fireEvent.click(refresh) })
+    expect(mocks.getProviders).toHaveBeenCalledTimes(2)
+    expect(refresh).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add local model' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Model destination' })).toBeDisabled()
+    expect(screen.getByText(guidance)).toBeVisible()
+    if (failedRead === 'provider inventory') {
+      await act(async () => { rejectInventory(new Error(retryError)) })
+    } else {
+      await act(async () => { finishInventory(registered) })
+      expect(mocks.refresh).toHaveBeenCalledTimes(2)
+      expect(refresh).toBeDisabled()
+      fireEvent.click(refresh)
+      expect(mocks.getProviders).toHaveBeenCalledTimes(2)
+      await act(async () => { rejectHosts(new Error(retryError)) })
+    }
+    expect(screen.getByText(guidance)).toBeVisible()
+    expect(screen.getByText(retryError)).not.toBeVisible()
+    expect(screen.getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+    expect(refresh).toBeEnabled()
+
+    fireEvent.click(refresh)
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(screen.getByText('Added local model')).toBeVisible()
+    expect(refresh).toBeEnabled()
+    expect(mocks.getProviders).toHaveBeenCalledTimes(3)
+    expect(mocks.setProviders).toHaveBeenCalledTimes(failedRead === 'provider inventory' ? 1 : 3)
+    expect(mocks.setProviders).toHaveBeenLastCalledWith(registered)
+    expect(mocks.refresh).toHaveBeenCalledTimes(failedRead === 'provider inventory' ? 1 : 3)
+    expect(mocks.open).toHaveBeenCalledOnce()
+    expect(mocks.command.mock.calls.filter(([action]) => action !== 'local_model_downloads')).toEqual([
+      ['local_model_register', { path }],
+    ])
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+    expect(mocks.controlHost).not.toHaveBeenCalled()
   })
   it('guards repeated clicks before the chooser, registration and inventory refresh finish', async () => {
     let choose!: (path: string) => void
