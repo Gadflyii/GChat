@@ -1,0 +1,340 @@
+{
+  "status": "PASS",
+  "started_utc": "2026-10-18T08:05:53.362055+00:00",
+  "booking_line": 3147,
+  "source_base": "5ce4bab653e8b9b95c28328ceb374f4dc609c05a",
+  "root": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018",
+  "argv": [
+    "docker",
+    "run",
+    "--rm",
+    "--init",
+    "--pull=never",
+    "--name",
+    "gchat-c7-assistants-empty-verify-20261018",
+    "--cpuset-cpus=88-95",
+    "--user",
+    "1000:1000",
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges",
+    "--network=bridge",
+    "-v",
+    "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018:/work",
+    "-w",
+    "/work/gchat",
+    "-e",
+    "HOME=/tmp",
+    "-e",
+    "XDG_CACHE_HOME=/work/build-xdg-cache",
+    "-e",
+    "XDG_DATA_HOME=/work/build-xdg-data",
+    "-e",
+    "COREPACK_ENABLE_NETWORK=0",
+    "-e",
+    "COREPACK_ENABLE_DOWNLOAD_PROMPT=0",
+    "-e",
+    "YARN_ENABLE_GLOBAL_CACHE=false",
+    "-e",
+    "YARN_CACHE_FOLDER=/work/gchat/.yarn/cache",
+    "-e",
+    "YARN_ENABLE_NETWORK=0",
+    "-e",
+    "IS_TAURI=true",
+    "-e",
+    "TAURI_ENV_PLATFORM=linux",
+    "-e",
+    "CARGO_HOME=/work/cargo-home",
+    "-e",
+    "CARGO_TARGET_DIR=/work/native-target",
+    "-e",
+    "CARGO_INCREMENTAL=0",
+    "-e",
+    "CARGO_PROFILE_DEV_DEBUG=0",
+    "-e",
+    "CARGO_PROFILE_TEST_DEBUG=0",
+    "-e",
+    "CARGO_BUILD_JOBS=8",
+    "-e",
+    "CARGO_NET_OFFLINE=true",
+    "-e",
+    "RUSTC_WRAPPER=",
+    "-e",
+    "OPENSSL_NO_VENDOR=1",
+    "-e",
+    "PROTOC=/usr/bin/protoc",
+    "-e",
+    "GINFER_PROFILE_CATALOGS=/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json",
+    "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+    "nice",
+    "-n",
+    "10",
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-c",
+    "set -euo pipefail\nulimit -c 0\nunset VITE_MODEL_CATALOG_URL GINFER_MODEL_CATALOG_URL IS_DEV NODE_OPTIONS NODE_ENV FORCE_ONBOARDING FRESH_INSTALL FORCE_HARDWARE_TIER TAURI_CONFIG TAURI_DEV_HOST TAURI_ENV_DEBUG IS_IOS IS_ANDROID IS_CLEAN CARGO_ENCODED_RUSTFLAGS CARGO_BUILD_TARGET RUSTFLAGS CUDA_VISIBLE_DEVICES CUDA_DEVICE_ORDER NVIDIA_VISIBLE_DEVICES\nmake verify\n"
+  ],
+  "make_verify_invocations": 1,
+  "other_tests_repeated": false,
+  "frozen_file_sha256": {
+    "web-app/src/routes/settings/__tests__/assistant-save.test.tsx": "7d9c7fdebaf490984a6c367b2f0a4d89dbce5701bb1b53a826017fb8fbf35c5d",
+    "web-app/src/routes/settings/assistant.tsx": "abb45fb17d4101feea6d541c0d7fb31be5af96cd51dd6d54043c643f899f7281",
+    "web-app/src/locales/en/assistants.json": "ade1c812bc8b522b1b9f6f932aa7c122be9e80de9c79e8000e44a7e99ac9d818"
+  },
+  "catalog_inputs": {
+    "source_repository": "/ai/ginfer",
+    "source_commit": "5825c2e39062a0998fa42e989dc8e5de91da23d7",
+    "private_target": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/profile-catalogs",
+    "selection": "the four merged laptop context-admission catalogs, copied unchanged from merged commit; no donor or shared catalog changes",
+    "catalogs": [
+      {
+        "file": "linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json",
+        "source": "config/launch-profiles/linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json",
+        "sha256": "521d6f5ca793f5a89bd2a1a22c129a0d35d9bdd6971fa92f7e15cd01cba36010",
+        "bytes": 19101,
+        "profiles": 10,
+        "contexts": [
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8",
+            161792
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c2-72k-int8",
+            73728
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c3-47997-int8",
+            47997
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c4-33422-int8",
+            33422
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c5-25174-int8",
+            25174
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c6-19633-int8",
+            19633
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c7-4k-int8",
+            4096
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c7-17609-int8-eager",
+            17609
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c8-12234-int8",
+            12234
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c8-14469-int8-eager",
+            14469
+          ]
+        ]
+      },
+      {
+        "file": "linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json",
+        "source": "config/launch-profiles/linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json",
+        "sha256": "040af54a8e1885f595d93268df101e302a0adc99db589f92b4c8c57132486d9b",
+        "bytes": 22195,
+        "profiles": 10,
+        "contexts": [
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8",
+            138240
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c2-68421-int8",
+            68421
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c3-40773-int8",
+            40773
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c4-27942-int8",
+            27942
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c5-20765-int8",
+            20765
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c6-4k-int8",
+            4096
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c6-18049-int8-eager",
+            18049
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c7-14460-int8-eager",
+            14460
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c8-9704-int8",
+            9704
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c8-11853-int8-eager",
+            11853
+          ]
+        ]
+      },
+      {
+        "file": "linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json",
+        "source": "config/launch-profiles/linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json",
+        "sha256": "0d84d625cbfbaf6642f96b89089e5a21cd1b97811b85262633363cd368921b28",
+        "bytes": 19015,
+        "profiles": 9,
+        "contexts": [
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated",
+            82944
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c2-72k-int8-vision-calculated",
+            35617
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c3-47997-int8-vision-calculated",
+            22868
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c4-33422-int8-vision-calculated",
+            17312
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c5-25174-int8-vision-calculated",
+            13746
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c6-19633-int8-vision-calculated",
+            11101
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c7-4k-int8-vision-calculated",
+            4096
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c7-17609-int8-eager-vision-calculated",
+            10282
+          ],
+          [
+            "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c8-14469-int8-eager-vision-calculated",
+            8609
+          ]
+        ]
+      },
+      {
+        "file": "linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json",
+        "source": "config/launch-profiles/linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json",
+        "sha256": "58603f767aa5b00d8181b139d4e62cc47e619e01133fb5d3c1186e4071110431",
+        "bytes": 19029,
+        "profiles": 9,
+        "contexts": [
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated",
+            60416
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c2-68421-int8-vision-calculated",
+            27780
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c3-40773-int8-vision-calculated",
+            19204
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c4-27942-int8-vision-calculated",
+            14274
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c5-20765-int8-vision-calculated",
+            11159
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c6-4k-int8-vision-calculated",
+            4096
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c6-18049-int8-eager-vision-calculated",
+            10133
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c7-14460-int8-eager-vision-calculated",
+            8311
+          ],
+          [
+            "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c8-11853-int8-eager-vision-calculated",
+            6925
+          ]
+        ]
+      }
+    ],
+    "profile_count": 38,
+    "GINFER_PROFILE_CATALOGS": "/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json"
+  },
+  "container": "fe863132341970908cb6481b1dc5e089676844dfe1460505d23c34eb88b65d71",
+  "effective_execution": {
+    "runtime": "runc",
+    "network": "bridge",
+    "devices": [],
+    "device_requests": null,
+    "cpus": "88-95",
+    "user": "1000:1000",
+    "env": [
+      "IS_TAURI=true",
+      "CARGO_NET_OFFLINE=true",
+      "RUSTC_WRAPPER=",
+      "CARGO_PROFILE_TEST_DEBUG=0",
+      "XDG_CACHE_HOME=/work/build-xdg-cache",
+      "XDG_DATA_HOME=/work/build-xdg-data",
+      "YARN_CACHE_FOLDER=/work/gchat/.yarn/cache",
+      "TAURI_ENV_PLATFORM=linux",
+      "CARGO_HOME=/work/cargo-home",
+      "CARGO_TARGET_DIR=/work/native-target",
+      "CARGO_BUILD_JOBS=8",
+      "PROTOC=/usr/bin/protoc",
+      "COREPACK_ENABLE_DOWNLOAD_PROMPT=0",
+      "YARN_ENABLE_GLOBAL_CACHE=false",
+      "CARGO_INCREMENTAL=0",
+      "CARGO_PROFILE_DEV_DEBUG=0",
+      "OPENSSL_NO_VENDOR=1",
+      "GINFER_PROFILE_CATALOGS=/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json",
+      "HOME=/tmp",
+      "COREPACK_ENABLE_NETWORK=0",
+      "YARN_ENABLE_NETWORK=0",
+      "PATH=/opt/rust/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "CUDA_HOME=/usr/local/cuda-13.3",
+      "DEBIAN_FRONTEND=noninteractive"
+    ],
+    "catalogs_preserved": "GINFER_PROFILE_CATALOGS=/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4.json:/work/profile-catalogs/linux-rtx3090-qwen38-groupwise-int-dflash2-q4-vision.json:/work/profile-catalogs/linux-rtx4090-qwen38-groupwise-int-dflash2-q4-vision.json"
+  },
+  "exit": 0,
+  "docker_attach_exit": 0,
+  "started_at": "2026-10-18T08:05:53.51596243Z",
+  "finished_at": "2026-10-18T08:13:45.716341199Z",
+  "oom_killed": false,
+  "log": "make-verify.log",
+  "completed_utc": "2026-10-18T08:13:45.867719+00:00",
+  "summary": {
+    "web_app": {
+      "passed": 3503,
+      "skipped": 6
+    },
+    "extensions_passed": 127,
+    "rust": {
+      "passed": 1276,
+      "ignored": 28
+    },
+    "lint": "0 errors; 5 existing warnings",
+    "typecheck": "PASS",
+    "quality_contracts_assets": "PASS",
+    "critical_coverage_floors": "6 PASS"
+  }
+}

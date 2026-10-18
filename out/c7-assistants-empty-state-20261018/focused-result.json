@@ -1,0 +1,40 @@
+{
+  "base": "5ce4bab653e8b9b95c28328ceb374f4dc609c05a",
+  "baseline": {
+    "exit": 1,
+    "passed": 2,
+    "failed": 2,
+    "failure_reasons": [
+      "English empty guidance missing after deleting the final assistant",
+      "Missing saved default does not display first available Research helper"
+    ],
+    "new_test_on_old_production": true
+  },
+  "candidate": {
+    "exit": 0,
+    "passed": 4,
+    "failed": 0
+  },
+  "lint": {
+    "exit": 0,
+    "errors": 0,
+    "warnings": 1,
+    "warning": "test file is ignored by existing ESLint pattern"
+  },
+  "command": "yarn workspace @gchat/web-app exec vitest run src/routes/settings/__tests__/assistant-save.test.tsx --maxWorkers=8",
+  "runs": "one baseline, one candidate; no repeats",
+  "times": {
+    "baseline-focused": {
+      "start": "2026-10-18T08:01:37Z",
+      "end": "2026-10-18T08:01:41Z"
+    },
+    "candidate-focused": {
+      "start": "2026-10-18T08:01:41Z",
+      "end": "2026-10-18T08:01:44Z"
+    },
+    "affected-lint": {
+      "start": "2026-10-18T08:01:44Z",
+      "end": "2026-10-18T08:01:46Z"
+    }
+  }
+}
