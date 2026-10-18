@@ -51,8 +51,11 @@ Enter retains the draft. Once the catalog arrives, submission uses the restored
 skill rather than the conversation's previous active skill. Ordinary Chat
 without a draft skill and `/compact` remain available while the catalog loads.
 Deferred-catalog rendered regressions cover both submission controls and a
-different previously active skill. Follow-up receipts:
-`/ai/gchat/out/gchat-chat-skill-draft-loading-20261018/`.
+different previously active skill. Source `48d194f70` passes 69 focused tests,
+lint and one `make verify` (3,719 app, 127 extension and 1,311 Rust tests),
+plus frontend and native builds. The deferred response is exercised by rendered
+tests; this follow-up makes no additional native race or model-execution claim.
+Follow-up receipts: `/ai/gchat/out/gchat-chat-skill-draft-loading-20261018/`.
 
 ## Finding a newly saved agent — October 18
 
