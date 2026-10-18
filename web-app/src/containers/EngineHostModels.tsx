@@ -15,6 +15,9 @@ import { EngineFirstRun } from '@/containers/EngineFirstRun'
 import { hostInstanceLabel, hostModelLabel, identityLabel, weightsDrafterDetail } from '@/lib/engine-host-labels'
 import { formatModelBytes } from '@/lib/model-release'
 
+const MEBIBYTE = 1024 ** 2
+const DEFAULT_GPU_RESERVE_BYTES = 300 * MEBIBYTE
+
 const advancedFieldLabels = { draft_tokens: 'Draft ahead length (tokens)', draft_tp: 'Drafting graphics cards (TP)', prefill_chunk: 'Input batch size (tokens)' } as const
 const instanceStatusLabels = { starting: 'Starting', ready: 'Ready to chat', stopping: 'Stopping', stopped: 'Stopped', failed: 'Could not start' } as const
 const modelActionMessages = {
@@ -25,6 +28,17 @@ const modelActionMessages = {
   launch: 'Model start requested.',
   profile_launch: 'Model start requested.',
 } as const
+
+function ModelFailureDetails({ details }: { details: string }) {
+  const reserveFailure = details.match(/final KV arena violates physical headroom on rank \d+; free_bytes=\d+; headroom_bytes=\d+/)?.[0]
+  return <>
+    {reserveFailure && <div className="mt-2 space-y-2">
+      <p>The model could not keep your chosen GPU memory free. Close other apps using the graphics card, lower a fixed graphics-card conversation memory limit, or reduce GPU memory to keep free, then try again.</p>
+      <p className="whitespace-pre-wrap break-all">{reserveFailure}</p>
+    </div>}
+    <details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{details}</p></details>
+  </>
+}
 
 export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot?: EngineSnapshot; error?: string }) {
   const refresh = useEngineHosts((s) => s.refresh)
@@ -65,7 +79,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     }
   }, [editing, settingsOpen])
   const [editingSession, setEditingSession] = useState<string | null>(null)
-  const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false, flash_host_ram_headroom_gib: null, expert_lfu: true })
+  const [options, setOptions] = useState<EngineLaunchOptions>({ vision: true, structured_outputs: true, spec: 'none', draft_tokens: 0, draft_tp: 0, kv_dtype: 'auto', kv_arena_bytes: null, kv_arena_headroom_bytes: DEFAULT_GPU_RESERVE_BYTES, host_kv_cache_bytes: null, prefill_chunk: 0, no_cuda_graph: false, flash_host_ram_headroom_gib: null, expert_lfu: true })
   const selected = snapshot?.models.find((m) => m.id === modelId)
   const configuration = { ...options, model_id: modelId, gpu_uuids: gpus, max_context: context, concurrency }
   const profile = snapshot?.hardware_profile
@@ -83,6 +97,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     setStartupQuote(null)
   }, [quoteKey])
   const currentQuote = startupQuote?.key === quoteKey ? startupQuote : null
+  const gpuReserve = options.kv_arena_headroom_bytes
+  const invalidGpuReserve = gpuReserve === undefined || !Number.isSafeInteger(gpuReserve) || gpuReserve < 0
   const flashHeadroom = options.flash_host_ram_headroom_gib ?? null
   const invalidFlashHeadroom = flashHeadroom !== null && (!Number.isSafeInteger(flashHeadroom) || flashHeadroom < 0)
   const invalidNumbers = !Number.isSafeInteger(context) || context < 1 ||
@@ -92,7 +108,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       .some((value) => !Number.isSafeInteger(value) || value < 0) ||
     (options.host_kv_cache_bytes !== null && (!Number.isSafeInteger(options.host_kv_cache_bytes) || options.host_kv_cache_bytes < 0)) ||
     (options.kv_arena_bytes !== null && (!Number.isSafeInteger(options.kv_arena_bytes) || options.kv_arena_bytes < 1))
-  const launchError = invalidFlashHeadroom ? 'Flash computer-memory headroom must be a whole number of GiB, at least 0, or left blank to use GInfer’s default.'
+  const launchError = invalidGpuReserve ? 'Enter GPU memory to keep free as a nonnegative number of MB, within the supported size range.'
+    : invalidFlashHeadroom ? 'Flash computer-memory headroom must be a whole number of GiB, at least 0, or left blank to use GInfer’s default.'
     : invalidNumbers ? 'Use whole numbers. Conversation length and model copies must be at least 1. Requests at once must be between 1 and 8. Advanced settings cannot be negative; the graphics-card memory limit must be greater than 0 or left blank.'
     : options.kv_dtype === 'nvfp4' && selected?.metadata.nvfp4_kv_available === false
       ? 'This model cannot use NVFP4 conversation memory. Choose INT8 or BF16, or add a model prepared for NVFP4 memory.' : null
@@ -237,7 +254,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
     {scanResult && <p role="status" className="text-sm">Model list refreshed.</p>}
     {actionResult && <p role="status" className="text-sm">{actionResult}</p>}
     {connectionRefreshFeedback}
-    {actionError && <div role="alert" className="text-sm text-destructive"><p>{actionError.message}</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{actionError.details}</p></details></div>}
+    {actionError && <div role="alert" className="text-sm text-destructive"><p>{actionError.message}</p><ModelFailureDetails details={actionError.details} /></div>}
     {hostStopError && <div role="alert" className="text-sm text-destructive"><p>Could not stop the model service. Wait for any model loading or other work to finish, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{hostStopError}</p></details></div>}
     {!error && snapshot?.draft_width_calibrations?.some(job => job.status === 'running') && <p role="status" className="text-sm text-muted-foreground">Finishing graphics-card speed tuning (about 1 minute). Your graphics card is busy until it finishes. Starting a model stops the tuning.</p>}
     {hostStopping && <p role="status" className="text-sm text-muted-foreground">The model service is stopping. Quitting GChat…</p>}
@@ -262,7 +279,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
       {!snapshot.instances.length && <p className="text-sm text-muted-foreground">No models are loaded. Choose an installed model below to start one.</p>}
       {(active ? [active] : []).map((instance) => <div key={instance.instance_id} className="rounded-lg bg-muted/40 p-3 space-y-2">
         <details><summary className="cursor-pointer text-sm text-muted-foreground">Current model settings</summary><EngineInstanceSettings instance={instance} online={!error} /></details>
-        {instance.last_error && <div role="alert" className="text-sm text-destructive"><p>The model reported a problem. Check its settings and available graphics-card memory before trying again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{instance.last_error}</p></details></div>}
+        {instance.last_error && <div role="alert" className="text-sm text-destructive"><p>The model reported a problem. Check its settings and available graphics-card memory before trying again.</p><ModelFailureDetails details={instance.last_error} /></div>}
         <div className="flex gap-2">
           {instance.profile && <Button variant="outline" disabled={busy || !!error} onClick={() => {
             const profile = instance.profile!
@@ -271,7 +288,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             setContext(profile.max_context); setConcurrency(profile.concurrency)
             setOptions({ vision: profile.vision, structured_outputs: profile.structured_outputs ?? true, spec: profile.spec, draft_tokens: profile.draft_tokens, draft_tp: profile.draft_tp,
               kv_dtype: profile.kv_dtype, kv_arena_bytes: profile.kv_arena_bytes, host_kv_cache_bytes: profile.host_kv_cache_bytes ?? null,
-              kv_arena_headroom_bytes: profile.kv_arena_headroom_bytes,
+              kv_arena_headroom_bytes: profile.kv_arena_headroom_bytes ?? DEFAULT_GPU_RESERVE_BYTES,
               flash_host_ram_headroom_gib: profile.flash_host_ram_headroom_gib ?? null, expert_lfu: profile.expert_lfu ?? true,
               prefill_chunk: profile.prefill_chunk, no_cuda_graph: profile.no_cuda_graph })
           }}>Edit settings</Button>}
@@ -321,6 +338,8 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
           <label className="text-sm">Graphics-card conversation memory (bytes)<Input type="number" min={1} max={Number.MAX_SAFE_INTEGER} value={options.kv_arena_bytes ?? ''} onChange={(e) => setOptions({ ...options, kv_arena_bytes: e.target.value ? Number(e.target.value) : null })} /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={options.no_cuda_graph} onChange={(e) => setOptions({ ...options, no_cuda_graph: e.target.checked })} />Turn off CUDA Graphs</label>
         </div>
+        <label className="block text-sm">GPU memory to keep free (MB)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER / MEBIBYTE} step="any" value={gpuReserve === undefined ? '' : gpuReserve / MEBIBYTE} aria-describedby={`gpu-reserve-help-${host.host_id}`} onChange={(e) => setOptions({ ...options, kv_arena_headroom_bytes: e.target.value === '' ? undefined : Number(e.target.value) * MEBIBYTE })} /></label>
+        <p id={`gpu-reserve-help-${host.host_id}`} className="text-sm text-muted-foreground">Raise this if other apps on this GPU, like your desktop or games, cause slowdowns. This amount is kept free on each selected graphics card. 1 MB here is 1,048,576 bytes. It applies when the model starts; use Save and restart to apply changes to a running model.</p>
         <label className="block text-sm">Computer memory headroom for Flash (GiB)<Input type="number" min={0} max={Number.MAX_SAFE_INTEGER} step={1} value={flashHeadroom ?? ''} onChange={(e) => setOptions({ ...options, flash_host_ram_headroom_gib: e.target.value === '' ? null : Number(e.target.value) })} /></label>
         <p className="text-sm text-muted-foreground">For Flash models, choose how much computer memory to leave free, measured in GiB. Leave blank to use GInfer’s default (4 GiB). This is separate from conversation memory.</p>
         {flashHeadroom === 0 && <p className="text-sm text-amber-700 dark:text-amber-400">0 removes the extra computer-memory reserve for Flash. Other apps may have less memory available.</p>}
@@ -339,7 +358,7 @@ export function HostCard({ host, snapshot, error }: { host: EngineHost; snapshot
             .finally(() => setBusy(false))
         }}>Check model settings</Button>
         {currentQuote?.result && <p role="status" className="text-sm">Model file checked: {identityLabel(currentQuote.result.model_identity)}. {currentQuote.result.instance_count} {currentQuote.result.instance_count === 1 ? 'model copy' : 'model copies'}. {currentQuote.result.kv_arena_bytes === null ? 'Conversation memory is automatic. Start one copy first so GInfer can measure its memory use before sharing the graphics cards.' : `${formatModelBytes(currentQuote.result.kv_arena_bytes)} of graphics-card conversation memory per model copy.`} This check did not start a model.</p>}
-        {currentQuote?.error && <div role="alert" className="text-sm text-destructive"><p>These model settings could not be checked. Review your choices and available graphics-card memory, then try again.</p><details className="mt-2"><summary className="cursor-pointer">Technical details</summary><p className="whitespace-pre-wrap break-all">{currentQuote.error}</p></details></div>}
+        {currentQuote?.error && <div role="alert" className="text-sm text-destructive"><p>These model settings could not be checked. Review your choices and available graphics-card memory, then try again.</p><ModelFailureDetails details={currentQuote.error} /></div>}
       </>}
       <div className="flex gap-2"><Button disabled={busy || profiling || !!error || !!launchError || !selected || gpus.length !== selected.metadata.tp_size} onClick={async () => {
         if (editing && !await confirmAction({ title: 'Save and restart this model?', message: 'The model will finish its current replies, then restart with your chosen settings. Other people using it will be affected while it restarts.', confirmLabel: 'Save and restart' })) return
