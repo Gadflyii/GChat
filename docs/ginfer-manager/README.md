@@ -72,6 +72,9 @@ No model run, profiling or repeated runtime matrix is needed.
 Do not use reserved ports 7443/7444 for the fixture. If the saved management
 port is 7443, selecting a nonreserved preferred address remains unresolved;
 changing only the shared discovery locator cannot select the desktop port.
+Source review on main `82ad083b1` confirms no ordinary management-port editor;
+`local_host::management_address` reads the configured root before managed bind.
+The saved-port metadata after C4 returns decides whether this fixture is usable.
 Reuse `out/c4-windows-rc-refresh-20261018/controls/native-uia-action-sequence.txt`
 and `out/windows-gate-20261016/native-gui-plan.md`, binding actions to the actual
 installed PID and start time. Next: review C4's returned installation/walk
