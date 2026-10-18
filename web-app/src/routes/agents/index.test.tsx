@@ -1208,6 +1208,59 @@ describe('AgentStudioPage', () => {
     expect(definitionState.value.remove).toHaveBeenCalledExactlyOnceWith('review-assistant-3')
   })
 
+  it.each(['before', 'after'] as const)(
+    'reveals the newly saved library entry when its list arrives %s save resolves, without stealing focus or repeating on refresh',
+    async (arrival) => {
+      const saved = { ...editableDraft, id: 'zebra-planner', name: 'Zebra planner' }
+      definitionState.value.definitions = [firstAgent, secondAgent]
+      definitionState.value.save.mockImplementation(async () => {
+        if (arrival === 'before') {
+          definitionState.value.definitions = [firstAgent, secondAgent, saved]
+        }
+        return saved
+      })
+      const revealed: HTMLElement[] = []
+      const scroll = vi.fn(function (this: HTMLElement) { revealed.push(this) })
+      const originalScroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scroll })
+      try {
+        const page = render(<AgentStudioPage />)
+        await screen.findByDisplayValue(firstAgent.name)
+        fireEvent.click(screen.getByTitle('New agent'))
+        await screen.findByDisplayValue(editableDraft.name)
+        fireEvent.change(screen.getByLabelText('Name'), { target: { value: saved.name } })
+        const focusTarget = screen.getByRole('button', { name: 'Templates', exact: true })
+        focusTarget.focus()
+        scroll.mockClear()
+        revealed.length = 0
+        fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+        await waitFor(() => expect(screen.getByLabelText('Identifier')).toHaveValue(saved.id))
+        if (arrival === 'after') {
+          expect(scroll).not.toHaveBeenCalled()
+          definitionState.value.definitions = [firstAgent, secondAgent, saved]
+          page.rerender(<AgentStudioPage />)
+        }
+        const selected = screen.getByRole('button', { name: /Zebra planner/ })
+        await waitFor(() => expect(revealed).toEqual([selected]))
+        expect(scroll).toHaveBeenCalledExactlyOnceWith({ block: 'nearest' })
+        expect(selected).toHaveClass('border-primary')
+        expect(focusTarget).toHaveFocus()
+
+        const library = selected.closest('aside')!
+        library.scrollTop = 0
+        definitionState.value.definitions = [...definitionState.value.definitions]
+        page.rerender(<AgentStudioPage />)
+        fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'A weekly plan.' } })
+        expect(library.scrollTop).toBe(0)
+        expect(scroll).toHaveBeenCalledTimes(1)
+        expect(focusTarget).toHaveFocus()
+      } finally {
+        if (originalScroll) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScroll)
+        else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+      }
+    }
+  )
+
   it.each(['new', 'existing'] as const)(
     'keeps a hyphenated identifier while typing a %s draft and normalizes it on blur', async (source) => {
       const user = userEvent.setup()
