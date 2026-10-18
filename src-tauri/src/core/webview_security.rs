@@ -98,20 +98,21 @@ pub fn build_window(
             tauri::webview::NewWindowResponse::Deny
         })
         .build()?;
-    let guarded_window = window.clone();
+    let (installed, result) = std::sync::mpsc::sync_channel(1);
     window.with_webview(move |native| {
         let result = install_frame_guard(&native, origin)
-            .and_then(|()| super::preview_protocol::install(&native, cache))
-            .and_then(|()| {
-                guarded_window
-                    .navigate(initial_url)
-                    .map_err(|error| error.to_string())
-            });
-        if let Err(error) = result {
-            log::error!("Could not install webview security boundary: {error}");
-            let _ = guarded_window.destroy();
-        }
+            .and_then(|()| super::preview_protocol::install(&native, cache));
+        let _ = installed.send(result);
     })?;
+    // Tauri holds its dispatcher lock throughout with_webview. Dispatching
+    // navigation or destruction from that callback would deadlock on startup.
+    // Wait for installation, then dispatch only after the callback returns.
+    if let Err(error) = result.recv().unwrap_or_else(|error| Err(error.to_string())) {
+        log::error!("Could not install webview security boundary: {error}");
+        let _ = window.destroy();
+        return Err(std::io::Error::other(error).into());
+    }
+    window.navigate(initial_url)?;
     Ok(window)
 }
 
