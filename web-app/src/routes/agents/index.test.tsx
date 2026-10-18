@@ -1070,6 +1070,145 @@ describe('AgentStudioPage', () => {
     ))
   })
 
+  it('keeps required tool steps empty while editing and saves typed steps before blur', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    await renderSavedAgents()
+    const user = userEvent.setup()
+    const steps = screen.getByLabelText('Maximum tool steps')
+
+    await user.clear(steps)
+    expect(steps).toHaveProperty('value', '')
+    await user.type(steps, '12')
+    expect(steps).toHaveProperty('value', '12')
+    expect(steps).toHaveFocus()
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({ id: firstAgent.id, maxSteps: 12 })
+    ))
+    fireEvent.blur(steps)
+    expect(steps).toHaveProperty('value', '12')
+  })
+
+  it('normalizes typed Goal Loop limits on blur and saves numeric values', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    definitionState.value.definitions = [{
+      ...firstAgent,
+      kind: 'goal_loop',
+      maxCycles: 3,
+      successCriteria: 'A verified answer.',
+      evaluatorInstructions: 'Check the answer.',
+      evaluatorModelInstanceId: null,
+      evaluatorReasoningEffort: null,
+    }]
+    render(<AgentStudioPage />)
+    const cycles = await screen.findByLabelText('Maximum cycles')
+    const steps = screen.getByLabelText('Maximum tool steps per cycle')
+    const user = userEvent.setup()
+
+    await user.clear(cycles)
+    expect(cycles).toHaveProperty('value', '')
+    await user.type(cycles, '04')
+    expect(cycles).toHaveProperty('value', '04')
+    fireEvent.blur(cycles)
+    expect(cycles).toHaveProperty('value', '4')
+    await user.clear(steps)
+    expect(steps).toHaveProperty('value', '')
+    await user.type(steps, '12')
+    expect(steps).toHaveProperty('value', '12')
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'goal_loop', maxCycles: 4, maxSteps: 12 })
+    ))
+    await user.clear(cycles)
+    expect(cycles).toHaveProperty('value', '')
+    fireEvent.blur(cycles)
+    expect(cycles).toHaveProperty('value', '0')
+  })
+
+  it.each(['workflow', 'coordinator'] as const)(
+    'keeps %s role-step edits empty until typed and saves numeric limits',
+    async (kind) => {
+      const role = {
+        id: 'research', name: 'Research', instructions: 'Research the request.',
+        skills: [], maxSteps: 12, modelInstanceId: null, reasoningEffort: null,
+      }
+      const definition: AgentDefinition = kind === 'workflow'
+        ? {
+            ...firstAgent, kind, nodes: [{ ...role, workspace: 'shared' }], edges: [],
+          }
+        : {
+            ...firstAgent, kind, maxParallel: 1,
+            coordinatorInstructions: 'Plan the work.',
+            synthesisInstructions: 'Combine the findings.',
+            synthesisModelInstanceId: null, synthesisReasoningEffort: null,
+            workers: [role, { ...role, id: 'review', name: 'Review', maxSteps: 20 }],
+          }
+      definitionState.value.save.mockImplementation(async (value) => value)
+      definitionState.value.definitions = [definition]
+      render(<AgentStudioPage />)
+      await screen.findByDisplayValue(firstAgent.name)
+      const user = userEvent.setup()
+
+      if (kind === 'coordinator') {
+        const parallel = screen.getByLabelText('Maximum parallel workers')
+        await user.clear(parallel)
+        expect(parallel).toHaveProperty('value', '')
+        await user.type(parallel, '02')
+        expect(parallel).toHaveProperty('value', '02')
+        fireEvent.blur(parallel)
+        expect(parallel).toHaveProperty('value', '2')
+      }
+      const steps = screen.getAllByLabelText('Maximum tool steps')[0]
+      await user.clear(steps)
+      expect(steps).toHaveProperty('value', '')
+      await user.type(steps, '09')
+      expect(steps).toHaveProperty('value', '09')
+      expect(steps).toHaveFocus()
+      fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+      await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+        expect.objectContaining(kind === 'workflow'
+          ? { kind, nodes: [expect.objectContaining({ id: role.id, maxSteps: 9 })] }
+          : {
+              kind, maxParallel: 2,
+              workers: [
+                expect.objectContaining({ id: role.id, maxSteps: 9 }),
+                expect.objectContaining({ id: 'review', maxSteps: 20 }),
+              ],
+            })
+      ))
+      fireEvent.blur(steps)
+      expect(steps).toHaveProperty('value', '9')
+      if (kind === 'coordinator') {
+        const parallel = screen.getByLabelText('Maximum parallel workers')
+        await user.clear(parallel)
+        await user.type(parallel, '02')
+        expect(parallel).toHaveProperty('value', '02')
+        fireEvent.click(screen.getAllByTitle('Remove specialist')[1])
+        expect(parallel).toHaveProperty('value', '1')
+      }
+    }
+  )
+
+  it('resets temporary numeric text when selecting another saved agent with the same limit', async () => {
+    definitionState.value.definitions = [firstAgent, { ...secondAgent, maxSteps: 12 }]
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue(firstAgent.name)
+    const user = userEvent.setup()
+    const steps = screen.getByLabelText('Maximum tool steps')
+
+    await user.clear(steps)
+    await user.type(steps, '012')
+    expect(steps).toHaveProperty('value', '012')
+    // Selection replaces the draft even if its numeric value has not changed.
+    fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+    expect(screen.getByLabelText('Maximum tool steps')).toHaveProperty('value', '12')
+    fireEvent.click(screen.getByRole('button', { name: /Review assistant/ }))
+    expect(screen.getByLabelText('Maximum tool steps')).toHaveProperty('value', '25')
+  })
+
   it('saves a new coordinator with valid default parallelism and allows more specialists', async () => {
     definitionState.value.save.mockImplementation(async (value) => value)
     render(<AgentStudioPage />)

@@ -106,6 +106,24 @@ was viewed and CPUs were returned at 05:08Z. This qualifies the Linux debug
 editor interaction; installer behavior was not checked.
 Windows: not built (dev phase).
 
+## Required numeric keyboard editing — October 18
+
+An isolated native Linux Studio pass reproduced a leading zero while replacing
+required numeric values. Clearing **Maximum tool steps** immediately inserted
+`0`, so typing `12` displayed `012`. Goal Loop **Maximum cycles** similarly
+showed `04`. Saving and reselecting the tool-step limit correctly retained `12`;
+the defect affects editing rather than stored numeric values. The affected
+editor is unchanged from native source `6e6286019` through main `b9a56c96c`.
+The viewed screenshot, DOM captures and stopped private session are in
+`/ai/gchat/out/gchat-agent-numeric-editing-20261018/`.
+
+The required tool-step, cycle, parallel-worker and role-step controls retain
+blank text while editing and normalize on blur. Their numeric validation and
+saved contract remain unchanged. The optional output budget retains its Auto
+behavior. Focused regression, full verification and corrected native results
+will be recorded after the frozen candidate gates.
+Windows: not built (dev phase).
+
 ## Skill slash-menu keyboard visibility — October 18
 
 An isolated native Linux Chat pass qualified the pending keyboard interaction
