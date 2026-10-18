@@ -5,7 +5,7 @@ use crate::types::GpuInfo;
     not(target_os = "macos")
 ))]
 use {
-    crate::types::Vendor,
+    crate::types::{PciAddress, Vendor},
     vulkano::device::physical::PhysicalDeviceType,
     vulkano::instance::{Instance, InstanceCreateInfo},
     vulkano::memory::MemoryHeapFlags,
@@ -126,14 +126,33 @@ fn get_vulkan_gpus_internal() -> Result<Vec<GpuInfo>, Box<dyn std::error::Error>
             .map(|heap| heap.size / (1024 * 1024))
             .sum();
 
-        let device_uuid = physical_device.properties().device_uuid.unwrap_or([0; 16]);
+        let uuid = properties
+            .device_uuid
+            .filter(|uuid| *uuid != [0; 16])
+            .map(|uuid| parse_uuid(&uuid))
+            .unwrap_or_default();
+        let pci_address = match (
+            properties.pci_domain,
+            properties.pci_bus,
+            properties.pci_device,
+            properties.pci_function,
+        ) {
+            (Some(domain), Some(bus), Some(device), Some(function)) => Some(PciAddress {
+                domain,
+                bus,
+                device,
+                function,
+            }),
+            _ => None,
+        };
         let driver_version = format!("{}", properties.driver_version);
 
         let device_info = GpuInfo {
             name: properties.device_name.clone(),
             total_memory,
             vendor: Vendor::from_vendor_id(properties.vendor_id),
-            uuid: parse_uuid(&device_uuid),
+            uuid,
+            pci_address,
             driver_version,
             nvidia_info: None,
             vulkan_info: Some(VulkanInfo {

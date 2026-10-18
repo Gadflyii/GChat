@@ -2,7 +2,7 @@ use crate::types::{GpuInfo, GpuUsage};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use {
-    crate::types::Vendor,
+    crate::types::{PciAddress, Vendor},
     nvml_wrapper::{error::NvmlError, Nvml},
     std::sync::RwLock,
 };
@@ -221,6 +221,10 @@ fn create_gpu_info(nvml: &Nvml, index: u32, driver_version: &str) -> Result<GpuI
         total_memory: memory_info.total / (1024 * 1024), // bytes to MiB
         vendor: Vendor::NVIDIA,
         uuid: clean_uuid,
+        pci_address: device
+            .pci_info()
+            .ok()
+            .and_then(|pci| PciAddress::from_bus_id(&pci.bus_id)),
         driver_version: driver_version.to_string(),
         nvidia_info: Some(NvidiaInfo {
             index,

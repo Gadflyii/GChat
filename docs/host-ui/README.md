@@ -1,5 +1,49 @@
 # GInfer host UI
 
+## Physical graphics-card inventory — C3, October 18
+
+`GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED`: the fresh private native main
+`201f46712` walk showed one card in Hardware and System Monitor on S1 despite
+two physical PRO 6000 cards with distinct NVML UUIDs and indices. The frontend
+collapsed every matching vendor/name/memory tuple. That heuristic also hid real
+cards after the native probe had correctly distinguished them.
+
+The candidate reconciles NVML/Vulkan aliases by exact PCI domain/bus/device/
+function, preserving NVML identity for telemetry. UUID is used when a comparable
+PCI address is unavailable. Two different PCI addresses remain separate even
+if their UUID strings match. Missing shared identity cannot prove an alias, so
+such entries remain separate. PCI identity stays internal to the native plugin.
+Both UI views now render the physical inventory without tuple collapse.
+
+Acceptance: rendered regressions for both views with the retained two-card
+identities, native alias/unknown/conflicting-PCI regressions, focused plugin
+check/Clippy, lint, one `make verify`, and changed-source native two-card
+rendering. No model load, GPU profiling, numerical or performance claim.
+Focused Hardware cases (8), lint, and plugin tests (16), check and Clippy pass.
+The ONE `make verify` stopped on an existing stale first-run Cancel label test.
+Its selectors now match the existing Stop setup wording. The affected first-run
+suite (28 cases), coverage stage (3,275 frontend and121 extension cases) and all
+six coverage floors then passed. The native continuation stopped at a desktop
+GPU fixture missing the new internal PCI field; the fixture now explicitly uses
+`None`. Both failures remain recorded and the full verify is not repeated.
+The seven original native suites then passed (1,220 tests,28 ignored), and
+the changed-source frontend/native build passed. Native Linux acceptance also
+passes: real pointer input opened Hardware and System Monitor, each showing
+two physical PRO 6000 cards with95.59GB. Reviewed Dark-theme screenshots cover
+Hardware1500×1000 and Monitor1000×1000/800×650. No horizontal overflow.
+Live GPU statistics remain unavailable in this fixture; no GPU work was run.
+Windows, installers and release builds remain unqualified. Result and summary:
+`out/c3-hardware-card-identity-20261018/{result.json,summary.md}`.
+Next action: commit and send this tested candidate for merge.
+
+Owner/source `/ai/gchat-worktrees/c3-hardware-card-identity-20261018`, branch
+`fix/c3-hardware-card-identity-20261018`, base `832fddb85`. Reuse the owned
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` CPU-only build fixture
+and private dependency cache; preserve baseline and preparation binaries.
+The tested binary is retained at `hardware-candidate/bin/gchat`. No new GPU
+booking or model process is needed. Build copies retire when this walk and its
+native candidates finish; result JSON and short summary remain.
+
 ## Connect service-selection hint — Gchat 2 native acceptance, October 18
 
 `GUI-CONNECT-NEEDS-SERVICE-HINT` passes its Linux native check in the
