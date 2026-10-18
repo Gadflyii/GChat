@@ -27,7 +27,7 @@ pub enum ApiError {
     Http(hyper::Error),
     Workspace(WorkspaceError),
     Tasks(TaskRunnerError),
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     Setup(crate::kvm_setup::SetupIssue),
 }
 
@@ -43,7 +43,7 @@ impl std::fmt::Display for ApiError {
             Self::Http(_) => formatter.write_str("Gbot HTTP service could not complete"),
             Self::Workspace(error) => error.fmt(formatter),
             Self::Tasks(error) => error.fmt(formatter),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "windows"))]
             Self::Setup(error) => error.fmt(formatter),
         }
     }
@@ -85,7 +85,7 @@ pub fn request_method(path: &str) -> Method {
 }
 
 impl ApiClient {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub fn subscribe_setup(&self) -> Option<tokio::sync::watch::Receiver<u64>> {
         self.runtime.kvm_setup().map(|setup| setup.subscribe())
     }
@@ -321,7 +321,7 @@ impl Api {
         Ok(self)
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     pub async fn with_kvm_setup(self, root: std::path::PathBuf) -> Result<Self, ApiError> {
         self.runtime
             .configure_kvm_setup(root)
@@ -350,7 +350,7 @@ impl Api {
                 .await
                 .map_err(ApiError::Tasks)?,
         );
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         self.runtime
             .configure_task_runner(Arc::downgrade(&tasks))
             .map_err(ApiError::Workspace)?;
@@ -376,7 +376,7 @@ impl Api {
         shutdown: impl Future<Output = ()> + Send + 'static,
     ) -> Result<(), ApiError> {
         // Load and register persisted tasks before automatic saved-VM recovery.
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
         if let Some(setup) = self.runtime.kvm_setup() {
             setup.resume_saved().await.map_err(ApiError::Setup)?;
         }
@@ -522,15 +522,19 @@ async fn setup_route(
     tasks: Option<Arc<TaskRunner>>,
     request: Request<Body>,
 ) -> Response<Body> {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     {
         let Some(setup) = runtime.kvm_setup() else {
             return error_response(StatusCode::SERVICE_UNAVAILABLE, "setup_unavailable", "Local VM setup is not enabled in this service. Reopen GChat with its local service enabled.");
         };
         match request.uri().path() {
-            "/v1/setup/kvm/preflight" => json_response(StatusCode::OK, &setup.preflight().await),
-            "/v1/setup/kvm/status" => json_response(StatusCode::OK, &setup.status().await),
-            "/v1/setup/kvm/start" => {
+            "/v1/setup/kvm/preflight" | "/v1/setup/local-vm/preflight" => {
+                json_response(StatusCode::OK, &setup.preflight().await)
+            }
+            "/v1/setup/kvm/status" | "/v1/setup/local-vm/status" => {
+                json_response(StatusCode::OK, &setup.status().await)
+            }
+            "/v1/setup/kvm/start" | "/v1/setup/local-vm/start" => {
                 match parse_body::<crate::kvm_setup::StartSetup>(request).await {
                     Some(input) => match setup.start(input).await {
                         Ok(record) => json_response(StatusCode::OK, &record),
@@ -541,7 +545,25 @@ async fn setup_route(
                     None => invalid_request(),
                 }
             }
-            "/v1/setup/kvm/remove" => {
+            "/v1/setup/local-vm/stop" => {
+                match parse_body::<crate::kvm_setup::SetupId>(request).await {
+                    Some(input) => {
+                        let result = match tasks {
+                            Some(tasks) => tasks.stop_computer(setup.clone(), input.id).await,
+                            None => setup.stop(input.id).await,
+                        };
+                        match result {
+                            Ok(record) => json_response(StatusCode::OK, &record),
+                            Err(issue) => json_response(
+                                StatusCode::CONFLICT,
+                                &serde_json::json!({"error":issue}),
+                            ),
+                        }
+                    }
+                    None => invalid_request(),
+                }
+            }
+            "/v1/setup/kvm/remove" | "/v1/setup/local-vm/remove" => {
                 match parse_body::<crate::kvm_setup::SetupId>(request).await {
                     Some(input) => {
                         let result = match tasks {
@@ -562,16 +584,19 @@ async fn setup_route(
             _ => invalid_request(),
         }
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
-        if request.uri().path() == "/v1/setup/kvm/status" {
+        if matches!(
+            request.uri().path(),
+            "/v1/setup/kvm/status" | "/v1/setup/local-vm/status"
+        ) {
             return json_response(StatusCode::OK, &Vec::<serde_json::Value>::new());
         }
         let _ = (runtime, tasks, request);
         error_response(
             StatusCode::NOT_IMPLEMENTED,
             "unsupported_host",
-            "Local KVM setup requires Linux x86-64. Hyper-V setup is unfinished.",
+            "A separate local computer requires Linux with KVM or Windows Pro, Enterprise or Education with Hyper-V.",
         )
     }
 }
@@ -783,11 +808,11 @@ async fn wait_updates(
     revision: UpdateRevision,
 ) -> Response<Body> {
     let mut task_updates = tasks.map(TaskRunner::subscribe);
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     let mut setup_updates = runtime.kvm_setup().map(|setup| setup.subscribe());
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     let mut setup_updates: Option<tokio::sync::watch::Receiver<u64>> = None;
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     let _ = runtime;
     let task_revision = task_updates
         .as_mut()
@@ -846,7 +871,7 @@ async fn route(
     if request.method() == Method::POST && request.uri().path().starts_with("/v1/setup/cloud/") {
         return Ok(cloud_route(runtime, request).await);
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     if request.method() == Method::POST
         && matches!(
             request.uri().path(),
@@ -961,9 +986,14 @@ async fn route(
         (
             &Method::POST,
             "/v1/setup/kvm/preflight"
+            | "/v1/setup/local-vm/preflight"
             | "/v1/setup/kvm/status"
+            | "/v1/setup/local-vm/status"
             | "/v1/setup/kvm/start"
-            | "/v1/setup/kvm/remove",
+            | "/v1/setup/local-vm/start"
+            | "/v1/setup/kvm/remove"
+            | "/v1/setup/local-vm/remove"
+            | "/v1/setup/local-vm/stop",
         ) => setup_route(runtime, tasks, request).await,
 
         (&Method::POST, "/v1/connectors/get") => match parse_body::<GetAssignment>(request).await {
@@ -1152,7 +1182,9 @@ async fn route(
                         None => runtime.remove_lan_workspace(input.workspace_id).await,
                     };
                     match result {
-                        Ok(()) => json_response(StatusCode::OK, &serde_json::json!({"removed":true})),
+                        Ok(()) => {
+                            json_response(StatusCode::OK, &serde_json::json!({"removed":true}))
+                        }
                         Err(error) => lan_bot_error(error),
                     }
                 }
@@ -1549,7 +1581,7 @@ mod tests {
 
     struct LockedVault(bool);
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[tokio::test]
     async fn kvm_discovery_preserves_unavailable_and_empty_status_without_preflight() {
         let root = tempfile::tempdir().unwrap();
@@ -1583,6 +1615,21 @@ mod tests {
                 .unwrap(),
             serde_json::json!([])
         );
+        assert_eq!(
+            client
+                .call("/v1/setup/local-vm/status", serde_json::json!({}))
+                .await
+                .unwrap(),
+            serde_json::json!([])
+        );
+        assert!(client
+            .call(
+                "/v1/setup/local-vm/stop",
+                serde_json::json!({"id": WorkspaceId::new()})
+            )
+            .await
+            .unwrap_err()
+            .contains("not found"));
         assert!(service.snapshot().await.workspaces.is_empty());
         assert!(tokio::fs::read_dir(root.path().join("vms"))
             .await
@@ -1593,7 +1640,7 @@ mod tests {
             .is_none());
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     #[tokio::test]
     async fn kvm_discovery_is_empty_on_unsupported_hosts_but_other_operations_stay_unsupported() {
         let root = tempfile::tempdir().unwrap();
@@ -2174,7 +2221,10 @@ mod tests {
         assert_eq!(vault.0.lock().unwrap().len(), before + 1);
 
         assert!(client
-            .call("/v1/workspaces/ssh/rename", serde_json::json!({"workspace_id": id, "name": ""}))
+            .call(
+                "/v1/workspaces/ssh/rename",
+                serde_json::json!({"workspace_id": id, "name": ""})
+            )
             .await
             .is_err());
         let renamed = client
@@ -2188,7 +2238,10 @@ mod tests {
         let after = service.snapshot().await.workspaces[0].clone();
         assert_eq!(after.name, "Office bot");
         assert_eq!(
-            WorkspaceConfig { name: saved.name.clone(), ..after },
+            WorkspaceConfig {
+                name: saved.name.clone(),
+                ..after
+            },
             saved
         );
 
@@ -2200,7 +2253,10 @@ mod tests {
             .await
             .unwrap();
         assert!(client
-            .call("/v1/workspaces/ssh/remove", serde_json::json!({"workspace_id": id}))
+            .call(
+                "/v1/workspaces/ssh/remove",
+                serde_json::json!({"workspace_id": id})
+            )
             .await
             .unwrap_err()
             .contains("in use"));
@@ -2215,14 +2271,20 @@ mod tests {
             .await
             .unwrap();
         client
-            .call("/v1/workspaces/ssh/remove", serde_json::json!({"workspace_id": id}))
+            .call(
+                "/v1/workspaces/ssh/remove",
+                serde_json::json!({"workspace_id": id}),
+            )
             .await
             .unwrap();
         let state = service.snapshot().await;
         assert!(state.workspaces.is_empty() && state.connector_accounts.is_empty());
         assert_eq!(vault.0.lock().unwrap().len(), before);
         assert!(client
-            .call("/v1/workspaces/ssh/remove", serde_json::json!({"workspace_id": id}))
+            .call(
+                "/v1/workspaces/ssh/remove",
+                serde_json::json!({"workspace_id": id})
+            )
             .await
             .is_err());
     }

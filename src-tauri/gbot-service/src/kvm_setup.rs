@@ -1,7 +1,11 @@
 //! Product-owned, resumable setup of a separate Linux guest. No host installation.
+#[cfg(target_os = "windows")]
+use crate::hyperv::{HypervTools as KvmTools, PreparedVm};
+#[cfg(target_os = "linux")]
+use crate::kvm::{KvmTools, PreparedVm};
 use crate::{
     contract::*,
-    kvm::{GuestBinary, KvmSpec, KvmTools, PreparedVm, VmState, CUA_DRIVER_REVISION, CUA_REVISION},
+    kvm::{GuestBinary, KvmSpec, VmState, CUA_DRIVER_REVISION, CUA_REVISION},
     service::Service,
     store::Store,
     vault::{Secret, Vault},
@@ -18,9 +22,10 @@ use std::{
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+#[cfg(target_os = "linux")]
+use tokio::process::Command;
 use tokio::{
     fs,
-    process::Command,
     sync::{watch, Mutex, Notify},
 };
 use uuid::Uuid;
@@ -64,6 +69,8 @@ pub enum SetupStage {
     Connecting,
     TestingDesktop,
     Ready,
+    StoppingComputer,
+    Stopped,
     Removing,
     Removed,
 }
@@ -82,6 +89,9 @@ pub struct SetupRecord {
     pub resume_on_start: bool,
     pub issue: Option<SetupIssue>,
     pub spec: Option<KvmSpec>,
+    /// The selected disk volume is saved once; retries never move an existing guest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vm_root: Option<PathBuf>,
     pub pinned_host_key: Option<SshHostPublicKey>,
 }
 #[derive(Deserialize)]
@@ -102,6 +112,8 @@ pub struct Preflight {
     pub cpus: u16,
     pub memory_mib: u32,
     pub disk_gib: u32,
+    pub hypervisor: Hypervisor,
+    pub storage_path: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -126,6 +138,7 @@ impl Assets {
             media_pin: assets[2].digest.clone(),
         }
     }
+    #[cfg(target_os = "linux")]
     async fn check(&self) -> Vec<SetupIssue> {
         let mut issues = Vec::new();
         for (path, tool, pin) in [
@@ -161,6 +174,19 @@ impl Assets {
         }
         issues
     }
+    #[cfg(target_os = "windows")]
+    async fn check(&self) -> Vec<SetupIssue> {
+        let assets = [
+            (self.image.clone(), self.image_pin.clone()),
+            (self.driver.clone(), self.driver_pin.clone()),
+            (self.media.clone(), self.media_pin.clone()),
+        ];
+        match crate::hyperv::validate_assets(&KvmTools::default(), &assets).await {
+            Ok(()) => Vec::new(),
+            Err(error) => vec![SetupIssue::new("asset_unavailable", error.to_string(),
+                "Install the GChat release with its approved guest resources, or stage the accepted assets in the GChat guest assets folder, then retry.")],
+        }
+    }
 }
 
 pub struct KvmSetup {
@@ -175,7 +201,12 @@ pub struct KvmSetup {
     runtime: Weak<WorkspaceRuntime>,
     tools: KvmTools,
     assets: Assets,
+    #[cfg(target_os = "linux")]
     kvm_device: PathBuf,
+    #[cfg(target_os = "windows")]
+    serial: Mutex<BTreeMap<WorkspaceId, crate::hyperv::SerialCapture>>,
+    #[cfg(target_os = "windows")]
+    relays: Mutex<BTreeMap<WorkspaceId, crate::hyperv::SshRelay>>,
     stopping: AtomicBool,
     cancellations: Mutex<BTreeSet<WorkspaceId>>,
     cancel_update: Notify,
@@ -189,9 +220,13 @@ impl KvmSetup {
         runtime: Weak<WorkspaceRuntime>,
     ) -> Result<Self, SetupIssue> {
         let store = Arc::new(
-            Store::open(root.join("kvm-setups.json"))
-                .await
-                .map_err(persistence)?,
+            Store::open(root.join(if cfg!(target_os = "windows") {
+                "hyperv-setups.json"
+            } else {
+                "kvm-setups.json"
+            }))
+            .await
+            .map_err(persistence)?,
         );
         let saved: Vec<SetupRecord> = store.load().await.map_err(persistence)?.unwrap_or_default();
         let service_id = service.snapshot().await.service_id;
@@ -211,6 +246,10 @@ impl KvmSetup {
                 || record.credential_ref.validate().is_err()
                 || record.identity.workspace_id != record.id
                 || record.service_id != service_id
+                || record
+                    .vm_root
+                    .as_ref()
+                    .is_some_and(|root| !root.is_absolute())
                 || record
                     .spec
                     .as_ref()
@@ -240,7 +279,12 @@ impl KvmSetup {
             vault,
             runtime,
             tools: KvmTools::default(),
+            #[cfg(target_os = "linux")]
             kvm_device: "/dev/kvm".into(),
+            #[cfg(target_os = "windows")]
+            serial: Mutex::new(BTreeMap::new()),
+            #[cfg(target_os = "windows")]
+            relays: Mutex::new(BTreeMap::new()),
             stopping: AtomicBool::new(false),
             cancellations: Mutex::new(BTreeSet::new()),
             cancel_update: Notify::new(),
@@ -304,6 +348,7 @@ impl KvmSetup {
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone()
     }
+    #[cfg(target_os = "linux")]
     pub async fn preflight(&self) -> Preflight {
         let mut issues = Vec::new();
         if std::thread::available_parallelism().map_or(true, |count| count.get() < 2) {
@@ -365,7 +410,7 @@ impl KvmSetup {
             issues.push(SetupIssue::new(
                 "unsupported_host",
                 "Local KVM setup requires Linux x86-64.",
-                "Use a supported Linux service PC; Hyper-V setup is unfinished.",
+                "Use Linux x86-64 with KVM for this service.",
             ));
         }
         if std::fs::OpenOptions::new()
@@ -404,7 +449,42 @@ impl KvmSetup {
             cpus: 2,
             memory_mib: 4096,
             disk_gib: 40,
+            hypervisor: local_hypervisor(),
+            storage_path: Some(self.root.clone()),
         }
+    }
+    #[cfg(target_os = "windows")]
+    pub async fn preflight(&self) -> Preflight {
+        self.preflight_at(None).await
+    }
+    #[cfg(target_os = "windows")]
+    async fn preflight_at(&self, saved_root: Option<&Path>) -> Preflight {
+        let detection = match saved_root {
+            Some(root) => crate::hyperv::detect_saved_root(root, &self.tools).await,
+            None => crate::hyperv::detect_with_tools(&self.root, &self.tools).await,
+        };
+        let (mut issues, storage_path) = match detection {
+            Ok(report) => (report.issues, report.preferred_root),
+            Err(error) => (vec![SetupIssue::new("hyperv_unavailable", error.to_string(),
+                "Check Windows virtualization support. If Hyper-V is disabled, enable it yourself in Windows Features and restart this PC, then retry.")], None),
+        };
+        issues.extend(self.assets.check().await);
+        Preflight {
+            ready: issues.is_empty(),
+            issues,
+            cpus: 2,
+            memory_mib: 4096,
+            disk_gib: 40,
+            hypervisor: Hypervisor::HyperV,
+            storage_path,
+        }
+    }
+    fn vm_directory(&self, record: &SetupRecord) -> PathBuf {
+        record
+            .vm_root
+            .as_ref()
+            .unwrap_or(&self.root)
+            .join(record.id.as_uuid().to_string())
     }
     pub async fn start(self: &Arc<Self>, input: StartSetup) -> Result<SetupRecord, SetupIssue> {
         if self.stopping.load(Ordering::Acquire) {
@@ -478,6 +558,7 @@ impl KvmSetup {
                     resume_on_start: false,
                     issue: None,
                     spec: None,
+                    vm_root: None,
                     pinned_host_key: None,
                 };
                 self.save(record.clone()).await?;
@@ -502,10 +583,14 @@ impl KvmSetup {
         Ok(record)
     }
     async fn stage(&self, record: &mut SetupRecord, stage: SetupStage) -> Result<(), SetupIssue> {
-        if stage != SetupStage::Removing
-            && stage != SetupStage::Removed
-            && (self.stopping.load(Ordering::Acquire)
-                || self.cancellations.lock().await.contains(&record.id))
+        if !matches!(
+            stage,
+            SetupStage::Removing
+                | SetupStage::Removed
+                | SetupStage::StoppingComputer
+                | SetupStage::Stopped
+        ) && (self.stopping.load(Ordering::Acquire)
+            || self.cancellations.lock().await.contains(&record.id))
         {
             return Err(SetupIssue::new(
                 "setup_cancelled",
@@ -516,7 +601,10 @@ impl KvmSetup {
         record.stage = stage;
         match record.stage {
             SetupStage::Ready => record.resume_on_start = true,
-            SetupStage::Removing | SetupStage::Removed => record.resume_on_start = false,
+            SetupStage::Removing
+            | SetupStage::Removed
+            | SetupStage::StoppingComputer
+            | SetupStage::Stopped => record.resume_on_start = false,
             _ => {}
         }
         record.issue = None;
@@ -524,10 +612,23 @@ impl KvmSetup {
     }
     async fn advance(&self, record: &mut SetupRecord) -> Result<(), SetupIssue> {
         self.stage(record, SetupStage::CheckingPc).await?;
+        #[cfg(target_os = "linux")]
         let preflight = self.preflight().await;
+        #[cfg(target_os = "windows")]
+        let preflight = self.preflight_at(record.vm_root.as_deref()).await;
         if let Some(issue) = preflight.issues.into_iter().next() {
             return Err(issue);
         }
+        if record.vm_root.is_none() {
+            record.vm_root = preflight.storage_path;
+            self.save(record.clone()).await?;
+        }
+        fs::create_dir_all(record.vm_root.as_ref().unwrap_or(&self.root))
+            .await
+            .map_err(|error| {
+                SetupIssue::new("storage_unavailable", error.to_string(),
+                "Check that this account can create files on the selected guest drive, then retry.")
+            })?;
         self.stage(record, SetupStage::PreparingComputer).await?;
         let secret = match self
             .vault
@@ -611,29 +712,46 @@ impl KvmSetup {
                 "Restore this setup's original vault entry or remove the setup.",
             ));
         }
-        let vm = PreparedVm::prepare(&self.root, &self.assets.image, spec, &self.tools)
-            .await
-            .map_err(|error| {
-                SetupIssue::new(
-                    "prepare_failed",
-                    error.to_string(),
-                    "Resolve the reported libvirt/disk error, then retry this same setup.",
-                )
-            })?;
+        let vm = PreparedVm::prepare(
+            record.vm_root.as_ref().unwrap_or(&self.root),
+            &self.assets.image,
+            spec,
+            &self.tools,
+        )
+        .await
+        .map_err(|error| {
+            SetupIssue::new(
+                "prepare_failed",
+                error.to_string(),
+                "Resolve the reported virtual machine or disk error, then retry this same setup.",
+            )
+        })?;
+        #[cfg(target_os = "windows")]
+        if !self.serial.lock().await.contains_key(&record.id) {
+            let capture = vm.capture_serial(&self.tools).await.map_err(persistence)?;
+            self.serial.lock().await.insert(record.id, capture);
+        }
         self.stage(record, SetupStage::StartingComputer).await?;
         if vm.start(&self.tools).await.map_err(|error| {
             SetupIssue::new(
                 "start_failed",
                 error.to_string(),
-                "Check the owned libvirt guest and its saved SSH port, then retry.",
+                "Check the owned virtual machine and its saved SSH port, then retry.",
             )
         })? != VmState::Running
         {
             return Err(SetupIssue::new(
                 "start_failed",
                 "The owned guest is not running.",
-                "Check its libvirt state and retry.",
+                "Check its power state and retry.",
             ));
+        }
+        #[cfg(target_os = "windows")]
+        if !self.relays.lock().await.contains_key(&record.id) {
+            let relay = crate::hyperv::SshRelay::start(&vm, &self.tools)
+                .await
+                .map_err(persistence)?;
+            self.relays.lock().await.insert(record.id, relay);
         }
         self.stage(record, SetupStage::Connecting).await?;
         if record.pinned_host_key.is_none() {
@@ -654,7 +772,7 @@ impl KvmSetup {
             bot_pc: BotPc::LocalVm {
                 host_id: record.service_id,
                 vm_id: vm.spec.id.to_string(),
-                hypervisor: Hypervisor::Kvm,
+                hypervisor: local_hypervisor(),
             },
             connection: WorkspaceConnection::Ssh(SshConnection {
                 endpoint: SshEndpoint {
@@ -1157,6 +1275,69 @@ impl KvmSetup {
             let lock = self.lock(id).await;
             let _guard = lock.lock().await;
         }
+        #[cfg(target_os = "windows")]
+        {
+            self.relays.lock().await.clear();
+            self.serial.lock().await.clear();
+        }
+    }
+    /// Graceful shutdown preserves the workspace, vault key and guest disk.
+    pub async fn stop(self: &Arc<Self>, id: WorkspaceId) -> Result<SetupRecord, SetupIssue> {
+        if self.stopping.load(Ordering::Acquire) {
+            return Err(SetupIssue::new(
+                "setup_closed",
+                "The setup service is closing.",
+                "Reopen GChat and retry.",
+            ));
+        }
+        let lock = self.lock(id).await;
+        self.cancellations.lock().await.insert(id);
+        self.cancel_update.notify_waiters();
+        let owner = self.clone();
+        tokio::spawn(async move {
+            let _guard = lock.lock().await;
+            let mut record = owner.records.lock().await.get(&id).cloned().ok_or_else(||
+                SetupIssue::new("setup_missing", "This computer was not found.", "Refresh the computer list."))?;
+            if record.stage == SetupStage::Stopped { return Ok(record); }
+            if record.stage == SetupStage::Removing || record.stage == SetupStage::Removed {
+                return Err(SetupIssue::new("setup_removed", "This computer is being removed or has been removed.", "Refresh the computer list."));
+            }
+            let result = async {
+                let owned_pc = BotPc::LocalVm { host_id: record.service_id, vm_id: id.as_uuid().to_string(), hypervisor: local_hypervisor() };
+                let runtime = owner.runtime.upgrade();
+                let transport = match runtime.as_ref() {
+                    Some(runtime) => Some(runtime.lock_for_removal(record.identity).await.map_err(persistence)?),
+                    None => None,
+                };
+                let mut fence = owner.service.begin_owned_workspace_stop(id, &owned_pc,
+                    transport.as_ref().and_then(|transport| transport.session())).await.map_err(|error|
+                    SetupIssue::new("workspace_in_use", error.to_string(), "Resolve unfinished work and return control to the bot before stopping this computer."))?;
+                // Save the admission gate before releasing any transport or changing power.
+                owner.stage(&mut record, SetupStage::StoppingComputer).await?;
+                fence.detach_session();
+                if let Some(transport) = &transport { transport.disconnect().await.map_err(persistence)?; }
+                #[cfg(target_os = "windows")]
+                { owner.relays.lock().await.remove(&id); owner.serial.lock().await.remove(&id); }
+                let directory = owner.vm_directory(&record);
+                let vm = PreparedVm::open(&directory).await.map_err(persistence)?;
+                let stopped = async {
+                    let mut state = vm.shutdown(&owner.tools).await?;
+                    while state != VmState::Stopped {
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        state = vm.state(&owner.tools).await?;
+                    }
+                    Ok::<(), io::Error>(())
+                };
+                tokio::time::timeout(Duration::from_secs(90), stopped).await
+                    .map_err(|_| SetupIssue::new("stop_unconfirmed", "The computer has not confirmed that it stopped.", "Check the guest shutdown, then retry Stop computer. GChat has kept its disk and has not forced it off."))?
+                    .map_err(|error| SetupIssue::new("stop_failed", error.to_string(), "Check the owned virtual machine, then retry Stop computer."))?;
+                owner.stage(&mut record, SetupStage::Stopped).await
+            }.await;
+            if let Err(issue) = result {
+                record.issue = Some(issue.clone()); owner.save(record).await?; return Err(issue);
+            }
+            Ok(record)
+        }).await.map_err(persistence)?
     }
     pub async fn remove(self: &Arc<Self>, id: WorkspaceId) -> Result<SetupRecord, SetupIssue> {
         if self.stopping.load(Ordering::Acquire) {
@@ -1181,7 +1362,7 @@ impl KvmSetup {
             let mut record = owner.records.lock().await.get(&id).cloned().ok_or_else(|| SetupIssue::new("setup_missing", "This setup was not found.", "Refresh the setup list."))?;
             if record.stage == SetupStage::Removed { return Ok(record); }
             let result: Result<(), SetupIssue> = async {
-            let owned_pc = BotPc::LocalVm { host_id: record.service_id, vm_id: id.as_uuid().to_string(), hypervisor: Hypervisor::Kvm };
+            let owned_pc = BotPc::LocalVm { host_id: record.service_id, vm_id: id.as_uuid().to_string(), hypervisor: local_hypervisor() };
             if owner.service.snapshot().await.workspaces.iter().any(|workspace| workspace.id == id && workspace.bot_pc != owned_pc) {
                 return Err(SetupIssue::new("workspace_not_owned", "This workspace no longer belongs to this local setup.", "Resolve the workspace ownership before removing this setup."));
             }
@@ -1198,10 +1379,17 @@ impl KvmSetup {
                 record.pending_model_credential = Some(credential);
                 owner.save(record.clone()).await?;
             }
-            let directory = owner.root.join(id.as_uuid().to_string());
+            #[cfg(target_os = "windows")]
+            { owner.relays.lock().await.remove(&id); owner.serial.lock().await.remove(&id); }
+            let directory = owner.vm_directory(&record);
+            #[cfg(target_os = "linux")]
+            let registered = {
             let output = Command::new(&owner.tools.virsh).args(["--connect", "qemu:///session", "list", "--all", "--uuid"]).output().await.map_err(persistence)?;
             if !output.status.success() { return Err(SetupIssue::new("removal_unconfirmed", "Libvirt could not confirm owned guest registration.", "Restore the libvirt session, then retry removal.")); }
-            let registered = String::from_utf8_lossy(&output.stdout).lines().any(|line| line.trim() == id.as_uuid().to_string());
+            String::from_utf8_lossy(&output.stdout).lines().any(|line| line.trim() == id.as_uuid().to_string())
+            };
+            #[cfg(target_os = "windows")]
+            let registered = crate::hyperv::inspect_registered(&owner.tools, id.as_uuid(), &directory).await.map_err(persistence)?;
             if registered && directory.join("prepared").is_file() {
                 let vm = PreparedVm::open(&directory).await.map_err(persistence)?;
                 vm.force_stop(&owner.tools).await.map_err(persistence)?; vm.unregister(&owner.tools).await.map_err(persistence)?;
@@ -1220,6 +1408,13 @@ impl KvmSetup {
             if let Err(issue) = result { record.issue = Some(issue.clone()); owner.save(record).await?; return Err(issue); }
             Ok(record)
         }).await.map_err(persistence)?
+    }
+}
+fn local_hypervisor() -> Hypervisor {
+    if cfg!(target_os = "windows") {
+        Hypervisor::HyperV
+    } else {
+        Hypervisor::Kvm
     }
 }
 fn readiness_editor_command(id: WorkspaceId, path: &GuestPath) -> String {
@@ -1502,7 +1697,7 @@ fn desktop_ready(result: &GuestResult) -> bool {
         && result["content"].as_array().is_some_and(|content| content.iter().any(|part| part["type"] == "image" && part["data"].as_str().is_some_and(|data| !data.is_empty()))))
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
     use crate::vault::VaultFuture;
@@ -1661,6 +1856,7 @@ mod tests {
             resume_on_start: true,
             issue: None,
             spec: None,
+            vm_root: None,
             pinned_host_key: Some(pinned_host_key),
         };
         setup.save(record.clone()).await.unwrap();
@@ -1868,6 +2064,7 @@ mod tests {
             issue: None,
             resume_on_start: false,
             spec: None,
+            vm_root: None,
             pinned_host_key: None,
         };
         setup.save(record.clone()).await.unwrap();
@@ -2013,6 +2210,7 @@ mod tests {
             issue: None,
             resume_on_start: false,
             spec: None,
+            vm_root: None,
             pinned_host_key: None,
         };
         let failures = [
@@ -2490,6 +2688,192 @@ mod tests {
         );
     }
     #[tokio::test]
+    async fn graceful_stop_failure_retries_without_losing_the_saved_computer() {
+        let root = tempfile::tempdir().unwrap();
+        let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
+        let vault = Arc::new(MemoryVault::default());
+        let mut owner = KvmSetup::open(
+            root.path().to_owned(),
+            service.clone(),
+            vault.clone(),
+            Weak::new(),
+        )
+        .await
+        .unwrap();
+        let id = WorkspaceId::new();
+        let directory = owner.root.join(id.as_uuid().to_string());
+        fs::create_dir(&directory).await.unwrap();
+        let spec = KvmSpec {
+            id: id.as_uuid(),
+            cpus: 2,
+            host_cpus: vec![],
+            memory_mib: 4096,
+            disk_gib: 40,
+            ssh_port: 2222,
+            ssh_public_key: russh::keys::PrivateKey::from_openssh(
+                crate::ssh::generate_ssh_key().unwrap().expose_secret(),
+            )
+            .unwrap()
+            .public_key()
+            .to_openssh()
+            .unwrap(),
+            browser_package: "chromium".into(),
+            driver: GuestBinary::Download {
+                url: "https://example.invalid/driver.tgz".into(),
+                sha256: "a".repeat(64),
+            },
+            driver_revision: CUA_DRIVER_REVISION.into(),
+            media: GuestBinary::Download {
+                url: "https://example.invalid/media.tgz".into(),
+                sha256: "b".repeat(64),
+            },
+            media_revision: CUA_REVISION.into(),
+        };
+        let vm = PreparedVm {
+            directory: directory.clone(),
+            spec: spec.clone(),
+        };
+        fs::write(
+            directory.join("setup.json"),
+            serde_json::to_vec(&vm).unwrap(),
+        )
+        .await
+        .unwrap();
+        fs::write(directory.join("prepared"), "1").await.unwrap();
+        fs::write(directory.join("disk.qcow2"), "saved guest data")
+            .await
+            .unwrap();
+        fs::write(directory.join("state"), "running").await.unwrap();
+        fs::write(directory.join("fail"), "1").await.unwrap();
+        let virsh = directory.join("virsh");
+        fs::write(&virsh, format!(r#"#!/bin/sh
+set -eu
+cd "$(dirname "$0")"
+printf '%s\n' "$3" >> actions
+case "$3" in
+domuuid) printf '%s\n' '{id}' ;;
+domstate) cat state ;;
+shutdown) if [ -f fail ]; then echo 'shutdown rejected' >&2; exit 1; fi; printf 'shut off\n' > state ;;
+*) exit 23 ;;
+esac
+"#, id=id.as_uuid())).await.unwrap();
+        fs::set_permissions(&virsh, std::fs::Permissions::from_mode(0o755))
+            .await
+            .unwrap();
+        owner.tools.virsh = virsh;
+        let setup = Arc::new(owner);
+        let record = SetupRecord {
+            id,
+            name: "Saved computer".into(),
+            service_id: service.snapshot().await.service_id,
+            credential_ref: VaultCredentialRef::new(),
+            pending_model_credential: None,
+            identity: SessionIdentity {
+                workspace_id: id,
+                session_id: SessionId::new(),
+            },
+            stage: SetupStage::Ready,
+            issue: None,
+            resume_on_start: true,
+            spec: Some(spec),
+            vm_root: Some(setup.root.clone()),
+            pinned_host_key: None,
+        };
+        setup.save(record.clone()).await.unwrap();
+        service
+            .register_workspace(WorkspaceConfig {
+                id,
+                name: record.name.clone(),
+                service_pc: ServicePc::Local,
+                bot_pc: BotPc::LocalVm {
+                    host_id: record.service_id,
+                    vm_id: id.as_uuid().to_string(),
+                    hypervisor: Hypervisor::Kvm,
+                },
+                connection: WorkspaceConnection::Ssh(SshConnection {
+                    endpoint: SshEndpoint {
+                        hostname: "127.0.0.1".into(),
+                        port: 2222,
+                        user: "gbot".into(),
+                    },
+                    pinned_host_key: SshHostPublicKey {
+                        algorithm: "ssh-ed25519".into(),
+                        public_key: "AAAA".into(),
+                    },
+                    credential_ref: record.credential_ref,
+                }),
+            })
+            .await
+            .unwrap();
+        let brain = crate::service::ModelAssignment {
+            workspace_id: id,
+            connection: crate::inference::ModelConnection::Endpoint {
+                api_base: "http://fixture/v1".into(),
+            },
+            model: "fixture".into(),
+            context_tokens: 131072,
+            credential_ref: None,
+        };
+        service.save_model_assignment(brain.clone()).await.unwrap();
+        service
+            .save_connector_accounts(crate::connectors::BotConnectorAccounts {
+                workspace_id: id,
+                account_ids: vec!["saved-account".into()],
+            })
+            .await
+            .unwrap();
+        vault
+            .put(
+                record.credential_ref.as_uuid(),
+                Secret::new(b"saved key".to_vec()),
+            )
+            .await
+            .unwrap();
+        assert_eq!(setup.stop(id).await.unwrap_err().code, "stop_failed");
+        assert_eq!(setup.status().await[0].stage, SetupStage::StoppingComputer);
+        assert!(!setup.status().await[0].resume_on_start);
+        assert!(setup.ensure_ready(id).await.is_err());
+        fs::remove_file(directory.join("fail")).await.unwrap();
+        let stopped = setup.stop(id).await.unwrap();
+        assert_eq!(stopped.stage, SetupStage::Stopped);
+        assert!(stopped.issue.is_none());
+        assert_eq!(stopped.identity, record.identity);
+        assert_eq!(stopped.credential_ref, record.credential_ref);
+        assert_eq!(
+            fs::read_to_string(directory.join("disk.qcow2"))
+                .await
+                .unwrap(),
+            "saved guest data"
+        );
+        assert!(vault
+            .get(record.credential_ref.as_uuid())
+            .await
+            .unwrap()
+            .is_some());
+        assert_eq!(service.model_assignment(id).await.unwrap(), Some(brain));
+        assert_eq!(
+            service.snapshot().await.connector_accounts[0].account_ids,
+            vec!["saved-account"]
+        );
+        let actions = fs::read_to_string(directory.join("actions")).await.unwrap();
+        assert!(!actions.contains("destroy") && !actions.contains("undefine"));
+        setup.stop(id).await.unwrap();
+        assert_eq!(
+            fs::read_to_string(directory.join("actions")).await.unwrap(),
+            actions
+        );
+        drop(setup);
+        let reopened = Arc::new(
+            KvmSetup::open(root.path().to_owned(), service, vault, Weak::new())
+                .await
+                .unwrap(),
+        );
+        reopened.resume_saved().await.unwrap();
+        assert_eq!(reopened.status().await[0].stage, SetupStage::Stopped);
+        assert!(reopened.jobs.lock().await.is_empty());
+    }
+
+    #[tokio::test]
     async fn removal_refusal_preserves_ready_setup_and_live_session() {
         let root = tempfile::tempdir().unwrap();
         let service = Arc::new(Service::open(root.path().join("state.json")).await.unwrap());
@@ -2519,6 +2903,7 @@ mod tests {
             issue: None,
             resume_on_start: true,
             spec: None,
+            vm_root: None,
             pinned_host_key: None,
         };
         setup.save(record.clone()).await.unwrap();

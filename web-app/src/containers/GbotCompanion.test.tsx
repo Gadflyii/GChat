@@ -1863,41 +1863,58 @@ it('makes no service calls when disabled, including queued events after cleanup'
   view.unmount()
 })
 
-it('holds task and desktop admission until the KVM setup becomes Ready', async () => {
-  snapshot.workspaces[0].bot_pc = { kind: 'local_vm', hypervisor: 'kvm' }
-  let stage = 'installing'
-  mocks.call.mockImplementation(async (path) =>
-    path === 'state'
-      ? snapshot
-      : path === 'setup/kvm/status'
-        ? [{ id: 'a', name: 'Atlas', stage, issue: null }]
-        : []
-  )
-  await mount()
-  fireEvent.change(screen.getByRole('textbox', { name: 'Message bot' }), {
-    target: { value: 'Do work' },
-  })
-  expect(
-    screen.getByRole('button', { name: 'Send', exact: true })
-  ).toBeDisabled()
-  fireEvent.click(screen.getByRole('button', { name: 'Desktop', exact: true }))
-  expect(
-    screen.queryByRole('button', { name: 'View bot’s desktop' })
-  ).not.toBeInTheDocument()
-  stage = 'ready'
-  await act(async () => {
-    await useGbotCompanion.getState().refresh()
-  })
-  expect(
-    screen.getByRole('button', { name: 'View bot’s desktop' })
-  ).toBeInTheDocument()
-  fireEvent.click(
-    screen.getByRole('button', { name: 'Conversation', exact: true })
-  )
-  expect(
-    screen.getByRole('button', { name: 'Send', exact: true })
-  ).toBeEnabled()
-})
+it.each(['kvm', 'hyper_v'])(
+  'holds task and desktop admission until the %s computer is ready and running',
+  async (hypervisor) => {
+    snapshot.workspaces[0].bot_pc = { kind: 'local_vm', hypervisor }
+    let stage = 'installing'
+    mocks.call.mockImplementation(async (path) =>
+      path === 'state'
+        ? snapshot
+        : path === 'setup/local-vm/status'
+          ? [{ id: 'a', name: 'Atlas', stage, issue: null }]
+          : []
+    )
+    await mount()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Message bot' }), {
+      target: { value: 'Do work' },
+    })
+    expect(
+      screen.getByRole('button', { name: 'Send', exact: true })
+    ).toBeDisabled()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Desktop', exact: true })
+    )
+    expect(
+      screen.queryByRole('button', { name: 'View bot’s desktop' })
+    ).not.toBeInTheDocument()
+    stage = 'stopped'
+    await act(async () => {
+      await useGbotCompanion.getState().refresh()
+    })
+    expect(
+      screen.getByText(
+        'Start this bot’s computer in Gbot settings to view its desktop.'
+      )
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: 'View bot’s desktop' })
+    ).not.toBeInTheDocument()
+    stage = 'ready'
+    await act(async () => {
+      await useGbotCompanion.getState().refresh()
+    })
+    expect(
+      screen.getByRole('button', { name: 'View bot’s desktop' })
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Conversation', exact: true })
+    )
+    expect(
+      screen.getByRole('button', { name: 'Send', exact: true })
+    ).toBeEnabled()
+  }
+)
 
 it('stops only the selected bot task and keeps progress through the state refresh', async () => {
   tasks = [

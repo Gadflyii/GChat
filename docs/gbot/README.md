@@ -1,5 +1,51 @@
 # Gbot design
 
+## Windows Hyper-V local computer adapter — Gchat 2
+
+`GBOT-WINDOWS-HYPERV-ADAPTER` adds the Windows adapter to the existing
+local-computer setup contract. Preflight reads edition, firmware virtualization,
+Hyper-V availability, permissions, restart requirements and storage. Missing
+features give the user a Windows Features and restart step; GChat never enables
+features or elevates. The selected guest root prefers a suitable non-system
+drive and is saved for retries. The separate persistent Debian guest uses the
+same pinned worker, SSH identity, desktop tools and full readiness checks as KVM.
+
+The setup API is `/v1/setup/local-vm/{preflight,status,start,stop,remove}`;
+existing `/v1/setup/kvm` routes remain compatible. Stop computer fences tasks,
+schedules and human control, waits for graceful shutdown and keeps the disk,
+brain, key and account links. A failed shutdown stays visible and blocks new
+work until Stop succeeds or Start rechecks readiness. Start computer uses the
+same saved guest. Remove computer checks ownership before retiring it.
+
+The adapter uses the existing Default Switch, an owned COM console pipe for
+SSH host-key capture, and a loopback relay to the guest's current IP. It checks
+the Hyper-V VM ID, ownership note and exact disk/seed/console paths before
+mutating the guest. It does not adopt another VM after a name collision.
+See the [adapter decision](../decisions/2026-10-18-own-windows-hyperv-bot-computers.md).
+
+Source verification passes: 200 focused UI tests, 110 service library tests,
+Cargo checks and service/Host Clippy. Shell library Clippy passes with the
+existing unrelated MSRV finding suppressed. The production PowerShell dispatcher
+and module fake pass 138 assertions under Windows PowerShell 5.1, covering
+read-only detection, storage, owned lifecycle and refusal of foreign resources.
+
+The Linux/S1 `make verify` run on 18 October, 10:11:30–10:20:58 UTC, completed
+through a failed-stage continuation: lint, type checking, quality guards, 3,537
+app tests (6 skipped), 127 extension tests, six coverage floors and 1,295 Rust
+tests (28 ignored) pass. The initial command stopped at missing private Yarn
+extension workspace metadata; the continuation ran its exact installed coverage
+script through Node, then the remaining coverage and Rust stages. No passing
+stage was repeated. Source hashes and command results are recorded in
+`out/gchat2-windows-hyperv-20261018/result.json`.
+
+Windows Rust compilation and native guest acceptance remain pending on Ron's
+Windows 11 Pro 4090 host `192.168.1.143`. Bubbs placed it under a reboot hold at
+10:06 UTC; no further access occurs until he reopens it. The last read-only
+detection reported a pending restart, missing `vmms`, Hyper-V cmdlets and
+`qemu-img.exe`, and about 58.6 GiB free on F:. Prerequisites and free space must
+be checked again before creation. No native guest has been created. Live worker
+readiness, view/input, stop/start persistence and owned retirement remain open.
+
 ## Saved human replies keep recovery errors visible — Gchat 2
 
 `GBOT-HUMAN-HELP-SAVED-REPLY-RECOVERY`, based on main `f15627195`,
@@ -853,7 +899,7 @@ processes passed at 01:09:06 UTC on October 13, freeing 30.47 GB on S1 and
 and concise evidence; no guest, job or reservation remains.
 
 Remaining setup acceptance includes sleep recovery, scheduled
-dispatch after client exit, Windows/Hyper-V, cloud/M365 creation, remote service
+dispatch after client exit, native Windows/Hyper-V acceptance, cloud/M365 creation, remote service
 selection and installer opt-in. The [implementation and test plan](../agent-runtime/remaining-acceptance.md#current-implementation-and-test-plan--october-12)
 separates these from accepted setup evidence. The CPU-only installed guest also
 exposed unguarded local Host hardware preparation; its owning native gate now rejects unsupported local hardware before Host
@@ -1774,7 +1820,7 @@ source tree, current tested desktop artifact and evidence; no live job or
 reservation remains. The accepted baseline package was preserved.
 
 This setup candidate is merged to main `bb4cde410`; reuse its installed evidence.
-Remaining setup acceptance: Windows/Hyper-V, cloud/M365,
+Remaining setup acceptance: native Windows/Hyper-V on .143 after user enable/reboot, cloud/M365,
 remote service selection, installer choice, sleep recovery and scheduled
 dispatch after client exit. Gbot's explicit brain assignment must select a
 persistent Host or other inference endpoint for client-exit continuity. Hardware preparation is a

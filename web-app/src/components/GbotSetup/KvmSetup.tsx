@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Button } from '@/components/ui/button'
-import { gbot, type KvmSetupRecord, type SetupIssue } from '@/services/gbot'
+import {
+  gbot,
+  type KvmSetupRecord,
+  type LocalVmPreflight,
+} from '@/services/gbot'
 import { confirmAction } from '@/lib/confirm'
 
-type Preflight = {
-  ready: boolean
-  issues: SetupIssue[]
-  cpus: number
-  memory_mib: number
-  disk_gib: number
-}
 const stages: Record<string, string> = {
   checking_pc: 'Checking this PC',
   preparing_computer: 'Preparing the guest disk and secure connection',
@@ -18,6 +15,8 @@ const stages: Record<string, string> = {
   connecting: 'Waiting for guest setup and verifying SSH',
   testing_desktop: 'Checking guest files, desktop input and media connection',
   ready: 'Computer ready',
+  stopping_computer: 'Stopping the separate computer',
+  stopped: 'Computer stopped',
   removing: 'Removing this setup’s owned computer',
   removed: 'Computer removed',
 }
@@ -30,13 +29,14 @@ export default function KvmSetup({
   initialId?: string
   connected: (id: string) => Promise<void>
 }) {
-  const [preflight, setPreflight] = useState<Preflight | null>(null)
+  const [preflight, setPreflight] = useState<LocalVmPreflight | null>(null)
   const [records, setRecords] = useState<KvmSetupRecord[]>([])
   const [current, setCurrent] = useState<string | null>(initialId ?? null)
   const [action, setAction] = useState<{
-    kind: 'start' | 'remove' | 'use'
+    kind: 'start' | 'stop' | 'remove' | 'use'
     id: string
     name: string
+    stopped: boolean
   }>()
   const busy = !!action
   const [checking, setChecking] = useState(false)
@@ -52,7 +52,7 @@ export default function KvmSetup({
   const refresh = useCallback(async () => {
     const version = ++refreshVersion.current
     try {
-      const saved = await gbot<KvmSetupRecord[]>('setup/kvm/status', {})
+      const saved = await gbot<KvmSetupRecord[]>('setup/local-vm/status', {})
       if (version !== refreshVersion.current) return
       setRecords(saved.filter((record) => record.stage !== 'removed'))
     } catch (cause) {
@@ -66,7 +66,10 @@ export default function KvmSetup({
     setPreflight(null)
     setError('')
     try {
-      const result = await gbot<Preflight>('setup/kvm/preflight', {})
+      const result = await gbot<LocalVmPreflight>(
+        'setup/local-vm/preflight',
+        {}
+      )
       await refresh()
       setPreflight(result)
     } catch (cause) {
@@ -93,14 +96,19 @@ export default function KvmSetup({
     : records
   const record = records.find((saved) => saved.id === current)
   const act = async (
-    path: 'start' | 'remove' | 'use',
+    path: 'start' | 'stop' | 'remove' | 'use',
     saved?: KvmSetupRecord
   ) => {
     if (actionPending.current || checkPending.current) return
     actionPending.current = true
     const id = saved?.id ?? newId.current
     const botName = saved?.name ?? name.trim()
-    setAction({ kind: path, id, name: botName })
+    setAction({
+      kind: path,
+      id,
+      name: botName,
+      stopped: saved?.stage === 'stopped',
+    })
     setError('')
     try {
       if (path === 'use') {
@@ -110,7 +118,7 @@ export default function KvmSetup({
       invalidateRefresh()
       setCurrent(id)
       const result = await gbot<KvmSetupRecord>(
-        `setup/kvm/${path}`,
+        `setup/local-vm/${path}`,
         path === 'start' ? { id, name: botName } : { id }
       )
       invalidateRefresh()
@@ -145,19 +153,28 @@ export default function KvmSetup({
     <div className="space-y-3" aria-label="Local VM setup">
       <p className="text-sm">
         {initialId
-          ? 'Resume the saved separate Linux computer: '
+          ? 'Manage the saved separate Linux computer: '
           : 'Review the separate Linux computer before creating it: '}
         2 CPU threads, 4 GiB memory and a 40 GiB virtual disk. This virtual
         machine gives the bot its own desktop without sharing yours. GChat
         protects its connection key in secure storage.
       </p>
       <p className="text-sm text-muted-foreground">
-        This setup uses Linux KVM. It checks for the required Linux system image
-        and Gbot desktop and media tools in your GChat data folder, then
-        verifies they are the approved files. These files must already be
-        available; this step does not download them or install software on this
-        computer. Windows Hyper-V setup is not available yet.
+        {preflight?.hypervisor === 'hyper_v'
+          ? 'This setup uses Windows Hyper-V to run a separate Linux desktop.'
+          : preflight?.hypervisor === 'kvm'
+            ? 'This setup uses Linux KVM.'
+            : 'GChat checks which local virtualization support is available on the service computer.'}{' '}
+        It checks for the required Linux system image and Gbot desktop and media
+        tools in your GChat data folder, then verifies they are the approved
+        files. These files must already be available; this step does not
+        download them or install software on this computer.
       </p>
+      {preflight?.storage_path && (
+        <p className="break-words text-xs text-muted-foreground">
+          Local VM files on the service computer: {preflight.storage_path}
+        </p>
+      )}
       {!preflight && !error && (
         <p role="status" aria-live="polite">
           Checking local VM prerequisites…
@@ -169,7 +186,11 @@ export default function KvmSetup({
             ? `Connecting to ${action.name}’s computer…`
             : action.kind === 'remove'
               ? `Removing ${action.name}’s owned computer…`
-              : `Starting ${action.name}’s computer setup…`}
+              : action.kind === 'stop'
+                ? `Stopping ${action.name}’s computer…`
+                : action.stopped
+                  ? `Starting ${action.name}’s computer…`
+                  : `Starting ${action.name}’s computer setup…`}
         </p>
       )}
       {preflight?.issues.map((issue, index) => (
@@ -219,7 +240,7 @@ export default function KvmSetup({
                   <p>{saved.issue.next_action}</p>
                 </div>
               )}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {saved.stage === 'ready' ? (
                   <Button
                     type="button"
@@ -230,7 +251,7 @@ export default function KvmSetup({
                       ? 'Connecting…'
                       : 'Use this computer'}
                   </Button>
-                ) : (
+                ) : saved.stage !== 'stopping_computer' ? (
                   <Button
                     type="button"
                     disabled={
@@ -242,8 +263,25 @@ export default function KvmSetup({
                     onClick={() => void act('start', saved)}
                   >
                     {action?.id === saved.id && action.kind === 'start'
-                      ? 'Resuming setup…'
-                      : 'Resume setup'}
+                      ? action.stopped
+                        ? 'Starting computer…'
+                        : 'Resuming setup…'
+                      : saved.stage === 'stopped'
+                        ? 'Start computer'
+                        : 'Resume setup'}
+                  </Button>
+                ) : null}
+                {(saved.stage === 'ready' ||
+                  saved.stage === 'stopping_computer') && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy || checking}
+                    onClick={() => void act('stop', saved)}
+                  >
+                    {action?.id === saved.id && action.kind === 'stop'
+                      ? 'Stopping computer…'
+                      : 'Stop computer'}
                   </Button>
                 )}
                 <Button
@@ -263,8 +301,9 @@ export default function KvmSetup({
       )}
       {record && record.stage !== 'ready' && (
         <p role="status" className="text-sm">
-          {stages[record.stage] ?? record.stage}. Progress is saved by the
-          service; closing this wizard preserves the setup.
+          {record.stage === 'stopped'
+            ? 'Computer stopped. Its virtual disk and saved files are kept. Start this computer to use it again.'
+            : `${stages[record.stage] ?? record.stage}. Progress is saved by the service; closing this wizard preserves the setup.`}
         </p>
       )}
       {error && (

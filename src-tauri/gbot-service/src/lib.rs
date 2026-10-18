@@ -5,10 +5,12 @@ pub mod contract;
 mod cua_skill;
 pub mod executor;
 pub mod guest_assets;
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+pub mod hyperv;
 pub mod inference;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub mod kvm;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "windows"))]
 pub mod kvm_setup;
 pub mod lan_setup;
 pub mod m365;

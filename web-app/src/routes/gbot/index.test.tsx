@@ -119,6 +119,136 @@ function readyTaskBots(
   return identities
 }
 
+it.each(['kvm', 'hyper_v'])(
+  'stops and starts a saved %s computer from settings, preserving failures and blocking desktop admission while stopped',
+  async (hypervisor) => {
+    readyTaskBots(undefined, {
+      workspaces: [
+        { id: 'one', name: 'Writer', bot_pc: { kind: 'local_vm', hypervisor } },
+      ],
+    })
+    const original = mocks.call.getMockImplementation()!
+    let saved: KvmSetupRecord = {
+      id: 'one',
+      name: 'Writer',
+      stage: 'ready',
+      issue: null,
+    }
+    let rejectStop!: (cause: Error) => void
+    const pendingStop = new Promise<never>((_, reject) => {
+      rejectStop = reject
+    })
+    let stops = 0
+    let starts = 0
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, unknown>) => {
+        if (path === 'setup/local-vm/status') return [saved]
+        if (path === 'setup/local-vm/stop') {
+          if (++stops === 1) {
+            saved = { ...saved, stage: 'stopping_computer' }
+            return pendingStop
+          }
+          saved = { ...saved, stage: 'stopped' }
+          return saved
+        }
+        if (path === 'setup/local-vm/start') {
+          if (++starts === 1)
+            throw new Error('The saved VM is temporarily unavailable.')
+          saved = { ...saved, stage: 'ready' }
+          return saved
+        }
+        return original(path, body)
+      }
+    )
+    render(<Page />)
+    const stop = await screen.findByRole('button', { name: 'Stop computer' })
+    expect(
+      screen.getByText(
+        'Stopping this computer keeps its virtual disk and saved files.'
+      )
+    ).toBeVisible()
+    act(() => {
+      stop.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      stop.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(
+      screen.getByRole('button', { name: 'Stopping computer…' })
+    ).toBeDisabled()
+    expect(stops).toBe(1)
+    await act(async () =>
+      rejectStop(new Error('The guest did not shut down.'))
+    )
+    expect(
+      await screen.findByText('The guest did not shut down.')
+    ).toBeVisible()
+    expect(
+      screen.getByText('Could not stop this computer. Try again.')
+    ).toBeVisible()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Stop computer' })
+      ).toBeEnabled()
+    )
+    expect(
+      screen.getByText('Computer is stopping', { exact: true })
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'Start computer' })
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop computer' }))
+    const start = await screen.findByRole('button', { name: 'Start computer' })
+    await waitFor(() => expect(start).toBeEnabled())
+    expect(screen.getByText('Computer stopped', { exact: true })).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Run', exact: true })
+    ).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'View bot’s desktop' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Could not stop this computer. Try again.')
+    ).not.toBeInTheDocument()
+    fireEvent.click(start)
+    expect(
+      await screen.findByText('The saved VM is temporarily unavailable.')
+    ).toBeVisible()
+    expect(
+      screen.getByText('Could not start this computer. Try again.')
+    ).toBeVisible()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Start computer' })
+      ).toBeEnabled()
+    )
+    expect(screen.getByText('Computer stopped', { exact: true })).toBeVisible()
+    fireEvent.click(screen.getByRole('button', { name: 'Start computer' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Stop computer' })
+      ).toBeEnabled()
+    )
+    expect(
+      screen.getByRole('button', { name: 'View bot’s desktop' })
+    ).toBeEnabled()
+    expect(
+      screen.queryByText('Could not start this computer. Try again.')
+    ).not.toBeInTheDocument()
+    expect(
+      mocks.call.mock.calls.filter(([path]) =>
+        /setup\/local-vm\/(start|stop|remove)$/.test(path)
+      )
+    ).toEqual([
+      ['setup/local-vm/stop', { id: 'one' }],
+      ['setup/local-vm/stop', { id: 'one' }],
+      ['setup/local-vm/start', { id: 'one', name: 'Writer' }],
+      ['setup/local-vm/start', { id: 'one', name: 'Writer' }],
+    ])
+  }
+)
+
 it('attributes saved task messages to you or the selected bot in conversation order', async () => {
   const [identity] = readyTaskBots()
   const call = mocks.call.getMockImplementation()!
@@ -746,7 +876,7 @@ it.each(['Error', 'native string'] as const)(
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
       expect(mocks.call.mock.calls.filter(([request]) =>
         request.startsWith('control/') || request.startsWith('view/') || request === 'connect' || request === 'disconnect' ||
-        request === 'setup/kvm/start' || (request.startsWith('tasks/') && request !== 'tasks/approvals')
+        request === 'setup/local-vm/start' || (request.startsWith('tasks/') && request !== 'tasks/approvals')
       )).toEqual([['control/recover', payload], ['control/recover', payload]])
       expect(errorToast).not.toHaveBeenCalled()
     } finally {
@@ -795,9 +925,9 @@ it('explicitly recovers an orphaned paused owner while keeping hand-back and set
         recoverable_controls: recoverable ? [control] : [],
         assignments: [],
       }
-    if (path === 'setup/kvm/status') return [record]
-    if (path === 'setup/kvm/preflight') return { ready: true, issues: [] }
-    if (path === 'setup/kvm/start') return record
+    if (path === 'setup/local-vm/status') return [record]
+    if (path === 'setup/local-vm/preflight') return { ready: true, issues: [] }
+    if (path === 'setup/local-vm/start') return record
     if (path === 'connectors/get') return { account_ids: [], accounts: [] }
     if (path === 'control/recover') {
       expect(body).toEqual({ identity, expected_owner: previousOwner, owner })
@@ -841,7 +971,7 @@ it('explicitly recovers an orphaned paused owner while keeping hand-back and set
   ).not.toBeInTheDocument()
   expect(handBacks).toBe(0)
   expect(mocks.call).not.toHaveBeenCalledWith(
-    'setup/kvm/start',
+    'setup/local-vm/start',
     expect.anything()
   )
   fireEvent.click(screen.getByRole('button', { name: 'Hand back' }))
@@ -858,7 +988,7 @@ it('explicitly recovers an orphaned paused owner while keeping hand-back and set
   expect(control.state).toBe('bot')
   expect(screen.getByText('Setup incomplete')).toBeInTheDocument()
   expect(mocks.call).not.toHaveBeenCalledWith(
-    'setup/kvm/start',
+    'setup/local-vm/start',
     expect.anything()
   )
   for (const path of [
@@ -878,7 +1008,7 @@ it('explicitly recovers an orphaned paused owner while keeping hand-back and set
   )
   fireEvent.click(within(wizard).getByRole('button', { name: 'Resume setup' }))
   await waitFor(() =>
-    expect(mocks.call).toHaveBeenCalledWith('setup/kvm/start', {
+    expect(mocks.call).toHaveBeenCalledWith('setup/local-vm/start', {
       id: record.id,
       name: record.name,
     })
@@ -927,7 +1057,7 @@ it.each([
   render(<Page />)
   await screen.findByRole('heading', { name: 'Writer' })
   await waitFor(() =>
-    expect(mocks.call).toHaveBeenCalledWith('setup/kvm/status', {})
+    expect(mocks.call).toHaveBeenCalledWith('setup/local-vm/status', {})
   )
   expect(
     screen.queryByRole('button', { name: 'Recover control' })
@@ -978,8 +1108,8 @@ it('discovers a saved KVM setup without a workspace after remount and resumes on
         assignments: [],
         controls: [],
       }
-    if (path === 'setup/kvm/status') return [record]
-    if (path === 'setup/kvm/preflight')
+    if (path === 'setup/local-vm/status') return [record]
+    if (path === 'setup/local-vm/preflight')
       return {
         ready: prerequisitesReady,
         issues: prerequisitesReady
@@ -993,7 +1123,7 @@ it('discovers a saved KVM setup without a workspace after remount and resumes on
               },
             ],
       }
-    if (path === 'setup/kvm/start') return record
+    if (path === 'setup/local-vm/start') return record
     return []
   })
   const first = render(<Page />)
@@ -1012,7 +1142,7 @@ it('discovers a saved KVM setup without a workspace after remount and resumes on
   expect(within(card).getByText(record.issue!.next_action)).toBeInTheDocument()
   expect(screen.queryByLabelText('Bot name')).not.toBeInTheDocument()
   expect(mocks.call).not.toHaveBeenCalledWith(
-    'setup/kvm/start',
+    'setup/local-vm/start',
     expect.anything()
   )
 
@@ -1028,7 +1158,7 @@ it('discovers a saved KVM setup without a workspace after remount and resumes on
   ).toBeDisabled()
   fireEvent.click(within(wizard).getByRole('button', { name: 'Resume setup' }))
   expect(mocks.call).not.toHaveBeenCalledWith(
-    'setup/kvm/start',
+    'setup/local-vm/start',
     expect.anything()
   )
 
@@ -1042,18 +1172,18 @@ it('discovers a saved KVM setup without a workspace after remount and resumes on
     ).toBeEnabled()
   )
   expect(mocks.call).not.toHaveBeenCalledWith(
-    'setup/kvm/start',
+    'setup/local-vm/start',
     expect.anything()
   )
   fireEvent.click(within(wizard).getByRole('button', { name: 'Resume setup' }))
   await waitFor(() =>
-    expect(mocks.call).toHaveBeenCalledWith('setup/kvm/start', {
+    expect(mocks.call).toHaveBeenCalledWith('setup/local-vm/start', {
       id: record.id,
       name: record.name,
     })
   )
   expect(
-    mocks.call.mock.calls.filter(([path]) => path === 'setup/kvm/start')
+    mocks.call.mock.calls.filter(([path]) => path === 'setup/local-vm/start')
   ).toHaveLength(1)
   expect(
     within(wizard).queryByRole('button', { name: 'Use this computer' })
@@ -1079,7 +1209,7 @@ it('does not offer removed KVM setups and permits first-bot setup', async () => 
         assignments: [],
         controls: [],
       }
-    if (path === 'setup/kvm/status')
+    if (path === 'setup/local-vm/status')
       return [
         {
           id: 'removed-local',
@@ -1099,7 +1229,7 @@ it('does not offer removed KVM setups and permits first-bot setup', async () => 
     screen.queryByRole('button', { name: 'Resume setup' })
   ).not.toBeInTheDocument()
   expect(mocks.call).not.toHaveBeenCalledWith(
-    'setup/kvm/start',
+    'setup/local-vm/start',
     expect.anything()
   )
 })
@@ -1115,7 +1245,7 @@ it('retains a KVM status error instead of assuming no saved setup and discovers 
         assignments: [],
         controls: [],
       }
-    if (path === 'setup/kvm/status') {
+    if (path === 'setup/local-vm/status') {
       if (unavailable) throw new Error('Saved setup status could not be read')
       return [
         {
@@ -1512,7 +1642,7 @@ it('removes only the confirmed saved M365 setup and defaults to keyboard cancell
   await waitFor(() => expect(card).not.toBeInTheDocument())
   expect(other).toBeVisible()
   expect(mocks.call.mock.calls.filter(([path]) => ![
-    'state', 'setup/cloud/status', 'setup/m365/status', 'setup/kvm/status',
+    'state', 'setup/cloud/status', 'setup/m365/status', 'setup/local-vm/status',
     'tasks', 'tasks/approvals',
   ].includes(path))).toEqual([
     ['setup/m365/remove', { id: 'm365-setup' }],
@@ -3057,7 +3187,7 @@ it.each(['incomplete', 'unavailable', 'service-unavailable'])(
       async (path: string, body: Record<string, unknown>) => {
         if (path === 'state' && failState)
           throw new Error('Gbot service unavailable')
-        if (path === 'setup/kvm/status') {
+        if (path === 'setup/local-vm/status') {
           statusReads += 1
           return status()
         }
@@ -3482,7 +3612,7 @@ it.each([
         // The stopped Settings route must not restart its setup/status refresh.
         const setupReads = () => mocks.call.mock.calls.filter(([request]) =>
           request === 'setup/cloud/status' || request === 'setup/m365/status' ||
-          request === 'setup/kvm/status'
+          request === 'setup/local-vm/status'
         ).length
         const reads = setupReads()
         await act(async () => finish())
@@ -3747,15 +3877,15 @@ it('renders service session identities, holds unfinished KVM and admits actions 
             },
           ],
         }
-      if (path === 'setup/kvm/status') {
+      if (path === 'setup/local-vm/status') {
         if (firstStatus) {
           firstStatus = false
           return pendingStatus
         }
         return [record]
       }
-      if (path === 'setup/kvm/preflight') return { ready: true, issues: [] }
-      if (path === 'setup/kvm/start') {
+      if (path === 'setup/local-vm/preflight') return { ready: true, issues: [] }
+      if (path === 'setup/local-vm/start') {
         record = { ...record, stage: 'testing_desktop', issue: null }
         return record
       }
@@ -3810,13 +3940,13 @@ it('renders service session identities, holds unfinished KVM and admits actions 
   )
   fireEvent.click(within(wizard).getByRole('button', { name: 'Resume setup' }))
   await waitFor(() =>
-    expect(mocks.call).toHaveBeenCalledWith('setup/kvm/start', {
+    expect(mocks.call).toHaveBeenCalledWith('setup/local-vm/start', {
       id: identity.workspace_id,
       name: 'Writer',
     })
   )
   expect(
-    mocks.call.mock.calls.filter(([path]) => path === 'setup/kvm/start')
+    mocks.call.mock.calls.filter(([path]) => path === 'setup/local-vm/start')
   ).toHaveLength(1)
   expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
   expect(mocks.call).not.toHaveBeenCalledWith('view/open', expect.anything())
@@ -3851,12 +3981,12 @@ it('renders service session identities, holds unfinished KVM and admits actions 
 
   record = { ...record, id: 'another-kvm', stage: 'checking_pc' }
   const statusCalls = mocks.call.mock.calls.filter(
-    ([path]) => path === 'setup/kvm/status'
+    ([path]) => path === 'setup/local-vm/status'
   ).length
   updates.forEach((update) => update())
   await waitFor(() =>
     expect(
-      mocks.call.mock.calls.filter(([path]) => path === 'setup/kvm/status')
+      mocks.call.mock.calls.filter(([path]) => path === 'setup/local-vm/status')
         .length
     ).toBeGreaterThan(statusCalls)
   )
@@ -3916,9 +4046,9 @@ it.each(['human', 'paused'])(
               },
             ],
           }
-        if (path === 'setup/kvm/status') return [record]
-        if (path === 'setup/kvm/preflight') return { ready: true, issues: [] }
-        if (path === 'setup/kvm/start') return record
+        if (path === 'setup/local-vm/status') return [record]
+        if (path === 'setup/local-vm/preflight') return { ready: true, issues: [] }
+        if (path === 'setup/local-vm/start') return record
         if (path === 'tasks')
           return [{ id: 'task', identity, state: 'paused', messages: [] }]
         if (path === 'connectors/get') return { account_ids: [], accounts: [] }
@@ -3968,7 +4098,7 @@ it.each(['human', 'paused'])(
     assertSetupBlocked()
     expect(screen.getByRole('button', { name: 'Take over' })).toBeDisabled()
     expect(mocks.call).not.toHaveBeenCalledWith(
-      'setup/kvm/start',
+      'setup/local-vm/start',
       expect.anything()
     )
     for (const path of [
@@ -3987,14 +4117,14 @@ it.each(['human', 'paused'])(
       ).toBeEnabled()
     )
     expect(mocks.call).not.toHaveBeenCalledWith(
-      'setup/kvm/start',
+      'setup/local-vm/start',
       expect.anything()
     )
     fireEvent.click(
       within(wizard).getByRole('button', { name: 'Resume setup' })
     )
     await waitFor(() =>
-      expect(mocks.call).toHaveBeenCalledWith('setup/kvm/start', {
+      expect(mocks.call).toHaveBeenCalledWith('setup/local-vm/start', {
         id: identity.workspace_id,
         name: 'Writer',
       })
@@ -4076,7 +4206,7 @@ it.each([
           ],
           assignments: [],
         }
-      if (path === 'setup/kvm/status') {
+      if (path === 'setup/local-vm/status') {
         if (scenario === 'unknown setup')
           throw new Error('Setup status unavailable')
         return [

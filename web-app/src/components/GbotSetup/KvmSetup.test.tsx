@@ -26,6 +26,188 @@ afterEach(() => {
   call.mockReset()
   events.update = null
 })
+it.each([
+  ['kvm', 'This setup uses Linux KVM.', '/data/GChat/gbot/vms'],
+  [
+    'hyper_v',
+    'This setup uses Windows Hyper-V to run a separate Linux desktop.',
+    'C:\\GChat\\gbot\\vms',
+  ],
+])(
+  'explains the detected %s service computer without starting it',
+  async (hypervisor, description, storagePath) => {
+    call.mockImplementation(async (path) =>
+      path === 'setup/local-vm/preflight'
+        ? {
+            hypervisor,
+            storage_path: storagePath,
+            ready: true,
+            issues: [],
+            cpus: 2,
+            memory_mib: 4096,
+            disk_gib: 40,
+          }
+        : []
+    )
+    render(<KvmSetup name="Writer" connected={vi.fn()} />)
+    expect(await screen.findByText(description, { exact: false })).toBeVisible()
+    expect(
+      screen.getByText(/2 CPU threads, 4 GiB memory and a 40 GiB virtual disk/)
+    ).toBeVisible()
+    expect(
+      screen.getByText(`Local VM files on the service computer: ${storagePath}`)
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Create Writer’s computer' })
+    ).toBeEnabled()
+    expect(call.mock.calls).toEqual([
+      ['setup/local-vm/preflight', {}],
+      ['setup/local-vm/status', {}],
+    ])
+  }
+)
+
+it('shows the Windows detection issue and leaves enabling Hyper-V and rebooting to the user', async () => {
+  call.mockImplementation(async (path) =>
+    path === 'setup/local-vm/preflight'
+      ? {
+          hypervisor: 'hyper_v',
+          ready: false,
+          issues: [
+            {
+              code: 'hyper_v_disabled',
+              message: 'Hyper-V is not enabled on this Windows computer.',
+              next_action:
+                'Enable Hyper-V in Windows Features, reboot this computer, then check prerequisites again.',
+            },
+          ],
+        }
+      : []
+  )
+  render(<KvmSetup name="Writer" connected={vi.fn()} />)
+  expect(
+    await screen.findByText('Hyper-V is not enabled on this Windows computer.')
+  ).toBeVisible()
+  expect(
+    screen.getByText(
+      'Enable Hyper-V in Windows Features, reboot this computer, then check prerequisites again.'
+    )
+  ).toBeVisible()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Create Writer’s computer' })
+  )
+  expect(call.mock.calls.map(([path]) => path)).toEqual([
+    'setup/local-vm/preflight',
+    'setup/local-vm/status',
+  ])
+})
+
+it.each(['kvm', 'hyper_v'])(
+  'stops and restarts the same %s computer, preserving retry controls after failures',
+  async (hypervisor) => {
+    let saved = { id: 'writer-id', name: 'Writer', stage: 'ready', issue: null }
+    const firstStop = deferred<object>()
+    let stops = 0
+    let starts = 0
+    call.mockImplementation(async (path) => {
+      if (path === 'setup/local-vm/preflight')
+        return { hypervisor, ready: true, issues: [] }
+      if (path === 'setup/local-vm/status') return [saved]
+      if (path === 'setup/local-vm/stop') {
+        if (++stops === 1) {
+          saved = { ...saved, stage: 'stopping_computer' }
+          return firstStop.promise
+        }
+        saved = { ...saved, stage: 'stopped' }
+        return saved
+      }
+      if (path === 'setup/local-vm/start') {
+        if (++starts === 1)
+          throw new Error('The saved computer could not start.')
+        saved = { ...saved, stage: 'ready' }
+        return saved
+      }
+      throw new Error(`Unexpected ${path}`)
+    })
+    const connected = vi.fn()
+    render(
+      <KvmSetup name="Other name" initialId={saved.id} connected={connected} />
+    )
+    const stop = await screen.findByRole('button', { name: 'Stop computer' })
+    await waitFor(() => expect(stop).toBeEnabled())
+    act(() => {
+      stop.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      stop.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      screen
+        .getByRole('button', { name: 'Use this computer' })
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+    expect(call.mock.calls.filter(([path]) => path.endsWith('/stop'))).toEqual([
+      ['setup/local-vm/stop', { id: saved.id }],
+    ])
+    expect(
+      screen.getByRole('button', { name: 'Stopping computer…' })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Remove owned computer' })
+    ).toBeDisabled()
+    expect(connected).not.toHaveBeenCalled()
+    await act(async () =>
+      firstStop.reject(new Error('The guest did not shut down.'))
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The guest did not shut down.'
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Stop computer' })
+      ).toBeEnabled()
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Use this computer' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Resume setup' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Start computer' })
+    ).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop computer' }))
+    const start = await screen.findByRole('button', { name: 'Start computer' })
+    await waitFor(() => expect(start).toBeEnabled())
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Its virtual disk and saved files are kept.'
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Use this computer' })
+    ).not.toBeInTheDocument()
+    fireEvent.click(start)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The saved computer could not start.'
+    )
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Start computer' })
+      ).toBeEnabled()
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Start computer' }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Use this computer' })
+      ).toBeEnabled()
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      call.mock.calls.filter(([path]) => /\/(start|stop|remove)$/.test(path))
+    ).toEqual([
+      ['setup/local-vm/stop', { id: saved.id }],
+      ['setup/local-vm/stop', { id: saved.id }],
+      ['setup/local-vm/start', { id: saved.id, name: saved.name }],
+      ['setup/local-vm/start', { id: saved.id, name: saved.name }],
+    ])
+  }
+)
+
 it('shows exact missing asset action and refuses creation without falling back to LAN', async () => {
   call.mockImplementation((path) =>
     Promise.resolve(
@@ -290,7 +472,7 @@ it.each([
       )
     expect(mutations()).toEqual([
       [
-        `setup/kvm/${path}`,
+        `setup/local-vm/${path}`,
         path === 'start'
           ? { id: saved.id, name: saved.name }
           : { id: saved.id },
@@ -364,7 +546,7 @@ it.each(['ready', 'connecting'])(
     })
     await waitFor(() => expect(remove).toBeEnabled())
     fireEvent.click(remove)
-    expect(call).not.toHaveBeenCalledWith('setup/kvm/remove', expect.anything())
+    expect(call).not.toHaveBeenCalledWith('setup/local-vm/remove', expect.anything())
     const pending = useConfirmStore.getState().pending
     expect(pending).toMatchObject({
       title: 'Delete Writer’s computer?',
@@ -374,12 +556,12 @@ it.each(['ready', 'connecting'])(
     expect(pending?.message).toContain('all files saved on it')
     expect(pending?.message).toContain('cannot be undone')
     await act(async () => settleConfirm(false))
-    expect(call).not.toHaveBeenCalledWith('setup/kvm/remove', expect.anything())
+    expect(call).not.toHaveBeenCalledWith('setup/local-vm/remove', expect.anything())
     expect(remove).toBeEnabled()
 
     fireEvent.click(remove)
     await act(async () => settleConfirm(true))
-    expect(call).toHaveBeenCalledWith('setup/kvm/remove', { id: saved.id })
+    expect(call).toHaveBeenCalledWith('setup/local-vm/remove', { id: saved.id })
     expect(
       call.mock.calls.filter(([path]) => path.endsWith('/remove'))
     ).toHaveLength(1)
@@ -409,7 +591,7 @@ it('does not delete a computer when its confirmation is accepted after leaving s
   expect(useConfirmStore.getState().pending).not.toBeNull()
   unmount()
   await act(async () => settleConfirm(true))
-  expect(call).not.toHaveBeenCalledWith('setup/kvm/remove', expect.anything())
+  expect(call).not.toHaveBeenCalledWith('setup/local-vm/remove', expect.anything())
 })
 
 it.each(['reply', 'error'] as const)(
@@ -446,7 +628,7 @@ it.each(['reply', 'error'] as const)(
     expect(statusReads).toBe(2)
     fireEvent.click(remove)
     await act(async () => settleConfirm(true))
-    expect(call).toHaveBeenCalledWith('setup/kvm/remove', { id: saved.id })
+    expect(call).toHaveBeenCalledWith('setup/local-vm/remove', { id: saved.id })
     await act(async () => removal.resolve({ ...saved, stage: 'removed' }))
     await waitFor(() => expect(statusReads).toBe(3))
     await act(async () => freshStatus.resolve([]))
@@ -507,7 +689,7 @@ it.each(['reply', 'error'] as const)(
     act(() => events.update?.())
     expect(statusReads).toBe(2)
     fireEvent.click(restart)
-    expect(call).toHaveBeenCalledWith('setup/kvm/start', {
+    expect(call).toHaveBeenCalledWith('setup/local-vm/start', {
       id: saved.id,
       name: saved.name,
     })
