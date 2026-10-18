@@ -47,6 +47,27 @@ regressions. No native send, save, inference, installed-package or Windows
 acceptance was performed. Candidate receipts:
 `/ai/gchat/out/gchat-chat-edit-cancel-focus-20261018/`.
 
+## Attachment send completion after switching conversations — October 18
+
+Codex 8 found that switching from conversation A to B during an attachment
+submission left A's successfully sent text in its cached draft. The cleanup
+was guarded by the visible composer's lifetime, so returning to A restored
+text already sent.
+
+Successful completion now clears the sending conversation's own draft by ID,
+only if it still matches the submitted text. B's draft stays intact even when
+its text is identical, and newer edits in A remain available. Submitted
+attachments keep their existing per-conversation cleanup. Failed sends retain
+their drafts and attachments for retry.
+
+The extended rendered regression fails on the original cleanup: returning to A
+restores already-sent text. Both navigation cases pass with the fix. Validation:
+53 focused tests and workspace lint PASS; one `make verify` PASS (3,597
+web-app, 127 extension and 1,288 Rust tests, plus six coverage floors) on
+`40e51840b`. No native, inference, installed-package or Windows acceptance is
+claimed for this follow-up. Receipts:
+`/ai/gchat/out/gchat-chat-attachment-sent-draft-20261018/`.
+
 ## Conversation draft isolation — October 18
 
 A private native Chat pass reproduced a New Chat draft appearing in an existing
