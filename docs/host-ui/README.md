@@ -474,48 +474,48 @@ No app, model, GPU, installer, Windows account or shared app data was involved.
 CPUs returned 01:15Z. Next: Codex 8 review and coordinator merge.
 ## Installed dropdown acceptance — C7, October 18
 
-`GUI-DROPDOWN-THEME-CONSISTENCY-20261017` passes the shared Theme and Font
-Size menu scope in retained Linux release `ed68c7443`. Real trusted keyboard
-input opened the menus, selected Light/Dark and Medium/Large, closed with
-Escape and moved focus with Tab. Visual inspection confirmed readable Geist
-text and app colors in both themes; menu text followed Medium (14px) and
-Large (15.75px). A rapid Escape/Tab/Enter sequence did not reach its intended
-control and is excluded; separately observed Escape and Tab steps passed.
+`GUI-DROPDOWN-THEME-CONSISTENCY-20261017` now replaces native select popups
+with the existing app-rendered Radix radio menus through `ChoiceSelect`. Native
+WebKitGTK reproduced a white serving popup in Dark mode despite dark computed
+option styles, so CSS color-scheme alone did not meet the contract. The shared
+control preserves values, disabled choices and callbacks, focuses the checked
+choice, restores focus on Escape, and advances on Tab or Shift-Tab. It explicitly
+skips controls inside closed details: WebKit reports rectangles for them even
+though they cannot receive focus. The serving field and action buttons wrap so
+long labels retain a usable width.
 
-C7 is continuing the serving-instance, launch-profile and Fleet-coordinator
-selectors in `test/c7-dropdown-host-selectors-20261018`, baseline `4ce2a2615`.
-The private S1 native fixture has two genuinely paired Hosts and two explicitly
-saved, stopped instances. The first OS screenshot reproduces a white GTK popup
-in app Dark mode, although computed select/option styles request dark colors.
-Explicitly choosing Dark through Interface does not correct it. Real Down/Enter
-changes the selected stopped instance without starting it. This invalidates the
-prior assumption that CSS color-scheme alone themes native WebKitGTK popups.
+Native Linux acceptance on S1 `AIS-2-8592-L01` uses source `8f4d0724f`, two
+actually paired private Hosts and two saved, stopped instances. OS screenshots
+show readable serving-instance, saved-profile and Fleet-coordinator popups in
+Light/Medium (Geist 14px) and Dark/Large (15.75px), with app palette colors and
+wrapped long choices. Trusted XTest keyboard input selects another stopped
+server, a saved profile and a coordinator draft. Escape restores trigger focus;
+Tab reaches Start model without activating it; Shift-Tab reaches the preceding
+visible summary instead of a hidden setting. The shared Theme/Font Size native
+acceptance in retained release `ed68c7443` remains valid. Results and seven
+native screenshots are in `out/c7-dropdown-host-selectors-20261018/` in this
+source branch.
 
-The outcome is readable, app-themed typography and colors for these dropdowns,
-with keyboard navigation, selection, Escape and Tab verified in Light/Dark and
-Medium/Large. The next action is a shared app-rendered choice control using the
-existing Radix dropdown primitives, preserving disabled choices and callbacks.
-No dependency, model execution, Fleet authority change or Windows account change
-is needed. The prior Theme/Font Size acceptance remains valid.
+One `make verify` invocation stopped on an unsupported Radix lifecycle prop.
+After that correction, the remaining stages found and corrected tests that used
+native-select interaction and split eight reasoning-effort saves into independent
+cases with unchanged payload assertions and timeout. All verification stages
+then pass: 3,298 frontend tests, 121 extension tests, all six critical coverage
+floors and 1,216 Rust tests (six frontend skips, 28 Rust ignores); lint has zero
+errors and five existing warnings. After the native layout/focus corrections,
+42 focused tests, typecheck, production-control lint and frontend/native builds
+pass. This is a continued stage result, not a second full verification run.
 
-S1 CPUs104–111 are booked03:23–03:53Z (line2918); private root
-`/media/ron/SSD_RAID/ai/tmp-c7-dropdown-host-selectors-20261018` owns the
-Host bridge container and native app profile. The ed68 AppDir and Flash Next
-pure 2-bit package are read-only donors. No model or GPU execution is permitted.
-Windows and release-wide qualification remain outside this leaf.
-
-The former CSS-only assumption is superseded by the native reproduction above.
-All production native selects now use the shared app-rendered choice control.
-Focused component tests pass, including a disabled-trigger regression found and
-fixed during this gate. The one full verification invocation found an unsupported
-Radix lifecycle prop; that is fixed and typecheck passes. Its continued frontend
-stage found remaining tests that still used native-select interactions. Those
-tests are being updated without changing their behavior assertions; remaining
-Rust verification and the native build are running. Candidate screenshots follow.
-Prior gates do not qualify this fix.
-The earlier FRESH VM acceptance remains scoped to its shared menus, with the
-VM returned OFF/original XML and its private stage removed. The current live
-S1 fixture and build cache are separate owned paths under the root above.
+C7 owns `/ai/gchat-worktrees/c7-dropdown-host-selectors-20261018`, branch
+`test/c7-dropdown-host-selectors-20261018`, based on `d03667c8d`. The native
+session is stopped. Private SSD build/cache cleanup follows the final merge
+reconciliation check. Read-only ed68 AppDir and Flash Next pure 2-bit donors
+were unchanged (package SHA256
+`8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08`).
+No model start, GPU computation, Fleet authority change, Windows account change
+or release-wide qualification is claimed. Windows native UI remains unqualified.
+The earlier FRESH VM is OFF with original XML and its private stage removed.
+Next: coordinator review and merge of source and native evidence together.
 
 ## Models tabs installed keyboard acceptance — C7, closed October 18
 

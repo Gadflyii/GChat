@@ -1,0 +1,67 @@
+{
+  "row": "GUI-DROPDOWN-THEME-CONSISTENCY-20261017",
+  "owner": "Codex 7",
+  "source": "8f4d0724f",
+  "status": "PASS_SCOPED native Linux",
+  "fix": "Shared Radix ChoiceSelect replaces native selects; disabled trigger and selected-item focus are handled explicitly. Host selector and actions wrap without collapsing the label.",
+  "verification": {
+    "full_make_verify_invocations": 1,
+    "initial_failure": "Unsupported Radix onOpenAutoFocus prop rejected by typecheck; removed in favor of a supported open effect.",
+    "continuation_failures": [
+      "Tests used native-select interaction after the control changed; reconciled to real menu interaction.",
+      "Eight reasoning-effort saves exceeded one existing test timeout; split into eight independent cases with the same payload assertions and timeout."
+    ],
+    "final_stages": {
+      "lint_errors": 0,
+      "lint_existing_warnings": 5,
+      "typecheck": "PASS",
+      "quality_hardening_manager_assets": "PASS",
+      "frontend_passed": 3298,
+      "frontend_skipped": 6,
+      "extension_passed": 121,
+      "critical_coverage_floors_passed": 6,
+      "rust_passed": 1216,
+      "rust_ignored": 28
+    },
+    "after_native_layout_correction": {
+      "focused_tests_passed": 41,
+      "typecheck": "PASS",
+      "native_build": "PASS"
+    },
+    "after_native_focus_correction": {
+      "focused_tests_passed": 42,
+      "typecheck": "PASS",
+      "production_control_lint": "PASS (test path ignored by repository lint configuration)",
+      "frontend_build": "PASS",
+      "native_build": "PASS"
+    }
+  },
+  "native": {
+    "host": "AIS-2-8592-L01",
+    "platform": "Linux x86_64 / WebKitGTK / Xvfb",
+    "input": "xdotool XTest; inspector observations only",
+    "baseline": "Native GTK serving popup remains white in app Dark mode.",
+    "candidate_checks": [
+      "All three selectors have inspected native OS screenshots in Light/Medium (Geist 14px, white/near-black) and Dark/Large (Geist 15.75px, rgb(17,19,22)/rgb(243,245,247)). Long popup choices wrap readably; serving field 458px Medium and 413px Large.",
+      "Down/Enter selects stopped server 2 at context131072; no start.",
+      "Down/Enter selects the explicit screened 128K/C8 saved profile as a draft; no start.",
+      "End/Enter selects C7-B as coordinator draft; Use selected coordinator is not invoked.",
+      "Escape restores serving trigger; Tab closes menu and focuses Start model without activating; Shift-Tab closes menu and focuses visible Model and memory settings summary."
+    ],
+    "screenshot_source": "8f4d0724f",
+    "screenshots": [
+      "before-dark-native-popup.png",
+      "after-light-medium-serving.png",
+      "after-light-medium-profile.png",
+      "after-light-medium-fleet.png",
+      "after-dark-large-serving.png",
+      "after-dark-large-profile.png",
+      "after-dark-large-fleet.png"
+    ]
+  },
+  "limitations": [
+    "Windows native UI is unqualified.",
+    "No model start, measurement, GPU computation, Fleet authority change or release-wide qualification."
+  ],
+  "isolation": "Private HOME/XDG/runtime700, dbus session, unlocked keyring, Xvfb :78; native session and fixture Hosts stopped by exact owned PIDs; build cache retained only through integration check."
+}
