@@ -1109,6 +1109,32 @@ XML and Gchat 2 custody; inert responses do not qualify live tasks or native
 Windows.
 
 
+## Recovering an interrupted task — Gchat 2
+
+`GBOT-TASK-INTERRUPTION-GUIDANCE`, based on main `a0971c3ad`, explains that
+an interrupted task stopped before completion and names explicit resume after
+checking model and computer connections. Previously, the shared Settings and
+companion notice displayed only its diagnostic, such as executor restarted,
+and displayed nothing when the reason was absent.
+
+The exact latest interruption reason stays in initially closed Details, when
+present. Disclosure never resumes a task. Rendered journeys cover restart and
+missing-reason records in both views, reopening the Settings task, explicit
+Resume for the correct task and hiding the notice after completion. Existing
+task-state, consent and action guards are unchanged; no reason strings are
+classified. This is source/rendered scope, with no native or live-task claim.
+
+Validation: all four new interrupted-task journeys failed against original
+production; fixed focus passed 178 tests. Lint passed with zero errors and five
+existing warnings. ONE `make verify` (2026-10-18 21:51:53–21:58:04 UTC) passed
+3,832 app tests (six skipped), 130 extension tests, 1,319 Rust tests (28 ignored),
+all six coverage floors and lint/typecheck/quality guards. All 3,479 tracked raw
+bytes and modes matched before and after the gates, with fresh tracked timestamps.
+Only this receipt was added afterward. Booking3592 returned21:58Z; private cache
+and exports were retired by21:59:20Z. Small evidence:
+`/ai/gchat/out/gchat2-task-interruption-guidance-20261018/SUMMARY.md`.
+
+
 ## Recovering a service-computer change — Gchat 2
 
 `GBOT-SERVICE-CHANGE-ERROR-GUIDANCE`, based on main `9aeec47dc`, names the
