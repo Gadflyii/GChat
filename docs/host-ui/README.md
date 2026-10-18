@@ -22,7 +22,8 @@ then locks and reloads the shared registry before removing an exact match and
 its in-memory routes/credentials. It preserves a concurrently changed pin and
 all other records. The system reset calls completion after its existing data
 deletion and binary restoration. Failures return an actionable error instead
-of claiming restart completed.
+of claiming restart completed. The command restores its windows on failure so
+errors after window hiding remain visible and the user can retry.
 
 Owner/inventory: `/ai/gchat-worktrees/c3-reset-stale-host-connection-20261018`,
 branch `fix/c3-reset-stale-host-connection-20261018`, baseline `04866d698`.

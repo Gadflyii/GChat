@@ -117,7 +117,19 @@ pub async fn factory_reset<R: Runtime>(
 ) -> Result<(), String> {
     let configuration_file = get_configuration_file_path(app_handle.clone());
     let default_folder = PathBuf::from(default_data_folder_path(app_handle.clone()));
-    reset_configured_app_data(&app_handle, &state, &configuration_file, &default_folder).await?;
+    if let Err(error) =
+        reset_configured_app_data(&app_handle, &state, &configuration_file, &default_folder).await
+    {
+        // Deletion or registration cleanup can fail after reset hides the
+        // windows. Keep the returned error and retry controls visible.
+        #[cfg(not(any(target_os = "ios", target_os = "android")))]
+        for (label, window) in app_handle.webview_windows() {
+            if let Err(show_error) = window.show() {
+                log::warn!("Failed to restore window {label:?} after reset failed: {show_error}");
+            }
+        }
+        return Err(error);
+    }
 
     // Keep the installation's selected location and startup preference. A move
     // retains its old copy, so selecting the default here can resurrect data.
