@@ -2363,22 +2363,13 @@ while True:
                 .is_empty());
             for action in ["runs", "monitor"] {
                 let history = super::super::studio::operation(
-                    app.handle().clone(),
-                    action,
-                    serde_json::json!({}),
-                )
-                .await
-                .unwrap();
-                let records = if action == "monitor" {
-                    &history["completed"]
-                } else {
-                    &history
-                };
+                    app.handle().clone(), action, serde_json::json!({}),
+                ).await.unwrap();
+                let records = if action == "monitor" { &history["completed"] } else { &history };
                 assert!(records.as_array().unwrap().is_empty(), "{action}");
             }
             assert!(super::super::runs::agent_delete_run(
-                app.handle().clone(),
-                records[0].id.clone(),
+                app.handle().clone(), records[0].id.clone(),
             )
             .await
             .unwrap_err()
@@ -2409,9 +2400,7 @@ while True:
                 },
             );
             let monitor = super::super::studio::operation(
-                app.handle().clone(),
-                "monitor",
-                serde_json::json!({}),
+                app.handle().clone(), "monitor", serde_json::json!({}),
             )
             .await
             .unwrap();
@@ -2525,9 +2514,7 @@ while True:
                 .expect("the same run ID is reusable after pending-state cleanup");
             drop(replacement);
             let monitor = super::super::studio::operation(
-                app.handle().clone(),
-                "monitor",
-                serde_json::json!({}),
+                app.handle().clone(), "monitor", serde_json::json!({}),
             )
             .await
             .unwrap();
@@ -2543,10 +2530,7 @@ while True:
             other_cancel_rx
                 .try_recv()
                 .expect("ordinary Stop still cancels the other run");
-            assert_eq!(
-                other_approval_rx.try_recv().unwrap(),
-                ApprovalDecision::Deny
-            );
+            assert_eq!(other_approval_rx.try_recv().unwrap(), ApprovalDecision::Deny);
             assert!(!other_folder_rx.try_recv().unwrap());
             drop(other_run);
             let reopened = tauri::test::mock_app();
@@ -2565,20 +2549,14 @@ while True:
             assert_eq!(restored.finished_at_ms, 0);
             assert!(restored.finish_reason.is_empty());
             assert!(restored.final_reply.contains("Completion was not recorded"));
-            let output =
-                Path::new(restored.output_workspace.as_deref().unwrap()).join("agent/context");
-            for name in [
-                "transcript.jsonl",
-                "working-state.json",
-                "step-0-tool-0.json",
-            ] {
+            let output = Path::new(restored.output_workspace.as_deref().unwrap())
+                .join("agent/context");
+            for name in ["transcript.jsonl", "working-state.json", "step-0-tool-0.json"] {
                 let contents = fs::read_to_string(output.join(name)).unwrap();
                 assert!(contents.contains("DURABLE_STUDIO_OBSERVATION"), "{name}");
             }
             let monitor = super::super::studio::operation(
-                reopened.handle().clone(),
-                "monitor",
-                serde_json::json!({}),
+                reopened.handle().clone(), "monitor", serde_json::json!({}),
             )
             .await
             .unwrap();
@@ -2590,11 +2568,7 @@ while True:
             assert!(state.agent_pending_folder_access.lock().await.is_empty());
             assert!(state.tool_call_cancellations.lock().await.is_empty());
             assert!(state.agent_runs.inner.lock().unwrap().runs.is_empty());
-            assert_eq!(
-                server.requests().len(),
-                2,
-                "history reopening must not replay execution"
-            );
+            assert_eq!(server.requests().len(), 2, "history reopening must not replay execution");
             assert!(!root.path().join("must-not-run.txt").exists());
             super::super::runs::agent_delete_run(reopened.handle().clone(), restored.id.clone())
                 .await
@@ -2611,11 +2585,7 @@ while True:
             // Check before joining the caller: shutdown itself must wait for
             // the history and semantic session writes, not just cancellation.
             let records = super::super::runs::list_runs(&data).unwrap();
-            assert_eq!(
-                records.len(),
-                1,
-                "terminal history replaces durable admission"
-            );
+            assert_eq!(records.len(), 1, "terminal history replaces durable admission");
             let record = records
                 .iter()
                 .find(|record| record.run_id == run_id)
