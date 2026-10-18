@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { expect, it, vi } from 'vitest'
 import { AgentStudioHeader, type AgentStudioSection } from '../AgentStudioHeader'
@@ -45,4 +45,24 @@ it('exposes the current section as keyboard navigation changes the Studio view',
     expect(nav.getAllByRole('button', { current: 'page' })).toEqual([section])
     expect(section).toHaveFocus()
   }
+})
+
+it('leaves focus on a control chosen while section navigation is pending', async () => {
+  const user = userEvent.setup()
+  let finish!: () => void
+  const pending = new Promise<void>((resolve) => { finish = resolve })
+  const onSelect = vi.fn(() => pending)
+  const view = render(<>
+    <AgentStudioHeader active="definitions" onSelect={onSelect} />
+    <button>Keep working</button>
+  </>)
+  screen.getByRole('button', { name: 'Skills', exact: true }).focus()
+  await user.keyboard('{Enter}')
+  view.rerender(<>
+    <AgentStudioHeader key="skills-route" active="skills" onSelect={onSelect} />
+    <button>Keep working</button>
+  </>)
+  screen.getByRole('button', { name: 'Keep working' }).focus()
+  await act(async () => finish())
+  expect(screen.getByRole('button', { name: 'Keep working' })).toHaveFocus()
 })

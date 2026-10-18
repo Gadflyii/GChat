@@ -240,6 +240,52 @@ describe('AgentStudioPage', () => {
     return router
   }
 
+  it('keeps keyboard focus on the selected section across Skills route replacement', async () => {
+    const api = await vi.importActual<typeof import('@tanstack/react-router')>('@tanstack/react-router')
+    const { SkillsPage } = await import('../skills')
+    blockNavigation.mockImplementation(api.useBlocker)
+    definitionState.value.definitions = [firstAgent]
+    const search = vi.spyOn(Route, 'useSearch').mockImplementation(() =>
+      api.useSearch({ strict: false })
+    )
+    const root = api.createRootRoute({ component: api.Outlet })
+    const agents = api.createRoute({ getParentRoute: () => root, path: '/agents', component: AgentStudioPage })
+    const skills = api.createRoute({ getParentRoute: () => root, path: '/skills', component: SkillsPage })
+    window.history.replaceState({}, '', '/agents')
+    const history = api.createBrowserHistory()
+    navigableHistories.push(history)
+    const router = api.createRouter({ routeTree: root.addChildren([agents, skills]), history })
+    navigate.mockImplementation((options) => router.navigate(options))
+    try {
+      render(<api.RouterProvider router={router} />)
+      await screen.findByDisplayValue(firstAgent.name)
+      const user = userEvent.setup()
+      const skillsButton = screen.getByRole('button', { name: 'Skills', exact: true })
+      skillsButton.focus()
+      await user.keyboard('{Enter}')
+      await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Skills', current: 'page' })).toHaveFocus())
+      expect(skillsButton).not.toBeInTheDocument()
+
+      for (const name of ['Worker Pools', 'Templates', 'Runs', 'Agents & flows']) {
+        const target = screen.getByRole('button', { name, exact: true })
+        target.focus()
+        await user.keyboard(' ')
+        await waitFor(() => expect(router.state.location.pathname).toBe('/agents'))
+        await waitFor(() => expect(screen.getByRole('button', { name, current: 'page' })).toHaveFocus())
+        expect(target).not.toBeInTheDocument()
+        screen.getByRole('button', { name: 'Skills', exact: true }).focus()
+        await user.keyboard('{Enter}')
+        await waitFor(() => expect(router.state.location.pathname).toBe('/skills'))
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Skills', current: 'page' })).toHaveFocus())
+      }
+      expect(definitionState.value.save).not.toHaveBeenCalled()
+      expect(definitionState.value.remove).not.toHaveBeenCalled()
+    } finally {
+      search.mockRestore()
+    }
+  })
+
   it.each(['saved', 'new', 'template'] as const)(
     'guards navigation away from an edited %s draft until discard is explicit', async (source) => {
       listAgentTemplates.mockResolvedValue([{

@@ -710,8 +710,7 @@ function AgentStudioPage() {
         onSelect={(section) => {
           if (section === 'skills') {
             invalidateRunSetup()
-            void navigate({ to: route.skills.index })
-            return
+            return navigate({ to: route.skills.index })
           }
           selectView(section)
           if (section === 'runs') void refreshRuns()

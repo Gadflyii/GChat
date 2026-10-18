@@ -22,6 +22,25 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Agent Studio navigation across Skills — October 18
+
+A private native keyboard pass on `014afdc21` (the header and routing match main
+`e96d97b02`) selected Skills with Space and then Worker Pools with Enter. Both
+routes changed and the current-section state was correct, but each route
+replacement dropped keyboard focus to the page body. Baseline DOM receipts and
+the viewed screenshot are in
+`/ai/gchat/out/gchat-agent-studio-current-section-20261018/`.
+
+Section navigation now returns its completion promise to the shared header.
+When navigation replaces the focused button, the header restores focus to the
+new selected section button after completion. A cancelled transition or a user
+who has moved focus to another control keeps that focus. Direct page entry and
+navigation within the Agents route keep their existing behavior.
+
+Validation pending focused tests, lint, one `make verify`, native rebuild and
+private native keyboard acceptance. Candidate receipts:
+`/ai/gchat/out/gchat-agent-studio-route-focus-20261018/`.
+
 ## Agent Studio current section — October 18
 
 A private native pass selected Templates with Enter. The section changed and
