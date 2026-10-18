@@ -19,21 +19,34 @@ entry point; that failure is retained and corrected to library scope.
 
 The first/only `make verify` stopped at a new background disk-full test:
 3351 app tests passed, one failed, six skipped. Its alert renders directly from
-`flow`, while the retained folder is hydrated by a later `useEffect([flow])`.
-Waiting for the alert did not wait for that effect. The test now waits for the
-same `/models` value before clicking Retry; all existing assertions remain.
-The original failure remains in the packet. Authorized continuation: this
-first-run file, failed app coverage, then unrun extension coverage/floors and
-seven native suites; no second `make verify` or passed-stage repeat. If these
-pass, build Vite/default desktop custom-protocol into `folder-reveal-candidate`.
-Actual changed-source native acceptance remains coordinator-owned and pending.
+`flow`, while a later `useEffect([flow])` hydrates the retained folder. The test
+now waits for the same `/models` assertion before Retry; all assertions remain.
+This synchronization correction is pushed in `7fd01cf0a`; the original verify
+failure is retained. Authorized continuation passed the first-run file32, app
+coverage3352 (six skipped), extension121, all six coverage floors and1223 native
+tests (28 ignored). No second `make verify` ran and no passed stage was repeated.
+Vite/default desktop custom-protocol build passed05:00:08Z; checked candidate
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/folder-reveal-candidate/bin/gchat`.
+Native Linux acceptance passed05:04–05:08Z: ordinary pointer input opened
+private Nautilus in the correct data root with **logs** selected. Its HOME,
+runtime, display and D-Bus matched the isolated app. The screenshot was visually
+reviewed; subsequent ordinary Interface navigation proved responsiveness.
+The real-opener worker test covers an unavailable handler returning an ordinary
+error. No native GUI handler failure is claimed. The first direct candidate
+launch inherited AppRun libraries and failed before UI at a relative WebKit
+child path; using the host desktop environment corrected the fixture. This is
+a changed-source custom-protocol debug binary, not a fresh installer/Windows
+qualification. Source gates were not repeated. The result is merge-ready.
 No model, profile or GPU workload is needed.
 
 Owner/source: Codex 3,
 `/ai/gchat-worktrees/c3-folder-reveal-runtime-20261018`, branch
 `fix/c3-folder-reveal-runtime-20261018`, baseline `bbc81c2ec`.
 The shared S1 stage was handed off after download-count build04:41:46Z.
-CPU80–87 booking2994 through05:09Z, socket1 shared lock and nice10;
+CPU80–87 booking2993 returned05:01Z; all owned gate containers exited/removed.
+Local/remote disposable source archives were removed after checked candidate copy.
+The shared stage is handed to Interface; immutable folder candidate is retained.
+Execution used socket1 shared lock and nice10;
 all35 retained manifests/locks/config matched before exact source staging.
 The installed AppDir/home, badge candidate, downloads home, runnable resources
 and tools are protected. Evidence:
