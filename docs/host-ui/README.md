@@ -1050,35 +1050,44 @@ three exited containers were removed at 03:59:59Z, releasing 42.31 GB; the
 280 MB disposable source archive was also removed. Read-only donors remain.
 CPU 88–95 booking 2944 was canceled; returned 04:00Z. Next: reviewed branch
 integration; no further test run is required.
-## Host-managed download in the popover — C7 native acceptance
+## Shared private development catalog and Downloads native acceptance
 
-`GUI-DOWNLOADS-POPOVER-MANAGED` remains blocked for its real-transfer native
-leaf. The merged listing/status source and prior focused/full gates remain
-valid; retained paused-journal screenshots do not establish that a download
-started in Models appears live in the popover.
+Bubbs authorized one shared read-only S1 LAN fixture on October 18 for
+`GUI-DOWNLOADS-POPOVER-MANAGED` and the other development lanes. It is generated
+from `/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1`, using recorded
+package SHA-256 values and existing launch profiles. Only packages with matching
+profiles are offered; this fixture adds no model or hardware qualification.
+No package is copied, repacked or published. The public release-catalog gate
+and production download admission remain unchanged.
 
-The October 18 source check found no supported private transfer route in
-current main or the retained `d0a8d06bf` AppDir. Models reads the compile-time
-`VITE_MODEL_CATALOG_URL`; Host reads `GINFER_MODEL_CATALOG_URL`. Both release
-validators require commit-pinned HTTPS Hugging Face `.ginfer` URLs, and Host
-catalog/transfer clients require HTTPS. The default catalog contains only
-unpublished placeholders without release metadata. The existing loopback
-resume test injects a job/client inside a unit test and cannot be started from
-native Models. This is the existing public-catalog release limitation, not a
-reason to weaken admission for a screenshot. Next: qualify the real transfer
-when Ron supplies the release catalog, or when an explicit development-fixture
-change is authorized. No native launch, model transfer or GPU use occurred.
+Current work: restore the existing development-only private-catalog route on
+current main, extending its configured literal IPv4 origin from loopback to
+RFC1918 LAN addresses. Frontend development mode and a debug Host must both be
+used. Catalog and `.ginfer` URLs use the same explicit origin, with no credentials,
+query or fragment; Host private requests use neither proxies nor redirects.
+Full size, hash, identity, launch-profile and hardware checks remain in force.
+The fixture must never be uploaded or configured in a release build.
 
-Owner C7, branch `test/c7-managed-downloads-native-20261018`, base `e0a67a528`,
-worktree `/ai/gchat-worktrees/c7-managed-downloads-native-20261018`. The authorized
-read-only `d0a8d06bf` AppDir copy is private at
+The intended shared URL is `http://192.168.1.109:18761/catalog.json` (not yet
+serving). Its durable S1 root is
+`/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1`, separate from disposable
+lane builds. Next: validate the generated metadata and development transport,
+start the read-only service, and mail the live URL. Then start a real transfer
+through native Models, observe its live status/progress in the sidebar popover,
+and pause/remove the partial transfer through native controls. Native screenshots,
+focused checks and ONE `make verify` belong in this same source branch. No model
+load, engine execution or GPU compute is needed.
+
+Owner C7, branch `test/c7-managed-downloads-native-20261018`, worktree
+`/ai/gchat-worktrees/c7-managed-downloads-native-20261018`; current baseline is
+main `96172afb5`, normally merged as `dc67f5df7`. Parallel source work owns only
+`web-app/src/lib/model-release.{ts,test.ts}` and Host `model_downloads.rs`;
+fixture generation owns only the named durable S1 fixture root. C7 integrates
+and checks both. The private runtime donor is
 `/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir`
-(4.1 GB, all links dereferenced). Copy completed 06:07Z; booking 3072 canceled,
-returned 06:07Z. C3 donor custody was released immediately. The copy is retained
-only for C7's next native GUI leaf; it contains no borrowed profile or cache.
-Source references: `web-app/src/stores/model-catalog-store.ts`,
-`web-app/src/constants/models.ts`, `web-app/src/lib/model-release.ts` and
-`src-tauri/ginfer-host/src/model_downloads.rs`. No source changed or tests rerun.
+(`d0a8d06bf`, 4.1 GB, no borrowed profile/cache). Its copy completed and C3
+custody was released at 06:07Z. No native app, transfer or GPU is live.
+
 
 ## Downloads popover transfer status — C3, October 18
 

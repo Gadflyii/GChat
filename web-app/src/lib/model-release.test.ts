@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { downloadFailureMessage, downloadStatusLabel, formatModelBytes, releaseReadiness, releaseVerified, validRelease, type ModelRelease } from './model-release'
 
 const release: ModelRelease = { name: 'Fixture', identity: { model_id: 'fixture', weights_id: 'q4' },
@@ -6,6 +6,7 @@ const release: ModelRelease = { name: 'Fixture', identity: { model_id: 'fixture'
   bytes: 4096, tp: 1, qualified_sm: ['8.6'], min_vram_mib_per_gpu: 16384, capabilities: ['tools'],
   launch_profiles: [{ id: 'c1' }] }
 const gpu = { uuid: 'one', name: 'Fixture GPU', memory_mib: 16384, compute_capability: '8.6' }
+afterEach(() => vi.unstubAllEnvs())
 describe('released model recommendations', () => {
   it('matches actual SM and per-GPU memory, not marketing names', () => {
     expect(releaseReadiness(release, [gpu]).available).toBe(true)
@@ -27,6 +28,62 @@ describe('released model recommendations', () => {
     const untested = { ...release, launch_profiles: [] }
     expect(releaseVerified(untested)).toBe(false)
     expect(releaseReadiness(untested, [gpu]).available).toBe(false)
+  })
+  it.each(['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.254', '192.168.1.10'])(
+    'admits verified packages from the explicitly selected private development origin %s', (host) => {
+      vi.stubEnv('DEV', true)
+      vi.stubEnv('VITE_MODEL_CATALOG_URL', `http://${host}:19361/catalog.json`)
+      const local = { ...release, url: `http://${host}:19361/packages/model.ginfer` }
+      expect(releaseReadiness(local, [gpu]).available).toBe(true)
+      expect(validRelease({ ...local, sha256: '' })).toBe(false)
+      expect(validRelease({ ...local, bytes: 0 })).toBe(false)
+      expect(validRelease({ ...local, tp: 3 })).toBe(false)
+      expect(releaseVerified({ ...local, launch_profiles: [] })).toBe(false)
+      expect(releaseReadiness(local, [{ ...gpu, memory_mib: 12288 }]).available).toBe(false)
+    })
+  it('keeps private packages on the configured exact origin without URL credentials or parameters', () => {
+    vi.stubEnv('DEV', true)
+    vi.stubEnv('VITE_MODEL_CATALOG_URL', 'http://192.168.1.10:19361/catalog.json')
+    for (const url of [
+      'http://192.168.1.10:19362/model.ginfer',
+      'http://192.168.1.11:19361/model.ginfer',
+      'http://192.168.1.10/model.ginfer',
+      'https://192.168.1.10:19361/model.ginfer',
+      'http://127.0.0.1:19361/model.ginfer',
+      'http://user@192.168.1.10:19361/model.ginfer',
+      'http://user:password@192.168.1.10:19361/model.ginfer',
+      'http://192.168.1.10:19361/model.ginfer?token=value',
+      'http://192.168.1.10:19361/model.ginfer#fragment',
+      'http://192.168.1.10:19361/model.gguf',
+    ]) expect(validRelease({ ...release, url })).toBe(false)
+  })
+  it('requires explicit private IPv4 configuration and keeps production publication validation unchanged', () => {
+    vi.stubEnv('DEV', true)
+    for (const catalog of [
+      '', 'invalid', 'file:///tmp/catalog.json',
+      'https://192.168.1.10:19361/catalog.json',
+      'http://localhost:19361/catalog.json', 'http://127.0.0.2:19361/catalog.json',
+      'http://172.15.255.255:19361/catalog.json', 'http://172.32.0.1:19361/catalog.json',
+      'http://192.169.1.10:19361/catalog.json', 'http://169.254.1.10:19361/catalog.json',
+      'http://8.8.8.8:19361/catalog.json', 'http://0.0.0.0:19361/catalog.json',
+      'http://[::1]:19361/catalog.json', 'http://catalog.local:19361/catalog.json',
+      'http://user@192.168.1.10:19361/catalog.json',
+      'http://user:password@192.168.1.10:19361/catalog.json',
+      'http://192.168.1.10:19361/catalog.json?private=true',
+      'http://192.168.1.10:19361/catalog.json#private',
+    ]) {
+      vi.stubEnv('VITE_MODEL_CATALOG_URL', catalog)
+      const url = catalog ? catalog.replace('catalog.json', 'model.ginfer') : 'http://127.0.0.1:19361/model.ginfer'
+      expect(validRelease({ ...release, url }), catalog).toBe(false)
+      expect(validRelease(release)).toBe(true)
+    }
+    vi.stubEnv('DEV', false)
+    for (const host of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.10']) {
+      vi.stubEnv('VITE_MODEL_CATALOG_URL', `http://${host}:19361/catalog.json`)
+      expect(validRelease({ ...release, url: `http://${host}:19361/model.ginfer` })).toBe(false)
+    }
+    expect(validRelease(release)).toBe(true)
+    expect(validRelease({ ...release, url: release.url.replace('a'.repeat(40), 'main') })).toBe(false)
   })
   it('explains the required card count and memory on each card', () => {
     expect(releaseReadiness(release, [{ ...gpu, memory_mib: 12288 }])).toEqual({
