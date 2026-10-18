@@ -60,6 +60,8 @@ const failureMessages = {
   signIn: 'Could not open Microsoft sign-in. Try signing in again.',
   checkSignIn:
     'Could not check Microsoft sign-in. Choose Check sign-in status to try again.',
+  refreshSignedIn:
+    'Microsoft sign-in completed, but the account list could not be refreshed. Choose Refresh Microsoft accounts to try again.',
   cancelSignIn:
     'Could not confirm Microsoft sign-in was cancelled. Choose Cancel sign-in to try again.',
   checkPcs:
@@ -69,7 +71,10 @@ const failureMessages = {
     'Your Cloud PC setup was saved, but the computer list could not be refreshed. Close setup to try refreshing the list again.',
   openClient:
     'Could not open Microsoft’s client. Choose Open Microsoft client to try again.',
-} satisfies Record<PendingAction | 'load' | 'refreshSaved', string>
+} satisfies Record<
+  PendingAction | 'load' | 'refreshSaved' | 'refreshSignedIn',
+  string
+>
 
 type SetupFailure = {
   action: keyof typeof failureMessages
@@ -230,7 +235,13 @@ export default function M365Setup({
     if (next.status === 'connected') {
       // Sign-in never silently chooses an account or a computer.
       setPcs(undefined)
-      await refreshAccounts()
+      try {
+        await refreshAccounts()
+      } catch (cause) {
+        if (active.current) {
+          setError({ action: 'refreshSignedIn', detail: String(cause) })
+        }
+      }
     }
   }
 
