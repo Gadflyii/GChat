@@ -1,5 +1,42 @@
 # GInfer host UI
 
+## Conversation Rename keyboard — Gchat 3 native acceptance, October 18
+
+`GUI-THREAD-RENAME-KEYBOARD` passes its remaining native Linux leaf. Ordinary
+Enter on unchanged, trimmed-unchanged and whitespace-only titles left Rename
+disabled, the dialog open and saved thread bytes/mtime unchanged. A pointer
+click on disabled Rename also did not save. Valid Enter trimmed the new title;
+valid Rename-button input saved a second title. Both closed the dialog, updated
+the sidebar and private `thread.json`, and showed the success toast. Five Dark
+theme screenshots at 1200×800 app size were visually reviewed.
+
+The retained `ed68c7443` release AppDir ran on verified S1 `AIS-2-8592-L01`.
+Its `RenameThreadDialog.tsx`, `ThreadList.tsx` and `useThreads.ts` match allocated
+main `80424bb41` exactly. Source `c1ead69b2` merged as `8c83d852b`; the accepted
+nine focused cases and full verification were reused without rerun. One synthetic
+thread was seeded in private app data before launch, with no messages or model.
+Native pointer/keyboard drove the controls; WebKit only observed state. This
+observation does not requalify pending/error callbacks, Windows or an installer.
+No product source change, model/request, real user conversation, account or Host
+pairing action occurred. Initial observer focus loss was corrected by explicitly
+focusing and confirming each draft; those invalid later drafts were excluded.
+
+At 03:35Z the app also reloaded the final saved title from the byte-identical
+200-byte `thread.json`. Ancillary private app state was fresh after the first
+cleanup; this checks saved-thread rehydration, not a full profile restart.
+
+Result, concise summary, five screenshots and relevant state/storage receipts:
+`out/thread-rename-native-20261018/{result.json,summary.md}`. Owner worktree
+`/ai/gchat-worktrees/gchat3-thread-rename-native-20261018`, branch
+`test/gchat3-thread-rename-native-20261018`. The private S1 container, HOME,
+runtime/cache, keyring/D-Bus, Xvfb and inspector forward were removed after each
+run, last at 03:35Z; bookings 2923/2930 on CPU 120–127 were canceled, with no GPU
+or build. The exact owned root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-thread-rename-native-20261018` is absent
+(3.45 GB and 3.42 GB of disposable app data released). The retained read-only
+AppDir donor remains in place.
+Docs-only acceptance is recorded; merge is pending.
+
 ## Physical graphics-card inventory — C3, October 18
 
 `GUI-HARDWARE-IDENTICAL-CARDS-COLLAPSED`: the fresh private native main
