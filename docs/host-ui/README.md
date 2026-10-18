@@ -1,5 +1,36 @@
 # GInfer host UI
 
+## MCP duplicate-name protection — C3, October 18
+
+`GUI-MCP-DUPLICATE-NAME` passes Linux native acceptance. Original fix
+`42eb97903` (merge `373d706c7`) rejects a new connection whose trimmed name
+already exists before saving. Native Save with a different draft command
+shows the plain duplicate-name alert and retains the draft in Dark 1500×1000
+and Light 1024×800, including a name padded with spaces. Both inspected
+screenshots are readable without horizontal overflow. Cancel closes the draft
+and returns to the original inactive connection and its saved command/options.
+Baseline, post-rejection and final configuration bytes match. The private app
+initialized zero MCP servers; an inactive official Browser entry was added by
+the app before the baseline snapshot.
+
+The rejection handler, relevant fields/controls, route name list and save
+binding match retained native source `ed68c7443`. Current component, route and
+tests match C7's **11 focused PASS** and ONE `make verify` PASS: **3,459 app,
+127 extension, 1,275 native**, six coverage floors. This evidence-only branch
+reuses those gates and passes `git diff --check`.
+[Source binding](../../out/c3-mcp-duplicate-name-20261018/source-binding.json)
+and [result](../../out/c3-mcp-duplicate-name-20261018/result.json) retain the
+comparison, observations and two screenshots. Native input used XTest;
+the inspector only read state. No tool, account, model/GPU or Windows
+acceptance is claimed.
+
+Owned worktree `/ai/gchat-worktrees/c3-mcp-duplicate-name-20261018`, branch
+`docs/c3-mcp-duplicate-name-20261018`, base `bb194ff03`. Private S1 app/Host,
+keyring/D-Bus, Xvfb and observer stopped; owned SSD root
+`/media/ron/SSD_RAID/ai/tmp-c3-mcp-duplicate-name-20261018` removed.
+CPU96–103 booking3211 canceled; returned09:30Z. Donors unchanged, no hold.
+Only small evidence remains. Next: coordinator integration and row closure.
+
 ## MCP required-field guidance — C3, October 18
 
 `GUI-MCP-REQUIRED-FIELDS` passes Linux native acceptance. The merged fix

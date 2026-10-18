@@ -1,0 +1,39 @@
+{
+  "utc": "2026-10-18T09:28:50.736501+00:00",
+  "config": {
+    "mcpServers": {
+      "C3 saved calendar": {
+        "active": false,
+        "args": [
+          "saved"
+        ],
+        "command": "/c3-saved-not-executed",
+        "env": {
+          "C3_SEED": "saved"
+        }
+      },
+      "GChat Browser MCP": {
+        "active": false,
+        "args": [
+          "-y",
+          "search-mcp-server@latest"
+        ],
+        "command": "npx",
+        "env": {
+          "BRIDGE_HOST": "127.0.0.1",
+          "BRIDGE_PORT": "17389"
+        },
+        "official": true
+      }
+    },
+    "mcpSettings": {
+      "toolCallTimeoutSeconds": 30
+    }
+  },
+  "sha256": "ace6c9d57f4eaa7f4f6f74647ecb4f227bef49697e0563c48ef6fe87c6436652",
+  "binary_sha256": "9686d5434702648bf58fffbe6ee25c1038f1bc753d90e16fa95d867550785feb",
+  "pids": {
+    "xvfb": 622030,
+    "app": 622632
+  }
+}
