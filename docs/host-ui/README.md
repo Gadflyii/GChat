@@ -65,7 +65,7 @@ protected RC donor is unchanged. Only
 and [short summary](../../out/secure-storage-locked-guidance-20261018/test-summary.md)
 are retained. Merged as `73fac6573`; continue the next owned GUI row without
 repeating these accepted checks.
-## GPU memory reserve setting — verified, merge pending, C3, October 18
+## GPU memory reserve setting — merged, C3, October 18
 
 `KV-HEADROOM-USER-SETTING` delivers Ron’s per-launch setting in each Host’s
 model editor under Advanced: **GPU memory to keep free (MB)**. New custom
@@ -124,8 +124,10 @@ The app closed normally, private services stopped, and CPUs40–47 returned
 **18:32Z**. The owned 63 GiB S1 build/private-HOME fixture is retired; accepted
 RC packages, dependency donors and protected inputs remain intact. See
 `out/c3-gpu-memory-reserve-20261018/result.json`, `native-result.json`,
-`terminal-summary.json` and `reserve-default-300.png`. Next: push the verified
-branch for Bubbs’s merge, then release EngineHostModels.tsx to Gchat 3.
+`terminal-summary.json` and `reserve-default-300.png`. Source `26a0f4e97` merged
+as `e97f30aa0`; EngineHostModels.tsx and its rendered tests are released to
+Gchat 3. Continue the remaining owned GUI acceptance without repeating these
+checks.
 
 ## Check-again locked-vault recovery — verified, Gchat 3, October 18
 

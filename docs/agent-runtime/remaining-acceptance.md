@@ -4,6 +4,56 @@ Repository: `/ai/gchat`; subject: `docs/agent-runtime/`. The GInfer
 `docs/maintainer/open-work.md` is the sole issue-status authority. This record
 owns acceptance scope, preserved evidence and actual prerequisites.
 
+## Gbot credentials after abrupt Linux service loss — October 18, Codex 3
+
+The bounded Linux service-plus-desktop crash/relaunch leaf of
+`GCHAT-KEYRING-PROMPT-AT-LAUNCH` **passes**. Ordinary `dpkg -i` freshly installed
+accepted RC `3e32ad0c9` / Engine `b26ec5b8f` in a disposable S1 container. The
+owning native Gbot core/service, bootstrap/login/owner, credential storage,
+companion and service bridge match main `e97f30aa0`; the later page change only
+adds task-history retry feedback. Prior normal service restart and saved-Host
+desktop-crash receipts remain accepted, without repeated source or model gates.
+
+At **18:52:53Z**, only the private service and desktop received SIGKILL. No
+service survived. Persisted state and stale `gbot/service.json` discovery were
+left intact and remained byte-identical across loss. With the private login
+collection locked, same-data desktop relaunch and native Gbot navigation made
+**zero Secret Service calls** and left the collection locked. Explicit **Start
+Gbot service** opened an unlock prompt; D-Bus identified the relaunched desktop
+as caller. Native unlock retrieved the existing `login/1` item four times, with
+**zero CreateItem, SetSecret or Delete**, and connected the same persisted
+service UUID under a new service PID. The empty bot-name wizard was cancelled;
+no bot, task, schedule, account, model or VM was created.
+
+Normal **Quit Gbot service** stopped the service. Native window Close completed
+desktop cleanup at **18:54:16Z**, with no storage calls. This used private S1 SSD
+HOME, mode-700 runtime, D-Bus, keyring and X display; Ron's desktop/keyring and
+all GPUs were unused. Inspector access only observed the rendered page;
+ordinary native input performed every product action.
+
+Preparation correction: the initial synthetic keyring password included a
+trailing newline from stdin. Two native unlock attempts failed and delayed
+startup timed out. The private collection master password was corrected without
+changing its credential item, then ordinary Start connected. The entire
+crash/relaunch boundary above ran once from that corrected connected baseline;
+the earlier attempt is preparation evidence only. Future fixture setup must
+pass the intended password bytes without a trailing newline.
+
+Small result, summary, original receipts/header-only trace and viewed native
+screenshots are retained in
+[`out/c3-gbot-service-crash-keyring-20261018/`](../../out/c3-gbot-service-crash-keyring-20261018/)
+(`result.json`, `summary.md`). The owned container, private processes, inspector
+tunnel and S1 `tmp-c3-gbot-service-crash-keyring-20261018` fixture are retired;
+**returned18:55Z**. The protected accepted package remains at
+`/media/ron/SSD_RAID/ai/tmp-c3-linux-rc-20261018/packages/`.
+
+Evidence branch: `test/c3-gbot-service-crash-keyring-20261018`. Verification:
+`git diff --check`; no source changes or source gates. The parent remains OPEN
+for provider credentials, actual Gbot task recovery and native Windows. This
+does not qualify general crash or power-loss recovery. Next: coordinate those
+remaining acceptance prerequisites with Gchat 1 and Gchat 2; keep this service
+credential result accepted without repeating it.
+
 ## Saved Host credential after abrupt Linux desktop loss — October 18, Codex 3
 
 The bounded Linux saved-Host crash/relaunch leaf of
