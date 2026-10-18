@@ -979,7 +979,7 @@ it('offers setup guidance only after an authoritative empty service snapshot', a
   expect(screen.queryByText('Loading your bots…')).not.toBeInTheDocument()
 })
 
-it('shows a preparation failure without treating unknown bots as missing configuration', async () => {
+it('explains companion resource failure recovery without treating unknown bots as missing configuration', async () => {
   mocks.resources.ready = false
   let fail!: (error: string) => void
   mocks.call.mockImplementation(async (path: string) =>
@@ -1005,7 +1005,13 @@ it('shows a preparation failure without treating unknown bots as missing configu
     </>
   )
   await act(async () => fail(mocks.resources.error))
-  expect(screen.getByRole('alert')).toHaveTextContent(mocks.resources.error)
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Could not prepare the files Gbot needs.')
+  expect(alert).toHaveTextContent('Restart GChat')
+  expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute(
+    'open'
+  )
+  expect(within(alert).getByText(mocks.resources.error)).not.toBeVisible()
   expect(
     screen.getByRole('heading', { name: 'Gbot unavailable' })
   ).toBeInTheDocument()
@@ -1015,7 +1021,7 @@ it('shows a preparation failure without treating unknown bots as missing configu
   ).not.toBeInTheDocument()
 })
 
-it('preserves a known name and draft through pending preparation and failure', async () => {
+it('explains companion resource failure recovery while preserving a known name and draft', async () => {
   const view = render(
     <>
       <GbotAvatars />
@@ -1054,8 +1060,17 @@ it('preserves a known name and draft through pending preparation and failure', a
       <GbotCompanion />
     </>
   )
-  expect(screen.getByRole('alert')).toHaveTextContent(mocks.resources.error)
-  expect(screen.getByRole('alert')).toHaveTextContent('Restart GChat')
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Could not prepare the files Gbot needs.')
+  expect(alert).toHaveTextContent('Restart GChat')
+  expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute(
+    'open'
+  )
+  expect(within(alert).getByText(mocks.resources.error)).not.toBeVisible()
+  const requests = mocks.call.mock.calls.length
+  fireEvent.click(within(alert).getByText('Details'))
+  expect(within(alert).getByText(mocks.resources.error)).toBeVisible()
+  expect(mocks.call).toHaveBeenCalledTimes(requests)
   expect(
     screen.queryByRole('button', { name: 'Retry connection' })
   ).not.toBeInTheDocument()
@@ -1064,6 +1079,80 @@ it('preserves a known name and draft through pending preparation and failure', a
   expect(mocks.call).not.toHaveBeenCalledWith('tasks/start', expect.anything())
   expect(mocks.call).not.toHaveBeenCalledWith('view/open', expect.anything())
 })
+
+it.each([
+  ['first load', Error, false],
+  ['first load', String, false],
+  ['saved bot', Error, true],
+  ['saved bot', String, true],
+] as const)(
+  'explains companion service failure recovery on %s with %s diagnostics',
+  async (_stage, Failure, known) => {
+    const failure = new Failure('service endpoint rejected\nfixture diagnostic')
+    const read = vi.fn()
+    if (known) read.mockResolvedValueOnce(snapshot)
+    read.mockRejectedValueOnce(failure).mockResolvedValue(snapshot)
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) =>
+      path === 'state' ? read() : fallback(path, body)
+    )
+    if (known) {
+      await mount()
+      fireEvent.change(screen.getByRole('textbox', { name: 'Message bot' }), {
+        target: { value: 'Keep my unsent task' },
+      })
+      await act(async () => events.get('gbot-setup-update')?.())
+    } else {
+      render(
+        <>
+          <GbotAvatars />
+          <GbotCompanion />
+        </>
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Open Gbot companion' }))
+    }
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Could not connect to the Gbot service.')
+    expect(alert).toHaveTextContent('Choose Retry connection to try again')
+    expect(
+      within(alert).getByRole('link', { name: 'Open Gbot settings' })
+    ).toHaveAttribute('href', '/gbot/')
+    const details = within(alert).getByText('Details').closest('details')!
+    expect(details).not.toHaveAttribute('open')
+    expect(details.querySelector('p')).toHaveTextContent(
+      String(failure).replace(/\s+/g, ' ')
+    )
+    expect(details.querySelector('p')).not.toBeVisible()
+    if (known) {
+      expect(screen.getByRole('heading', { name: 'Atlas' })).toBeVisible()
+      expect(screen.getByRole('textbox', { name: 'Message bot' })).toHaveValue(
+        'Keep my unsent task'
+      )
+      expect(
+        screen.getByRole('button', { name: 'Send', exact: true })
+      ).toBeDisabled()
+    }
+    const reads = read.mock.calls.length
+    const requests = mocks.call.mock.calls.length
+    fireEvent.click(within(alert).getByText('Details'))
+    expect(details.querySelector('p')).toBeVisible()
+    expect(read).toHaveBeenCalledTimes(reads)
+    expect(mocks.call).toHaveBeenCalledTimes(requests)
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry connection' }))
+    await waitFor(() => expect(useGbotCompanion.getState().available).toBe(true))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(read).toHaveBeenCalledTimes(reads + 1)
+    expect(screen.getByRole('heading', { name: 'Atlas' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Message bot' })).toHaveValue(
+      known ? 'Keep my unsent task' : ''
+    )
+    expect(
+      mocks.call.mock.calls.every(([path]) =>
+        ['state', 'tasks', 'tasks/approvals'].includes(path)
+      )
+    ).toBe(true)
+  }
+)
 
 it('ends page sharing when switching bots or hiding the pane', async () => {
   await mount()

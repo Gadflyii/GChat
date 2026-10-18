@@ -1,5 +1,21 @@
 # Gbot design
 
+## Recovering a companion connection failure — Gchat 2
+
+`GBOT-COMPANION-SERVICE-ERROR-GUIDANCE`, based on main `e5d0f3c38`,
+explains a companion service failure beside Retry connection and an Open Gbot
+settings link. Resource preparation failures instead name Restart GChat.
+Diagnostics remain available in initially closed Details. Previously, these
+alerts showed the diagnostic directly without naming recovery for the service.
+
+Rendered journeys cover first load and a saved bot, both Error and native
+string diagnostics, explicit retry, and retained bot name and unsent draft.
+Opening Details sends no request. Existing resource preparation journeys also
+check restart guidance. This is source/rendered mocked-service scope, with no
+native, account, model or VM acceptance.
+
+Validation pending focused checks and ONE `make verify`.
+
 ## Recovering a failed Microsoft sign-in result — Gchat 2
 
 `GBOT-M365-SIGNIN-RESULT-GUIDANCE`, based on main `9aeec47dc`, names

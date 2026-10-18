@@ -393,17 +393,32 @@ export default function GbotCompanion() {
       )}
       {connectionError && (
         <div role="alert" className="space-y-2 border-b p-4 text-sm">
-          <p>{connectionError}</p>
-          {resources.error ? (
-            <p>Restart GChat to try resource preparation again.</p>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void state.refresh()}
-            >
-              Retry connection
-            </Button>
+          <p>
+            {resources.error
+              ? 'Could not prepare the files Gbot needs. Restart GChat to try resource preparation again.'
+              : 'Could not connect to the Gbot service. Choose Retry connection to try again, or open Gbot settings to check the service.'}
+          </p>
+          <details className="text-muted-foreground">
+            <summary className="cursor-pointer">Details</summary>
+            <p className="whitespace-pre-wrap break-words">{connectionError}</p>
+          </details>
+          {!resources.error && (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void state.refresh()}
+              >
+                Retry connection
+              </Button>
+              <Link
+                to={route.gbot.index}
+                onClick={hide}
+                className="text-primary underline"
+              >
+                Open Gbot settings
+              </Link>
+            </div>
           )}
         </div>
       )}
