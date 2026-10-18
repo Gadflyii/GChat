@@ -121,7 +121,7 @@ errors after window hiding remain visible and the user can retry.
 Owner/inventory: `/ai/gchat-worktrees/c3-reset-stale-host-connection-20261018`,
 branch `fix/c3-reset-stale-host-connection-20261018`, baseline `04866d698`.
 Evidence is `out/c3-reset-stale-host-connection-20261018/`. Source
-`63f9e8a49` is pushed. Arch signed the registry lifecycle (`7007c37fd`)
+`63f9e8a49` merged through `4514dfc73`. Arch signed the registry lifecycle (`7007c37fd`)
 at06:26Z and window recovery at06:34Z. Focused Host regressions pass4;
 reset cases pass9 with one existing live-GPU ignore. Library check/Clippy
 and lint pass. ONE make verify passes:3,406 app tests (six skipped),127
@@ -149,9 +149,12 @@ No GPU/model/profile or real account/remote enrollment was run. All private
 native processes stopped and CPUs64–71 returned07:01Z (build CPUs80–87
 returned06:47Z). Inactive independent source/build/cache copies under
 `/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018` were retired
-(31.82GB logical bytes). The tested candidate and required stopped resources
-under `tmp-c3-first-user-setup-20261018` remain only until source merge, then
-retire. Next: Bubbs merges the signed branch; C3 retires those owned copies.
+(31.82GB logical bytes). After merge, both literal owned S1 roots were retired
+at07:06Z, removing another21.68GB logical bytes and eight exited C3 containers.
+The tested candidate, private profiles, release and copied resources are gone;
+small failure/native logs and screenshots remain with `final-retirement.json`.
+External donors and model inputs are unchanged. No job or resource loan remains.
+Next: the separate support-link row awaits Ron's destination decision.
 
 ## Gbot task-control failure recovery — October 18
 
