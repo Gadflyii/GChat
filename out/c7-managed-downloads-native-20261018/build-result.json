@@ -1,0 +1,197 @@
+{
+  "source": "71abf17084c8bbea0eb40da94cb5cfccb8e771f1",
+  "host": "AIS-2-8592-L01",
+  "status": "BUILD_AND_GATES_PASS_NATIVE_ACCEPTANCE_PENDING",
+  "booking": {
+    "line": 3081,
+    "cpus": "104-111"
+  },
+  "root": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018",
+  "source_stage": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/gchat",
+  "cache_donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app",
+  "independent_copies": true,
+  "donor_mutated": false,
+  "manifest_comparison": {
+    "compared": 35,
+    "mismatches": [
+      {
+        "path": "src-tauri/Cargo.toml",
+        "current": "44ea3465bba6669f457e93759fc43dfe2efb4f228c607b209a8c99a07b2e1293",
+        "donor": "9c7223b0c2069f5df6d6914d3394bf3282aeb3aabe64a15d87c570112866473c"
+      }
+    ]
+  },
+  "stages": {
+    "core-assets": {
+      "exit": 0,
+      "start": "2026-10-18T06:18:58Z",
+      "end": "2026-10-18T06:19:00Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/core-assets.log"
+    },
+    "extensions-assets": {
+      "exit": 0,
+      "start": "2026-10-18T06:27:32Z",
+      "end": "2026-10-18T06:27:35Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/extensions-assets.log"
+    },
+    "focused-frontend": {
+      "exit": 0,
+      "start": "2026-10-18T06:19:00Z",
+      "end": "2026-10-18T06:19:02Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/focused-frontend.log"
+    },
+    "focused-host": {
+      "exit": 0,
+      "start": "2026-10-18T06:19:02Z",
+      "end": "2026-10-18T06:19:39Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/focused-host.log"
+    },
+    "frontend-build": {
+      "exit": 0,
+      "start": "2026-10-18T06:27:36Z",
+      "end": "2026-10-18T06:28:22Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/frontend-build.log"
+    },
+    "host-check": {
+      "exit": 0,
+      "start": "2026-10-18T06:19:39Z",
+      "end": "2026-10-18T06:19:53Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/host-check.log"
+    },
+    "host-clippy": {
+      "exit": 0,
+      "start": "2026-10-18T06:19:53Z",
+      "end": "2026-10-18T06:20:06Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/host-clippy.log"
+    },
+    "native-app": {
+      "exit": 0,
+      "start": "2026-10-18T06:28:23Z",
+      "end": "2026-10-18T06:29:18Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/native-app.log"
+    },
+    "native-host": {
+      "exit": 0,
+      "start": "2026-10-18T06:28:22Z",
+      "end": "2026-10-18T06:28:22Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/native-host.log"
+    },
+    "tauri-assets": {
+      "exit": 0,
+      "start": "2026-10-18T06:27:35Z",
+      "end": "2026-10-18T06:27:36Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/tauri-assets.log"
+    },
+    "verify": {
+      "exit": 0,
+      "start": "2026-10-18T06:20:06Z",
+      "end": "2026-10-18T06:27:32Z",
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/verify.log"
+    }
+  },
+  "focused_counts": {
+    "frontend": 47,
+    "host_model_downloads": 33
+  },
+  "verify_summary": [
+    "Test Files  339 passed | 1 skipped (340)",
+    "Tests  3409 passed | 6 skipped (3415)",
+    "Test Files  5 passed (5)",
+    "Tests  127 passed (127)",
+    "test result: ok. 762 passed; 0 failed; 8 ignored; 0 measured; 0 filtered out; finished in 32.33s",
+    "test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.54s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 260 passed; 0 failed; 13 ignored; 0 measured; 0 filtered out; finished in 17.27s",
+    "test result: ok. 8 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 4.73s",
+    "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.28s",
+    "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.74s",
+    "test result: ok. 0 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s",
+    "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 103 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.66s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s",
+    "test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.00s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+    "test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.63s",
+    "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+  ],
+  "frontend_command": [
+    "env",
+    "NODE_ENV=development",
+    "IS_TAURI=true",
+    "TAURI_ENV_PLATFORM=linux",
+    "VITE_MODEL_CATALOG_URL=http://192.168.1.109:18761/catalog.json",
+    "yarn",
+    "build:web"
+  ],
+  "frontend_dev_admission": "import.meta.env.DEV true through NODE_ENV=development; compiled LAN catalog URL present",
+  "native_host_command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--offline",
+    "--manifest-path",
+    "src-tauri/Cargo.toml",
+    "-p",
+    "ginfer-host",
+    "--bin",
+    "ginfer-host"
+  ],
+  "native_app_command": [
+    "cargo",
+    "build",
+    "--locked",
+    "--offline",
+    "--manifest-path",
+    "src-tauri/Cargo.toml",
+    "-p",
+    "gchat",
+    "--bin",
+    "gchat"
+  ],
+  "native_custom_protocol": "default features include tauri/custom-protocol; embedded web-app/dist, no devURL override",
+  "launch_catalog_env": "GINFER_MODEL_CATALOG_URL=http://192.168.1.109:18761/catalog.json",
+  "staged_appdir": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir",
+  "binaries": {
+    "gchat": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir/usr/bin/gchat",
+      "bytes": 257453008,
+      "mtime": "2026-10-18T06:29:18.667545+00:00"
+    },
+    "ginfer-host": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir/usr/lib/GChat/resources/bin/ginfer-host",
+      "bytes": 56671368,
+      "mtime": "2026-10-18T06:19:28.278661+00:00"
+    }
+  },
+  "ldd": {
+    "gchat": {
+      "exit": 0,
+      "unresolved": []
+    },
+    "ginfer-host": {
+      "exit": 0,
+      "unresolved": []
+    }
+  },
+  "wrapper_pid": 3589199,
+  "wrapper_exit": 0,
+  "wrapper_terminal": "2026-10-18T06:29:19Z",
+  "staged_at": "2026-10-18T06:30:10.417140+00:00",
+  "scope": "Build/test/stage only. No app/server/model launch, GPU use, host install, dependency download, source edits or commit.",
+  "terminal_check": {
+    "at": "2026-10-18T06:30:28.797676+00:00",
+    "wrapper_process": "absent",
+    "container": "absent",
+    "container_all_children": "terminated with rm container",
+    "owned_build_writers": "none; build/stage helpers returned",
+    "cache_status": "inactive independent copies available for read-only handoff"
+  }
+}

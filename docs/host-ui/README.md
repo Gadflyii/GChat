@@ -1,5 +1,51 @@
 # GInfer host UI
 
+## Saved model settings editor completion — Gchat 3, October 18
+
+`GUI-HOST-MODEL-EDITOR-SAVE-RESULT-20261018`: after an accepted Save-and-restart,
+the editor keeps the old session ID and remains open. A second save sends that
+old ID even though the native Host correctly created a replacement session.
+Close the completed editor and clear its editing identity/session after an
+accepted save, including when only the following host-list read fails. A new
+Edit captures the current profile and session. A rejected save or canceled
+confirmation must retain the editor and draft for deliberate correction/retry.
+
+Acceptance: reproduce the completed-editor failure on base `2c9b06ba4`; rendered
+success/read-failure/reopen and rejection/cancellation coverage; pending actions
+cannot repeat the save. Focused tests, lint and ONE `make verify`. Preserve
+native stale-session checks, launch settings and Engine behavior. No installed
+GUI, real model, GPU or Windows qualification.
+
+Owner `/ai/gchat-worktrees/gchat3-host-model-editor-save-result-20261018`, branch
+`fix/gchat3-host-model-editor-save-result-20261018`. Source inspection confirmed
+the stale `editingSession` in `EngineHostModels.tsx` and native replacement/
+conflict semantics in `ginfer-host/src/service.rs`. The focused repair now
+awaits the accepted save before clearing the editing identity/session and
+closing the editor. Two rendered regressions cover replacement-session reuse,
+failed subsequent reads, cancellation/rejection and explicit retry. Source
+and tests are frozen for baseline reproduction and candidate verification.
+Private S1 test root
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-model-editor-tests-20261018` is prepared:
+35 dependency inputs match the retained offline recipe; preparation booking
+3086 returned06:27Z. The coordinator reviewed the effective baseline/candidate
+commands, including shell quoting, isolated cache paths, pinned image and the
+focused/lint/ONE-verify stages. Baseline execution started06:28Z under booking
+3087, CPUs120–127 through06:48Z, socket1 shared compile lock, nice10/max8 jobs.
+The baseline with only the frozen test failed both new cases at the accepted
+save leaving the editor open (48 existing tests skipped). All 50 fixed-source
+component tests pass; lint passes with five existing warnings and no errors.
+ONE `make verify` passed typecheck, quality checks, 3,414 app tests (six skipped),
+127 extension tests and all six coverage floors. All 1,266 native tests pass
+(28 ignored, 23 summaries); the single full gate exited 0 at06:37Z without OOM.
+The coordinator reviewed the terminal raw results and confirmed both frozen
+source hashes still match. CPUs returned06:38Z and booking3087 was canceled.
+Owned-fixture cleanup completed06:39Z: removed the 42.33 GB SSD fixture, two
+terminal containers and 286.09 MB of local disposable inputs/raw output.
+The read-only RC donor remains intact. The source fix is ready for merge review.
+Use independent copies of the inactive RC donor; retain only
+`out/host-model-editor-save-result-20261018/test-result.json` and adjacent
+summary after cleanup. No installed or Windows acceptance is claimed.
+
 ## Host model controls and host-list read feedback — Gchat 3, October 18
 
 `GUI-HOST-MODEL-CONTROL-RESULT-20261018`: the shared action handler discarded
@@ -44,8 +90,8 @@ passed. Frozen source/test hashes match before and after verification. The
 coordinator reviewed the raw results, including the original failure. S1 CPUs
 returned06:20Z and booking3077 was canceled. The owned 42.33GB S1 fixture,
 three terminal containers and 286MB disposable local archive/raw files were
-removed after review; only the concise result and summary remain. Ready for
-reviewed merge. The inactive RC source/node/cargo/debug donor was separately
+removed after review; only the concise result and summary remain. Fix
+`a346be937` merged as `2c9b06ba4`. The inactive RC source/node/cargo/debug donor was separately
 granted to C7 for independent read-copy and is retained unchanged.
 
 ## Gbot task-control failure recovery — October 18
@@ -1189,6 +1235,93 @@ three exited containers were removed at 03:59:59Z, releasing 42.31 GB; the
 280 MB disposable source archive was also removed. Read-only donors remain.
 CPU 88–95 booking 2944 was canceled; returned 04:00Z. Next: reviewed branch
 integration; no further test run is required.
+## Shared private development catalog and Downloads native acceptance
+
+Bubbs authorized one shared read-only S1 LAN fixture on October 18 for
+`GUI-DOWNLOADS-POPOVER-MANAGED` and the other development lanes. It is generated
+from `/mnt/nas/AltaStratusAI/GInfer/artifacts/release-waves/v1`, using recorded
+package SHA-256 values and existing launch profiles. Only packages with matching
+profiles are offered; this fixture adds no model or hardware qualification.
+No package is copied, repacked or published. The public release-catalog gate
+and production download admission remain unchanged.
+
+The development-only private-catalog route in `71abf1708` extends its
+configured literal IPv4 origin from loopback to
+RFC1918 LAN addresses. Frontend development mode and a debug Host must both be
+used. Catalog and `.ginfer` URLs use the same explicit origin, with no credentials,
+query or fragment; Host private requests use neither proxies nor redirects.
+Full size, hash, identity, launch-profile and hardware checks remain in force.
+The fixture must never be uploaded or configured in a release build.
+
+The shared URL is **`http://192.168.1.109:18761/catalog.json`**, live since
+06:18 UTC on October 18. Its durable S1 root is
+`/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1`, separate from disposable
+lane builds. It offers seven packages and 112 unchanged profiles: 107
+full-context-tested, four calculated-startup-smoke and one screened-startup;
+166 pending profiles are omitted. Packages are explicit symlinks into the NAS
+wave. The service binds only S1's LAN address, permits GET/HEAD on the catalog
+and selected package names, supports byte ranges, and limits each transfer to
+8 MiB/s. Directory/internal routes return 404 and writes are unsupported.
+Catalog and a 16-byte package range passed from both S1 and another LAN host.
+The catalog route also accepts the existing loader's numeric `t` cache-buster;
+other query keys and package queries return 404.
+Bubbs received the live URL for reuse by the other lanes.
+
+For a development frontend, set
+`VITE_MODEL_CATALOG_URL=http://192.168.1.109:18761/catalog.json` when building
+or starting Vite. A packaged development frontend also needs
+`NODE_ENV=development`; `vite build --mode development` alone does not make
+`import.meta.env.DEV` true. Use a debug `ginfer-host` and set
+`GINFER_MODEL_CATALOG_URL=http://192.168.1.109:18761/catalog.json` in its runtime
+environment. GChat's child Host inherits that environment. Both sides must use
+the same origin and include the transport change above. Keep each lane's HOME,
+XDG directories, D-Bus, keyring and model download directory private. Do not set
+these values in release build settings.
+
+C7 owns the shared service, intentionally retained for the other lanes. Its
+PID is recorded in `service.pid` under the durable root (PID 3708693 at acceptance);
+output is `service.log`. Restart only after confirming that process is gone:
+`nohup python3 /media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1/srv.py >service.log 2>&1 &`
+from the durable root, then record the new PID. Stop only that verified PID
+when the shared fixture is retired. Do not regenerate or replace the fixture
+during another lane's transfer. Definition and generation/service receipts are
+in `out/c7-managed-downloads-native-20261018/shared-fixture/`.
+
+Focused frontend checks (47), Host download checks (33), Host check and strict
+all-target Clippy passed. ONE `make verify` passed: 3,409 web/core tests,
+127 extension tests and 1,267 Rust tests (28 ignored). The development frontend,
+current extensions and debug desktop/Host builds passed. The release profile
+explicitly sets `debug-assertions = false`; no release profile override enables
+it. Arch accepted the development transport at 06:15 UTC, confirmed at 06:29.
+Both requested actual `--release` checks passed, one test each: the private
+catalog URL is rejected, and private package URLs are rejected even when a
+catalog argument is supplied. The latter test exists only without debug
+assertions, so its execution also confirms the effective release configuration.
+
+Native acceptance passed in an isolated Linux desktop session: Models started
+a real Muse Glimmer INT transfer from the shared NAS fixture, and the sidebar
+popover showed 107 MiB of progress. Native Pause retained 155,975,468 bytes;
+both Models and the popover showed Paused. Native Delete partial download
+showed its confirmation, then removed the partial file and Host journal entry;
+Models and the popover returned to their empty states. The package SHA-256 is
+`46b5d54ee64ccd278f2a1a4d2c6d5aa9fc9097e8db0c3d165179aee5f2cb5b66`.
+This checks partial-transfer UI behavior; no model load, completed-package
+validation or GPU inference was performed. Screenshots and concise receipts
+are in `out/c7-managed-downloads-native-20261018/native/`; verification and
+release receipts are beside them.
+
+Owner C7, branch `test/c7-managed-downloads-native-20261018`, worktree
+`/ai/gchat-worktrees/c7-managed-downloads-native-20261018`; current baseline is
+main `96172afb5`, normally merged as `dc67f5df7`. The tested source is
+`71abf1708`. The native app, Host and private display/session processes stopped
+by verified PID; CPUs 88–95 returned 06:39Z. The disposable private HOME,
+4.1 GB AppDir and Xvfb closure were removed. Codex 4 completed an independent
+read-copy of the debug Host at 06:36Z, so it holds no donor. The shared service
+and NAS inputs remain available. After retaining the release receipts, the
+entire 33.06 GB build scratch was removed; CPUs 104–111 returned 06:39Z.
+No large binary or model is kept as evidence.
+
+
 ## Downloads popover transfer status — C3, October 18
 
 `GUI-DOWNLOADS-POPOVER-STATUS` is fixed and merge-ready. The private native

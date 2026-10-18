@@ -1,0 +1,42 @@
+{
+  "source": "71abf17084c8bbea0eb40da94cb5cfccb8e771f1",
+  "host": "AIS-2-8592-L01",
+  "catalog": "http://192.168.1.109:18761/catalog.json",
+  "status": "PASS",
+  "native_interaction": "Xvfb X11; xdotool pointer and keyboard only; inspector read-only DOM and screenshots",
+  "private_fixture": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/native-home",
+  "model": {
+    "name": "Muse Glimmer 30B INT DFlash2",
+    "sha256": "46b5d54ee64ccd278f2a1a4d2c6d5aa9fc9097e8db0c3d165179aee5f2cb5b66",
+    "total_bytes": 19776776704
+  },
+  "observations": [
+    {
+      "state": "downloading",
+      "displayed": "107 MiB / 18.4 GiB; 1%; 8.0 MiB/s",
+      "screenshot": "downloading-popover.png"
+    },
+    {
+      "state": "paused",
+      "received_bytes": 155975468,
+      "partial_file_bytes": 155975468,
+      "popover": "Paused; resume to continue",
+      "screenshot": "paused-popover.png"
+    },
+    {
+      "state": "delete_confirmation",
+      "screenshot": "delete-confirmation.png"
+    },
+    {
+      "state": "deleted",
+      "host_jobs": {},
+      "partial_files": [],
+      "popover": "Your download progress will appear here",
+      "screenshot": "empty-popover.png"
+    }
+  ],
+  "scope": "Real partial NAS-backed transfer, pause and discard. No completed-model integrity/qualification claim, load or GPU inference.",
+  "terminal": "returned 06:39Z; native app, Host, Xvfb and private session stopped by verified exact PID; shared catalog retained",
+  "host_read_copy": "Codex4 independent copy terminal06:36Z; no donor hold",
+  "cleanup": "Private HOME, AppDir, Xvfb closure and full S1 build scratch removed after retaining small evidence; shared service remains."
+}

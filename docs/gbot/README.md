@@ -1,5 +1,35 @@
 # Gbot design
 
+## Recover control failure guidance — Gchat 2
+
+`GBOT-RECOVERY-INLINE-ERRORS`, based on main `e097635db`, fixes failed
+**Confirm recovery** requests. A plain error now stays beside the confirmation,
+with diagnostic Details closed until requested. The message belongs to the
+original service, desktop session and previous owner. Refreshing status does
+not retry recovery; an explicit retry or Cancel recovery clears the message.
+
+A synchronous guard prevents repeated confirmation clicks from sending more
+than one request and holds through the status refresh. The service still
+validates the session and previous owner. Recovery leaves the bot paused;
+Hand back and Resume setup remain separate explicit actions.
+
+Both new rendered cases fail on unchanged main because rapid confirmations
+send two requests (90 tests filtered). All 92 settings tests pass with the
+fix, covering Error and native string rejection, closed Details, cancellation,
+real task updates, service/bot/session/previous-owner isolation, explicit retry
+and the pending status refresh. One Linux/S1 `make verify` passes on 18 October,
+06:36:39–06:44:25 UTC: 3,418 app, 127 extension and 1,266 Rust tests pass;
+six app tests are skipped and 28 Rust tests ignored. Lint, type checking,
+quality guards and all six coverage floors pass. Source, test and documentation
+hashes match before and after the gate; this final receipt was added afterward.
+Evidence:
+`out/gchat2-recovery-inline-errors-20261018/{result.json,SUMMARY.md}`.
+This change is checked with inert service failures. FRESH and OLD remain off
+with original XML and Gchat 2 custody; native Windows and live recovery are
+unqualified by this leaf. The private S1 build/cache was removed, the shared
+donor preserved, and CPUs 96–103 returned at 06:44 UTC; booking 3091 canceled.
+Next: bubbs merges the fix and its evidence.
+
 ## Computer connection recovery — Gchat 2
 
 `GBOT-CONNECTION-INLINE-ERRORS`, based on main `a74a3af54`, fixes

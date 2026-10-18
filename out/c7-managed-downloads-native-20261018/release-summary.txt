@@ -1,0 +1,6 @@
+PASS exact71ab release package + catalog rejection.
+Each requested cargo test --release --locked --offline -p ginfer-host --lib filter executed 1 test, passed, failed0.
+Profile debug-assertions=false; first test cfg(not(debug_assertions)) executed. No overrides; optimized rustc invocation retained.
+Terminal 2026-10-18T06:37:35.225054+00:00; wrapper PID3711751 absent; Docker absent; checked 2026-10-18T06:39:37.280247+00:00.
+Only release-only cache removed: /media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/native-target/release (510504960 bytes). Debug AppDir/Host/cache/source untouched.
+Commands/tests/config/cleanup: release-result.json, release-effective-config.json, release-command.json, release-rustc-invocation.json; logs retained.

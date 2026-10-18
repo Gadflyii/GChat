@@ -1,0 +1,52 @@
+{
+  "source": "/media/ron/SSD_RAID/ai/tmp-c7-managed-downloads-native-20261018/donor-appdir/usr/lib/GChat/resources/bin/launch-profiles.json",
+  "source_appdir_revision": "d0a8d06bf",
+  "source_bytes": 364548,
+  "source_sha256": "1eafbd0b510bd6cb9ba6f754af885fb2005d06f333b01d81f13faa42ccad862d",
+  "schema": "ginfer-launch-profiles-v1",
+  "profiles": [
+    {
+      "artifact_bytes": 70247086080,
+      "artifact_sha256": "8bbb85bf6ba669157045bac0a6fdd623dd87694b7b1fe09b7f2150fc3636ab08",
+      "compute_capability": "12.0",
+      "concurrency": 8,
+      "draft_tp": 0,
+      "gpu_name": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition",
+      "id": "rtx-pro6000-flash-next-smol-q2g64-tp1-c8-128k-int8-screened",
+      "identity": {
+        "model_id": "qwen3.8-flash-next",
+        "weights_id": "smol-q2g64"
+      },
+      "max_context": 131072,
+      "min_memory_mib_per_gpu": 97887,
+      "name": "Flash Next pure 2-bit \u00b7 128K context \u00b7 8 requests \u00b7 INT8 KV \u00b7 screened",
+      "options": {
+        "draft_policy": "fixed",
+        "draft_tokens": 3,
+        "draft_tp": 0,
+        "host_kv_cache_bytes": null,
+        "kv_arena_bytes": null,
+        "kv_arena_headroom_bytes": 1073741824,
+        "kv_dtype": "int8",
+        "no_cuda_graph": false,
+        "prefill_chunk": 0,
+        "progressive_ready": false,
+        "spec": "mtp",
+        "structured_outputs": true,
+        "vision": false,
+        "vram_budget_bytes": null
+      },
+      "platform": "linux",
+      "qualification": {
+        "engine_revision": "7b9938747b6eaac17f758c0b959343f1f4f0f1d4",
+        "evidence": "bench/reports/flash-eager-headroom-20261015/pro6000/graph/{C8.json,command.json,startup-receipt.txt,requests.jsonl,weather-nvml-after.json}; matrix row pm-v2-20261015-caaddfaa2f53831e. Screened, not full-context qualified: TP1, context131072, C8, INT8 KV, fixed MTP3, structured ON, Vision OFF, graphs/prefix/LFU enabled; 2048-token prompts and 500-token outputs, concurrent eight-request short wave, Ready31.844s and normal exit0. Recorded free bytes are the measured startup low-water mark, not a full-context workload margin. Dynamic automatic KV; bootstrap arena is not a full-context capacity estimate. C8 used eager wide verification despite graphs being enabled; no all-graph or throughput claim. Greedy sampling in the witness is a request setting, not imposed by this launch profile. Full-context/current-release qualification remains Ron release gate OI-072; no claim for context262144 or a changed Engine.",
+        "free_bytes_per_gpu": 18581880832,
+        "full_context_requests": 0,
+        "smoke_requests": 8,
+        "tier": "screened-startup"
+      },
+      "tp": 1,
+      "vram_tier_gib": 96
+    }
+  ]
+}
