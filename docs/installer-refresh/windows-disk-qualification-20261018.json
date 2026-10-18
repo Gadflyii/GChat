@@ -1,0 +1,318 @@
+{
+  "row": "GCHAT-WINDOWS-FASTEST-DISK-20261016",
+  "result": "PASS for existing C:/D:/E: separate-drive scope authorized by Bubbs at 11:12Z",
+  "native_run": {
+    "host": "RON-9950X3D2",
+    "started_at": "2026-10-18T11:48:15.2623885Z",
+    "engine_commit": "b76ce57a3cc4823f127a1ce718da454ef1f3510f",
+    "donor_profile": "C:\\Users\\Ron\\AppData\\Local\\GInfer\\c6-windows-gate-20261016\\ensure-current-full.json",
+    "archive": "E:\\gchat3-windows-multiarch-20261017\\accepted\\runtimes\\ginfer-windows-x64-sm120a.zip",
+    "model": "C:\\Users\\Ron\\AppData\\Local\\GInfer\\release-1003\\artifacts\\qwen38_27b_nvfp4_dflash2_nvfp4.ginfer",
+    "stage": "terminal",
+    "model_before": {
+      "length": 21767307520,
+      "last_write_time_utc": "2026-10-05T03:44:31.3633909Z",
+      "creation_time_utc": "2026-10-05T03:43:48.8288270Z"
+    },
+    "model_after": {
+      "length": 21767307520,
+      "last_write_time_utc": "2026-10-05T03:44:31.3633909Z",
+      "creation_time_utc": "2026-10-05T03:43:48.8288270Z"
+    },
+    "probe_paths_before": [
+      "D:\\.ginfer-hardware-50972-203774750"
+    ],
+    "probe_paths_after": [
+      "D:\\.ginfer-hardware-50972-203774750"
+    ],
+    "native_exit_code": 0,
+    "native_elapsed_seconds": 24.6534858,
+    "error": null,
+    "finished_at": "2026-10-18T11:48:44.0831393Z",
+    "runtime_removed": true
+  },
+  "command": [
+    "E:\\gchat7-windows-fastest-disk-20261018\\runtime\\bin\\ginfer.exe",
+    "profile-hardware",
+    "--disk-only",
+    "--model",
+    "C:\\Users\\Ron\\AppData\\Local\\GInfer\\release-1003\\artifacts\\qwen38_27b_nvfp4_dflash2_nvfp4.ginfer",
+    "--hardware-profile",
+    "E:\\gchat7-windows-fastest-disk-20261018\\evidence\\profile.json",
+    "--json"
+  ],
+  "checks": {
+    "native_exit_zero": true,
+    "volumes_C_D_E": true,
+    "distinct_volume_guids": true,
+    "distinct_physical_drives": true,
+    "all_rates_positive_and_measured": true,
+    "all_direct_io": true,
+    "one_GiB_per_physical_drive": true,
+    "calibration_fields_unchanged": true,
+    "non_disk_sources_unchanged": true,
+    "non_disk_warning_content_unchanged": true,
+    "donor_profile_byte_identical": true,
+    "model_size_and_times_unchanged": true,
+    "no_new_probe_paths": true,
+    "extracted_runtime_removed": true
+  },
+  "disks": [
+    {
+      "capability_source": "owned model-file source on \\\\?\\Volume{1171015c-b172-4201-9e3f-cb860a51a31e}\\/PhysicalDrive0",
+      "direct_io": true,
+      "filesystem_id": "\\\\?\\Volume{1171015c-b172-4201-9e3f-cb860a51a31e}\\",
+      "filesystem_uuid": "\\\\?\\Volume{1171015c-b172-4201-9e3f-cb860a51a31e}\\",
+      "free_bytes": 897939808256,
+      "id": "PhysicalDrive0",
+      "model": "Samsung SSD 9100 PRO 4TB",
+      "mount_path": "C:\\",
+      "path": "C:\\Users\\Ron\\AppData\\Local\\GInfer\\release-1003\\artifacts",
+      "pcie_generation": null,
+      "pcie_width": null,
+      "random_read_4k": {
+        "bytes": 268435456,
+        "operations": 65536,
+        "reason": "",
+        "seconds": 5.4478109,
+        "status": "measured",
+        "value": 49274003.98571103
+      },
+      "random_read_supported": true,
+      "read_bytes": 1073741824,
+      "read_source": "model-file",
+      "sequential_read": {
+        "bytes": 805306368,
+        "operations": 192,
+        "reason": "",
+        "seconds": 0.0915919,
+        "status": "measured",
+        "value": 8792331723.656786
+      },
+      "sequential_read_supported": true,
+      "serial": "0025_38A3_5140_AB6B.",
+      "type": "nvme"
+    },
+    {
+      "capability_source": "owned volume-probe source on \\\\?\\Volume{57d701e8-0fc4-4e4f-a0d4-b9034609b2f6}\\/PhysicalDrive3",
+      "direct_io": true,
+      "filesystem_id": "\\\\?\\Volume{57d701e8-0fc4-4e4f-a0d4-b9034609b2f6}\\",
+      "filesystem_uuid": "\\\\?\\Volume{57d701e8-0fc4-4e4f-a0d4-b9034609b2f6}\\",
+      "free_bytes": 991117799424,
+      "id": "PhysicalDrive3",
+      "model": "Samsung SSD 850",
+      "mount_path": "D:\\",
+      "path": "D:\\",
+      "pcie_generation": null,
+      "pcie_width": null,
+      "random_read_4k": {
+        "bytes": 268435456,
+        "operations": 65536,
+        "reason": "",
+        "seconds": 7.1409679,
+        "status": "measured",
+        "value": 37590906.4091998
+      },
+      "random_read_supported": true,
+      "read_bytes": 1073741824,
+      "read_source": "cache-probe",
+      "sequential_read": {
+        "bytes": 805306368,
+        "operations": 192,
+        "reason": "",
+        "seconds": 1.6127197,
+        "status": "measured",
+        "value": 499346766.8312107
+      },
+      "sequential_read_supported": true,
+      "serial": "S3PJNF0J915900D",
+      "type": "ssd"
+    },
+    {
+      "capability_source": "owned volume-probe source on \\\\?\\Volume{d67edbdd-2e23-4f7b-9272-0e81862434ab}\\/PhysicalDrive4",
+      "direct_io": true,
+      "filesystem_id": "\\\\?\\Volume{d67edbdd-2e23-4f7b-9272-0e81862434ab}\\",
+      "filesystem_uuid": "\\\\?\\Volume{d67edbdd-2e23-4f7b-9272-0e81862434ab}\\",
+      "free_bytes": 2112376262656,
+      "id": "PhysicalDrive4",
+      "model": "AMD-RAID Array 3",
+      "mount_path": "E:\\",
+      "path": "E:\\gchat7-windows-fastest-disk-20261018\\evidence",
+      "pcie_generation": null,
+      "pcie_width": null,
+      "random_read_4k": {
+        "bytes": 268435456,
+        "operations": 65536,
+        "reason": "",
+        "seconds": 7.4479699,
+        "status": "measured",
+        "value": 36041425.99985534
+      },
+      "random_read_supported": true,
+      "read_bytes": 1073741824,
+      "read_source": "cache-probe",
+      "sequential_read": {
+        "bytes": 805306368,
+        "operations": 192,
+        "reason": "",
+        "seconds": 0.8983093,
+        "status": "measured",
+        "value": 896468920.0033886
+      },
+      "sequential_read_supported": true,
+      "serial": "00009cc4b709f648",
+      "type": "ssd"
+    }
+  ],
+  "fastest_sequential_volume": "C:\\",
+  "changed_top_level_fields": [
+    "cpu_expert_format_completeness",
+    "disks",
+    "sources",
+    "warnings"
+  ],
+  "changed_source_keys": [
+    "disk_elapsed_seconds",
+    "disk_probe_contract",
+    "disk_reads",
+    "disk_timestamp_utc"
+  ],
+  "derived_cpu_completeness": {
+    "before": [
+      {
+        "complete": true,
+        "down_format": "q2g32-f16s",
+        "gate_up_format": "q2g32-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 1280
+      },
+      {
+        "complete": true,
+        "down_format": "q4g32-f16s",
+        "gate_up_format": "q4g32-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 1280
+      },
+      {
+        "complete": true,
+        "down_format": "q2g64-f16s",
+        "gate_up_format": "q2g64-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 1280
+      },
+      {
+        "complete": true,
+        "down_format": "q4g64-f16s",
+        "gate_up_format": "q4g64-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 1280
+      },
+      {
+        "complete": true,
+        "down_format": "w8g32-f16s",
+        "gate_up_format": "w8g32-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 1280
+      },
+      {
+        "complete": true,
+        "down_format": "nvfp4",
+        "gate_up_format": "nvfp4",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 960
+      },
+      {
+        "complete": true,
+        "down_format": "nvfp4-gmul",
+        "gate_up_format": "nvfp4-gmul",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 960
+      }
+    ],
+    "after": [
+      {
+        "complete": true,
+        "down_format": "q2g32-f16s",
+        "gate_up_format": "q2g32-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 960
+      },
+      {
+        "complete": true,
+        "down_format": "q4g32-f16s",
+        "gate_up_format": "q4g32-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 960
+      },
+      {
+        "complete": true,
+        "down_format": "q2g64-f16s",
+        "gate_up_format": "q2g64-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 960
+      },
+      {
+        "complete": true,
+        "down_format": "q4g64-f16s",
+        "gate_up_format": "q4g64-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 960
+      },
+      {
+        "complete": true,
+        "down_format": "w8g32-f16s",
+        "gate_up_format": "w8g32-f16s",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 960
+      },
+      {
+        "complete": true,
+        "down_format": "nvfp4",
+        "gate_up_format": "nvfp4",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 640
+      },
+      {
+        "complete": true,
+        "down_format": "nvfp4-gmul",
+        "gate_up_format": "nvfp4-gmul",
+        "missing_rows": 0,
+        "numa_node": 0,
+        "required_rows": 640
+      }
+    ],
+    "explanation": "Existing writer recomputed summaries under the SIMD-only requirement policy. All seven remain complete; no CPU calibration row changed."
+  },
+  "preserved_calibration_row_counts": {
+    "cpu_expert_rates": 11520,
+    "gpu_expert_rates": 1536,
+    "mapped_host_scatter_reads": 384,
+    "numa_nodes": 1,
+    "numa_loaded_reads": 3
+  },
+  "fixture_limits": [
+    "No eligible mounted sibling partitions exist. Bubbs accepted this fixture limit; no partitions or Windows settings were changed. Existing production-helper regression covers shared physical-drive budgeting.",
+    "C: is the model volume and E: holds the profile cache; fastest C: therefore does not establish physical fastest-volume-outside-model/cache acceptance. The existing helper regression covers that arrangement.",
+    "No retained native ginfer-host test executable or native_profile_storage_acceptance receipt exists. This producer disk-only result does not claim that separate native Host ranking/mutation test.",
+    "A preexisting D: probe directory was unchanged and left untouched. Only absence of new probe paths is claimed."
+  ],
+  "resource_return": "returned 11:48Z; booking 1457 canceled; both compile guards released; Gchat2 installer notified",
+  "retention": {
+    "source_worktree": "/ai/gchat-worktrees/c7-windows-flash-20261018",
+    "native_root": "E:\\gchat7-windows-fastest-disk-20261018",
+    "retain": "Only this consolidated result and README summary; native evidence parent retained so its recorded path stays usable. Runtime extraction, before/after profile copies and redirected logs removed. Shared runtime ZIP, donor profile and model unchanged."
+  }
+}
