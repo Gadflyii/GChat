@@ -44,14 +44,23 @@ function deferred<T>() {
 function setup(initial = connection) {
   const busy = vi.fn()
   const ready = vi.fn()
+  const changed = vi.fn()
   function Form() {
-    const [value, change] = useState(initial)
+    const [value, setValue] = useState(initial)
     return (
-      <LanSetup connection={value} change={change} ready={ready} busy={busy} />
+      <LanSetup
+        connection={value}
+        change={(next) => {
+          changed(next)
+          setValue(next)
+        }}
+        ready={ready}
+        busy={busy}
+      />
     )
   }
   render(<Form />)
-  return { busy, ready }
+  return { busy, ready, changed }
 }
 
 it('explains the identity check, blocks duplicate activation and allows retry after failure', async () => {
@@ -119,6 +128,204 @@ it('names an existing-key import while it runs and keeps the entered key in the 
   await act(async () => request.resolve({ id: 'saved-bot' }))
   await screen.findByDisplayValue('ssh-ed25519 bot-key')
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  expect(busy).toHaveBeenLastCalledWith(false)
+})
+
+it('keeps connection and key drafts stable during import, then permits a corrected explicit retry', async () => {
+  const first = deferred<{ id: string }>()
+  const retry = deferred<{ id: string }>()
+  let imports = 0
+  const api = vi.mocked(gbot).mockImplementation(async (path) => {
+    if (path === 'workspaces/ssh')
+      return ++imports === 1 ? first.promise : retry.promise
+    if (path === 'workspaces/ssh/key') return publicKey
+    throw new Error(`Unexpected ${path}`)
+  })
+  const { busy, changed } = setup()
+  const mode = screen.getByRole('checkbox', {
+    name: 'Use an existing SSH key (advanced)',
+  })
+  fireEvent.click(mode)
+  const drafts = [
+    ['SSH host public key', 'ssh-ed25519 original-host-key'],
+    ['SSH private key', 'original-private-key'],
+    ['Key passphrase', 'original-passphrase'],
+  ] as const
+  for (const [label, value] of drafts)
+    fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  const edits = changed.mock.calls.length
+  const importButton = screen.getByRole('button', { name: 'Import bot key' })
+  act(() => {
+    importButton.click()
+    for (const [label] of drafts)
+      fireEvent.change(screen.getByLabelText(label), {
+        target: { value: 'an edit after import started' },
+      })
+    fireEvent.change(screen.getByLabelText('SSH host'), {
+      target: { value: 'other.example' },
+    })
+    mode.click()
+  })
+  expect(changed).toHaveBeenCalledTimes(edits)
+  expect(mode).toBeChecked()
+  expect(mode).toBeDisabled()
+  for (const label of ['SSH host', 'SSH port', 'SSH user'])
+    expect(screen.getByLabelText(label)).toBeDisabled()
+  for (const [label, value] of drafts) {
+    expect(screen.getByLabelText(label)).toBeDisabled()
+    expect(screen.getByLabelText(label)).toHaveValue(value)
+  }
+  expect(screen.getByRole('status')).toHaveTextContent('Importing bot key…')
+  expect(busy).toHaveBeenLastCalledWith(true)
+  expect(api.mock.calls.filter(([path]) => path === 'workspaces/ssh')).toEqual([
+    [
+      'workspaces/ssh',
+      expect.objectContaining({
+        endpoint: { hostname: 'bot.example', port: 22, user: 'writer' },
+        pinned_host_key: {
+          algorithm: 'ssh-ed25519',
+          public_key: 'original-host-key',
+        },
+        private_key: 'original-private-key',
+        passphrase: 'original-passphrase',
+      }),
+    ],
+  ])
+
+  await act(async () =>
+    first.reject(new Error('The private key could not be unlocked'))
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'The private key could not be unlocked'
+  )
+  expect(busy).toHaveBeenLastCalledWith(false)
+  expect(mode).toBeEnabled()
+  for (const label of ['SSH host', 'SSH port', 'SSH user'])
+    expect(screen.getByLabelText(label)).toBeEnabled()
+  for (const [label, value] of drafts) {
+    expect(screen.getByLabelText(label)).toBeEnabled()
+    expect(screen.getByLabelText(label)).toHaveValue(value)
+  }
+  expect(imports).toBe(1)
+  for (const [label, value] of [
+    ['SSH host', 'corrected.example'],
+    ['SSH host public key', 'ssh-ed25519 corrected-host-key'],
+    ['SSH private key', 'corrected-private-key'],
+    ['Key passphrase', 'corrected-passphrase'],
+  ])
+    fireEvent.change(screen.getByLabelText(label), { target: { value } })
+  fireEvent.click(screen.getByRole('button', { name: 'Import bot key' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(api).toHaveBeenLastCalledWith(
+    'workspaces/ssh',
+    expect.objectContaining({
+      endpoint: { hostname: 'corrected.example', port: 22, user: 'writer' },
+      pinned_host_key: {
+        algorithm: 'ssh-ed25519',
+        public_key: 'corrected-host-key',
+      },
+      private_key: 'corrected-private-key',
+      passphrase: 'corrected-passphrase',
+    })
+  )
+  expect(imports).toBe(2)
+  await act(async () => retry.resolve({ id: 'saved-bot' }))
+  await screen.findByDisplayValue('ssh-ed25519 bot-key')
+  expect(changed).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      hostname: 'corrected.example',
+      hostKey: 'ssh-ed25519 corrected-host-key',
+      workspaceId: 'saved-bot',
+      key: '',
+      passphrase: '',
+    })
+  )
+  expect(screen.getByLabelText('SSH host')).toHaveValue('corrected.example')
+  for (const label of ['SSH host', 'SSH port', 'SSH user'])
+    expect(screen.getByLabelText(label)).toBeDisabled()
+  expect(screen.queryByLabelText('SSH private key')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Key passphrase')).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('checkbox', {
+      name: 'Use an existing SSH key (advanced)',
+    })
+  ).not.toBeInTheDocument()
+  expect(busy).toHaveBeenLastCalledWith(false)
+})
+
+it('keeps fingerprint confirmation stable during Create and restores editing after rejection', async () => {
+  const first = deferred<{ id: string }>()
+  const retry = deferred<{ id: string }>()
+  let creates = 0
+  const api = vi.mocked(gbot).mockImplementation(async (path) => {
+    if (path === 'ssh/identity') return identity
+    if (path === 'workspaces/ssh')
+      return ++creates === 1 ? first.promise : retry.promise
+    if (path === 'workspaces/ssh/key') return publicKey
+    throw new Error(`Unexpected ${path}`)
+  })
+  const { busy, changed } = setup()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Check computer identity' })
+  )
+  const confirm = await screen.findByRole('checkbox', {
+    name: 'I verified this fingerprint on the bot computer',
+  })
+  fireEvent.click(confirm)
+  const edits = changed.mock.calls.length
+  act(() => {
+    screen.getByRole('button', { name: 'Create bot key' }).click()
+    confirm.click()
+  })
+  expect(confirm).toBeDisabled()
+  expect(confirm).toBeChecked()
+  expect(changed).toHaveBeenCalledTimes(edits)
+  for (const label of ['SSH host', 'SSH port', 'SSH user'])
+    expect(screen.getByLabelText(label)).toBeDisabled()
+  expect(
+    screen.getByRole('checkbox', {
+      name: 'Use an existing SSH key (advanced)',
+    })
+  ).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Check computer identity' })
+  ).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('Creating bot key…')
+  await act(async () =>
+    first.reject(new Error('Secure storage is unavailable'))
+  )
+  expect(screen.getByRole('alert')).toHaveTextContent(
+    'Secure storage is unavailable'
+  )
+  expect(confirm).toBeEnabled()
+  expect(confirm).toBeChecked()
+  expect(busy).toHaveBeenLastCalledWith(false)
+  expect(creates).toBe(1)
+  fireEvent.click(confirm)
+  expect(screen.getByRole('button', { name: 'Create bot key' })).toBeDisabled()
+  fireEvent.click(confirm)
+  fireEvent.click(screen.getByRole('button', { name: 'Create bot key' }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(confirm).toBeChecked()
+  expect(confirm).toBeDisabled()
+  expect(creates).toBe(2)
+  const expectedCreate = [
+    'workspaces/ssh',
+    expect.objectContaining({
+      endpoint: { hostname: 'bot.example', port: 22, user: 'writer' },
+      pinned_host_key: publicKey,
+      private_key: null,
+      passphrase: null,
+    }),
+  ]
+  expect(api.mock.calls.filter(([path]) => path === 'workspaces/ssh')).toEqual([
+    expectedCreate,
+    expectedCreate,
+  ])
+  await act(async () => retry.resolve({ id: 'saved-bot' }))
+  await screen.findByDisplayValue('ssh-ed25519 bot-key')
+  expect(screen.getByLabelText('SSH host')).toHaveValue('bot.example')
+  expect(screen.getByLabelText('SSH host')).toBeDisabled()
   expect(busy).toHaveBeenLastCalledWith(false)
 })
 
