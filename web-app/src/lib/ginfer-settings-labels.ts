@@ -31,7 +31,7 @@ export const ginferSettingLabels: Record<string, { title: string; description: s
   },
   draft_tokens: {
     title: 'Helper draft length',
-    description: 'How many words the speculative helper guesses ahead (1 to 7). Auto uses the model’s own recommendation.',
+    description: 'How many tokens (pieces of text) the speculative helper guesses ahead (1 to 7). Auto uses the model’s own recommendation.',
   },
   draft_tp: {
     title: 'Helper model placement',
@@ -47,7 +47,7 @@ export const ginferSettingLabels: Record<string, { title: string; description: s
   },
   prefill_chunk: {
     title: 'Prompt processing block size',
-    description: 'How many words of a long prompt are read at once. Auto is fine for most computers; values must be multiples of 128.',
+    description: 'How many prompt tokens (pieces of text) GInfer processes in each block. Auto is fine for most computers; explicit values must be positive multiples of 128.',
   },
   max_concurrency: {
     title: 'Simultaneous requests',

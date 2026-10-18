@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { Route as ProviderRoute } from '../$providerName'
 import { seedServiceHub } from '@/test/service-hub'
 
@@ -19,9 +19,10 @@ vi.mock('@/containers/Card', () => ({
       {children}
     </section>
   ),
-  CardItem: ({ title, actions }: { title?: React.ReactNode; actions?: React.ReactNode }) => (
+  CardItem: ({ title, description, actions }: { title?: React.ReactNode; description?: React.ReactNode; actions?: React.ReactNode }) => (
     <div>
       {title}
+      {description}
       {actions}
     </div>
   ),
@@ -32,7 +33,9 @@ vi.mock('@/components/ModelSourceBadge', () => ({
   MissingModelBadge: () => null,
 }))
 vi.mock('@/containers/dynamicControllerSetting', () => ({ DynamicControllerSetting: () => null }))
-vi.mock('@/containers/RenderMarkdown', () => ({ RenderMarkdown: () => null }))
+vi.mock('@/containers/RenderMarkdown', () => ({
+  RenderMarkdown: ({ content }: { content: string }) => <p>{content}</p>,
+}))
 vi.mock('@/containers/dialogs/EditModel', () => ({ DialogEditModel: () => null }))
 vi.mock('@/containers/ModelSetting', () => ({ ModelSetting: () => null }))
 vi.mock('@/containers/dialogs/DeleteModel', () => ({ DialogDeleteModel: () => null }))
@@ -116,6 +119,29 @@ describe('Provider detail route', () => {
       expect(screen.getByText('Auto Unload').closest('details')).toBeNull()
       expect(screen.queryByRole('button', { name: 'providers:start' })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'providers:manageInModels' })).toBeInTheDocument()
+    } finally { state.name = 'openai' }
+  })
+
+  it('explains draft and prompt processing sizes in tokens when Advanced is opened', () => {
+    state.name = 'ginfer'
+    try {
+      state.provider = {
+        provider: 'ginfer', active: true, api_key: '', base_url: '',
+        settings: [
+          { key: 'draft_tokens', title: 'Draft Tokens', description: '', controller_type: 'input', controller_props: { value: 0, placeholder: 'Auto', type: 'number', min: 0, max: 7, step: 1 } },
+          { key: 'prefill_chunk', title: 'Prefill Chunk', description: '', controller_type: 'input', controller_props: { value: 0, placeholder: 'Auto', type: 'number', min: 0, step: 128 } },
+        ],
+        models: [],
+      }
+      const Component = (ProviderRoute as unknown as { component: React.ComponentType }).component
+      render(<Component />)
+
+      fireEvent.click(screen.getByText('providers:ginferAdvanced'))
+
+      expect(screen.getByText('Helper draft length')).toBeVisible()
+      expect(screen.getByText('How many tokens (pieces of text) the speculative helper guesses ahead (1 to 7). Auto uses the model’s own recommendation.')).toBeVisible()
+      expect(screen.getByText('Prompt processing block size')).toBeVisible()
+      expect(screen.getByText('How many prompt tokens (pieces of text) GInfer processes in each block. Auto is fine for most computers; explicit values must be positive multiples of 128.')).toBeVisible()
     } finally { state.name = 'openai' }
   })
 })
