@@ -435,7 +435,7 @@ it.each([
   expect(screen.getByLabelText('Conversation length (tokens)')).toHaveDisplayValue('')
   expect(screen.getByRole('button', { name: 'Start model with these settings' })).toBeDisabled()
   await userEvent.click(screen.getByLabelText('Installed model'))
-  await userEvent.click(screen.getByRole('menuitemradio', { name: target === 'muse-glimmer-30b' ? /Muse Glimmer/ : target === 'qwen3.8-flash-next' ? /Flash Next/ : /Qwen 3.8 27B/ }))
+  await userEvent.click(screen.getByRole('menuitemradio', { name: target === 'muse-glimmer-30b' ? /Muse 30B/ : target === 'qwen3.8-flash-next' ? /Qwen 3.8 Flash/ : /Qwen 3.8 27B/ }))
   expect(screen.getByLabelText('Conversation length (tokens)')).toHaveValue(nativeContext)
   fireEvent.click(screen.getByRole('button', { name: 'Start model with these settings' }))
   await waitFor(() => expect(engineCommand).toHaveBeenCalledWith('launch', expect.objectContaining({

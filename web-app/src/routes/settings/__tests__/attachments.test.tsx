@@ -152,7 +152,6 @@ async function openSettings() {
 }
 
 beforeEach(async () => {
-  vi.useFakeTimers()
   unblockReads = []
   extension = new AttachmentExtension('', STORAGE_KEY)
   getExtension.mockReturnValue(extension)
@@ -177,7 +176,7 @@ describe('Attachment settings availability', () => {
   it('offers supported document choices and explains the unavailable search fallback', async () => {
     await openSettings()
 
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = userEvent.setup()
     const parseMode = screen.getByRole('button', { name: text.parseMode })
     await user.click(parseMode)
     expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
@@ -228,7 +227,7 @@ describe('Attachment settings availability', () => {
     updateSettings.mockClear()
 
     const page = await openSettings()
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    const user = userEvent.setup()
     const parseMode = screen.getByRole('button', { name: text.parseMode })
     expect(parseMode).toHaveTextContent(text.savedDocumentSearchUnavailable)
     await user.click(parseMode)
@@ -267,6 +266,12 @@ describe('Attachment settings availability', () => {
 })
 
 describe('Attachment settings persistence', () => {
+  // Only persistence tests control elapsed time; availability uses real menu
+  // interactions and does not depend on the debounce clock.
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
   it('names fields with their visible translated titles and persists a named edit', async () => {
     const page = await openSettings()
     const maxFileSize = screen.getByRole('textbox', { name: text.maxFile })
