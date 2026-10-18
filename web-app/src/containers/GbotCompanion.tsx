@@ -725,6 +725,13 @@ export default function GbotCompanion() {
                   <p className="text-xs text-muted-foreground">
                     {task.state.replaceAll('_', ' ')}
                   </p>
+                  {task.state === 'needs_review' && (
+                    <p className="text-xs text-muted-foreground">
+                      This task stopped because a tool’s result is uncertain.
+                      Check whether the action happened before starting another
+                      task.
+                    </p>
+                  )}
                   {[...(task.calls ?? []), ...(task.connector_calls ?? [])].map(
                     (call) => (
                       <p key={call.call_id} className="text-xs">
@@ -732,7 +739,9 @@ export default function GbotCompanion() {
                         {'not_executed' in call && call.not_executed
                           ? 'not executed'
                           : call.reply == null
-                            ? 'awaiting result'
+                            ? task.state === 'needs_review'
+                              ? 'result unknown'
+                              : 'awaiting result'
                             : 'result received'}
                       </p>
                     )
