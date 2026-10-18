@@ -1575,6 +1575,32 @@ describe('AgentStudioPage', () => {
     expect(screen.getByRole('button', { name: 'Default model instance' })).toHaveTextContent('muse · port 8124')
   })
 
+  it('exposes one selected composition through keyboard changes and saves that selection', async () => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Create agent' }))
+    await screen.findByLabelText('Name')
+    const names = [/^Standard Agent/, /^Goal Loop/, /^Coordinator Team/, /^Workflow/]
+    const expectSelected = (selected: number) => {
+      names.forEach((name, index) => {
+        expect(screen.getByRole('button', { name, pressed: index === selected })).toBeInTheDocument()
+      })
+    }
+    expectSelected(0)
+    for (const [index, key] of [[1, ' '], [2, '{Enter}'], [3, ' '], [0, '{Enter}']] as const) {
+      const choice = screen.getByRole('button', { name: names[index], pressed: false })
+      choice.focus()
+      await user.keyboard(key)
+      expectSelected(index)
+      expect(choice).toHaveFocus()
+    }
+    await user.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'standard' })
+    ))
+  })
+
   it('preserves and saves the default goal when changing composition', async () => {
     definitionState.value.save.mockImplementation(async (value) => value)
     render(<AgentStudioPage />)
@@ -1600,8 +1626,9 @@ describe('AgentStudioPage', () => {
     render(<AgentStudioPage />)
     fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
     await screen.findByLabelText('Name')
-    const composition = screen.getByRole('button', { name: /Goal Loop/i })
+    const composition = screen.getByRole('button', { name: /Goal Loop/i, pressed: false })
     fireEvent.click(composition)
+    expect(screen.getByRole('button', { name: /Goal Loop/i, pressed: true })).toBe(composition)
     fireEvent.change(screen.getByLabelText('Success criteria'), {
       target: { value: 'The report cites every source.' },
     })
@@ -1654,6 +1681,7 @@ describe('AgentStudioPage', () => {
       })
       const composition = screen.getByRole('button', {
         name: kind === 'coordinator' ? /^Coordinator Team/ : /^Workflow/,
+        pressed: true,
       })
       composition.focus()
       await userEvent.setup().keyboard(' ')
