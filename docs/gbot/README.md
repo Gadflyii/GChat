@@ -1,5 +1,35 @@
 # Gbot design
 
+## SSH key fields stay stable during requests — Gchat 2
+
+`GBOT-LAN-KEY-FIELDS-BUSY`, based on main `1ba852d1e`, fixes advanced
+SSH key fields accepting edits while Import bot key is pending. The request
+uses the original values; its successful response previously discarded later
+edits and locked the original connection.
+
+The host public key, private key and passphrase now stay disabled through
+pending setup requests. The fingerprint confirmation follows the same busy
+state. Connection edits and key-mode or fingerprint changes also check the
+synchronous pending guards before changing the draft. A rejected request
+restores editing for an explicit corrected retry; accepted imports retain the
+existing saved-workspace and secret-clearing behavior.
+
+Both deferred regressions fail on unchanged main (ten cases filtered). All
+41 focused setup cases pass with the fix. They cover same-turn edits, disabled
+fields, preserved drafts after failure, corrected explicit retry payloads,
+secret clearing and fingerprint confirmation recovery.
+
+One isolated Linux/S1 `make verify` passes on 18 October, 07:59:42–08:08
+UTC: 3,507 app, 127 extension and 1,276 Rust tests pass; six app tests are
+skipped and 28 Rust tests ignored. Lint, type checking, quality guards and all
+six coverage floors pass. Source, test and documentation hashes match before
+and after the gate; this final receipt was added afterward. Evidence:
+`out/gchat2-lan-key-fields-busy-20261018/{result.json,SUMMARY.md}`.
+The private S1 build/cache was removed, the shared donor preserved, and CPUs
+96–103 returned at 08:08 UTC; booking 3146 canceled.
+FRESH and OLD remain off with original XML and Gchat 2 custody; this leaf
+uses inert SSH responses and does not qualify live SSH or native Windows.
+
 ## Price refresh keeps cloud controls busy — Gchat 2
 
 `GBOT-CLOUD-PRICE-REFRESH-ACTION-OVERLAP`, based on main `e50055c37`,
@@ -29,7 +59,8 @@ and after the gate; this final receipt was added afterward. Evidence:
 No live provider, SSH, native Windows, VM, model or GPU action is part of this
 leaf. FRESH and OLD remain off with original XML and Gchat 2 custody. The
 private S1 build/cache was removed, the shared donor preserved, and CPUs
-96–103 returned at 07:41 UTC; booking 3130 canceled. Next: bubbs merges the
+96–103 returned at 07:41 UTC; booking 3130 canceled. The fix and its evidence are merged.
+
 ## SSH rechecks block stale tool actions — Gchat 2
 
 `GBOT-LAN-TOOLS-PARENT-ACTION-OVERLAP`, based on main `3b449da5f`,
@@ -60,8 +91,7 @@ and after the gate; this final receipt was added afterward. Evidence:
 No live SSH, provider, native Windows, VM, model or GPU action is part of this
 leaf. FRESH and OLD remain off with original XML and Gchat 2 custody. The
 private S1 build/cache was removed, the shared donor preserved, and CPUs
-96–103 returned at 07:53 UTC; booking 3140 canceled. Next: bubbs merges the
-fix and its evidence.
+96–103 returned at 07:53 UTC; booking 3140 canceled. The fix and its evidence are merged.
 
 ## Cloud actions keep tool controls busy — Gchat 2
 

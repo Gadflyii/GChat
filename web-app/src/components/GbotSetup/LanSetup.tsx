@@ -116,6 +116,7 @@ export default function LanSetup({
     }
   }, [connection.workspaceId])
   const update = (field: keyof BotConnection, value: string) => {
+    if (pending.current || toolsPending.current) return
     setError('')
     setIdentity(undefined)
     setVerified(false)
@@ -168,6 +169,7 @@ export default function LanSetup({
             checked={importing}
             disabled={working}
             onChange={(event) => {
+              if (pending.current || toolsPending.current) return
               setImporting(event.target.checked)
               ready(false)
               change({ ...connection, key: '', passphrase: '', hostKey: '' })
@@ -190,6 +192,7 @@ export default function LanSetup({
             SSH host public key
             <Input
               required
+              disabled={working}
               value={connection.hostKey}
               onChange={(event) => update('hostKey', event.target.value)}
             />
@@ -198,6 +201,7 @@ export default function LanSetup({
             SSH private key
             <textarea
               required
+              disabled={working}
               autoComplete="off"
               className="min-h-24 w-full rounded-md border bg-background p-2 font-mono"
               value={connection.key}
@@ -208,6 +212,7 @@ export default function LanSetup({
             Key passphrase
             <Input
               type="password"
+              disabled={working}
               autoComplete="off"
               value={connection.passphrase}
               onChange={(event) => update('passphrase', event.target.value)}
@@ -269,7 +274,11 @@ export default function LanSetup({
                   type="checkbox"
                   className="size-4 accent-primary"
                   checked={verified}
-                  onChange={(event) => setVerified(event.target.checked)}
+                  disabled={working}
+                  onChange={(event) => {
+                    if (pending.current || toolsPending.current) return
+                    setVerified(event.target.checked)
+                  }}
                 />
                 I verified this fingerprint on the bot computer
               </label>
