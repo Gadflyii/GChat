@@ -521,6 +521,11 @@ Text or attachments you add while an earlier Send is pending stay in the
 composer when that preparation finishes; its completion does not clear your
 newer changes.
 
+When a preview or Files panel leaves a narrow chat column, the composer
+controls wrap onto additional rows inside the input border. The input grows
+to fit those rows, keeping the saved-agent choice, Approvals, reasoning and
+Send controls separate and available.
+
 ## Reading workspace folders
 
 If GChat cannot read your workspace folder, the **Files** panel opens so you

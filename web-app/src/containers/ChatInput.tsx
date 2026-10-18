@@ -2373,7 +2373,7 @@ const ChatInput = memo(function ChatInput({
           <div className="relative z-20">
             <div
               className={cn(
-                'relative z-20 px-0 pb-10 border rounded-3xl border-input bg-white dark:bg-input/30',
+                'relative z-20 px-0 border rounded-3xl border-input bg-white dark:bg-input/30',
                 isFocused && 'ring-1 ring-ring/50',
                 isDragOver && 'ring-2 ring-ring/50 border-primary'
               )}
@@ -2637,15 +2637,13 @@ const ChatInput = memo(function ChatInput({
                   )}
                 />
               </div>
-            </div>
-          </div>
 
-          <div className="absolute z-20 bg-transparent bottom-0 w-full p-2 ">
-            <div className="flex justify-between items-center w-full">
+          <div className="relative z-20 w-full p-2">
+            <div className="flex justify-between items-end gap-1 w-full">
               <div className="px-1 flex items-center gap-1 flex-1 min-w-0">
                 <div
                   className={cn(
-                    'px-1 flex items-center w-full gap-1',
+                    'px-1 flex flex-wrap items-center w-full gap-1',
                     isStreaming && 'opacity-50 pointer-events-none'
                   )}
                 >
@@ -2738,7 +2736,7 @@ const ChatInput = memo(function ChatInput({
                   </DropdownMenu>
 
                   {agentDefinitions.length > 0 && (
-                    <label className="mb-1 flex h-8 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
+                    <label className="mb-1 flex h-8 min-w-0 max-w-48 items-center gap-1.5 rounded-md border bg-secondary px-2 text-xs text-secondary-foreground">
                       <IconSparkles className="size-3.5 shrink-0 text-primary" />
                       <select
                         aria-label="Invoke saved agent"
@@ -2989,6 +2987,8 @@ const ChatInput = memo(function ChatInput({
                   </Button>
                 )}
               </div>
+            </div>
+          </div>
             </div>
           </div>
         </div>
