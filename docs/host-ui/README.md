@@ -1,5 +1,37 @@
 # GInfer host UI
 
+## Gbot connection controls wait for refreshed status — October 18
+
+`GBOT-WORKSPACE-ACTION-REFRESH-PENDING`: Connect and Disconnect remain disabled
+until their action and follow-up refresh finish. Previously, the action released
+the controls before reading the new status. A slow status response exposed the
+old Connect button; clicking it again generated another session identity, which
+could replace the working SSH session. The pending controls now cover that gap
+and become available with the refreshed connection status.
+
+Two rendered regressions delay the status response after Connect and Disconnect,
+try a second ordinary click, and then finish the refresh. Each dispatches its
+connection action once and enables the correct control after the response.
+Against main `e6b28e8d4`, both cases fail with two dispatched requests (71 other
+cases skipped). The fixed Gbot page suite passes all 73 cases.
+
+Commands: baseline `yarn test web-app/src/routes/gbot/index.test.tsx -t 'holds
+connection controls through the status refresh'`; focused `yarn test
+web-app/src/routes/gbot/index.test.tsx`; full `make verify`.
+
+The ONE `make verify` passes: 3310 passed | 6 skipped (3316); 121 passed (121)
+extension cases; 1220 Rust cases, with 28 ignored; all six coverage
+floors. Lint has zero errors and five existing warnings; type checking and
+quality guards pass. Source and test hashes match before and after the gate.
+The gate ran 03:51:39–03:59:14 UTC on private S1 SSD caches, CPU 96–103,
+nice 10 and at most eight build jobs, without a GPU.
+
+Evidence: `out/gchat2-workspace-action-refresh-20261018/{result.json,SUMMARY.md}`.
+The tests use a mocked service. No new native VM, Windows, GPU or live model
+qualification is claimed. Windows was not built; this shared frontend change
+uses no platform-specific API. FRESH and OLD remained off with their original
+XML and Gchat 2 custody.
+
 ## Conversation Rename keyboard — Gchat 3 native acceptance, October 18
 
 `GUI-THREAD-RENAME-KEYBOARD` passes its remaining native Linux leaf. Ordinary

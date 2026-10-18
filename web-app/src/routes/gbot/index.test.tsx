@@ -1046,6 +1046,80 @@ it('imports an SSH workspace and preserves setup identity on retry', async () =>
   expect(JSON.stringify(sessionStorage)).not.toContain('private-key')
 })
 
+it.each([false, true])(
+  'holds connection controls through the status refresh (initially connected: %s)',
+  async (initiallyConnected) => {
+    let identity = initiallyConnected
+      ? { workspace_id: 'one', session_id: 'saved-session' }
+      : undefined
+    let actionFinished = false
+    let finishRefresh!: (state: BotState) => void
+    const refreshedState = new Promise<BotState>((resolve) => {
+      finishRefresh = resolve
+    })
+    const snapshot = (): BotState => ({
+      workspaces: [{ id: 'one', name: 'Writer' }],
+      live_sessions: identity ? [identity] : [],
+      controls: [],
+      assignments: [],
+    })
+    const action = initiallyConnected ? 'disconnect' : 'connect'
+    mocks.listen.mockResolvedValue(() => {})
+    mocks.call.mockImplementation(
+      async (path: string, body: Record<string, string>) => {
+        if (path === 'connectors/get') return { account_ids: [], accounts: [] }
+        if (path === 'state')
+          return actionFinished ? refreshedState : snapshot()
+        if (path === action) {
+          identity = initiallyConnected
+            ? undefined
+            : { workspace_id: body.workspace_id, session_id: body.session_id }
+          actionFinished = true
+          return {}
+        }
+        return []
+      }
+    )
+    render(<Page />)
+    await waitFor(() =>
+      expect(mocks.call).toHaveBeenCalledWith('tasks', undefined)
+    )
+    const button = screen.getByRole('button', {
+      name: initiallyConnected ? 'Disconnect' : 'Connect',
+      exact: true,
+    })
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+    await waitFor(() =>
+      expect(
+        mocks.call.mock.calls.filter(([path]) => path === 'state')
+      ).toHaveLength(2)
+    )
+
+    expect(
+      screen.getByText(initiallyConnected ? 'Connected' : 'Disconnected')
+    ).toBeVisible()
+    fireEvent.click(button)
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === action)
+    ).toHaveLength(1)
+    expect(button).toBeDisabled()
+
+    await act(async () => finishRefresh(snapshot()))
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {
+          name: initiallyConnected ? 'Connect' : 'Disconnect',
+          exact: true,
+        })
+      ).toBeEnabled()
+    )
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === action)
+    ).toHaveLength(1)
+  }
+)
+
 it('isolates bot assignments and approvals, and holds new tasks during takeover', async () => {
   const identity = { workspace_id: 'one', session_id: 'session' }
   let control = 'bot'
