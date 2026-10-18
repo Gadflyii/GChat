@@ -1488,7 +1488,7 @@ describe('AgentStudioPage', () => {
 
   it('resets temporary numeric text when selecting another saved agent with the same limit', async () => {
     definitionState.value.definitions = [firstAgent, { ...secondAgent, maxSteps: 12 }]
-    render(<AgentStudioPage />)
+    render(<><AgentStudioPage /><ConfirmDialogHost /></>)
     await screen.findByDisplayValue(firstAgent.name)
     const user = userEvent.setup()
     const steps = screen.getByLabelText('Maximum tool steps')
@@ -1496,8 +1496,9 @@ describe('AgentStudioPage', () => {
     await user.clear(steps)
     fireEvent.change(steps, { target: { value: '012' } })
     expect(steps).toHaveProperty('value', '012')
-    // Selection replaces the draft even if its numeric value has not changed.
+    // Confirm replacement even if the two drafts have the same numeric value.
     fireEvent.click(screen.getByRole('button', { name: /Research assistant/ }))
+    await user.click(screen.getByRole('button', { name: 'Discard changes' }))
     expect(screen.getByLabelText('Maximum tool steps')).toHaveProperty('value', '12')
     fireEvent.click(screen.getByRole('button', { name: /Review assistant/ }))
     expect(screen.getByLabelText('Maximum tool steps')).toHaveProperty('value', '25')
@@ -1805,7 +1806,7 @@ describe('AgentStudioPage', () => {
       edges: [{ from: 'research', to: 'deliver' }],
     }
     definitionState.value.definitions = [workflow, otherWorkflow]
-    render(<AgentStudioPage />)
+    render(<><AgentStudioPage /><ConfirmDialogHost /></>)
     await screen.findByDisplayValue(workflow.name)
 
     const dependencies = screen.getAllByLabelText('Depends on stage IDs')[2]
@@ -1823,6 +1824,7 @@ describe('AgentStudioPage', () => {
       .toEqual(['', 'review-stage'])
 
     fireEvent.click(screen.getByRole('button', { name: /Second dependency workflow/ }))
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Discard changes' }))
     expect(screen.getAllByLabelText('Depends on stage IDs').map((input) => (input as HTMLInputElement).value))
       .toEqual(['', '', 'research'])
     fireEvent.click(screen.getByRole('button', { name: /First dependency workflow/ }))
