@@ -1,0 +1,14 @@
+{
+  "fix": "d5841351db0be035917473b850a435e61d394580",
+  "merge": "54c378d03c8878de977b51d7ec2e1762fc3c39ac",
+  "native_source": "11ce0355dc56ec0a4ade63e0499a68ef109c49fc",
+  "base": "3de78b8294304368b89b571ed5b1e908364662c9",
+  "reused_gate": "1062ba9f85653a25f7371d9ea03f807e3d48009b",
+  "files_identical_across_native_base_gate": [
+    "web-app/src/containers/EngineHardwareProfile.tsx",
+    "web-app/src/containers/__tests__/EngineHardwareProfile.test.tsx"
+  ],
+  "retained_desktop_sha256": "c1cbae677d800a6deed86106ad0b00306f09a71d832bfd70dc2801dac064690a",
+  "gate_summary": "../c3-load-needs-profile-message-20261018/verify-summary.json",
+  "regression": "drops the how-long-it-takes note once the profile is ready and keeps it while profiling"
+}
