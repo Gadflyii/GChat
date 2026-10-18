@@ -1,4 +1,5 @@
 import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
 import { localStorageKey } from '@/constants/localStorage'
 import { createSafeUnlisten } from '@/lib/tauriEvent'
 /**
@@ -30,19 +31,15 @@ export class TauriWindowService extends DefaultWindowService {
         }
       }
 
-      const webviewWindow = new WebviewWindow(config.label, {
-        url: config.url,
-        title: config.title,
-        width: config.width,
-        height: config.height,
-        center: config.center,
-        resizable: config.resizable,
-        minimizable: config.minimizable,
-        maximizable: config.maximizable,
-        closable: config.closable,
-        fullscreen: config.fullscreen,
-        theme: theme,
+      // Native code owns the allowed labels, routes and window configuration.
+      await invoke('open_auxiliary_window', {
+        label: config.label,
+        theme,
       })
+      const webviewWindow = await WebviewWindow.getByLabel(config.label)
+      if (!webviewWindow) {
+        throw new Error(`Auxiliary window was not created: ${config.label}`)
+      }
 
       // Setup theme listener for this window
       await this.setupThemeListenerForWindow(webviewWindow)

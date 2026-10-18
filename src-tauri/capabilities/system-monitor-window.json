@@ -3,8 +3,14 @@
   "identifier": "system-monitor-window",
   "description": "enables permissions for the system monitor window",
   "local": true,
-  "webviews": ["system-monitor-window"],
-  "platforms": ["linux", "macOS", "windows"],
+  "webviews": [
+    "system-monitor-window"
+  ],
+  "platforms": [
+    "linux",
+    "macOS",
+    "windows"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
@@ -12,7 +18,6 @@
     "core:window:allow-get-all-windows",
     "core:event:allow-listen",
     "log:default",
-    "core:webview:allow-create-webview-window",
     "core:webview:allow-get-all-webviews",
     "core:window:allow-set-focus",
     "hardware:default",

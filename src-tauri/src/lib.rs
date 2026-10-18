@@ -46,6 +46,12 @@ pub(crate) fn handle_agent_window_event(
 pub fn run() {
     let (bundled_resources, resource_completion) = setup::BundledResources::pending();
     let model_resources = bundled_resources.clone();
+    let mut context = tauri::generate_context!();
+    let configured_windows = context.config().app.windows.clone();
+    // Construct every application window through the guarded native builder.
+    for window in &mut context.config_mut().app.windows {
+        window.create = false;
+    }
     let mut builder = tauri::Builder::default().manage(bundled_resources);
     #[cfg(desktop)]
     {
@@ -81,7 +87,6 @@ pub fn run() {
     }
 
     let mut app_builder = builder
-        .register_uri_scheme_protocol("artifact", core::artifact::handle_artifact_request)
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_http::init())
@@ -298,9 +303,10 @@ pub fn run() {
         // HTTP (bypasses tauri_plugin_http fetch interception)
         core::http::post_local_http,
         core::http::get_local_http,
-        // HTML artifact preview (served via the artifact:// protocol)
+        // HTML preview cache (served outside Tauri's trusted protocol registry)
         core::artifact::set_artifact_html,
         core::artifact::clear_artifact_html,
+        core::webview_security::open_auxiliary_window,
         // Tray status (desktop only runtime behaviour; the symbol exists on mobile as a no-op)
         core::tray_status::update_tray_status,
     ]);
@@ -454,9 +460,10 @@ pub fn run() {
         // Download
         core::downloads::commands::download_files,
         core::downloads::commands::cancel_download_task,
-        // HTML artifact preview (served via the artifact:// protocol)
+        // HTML preview cache (served outside Tauri's trusted protocol registry)
         core::artifact::set_artifact_html,
         core::artifact::clear_artifact_html,
+        core::webview_security::open_auxiliary_window,
         // Tray status (no-op on mobile; kept registered so the frontend can invoke it uniformly)
         core::tray_status::update_tray_status,
     ]);
@@ -492,6 +499,10 @@ pub fn run() {
             tray_handles: Arc::new(std::sync::Mutex::new(None)),
         })
         .setup(move |app| {
+            core::artifact::clear_artifact_cache(app.handle()).map_err(std::io::Error::other)?;
+            for config in &configured_windows {
+                core::webview_security::build_window(app.handle(), config)?;
+            }
             core::engine_hosts::initialize_credentials().map_err(std::io::Error::other)?;
             let log_dir = get_jan_data_folder_path(app.handle().clone()).join("logs");
             // The plugin's defaults are 40 KB per file with
@@ -658,7 +669,7 @@ pub fn run() {
 
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running tauri application");
     // Handle app lifecycle events
     app.run(|app, event| {
@@ -697,6 +708,9 @@ pub fn run() {
             }
             RunEvent::Exit => {
                 let app_handle = app.clone();
+                if let Err(error) = core::artifact::clear_artifact_cache(&app_handle) {
+                    log::warn!("Could not clear preview cache: {error}");
+                }
                 // Fence turns before other cleanup can close their event sink.
                 app_handle.state::<AppState>().agent_runs.close_admission();
 

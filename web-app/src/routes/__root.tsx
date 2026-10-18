@@ -159,15 +159,21 @@ function RootLayout() {
         <ToasterProvider />
         <ConfirmDialogHost />
         <TranslationProvider>
-          <ExtensionProvider>
-            <DataProvider />
-            <GlobalEventHandler />
-            {IS_LOGS_ROUTE ? <LogsLayout /> : <AppLayout />}
-          </ExtensionProvider>
-          <AgentApprovalDialog inlineThreadId={inlineThreadId} />
-          <AgentFolderAccessDialog inlineThreadId={inlineThreadId} />
-          <AttachmentIngestionDialog />
-          <OutOfContextPromiseModal />
+          {IS_LOGS_ROUTE ? (
+            <LogsLayout />
+          ) : (
+            <>
+              <ExtensionProvider>
+                <DataProvider />
+                <GlobalEventHandler />
+                <AppLayout />
+              </ExtensionProvider>
+              <AgentApprovalDialog inlineThreadId={inlineThreadId} />
+              <AgentFolderAccessDialog inlineThreadId={inlineThreadId} />
+              <AttachmentIngestionDialog />
+              <OutOfContextPromiseModal />
+            </>
+          )}
         </TranslationProvider>
       </ServiceHubProvider>
     </Fragment>

@@ -564,3 +564,4 @@ decision is reversed, add a new one that says which record it supersedes.
 - **2026-10-18** — [Bundle the accepted Cua runtime on Windows](2026-10-18-bundle-private-windows-cua-runtime.md)
 - **2026-10-18** — [Confirm window close for unsaved agent drafts](2026-10-18-confirm-window-close-for-agent-drafts.md)
 - **2026-10-18** — [Restrict plugin IPC to local app webviews](2026-10-18-restrict-plugin-ipc-to-local-webviews.md)
+- **2026-10-18** — [Isolate HTML previews from desktop commands](2026-10-18-isolate-html-previews-from-desktop-commands.md)
