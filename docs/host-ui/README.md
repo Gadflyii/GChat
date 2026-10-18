@@ -6134,9 +6134,13 @@ Current state: Ada Qwen, Ada Muse and laptop Muse passed; laptop Qwen remains
 pending its ordinary Download and unchanged C1/C4 app check. Laptop and Ada
 returned at 18:48 UTC after the concurrent Muse checks. The remaining Download
 starts after C4's two corrected no-load quotes and the selected raw evidence
-relay. Ada booking 778 returned at 19:06 UTC. C6's not-yet-ready Ada check
-takes the first coordinated quiet boundary when built, before Download if
-ready at the quote terminal or before paired Qwen chats afterward.
+relay. Ada booking 778 returned at 19:06 UTC. C6's SM89 builds returned at
+19:10 UTC; its ready 291.5 MB direct relay and three-minute Ada pair follow
+the selected evidence relay. C4's newly delivered native Windows RC first-user
+checks on laptop and Ada then take the returned boundary before Download;
+their forecast is 20–30 minutes per target, with no native transfer or booking
+yet. Shared relays also await Gchat3's local native standard, booked through
+19:47 UTC; laptop's second quote is under booking 410 through 19:38 UTC.
 Neither Qwen natural is pre-booked while these prerequisites run.
 Ada Qwen returned at
 16:07 UTC after normal app API and model Stop. Its selected profile is
@@ -6274,8 +6278,10 @@ cross-host SSH direction authenticates, the earlier transient HTTP route is
 retired and the private catalog service accepts only catalog/model paths.
 Native booking 1489 returned at 18:54:25 UTC and was canceled. Its owner
 started the established parent-mediated relay at 18:58 UTC, followed by the
-two no-load laptop quotes. Ordinary laptop Qwen Download waits for their
-terminal; no key or
+two no-load laptop quotes. The 81920 quote fit with native exit zero; the
+262144 quote started at 19:08 UTC. Ordinary laptop Qwen Download waits for
+their terminal, the selected evidence relay, C6's ready Ada pair and C4's
+coordinated native RC first-user checks; no key or
 installation changes, Flash model load or timing gate belong to this handoff.
 Existing signed catalog entries and the eb777 bundle remain the first-use
 inputs until replacement bounds are signed and coordinated with Gchat 3.
