@@ -1,6 +1,7 @@
 import { Channel, invoke } from '@tauri-apps/api/core'
 import type {
   OpenCodeReadiness,
+  OpenCodeUpdateResult,
   OpenCodeProvisionPhase,
   OpenCodeProvisionRequest,
   HermesProvisionRequest,
@@ -89,10 +90,20 @@ export function updateHermes(customPath: string | undefined, onProgress: (phase:
   return invoke('update_hermes', { customPath: customPath || null, onProgress: channel })
 }
 
-export function updateCode(customPath: string | undefined, onProgress: (phase: string) => void): Promise<{ logPath: string }> {
+export function updateCode(
+  customPath: string | undefined,
+  onProgress: (phase: string) => void,
+  useManagedCopy = false,
+  proxy?: OpenCodeProvisionRequest['proxy']
+): Promise<OpenCodeUpdateResult> {
   const channel = new Channel<string>()
   channel.onmessage = onProgress
-  return invoke('update_code', { customPath: customPath || null, onProgress: channel })
+  return invoke('update_code', {
+    customPath: customPath || null,
+    onProgress: channel,
+    useManagedCopy,
+    proxy,
+  })
 }
 
 export function getOpenCodeReadiness(
@@ -150,7 +161,7 @@ export function provisionOpenCode(
       readiness = await getOpenCodeReadiness()
       if (!readiness.installed || readiness.viaWsl) {
         throw new Error(
-          'OpenCode installation completed without a native executable on PATH.'
+          'OpenCode setup did not create a working executable. Try setup again.'
         )
       }
     }

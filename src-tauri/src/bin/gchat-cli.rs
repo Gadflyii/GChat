@@ -7,7 +7,7 @@
 //! Shares all core logic with the GChat desktop app.
 //! Build with: cargo build --features cli --bin gchat-cli
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use console::Style;
@@ -21,6 +21,7 @@ use app_lib::core::cli::{
     resolve_model_by_id, CliEndpointSettings, GinferConfig, GinferLoadRequest, HfFileInfo,
 };
 use app_lib::core::server::state_file::{self, LocalApiServerState};
+use app_lib::core::system::opencode_runtime;
 
 use integrations::{Agent, RunMode};
 
@@ -680,10 +681,10 @@ async fn auto_download_hf_model(repo_id: &str, select_file: bool) -> String {
 // ── Interactive pickers ────────────────────────────────────────────────────
 
 /// Present an interactive menu of the agents installed on this machine.
-async fn select_agent_interactively() -> &'static Agent {
+async fn select_agent_interactively(data_folder: &Path) -> &'static Agent {
     let installed: Vec<&'static Agent> = integrations::AGENTS
         .iter()
-        .filter(|a| is_command_installed(a.detect_bin))
+        .filter(|a| matches!(resolve_agent_executable(a, data_folder), Ok(Some(_))))
         .collect();
 
     if installed.is_empty() {
@@ -1054,11 +1055,29 @@ fn is_command_installed(cmd: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn resolve_agent_executable(agent: &Agent, data_folder: &Path) -> Result<Option<PathBuf>, String> {
+    if agent.id == "opencode" {
+        return Ok(opencode_runtime::resolve(data_folder, None)?.map(|runtime| runtime.executable));
+    }
+    Ok(is_command_installed(agent.detect_bin).then(|| PathBuf::from(agent.detect_bin)))
+}
+
+fn agent_command(agent: &Agent, executable: &Path, args: &[String]) -> std::process::Command {
+    if agent.id == "opencode" {
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        return opencode_runtime::command(executable, &args);
+    }
+    let mut command = std::process::Command::new(executable);
+    command.args(args);
+    command
+}
+
 // ── Launch handler ─────────────────────────────────────────────────────────
 
 async fn handle_launch(args: LaunchArgs) {
+    let data_folder = cli_get_data_folder();
     if args.list {
-        print_agent_list();
+        print_agent_list(&data_folder);
         return;
     }
 
@@ -1066,13 +1085,15 @@ async fn handle_launch(args: LaunchArgs) {
         Some(name) => integrations::find(name).unwrap_or_else(|| {
             eprintln!("Error: unknown agent '{name}'.");
             eprintln!();
-            print_agent_list();
+            print_agent_list(&data_folder);
             std::process::exit(1);
         }),
-        None => select_agent_interactively().await,
+        None => select_agent_interactively(&data_folder).await,
     };
 
-    if !is_command_installed(agent.detect_bin) {
+    let executable = resolve_agent_executable(agent, &data_folder)
+        .unwrap_or_else(|error| fail(format!("could not find {}: {error}", agent.name)));
+    let Some(executable) = executable else {
         eprintln!("Error: {} is not installed.", agent.name);
         eprintln!();
         eprintln!("  Install it first — the GChat desktop app can do this");
@@ -1080,7 +1101,7 @@ async fn handle_launch(args: LaunchArgs) {
         eprintln!();
         eprintln!("    {}", agent.docs_url);
         std::process::exit(1);
-    }
+    };
 
     let model_id = match args.model {
         Some(m) => m,
@@ -1109,8 +1130,6 @@ async fn handle_launch(args: LaunchArgs) {
 
     let base_url = format!("http://127.0.0.1:{actual_port}");
     let api_url = integrations::api_url_for(agent, &base_url, "/v1");
-    let data_folder = cli_get_data_folder();
-
     if let Err(e) =
         integrations::configure(agent, &data_folder, &api_url, &model_id, &args.api_key).await
     {
@@ -1132,9 +1151,8 @@ async fn handle_launch(args: LaunchArgs) {
     if agent.run_mode == RunMode::Gui {
         // A GUI launcher returns immediately, so exiting here would take the
         // model server down with it. Keep serving until the user stops us.
-        let mut cmd = std::process::Command::new(agent.detect_bin);
-        cmd.args(&argv)
-            .stdin(std::process::Stdio::null())
+        let mut cmd = agent_command(agent, &executable, &argv);
+        cmd.stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null());
         apply_agent_env(
@@ -1158,11 +1176,10 @@ async fn handle_launch(args: LaunchArgs) {
         return;
     }
 
-    eprintln!("  → Launching: {} {}", agent.detect_bin, argv.join(" "));
+    eprintln!("  → Launching: {} {}", executable.display(), argv.join(" "));
     eprintln!();
 
-    let mut cmd = std::process::Command::new(agent.detect_bin);
-    cmd.args(&argv);
+    let mut cmd = agent_command(agent, &executable, &argv);
     apply_agent_env(
         &mut cmd,
         agent,
@@ -1178,7 +1195,7 @@ async fn handle_launch(args: LaunchArgs) {
 
     match status {
         Ok(s) => std::process::exit(s.code().unwrap_or(0)),
-        Err(e) => fail(format!("launching '{}': {e}", agent.detect_bin)),
+        Err(e) => fail(format!("launching '{}': {e}", executable.display())),
     }
 }
 
@@ -1205,11 +1222,11 @@ fn apply_agent_env(
     }
 }
 
-fn print_agent_list() {
+fn print_agent_list(data_folder: &Path) {
     println!("Agents this CLI can configure:");
     println!();
     for agent in integrations::AGENTS {
-        let mark = if is_command_installed(agent.detect_bin) {
+        let mark = if matches!(resolve_agent_executable(agent, data_folder), Ok(Some(_))) {
             Style::new().green().apply_to("●").to_string()
         } else {
             Style::new().dim().apply_to("○").to_string()
@@ -1221,7 +1238,7 @@ fn print_agent_list() {
         "  {}",
         Style::new()
             .dim()
-            .apply_to("● installed   ○ not found on PATH")
+            .apply_to("● installed   ○ not installed")
     );
 }
 
@@ -1276,4 +1293,49 @@ async fn start_model_server(
     let url = format!("http://127.0.0.1:{}", info.port);
     finish_progress(pb, format!("✓ {model_id} ready · {url}"));
     (info.pid, info.port)
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn cli_launch_uses_the_selected_managed_opencode_and_configuration() {
+        let root = tempfile::tempdir().unwrap();
+        let data = root.path().join("Selected GChat data");
+        let executable = opencode_runtime::managed_executable(&data);
+        std::fs::create_dir_all(executable.parent().unwrap()).unwrap();
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s\\n' \"$0\" \"$1\" \"$2\" \"$HOME\" \"$OPENCODE_CONFIG_DIR\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let agent = integrations::find("opencode").unwrap();
+        let resolved = resolve_agent_executable(agent, &data).unwrap().unwrap();
+        assert_eq!(resolved, executable);
+        let mut command = agent_command(agent, &resolved, &["--session".into(), "ses_cli".into()]);
+        apply_agent_env(
+            &mut command,
+            agent,
+            &data,
+            "http://127.0.0.1:6767/v1",
+            "test-model",
+            "",
+        );
+
+        let output = command.output().unwrap();
+
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap(),
+            format!(
+                "{}\n--session\nses_cli\n{}\n{}\n",
+                executable.display(),
+                std::env::var("HOME").unwrap_or_default(),
+                data.join("code/opencode").display(),
+            ),
+        );
+    }
 }
