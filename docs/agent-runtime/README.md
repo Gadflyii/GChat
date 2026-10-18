@@ -45,7 +45,9 @@ viewed screenshots: `/ai/gchat/out/gchat-chat-agent-draft-20261018/`.
 This qualifies in-session navigation only. Clean-exit acceptance is excluded:
 Alt+F4 had no effect in bare Xvfb, and destroying the X window logged a GDK
 BadDrawable error during teardown. The container stopped and CPUs were returned
-at 17:17Z. Cold restart and Windows were not tested.
+at 17:17Z. Cold restart and Windows were not tested. After merging the
+skill-loading fix from main, 96 focused integration tests also pass; the
+combined check is retained as `integrated-focused.json` and its log.
 
 ## Conversation draft skills — October 18
 
