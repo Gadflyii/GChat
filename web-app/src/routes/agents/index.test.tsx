@@ -1073,6 +1073,94 @@ describe('AgentStudioPage', () => {
   })
 
   it.each([
+    { kind: 'workflow', manualCollision: false },
+    { kind: 'coordinator', manualCollision: false },
+    { kind: 'workflow', manualCollision: true },
+    { kind: 'coordinator', manualCollision: true },
+  ] as const)('appends a unique $kind role after middle removal (manual collision: $manualCollision)', async ({ kind, manualCollision }) => {
+    const prefix = kind === 'workflow' ? 'stage' : 'specialist'
+    const label = kind === 'workflow' ? 'Stage ID' : 'Specialist ID'
+    const roleName = kind === 'workflow' ? 'Stage' : 'Specialist'
+    const role = (id: string, name: string) => ({
+      id, name, instructions: `Preserve ${id} instructions.`, skills: [],
+      maxSteps: 17, modelInstanceId: 'qwen', reasoningEffort: null,
+    })
+    const roles = [
+      role(kind === 'workflow' ? 'deliver' : 'researcher', 'Original lead'),
+      role(`${prefix}-2`, 'Removed middle'),
+      role(`${prefix}-3`, 'Original third'),
+    ]
+    const definition: AgentDefinition = kind === 'workflow'
+      ? {
+        ...editableDraft, id: 'append-roles', name: 'Append roles workflow', kind,
+        nodes: roles.map((node, index) => ({
+          ...node, workspace: index === 0 ? 'shared' as const : 'isolated' as const,
+        })),
+        edges: [
+          { from: 'stage-2', to: 'deliver' },
+          { from: 'stage-3', to: 'deliver' },
+        ],
+      }
+      : {
+        ...editableDraft, id: 'append-roles', name: 'Append roles team', kind,
+        workers: roles, maxParallel: 2,
+        coordinatorInstructions: 'Plan', synthesisInstructions: 'Combine',
+        synthesisModelInstanceId: null, synthesisReasoningEffort: null,
+      }
+    const originalRoles = definition.kind === 'workflow' ? definition.nodes : definition.workers
+    definitionState.value.definitions = [definition]
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue(definition.name)
+
+    fireEvent.click(screen.getAllByTitle(`Remove ${prefix}`)[1])
+    const firstId = manualCollision ? `${prefix}-4` : originalRoles[0].id
+    if (manualCollision) {
+      const firstIdentifier = screen.getAllByLabelText(label)[0]
+      fireEvent.change(firstIdentifier, { target: { value: firstId } })
+      fireEvent.blur(firstIdentifier)
+    }
+    fireEvent.click(screen.getByRole('button', { name: `Add ${prefix}` }))
+
+    const next = manualCollision ? 5 : 4
+    const appendedId = `${prefix}-${next}`
+    expect(screen.getAllByLabelText(label).map((input) => (input as HTMLInputElement).value))
+      .toEqual([firstId, `${prefix}-3`, appendedId])
+    expect(screen.getAllByLabelText('Display name').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['Original lead', 'Original third', `${roleName} ${next}`])
+    if (kind === 'workflow') {
+      const dependencies = screen.getAllByLabelText('Depends on stage IDs')
+      expect(dependencies[0]).toHaveValue('stage-3')
+      expect(dependencies[1]).toHaveValue('')
+      expect(dependencies[2]).toHaveValue('')
+      fireEvent.change(dependencies[0], {
+        target: { value: `stage-3, ${appendedId}` },
+      })
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        kind,
+        [kind === 'workflow' ? 'nodes' : 'workers']: [
+          { ...originalRoles[0], id: firstId },
+          originalRoles[2],
+          expect.objectContaining({
+            id: appendedId, name: `${roleName} ${next}`,
+            ...(kind === 'workflow' ? { workspace: 'isolated' } : {}),
+          }),
+        ],
+        ...(kind === 'workflow'
+          ? { edges: [
+            { from: 'stage-3', to: firstId },
+            { from: appendedId, to: firstId },
+          ] }
+          : { maxParallel: 2 }),
+      })
+    ))
+  })
+
+  it.each([
     ['Off', 'none'], ['Minimal', 'minimal'], ['Low', 'low'], ['Medium', 'medium'],
     ['High', 'high'], ['Extra high', 'xhigh'], ['Maximum', 'max'], ['Model default', null],
   ] as const)('offers every GInfer reasoning effort and saves %s', async (label, value) => {

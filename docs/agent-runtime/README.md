@@ -49,6 +49,32 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Adding roles after removal — October 18
+
+An isolated native Linux Studio pass reproduced duplicate generated IDs after
+removing a middle role and adding another: `deliver, stage-2, stage-3` became
+`deliver, stage-3, stage-3`, and the workflow could not save. Coordinator Team
+specialists reproduced the same collision with `specialist-3`. Both Add handlers
+are unchanged between native source `a7debe294` and main `bca080b71`.
+
+Add stage and Add specialist now advance past IDs already in the current draft,
+including manually renamed IDs. Existing role IDs and workflow handoffs remain
+unchanged. Four rendered regressions cover middle removal and manual collisions
+for both kinds. The focused Studio suite passed 63 tests; one `make verify`,
+frontend build and native build passed on frozen source `edcd74e49`.
+
+Native Linux replay created `stage-4` / `specialist-4` after middle removal,
+then skipped manually occupied `*-4` IDs to create `stage-5` / `specialist-5`.
+Both definitions saved and reselected with the expected IDs; the workflow
+retained both handoff edges, and all eight prior definitions were unchanged.
+The candidate SHA256 is
+`bba3976355aca7a8c8721866f2eb5f3376be33181ae067dc12e4efb82d1a63be`.
+The private HOME/XDG, Xvfb, D-Bus and unlocked test keyring replay used no model
+or GPU and returned CPUs at 04:32Z. Evidence is in
+`/ai/gchat/out/gchat-appended-role-identifiers-20261018/`.
+This qualifies the Linux debug desktop interaction; Windows was not built
+(dev phase), and installer behavior was not checked.
+
 ## Workflow dependency keyboard entry — October 18
 
 An isolated native Linux Studio pass reproduced a dependency editor that removed
