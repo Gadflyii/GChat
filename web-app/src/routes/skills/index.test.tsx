@@ -51,12 +51,17 @@ vi.mock('@/hooks/useAgentSkills', () => ({
 
 vi.mock('@/i18n/react-i18next-compat', () => ({
   useTranslation: () => ({
-    t: (key: string, options?: { name?: string; defaultValue?: string }) =>
-      key === 'common:enablingSkill' ||
-      key === 'common:disablingSkill' ||
-      key === 'common:savingSkill'
-        ? (options?.defaultValue ?? key).replace('{{name}}', options?.name ?? '')
-        : key,
+    t: (
+      key: string,
+      options?: { name?: string; platforms?: string; defaultValue?: string }
+    ) =>
+      key === 'common:skillSupportedSystems'
+        ? `Supported systems: ${options?.platforms}.`
+        : key === 'common:enablingSkill' ||
+            key === 'common:disablingSkill' ||
+            key === 'common:savingSkill'
+          ? (options?.defaultValue ?? key).replace('{{name}}', options?.name ?? '')
+          : key,
   }),
 }))
 
@@ -353,6 +358,65 @@ describe('SkillsPage', () => {
     for (const button of screen.getAllByText('common:tryInChat')) {
       expect(button.closest('button')).toBeDisabled()
     }
+  })
+
+  it.each([
+    { platforms: ['darwin'] as const, systems: 'macOS' },
+    { platforms: ['linux', 'win32'] as const, systems: 'Linux, Windows' },
+  ])('explains incompatible skills supported on $systems', ({ platforms, systems }) => {
+    const incompatible: AgentSkillDetail = {
+      ...customSkill,
+      platforms: [...platforms],
+      compatible: false,
+      unavailableReasons: ['Required tool is missing'],
+    }
+    hookState.value.skills = [incompatible]
+    hookState.value.selected = incompatible
+
+    render(<SkillsPage />)
+
+    expect(screen.getAllByText('common:skillUnavailableOnComputer')).toHaveLength(
+      2
+    )
+    const notice = screen.getByRole('heading', {
+      name: 'common:skillUnavailable',
+    }).parentElement!
+    expect(within(notice).getByText(`Supported systems: ${systems}.`)).toBeVisible()
+    expect(notice).toHaveTextContent('Required tool is missing')
+    expect(screen.getByRole('switch')).toBeChecked()
+    const tryButton = screen.getByRole('button', { name: 'common:tryInChat' })
+    expect(tryButton).toBeDisabled()
+    fireEvent.click(tryButton)
+    expect(navigate).not.toHaveBeenCalled()
+    expect(hookState.value.setEnabled).not.toHaveBeenCalled()
+  })
+
+  it('shows a generic platform notice when supported systems are absent', () => {
+    hookState.value.skills = [{ ...customSkill, compatible: false }]
+    hookState.value.selected = hookState.value.skills[0]
+
+    render(<SkillsPage />)
+
+    expect(screen.getAllByText('common:skillUnavailableOnComputer')).toHaveLength(
+      2
+    )
+    expect(screen.queryByText(/Supported systems:/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'common:tryInChat' })).toBeDisabled()
+  })
+
+  it.each([true, false])('omits platform warnings for compatible skills enabled=%s', (enabled) => {
+    hookState.value.skills = [{ ...customSkill, platforms: ['linux'], enabled }]
+    hookState.value.selected = hookState.value.skills[0]
+
+    render(<SkillsPage />)
+
+    expect(
+      screen.queryByText('common:skillUnavailableOnComputer')
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/Supported systems:/)).not.toBeInTheDocument()
+    const tryButton = screen.getByRole('button', { name: 'common:tryInChat' })
+    if (enabled) expect(tryButton).toBeEnabled()
+    else expect(tryButton).toBeDisabled()
   })
 
   it('updates the selected skill from its switch', async () => {
