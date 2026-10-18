@@ -732,6 +732,7 @@ function AgentStudioPage() {
           <main className="min-h-0 min-w-0 overflow-y-auto p-5">
             {draft ? (
               <DefinitionEditor
+                key={draftSavedId === null ? 'unsaved' : `saved:${draftSavedId}`}
                 draft={draft}
                 modelInstances={modelInstances}
                 skills={skills
@@ -1041,14 +1042,11 @@ function DefinitionEditor({
               }
               help="Sets the maximum number of think → act → observe rounds before the role must return its answer. One round can run a batch of independent tools."
             >
-              <Input
-                type="number"
+              <RequiredNumberInput
                 min={1}
                 max={25}
                 value={draft.maxSteps}
-                onChange={(event) =>
-                  common({ maxSteps: Number(event.target.value) })
-                }
+                onValueChange={(maxSteps) => common({ maxSteps })}
               />
             </Field>
             <div className="rounded-xl border bg-muted/15 p-3 text-xs text-muted-foreground">
@@ -1248,14 +1246,11 @@ function GoalLoopEditor({
           label="Maximum cycles"
           help="One cycle is one executor result plus one evaluator decision."
         >
-          <Input
-            type="number"
+          <RequiredNumberInput
             min={1}
             max={8}
             value={draft.maxCycles}
-            onChange={(event) =>
-              onChange({ ...draft, maxCycles: Number(event.target.value) })
-            }
+            onValueChange={(maxCycles) => onChange({ ...draft, maxCycles })}
           />
         </Field>
         <div className="rounded-xl border bg-background p-3 text-xs text-muted-foreground">
@@ -1433,14 +1428,11 @@ function CoordinatorEditor({
           label="Maximum parallel workers"
           help="Limits how many specialist model instances can work at the same time."
         >
-          <Input
-            type="number"
+          <RequiredNumberInput
             min={1}
             max={Math.max(1, draft.workers.length)}
             value={draft.maxParallel}
-            onChange={(event) =>
-              onChange({ ...draft, maxParallel: Number(event.target.value) })
-            }
+            onValueChange={(maxParallel) => onChange({ ...draft, maxParallel })}
           />
         </Field>
         <div className="rounded-xl border bg-background p-3 text-xs text-muted-foreground">
@@ -1644,6 +1636,43 @@ function WorkflowEditor({
   )
 }
 
+function RequiredNumberInput({
+  value,
+  onValueChange,
+  ...props
+}: Omit<
+  React.ComponentProps<typeof Input>,
+  'type' | 'value' | 'onChange' | 'onBlur'
+> & {
+  value: number
+  onValueChange: (value: number) => void
+}) {
+  const [draftValue, setDraftValue] = useState<{
+    text: string
+    numeric: number
+  } | null>(null)
+
+  useEffect(() => {
+    setDraftValue((current) => (current?.numeric === value ? current : null))
+  }, [value])
+
+  return (
+    <Input
+      {...props}
+      type="number"
+      // Keep an empty edit visible while the definition still receives a number.
+      value={draftValue?.numeric === value ? draftValue.text : String(value)}
+      onChange={(event) => {
+        const text = event.target.value
+        const numeric = Number(text)
+        setDraftValue({ text, numeric })
+        onValueChange(numeric)
+      }}
+      onBlur={() => setDraftValue(null)}
+    />
+  )
+}
+
 function WorkflowDependencyInput({
   value,
   onChange,
@@ -1745,14 +1774,11 @@ function RoleEditor({
           label="Maximum tool steps"
           help="The most think → act → observe rounds this role may use."
         >
-          <Input
-            type="number"
+          <RequiredNumberInput
             min={1}
             max={25}
             value={role.maxSteps}
-            onChange={(event) =>
-              onChange({ ...role, maxSteps: Number(event.target.value) })
-            }
+            onValueChange={(maxSteps) => onChange({ ...role, maxSteps })}
           />
         </Field>
         <div className="rounded-xl border bg-muted/15 p-3 text-xs text-muted-foreground">

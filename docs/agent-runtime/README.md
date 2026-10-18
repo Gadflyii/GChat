@@ -148,6 +148,48 @@ was viewed and CPUs were returned at 05:08Z. This qualifies the Linux debug
 editor interaction; installer behavior was not checked.
 Windows: not built (dev phase).
 
+## Required numeric keyboard editing — October 18
+
+An isolated native Linux Studio pass reproduced a leading zero while replacing
+required numeric values. Clearing **Maximum tool steps** immediately inserted
+`0`, so typing `12` displayed `012`. Goal Loop **Maximum cycles** similarly
+showed `04`. Saving and reselecting the tool-step limit correctly retained `12`;
+the defect affects editing rather than stored numeric values. The affected
+editor is unchanged from native source `6e6286019` through main `b9a56c96c`.
+The viewed screenshot, DOM captures and stopped private session are in
+`/ai/gchat/out/gchat-agent-numeric-editing-20261018/`.
+
+The required tool-step, cycle, parallel-worker and role-step controls retain
+blank text while editing and normalize on blur. Their numeric validation and
+saved contract remain unchanged. The optional output budget retains its Auto
+behavior. Five regressions cover clear/type/save, blur normalization, role
+limits, external clamping and selecting another saved agent. The focused Studio
+suite passed all 70 tests on frozen source `f1c7c73b0`; the unchanged-source
+negative control failed the four clear-edit cases as expected. The initial
+focused run stopped on four leading-zero assertions caused by the test driver's
+number-input coercion. Those raw-value events now use `fireEvent.change`;
+ordinary keyboard interactions remain covered by `userEvent`.
+
+The first `make verify` stopped at typecheck because the retained staging folder
+contained two settings files deleted from the frozen source. Removing only
+those two stale scratch files restored the exact 3,220-file source manifest.
+The clean-staging `make verify` passed: 3,374 root/web tests, 127 extension tests
+and 1,229 Rust tests, with six JavaScript skips and 28 Rust ignores. The focused
+suite and negative control were not repeated during this environment recovery.
+The frontend and native builds passed. The corrected native replay kept all
+four required controls blank when cleared, accepted replacement values, and
+normalized native `04` and `09` to `4` and `9` on Tab. Save and reselect preserved
+the workflow stage’s `9` steps; clearing the optional output budget reopened as
+Auto. The eleven other definitions were unchanged. The corrected screenshot
+was viewed; the private app stopped and CPUs returned at 05:39Z. Candidate
+SHA256 is
+`ab6efa376859b0ac417b41963ad72a29e42c8554d1fb57f3eb1a9d68c688166f`.
+Evidence is in `/ai/gchat/out/gchat-agent-numeric-keyboard-20261018/`.
+The later main merge did not change the tested editor or regression file.
+This qualifies the frozen Linux debug candidate’s editor interaction; no model
+or agent run was requested.
+Windows: not built (dev phase).
+
 ## Skill slash-menu keyboard visibility — October 18
 
 An isolated native Linux Chat pass qualified the pending keyboard interaction
