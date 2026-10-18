@@ -1,5 +1,38 @@
 # GInfer host UI
 
+## Models tabs installed keyboard acceptance — C7, closed October 18
+
+`GUI-MODELS-TABS-KEYBOARD` passes the remaining native Linux keyboard leaf.
+The source fix (`6d604972a`, merge `ca11ad8c0`) and its 27 focused cases were
+already merged. Retained release AppDir source
+`ed68c7443d3d782869dad89736ca049631f8a157` has the same tab order, map and
+keyboard handler as current source `d8ce59320`; no rebuild was needed.
+
+On S1 `AIS-2-8592-L01`, real xdotool/XTest input reached the native WebView
+in a private Xvfb display. Observed key events were trusted. Fourteen states
+establish one selected tab and one tab stop, Right/Left wrap, Home/End selection,
+and Tab/Shift-Tab into and out of Installed, Recommended and Downloads. Focus,
+`aria-selected` and visible panel content stayed consistent; Tab reached each
+panel's refresh control. The inspector observed DOM state and did not synthesize
+keyboard input. Results are
+`out/c7-models-tabs-installed-20261018/{result.json,summary.md}`.
+
+The app used a private HOME/XDG, session bus and unlocked keyring. All owned
+processes stopped by recorded PID, and its 3.28GiB private runtime/profile/tool
+root `/media/ron/SSD_RAID/ai/tmp-c7-models-tabs-installed-20261018` was removed.
+CPUs96–103 returned00:58Z. Gchat3's retained AppDir was read-only; no build,
+model load, profile, download, benchmark or GPU allocation was needed.
+This establishes the unchanged tab behavior in that Linux release. Windows
+WebView, later local-import controls and release-wide qualification are outside
+this result. Ron's installation and shared app data were untouched.
+
+Owned source worktree
+`/ai/gchat-worktrees/c7-models-tabs-installed-20261018`, branch
+`test/c7-models-tabs-installed-20261018`, remains for review. Only the result JSON
+and short summary are retained as new local artifacts; no live job or booking
+remains. This documentation-only closure uses `git diff --check`; source gates
+were reused. Next action: coordinator merge of the closure record.
+
 ## Connected Gbot desktop, approvals and history — Gchat 2
 
 `GBOT-DESKTOP-TASKS-APPROVALS-WALK`, October 17–18, 2026: the previously
