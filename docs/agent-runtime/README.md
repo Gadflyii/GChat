@@ -22,6 +22,22 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Starting an agent from a template — October 18
+
+A private native keyboard pass activated Goal Loop's **Use template** button.
+The editor opened with focus on the page body; the next Tab returned to section
+navigation. Accepted template selection now focuses the draft's Name field,
+including when replacing an unsaved template. Typing and later Tab navigation
+keep their normal focus, and the existing discard confirmation still applies.
+
+Source `fc6a615f2` passed 110 focused tests, lint and one `make verify`
+(3,664 app, 127 extension and 1,309 Rust tests; six coverage floors). The frontend
+and Linux native build passed. Native keyboard input confirmed Name focus,
+ordinary Tab to Identifier, retained edits after Cancel, and Name focus after
+confirmed discard. The app closed normally with all four saved fixture files
+unchanged; no model or inference ran. Windows remains unqualified. Evidence:
+`/ai/gchat/out/gchat-agent-template-editor-focus-20261018/`.
+
 ## Validating the agent output budget — October 18
 
 A private native pass entered `256.5` as the output budget and saved a new
