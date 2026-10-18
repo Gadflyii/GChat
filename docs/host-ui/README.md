@@ -3687,6 +3687,25 @@ or **Saving skill…** until the request finishes. Wait for the dialog to close
 before using the saved skill. If saving fails, your entries stay in the dialog
 and the button becomes available so you can try again.
 
+## Downloading a skill
+
+In **Agent Studio → Skills**, open the skill's **Skill actions** menu and choose
+**Download**. Choose where to save its `.skill` archive in the native Save
+window. **Cancel** returns to Skills without exporting; open **Download** again
+when you are ready to save. A successful save shows **Skill exported**.
+
+Linux acceptance (`GUI-AGENT-SKILL-EXPORT-NATIVE-20261018`): Download opened
+the native Save window with `lifecycle-probe.skill` and the **GChat Skill**
+filter. Cancel cleared the saving status silently, and Download became available
+again. Reopening and saving to an owned destination showed **Skill exported**;
+the valid archive contained `SKILL.md` byte identical to its source. The saving
+status cleared and Download was available after success. All 17 saved records,
+45 `SKILL.md` files and two workspace inputs stayed unchanged. The retained
+`8f7d18f6f` build matches the relevant source at `f333b3b47`.
+Evidence: [`out/gchat-agent-skill-export-native-20261018/`](../../out/gchat-agent-skill-export-native-20261018/).
+This covers ordinary Linux Cancel and Save; delayed duplicate submissions,
+export failures and Windows remain outside this native check.
+
 ## Assistant save results — C7
 
 `GUI-ASSISTANT-SAVE-RESULT-20261017` fixes assistant creation and editing
