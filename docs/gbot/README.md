@@ -16,6 +16,16 @@ response, plus resuming partially advanced setup. No automatic retry,
 connection or task is added. This is source and
 rendered acceptance; live Linux/Windows guest acceptance is unchanged.
 
+Validation: all six new journeys failed against original production; fixed
+focus passed 153 tests across the route and local setup. Lint passed with
+zero errors and five existing warnings. ONE `make verify` (2026-10-18
+23:03:58–23:10:04 UTC) passed 3,878 app tests (six skipped), 130 extension
+tests, 1,323 Rust tests (28 ignored), all six coverage floors and
+lint/typecheck/quality guards. All 3,481 tracked inputs matched raw bytes and
+modes before and after verification, with fresh tracked timestamps. Only this
+receipt was added afterward. Booking3625 returned23:10Z. Evidence:
+`/ai/gchat/out/gchat2-saved-local-vm-failure-recovery-20261018/SUMMARY.md`.
+
 ## Refreshing accounts after Microsoft sign-in — Gchat 2
 
 `GBOT-M365-CONNECTED-ACCOUNT-REFRESH`, based on main `42759aafd`, keeps
