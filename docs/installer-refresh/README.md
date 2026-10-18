@@ -948,7 +948,108 @@ liveness check; this is scoped local retirement, not a fleet cleanup claim.
 The small JSON receipt and short account retain the disposition; no new build,
 model run or acceptance rerun was needed.
 
-## Windows RC refresh — release installer delivered, October 18
+## Windows RC refresh — current main and Engine, October 18 afternoon
+
+The unsigned Release RC is built, accepted and delivered. Codex4 still owns
+Bubbs's requested native installation, first-user walk and chat on the4090 and
+laptop. Nothing is published; the builder's installed app/profile is excluded.
+
+| Field | Refreshed RC |
+| --- | --- |
+| GChat | `250df804ac3efc73832ac4f805b137a226522a27` — main at assignment |
+| Engine | `6b85ecf77da129fe332818b8bcaec9467b56bdaa` — dev/next at assignment |
+| Images / profile / signature | Separate SM86, SM89, SM120a / Release / NotSigned |
+| NSIS bytes / SHA256 | 1,484,393,816 / `1090efe265225e09274972bfc59755bbddbec7409e5126f8aab0a9934f52b211` |
+| MSI bytes / SHA256 | 1,562,340,922 / `e54360dba49d4a11162c3010d4777e871c3381814af8175d16daa0183f3ed56c` |
+| Delivered | 19:08:49Z on `RON-9950X3D2`, beside the preserved previous RC |
+
+```text
+C:\Users\Ron\gchat-windows-rc-ed68c7443-20261017\windows-rc-ed68c7443-e2282c336-20261017\GChat_2.0.42_x64-setup.250df804a-6b85ecf77.exe
+```
+
+All three native Engine images passed archive integrity and CLI/server help
+checks at18:03Z. The production frontend, CLI, Host and desktop compiled; NSIS
+and MSI packaging passed18:54:25Z. Final acceptance passed19:08:41Z: complete
+14-catalog/103-profile equality, pinned sources, both package hashes and native
+Job exit0 with no remaining owned processes. Delivery preserved the previous
+RC and verified the new unsigned NSIS. Durable WSL parents held both canonical
+locks through native Job exit. The final booking1490 was canceled at19:14Z;
+local5090 returned to Gchat3. No installer or model has run for this walk.
+The existing publisher, packager and Job/memory guard were reused. Canonical
+small receipts are under
+`/ai/gchat/out/c4-windows-rc-refresh-20261018/{engine-release,app-installer,package-acceptance}`;
+acceptance authority is `package-acceptance/{app-result.json,native-guard-result.json,rc-delivery-result.json}`.
+
+An owned PowerShell status observer accumulated85.82GB RSS. Its command,
+creation time and PID45328 were verified before retirement19:07:58Z; available
+native RAM recovered to96.32GB. The cause of growth is unproved. Future status
+observations use bounded .NET byte reads or small terminal JSON instead of the
+previous Get-Content-tail observer. The small retirement receipt is retained in
+`app-installer/observer-retirement.json`.
+
+Bubbs's18:20Z disposition uses qualified Windows Qwen INT `bcf29abd` for the
+4090 Automatic chat, catalog
+`windows-rtx4090-qwen38-groupwise-int-dflash2-q4`. The pinned catalogs contain
+no3080Ti laptop profile. On the laptop, retain Automatic's actual
+`no_qualified_profile`, then use the authorized hand-picked Qwen2-bit mix
+`483343c2` for one chat. That catalog gap is accepted and does not block the RC.
+No Linux profile becomes native Windows qualification. Installation preserves
+existing user data and any detected install directory; no reset or uninstall
+is authorized. Observe genuine first-user state, actual Ready, one complete
+ordinary new chat and normal model Stop on each target.
+
+Read-only19:12Z metadata confirmed both retained exact artifacts accessible
+through registered WSL distro `Ubuntu`: the Ada INT donor under
+`\\wsl.localhost\Ubuntu\ai\ginfer-artifacts\qwen38-muse-tp1-tp2-tp4-2026-09-02-r1\qwen38_27b_int_df2.ginfer`
+and the laptop mix under
+`\\wsl.localhost\Ubuntu\home\ron\tmp-c5-laptop-natural-c4-soak-rerun-20261018\pkg\qwen38_27b_smol_df2.ginfer`.
+Native Temp parents have ample space; no installer staging or launch has run.
+C5's ordinary laptop Qwen Download completed20:05Z. After artifact setup
+recovery, Automatic Load was rejected before Ready; no laptop natural or
+Engine run completed. The signed Ada Qwen natural passed. Both targets
+returned20:30Z with no C5 hold. Gchat3's local native Muse1498 returned20:34Z;
+the earlier native arena rejections remain evidence for Arch's decision to
+permit platform-specific Automatic sizing. All C5 raw evidence relays returned
+20:35:35Z, and C4's guided quote ELF relays returned20:37:39Z. The guided
+quote SM86/SM120a/SM89 builds and focused tests passed on S1.
+
+C6's Ada seam5 gate returned20:41Z. The guided dry quotes initially reported
+laptop82944/81920 and Ada140288. Laptop live82944 and the separately authorized
+81920 stepdown both rejected before Ready: quote omitted the serving request
+reserve. Bubbs prioritized that correction ahead of these RC walks. Corrected
+source `c26257593` shares serving's request-budget callback; focused tests and
+all three corrected no-load checks pass. At21:14Z the laptop reported a
+conservative67584 bound and typed rejection for81920; Ada remained140288.
+The build/physical packet is GInfer `a8a1bf8d1`,
+`docs/fn-graph-probe-startup/README.md`. Arch direction for a single corrected
+laptop liveC8 witness remains pending. No RC target installer, desktop or model
+has launched. Both native walk commands remain prepared under the retained
+Job guards; install/walk/chat follow correction acceptance and the current
+target handoff. Gchat3's separate packaged-resource copies returned21:08:55Z;
+those are qualification copies, not an RC installation. Recheck each actual
+shared boundary before staging or launch; no earlier return grants a future hold.
+C7's local-model acceptance can share the
+laptop walk before its single Start: retain the visible empty/unset download
+catalog and registered local model without a download dependency, then the
+settings quote's identity, memory estimate and no-start behavior. Change a valid
+field and observe invalidation, then restore and recheck the original launch
+controls. Preserve existing profile/catalog state; unexpected nonempty state is
+reported rather than manufactured. A nonempty catalog is a secondary C7
+empty-catalog acceptance gap: preserve the settings and continue the authorized
+primary RC install/chat walk. The pinned RC contains this UI; native behavior
+remains unobserved. The
+[Gchat3 procedure handoff](/ai/gchat/out/windows-rc-current-main-20261018/rc-owner-handoff-20261018.md)
+and the retained candidate-bound UIAutomation recipe govern execution.
+
+| Owner / host | Owned path | Purpose / retention |
+| --- | --- | --- |
+| C4 local WSL | `/ai/gchat-worktrees/c4-windows-rc-refresh-20261018` | Branch `build/c4-windows-rc-refresh-20261018`, current record |
+| C4 local WSL | `/ai/gchat/out/c4-windows-rc-refresh-20261018` | Small command, result and target metadata receipts; no binaries |
+| C4 local WSL | `/ai/ginfer-worktrees/c4-windows-rc-engine-20261018` | Read-only pinned Engine donor |
+| C4 local Windows | `E:\gchat4-windows-rc-250df804a-20261018` | Accepted images/packages; retain through both target walks, then retire disposable builds. Gchat3's read-copy returned19:05Z |
+| C4 target Windows | not yet allocated | Authorized installation/walk; staged package copies will be retired afterward |
+
+## Windows RC refresh — release installer delivered, October 18 morning
 
 Bubbs's post-merge refresh is **PASS**. The unsigned Windows release installer
 was delivered at **03:35:36Z** beside the previous RC, without overwriting it:
