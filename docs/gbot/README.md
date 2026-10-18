@@ -1,5 +1,30 @@
 # Gbot design
 
+## Refreshing Hosts preserves failed brain saves — Gchat 2
+
+`GBOT-BRAIN-HOST-REFRESH-SAVE-ERROR`, based on main `73d9d4b9c`,
+fixes Refresh hosts clearing a failed Save brain settings error. Discovering
+ready models does not save the bot's settings, so a successful refresh could
+hide the failure while leaving the same unsaved draft.
+
+Host discovery and Save now keep separate errors beside their respective
+controls. Refresh clears only the discovery error; the Save error remains
+until an explicit Save retry or Cancel. Rendered regressions cover refresh
+success, discovery failure and recovery, retained Host/model/context drafts,
+no automatic save, and an explicit retry with the original assignment.
+
+Acceptance: unchanged production failed both new cases (11 filtered); the
+fixed BrainSetup suite passed all 13 with
+`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotSetup/BrainSetup.test.tsx`.
+ONE isolated S1 `make verify` passed 18 October 11:04:37–11:10:18 UTC:
+3,542 application tests / 6 skipped, 127 extension tests, 1,288 Rust tests /
+28 ignored, six coverage floors, lint, typecheck and guards. All 3,446 tracked
+source hashes matched before and after the gate. This final receipt text was
+added afterward; production and test hashes stayed unchanged.
+Evidence: `out/gchat2-brain-refresh-save-error-20261018/result.json`.
+FRESH and OLD are untouched; rendered service responses do not qualify native
+Windows or live Host execution.
+
 ## Task controls discard errors after confirmed progress — Gchat 2
 
 `GBOT-TASK-ACTION-ERROR-RECONCILIATION`, based on main `d67e8fdb2`,

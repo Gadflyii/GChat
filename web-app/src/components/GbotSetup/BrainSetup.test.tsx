@@ -277,6 +277,120 @@ const ready = {
   model: 'qwen-smol',
   context_tokens: 262144,
 }
+
+it('keeps a failed brain save visible while refreshing ready Hosts', async () => {
+  const firstSave = deferred()
+  const refresh = deferred()
+  const retry = deferred()
+  call
+    .mockResolvedValueOnce([ready])
+    .mockReturnValueOnce(refresh.promise.then(() => [ready]))
+  const configured: SavedAssignment = {
+    ...saved,
+    connection: { kind: 'paired_host', target: ready.target },
+    model: ready.model,
+    context_tokens: ready.context_tokens,
+    credential_ref: null,
+  }
+  const save = vi
+    .fn()
+    .mockReturnValueOnce(firstSave.promise)
+    .mockReturnValueOnce(retry.promise)
+  render(<Setup initial={configured} configured={configured} save={save} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Edit brain' }))
+  const submit = screen.getByRole('button', { name: 'Save brain settings' })
+  await waitFor(() => expect(submit).toBeEnabled())
+  fireEvent.click(submit)
+  await act(async () => firstSave.reject(new Error('Brain settings not saved')))
+  expect(screen.getByRole('alert')).toHaveTextContent('Brain settings not saved')
+
+  const reload = screen.getByRole('button', { name: 'Refresh hosts' })
+  fireEvent.click(reload)
+  expect(reload).toBeDisabled()
+  expect(submit).toBeDisabled()
+  expect(screen.getByRole('alert')).toHaveTextContent('Brain settings not saved')
+  await act(async () => refresh.resolve())
+  expect(reload).toBeEnabled()
+  expect(submit).toBeEnabled()
+  expect(screen.getByRole('alert')).toHaveTextContent('Brain settings not saved')
+  expect(screen.getByRole('button', { name: 'Ready Host model' })).toHaveTextContent(
+    ready.model
+  )
+  expect(screen.getByLabelText('Model ID')).toHaveValue(ready.model)
+  expect(screen.getByLabelText('Model context tokens')).toHaveValue(262144)
+  expect(screen.queryByText('Brain configured')).not.toBeInTheDocument()
+  expect(save).toHaveBeenCalledTimes(1)
+  expect(call.mock.calls).toEqual([
+    ['assignments/models'],
+    ['assignments/models'],
+  ])
+
+  fireEvent.click(submit)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('Saving brain settings…')
+  expect(save).toHaveBeenCalledTimes(2)
+  expect(save.mock.calls[1]).toEqual(save.mock.calls[0])
+  await act(async () => retry.resolve())
+  expect(screen.getByText('Brain configured')).toBeVisible()
+})
+
+it('keeps a failed brain save when Host discovery fails and recovers', async () => {
+  const firstSave = deferred()
+  const failedRefresh = deferred()
+  const recoveredRefresh = deferred()
+  const retry = deferred()
+  call
+    .mockResolvedValueOnce([ready])
+    .mockReturnValueOnce(failedRefresh.promise.then(() => [ready]))
+    .mockReturnValueOnce(recoveredRefresh.promise.then(() => [ready]))
+  const initial: Assignment = {
+    connection: { kind: 'paired_host', target: ready.target },
+    model: ready.model,
+    context_tokens: ready.context_tokens,
+  }
+  const save = vi
+    .fn()
+    .mockReturnValueOnce(firstSave.promise)
+    .mockReturnValueOnce(retry.promise)
+  render(<Setup initial={initial} save={save} />)
+  const submit = screen.getByRole('button', { name: 'Save brain settings' })
+  await waitFor(() => expect(submit).toBeEnabled())
+  fireEvent.click(submit)
+  await act(async () => firstSave.reject('Brain settings not saved'))
+  expect(screen.getByRole('alert')).toHaveTextContent('Brain settings not saved')
+
+  const reload = screen.getByRole('button', { name: 'Refresh hosts' })
+  fireEvent.click(reload)
+  await act(async () => failedRefresh.reject('Host discovery unavailable'))
+  expect(screen.getAllByRole('alert').map((alert) => alert.textContent)).toEqual([
+    'Host discovery unavailable',
+    'Brain settings not saved',
+  ])
+  expect(submit).toBeDisabled()
+  expect(screen.getByLabelText('Model ID')).toHaveValue(ready.model)
+  expect(screen.getByLabelText('Model context tokens')).toHaveValue(262144)
+  expect(save).toHaveBeenCalledExactlyOnceWith(initial)
+
+  fireEvent.click(reload)
+  expect(screen.getByRole('alert')).toHaveTextContent('Brain settings not saved')
+  await act(async () => recoveredRefresh.resolve())
+  expect(screen.getByRole('alert')).toHaveTextContent('Brain settings not saved')
+  expect(submit).toBeEnabled()
+  expect(save).toHaveBeenCalledTimes(1)
+  expect(call.mock.calls).toEqual([
+    ['assignments/models'],
+    ['assignments/models'],
+    ['assignments/models'],
+  ])
+
+  fireEvent.click(submit)
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(save).toHaveBeenCalledTimes(2)
+  expect(save.mock.calls[1]).toEqual(save.mock.calls[0])
+  await act(async () => retry.resolve())
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
 it('restores the exact saved Host session when connection edits are canceled', async () => {
   call.mockResolvedValue([ready])
   const configured: SavedAssignment = {
