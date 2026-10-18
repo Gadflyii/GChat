@@ -36,6 +36,8 @@ const mocks = vi.hoisted(() => ({
 const agentDefinitions = vi.hoisted(() => ({
   value: [] as AgentDefinition[],
   loading: false,
+  error: null as string | null,
+  load: vi.fn(),
 }))
 const agentSkills = vi.hoisted(() => ({
   value: [] as AgentSkill[],
@@ -97,7 +99,12 @@ vi.mock('@/hooks/useAgentSkills', () => ({
 }))
 
 vi.mock('@/hooks/useAgentDefinitions', () => ({
-  useAgentDefinitions: () => ({ definitions: agentDefinitions.value, loading: agentDefinitions.loading }),
+  useAgentDefinitions: () => ({
+    definitions: agentDefinitions.value,
+    loading: agentDefinitions.loading,
+    error: agentDefinitions.error,
+    load: agentDefinitions.load,
+  }),
 }))
 
 vi.mock('@/hooks/useConversationPolicy', () => {
@@ -190,6 +197,8 @@ describe('ChatInput', () => {
     useToolAvailable.setState({ disabledTools: {}, defaultDisabledTools: [], defaultsInitialized: false })
     agentDefinitions.value = []
     agentDefinitions.loading = false
+    agentDefinitions.error = null
+    agentDefinitions.load.mockReset()
     agentSkills.value = []
     agentSkills.loading = false
     agentSkills.error = null
@@ -529,6 +538,160 @@ describe('ChatInput', () => {
     await user.click(screen.getByRole('menuitemradio', { name: 'Chat', exact: true }))
     view.rerender(<ChatInput initialMessage preselectedAgentDefinitionId="researcher" />)
     expect(choice()).toHaveTextContent('Chat')
+  })
+
+  it.each(['click', 'Enter'])('preserves a selected saved agent through catalog loading and rejection, then retries with %s', async (method) => {
+    const threadId = 'failed-agent-draft'
+    useThreads.setState({ currentThreadId: threadId })
+    usePrompt.setState({ drafts: { [threadId]: 'Review the original plan' } })
+    conversationPolicyState.activeDefinitions[threadId] = 'reviewer'
+    agentDefinitions.loading = true
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const view = render(<ChatInput onSubmit={onSubmit} />)
+    const input = screen.getByTestId('chat-input')
+    const send = screen.getByRole('button', { name: 'Send message' })
+    expect(screen.getByRole('status')).toHaveTextContent('Loading your selected saved agent…')
+    expect(send).toBeDisabled()
+    expect(send).toHaveAttribute('aria-busy', 'true')
+    fireEvent.click(send)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(input).toHaveValue('Review the original plan')
+
+    const catalog = deferred<AgentDefinition[]>()
+    const rejected = catalog.promise.catch((error) => {
+      agentDefinitions.loading = false
+      agentDefinitions.error = String(error)
+      // The catalog mock is not reactive; change a prop to rerender the memoized composer.
+      view.rerender(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+    })
+    await act(async () => {
+      catalog.reject(new Error('Permission denied'))
+      await rejected
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load saved agents.")
+    expect(send).toBeDisabled()
+    expect(send).toHaveAttribute('aria-busy', 'false')
+    fireEvent.click(send)
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(input).toHaveValue('Review the original plan')
+    expect(conversationPolicyState.activeDefinitions[threadId]).toBe('reviewer')
+    expect(conversationPolicyState.setActiveDefinition).not.toHaveBeenCalled()
+
+    const retry = deferred<AgentDefinition[]>()
+    agentDefinitions.load.mockImplementation(() => {
+      agentDefinitions.loading = true
+      agentDefinitions.error = null
+      view.rerender(<ChatInput onSubmit={onSubmit} />)
+      return retry.promise.then((definitions) => {
+        agentDefinitions.value = definitions
+        agentDefinitions.loading = false
+        view.rerender(<ChatInput onSubmit={onSubmit} chatStatus="ready" />)
+      })
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry saved agents' }))
+    expect(agentDefinitions.load).toHaveBeenCalledOnce()
+    expect(screen.getByRole('status')).toHaveTextContent('Loading your selected saved agent…')
+    expect(send).toBeDisabled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+    await act(async () => {
+      retry.resolve([{
+        id: 'reviewer', name: 'Reviewer', kind: 'standard', schemaVersion: 2,
+        skills: [], instructions: '', description: '', outputContract: '',
+        maxSteps: 25, modelInstanceId: null, builtIn: false,
+      }])
+      await agentDefinitions.load.mock.results[0].value
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Invoke saved agent' })).toHaveTextContent('Reviewer')
+    expect(send).toBeEnabled()
+    expect(input).toHaveValue('Review the original plan')
+    if (method === 'click') fireEvent.click(send)
+    else fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Review the original plan', undefined, undefined, 'reviewer', []))
+    expect(input).toHaveValue('')
+  })
+
+  it.each(['loading', 'failed'])('requires explicit Chat selection for a %s saved-agent catalog without sending or clearing an independent skill', async (status) => {
+    const threadId = 'agent-opt-out-draft'
+    useThreads.setState({ currentThreadId: threadId })
+    usePrompt.setState({
+      drafts: { [threadId]: 'Summarize the document', other: 'Other draft' },
+      draftSkills: { [threadId]: 'pdf', other: 'slides' },
+    })
+    conversationPolicyState.activeDefinitions = { [threadId]: 'reviewer', other: 'researcher' }
+    conversationPolicyState.activeSkills[threadId] = 'pdf'
+    conversationPolicyState.setActiveDefinition.mockImplementation((key: string, definition?: string) => {
+      if (definition && definition !== 'general') conversationPolicyState.activeDefinitions[key] = definition
+      else delete conversationPolicyState.activeDefinitions[key]
+    })
+    agentSkills.value = [{
+      name: 'pdf', description: 'PDF', version: '1.0.0', requiresTools: [], requiresScripts: [],
+      dangerous: false, platforms: null, enabled: true, compatible: true,
+      reserved: false, unavailableReasons: [], error: null,
+    }]
+    agentDefinitions.loading = status === 'loading'
+    agentDefinitions.error = status === 'failed' ? 'Permission denied' : null
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<ChatInput onSubmit={onSubmit} />)
+    const input = screen.getByTestId('chat-input')
+    const send = screen.getByRole('button', { name: 'Send message' })
+    expect(send).toBeDisabled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use Chat instead' }))
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(input).toHaveValue('Summarize the document')
+    expect(conversationPolicyState.activeDefinitions[threadId]).toBeUndefined()
+    expect(conversationPolicyState.activeDefinitions.other).toBe('researcher')
+    expect(usePrompt.getState().drafts.other).toBe('Other draft')
+    expect(usePrompt.getState().draftSkills).toEqual({ [threadId]: 'pdf', other: 'slides' })
+    expect(conversationPolicyState.activeSkills[threadId]).toBe('pdf')
+    expect(conversationPolicyState.setActiveSkill).not.toHaveBeenCalled()
+    expect(screen.getByTestId('agent-skill-inline-token')).toHaveTextContent('/pdf')
+    expect(screen.queryByRole('button', { name: 'Use Chat instead' })).not.toBeInTheDocument()
+    expect(send).toBeEnabled()
+    fireEvent.click(send)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('Summarize the document', undefined, 'pdf', undefined, []))
+  })
+
+  it.each(['loading', 'failed'])('allows ordinary Chat when the saved-agent catalog is %s', async (status) => {
+    agentDefinitions.loading = status === 'loading'
+    agentDefinitions.error = status === 'failed' ? 'Permission denied' : null
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<ChatInput onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'An ordinary question' } })
+    const send = screen.getByRole('button', { name: 'Send message' })
+    expect(send).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Use Chat instead' })).not.toBeInTheDocument()
+    fireEvent.click(send)
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('An ordinary question', undefined, undefined, undefined, []))
+  })
+
+  it.each(['loading', 'failed'])('reserves /compact when the selected saved-agent catalog is %s', async (status) => {
+    const threadId = 'agent-compact-draft'
+    useThreads.setState({ currentThreadId: threadId })
+    conversationPolicyState.activeDefinitions[threadId] = 'reviewer'
+    agentDefinitions.loading = status === 'loading'
+    agentDefinitions.error = status === 'failed' ? 'Permission denied' : null
+    useModelProvider.setState({ selectedModel: undefined })
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    render(<ChatInput onSubmit={onSubmit} />)
+    const input = screen.getByTestId('chat-input')
+    fireEvent.change(input, { target: { value: '/compact' } })
+    const send = screen.getByRole('button', { name: 'Send message' })
+    expect(send).toBeEnabled()
+    expect(send).toHaveAttribute('aria-busy', 'false')
+    if (status === 'loading') fireEvent.click(send)
+    else fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledExactlyOnceWith('/compact'))
+    expect(input).toHaveValue('')
+    expect(conversationPolicyState.activeDefinitions[threadId]).toBe('reviewer')
+    expect(conversationPolicyState.setActiveDefinition).not.toHaveBeenCalled()
+    expect(mocks.navigate).not.toHaveBeenCalled()
   })
 
   it('clears only the submitted conversation draft after a successful send', async () => {
