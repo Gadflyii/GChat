@@ -18,7 +18,8 @@ const mocks = vi.hoisted(() => ({
   switchModel: vi.fn<(params: { options?: { loadOperationId?: string }; signal?: AbortSignal }) => Promise<void>>(async () => {}),
   selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
   providers: [] as TestProvider[],
-  getProviders: vi.fn<() => Promise<TestProvider[]>>(), setProviders: vi.fn<(providers: TestProvider[]) => void>(),
+  getProviders: vi.fn<() => Promise<TestProvider[]>>(), setProviders: vi.fn<(providers: TestProvider[], revision?: number) => void>(),
+  inventoryRevision: 0, recordModelInstall: vi.fn<(modelId: string) => void>(),
   open: vi.fn<(options?: DialogOpenOptions) => Promise<string | string[] | null>>(),
   joinPath: vi.fn<(parts: string[]) => Promise<string>>(),
   catalog: [] as unknown[], catalogError: null as string | null, errors: {} as Record<string, string>,
@@ -53,7 +54,7 @@ vi.mock('@/hooks/useServiceHub', () => ({ isServiceHubInitialized: () => false, 
 }) }))
 vi.mock('@/hooks/useBundledResources', () => ({ useBundledResources: (enabled = true) => enabled ? mocks.resources : { ready: true, error: '' } }))
 vi.mock('@/hooks/useModelProvider', () => {
-  const state = { get providers() { return mocks.providers }, selectModelProvider: vi.fn(), setProviders: mocks.setProviders }
+  const state = { get providers() { return mocks.providers }, get inventoryRevision() { return mocks.inventoryRevision }, recordModelInstall: mocks.recordModelInstall, selectModelProvider: vi.fn(), setProviders: mocks.setProviders }
   const hook = (selector: (s: typeof state) => unknown) => selector(state)
   hook.getState = () => state
   return { useModelProvider: hook }
@@ -115,7 +116,14 @@ describe('host-scoped Models', () => {
       delete mocks.errors[hostId]
     })
     mocks.resources = { ready: true, error: '' }
-    mocks.command.mockReset().mockImplementation(async action => action === 'snapshot' ? mocks.localSnapshot : [])
+    mocks.inventoryRevision = 0
+    mocks.recordModelInstall.mockImplementation(() => { mocks.inventoryRevision += 1 })
+    mocks.command.mockReset().mockImplementation(async (action, args) => {
+      if (action === 'local_model_register') return { modelId: 'registered-model', modelPath: args?.path }
+      if (action === 'local_model_adopt') return { adopted: [], rejected: [] }
+      if (action === 'snapshot') return mocks.localSnapshot
+      return []
+    })
     mocks.refresh.mockReset().mockResolvedValue(undefined)
     mocks.switchModel.mockResolvedValue(undefined)
     mocks.getActiveModels.mockReset().mockResolvedValue(['another-model'])
@@ -167,7 +175,7 @@ describe('host-scoped Models', () => {
     mocks.catalog = []
     mocks.catalogError = catalogError
     const path = '/external/My model.ginfer'
-    const registered = [{ provider: 'ginfer', models: [{ id: 'host-model-id', displayName: 'My local model', path, source: 'external' }] }]
+    const registered = [{ provider: 'ginfer', models: [{ id: 'registered-model', displayName: 'My local model', path, source: 'external' }] }]
     mocks.open.mockResolvedValue(path)
     mocks.getProviders.mockResolvedValue(registered)
     render(<ModelManagement />)
@@ -184,7 +192,8 @@ describe('host-scoped Models', () => {
       ['local_model_register', { path }],
     ])
     expect(mocks.getProviders).toHaveBeenCalledOnce()
-    expect(mocks.setProviders).toHaveBeenCalledExactlyOnceWith(registered)
+    expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('registered-model')
+    expect(mocks.setProviders).toHaveBeenCalledExactlyOnceWith(registered, 1)
     expect(mocks.refresh).toHaveBeenCalledOnce()
     expect(mocks.switchModel).not.toHaveBeenCalled()
     expect(mocks.controlHost).not.toHaveBeenCalled()
@@ -236,6 +245,7 @@ describe('host-scoped Models', () => {
     expect(mocks.setProviders).not.toHaveBeenCalled()
     expect(mocks.refresh).not.toHaveBeenCalled()
     expect(mocks.switchModel).not.toHaveBeenCalled()
+    expect(mocks.recordModelInstall).not.toHaveBeenCalled()
     mocks.open.mockResolvedValue(null)
     fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled())
@@ -258,7 +268,10 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce())
     mocks.refresh.mockClear()
     if (failedRead === 'provider inventory') {
-      mocks.getProviders.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectInitial = reject }))
+      mocks.getProviders.mockImplementationOnce(() => {
+        expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('registered-model')
+        return new Promise((_resolve, reject) => { rejectInitial = reject })
+      })
     } else {
       mocks.refresh.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectInitial = reject }))
     }
@@ -312,7 +325,8 @@ describe('host-scoped Models', () => {
     expect(refresh).toBeEnabled()
     expect(mocks.getProviders).toHaveBeenCalledTimes(3)
     expect(mocks.setProviders).toHaveBeenCalledTimes(failedRead === 'provider inventory' ? 1 : 3)
-    expect(mocks.setProviders).toHaveBeenLastCalledWith(registered)
+    expect(mocks.setProviders).toHaveBeenLastCalledWith(registered, 1)
+    expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('registered-model')
     expect(mocks.refresh).toHaveBeenCalledTimes(failedRead === 'provider inventory' ? 1 : 3)
     expect(mocks.open).toHaveBeenCalledOnce()
     expect(mocks.command.mock.calls.filter(([action]) => action !== 'local_model_downloads')).toEqual([
@@ -341,10 +355,13 @@ describe('host-scoped Models', () => {
     expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_register')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Refresh installed models' })).toBeDisabled()
-    await act(async () => { register({}) })
+    await act(async () => { register({ modelId: 'local-model', modelPath: '/external/model.ginfer' }) })
     expect(mocks.getProviders).toHaveBeenCalledOnce()
+    expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('local-model')
+    mocks.inventoryRevision += 1 // A different install completes while this read is pending.
     expect(screen.getByRole('button', { name: 'Adding local model…' })).toBeDisabled()
     await act(async () => { inventory(mocks.providers) })
+    expect(mocks.setProviders).toHaveBeenCalledExactlyOnceWith(mocks.providers, 1)
     expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled()
     expect(mocks.open).toHaveBeenCalledOnce()
     expect(mocks.switchModel).not.toHaveBeenCalled()

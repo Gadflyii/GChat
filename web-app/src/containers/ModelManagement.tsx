@@ -215,14 +215,17 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
   }
   const rescan = async () => {
     if (!local) return engineCommand('scan', { host_id: destination })
-    const report = await engineCommand<{ rejected: { filename: string; reason: string }[] }>('local_model_adopt')
-    useModelProvider.getState().setProviders(await service.providers().getProviders())
+    const report = await engineCommand<{ adopted: { modelId: string }[]; rejected: { filename: string; reason: string }[] }>('local_model_adopt')
+    for (const model of report.adopted) useModelProvider.getState().recordModelInstall(model.modelId)
+    const revision = useModelProvider.getState().inventoryRevision
+    useModelProvider.getState().setProviders(await service.providers().getProviders(), revision)
     if (report.rejected.length) throw new Error(report.rejected.map(r => `${r.filename}: ${r.reason}`).join('\n'))
   }
   const refreshRegisteredModels = async () => {
+    const revision = useModelProvider.getState().inventoryRevision
     const updated = await service.providers().getProviders()
     if (!mounted.current) return
-    useModelProvider.getState().setProviders(updated)
+    useModelProvider.getState().setProviders(updated, revision)
     await refreshHosts()
     if (mounted.current) {
       registrationNeedsRefresh.current = false
@@ -258,7 +261,8 @@ export function ModelManagement({ initialQuery = '', tab, onTabChange: setTab }:
       setError(null)
       const configuredRoot = String(localProvider?.settings?.find(s => s.key === 'model_path')?.controller_props.value ?? '').trim()
       const modelsRoot = configuredRoot ? await joinPath([configuredRoot, 'models']) : undefined
-      await engineCommand('local_model_register', { path, ...(modelsRoot === undefined ? {} : { modelsRoot }) })
+      const entry = await engineCommand<{ modelId: string }>('local_model_register', { path, ...(modelsRoot === undefined ? {} : { modelsRoot }) })
+      useModelProvider.getState().recordModelInstall(entry.modelId)
       registered = true
       registrationNeedsRefresh.current = true
       await refreshRegisteredModels()
