@@ -61,6 +61,9 @@ export default function GbotCompanion() {
   const [owner] = useState(gbotControlOwner)
   const [busy, setBusy] = useState(false)
   const [submittingTask, setSubmittingTask] = useState<string>()
+  const [taskErrors, setTaskErrors] = useState<Record<string, string | undefined>>(
+    {}
+  )
   const taskSubmission = useRef(false)
   const desktop = useRef<DesktopViewHandle>(null)
   const panel = useRef<HTMLElement>(null)
@@ -115,6 +118,8 @@ export default function GbotCompanion() {
   )
   const tab = state.tabs[workspaceId] ?? 'conversation'
   const draft = state.drafts[workspaceId] ?? ''
+  const taskErrorKey = JSON.stringify([state.target, workspaceId])
+  const taskError = taskErrors[taskErrorKey]
 
   useEffect(() => {
     const sharing = useGbotPage.getState().sharing
@@ -529,23 +534,38 @@ export default function GbotCompanion() {
                 const submitted = draft
                 taskSubmission.current = true
                 setSubmittingTask(workspaceId)
-                void perform(async () => {
-                  const request = useGbotPage
-                    .getState()
-                    .capture(workspaceId, state.target, submitted)
-                  const task = await gbot<Task>('tasks/start', {
-                    identity,
-                    prompt: request?.prompt ?? submitted,
+                setTaskErrors((previous) => ({
+                  ...previous,
+                  [taskErrorKey]: undefined,
+                }))
+                void perform(
+                  async () => {
+                    const request = useGbotPage
+                      .getState()
+                      .capture(workspaceId, state.target, submitted)
+                    const task = await gbot<Task>('tasks/start', {
+                      identity,
+                      prompt: request?.prompt ?? submitted,
+                    })
+                    if (request && task?.id)
+                      useGbotPage.getState().remember(task.id, request)
+                    const current = useGbotCompanion.getState()
+                    if (current.drafts[workspaceId] === submitted)
+                      current.setDraft(workspaceId, '')
+                  },
+                  true
+                )
+                  .catch((cause) => {
+                    setTaskErrors((previous) => ({
+                      ...previous,
+                      [taskErrorKey]:
+                        cause instanceof Error ? cause.message : String(cause),
+                    }))
                   })
-                  if (request && task?.id)
-                    useGbotPage.getState().remember(task.id, request)
-                  const current = useGbotCompanion.getState()
-                  if (current.drafts[workspaceId] === submitted)
-                    current.setDraft(workspaceId, '')
-                }).finally(() => {
-                  taskSubmission.current = false
-                  setSubmittingTask(undefined)
-                })
+                  .finally(() => {
+                    taskSubmission.current = false
+                    setSubmittingTask(undefined)
+                  })
               }}
             >
               {pageState.page && (
@@ -580,6 +600,9 @@ export default function GbotCompanion() {
               )}
               <textarea
                 aria-label="Message bot"
+                aria-describedby={
+                  taskError !== undefined ? 'gbot-companion-task-error' : undefined
+                }
                 placeholder={`Message ${bot.name}`}
                 value={draft}
                 className="min-h-20 max-h-48 w-full resize-y rounded-lg border bg-background p-3 text-sm"
@@ -589,6 +612,19 @@ export default function GbotCompanion() {
                   state.setDraft(workspaceId, event.target.value)
                 }
               />
+              {taskError !== undefined && (
+                <div
+                  id="gbot-companion-task-error"
+                  role="alert"
+                  className="space-y-1 text-sm"
+                >
+                  <p>Could not send this task. Try again.</p>
+                  <details className="text-muted-foreground">
+                    <summary className="cursor-pointer">Details</summary>
+                    <p className="break-words">{taskError}</p>
+                  </details>
+                </div>
+              )}
               {submittingTask === workspaceId && (
                 <p role="status" className="text-sm text-muted-foreground">
                   Sending this task to the bot…
