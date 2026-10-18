@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
@@ -978,6 +979,66 @@ it('offers setup guidance only after an authoritative empty service snapshot', a
   expect(screen.getByText(/Add a bot computer/)).toBeInTheDocument()
   expect(screen.queryByText('Loading your bots…')).not.toBeInTheDocument()
 })
+
+it.each([
+  ['empty', 'Escape'],
+  ['empty', 'Hide'],
+  ['named', 'Escape'],
+  ['named', 'Hide'],
+] as const)(
+  'returns keyboard focus to the %s opener after %s',
+  async (kind, close) => {
+    if (kind === 'empty') {
+      snapshot = {
+        workspaces: [],
+        live_sessions: [],
+        controls: [],
+        assignments: [],
+      }
+    }
+    const user = userEvent.setup()
+    render(
+      <>
+        <GbotAvatars />
+        <GbotCompanion />
+      </>
+    )
+    await waitFor(() => expect(useGbotCompanion.getState().available).toBe(true))
+    const opener = screen.getByRole('button', {
+      name: kind === 'empty' ? 'Open Gbot companion' : /Open Bramble/,
+    })
+    await user.tab()
+    if (kind === 'named') await user.tab()
+    expect(opener).toHaveFocus()
+    await user.keyboard('{Enter}')
+    const pane = screen.getByRole('complementary', { name: 'Gbot companion' })
+    expect(pane).toHaveFocus()
+    expect(opener).toHaveAttribute('aria-expanded', 'true')
+    if (kind === 'empty') {
+      expect(within(pane).getByText(/Add a bot computer/)).toBeInTheDocument()
+    } else {
+      expect(
+        within(pane).getByRole('heading', { name: 'Bramble' })
+      ).toBeInTheDocument()
+    }
+
+    if (close === 'Hide') {
+      await user.tab()
+      await user.tab()
+      expect(
+        within(pane).getByRole('button', { name: 'Hide bot pane' })
+      ).toHaveFocus()
+      await user.keyboard('{Enter}')
+    } else {
+      await user.keyboard('{Escape}')
+    }
+
+    expect(opener).toHaveFocus()
+    expect(opener).toHaveAttribute('aria-expanded', 'false')
+    expect(pane).toHaveAttribute('inert')
+    expect(pane).toHaveAttribute('aria-hidden', 'true')
+  }
+)
 
 it('explains companion resource failure recovery without treating unknown bots as missing configuration', async () => {
   mocks.resources.ready = false

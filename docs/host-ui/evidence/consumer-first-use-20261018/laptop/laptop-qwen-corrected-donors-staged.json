@@ -1,0 +1,24 @@
+{
+  "host": "Ron-X17R2",
+  "gpu_uuid": "GPU-a1cd7f6c-2d72-5a65-886c-b245fd95d0a6",
+  "finished_utc": "2026-10-18T22:16:58Z",
+  "status": "STAGED_ONLY_APP_HELD",
+  "engine": {
+    "source": "1209de84905028ba78291751df719b7d09fe38f8",
+    "donor": "S1:/media/ron/SSD_RAID/ai/tmp-c1-quote-admission-exact-vram-20261018/bin/1209de849/sm86/ginfer-serve",
+    "staged": "/home/ron/tmp-c5-consumer-first-use-20261018/bin/1209de849/ginfer-serve",
+    "bytes": 317338400,
+    "sha256": "505ed0cc73d16c945ec54faa9ff5bdc4157e0921e70a6cb6ab4baa71969181f3"
+  },
+  "host_binary": {
+    "source": "e001e9ea3",
+    "donor": "S1:/media/ron/SSD_RAID/ai/tmp-gchat3-windows-consumer-host-20261018/native-target/debug/ginfer-host",
+    "staged": "/home/ron/tmp-c5-consumer-first-use-20261018/bin/e001e9ea3/ginfer-host",
+    "bytes": 57183816,
+    "sha256": "48e9040ade587e720f2d255895a19ac0946e6f4d2f4ec09b781bf0c3f78d344a"
+  },
+  "verification": "Source and target byte counts and SHA256 match; no model process before staging; both ldd checks resolve with no missing libraries, Engine using the retained SM86 runtime library path.",
+  "fixture_changed": false,
+  "model_started": false,
+  "next_action": "Await C1's two local once-only starts and Arch clearance, then bind the corrected Host and Engine for first/second Automatic Qwen53248 loads."
+}

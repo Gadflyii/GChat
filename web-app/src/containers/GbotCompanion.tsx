@@ -198,11 +198,13 @@ export default function GbotCompanion() {
     if (visible) panel.current?.focus()
     else if (wasVisible.current) {
       desktop.current?.stopInput()
-      const avatars =
+      const avatars = Array.from(
         document.querySelectorAll<HTMLElement>('[data-gbot-avatar]')
-      Array.from(avatars)
-        .find((a) => a.dataset.gbotAvatar === workspaceId)
-        ?.focus()
+      )
+      const opener =
+        avatars.find((a) => a.dataset.gbotAvatar === workspaceId) ??
+        avatars.find((a) => a.dataset.gbotAvatar === '')
+      opener?.focus()
     }
     wasVisible.current = visible
   }, [visible, workspaceId])
