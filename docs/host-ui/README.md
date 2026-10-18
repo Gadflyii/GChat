@@ -1,6 +1,6 @@
 # GInfer host UI
 
-## Packaged CLI terminal-install detection — Gchat 3, October 18
+## Packaged CLI terminal-install detection — C3, October 18
 
 `GUI-CLI-PACKAGED-PATH-DETECTION` corrects Settings → General → terminal
 command detection. The private current-main release `d0a8d06bf` reproduced
@@ -33,13 +33,25 @@ Focused Rust checks, supported Cargo check/Clippy, ONE `make verify`, a changed
 native build and parent-owned installed-layout acceptance are pending; no
 execution result is claimed. Windows is not built or exercised.
 
+Current main `b9a56c96c` was merged normally before gates. Its retained
+first-run disk-full test already includes the exact folder hydration wait;
+all first-run regressions are preserved without another source correction.
+The Interface candidate is immutable and excluded from this CLI source.
+
 Inventory: owner C3, branch
 `fix/c3-cli-packaged-path-detection-20261018`, baseline `bbc81c2ec`, worktree
 `/ai/gchat-worktrees/c3-cli-packaged-path-detection-20261018`. Only
-`src-tauri/src/core/system/commands.rs` and this authority change. No S1 stage,
-cache, running app, dependency or resource allocation is changed by this source
-task. The shared stage remains scheduled by the coordinator. Next: source
-handoff, then scheduled verification and native acceptance.
+`src-tauri/src/core/system/commands.rs` and this authority are owned by this
+row. The shared S1 source/dependencies/native target are released after
+Interface export. Next: five focused native detection tests, library-scope
+check/Clippy with `test-tauri,cli`, lint, ONE `make verify`, then Vite/default
+desktop debug build into separate `cli-candidate`. Parent owns native installed
+layout acceptance with private HOME and explicit APPDIR/bundled PATH; no GPU,
+model, profile, host install or shared terminal PATH mutation. Reuse pinned
+routed-offline dependencies only after all retained manifests match. Preserve
+current-main AppDir/home, Interface/folder/badge candidates and runnable assets.
+Packet: `out/c3-cli-packaged-path-detection-20261018/{result.json,summary.md}`.
+
 ## Gbot human-help failure recovery — October 18
 
 `GBOT-HUMAN-HELP-INLINE-ERRORS`: Gbot settings and the companion previously
