@@ -1083,12 +1083,22 @@ caller's identity is not retained. Historical vmmem commit was not sampled.
 A separate22:44Z read found vmmemWSL private33,205,932,032B; that later value
 does not prove its size or cause at failure time. The small source/telemetry
 packet is `ada-native-walk/installed-desktop/profile-ram-floor-readonly.json`.
-Next: obtain Arch's disposition of the total-derived floor and implement the
-required actionable RAM-needed/free message. No floor is lowered and no walk
-is retried without that direction; Gchat3 owns Ada's next benchmark boundary.
+Arch22:47Z directs **no floor change**. Implement a typed profiler failure with
+the reserve, retained-buffer bytes per node, global/node availability and
+amount to free, surfaced as an actionable GChat first-run message, with one
+forced-low-RAM regression. His environmental disposition requires one Ada walk
+retry with WSL lanes idle and native availability at least reserve plus buffers,
+recorded before launch; Bubbs assigned23:00–23:30Z with all Ada WSL lanes idle.
+If native memory remains insufficient, record the available/vmmem figures and
+return without retry. Gchat3's authorized Muse retry follows the RC's normal
+return sequentially in that window. No WSL shutdown or RAM
+reclamation is authorized while other lanes are live. The reserve policy versus
+Engine serving's10GiB headroom is outside this row. Source work is split between
+owned `c4-profile-ram-admission-20261018` GInfer and
+`c4-profile-ram-message-20261018` GChat worktrees; the pinned RC remains unchanged.
 
 C5's corrected1209/e001 laptop app gate returned22:28Z after a pre-Engine
-fixture CLI rejection, with no C5 hold. C4 has neither staged nor launched there. Arch
+fixture CLI rejection, with no C5 hold. C4 had not yet staged or launched there at that boundary. Arch
 22:14Z clarified that its qualification hold permits the pinned6b85 manual
 C1 text-only RC chat without explicit arena or bypass. Any pre-Engine
 rejection is an RC finding under QUOTE-ADMISSION-EXACT-VRAM. No coordinate,
@@ -1096,7 +1106,15 @@ SendKeys, CDP or guessed-control fallback is authorized. The installed
 first-user walks and both new chats remain incomplete. This Windows
 authorization does not release either card for held Flash experiments.
 Recheck each shared boundary before staging or launch; earlier returns grant
-no future resource hold.
+no future resource hold. Gchat3's Ada792 returned22:49Z after a pre-Engine
+profiling rejection, following local1506's22:44Z return. The laptop's accepted
+1,484,393,816B installer relay returned22:51:15Z with matching bytes/SHA256.
+The two retained guarded command files are staged and hash-verified, unexecuted.
+Fresh22:50:54Z native metadata reports RON-X17R2, no GChat/Engine
+process or GChat installation,34,015,064,064B physical and17,103,478,784B available
+RAM. No installer or app has launched there. A fresh booking attempt met
+Codex5's exclusive427 first-use run22:51–23:31Z; the installed walk remains
+queued after its normal return, without a reservation or preemption.
 C7's local-model acceptance can share the
 laptop walk before its single Start: retain the visible empty/unset download
 catalog and registered local model without a download dependency, then the
@@ -1117,6 +1135,8 @@ and the retained candidate-bound UIAutomation recipe govern execution.
 | C4 local WSL | Engine `6b85ecf77` in `/ai/ginfer` Git objects | Pinned source retained; former `/ai/ginfer-worktrees/c4-windows-rc-engine-20261018` source tree is absent |
 | C4 local Windows | `E:\gchat4-windows-rc-250df804a-20261018` | Accepted images/packages; retain through both target walks, then retire disposable builds. Gchat3's read-copy returned19:05Z |
 | C4 Ada Windows | `C:\Users\Ron\AppData\Local\Temp\gchat4-windows-rc-250df804a-20261018` | Accepted NSIS and small Job/UIA receipts; installed RC/import complete, Automatic blocked by profiling before Engine. App/Host stopped and791 returned22:41Z. Retire staged package after walk |
+| C4 laptop Windows | `C:\Users\Ron\AppData\Local\Temp\gchat4-windows-rc-250df804a-20261018` | Accepted installer and guarded commands staged22:51Z, no launch; retain through installed walk |
+| C4 source | `/ai/ginfer-worktrees/c4-profile-ram-admission-20261018`, `/ai/gchat-worktrees/c4-profile-ram-message-20261018` | Typed profiler failure and actionable first-run UI; unchanged reserve, focused verification next |
 
 ## Windows RC refresh — release installer delivered, October 18 morning
 
