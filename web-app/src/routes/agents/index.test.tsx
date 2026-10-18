@@ -650,6 +650,64 @@ describe('AgentStudioPage', () => {
     expect(screen.queryByText('Duplicate to edit')).not.toBeInTheDocument()
   })
 
+  it('saves a same-name new agent separately and keeps its identifier on later edits', async () => {
+    definitionState.value.definitions = [
+      firstAgent,
+      { ...firstAgent, id: `${firstAgent.id}-2` },
+    ]
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    await screen.findByDisplayValue(firstAgent.name)
+    fireEvent.click(screen.getByTitle('New agent'))
+    await screen.findByDisplayValue(editableDraft.name)
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: firstAgent.name } })
+    fireEvent.change(screen.getByLabelText('Agent role and operating instructions'), {
+      target: { value: 'A separate task for a separate agent.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Identifier')).toHaveValue('review-assistant-3'))
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      id: 'review-assistant-3',
+      instructions: 'A separate task for a separate agent.',
+    }))
+    expect(definitionState.value.definitions[0]).toEqual(firstAgent)
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Renamed agent' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+    await waitFor(() => expect(definitionState.value.save).toHaveBeenCalledTimes(2))
+    expect(definitionState.value.save).toHaveBeenLastCalledWith(expect.objectContaining({
+      id: 'review-assistant-3', name: 'Renamed agent',
+    }))
+  })
+
+  it.each([
+    ['General', 'general-2'],
+    ['旅行助手', 'agent'],
+  ])('generates an available identifier for the name %s', async (name, id) => {
+    definitionState.value.save.mockImplementation(async (value) => value)
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: name } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    await waitFor(() => expect(screen.getByLabelText('Identifier')).toHaveValue(id))
+    expect(screen.getByLabelText('Name')).toHaveValue(name)
+    expect(definitionState.value.save).toHaveBeenCalledWith(expect.objectContaining({ name, id }))
+  })
+
+  it('asks for a name before generating a new identifier', async () => {
+    render(<AgentStudioPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Create agent' }))
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save definition' }))
+
+    expect(definitionState.value.save).not.toHaveBeenCalled()
+    expect(toast.error).toHaveBeenCalledWith('Give the agent a name before saving.')
+    expect(screen.getByLabelText('Identifier')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeEnabled()
+  })
+
   it('saves once while keeping newer edits when the reviewed save completes', async () => {
     const pending = deferred<AgentDefinition>()
     definitionState.value.save.mockReturnValue(pending.promise)

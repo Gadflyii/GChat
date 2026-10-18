@@ -355,6 +355,14 @@ function slug(value: string): string {
     .slice(0, 52)
 }
 
+function unusedDefinitionId(name: string, definitions: AgentDefinition[]): string {
+  const base = slug(name) || 'agent'
+  const used = new Set(['general', ...definitions.map((definition) => definition.id)])
+  let id = base
+  for (let suffix = 2; used.has(id); suffix++) id = `${base}-${suffix}`
+  return id
+}
+
 function AgentStudioPage() {
   const [runSetup, setRunSetup] = useState<AgentDefinition | null>(null)
   const runSetupRequest = useRef(0)
@@ -508,14 +516,14 @@ function AgentStudioPage() {
   ): Promise<AgentDefinition | null> => {
     if (!draft || mutatingDraft.current) return null
     const revision = draftRevision.current
-    const candidate = {
-      ...draft,
-      id: draft.id || slug(draft.name),
-      builtIn: false,
-    }
-    if (!candidate.id) {
+    if (!draft.name.trim()) {
       toast.error('Give the agent a name before saving.')
       return null
+    }
+    const candidate = {
+      ...draft,
+      id: draft.id || unusedDefinitionId(draft.name, definitions),
+      builtIn: false,
     }
     mutatingDraft.current = true
     setSaving(true)
