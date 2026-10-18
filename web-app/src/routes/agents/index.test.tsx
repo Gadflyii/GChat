@@ -171,6 +171,7 @@ function deferred<T>() {
 }
 
 describe('AgentStudioPage', () => {
+  const navigableHistories: { destroy: () => void }[] = []
   beforeEach(() => {
     vi.spyOn(toast, 'error').mockReturnValue('test-error')
     useGbotPage.setState({ page: null, sharing: null, requests: {} })
@@ -206,6 +207,7 @@ describe('AgentStudioPage', () => {
   afterEach(() => {
     act(() => settleConfirm(false))
     vi.mocked(toast.error).mockRestore()
+    navigableHistories.splice(0).forEach((history) => history.destroy())
   })
 
   async function renderSavedAgents() {
@@ -226,9 +228,12 @@ describe('AgentStudioPage', () => {
     })
     const agents = api.createRoute({ getParentRoute: () => root, path: '/agents/', component: AgentStudioPage })
     const chat = api.createRoute({ getParentRoute: () => root, path: '/', component: () => <p>Chat destination</p> })
+    window.history.replaceState({}, '', '/agents/')
+    const history = api.createBrowserHistory()
+    navigableHistories.push(history)
     const router = api.createRouter({
       routeTree: root.addChildren([agents, chat]),
-      history: api.createMemoryHistory({ initialEntries: ['/agents/'] }),
+      history,
     })
     render(<><api.RouterProvider router={router} /><ConfirmDialogHost /></>)
     await screen.findByDisplayValue(firstAgent.name)
