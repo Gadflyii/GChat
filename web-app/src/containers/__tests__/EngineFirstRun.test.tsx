@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { EngineFirstRun } from '../EngineFirstRun'
 import { EngineHardwareProfile } from '../EngineHardwareProfile'
@@ -261,6 +261,149 @@ it('requires an Engine quote and saves approved startup overrides without launch
   await waitFor(() => expect(onComplete).toHaveBeenCalledOnce())
   expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'complete' })
   expect(screen.queryByRole('region', { name: 'Set up local GInfer' })).not.toBeInTheDocument()
+})
+
+it('blocks first-run completion and hides readiness when any quoted startup field is edited', async () => {
+  mocks.command.mockResolvedValue(flow('startup', {
+    startup_profiles: [{ ...profile, quote: { fits: true } }],
+  }))
+  render(<EngineFirstRun />)
+  const finish = await screen.findByRole('button', { name: 'Finish local setup' })
+  expect(finish).toBeEnabled()
+  fireEvent.click(screen.getByText('Advanced settings and memory details'))
+
+  for (const [label, changed, accepted] of [
+    ['simultaneous requests', '2', '4'],
+    ['conversation limit in tokens', '16384', '32768'],
+    ['model copies', '2', '1'],
+    ['graphics-card conversation memory in bytes', '2147483648', ''],
+  ]) {
+    const field = screen.getByLabelText(`muse ${label}`)
+    fireEvent.change(field, { target: { value: changed } })
+    expect(finish).toBeDisabled()
+    expect(screen.queryByText('Ready to start with these settings.')).not.toBeInTheDocument()
+    fireEvent.click(finish)
+    fireEvent.change(field, { target: { value: accepted } })
+    expect(finish).toBeEnabled()
+    expect(screen.getByText('Ready to start with these settings.')).toBeVisible()
+  }
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+})
+
+it('keeps an unchecked startup edit and completion blocked after a rejected check', async () => {
+  mocks.command.mockImplementation((_operation, args) => args.action === 'startup'
+    ? Promise.reject(new Error('Startup check unavailable'))
+    : Promise.resolve(flow('startup', { startup_profiles: [{ ...profile, quote: { fits: true } }] })))
+  render(<EngineFirstRun />)
+  const finish = await screen.findByRole('button', { name: 'Finish local setup' })
+  expect(finish).toBeEnabled()
+  fireEvent.click(screen.getByText('Advanced settings and memory details'))
+  const requests = screen.getByLabelText('muse simultaneous requests')
+  fireEvent.change(requests, { target: { value: '2' } })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' })) })
+  expect(screen.getByRole('alert')).toHaveTextContent('Startup check unavailable')
+  expect(requests).toHaveValue(2)
+  expect(finish).toBeDisabled()
+  expect(screen.queryByText('Ready to start with these settings.')).not.toBeInTheDocument()
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action)).toEqual([
+    ['first_run', { host_id: 'local', action: 'startup', download_id: 'download', concurrency: 2, max_context: 32768, instance_count: 1, kv_arena_bytes: null }],
+  ])
+})
+
+it('finishes first-run setup only after a matching check accepts the edited startup settings', async () => {
+  const onComplete = vi.fn()
+  let saved = flow('startup', { startup_profiles: [{ ...profile, quote: { fits: true } }] })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'complete') return Promise.resolve(flow('complete'))
+    if (args.action === 'startup') saved = flow('startup', { startup_profiles: [{
+      ...profile, concurrency: args.concurrency, max_context: args.max_context,
+      instance_count: args.instance_count, kv_arena_bytes: args.kv_arena_bytes, quote: { fits: true },
+    }] })
+    return Promise.resolve(saved)
+  })
+  render(<EngineFirstRun onComplete={onComplete} />)
+  const finish = await screen.findByRole('button', { name: 'Finish local setup' })
+  fireEvent.click(screen.getByText('Advanced settings and memory details'))
+  fireEvent.change(screen.getByLabelText('muse simultaneous requests'), { target: { value: '2' } })
+  fireEvent.change(screen.getByLabelText('muse conversation limit in tokens'), { target: { value: '16384' } })
+  fireEvent.change(screen.getByLabelText('muse model copies'), { target: { value: '2' } })
+  fireEvent.change(screen.getByLabelText('muse graphics-card conversation memory in bytes'), { target: { value: '2147483648' } })
+  expect(finish).toBeDisabled()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' })) })
+  expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'startup', download_id: 'download', concurrency: 2, max_context: 16384, instance_count: 2, kv_arena_bytes: 2147483648 })
+  expect(finish).toBeEnabled()
+  expect(screen.getByText('Ready to start with these settings.')).toBeVisible()
+  fireEvent.click(finish)
+  await waitFor(() => expect(onComplete).toHaveBeenCalledOnce())
+  expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'complete' })
+  expect(mocks.command.mock.calls.every(([operation]) => operation === 'first_run')).toBe(true)
+})
+
+it('does not validate a newer startup edit when an in-flight check accepts an older value', async () => {
+  let resolveCheck!: (value: ReturnType<typeof flow>) => void
+  const check = new Promise<ReturnType<typeof flow>>(resolve => { resolveCheck = resolve })
+  let saved = flow('startup', { startup_profiles: [{ ...profile, quote: { fits: true } }] })
+  let checks = 0
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'startup') {
+      if (++checks === 1) return check
+      saved = flow('startup', { startup_profiles: [{ ...profile, concurrency: args.concurrency, quote: { fits: true } }] })
+    }
+    return Promise.resolve(saved)
+  })
+  render(<EngineFirstRun />)
+  const finish = await screen.findByRole('button', { name: 'Finish local setup' })
+  fireEvent.click(screen.getByText('Advanced settings and memory details'))
+  const requests = screen.getByLabelText('muse simultaneous requests')
+  fireEvent.change(requests, { target: { value: '2' } })
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' })) })
+  expect(requests).toBeEnabled()
+  fireEvent.change(requests, { target: { value: '3' } })
+  saved = flow('startup', { startup_profiles: [{ ...profile, concurrency: 2, quote: { fits: true } }] })
+  await act(async () => { resolveCheck(saved) })
+  expect(requests).toHaveValue(3)
+  expect(finish).toBeDisabled()
+  expect(screen.queryByText('Ready to start with these settings.')).not.toBeInTheDocument()
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Check startup settings' })) })
+  expect(requests).toHaveValue(3)
+  expect(finish).toBeEnabled()
+  expect(screen.getByText('Ready to start with these settings.')).toBeVisible()
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action).map(([, args]) => args.concurrency)).toEqual([2, 3])
+})
+
+it('keeps startup edits and accepted checks independent for each selected model', async () => {
+  let profiles = [
+    { ...profile, quote: { fits: true } },
+    { ...profile, download_id: 'other-download', model_id: 'qwen', quote: { fits: true } },
+  ]
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'startup') profiles = profiles.map(saved => saved.download_id === args.download_id
+      ? { ...saved, concurrency: args.concurrency } : saved)
+    return Promise.resolve(flow('startup', { startup_profiles: profiles }))
+  })
+  render(<EngineFirstRun />)
+  const finish = await screen.findByRole('button', { name: 'Finish local setup' })
+  expect(finish).toBeEnabled()
+  screen.getAllByText('Advanced settings and memory details').forEach(summary => fireEvent.click(summary))
+  const museRequests = screen.getByLabelText('muse simultaneous requests')
+  const qwenRequests = screen.getByLabelText('qwen simultaneous requests')
+  fireEvent.change(museRequests, { target: { value: '2' } })
+  expect(qwenRequests).toHaveValue(4)
+  expect(screen.getAllByText('Ready to start with these settings.')).toHaveLength(1)
+  expect(finish).toBeDisabled()
+  fireEvent.change(qwenRequests, { target: { value: '3' } })
+  expect(screen.queryByText('Ready to start with these settings.')).not.toBeInTheDocument()
+  await act(async () => { fireEvent.click(within(museRequests.closest('form')!).getByRole('button', { name: 'Check startup settings' })) })
+  expect(museRequests).toHaveValue(2)
+  expect(qwenRequests).toHaveValue(3)
+  expect(screen.getAllByText('Ready to start with these settings.')).toHaveLength(1)
+  expect(finish).toBeDisabled()
+  await act(async () => { fireEvent.click(within(qwenRequests.closest('form')!).getByRole('button', { name: 'Check startup settings' })) })
+  expect(screen.getAllByText('Ready to start with these settings.')).toHaveLength(2)
+  expect(finish).toBeEnabled()
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action).map(([, args]) => [args.download_id, args.concurrency])).toEqual([
+    ['download', 2], ['other-download', 3],
+  ])
 })
 
 it('restores the measured placement review without automatically accepting or moving models', async () => {
@@ -824,7 +967,7 @@ it('explains a saved setup error while keeping diagnostics closed and model choi
 
 it('explains startup errors, hides diagnostics and keeps completion blocked until settings pass', async () => {
   mocks.command.mockImplementation((_operation, args) => Promise.resolve(flow('startup', {
-    startup_profiles: [{ ...profile, quote: { fits: true }, error: args.action === 'startup' ? null : 'CUDA allocation failed: requested 4294967296 bytes' }],
+    startup_profiles: [{ ...profile, concurrency: args.action === 'startup' ? args.concurrency : profile.concurrency, quote: { fits: true }, error: args.action === 'startup' ? null : 'CUDA allocation failed: requested 4294967296 bytes' }],
   })))
   render(<EngineFirstRun />)
   expect(await screen.findByRole('alert')).toHaveTextContent('A shorter conversation limit or fewer simultaneous requests may help if memory is short.')
