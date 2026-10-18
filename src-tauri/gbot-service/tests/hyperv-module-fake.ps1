@@ -25,6 +25,7 @@ foreach ($statement in $ast.EndBlock.Statements) {
         . ([scriptblock]::Create($statement.Extent.Text))
     }
 }
+$script:ProductionCopyFile = ${function:CopyFile}
 $dispatch = @($ast.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.TryStatementAst] })
 if ($dispatch.Count -ne 1) { throw 'Expected one production request dispatcher.' }
 $body = $dispatch[0].Body.Extent.Text
@@ -324,6 +325,30 @@ function Invoke-Operation([string]$action, $extra = @{}) {
 $script:Assertions = 0
 $oldSystemDrive = $env:SystemDrive
 try {
+    # Exercise the production .NET copy seam with real files before mocking the
+    # Hyper-V module: an immutable bundle must yield a writable guest disk.
+    $copyRoot = [IO.Path]::Combine([IO.Path]::GetTempPath(), ('gchat-hyperv-copy-' + [Guid]::NewGuid()))
+    [IO.Directory]::CreateDirectory($copyRoot) | Out-Null
+    $copySource = [IO.Path]::Combine($copyRoot, 'accepted.vhdx')
+    $copyDestination = [IO.Path]::Combine($copyRoot, 'owned.partial.vhdx')
+    try {
+        [IO.File]::WriteAllText($copySource, 'immutable accepted fixture')
+        [IO.File]::SetAttributes($copySource, [IO.FileAttributes]::ReadOnly)
+        & $script:ProductionCopyFile $copySource $copyDestination
+        Assert-True (([IO.File]::GetAttributes($copySource) -band [IO.FileAttributes]::ReadOnly) -ne 0) 'Copying changed the accepted source read-only flag.'
+        Assert-True (([IO.File]::GetAttributes($copyDestination) -band [IO.FileAttributes]::ReadOnly) -eq 0) 'The private guest disk inherited the immutable source read-only flag.'
+        [IO.File]::AppendAllText($copyDestination, ' guest write')
+        Assert-Equal ([IO.File]::ReadAllText($copySource)) 'immutable accepted fixture' 'Guest disk writes changed the accepted source.'
+        Assert-Equal ([IO.File]::ReadAllText($copyDestination)) 'immutable accepted fixture guest write' 'The owned guest disk is not writable.'
+    } finally {
+        foreach ($path in @($copySource, $copyDestination)) {
+            if ([IO.File]::Exists($path)) {
+                [IO.File]::SetAttributes($path, [IO.FileAttributes]::Normal)
+                [IO.File]::Delete($path)
+            }
+        }
+        [IO.Directory]::Delete($copyRoot)
+    }
     $env:SystemDrive = 'C:'
     Reset-Fake
     $detected = Invoke-Operation 'detect'

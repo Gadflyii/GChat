@@ -230,6 +230,10 @@ public static class GChatIsoStream {
 function CopyFile([string]$source, [string]$destination) {
     # Never overwrite an unexpected output between the ownership check and copy.
     [IO.File]::Copy($source, $destination, $false)
+    # Bundled assets can be read-only. Only the newly created owned guest copy
+    # must be writable for Resize-VHD and the persistent guest's disk writes.
+    [IO.File]::SetAttributes($destination,
+        ([IO.File]::GetAttributes($destination) -band (-bnot [IO.FileAttributes]::ReadOnly)))
 }
 function GuestDisk([string]$path, [uint64]$capacity) {
     $disk = Get-VHD -Path $path -ErrorAction Stop
