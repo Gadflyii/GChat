@@ -162,6 +162,105 @@ it('requires an Engine quote and saves approved startup overrides without launch
   expect(screen.queryByRole('region', { name: 'Set up local GInfer' })).not.toBeInTheDocument()
 })
 
+it('restores the measured placement review without automatically accepting or moving models', async () => {
+  const saved = flow('storage_review', {
+    gpu_uuids: ['GPU-one'],
+    hardware_profile: { status: 'completed', scope: 'artifact', scope_complete: true },
+    storage: { path: '/models', recommended_path: '/fast', available_bytes: 1024 ** 4, required_bytes: 3 * 1024 ** 3, review_key: 'current-placement',
+      selected_models: [
+        { download_id: 'download', name: 'Muse', path: '/models/muse.ginfer', bytes: 1024 ** 3 },
+        { download_id: 'other', name: 'Qwen', path: '/models-other/qwen.ginfer', bytes: 2 * 1024 ** 3 },
+      ],
+      candidates: [
+        { path: '/fast', available_bytes: 1024 ** 4, required_bytes: 3 * 1024 ** 3, eligible: true, measured_read_bytes_per_second: 2048 * 1024 ** 2 },
+        { path: '/full', available_bytes: 0, eligible: false, reason: 'Not enough free space for the selected models' },
+      ],
+    },
+  })
+  mocks.command.mockImplementation((_operation, args) => Promise.resolve(args.action === 'accept_storage'
+    ? flow('startup', { startup_profiles: [profile] }) : saved))
+  const view = render(<EngineFirstRun />)
+  expect(await screen.findByText('Review model locations')).toBeVisible()
+  await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/models'))
+  expect(screen.getByText('Selected models: 3.0 GiB total.')).toBeVisible()
+  expect(screen.getByText('Muse · 1.0 GiB')).toBeVisible()
+  expect(screen.getByText('Qwen · 2.0 GiB')).toBeVisible()
+  expect(screen.getByText('Current location: /models/muse.ginfer')).toBeVisible()
+  expect(screen.getByText('Current location: /models-other/qwen.ginfer')).toBeVisible()
+  expect(screen.getByText('Recommended: /fast')).toBeVisible()
+  expect(screen.getByText(/Measured read: 2048.0 MiB\/s · Additional space needed: 3.0 GiB/)).toBeVisible()
+  expect(screen.getByText('Unavailable · Read speed unavailable')).toBeVisible()
+  expect(screen.getByText('Not enough free space for the selected models')).toBeVisible()
+  expect(screen.getByRole('button', { name: '/full · 0 MiB free' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Move Muse to selected storage' })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Move Qwen to selected storage' })).toBeEnabled()
+  expect(screen.queryByRole('button', { name: 'Finish local setup' })).not.toBeInTheDocument()
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+
+  view.unmount()
+  mocks.command.mockClear()
+  render(<EngineFirstRun />)
+  const keep = await screen.findByRole('button', { name: 'Keep these locations and continue' })
+  await waitFor(() => expect(keep).toBeEnabled())
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+  fireEvent.click(keep)
+  expect(await screen.findByText('Review model startup settings')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Finish local setup' })).toBeDisabled()
+  expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'accept_storage', review_key: 'current-placement' })
+})
+
+it('saves a placement destination separately from an explicit managed move', async () => {
+  const installed = { id: 'download', release, status: 'installed', received: release.bytes, bytes_per_second: 0 }
+  let currentStorage = { path: '/models', requested_path: null as string | null, recommended_path: '/fast', available_bytes: 1024 ** 4, required_bytes: release.bytes, review_key: 'original-placement',
+    selected_models: [{ download_id: 'download', name: 'Muse', path: '/models/muse.ginfer', bytes: release.bytes }],
+    candidates: [{ path: '/fast', available_bytes: 1024 ** 4, eligible: true, measured_read_bytes_per_second: 2048 * 1024 ** 2 }],
+  }
+  let saved = flow('storage_review', { gpu_uuids: ['GPU-one'], selected_downloads: [installed], storage: currentStorage })
+  mocks.command.mockImplementation((_operation, args) => {
+    if (args.action === 'storage') {
+      currentStorage = { ...currentStorage, path: args.path, review_key: 'chosen-destination' }
+      saved = flow('storage_review', { gpu_uuids: ['GPU-one'], selected_downloads: [installed], storage: currentStorage })
+    }
+    if (args.action === 'move') saved = flow('profiling', { gpu_uuids: ['GPU-one'], selected_downloads: [installed], hardware_profile: { status: 'running', scope: 'artifact', scope_complete: false }, storage: currentStorage })
+    return Promise.resolve(saved)
+  })
+  const view = render(<EngineFirstRun />)
+  await screen.findByText('Review model locations')
+  fireEvent.click(screen.getByRole('button', { name: '/fast · 1024.0 GiB free' }))
+  expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast')
+  expect(screen.getByRole('button', { name: 'Keep these locations and continue' })).toBeDisabled()
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+  fireEvent.click(screen.getByRole('button', { name: 'Use this folder' }))
+  await waitFor(() => expect(screen.getByText('Selected download folder: /fast')).toBeVisible())
+  expect(screen.getByText('Current location: /models/muse.ginfer')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Keep these locations and continue' })).toBeEnabled()
+  expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'storage', path: '/fast' })
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action).map(([, args]) => args.action)).toEqual(['storage'])
+
+  fireEvent.click(screen.getByRole('button', { name: 'Move Muse to selected storage' }))
+  expect(await screen.findByText('Measuring graphics cards…')).toBeVisible()
+  expect(screen.queryByRole('button', { name: 'Keep these locations and continue' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Finish local setup' })).not.toBeInTheDocument()
+  expect(mocks.command).toHaveBeenLastCalledWith('first_run', { host_id: 'local', action: 'move', download_id: 'download' })
+  expect(mocks.command.mock.calls.filter(([, args]) => args.action).map(([, args]) => args.action)).toEqual(['storage', 'move'])
+
+  view.unmount()
+  saved = flow('storage_review', { gpu_uuids: ['GPU-one'], selected_downloads: [installed], storage: { ...currentStorage, review_key: 'moved-placement', selected_models: [{ ...currentStorage.selected_models[0], path: '/fast/muse.ginfer' }] } })
+  mocks.command.mockClear()
+  render(<EngineFirstRun />)
+  expect(await screen.findByText('Current location: /fast/muse.ginfer')).toBeVisible()
+  await waitFor(() => expect(screen.getByLabelText('Model download folder')).toHaveValue('/fast'))
+  expect(screen.queryByRole('button', { name: 'Move Muse to selected storage' })).not.toBeInTheDocument()
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+})
+
+it('waits for the current Host placement review key before accepting locations', async () => {
+  mocks.command.mockResolvedValue(flow('storage_review', { storage: { path: '/models', available_bytes: 1024 ** 4 } }))
+  render(<EngineFirstRun />)
+  expect(await screen.findByRole('button', { name: 'Keep these locations and continue' })).toBeDisabled()
+  expect(mocks.command).toHaveBeenCalledExactlyOnceWith('first_run', { host_id: 'local' })
+})
+
 it('preserves a typed storage override when the shared catalog finishes loading', async () => {
   mocks.command.mockImplementation((_operation, args) => Promise.resolve(flow('storage', {
     catalog_loaded: mocks.command.mock.calls.length > 1,

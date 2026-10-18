@@ -6,6 +6,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::{collections::BTreeSet, path::PathBuf, sync::atomic::Ordering};
 use uuid::Uuid;
 
@@ -16,6 +17,9 @@ pub struct Progress {
     pub storage_accepted: bool,
     pub requested_storage: Option<PathBuf>,
     pub storage_error: Option<String>,
+    /// Fingerprint of the explicitly reviewed profile, selected files and root.
+    /// Persisting a choice does not authorize a different profile or placement.
+    pub reviewed_storage: Option<String>,
     pub releases: Vec<Release>,
     pub catalog_loaded: bool,
     pub catalog_error: Option<String>,
@@ -37,7 +41,7 @@ pub struct Startup {
     pub error: Option<String>,
 }
 
-fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str {
+fn stage(progress: &Progress, profiled: bool, reviewed: bool, jobs: &[Download]) -> &'static str {
     if progress.complete {
         return "complete";
     }
@@ -71,7 +75,28 @@ fn stage(progress: &Progress, profiled: bool, jobs: &[Download]) -> &'static str
     if !profiled {
         return "profiling";
     }
+    if !reviewed {
+        return "storage_review";
+    }
     "startup"
+}
+
+fn storage_review_key(
+    progress: &Progress,
+    jobs: &[Download],
+    profile: &Value,
+    root: &std::path::Path,
+) -> Option<String> {
+    let selected: Option<Vec<_>> = progress.download_ids.iter().map(|id| {
+        let job = jobs.iter().find(|job| job.id == *id && job.status == "installed")?;
+        Some(json!({"id":id,"sha256":job.release.sha256,"bytes":job.release.bytes,"path":job.path.as_ref()?}))
+    }).collect();
+    let selected = selected.filter(|selected| !selected.is_empty())?;
+    let bytes = serde_json::to_vec(
+        &json!({"gpus":progress.gpu_uuids,"profile":profile,"root":root,"models":selected}),
+    )
+    .ok()?;
+    Some(hex::encode(Sha256::digest(bytes)))
 }
 
 /// A selected download that no longer exists (deleted on Models) releases the
@@ -90,6 +115,7 @@ fn reconcile(progress: &mut Progress, jobs: &[Download]) -> bool {
 }
 
 fn release_selection(progress: &mut Progress) {
+    progress.reviewed_storage = None;
     progress.selected_release_ids.clear();
     progress.download_ids.clear();
     progress.download_error = None;
@@ -239,6 +265,17 @@ fn recommendations(
 }
 
 impl Host {
+    async fn first_run_storage_reviewed(&self, progress: &Progress, jobs: &[Download]) -> bool {
+        let Some(reviewed) = &progress.reviewed_storage else {
+            return false;
+        };
+        let Some(profile) = self.first_run_profile(progress).await else {
+            return false;
+        };
+        storage_review_key(progress, jobs, &profile, &self.downloads.root()).as_ref()
+            == Some(reviewed)
+    }
+
     async fn first_run_profile_busy(&self) -> bool {
         self.processes
             .lock()
@@ -352,12 +389,42 @@ impl Host {
             .map(|r| r.bytes)
             .min()
             .unwrap_or(0);
+        let selected_models: Vec<_> = selected.iter().filter(|job| job.status == "installed").map(|job| json!({
+            "download_id":job.id,"name":job.release.name,"path":job.path,"bytes":job.release.bytes
+        })).collect();
+        let placements: Vec<_> = selected
+            .iter()
+            .filter(|job| job.status == "installed")
+            .filter_map(|job| job.path.clone().map(|path| (path, job.release.bytes)))
+            .collect();
+        let profiled = self.first_run_selected_ready(&progress).await;
+        let review_key = profile
+            .as_ref()
+            .filter(|_| profiled)
+            .and_then(|profile| storage_review_key(&progress, &jobs, profile, &root));
         let mut storage = json!({"path":root,"available_bytes":free,"existing_models_preserved":true,
             "requested_path":progress.requested_storage,"accepted":progress.storage_accepted,
+            "selected_models":selected_models,
+            "review_key":review_key,
             "existing_downloads":jobs.iter().filter(|j|j.status=="installed" && j.storage_root!=root).collect::<Vec<_>>()});
+        storage["required_bytes"] = json!(if placements.is_empty() {
+            required
+        } else {
+            placements
+                .iter()
+                .try_fold(0_u64, |total, (_, bytes)| total.checked_add(*bytes))
+                .ok_or("Selected package size overflow")?
+        });
         if let Some(profile) = &profile {
-            match crate::model_storage::recommend_storage(profile, &root, required).await {
+            let recommendation = if placements.is_empty() {
+                crate::model_storage::recommend_storage(profile, &root, required).await
+            } else {
+                crate::model_storage::recommend_storage_for_models(profile, &root, &placements)
+                    .await
+            };
+            match recommendation {
                 Ok(recommendation) => {
+                    storage["required_bytes"] = json!(recommendation.required_bytes);
                     storage["recommended_path"] = json!(recommendation.recommended_path);
                     storage["candidates"] = json!(recommendation.candidates);
                 }
@@ -366,6 +433,8 @@ impl Host {
         }
         if let Some(error) = &progress.storage_error {
             storage["error"] = json!(error);
+        } else if profiled && review_key.is_none() {
+            storage["error"] = json!("Accepted hardware profile or installed model locations are unavailable; refresh profiling before reviewing storage");
         }
         let hardware = {
             let processes = self.processes.lock().await;
@@ -383,7 +452,8 @@ impl Host {
         })).collect();
         let step = stage(
             &progress,
-            self.first_run_selected_ready(&progress).await,
+            profiled,
+            self.first_run_storage_reviewed(&progress, &jobs).await,
             &jobs,
         );
         let error = progress
@@ -436,7 +506,8 @@ impl Host {
             self.store_first_run(progress.clone()).await?;
         }
         let profiled = self.first_run_selected_ready(&progress).await;
-        let step = stage(&progress, profiled, &jobs);
+        let reviewed = self.first_run_storage_reviewed(&progress, &jobs).await;
+        let step = stage(&progress, profiled, reviewed, &jobs);
         match body["action"].as_str().ok_or("first-run action required")? {
             "reselect" => {
                 if step != "downloads" {
@@ -474,10 +545,12 @@ impl Host {
             "storage" => {
                 if progress.gpu_uuids.is_empty()
                     || progress.complete
-                    || !progress.download_ids.is_empty()
+                    || (!progress.download_ids.is_empty()
+                        && step != "storage_review"
+                        && !(step == "storage" && progress.requested_storage.is_some()))
                 {
                     return Err(
-                        "Choose storage after selecting GPUs and before admitting downloads".into(),
+                        "Choose storage before downloads or during measured storage review".into(),
                     );
                 }
                 let path = PathBuf::from(body["path"].as_str().ok_or("storage path required")?);
@@ -485,11 +558,59 @@ impl Host {
                     return Err("Choose an absolute model storage path".into());
                 }
                 progress.requested_storage = Some(path);
+                progress.reviewed_storage = None;
+                for profile in &mut progress.startup_profiles {
+                    profile.quote = None;
+                    profile.error = None;
+                }
                 progress.storage_accepted = false;
                 progress.storage_error = None;
                 progress.download_error = None;
                 self.store_first_run(progress.clone()).await?;
                 self.apply_first_run_storage(&mut progress).await?;
+            }
+            "accept_storage" => {
+                let _lifecycle = self.lifecycle.lock().await;
+                if step != "storage_review" || !profiled {
+                    return Err(
+                        "Complete selected-artifact profiling before reviewing model locations"
+                            .into(),
+                    );
+                }
+                if !self.first_run_selected_ready(&progress).await {
+                    return Err(
+                        "Selected-artifact profiling changed; refresh the storage review".into(),
+                    );
+                }
+                // Recheck the actual retained files, rather than requiring space
+                // for another copy or requiring a measured rate to keep them.
+                for id in &progress.download_ids {
+                    let job = jobs
+                        .iter()
+                        .find(|job| job.id == *id && job.status == "installed")
+                        .ok_or("A selected package is no longer installed")?;
+                    let path = job.path.as_ref().ok_or("Installed package has no path")?;
+                    let metadata = tokio::fs::metadata(path).await.map_err(|error| {
+                        format!(
+                            "Cannot keep installed package '{}': {error}",
+                            path.display()
+                        )
+                    })?;
+                    if !metadata.is_file() || metadata.len() != job.release.bytes {
+                        return Err("A selected package changed; verify its managed download before continuing".into());
+                    }
+                }
+                let profile = self.first_run_profile(&progress).await.ok_or("Accepted hardware profile is unavailable; refresh profiling before reviewing storage")?;
+                let key = storage_review_key(&progress, &jobs, &profile, &self.downloads.root())
+                    .ok_or("Selected model placement is unavailable")?;
+                if body["review_key"].as_str() != Some(key.as_str()) {
+                    return Err("Model locations or measurements changed; refresh the storage review before keeping these locations".into());
+                }
+                progress.reviewed_storage = Some(key);
+                for profile in &mut progress.startup_profiles {
+                    profile.quote = None;
+                    profile.error = None;
+                }
             }
             "refresh_catalog" => {
                 if progress.gpu_uuids.is_empty()
@@ -704,6 +825,9 @@ impl Host {
                             .into(),
                     );
                 }
+                if !self.first_run_storage_reviewed(&progress, &jobs).await {
+                    return Err("Review current model locations before setup can finish".into());
+                }
                 let mut data = self.data.lock().await;
                 let previous = data.profiles.clone();
                 for profile in &mut progress.startup_profiles {
@@ -743,7 +867,7 @@ impl Host {
 
     async fn move_first_run_model(&self, id: Uuid) -> Result<Value, String> {
         let _operation = self.first_run_operation.lock().await;
-        let progress = self.data.lock().await.first_run.clone();
+        let mut progress = self.data.lock().await.first_run.clone();
         if self.first_run_profile(&progress).await.is_none() {
             return Err("Complete hardware profiling before moving installed models".into());
         }
@@ -777,6 +901,14 @@ impl Host {
         );
         let key = serde_json::to_string(&(&destination, false, model.metadata.tp_size))
             .map_err(|e| e.to_string())?;
+        if progress.download_ids.contains(&id) {
+            progress.reviewed_storage = None;
+            for profile in &mut progress.startup_profiles {
+                profile.quote = None;
+                profile.error = None;
+            }
+            self.store_first_run(progress).await?;
+        }
         {
             let mut data = self.data.lock().await;
             if data.models.get(&key).is_some_and(|id| *id != model.id) {
@@ -808,6 +940,11 @@ impl Host {
         // Even a committed move whose source cleanup failed needs its current
         // journal path reflected in inventory before the error is displayed.
         let scanned = self.scan().await;
+        self.processes
+            .lock()
+            .await
+            .activity_notification()
+            .notify_one();
         moved?;
         scanned?;
         self.first_run_status().await
@@ -819,7 +956,7 @@ impl Host {
         reconcile(&mut progress, &jobs);
         if progress.complete
             || !progress.catalog_loaded
-            || stage(&progress, true, &jobs) != "startup"
+            || stage(&progress, true, true, &jobs) != "startup"
             || progress.startup_profiles.len() != progress.download_ids.len()
             || progress.download_ids.iter().any(|id| {
                 !progress
@@ -856,10 +993,11 @@ impl Host {
             return profile.error.is_none()
                 && !selected_scope_needs_resume(&job.status(cli), &progress.gpu_uuids, &intent);
         }
-        progress
-            .startup_profiles
-            .iter()
-            .any(|profile| profile.quote.is_none() && profile.error.is_none())
+        self.first_run_storage_reviewed(&progress, &jobs).await
+            && progress
+                .startup_profiles
+                .iter()
+                .any(|profile| profile.quote.is_none() && profile.error.is_none())
     }
 
     async fn apply_first_run_storage(&self, progress: &mut Progress) -> Result<(), String> {
@@ -1029,7 +1167,7 @@ impl Host {
         let jobs = self.downloads.list().await;
         // This ignores profiling only to test that every selected download is
         // installed. Actual readiness below is exact artifact acceptance.
-        if stage(&progress, true, &jobs) != "startup" {
+        if stage(&progress, true, true, &jobs) != "startup" {
             return Ok(progress.storage_error.is_none() && progress.download_error.is_none());
         }
         let _lifecycle = self.lifecycle.lock().await;
@@ -1156,6 +1294,15 @@ impl Host {
             }
             self.store_first_run(progress).await?;
             return Ok(true);
+        }
+        // Calibration may have changed the saved disk measurements. Park here
+        // for one explicit placement decision before obtaining startup quotes.
+        if !self.first_run_storage_reviewed(&progress, &jobs).await {
+            progress.reviewed_storage = None;
+            for profile in &mut progress.startup_profiles {
+                profile.quote = None;
+            }
+            return self.store_first_run(progress).await.map(|_| true);
         }
         for profile in &mut progress.startup_profiles {
             if profile.quote.is_some() || profile.error.is_some() {
@@ -2256,7 +2403,7 @@ mod tests {
         let model_id = host.inventory.read().await[0].id;
         let mut options = jobs[0].release.launch_profiles[0].options.clone();
         options.kv_arena_bytes = None;
-        let intent = host
+        let mut intent = host
             .selected_profile_intent(&LaunchRequest {
                 instance_id: None,
                 qualified_profile_id: None,
@@ -2287,11 +2434,13 @@ mod tests {
         let result = serde_json::to_string(&result).unwrap();
         let (prefix, suffix) = result.split_once("__OUTPUT__").unwrap();
         let shell_quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+        let native_profile = json!({"schema_version":2,"ram_bytes":128_u64 << 30,
+            "gpus":[{"uuid":gpu().uuid,"vram_bytes":32_u64 << 30}],"disks":[]});
         let path = directory.path().join("ginfer");
         std::fs::write(&path, format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nprintf '%s' '{{\"schema_version\":2,\"accepted\":\"scoped\"}}' > \"$3\"\nprintf '%s%s%s\\n' {} \"$3\" {}\n",
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > {}\nprintf '%s' {} > \"$3\"\nprintf '%s%s%s\\n' {} \"$3\" {}\n",
             shell_quote(directory.path().join("profile-args").to_str().unwrap()),
-            shell_quote(prefix), shell_quote(suffix)
+            shell_quote(&native_profile.to_string()), shell_quote(prefix), shell_quote(suffix)
         )).unwrap();
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
         host.store_first_run(Progress {
@@ -2341,6 +2490,47 @@ mod tests {
         assert!(profile_args.contains(&"--json"));
         assert!(!profile_args.contains(&"--complete-remaining-formats"));
         host.first_run_maintenance().await.unwrap();
+        let review = host.first_run_status().await.unwrap();
+        assert_eq!(review["step"], "storage_review");
+        assert_eq!(review["storage"]["required_bytes"], jobs[0].release.bytes);
+        assert_eq!(
+            review["storage"]["selected_models"][0]["path"],
+            json!(intent.path)
+        );
+        assert!(review["startup_profiles"][0]["quote"].is_null());
+        assert!(!directory.path().join("quote-args").exists());
+        assert!(!host.first_run_pending().await); // Review waits for a user, not a polling job.
+        assert!(host
+            .first_run_action(json!({"action":"complete"}))
+            .await
+            .is_err());
+        assert!(host
+            .first_run_action(json!({"action":"accept_storage","review_key":"stale"}))
+            .await
+            .is_err());
+        // Choosing a future-download destination leaves the installed file in
+        // place and requires an explicit review of the resulting placement.
+        let destination = directory.path().join("chosen-models");
+        let old_key = review["storage"]["review_key"].clone();
+        let chosen = host
+            .first_run_action(json!({"action":"storage","path":destination}))
+            .await
+            .unwrap();
+        assert_eq!(chosen["step"], "storage_review");
+        assert!(intent.path.is_file());
+        assert!(!destination.join(intent.path.file_name().unwrap()).exists());
+        assert!(host
+            .first_run_action(json!({"action":"accept_storage","review_key":old_key}))
+            .await
+            .is_err());
+        let accepted = host
+            .first_run_action(
+                json!({"action":"accept_storage","review_key":chosen["storage"]["review_key"]}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(accepted["step"], "startup");
+        host.first_run_maintenance().await.unwrap();
         let status = host.first_run_status().await.unwrap();
         assert!(status["startup_profiles"][0]["quote"].is_object());
         assert_eq!(status["startup_profiles"][0]["max_context"], 65536);
@@ -2358,6 +2548,66 @@ mod tests {
             .windows(2)
             .any(|pair| pair == ["--max-concurrency", "3"]));
         assert!(!host.processes.lock().await.has_children());
+        // Moving is a separate verified operation. It preserves the model
+        // UUID but revokes both placement review and the old startup quote.
+        let old_path = intent.path.clone();
+        let old_key = host
+            .data
+            .lock()
+            .await
+            .first_run
+            .reviewed_storage
+            .clone()
+            .unwrap();
+        let moved = host
+            .first_run_action(json!({"action":"move","download_id":jobs[0].id}))
+            .await
+            .unwrap();
+        assert_eq!(moved["step"], "profiling");
+        assert!(moved["startup_profiles"][0]["quote"].is_null());
+        assert!(host.data.lock().await.first_run.reviewed_storage.is_none());
+        assert!(!old_path.exists());
+        let request = host.data.lock().await.first_run.startup_profiles[0]
+            .request
+            .clone();
+        assert_eq!(request.model_id, model_id);
+        intent = host.selected_profile_intent(&request).await.unwrap();
+        assert!(intent.path.starts_with(&destination));
+        assert!(intent.path.is_file());
+        assert!(!worker.artifact_is_accepted(&[gpu().uuid], &intent));
+        // Retarget this existing synthetic profiler to the moved real fixture;
+        // its output must attest the new path before the Host can review it.
+        let cli = directory.path().join("ginfer");
+        let script = std::fs::read_to_string(&cli).unwrap();
+        std::fs::write(
+            &cli,
+            script.replace(old_path.to_str().unwrap(), intent.path.to_str().unwrap()),
+        )
+        .unwrap();
+        assert!(host.first_run_pending().await);
+        host.first_run_maintenance().await.unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while worker.busy() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
+        let review = host.first_run_status().await.unwrap();
+        assert_eq!(review["step"], "storage_review");
+        assert!(!host.first_run_pending().await);
+        assert!(host
+            .first_run_action(json!({"action":"accept_storage","review_key":old_key}))
+            .await
+            .is_err());
+        host.first_run_action(
+            json!({"action":"accept_storage","review_key":review["storage"]["review_key"]}),
+        )
+        .await
+        .unwrap();
+        host.first_run_maintenance().await.unwrap();
+        assert!(host.first_run_status().await.unwrap()["startup_profiles"][0]["quote"].is_object());
         // Retained quotes must wake selected-artifact validation after restart
         // and either runtime reconfiguration path, then park once accepted.
         drop(host);
@@ -2680,25 +2930,83 @@ mod tests {
             download_error: Some("Not found".into()),
             ..Default::default()
         };
-        assert_eq!(stage(&p0, true, &[]), "downloads");
+        assert_eq!(stage(&p0, true, false, &[]), "downloads");
         let mut p = p0.clone();
         assert!(reconcile(&mut p, &[]));
-        assert_eq!(stage(&p, true, &[]), "models");
+        assert_eq!(stage(&p, true, false, &[]), "models");
         assert!(p.selected_release_ids.is_empty() && p.download_error.is_none());
         assert!(!reconcile(&mut p, &[]));
     }
     #[test]
+    fn reviewed_storage_is_bound_to_profile_selection_paths_and_root() {
+        let (release, _) = package(0);
+        let id = Uuid::new_v4();
+        let jobs = vec![Download {
+            id,
+            release,
+            status: "installed".into(),
+            received: 4096,
+            bytes_per_second: 0,
+            error: None,
+            path: Some(PathBuf::from("/current/model.ginfer")),
+            storage_root: PathBuf::from("/current"),
+            verification: None,
+        }];
+        let mut progress = Progress {
+            gpu_uuids: vec![gpu().uuid],
+            storage_accepted: true,
+            download_ids: vec![id],
+            ..Default::default()
+        };
+        let profile = json!({"schema_version":2,"disks":[{"sequential_read":{"value":100}}]});
+        let root = std::path::Path::new("/current");
+        let key = storage_review_key(&progress, &jobs, &profile, root).unwrap();
+        progress.reviewed_storage = Some(key.clone());
+        let restored: Progress =
+            serde_json::from_slice(&serde_json::to_vec(&progress).unwrap()).unwrap();
+        assert_eq!(
+            storage_review_key(&restored, &jobs, &profile, root),
+            restored.reviewed_storage
+        );
+        assert_eq!(stage(&restored, true, false, &jobs), "storage_review");
+        assert_eq!(stage(&restored, true, true, &jobs), "startup");
+        assert_ne!(
+            storage_review_key(
+                &progress,
+                &jobs,
+                &json!({"schema_version":2,"disks":[]}),
+                root
+            ),
+            Some(key.clone())
+        );
+        assert_ne!(
+            storage_review_key(&progress, &jobs, &profile, std::path::Path::new("/chosen")),
+            Some(key.clone())
+        );
+        let mut moved = jobs.clone();
+        moved[0].path = Some(PathBuf::from("/chosen/model.ginfer"));
+        assert_ne!(
+            storage_review_key(&progress, &moved, &profile, root),
+            Some(key)
+        );
+        progress.download_ids.push(Uuid::new_v4());
+        assert!(storage_review_key(&progress, &jobs, &profile, root).is_none());
+        release_selection(&mut progress);
+        assert!(progress.reviewed_storage.is_none());
+    }
+
+    #[test]
     fn shared_progress_resumes_in_order() {
         let mut p = Progress::default();
-        assert_eq!(stage(&p, false, &[]), "gpu");
+        assert_eq!(stage(&p, false, false, &[]), "gpu");
         p.gpu_uuids = vec!["a".into()];
-        assert_eq!(stage(&p, false, &[]), "storage");
-        assert_eq!(stage(&p, true, &[]), "storage");
+        assert_eq!(stage(&p, false, false, &[]), "storage");
+        assert_eq!(stage(&p, true, false, &[]), "storage");
         p.storage_accepted = true;
-        assert_eq!(stage(&p, true, &[]), "models");
+        assert_eq!(stage(&p, true, false, &[]), "models");
         p.download_ids.push(Uuid::new_v4());
-        assert_eq!(stage(&p, true, &[]), "downloads");
+        assert_eq!(stage(&p, true, false, &[]), "downloads");
         let restored: Progress = serde_json::from_value(serde_json::to_value(&p).unwrap()).unwrap();
-        assert_eq!(stage(&restored, true, &[]), "downloads");
+        assert_eq!(stage(&restored, true, false, &[]), "downloads");
     }
 }

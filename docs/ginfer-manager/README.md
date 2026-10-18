@@ -327,6 +327,49 @@ are sequential in this change. The W10 follow-up for catalog-declared formats
 requires a separate Engine format-list contract before they can run in parallel.
 See the [decision](../decisions/2026-10-16-profile-selected-artifact-before-idle-format-completion.md).
 
+## CLI measured-storage review — active Codex 4 fix
+
+The novice Linux archive walk exposed `CLI-FIRST-RUN-MEASURED-STORAGE-REVIEW`:
+the initial folder choice precedes selected-artifact profiling, and the text
+wizard advances directly from profiling to startup without presenting the
+measured placement recommendation. The existing Host JSON has the ranking,
+but its capacity test uses the smallest catalog package instead of the selected
+packages. Source inspection confirms the current shared workflow has this gap.
+
+Arch signed the correction at 07:13:45Z on October 18: after accepted
+selected-artifact profiling, require one durable Host-owned placement review
+before startup. Show actual package locations, measured rates, eligibility
+reasons and the recommendation in every client. Explicitly keeping placement or
+choosing a writable native destination must persist across resume. Changing the
+future-download root leaves installed packages in place; relocating one remains
+a separate explicit verified managed move. After relocation, refresh artifact
+acceptance and startup quotes. Eligibility uses the selected packages' actual
+sizes and live free space. No new throughput probe or automatic move is allowed.
+
+Acceptance is shared CLI/GUI progression and resume, selected-size eligibility,
+keep without movement, explicit destination/move, and current artifact/quote
+state after relocation, supported by focused tests, one `make verify`, and an
+isolated native CLI replay. GInfer Engine code is excluded; measuring additional
+Linux filesystems is the separate `GINFER-LINUX-FASTEST-DISK-COVERAGE` row.
+
+Owner C4; source branch `fix/c4-first-run-measured-storage-20261018`, based on
+`6653b5bfd`, at `/ai/gchat-worktrees/c4-first-run-measured-storage-20261018`.
+Independent inactive RC dependency/cache copy completed at 07:17Z in S1
+`/media/ron/SSD_RAID/ai/tmp-c4-first-run-measured-storage-20261018`; donor
+remains unchanged, CPU72–79 returned at 07:18Z. The coherent Host/CLI,
+Welcome and Manager implementation is ready; source review and diff checks
+passed. CPU72–79 is booked 07:26–07:56Z with only the socket-1 shared
+compile guard. Exact source was staged into the independent SSD root; focused
+Host first-run/storage/launcher, Welcome and Manager checks passed once. The
+single `make verify` and the native debug Host build passed at 07:35Z.
+CPU72–79 returned at 07:35Z; booking3128 is canceled. Native replay remains
+pending selected-artifact profiling after the independently booked Flash soak.
+The independent archive-walk fixture under S1
+`/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018` is downloading
+the selected 21,707,145,472-byte package; it has no selected first-run release
+or profile and performs no GPU work. Native replay follows the checks; actual
+selected-artifact profiling waits for a separately booked GPU interval.
+
 ## Shared first-run setup — October 15
 
 `FIRST-RUN-WIZARD` and `MODEL-STORAGE-FASTEST-DISK` share one Host-owned workflow on branch
@@ -334,7 +377,7 @@ See the [decision](../decisions/2026-10-16-profile-selected-artifact-before-idle
 continuation, Manager's **Set up local GInfer** and GChat Welcome use the same
 durable state. The sequence is explicit GPU-group selection, storage selection,
 published package selection and verified download, selected-artifact profiling,
-startup review, then completion. No GPU is selected automatically. Selected
+measured storage review, startup review, then completion. No GPU is selected automatically. Selected
 release identities are saved before download admission; reopening a client resumes partial admission and
 existing jobs. The workflow saves instances stopped and leaves Start explicit.
 See the [decision](../decisions/2026-10-15-own-first-run-setup-and-measured-model-storage-in-host.md)
@@ -344,12 +387,17 @@ Authenticated `GET /host/v1/first-run` returns `step`, `gpu_uuids`,
 `hardware_profile`, `storage`, `models`, `selected_downloads` and
 `startup_profiles`. Storage includes the requested `path`, `recommended_path`,
 live `available_bytes`, existing downloads and candidate eligibility/reasons.
+At `storage_review`, `selected_models` contains the installed names, current
+paths and sizes, `required_bytes` is their aggregate size, and `review_key`
+identifies the displayed profile and placement. Each candidate's `required_bytes`
+is the additional live space needed after credit for files already in that folder.
 `POST /host/v1/first-run` accepts these actions:
 
 | Action | Inputs and behavior |
 | --- | --- |
 | `profile` | Explicit `gpu_uuids`; save a compatible supported group of 1, 2 or 4 GPUs. Profiling starts after the selected download is verified. |
-| `storage` | Absolute `path`; validate and persist the native managed-download root, or retain the choice while explicit profiling finishes. |
+| `storage` | Absolute `path`; validate and persist the native managed-download root before downloads or during measured storage review. This neither moves installed files nor accepts the review. |
+| `accept_storage` | Exact current `review_key`; explicitly retain the installed locations after accepted selected-artifact profiling. Stale placement or measurement keys are rejected. |
 | `move` | Installed managed `download_id`; explicitly move it to the selected storage root, rejecting active sources. |
 | `refresh_catalog` | Refresh the configured published release catalog. |
 | `models` | Exact `release_ids`; save compatible published choices; admit downloads after storage validation and a live capacity check, then profile each verified selected artifact. |
@@ -396,6 +444,17 @@ on the winning filesystem keeps its exact path; another measured disk offers
 `<measured-directory>/ginfer/models`. A writable native override remains available.
 WSL Windows-backed storage is ineligible for managed placement.
 
+After accepted selected-artifact profiling, the Host pauses at a durable measured
+storage review shared by every client. Recommendations use the actual aggregate
+selected package size, credit verified-size files already retained in the candidate
+folder, and add the mover's existing staging reserve for bytes still to be copied.
+The review shows current installed paths, measured rates, live capacity and
+reasons. Users explicitly keep the current locations or choose a destination and
+separately move packages. Keeping installed files does not require capacity for a
+second copy or a measured rate. The saved decision is bound to package identities,
+paths, the managed root, GPU group and native profile; changes require review again.
+No startup quote is requested while this decision is pending.
+
 Changing storage leaves existing models at their current locations. An explicit
 managed move copies and syncs into owned staging, verifies size, SHA-256 and
 artifact identities, publishes without overwriting a target, and commits the
@@ -405,6 +464,10 @@ inventory UUID and saved instance references survive relocation and restart.
 External discovered models are not moved by this action. An error before journal
 commit retains the original; an error removing it after commit reports the
 remaining copy.
+Moving a selected first-run package clears its placement decision and startup
+quotes. Host revalidates selected-artifact acceptance at the new path before
+presenting the placement review again; the next accepted review obtains fresh
+quotes. No model starts automatically.
 
 Model suggestions use the selected GPUs, published memory guidance and current
 disk capacity; they do not require calibration before download.

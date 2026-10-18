@@ -12,9 +12,10 @@ title: "Own first-run setup and measured model storage in Host"
   useful model-read throughput or current capacity.
 - **Decision:** Host persists one first-run workflow and exposes it through
   `GET` and `POST /host/v1/first-run`. The installer CLI, Manager and GChat render
-  that workflow: explicitly choose a supported GPU group, prepare its native
-  hardware profile, choose storage, select published packages, download them,
-  review startup defaults and save stopped instances. Persist selected release
+  that workflow: explicitly choose a supported GPU group and initial storage,
+  select published packages, download and verify them, prepare their required
+  hardware measurements, review measured model locations, review startup defaults
+  and save stopped instances. Persist selected release
   identities before admitting downloads so a restart can resume partial admission.
   Closing a client does not cancel Host-owned profiling, downloads or an admitted
   model move.
@@ -26,6 +27,20 @@ title: "Own first-run setup and measured model storage in Host"
   disk's measured directory with the existing `ginfer/models` convention when it
   wins. Users can override the recommendation with a writable native directory.
   Recommendation performs no throughput benchmark and moves no model.
+  After selected-artifact profiling is accepted, every client presents the same
+  Host-owned storage review before startup quotes. Show each installed package's
+  current path and actual size, measured rates, live space, ineligibility reasons
+  and recommendation. Rank destinations against the total selected size, crediting
+  verified-size files already retained in that folder; bytes still to be moved
+  need the existing mover's staging reserve. A missing rate does not prevent an
+  explicit choice to retain installed files.
+- **Review policy:** Persist an explicit keep decision bound to the selected
+  package identities and paths, GPU group, accepted native profile and managed
+  root. Reopening a client or restarting Host preserves an unchanged review;
+  changing those inputs requires another review. Reject a stale review key.
+  Choosing a different managed folder saves the destination but neither moves
+  installed files nor accepts their placement. Keep and move remain separate
+  explicit actions shared by the CLI, Welcome and Manager.
 - **Move policy:** Only an explicit move action can relocate an installed managed
   download. Reject active sources and existing targets. Copy into owned staging,
   sync and verify the package's immutable bytes and identities, publish without
@@ -33,12 +48,17 @@ title: "Own first-run setup and measured model storage in Host"
   Preserve the model's inventory identity and saved instance references. Failures
   before journal commitment retain the source; cleanup failure after commitment
   reports the remaining original. Discovered external model roots stay in place.
+  A selected package move invalidates its placement review and startup quotes.
+  Revalidate selected-artifact acceptance at the new path, then require a fresh
+  placement decision and fresh quotes before completion.
 - **Startup policy:** Engine `--quote-only` supplies each package's startup and
   KV estimates for the selected GPU group. These are estimates for that package,
   not proof that several selected packages coexist or that full context is
-  qualified. Completion saves stopped instances; a later explicit Start uses the
+  qualified. Quotes wait for the explicit measured-placement review. Completion
+  saves stopped instances; a later explicit Start uses the
   normal lifecycle and admission checks.
-- **Consequences:** Clients share durable progress and one storage decision.
+- **Consequences:** Clients share durable progress, an initial download destination
+  and the later measured-placement decision.
   Missing measurements, changed disk identity or insufficient live space remain
   visible instead of acquiring a guessed rate. Existing locations remain usable
   through inventory and download journals. Linux native acceptance and Windows

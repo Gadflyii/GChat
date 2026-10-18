@@ -1,0 +1,67 @@
+{
+  "status": "CHECKS_PASS_NATIVE_REPLAY_PENDING",
+  "owner": "Codex 4",
+  "row": "CLI-FIRST-RUN-MEASURED-STORAGE-REVIEW",
+  "base": "6653b5bfd",
+  "source_files": {
+    "src-tauri/ginfer-host/src/first_run.rs": "b26146bfeba780a4a4ffb3c52cd554ee2d9e97ef6f3448aaff7d0ac00f17ccee",
+    "src-tauri/ginfer-host/src/launcher.rs": "f8529c7848d7fc2c84b5904a08bc9f7713cd22d311bb4cede43e978abaa385f1",
+    "src-tauri/ginfer-host/src/main.rs": "f4f30b43a441f7ba5dbdbccbae44932c07ce8803d7871a3947d4104939c8d1ba",
+    "src-tauri/ginfer-host/src/model_storage.rs": "d49ae4e84e5c6ae50736d87971ba3075ba618d5d2d31845ea6ed32ced19c7815",
+    "src-tauri/ginfer-manager/ui/manager.js": "9a5268e4586139a875f68c3d5c189b3e10135308d3e19d3154251bc83af5ef74",
+    "tests/ginfer-manager-ui.test.mjs": "ab336ce5d042a300491c995f2a0c54a9060b839f4fdc94d259620767d2bb3f9a",
+    "web-app/src/containers/EngineFirstRun.tsx": "d2c3334a1d0008a727c875a294cd07c1ff944ab4925b3b3cc302b9545613b63a",
+    "web-app/src/containers/__tests__/EngineFirstRun.test.tsx": "8c458eaebdb562ab67bf0403cea1761ff11baada0393f22ebcc385d03fda29fb"
+  },
+  "s1_root": "/media/ron/SSD_RAID/ai/tmp-c4-first-run-measured-storage-20261018",
+  "checks": {
+    "host_first_run": {
+      "passed": 20,
+      "ignored": 1
+    },
+    "host_storage": {
+      "passed": 7,
+      "ignored": 1
+    },
+    "host_launcher": {
+      "passed": 13
+    },
+    "manager": {
+      "passed": 56
+    },
+    "welcome": {
+      "passed": 35
+    },
+    "make_verify": {
+      "exit": 0,
+      "invocations": 1
+    },
+    "native_host_build": {
+      "exit": 0,
+      "bytes": 56929168,
+      "sha256": "67306825f0e87c5cc3828f6686f63c696f4e8c5390c6bc961918d8b229b7bdbe"
+    }
+  },
+  "execution": {
+    "start": "2026-10-18T07:27:00.420878+00:00",
+    "cpus": "72-79",
+    "image": "sha256:ad7f9bf020d7699a6e87f38a57612413478a6364dd503de5e09805001d44ff14",
+    "lock": "/tmp/ginfer-s1-socket1-compile.lock",
+    "container": "c4-first-run-measured-storage-20261018",
+    "container_id": "cf2968a0a40aa1558d6b4ee16a08f1c4fe36d32900095e7802ed3aa1c39ccbcb",
+    "state": {
+      "Status": "exited",
+      "Running": false,
+      "ExitCode": 0,
+      "OOMKilled": false,
+      "Error": "",
+      "StartedAt": "2026-10-18T07:27:00.572350304Z",
+      "FinishedAt": "2026-10-18T07:35:16.904338642Z"
+    },
+    "final_container_exit": 0,
+    "end": "2026-10-18T07:35:17.118781+00:00",
+    "exit": 0
+  },
+  "native_replay": "Pending actual managed package verification and selected-artifact Ensure in a separately booked GPU interval. No fabricated profile or copied acceptance receipt.",
+  "full_gate_logs": "/ai/gchat/out/c4-first-run-measured-storage-20261018"
+}
