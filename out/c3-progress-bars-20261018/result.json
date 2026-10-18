@@ -1,0 +1,89 @@
+{
+  "row": "GUI-PROGRESS-BARS",
+  "status": "PASS_LINUX_NATIVE_LEAF",
+  "original_fix": "01caea779",
+  "original_merge": "836f7f4e9",
+  "acceptance": {
+    "indeterminate": "hp5/hp6 show a turquoise segment at different positions during the same real RTX5090 hardware-profile run (70 seconds elapsed).",
+    "determinate": "Already committed C7 real transfer screenshot shows turquoise Models download fill on a neutral track at107 MiB /18.4 GiB in Dark1280x900.",
+    "light": "lt3 shows themed determinate and indeterminate native controls in a synthetic preview overlay in rebuilt WebKitGTK."
+  },
+  "frames": [
+    {
+      "file": "hp5.png",
+      "original_path": "/ai/gchat/out/claude-gui-models-20261017/hp5.png",
+      "sha256": "ca0d945a8f80ffb70cb51762853365650fa4a406120d7406af16d4b81dac52b3",
+      "retained_file_mtime": "2026-10-17T17:59:15.299541+00:00"
+    },
+    {
+      "file": "hp6.png",
+      "original_path": "/ai/gchat/out/claude-gui-models-20261017/hp6.png",
+      "sha256": "1e04b4d591af6429b967c06c234fc9bf62fc6ee9bb94a11d816754218c3dfd56",
+      "retained_file_mtime": "2026-10-17T17:59:16.155541+00:00"
+    },
+    {
+      "file": "lt3.png",
+      "original_path": "/ai/gchat/out/claude-gui-models-20261017/lt3.png",
+      "sha256": "39c94973b9a5e33c8a81d1bdf642774c8f29da4894fe1a29494ded297f644eb6",
+      "retained_file_mtime": "2026-10-17T18:37:29.883309+00:00"
+    }
+  ],
+  "real_download": {
+    "screenshot": "../c7-managed-downloads-native-20261018/native/downloading-popover.png",
+    "receipt": "../c7-managed-downloads-native-20261018/native/result.json",
+    "source": "71abf17084c8bbea0eb40da94cb5cfccb8e771f1",
+    "sha256": "87c355e08f6889baff4060413460304dd96c5b335a41a3f1ad8ee103dad4c493"
+  },
+  "source_binding": {
+    "01caea779": {
+      "commit": "01caea779f9334e3108ea9f455c1270e52758f83",
+      "progress_rules_sha256": "bd561ad2c163d5421b46476e4f21264f73258ab70564e0f538f518bcfa245e4b"
+    },
+    "71abf1708": {
+      "commit": "71abf17084c8bbea0eb40da94cb5cfccb8e771f1",
+      "progress_rules_sha256": "bd561ad2c163d5421b46476e4f21264f73258ab70564e0f538f518bcfa245e4b"
+    },
+    "fbf94e385": {
+      "commit": "fbf94e385714e233c92aada1929c0ba8a6ea62a4",
+      "progress_rules_sha256": "bd561ad2c163d5421b46476e4f21264f73258ab70564e0f538f518bcfa245e4b"
+    },
+    "ed68c7443": {
+      "commit": "ed68c7443d3d782869dad89736ca049631f8a157",
+      "progress_rules_sha256": "bd561ad2c163d5421b46476e4f21264f73258ab70564e0f538f518bcfa245e4b"
+    },
+    "1062ba9f8": {
+      "commit": "1062ba9f85653a25f7371d9ea03f807e3d48009b",
+      "progress_rules_sha256": "bd561ad2c163d5421b46476e4f21264f73258ab70564e0f538f518bcfa245e4b"
+    },
+    "HEAD": {
+      "commit": "925f9919553ca31b2086ac1da7c1d1b908cabb12",
+      "progress_rules_sha256": "bd561ad2c163d5421b46476e4f21264f73258ab70564e0f538f518bcfa245e4b"
+    }
+  },
+  "reused_checks": {
+    "original_native_receipts": "/ai/coordination/mailbox/bubbs.log:11513,11552",
+    "full_verify_source": "1062ba9f85653a25f7371d9ea03f807e3d48009b",
+    "full_verify": "../c3-load-needs-profile-message-20261018/verify-summary.json",
+    "app": 3523,
+    "extensions": 127,
+    "native": 1284,
+    "critical_floors": 6,
+    "progress_test": "native-control-theme.test.ts, all3 cases pass in retained verify.log:3753"
+  },
+  "limits": [
+    "Original real-profile frames precede the source commit by seconds; no exact executable pin is retained. Contemporary author receipt attributes the live run to the progress fix.",
+    "Frame timestamps are retained file mtimes, not independently verified capture times.",
+    "Light is a native-control preview, not an actual download card.",
+    "No runtime reduced-motion, Windows or current-package rebuild claim.",
+    "hp7 is excluded from completed-profile-note acceptance: it predates that fix and still shows the note."
+  ],
+  "verification_this_branch": "git diff --check only; evidence/docs-only, no repeated gates or profile/transfer",
+  "inventory": {
+    "worktree": "/ai/gchat-worktrees/c3-progress-bars-20261018",
+    "branch": "docs/c3-progress-bars-20261018",
+    "base": "925f99195",
+    "new_compute_or_fixture": false,
+    "new_resource_copies": false,
+    "retained": "Small JSON/PNG evidence only; C7 original transfer fixture/build already retired."
+  }
+}
