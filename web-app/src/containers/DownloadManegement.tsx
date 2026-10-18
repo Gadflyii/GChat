@@ -664,7 +664,7 @@ export function DownloadManagement() {
                           size="sm"
                           onClick={() => {
                             setIsPopoverOpen(false)
-                            navigate({ to: route.hub.index })
+                            navigate({ to: route.hub.index, search: { tab: 'Downloads' } })
                           }}
                         >
                           Manage

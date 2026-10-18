@@ -225,3 +225,55 @@ it('explains SSH access checking and waits for success before offering tool chec
   expect(ready).toHaveBeenLastCalledWith(false)
   expect(screen.queryByRole('status')).not.toBeInTheDocument()
 })
+
+it.each([
+  ['Check tools', 'workspaces/ssh/tools'],
+  ['Prepare tools', 'workspaces/ssh/prepare'],
+])(
+  'blocks SSH rechecks while %s is pending, including before rerender',
+  async (label, route) => {
+    const request = deferred<{ installed: boolean }>()
+    const api = vi.mocked(gbot).mockImplementation(async (path) => {
+      if (path === 'workspaces/ssh/key') return publicKey
+      if (path === 'workspaces/ssh/check') return { authenticated: true }
+      if (path === route) return request.promise
+      throw new Error(`Unexpected ${path}`)
+    })
+    const { busy, ready } = setup({ ...connection, workspaceId: 'saved-bot' })
+    await screen.findByDisplayValue('ssh-ed25519 bot-key')
+    fireEvent.click(screen.getByRole('button', { name: 'Check SSH access' }))
+    await screen.findByRole('button', { name: 'Check tools' })
+    if (label === 'Prepare tools') {
+      fireEvent.click(
+        screen.getByRole('checkbox', {
+          name: /This computer is dedicated to Gbot/,
+        })
+      )
+    }
+    const ssh = screen.getByRole('button', { name: 'Check SSH access' })
+    act(() => {
+      screen.getByRole('button', { name: label }).click()
+      ssh.click()
+    })
+    expect(
+      api.mock.calls.filter(([path]) => path === 'workspaces/ssh/check')
+    ).toHaveLength(1)
+    expect(ssh).toBeDisabled()
+    expect(busy).toHaveBeenLastCalledWith(true)
+    expect(ready).toHaveBeenLastCalledWith(false)
+    fireEvent.click(ssh)
+    expect(
+      api.mock.calls.filter(([path]) => path === 'workspaces/ssh/check')
+    ).toHaveLength(1)
+    await act(async () => request.resolve({ installed: true }))
+    expect(ssh).toBeEnabled()
+    expect(busy).toHaveBeenLastCalledWith(false)
+    expect(ready).toHaveBeenLastCalledWith(true)
+    fireEvent.click(ssh)
+    await screen.findByRole('button', { name: 'Check tools' })
+    expect(
+      api.mock.calls.filter(([path]) => path === 'workspaces/ssh/check')
+    ).toHaveLength(2)
+    expect(ready).toHaveBeenLastCalledWith(false)
+  }
+)
