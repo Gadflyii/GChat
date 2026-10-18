@@ -53,6 +53,58 @@ The owned root `/media/ron/SSD_RAID/ai/tmp-gchat3-host-sharing-refresh-tests-202
 Next: commit/push and merge review. Rendered mocked behavior and the Linux
 source gate are qualified; live sharing/network, installed GUI, account/pairing,
 Engine/GPU, Windows and installer qualification remain separate.
+## Folder reveal runtime crash — C3, October 18
+
+`GUI-FOLDER-REVEAL-NESTED-RUNTIME`: the pinned current-main release
+`d0a8d06bf` crashed at 04:38:54Z when General → Diagnostic logs →
+**Open Containing Folder** was clicked. Opener 2.5.3 executes synchronous Linux
+`zbus::blocking` inside its async command; Tokio's nested-runtime guard aborts
+the app. The app now owns a native reveal command that calls the same
+cross-platform opener from `spawn_blocking`, and the frontend uses that command.
+Folder selection semantics and file-manager errors are preserved.
+
+Acceptance: the real private folder handler receives the logs folder, GChat
+stays responsive, and an unavailable handler returns an error without panic.
+Frontend IPC2 and the real-opener Linux runtime-worker regression1 passed.
+Corrected library check/clippy and lint passed. The original check command
+incorrectly combined all targets with CLI features, disabling the desktop
+entry point; that failure is retained and corrected to library scope.
+
+The first/only `make verify` stopped at a new background disk-full test:
+3351 app tests passed, one failed, six skipped. Its alert renders directly from
+`flow`, while a later `useEffect([flow])` hydrates the retained folder. The test
+now waits for the same `/models` assertion before Retry; all assertions remain.
+This synchronization correction is pushed in `7fd01cf0a`; the original verify
+failure is retained. Authorized continuation passed the first-run file32, app
+coverage3352 (six skipped), extension121, all six coverage floors and1223 native
+tests (28 ignored). No second `make verify` ran and no passed stage was repeated.
+Vite/default desktop custom-protocol build passed05:00:08Z; checked candidate
+`/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018/folder-reveal-candidate/bin/gchat`.
+Native Linux acceptance passed05:04–05:08Z: ordinary pointer input opened
+private Nautilus in the correct data root with **logs** selected. Its HOME,
+runtime, display and D-Bus matched the isolated app. The screenshot was visually
+reviewed; subsequent ordinary Interface navigation proved responsiveness.
+The real-opener worker test covers an unavailable handler returning an ordinary
+error. No native GUI handler failure is claimed. The first direct candidate
+launch inherited AppRun libraries and failed before UI at a relative WebKit
+child path; using the host desktop environment corrected the fixture. This is
+a changed-source custom-protocol debug binary, not a fresh installer/Windows
+qualification. Source gates were not repeated. The result is merge-ready.
+No model, profile or GPU workload is needed.
+
+Owner/source: Codex 3,
+`/ai/gchat-worktrees/c3-folder-reveal-runtime-20261018`, branch
+`fix/c3-folder-reveal-runtime-20261018`, baseline `bbc81c2ec`.
+The shared S1 stage was handed off after download-count build04:41:46Z.
+CPU80–87 booking2993 returned05:01Z; all owned gate containers exited/removed.
+Local/remote disposable source archives were removed after checked candidate copy.
+The shared stage is handed to Interface; immutable folder candidate is retained.
+Execution used socket1 shared lock and nice10;
+all35 retained manifests/locks/config matched before exact source staging.
+The installed AppDir/home, badge candidate, downloads home, runnable resources
+and tools are protected. Evidence:
+`out/c3-current-main-release-20261018/{folder-reveal-crash.json,folder-reveal-panic.txt}`;
+fix result `out/c3-folder-reveal-runtime-20261018/result.json`.
 
 ## Scheduled tasks brain setup guidance — October 18
 
