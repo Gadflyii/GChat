@@ -29,6 +29,31 @@ and the independent S1 SSD cache/build root
 CPU80–87 returned 08:15Z. Inactive Gchat 3 donor unchanged. Only small evidence
 remains. No Host/Engine source, Chat/Agents, selected-artifact, Windows,
 new native GUI launch or GPU work. Source and regression are merge-ready.
+## Small download sizes — C7, October 18
+
+`GUI-SMALL-DOWNLOAD-SIZES` passes the remaining Linux installed leaf.
+The retained real-transfer [native screenshot](../../out/c7-managed-downloads-native-20261018/native/downloading-popover.png)
+shows **107 MiB / 18.4 GiB** in both Models and its Downloads popover;
+the paused capture and DOM show **149 MiB / 18.4 GiB**. The corresponding
+Host receipt has 155,975,468 retained bytes. This establishes readable nonzero
+progress below 1 GiB without repeating the transfer.
+
+Original source `51c1ee068` merged as `bcf86d320`. The formatter and both
+Models/popover components are unchanged between tested native source
+`71abf1708` and this branch base `70606ac23`. The retained regression checks
+50 MiB and 9.9 GiB; the original focused pass and later ONE `make verify`
+(3,409 web, 127 extension, 1,267 Rust; lint/types/coverage pass) remain valid.
+See [verification summary](../../out/c7-managed-downloads-native-20261018/verification-summary.json)
+and [native result](../../out/c7-managed-downloads-native-20261018/native/result.json).
+This documentation-only recovery uses `git diff --check`; no gate repeats.
+
+Owner C7; worktree `/ai/gchat-worktrees/c7-small-download-sizes-native-20261018`,
+branch `test/c7-small-download-sizes-native-20261018`. No new build, app,
+transfer, booking or scratch copy was allocated. The original private Linux
+session stopped and returned 06:39Z; its SSD root/partial were removed. The
+shared read-only development catalog remains available. Windows, completed
+model integrity and inference qualification remain outside this leaf.
+
 ## Assistants empty state — C7, October 18
 
 `GUI-ASSISTANTS-EMPTY-STATE`: deleting the last assistant now explains how to
