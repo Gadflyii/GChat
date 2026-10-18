@@ -143,10 +143,16 @@ function WorkspaceSchedules({
   return (
     <div className="rounded-lg border p-3">
       {stopped && (
-        <p role="alert" className="mb-3 text-sm text-destructive">
-          Scheduling has stopped: {stopped}. Restart the Gbot service on the
-          computer where it runs before scheduled tasks can run again.
-        </p>
+        <div role="alert" className="mb-3 space-y-2 text-sm text-destructive">
+          <p>
+            Scheduling has stopped. Restart the Gbot service on the computer
+            where it runs before scheduled tasks can run again.
+          </p>
+          <details className="text-muted-foreground">
+            <summary>Details</summary>
+            <p className="whitespace-pre-wrap break-words">{stopped}</p>
+          </details>
+        </div>
       )}
       {error && (
         <div role="alert" className="mb-3 space-y-2 text-sm text-destructive">
@@ -215,8 +221,28 @@ function WorkspaceSchedules({
                 : 'Once'}
               {schedule.next_at
                 ? ` · Next: ${new Date(schedule.next_at * 1000).toLocaleString()}`
-                : ' · No future run'}
+                : ' · No later scheduled occurrences'}
             </p>
+            {schedule.enabled &&
+              !stopped &&
+              !schedule.occurrences.some(
+                (occurrence) => occurrence.state === 'needs_review'
+              ) &&
+              schedule.occurrences.map(
+                (occurrence) =>
+                  occurrence.state === 'queued' &&
+                  occurrence.retry_at !== null && (
+                    <p
+                      key={occurrence.task_id}
+                      className="text-sm text-muted-foreground"
+                    >
+                      Waiting to start. Gbot will try again automatically after{' '}
+                      {new Date(occurrence.retry_at * 1000).toLocaleString()}.
+                      Keep the Gbot service, bot computer and model server on
+                      and connected.
+                    </p>
+                  )
+              )}
             {schedule.occurrences.some(
               (occurrence) => occurrence.state === 'needs_review'
             ) && (

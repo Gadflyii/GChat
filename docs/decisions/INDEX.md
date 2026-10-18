@@ -1,6 +1,9 @@
 # Engineering Decisions (ADR)
 
+- **2026-10-18** — [Order local model inventory by mutation revision](2026-10-18-order-local-model-inventory-by-mutation-revision.md)
+
 - **2026-10-18** — [Expose the per-launch GPU memory reserve](2026-10-18-expose-per-launch-gpu-memory-reserve.md)
+- **2026-10-18** — [Reuse Ready graph receipts for dense models](2026-10-18-reuse-ready-graph-receipts-for-dense-models.md)
 
 - **2026-10-18** — [Forward Host residency controls](2026-10-18-forward-host-residency-controls.md)
 
@@ -562,3 +565,7 @@ decision is reversed, add a new one that says which record it supersedes.
 - [Shared private development model catalog](2026-10-18-private-development-model-catalog.md) — development/debug-only shared S1 LAN fixture; production admission unchanged.
 - **2026-10-18** — [Own Windows Hyper-V Bot computers](2026-10-18-own-windows-hyperv-bot-computers.md)
 - **2026-10-18** — [Bundle the accepted Cua runtime on Windows](2026-10-18-bundle-private-windows-cua-runtime.md)
+- **2026-10-18** — [Confirm window close for unsaved agent drafts](2026-10-18-confirm-window-close-for-agent-drafts.md)
+- **2026-10-18** — [Restrict plugin IPC to local app webviews](2026-10-18-restrict-plugin-ipc-to-local-webviews.md)
+
+- **2026-10-18** — [Preserve confirmed model Stop during status recovery](2026-10-18-preserve-confirmed-model-stop-during-status-recovery.md)

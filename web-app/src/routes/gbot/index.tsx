@@ -19,6 +19,7 @@ import GbotSetup, {
 } from '@/components/GbotSetup'
 import { BrainSetup } from '@/components/GbotSetup/BrainSetup'
 import ServiceSetup from '@/components/GbotSetup/ServiceSetup'
+import { CloudDeploymentIssue } from '@/components/GbotSetup/CloudComputer'
 import { useGeneralSetting } from '@/hooks/useGeneralSetting'
 import GbotDesktopView, {
   type DesktopViewHandle,
@@ -147,8 +148,8 @@ function GbotPage() {
       setState(value)
       setSetupError('')
       let kvm: KvmSetupRecord[] | undefined
-      let cloud: CloudReview[] = []
-      let m365: M365SetupRecord[] = []
+      let cloud: CloudReview[] | undefined
+      let m365: M365SetupRecord[] | undefined
       try {
         const saved = await gbot<CloudReview[]>('setup/cloud/status', {})
         if (stopped.current || version !== refreshVersion.current) return
@@ -180,7 +181,12 @@ function GbotPage() {
         setSetups(undefined)
         setSetupError(String(cause))
       }
-      if (!setupOffered.current && kvm !== undefined) {
+      if (
+        !setupOffered.current &&
+        kvm !== undefined &&
+        cloud !== undefined &&
+        m365 !== undefined
+      ) {
         setupOffered.current = true
         if (
           !value.workspaces.length &&
@@ -412,15 +418,33 @@ function GbotPage() {
   const setupBlocked = Boolean(
     isLocalVm && (setups === undefined || (setup && setup.stage !== 'ready'))
   )
-  const localVmErrorKey = JSON.stringify([serviceTarget, setup?.id])
-  const savedLocalVmError = localVmErrors[localVmErrorKey]
-  const localVmError =
-    savedLocalVmError &&
-    (savedLocalVmError.kind === 'start'
-      ? setup?.stage !== 'ready'
-      : setup?.stage !== 'stopped')
-      ? savedLocalVmError
-      : undefined
+  const renderLocalVmError = (record?: KvmSetupRecord) => {
+    const failure = localVmErrors[JSON.stringify([serviceTarget, record?.id])]
+    if (
+      !failure ||
+      (failure.kind === 'start'
+        ? record?.stage === 'ready'
+        : record?.stage === 'stopped')
+    )
+      return null
+    const recovery =
+      record?.stage === 'stopped'
+        ? 'Start computer'
+        : record?.stage === 'ready' || record?.stage === 'stopping_computer'
+          ? 'Stop computer'
+          : 'Resume setup'
+    return (
+      <div role="alert" className="space-y-1 text-sm">
+        <p>
+          Could not {failure.kind} this computer. Choose {recovery} to try again.
+        </p>
+        <details className="text-muted-foreground">
+          <summary>Details</summary>
+          <p className="whitespace-pre-wrap break-words">{failure.details}</p>
+        </details>
+      </div>
+    )
+  }
   const changeLocalVm = async (
     kind: 'start' | 'stop',
     record: KvmSetupRecord
@@ -750,7 +774,7 @@ function GbotPage() {
               connecting:
                 'Connecting to the Gbot service on your selected LAN computer. Please wait.',
               stopping:
-                'Stopping the Gbot service. Tasks and schedules will resume when you start it again.',
+                'Stopping the Gbot service. Unfinished tasks will stop. After restarting, review them before choosing Resume. Check Scheduled tasks for schedules that need review.',
               disconnecting:
                 'Disconnecting from the LAN Gbot service. Tasks and schedules continue on that computer.',
             }[serviceAction]
@@ -779,9 +803,16 @@ function GbotPage() {
             <ServiceSetup target={serviceDraft} change={changeServiceDraft} />
           </fieldset>
           {serviceError && (
-            <p role="alert" className="text-sm text-destructive">
-              {serviceError}
-            </p>
+            <div role="alert" className="space-y-2 text-sm text-destructive">
+              <p>
+                Could not confirm the service computer change. Review your
+                choice, then choose Use this service to try again.
+              </p>
+              <details className="text-muted-foreground">
+                <summary>Details</summary>
+                <p className="whitespace-pre-wrap break-words">{serviceError}</p>
+              </details>
+            </div>
           )}
           <div className="flex gap-2">
             <Button
@@ -805,7 +836,7 @@ function GbotPage() {
           <p>
             {serviceTarget.kind === 'paired_host'
               ? 'Disconnected from the LAN Gbot service. Tasks and schedules continue on that computer.'
-              : 'Gbot service is stopped. Tasks and schedules will resume when you start it again.'}
+              : 'Gbot service is stopped. Choose Start Gbot service, then review unfinished tasks before choosing Resume. Check Scheduled tasks for schedules that need review.'}
           </p>
           <p className="text-sm text-muted-foreground">
             {serviceTarget.kind === 'paired_host'
@@ -888,9 +919,32 @@ function GbotPage() {
               </Button>
             </div>
             {error && !serviceAction && (
-              <p role="alert" className="text-destructive">
-                {error}
-              </p>
+              <div role="alert" className="space-y-2 text-destructive">
+                <p>
+                  Could not load your bots. Choose Refresh to try again. If Gbot
+                  is stopped or disconnected, choose{' '}
+                  {serviceTarget.kind === 'paired_host'
+                    ? 'Connect Gbot service'
+                    : 'Start Gbot service'}{' '}
+                  above.
+                </p>
+                <details className="text-muted-foreground">
+                  <summary>Details</summary>
+                  <p className="whitespace-pre-wrap break-words">{error}</p>
+                </details>
+              </div>
+            )}
+            {setupError && (
+              <div role="alert" className="space-y-2 text-sm text-destructive">
+                <p>
+                  Could not check your saved computer setups. Choose Refresh to
+                  try again before starting another setup.
+                </p>
+                <details className="text-muted-foreground">
+                  <summary>Details</summary>
+                  <p className="whitespace-pre-wrap break-words">{setupError}</p>
+                </details>
+              </div>
             )}
             {adding && (
               <GbotSetup
@@ -962,11 +1016,7 @@ function GbotPage() {
                           : 'Stop computer'
                         : 'Resume setup'}
                   </Button>
-                  {localVmErrors[JSON.stringify([serviceTarget, record.id])] && (
-                    <p role="alert" className="break-words text-destructive">
-                      {localVmErrors[JSON.stringify([serviceTarget, record.id])]?.details}
-                    </p>
-                  )}
+                  {renderLocalVmError(record)}
                 </section>
               ))}
             {!adding &&
@@ -986,7 +1036,7 @@ function GbotPage() {
                         ? 'Cost review saved'
                         : 'Cost review incomplete · No VM created'}
                   </p>
-                  {review.deployment?.issue && <p>{review.deployment.issue}</p>}
+                  <CloudDeploymentIssue deployment={review.deployment} saved />
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -1074,11 +1124,6 @@ function GbotPage() {
                   </div>
                 </section>
               ))}
-            {!bot && setupError && (
-              <p role="alert" className="text-sm text-destructive">
-                {setupError}
-              </p>
-            )}
             {bot && (
               <>
                 {(setup?.stage === 'ready' ||
@@ -1176,8 +1221,8 @@ function GbotPage() {
                         computer to use it again.
                       </p>
                     )}
-                    {setups === undefined && (
-                      <p>{setupError || 'Checking setup status…'}</p>
+                    {setups === undefined && !setupError && (
+                      <p>Checking setup status…</p>
                     )}
                     {setup?.issue && (
                       <div role="alert">
@@ -1223,18 +1268,7 @@ function GbotPage() {
                     )}
                   </div>
                 )}
-                {localVmError && (
-                  <div
-                    role="alert"
-                    className="space-y-1 text-sm text-destructive"
-                  >
-                    <p>
-                      Could not {localVmError.kind}{' '}
-                      this computer. Try again.
-                    </p>
-                    <p className="break-words">{localVmError.details}</p>
-                  </div>
-                )}
+                {renderLocalVmError(setup)}
                 {controlError && (
                   <div
                     id="gbot-settings-control-error"

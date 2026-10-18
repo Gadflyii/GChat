@@ -60,6 +60,8 @@ const failureMessages = {
   signIn: 'Could not open Microsoft sign-in. Try signing in again.',
   checkSignIn:
     'Could not check Microsoft sign-in. Choose Check sign-in status to try again.',
+  refreshSignedIn:
+    'Microsoft sign-in completed, but the account list could not be refreshed. Choose Refresh Microsoft accounts to try again.',
   cancelSignIn:
     'Could not confirm Microsoft sign-in was cancelled. Choose Cancel sign-in to try again.',
   checkPcs:
@@ -69,7 +71,10 @@ const failureMessages = {
     'Your Cloud PC setup was saved, but the computer list could not be refreshed. Close setup to try refreshing the list again.',
   openClient:
     'Could not open Microsoft’s client. Choose Open Microsoft client to try again.',
-} satisfies Record<PendingAction | 'load' | 'refreshSaved', string>
+} satisfies Record<
+  PendingAction | 'load' | 'refreshSaved' | 'refreshSignedIn',
+  string
+>
 
 type SetupFailure = {
   action: keyof typeof failureMessages
@@ -230,7 +235,13 @@ export default function M365Setup({
     if (next.status === 'connected') {
       // Sign-in never silently chooses an account or a computer.
       setPcs(undefined)
-      await refreshAccounts()
+      try {
+        await refreshAccounts()
+      } catch (cause) {
+        if (active.current) {
+          setError({ action: 'refreshSignedIn', detail: String(cause) })
+        }
+      }
     }
   }
 
@@ -441,10 +452,23 @@ export default function M365Setup({
           )}
           {flow.status === 'cancelled' && <p>Microsoft sign-in cancelled.</p>}
           {flow.status === 'failed' && (
-            <p>
-              {flow.error ||
-                'Microsoft sign-in failed. Try again or ask your organization’s administrator for help.'}
-            </p>
+            <div className="space-y-2">
+              <p role="alert" className="text-destructive">
+                Microsoft sign-in could not be completed in GChat. Choose{' '}
+                {account
+                  ? 'Allow read-only Cloud PC access'
+                  : 'Sign in with Microsoft'}{' '}
+                to try again.
+              </p>
+              {flow.error && (
+                <details>
+                  <summary>Details</summary>
+                  <p className="whitespace-pre-wrap break-words text-muted-foreground">
+                    {flow.error}
+                  </p>
+                </details>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -619,6 +643,7 @@ export default function M365Setup({
               const launch = await gbot<{ url: string }>('setup/m365/launch', {
                 id,
               })
+              if (!active.current) return
               await getServiceHub().opener().open(launch.url)
               if (active.current)
                 setNotice(

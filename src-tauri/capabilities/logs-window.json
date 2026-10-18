@@ -2,7 +2,8 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "logs-window",
   "description": "enables permissions for the logs window",
-  "windows": ["logs-window-local-api-server"],
+  "local": true,
+  "webviews": ["logs-window-local-api-server"],
   "platforms": ["linux", "macOS", "windows"],
   "permissions": [
     "core:default",

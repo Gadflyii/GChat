@@ -2,10 +2,8 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "enables the default permissions",
-  "windows": ["main"],
-  "remote": {
-    "urls": ["http://*"]
-  },
+  "local": true,
+  "webviews": ["main"],
   "permissions": [
     "core:default",
     "core:webview:allow-print",

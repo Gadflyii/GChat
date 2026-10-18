@@ -431,17 +431,32 @@ mod tests {
             (
                 "linux-rtx5090-qwen38-smol-q2g64-mix-dflash2-q4.json",
                 "rtx5090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened",
-                "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 448790528,
+                "linux", "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 448790528,
+                "aa1c480162683d6da344456e2ccf0c14d2d291a3", 0,
             ),
             (
                 "linux-rtx4090-qwen38-smol-q2g64-mix-dflash2-q4.json",
                 "rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-screened",
-                "NVIDIA GeForce RTX 4090", "8.9", 24, 24563, 131072, 662700032,
+                "linux", "NVIDIA GeForce RTX 4090", "8.9", 24, 24563, 131072, 316039168,
+                "72153af017f4e3d864b47e5df6d62dc7a83357bf", 1024,
             ),
             (
                 "linux-rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4.json",
-                "rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-52k-int8-screened",
-                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 53248, 1117782016,
+                "rtx3080ti-laptop-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-74k-int8-screened",
+                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 75776, 316555264,
+                "72153af017f4e3d864b47e5df6d62dc7a83357bf", 1024,
+            ),
+            (
+                "windows-rtx5090-qwen38-smol-q2g64-mix-dflash2-q4.json",
+                "rtx5090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-windows-screened",
+                "windows", "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 373293056,
+                "6b85ecf77da129fe332818b8bcaec9467b56bdaa", 0,
+            ),
+            (
+                "windows-rtx4090-qwen38-smol-q2g64-mix-dflash2-q4.json",
+                "rtx4090-qwen38-smol-q2g64-mix-dflash2-q4-tp1-c8-128k-int8-windows-screened",
+                "windows", "NVIDIA GeForce RTX 4090", "8.9", 24, 24563, 131072, 316669952,
+                "6b85ecf77da129fe332818b8bcaec9467b56bdaa", 1024,
             ),
         ];
         let expected_consumer_ids: BTreeSet<_> = consumer_qwen_settings
@@ -458,38 +473,58 @@ mod tests {
             (
                 "linux-rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4.json",
                 "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
-                "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 8,
-                15189450752, 1024, 328204288, 8336650240,
+                "linux", "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 8,
+                Some(15189450752), 1024, 328204288, Some(8336650240),
+                "eb777ab9570fad1c8301635617f0923f2b820424",
             ),
             (
                 "linux-rtx4090-muse-smol-q2g64-mix-dflash-q4.json",
                 "rtx4090-muse-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-calculated",
-                "NVIDIA GeForce RTX 4090", "8.9", 24, 24564, 131072, 8,
-                8717860864, 0, 706740224, 8643358720,
+                "linux", "NVIDIA GeForce RTX 4090", "8.9", 24, 24564, 131072, 8,
+                Some(9091153920), 1024, 316669952, Some(8643358720),
+                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
+            ),
+            (
+                "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
+                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c8-8k-int8-calculated",
+                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 8192, 8,
+                Some(1593835520), 1024, 316669952, Some(1582880768),
+                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
             ),
             (
                 "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
                 "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c1-128k-int8-calculated",
-                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 131072, 1,
-                2163212288, 1024, 1117782016, 1042081280,
+                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 131072, 1,
+                Some(2965372928), 1024, 316669952, Some(1042081280),
+                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
             ),
             (
                 "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c2-115k-int8-calculated",
-                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 117760, 2,
-                1913651200, 1024, 1117782016, 1901222400,
+                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c2-128k-int8-calculated",
+                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 131072, 2,
+                Some(2715811840), 1024, 316669952, Some(2084162560),
+                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
             ),
             (
                 "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c4-31k-int8-calculated",
-                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 31744, 4,
-                1458569216, 1024, 1117782016, 1438663680,
+                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c4-60k-int8-calculated",
+                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 61440, 4,
+                Some(2260729856), 1024, 316669952, Some(2254770176),
+                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
             ),
             (
                 "linux-rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4.json",
-                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c7-4k-int8-calculated",
-                "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 4096, 7,
-                995098624, 1024, 1117782016, 991411456,
+                "rtx3080ti-laptop-muse-smol-q2g64-mix-dflash-q4-tp1-c7-16k-int8-calculated",
+                "linux", "NVIDIA GeForce RTX 3080 Ti Laptop GPU", "8.6", 16, 16384, 16384, 7,
+                Some(1797259264), 1024, 316669952, Some(1779305472),
+                "72153af017f4e3d864b47e5df6d62dc7a83357bf",
+            ),
+            (
+                "windows-rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4.json",
+                "rtx5090-muse-glimmer-smol-q2g64-mix-dflash-q4-tp1-c8-128k-int8-windows-screened",
+                "windows", "NVIDIA GeForce RTX 5090", "12.0", 32, 32606, 131072, 8,
+                None, 1024, 449839104, None,
+                "6b85ecf77da129fe332818b8bcaec9467b56bdaa",
             ),
         ];
         let expected_muse_ids: BTreeSet<_> = consumer_muse_settings
@@ -534,12 +569,12 @@ mod tests {
                     assert_eq!(p.max_context, *max_context, "{}", p.id);
                     laptop_ids.insert(*id);
                 }
-                if let Some((_, id, gpu, cc, tier, memory, context, free)) = consumer_qwen_settings
+                if let Some((_, id, platform, gpu, cc, tier, memory, context, free, engine, prefill)) = consumer_qwen_settings
                     .iter()
                     .find(|(_, id, ..)| p.id == *id)
                 {
                     consumer_ids.insert(*id);
-                    assert_eq!(p.platform, "linux");
+                    assert_eq!(p.platform, *platform);
                     assert_eq!(p.identity.model_id, "qwen3.8-27b");
                     assert_eq!(p.identity.weights_id, "smol-q2g64-mix-dflash2-q4");
                     assert_eq!(p.artifact_sha256, "483343c28912ae5db3d00478f16fffb10dcbb0c1317f8c90c09c396fcb6e4ca4");
@@ -560,23 +595,23 @@ mod tests {
                         vram_budget_bytes: None,
                         kv_arena_headroom_bytes: MIN_PROFILE_HEADROOM_BYTES,
                         host_kv_cache_bytes: None,
-                        prefill_chunk: 0,
+                        prefill_chunk: *prefill,
                         no_cuda_graph: false,
                         ..LaunchOptions::default()
                     }, "{}", p.id);
                     assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
-                    assert_eq!(p.qualification.engine_revision, "aa1c480162683d6da344456e2ccf0c14d2d291a3");
+                    assert_eq!(p.qualification.engine_revision, *engine);
                     assert_eq!(p.qualification.free_bytes_per_gpu, Some(*free));
                     assert_eq!(p.qualification.full_context_requests, 0);
                     assert_eq!(p.qualification.smoke_requests, Some(8));
                     assert!(p.qualification.calculation.is_none());
                 }
-                if let Some((_, id, gpu, cc, tier, memory, context, concurrency, arena, prefill, free, required)) = consumer_muse_settings
+                if let Some((_, id, platform, gpu, cc, tier, memory, context, concurrency, arena, prefill, free, required, engine)) = consumer_muse_settings
                     .iter()
                     .find(|(_, id, ..)| p.id == *id)
                 {
                     muse_ids.insert(*id);
-                    assert_eq!(p.platform, "linux");
+                    assert_eq!(p.platform, *platform);
                     assert_eq!(p.identity.model_id, "muse-glimmer-30b");
                     assert_eq!(p.identity.weights_id, "smol-q2g64-mix-dflash-q4");
                     assert_eq!(p.artifact_sha256, "9d4ca1b204b993e3a5dd9e52c8eda0d804801dd4ded664dd37b81641fcb44a2c");
@@ -593,7 +628,7 @@ mod tests {
                         draft_tokens: 7,
                         draft_tp: 1,
                         kv_dtype: "int8".into(),
-                        kv_arena_bytes: Some(*arena),
+                        kv_arena_bytes: *arena,
                         vram_budget_bytes: None,
                         kv_arena_headroom_bytes: MIN_PROFILE_HEADROOM_BYTES,
                         host_kv_cache_bytes: None,
@@ -601,14 +636,37 @@ mod tests {
                         no_cuda_graph: false,
                         ..LaunchOptions::default()
                     }, "{}", p.id);
-                    assert_eq!(p.qualification.tier, QualificationTier::CalculatedStartupSmoke);
-                    assert_eq!(p.qualification.engine_revision, "eb777ab9570fad1c8301635617f0923f2b820424");
+                    assert_eq!(p.qualification.engine_revision, *engine);
                     assert_eq!(p.qualification.free_bytes_per_gpu, Some(*free));
                     assert_eq!(p.qualification.full_context_requests, 0);
                     assert_eq!(p.qualification.smoke_requests, Some(*concurrency));
-                    let calculation = p.qualification.calculation.as_ref().unwrap();
-                    assert_eq!(calculation.required_kv_bytes_per_rank, *required);
-                    assert_eq!(calculation.available_kv_bytes_per_rank, Some(*arena));
+                    if let Some(required) = required {
+                        assert_eq!(p.qualification.tier, QualificationTier::CalculatedStartupSmoke);
+                        let calculation = p.qualification.calculation.as_ref().unwrap();
+                        assert_eq!(calculation.required_kv_bytes_per_rank, *required);
+                        assert_eq!(calculation.available_kv_bytes_per_rank, *arena);
+                    } else {
+                        assert_eq!(p.qualification.tier, QualificationTier::ScreenedStartup);
+                        assert!(p.qualification.calculation.is_none());
+                    }
+                }
+                if consumer_qwen_settings.iter().any(|(_, id, ..)| p.id == *id)
+                    || consumer_muse_settings.iter().any(|(_, id, ..)| p.id == *id)
+                {
+                    let gpu = Gpu {
+                        uuid: "GPU-consumer".into(),
+                        name: p.gpu_name.clone(),
+                        display_name: None,
+                        memory_mib: p.min_memory_mib_per_gpu,
+                        compute_capability: Some(p.compute_capability.clone()),
+                    };
+                    let groups = p.gpu_groups(std::slice::from_ref(&gpu), &BTreeSet::new());
+                    if p.platform == std::env::consts::OS {
+                        assert_eq!(groups, vec![vec![gpu.uuid.clone()]], "{}", p.id);
+                        assert!(p.gpu_groups(std::slice::from_ref(&gpu), &BTreeSet::from([gpu.uuid.clone()])).is_empty());
+                    } else {
+                        assert!(groups.is_empty(), "{}", p.id);
+                    }
                 }
                 if p.id == "rtx5090-flash-next-smol-q2g64-tp1-c8-256k-int8-screened" {
                     consumer_flash_found = true;

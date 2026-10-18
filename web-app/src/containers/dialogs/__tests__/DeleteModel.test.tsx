@@ -10,30 +10,34 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { TranslationContext } from '@/i18n/context'
 import i18n from '@/i18n/setup'
+import { useFavoriteModel } from '@/hooks/useFavoriteModel'
+import { useModelProvider } from '@/hooks/useModelProvider'
+import type { ModelsService } from '@/services/models/types'
+import type { ProvidersService } from '@/services/providers/types'
 import { resetServiceHubStore, seedServiceHub } from '@/test/service-hub'
 import { DialogDeleteModel } from '../DeleteModel'
 
 const mocks = vi.hoisted(() => ({
-  deleteLocalModel: vi.fn(),
+  deleteModel: vi.fn(),
+  getProviders: vi.fn(),
+  stopModel: vi.fn(),
+  startModel: vi.fn(),
+  warning: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
 }))
 
-vi.mock('@/lib/model-deletion', () => ({
-  deleteLocalModel: mocks.deleteLocalModel,
-}))
 vi.mock('sonner', () => ({
-  toast: { success: mocks.success, error: mocks.error },
+  toast: { success: mocks.success, error: mocks.error, warning: mocks.warning },
 }))
 
 const provider: ModelProvider = {
   provider: 'ginfer',
   active: true,
+  persist: true,
   settings: [],
   models: [{ id: 'model-first' }, { id: 'model-selected' }],
 }
-
-let serviceHub: ReturnType<typeof seedServiceHub>
 
 function modelDeletion(selectedProvider = provider, modelId?: string) {
   return (
@@ -43,10 +47,10 @@ function modelDeletion(selectedProvider = provider, modelId?: string) {
   )
 }
 
-function deferred() {
-  let resolve!: () => void
+function deferred<T = void>() {
+  let resolve!: (value: T) => void
   let reject!: (reason: unknown) => void
-  const promise = new Promise<void>((done, fail) => {
+  const promise = new Promise<T>((done, fail) => {
     resolve = done
     reject = fail
   })
@@ -55,8 +59,25 @@ function deferred() {
 
 beforeEach(async () => {
   vi.resetAllMocks()
-  serviceHub = seedServiceHub()
-  mocks.deleteLocalModel.mockResolvedValue(undefined)
+  mocks.deleteModel.mockResolvedValue(undefined)
+  mocks.getProviders.mockResolvedValue([{ ...provider, models: [] }])
+  mocks.stopModel.mockResolvedValue(undefined)
+  mocks.startModel.mockResolvedValue(undefined)
+  seedServiceHub({
+    models: {
+      deleteModel: mocks.deleteModel,
+      stopModel: mocks.stopModel,
+      startModel: mocks.startModel,
+    } as unknown as ModelsService,
+    providers: { getProviders: mocks.getProviders } as unknown as ProvidersService,
+  })
+  useModelProvider.setState({
+    providers: [provider],
+    inventoryRevision: 0, modelMutations: {},
+    selectedProvider: 'ginfer',
+    selectedModel: { id: 'model-selected' } as Model,
+  })
+  useFavoriteModel.setState({ favoriteModels: [{ id: 'model-selected' } as Model] })
   await i18n.changeLanguage('en')
 })
 
@@ -88,12 +109,12 @@ describe('DialogDeleteModel deletion result', () => {
       await waitFor(() =>
         expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
       )
-      expect(mocks.deleteLocalModel).not.toHaveBeenCalled()
+      expect(mocks.deleteModel).not.toHaveBeenCalled()
 
       await user.keyboard('{Enter}')
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(mocks.deleteLocalModel).not.toHaveBeenCalled()
+      expect(mocks.deleteModel).not.toHaveBeenCalled()
       expect(mocks.success).not.toHaveBeenCalled()
     }
   )
@@ -102,7 +123,7 @@ describe('DialogDeleteModel deletion result', () => {
     'deletes the selected model once through native %s and closes after success',
     async (activation) => {
       const deletion = deferred()
-      mocks.deleteLocalModel.mockReturnValue(deletion.promise)
+      mocks.deleteModel.mockReturnValue(deletion.promise)
       const user = userEvent.setup()
       render(modelDeletion(provider, 'model-selected'))
       await user.click(screen.getByRole('button', { name: 'Delete' }))
@@ -116,8 +137,7 @@ describe('DialogDeleteModel deletion result', () => {
         await user.keyboard(activation === 'Enter' ? '{Enter}' : ' ')
       }
 
-      expect(mocks.deleteLocalModel).toHaveBeenCalledExactlyOnceWith(
-        serviceHub,
+      expect(mocks.deleteModel).toHaveBeenCalledExactlyOnceWith(
         'model-selected',
         'ginfer'
       )
@@ -130,7 +150,7 @@ describe('DialogDeleteModel deletion result', () => {
       })
 
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(mocks.deleteLocalModel).toHaveBeenCalledOnce()
+      expect(mocks.deleteModel).toHaveBeenCalledOnce()
       expect(mocks.success).toHaveBeenCalledExactlyOnceWith(
         'Delete Model: model-selected',
         {
@@ -144,7 +164,7 @@ describe('DialogDeleteModel deletion result', () => {
 
   it('guards repeated native clicks before the pending controls render', async () => {
     const deletion = deferred()
-    mocks.deleteLocalModel.mockReturnValue(deletion.promise)
+    mocks.deleteModel.mockReturnValue(deletion.promise)
     const user = userEvent.setup()
     render(modelDeletion(provider, 'model-selected'))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
@@ -158,8 +178,7 @@ describe('DialogDeleteModel deletion result', () => {
       remove.click()
     })
 
-    expect(mocks.deleteLocalModel).toHaveBeenCalledExactlyOnceWith(
-      serviceHub,
+    expect(mocks.deleteModel).toHaveBeenCalledExactlyOnceWith(
       'model-selected',
       'ginfer'
     )
@@ -171,12 +190,12 @@ describe('DialogDeleteModel deletion result', () => {
     })
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(mocks.deleteLocalModel).toHaveBeenCalledOnce()
+    expect(mocks.deleteModel).toHaveBeenCalledOnce()
   })
 
   it('shows pending state and blocks repeated activation and dismissal', async () => {
     const deletion = deferred()
-    mocks.deleteLocalModel.mockReturnValue(deletion.promise)
+    mocks.deleteModel.mockReturnValue(deletion.promise)
     const user = userEvent.setup()
     render(modelDeletion(provider, 'model-selected'))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
@@ -196,7 +215,7 @@ describe('DialogDeleteModel deletion result', () => {
     await user.keyboard('{Enter} {Escape}')
     await user.click(cancel)
 
-    expect(mocks.deleteLocalModel).toHaveBeenCalledOnce()
+    expect(mocks.deleteModel).toHaveBeenCalledOnce()
     expect(dialog).toBeInTheDocument()
     expect(mocks.success).not.toHaveBeenCalled()
 
@@ -206,13 +225,13 @@ describe('DialogDeleteModel deletion result', () => {
     })
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(mocks.deleteLocalModel).toHaveBeenCalledOnce()
+    expect(mocks.deleteModel).toHaveBeenCalledOnce()
   })
 
   it('keeps a failed deletion open with its error and permits a successful retry', async () => {
     const first = deferred()
     const retry = deferred()
-    mocks.deleteLocalModel
+    mocks.deleteModel
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(retry.promise)
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -233,16 +252,20 @@ describe('DialogDeleteModel deletion result', () => {
     )
     expect(within(dialog).getByRole('button', { name: 'Delete' })).toBeEnabled()
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled()
-    expect(mocks.deleteLocalModel).toHaveBeenCalledOnce()
+    expect(mocks.deleteModel).toHaveBeenCalledOnce()
     expect(mocks.error).toHaveBeenCalledOnce()
     expect(mocks.success).not.toHaveBeenCalled()
+    expect(mocks.warning).not.toHaveBeenCalled()
+    expect(mocks.getProviders).not.toHaveBeenCalled()
+    expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['model-first', 'model-selected'])
+    expect(useModelProvider.getState().selectedModel?.id).toBe('model-selected')
+    expect(useFavoriteModel.getState().favoriteModels.map(model => model.id)).toEqual(['model-selected'])
 
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
-    expect(mocks.deleteLocalModel).toHaveBeenCalledTimes(2)
-    expect(mocks.deleteLocalModel).toHaveBeenNthCalledWith(
+    expect(mocks.deleteModel).toHaveBeenCalledTimes(2)
+    expect(mocks.deleteModel).toHaveBeenNthCalledWith(
       2,
-      serviceHub,
       'model-selected',
       'ginfer'
     )
@@ -255,11 +278,120 @@ describe('DialogDeleteModel deletion result', () => {
     })
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(mocks.deleteLocalModel).toHaveBeenCalledTimes(2)
+    expect(mocks.deleteModel).toHaveBeenCalledTimes(2)
     expect(mocks.success).toHaveBeenCalledOnce()
   })
 
+  it.each([false, true])(
+    'keeps accepted deletion recoverable after Settings unmounts without replaying it on failed or successful reads (external reference: %s)',
+    async (externalReference) => {
+      const selectedProvider: ModelProvider = {
+        ...provider,
+        models: provider.models.map((model) => model.id === 'model-selected' && externalReference
+          ? { ...model, source: 'external' }
+          : model),
+      }
+      useModelProvider.setState({
+        providers: [selectedProvider],
+        selectedModel: selectedProvider.models.find((model) => model.id === 'model-selected') ?? null,
+      })
+      const action = externalReference ? 'Remove from Models' : 'Delete'
+      const title = externalReference ? 'Model removed' : 'Delete Model: model-selected'
+      const description = externalReference
+        ? 'Removed from Models. The original file remains in place.'
+        : 'Model model-selected has been permanently deleted.'
+      const deletion = deferred()
+      const initialRead = deferred<ModelProvider[]>()
+      const failedRetry = deferred<ModelProvider[]>()
+      const successfulRetry = deferred<ModelProvider[]>()
+      mocks.deleteModel.mockReturnValueOnce(deletion.promise)
+      mocks.getProviders
+        .mockReturnValueOnce(initialRead.promise)
+        .mockReturnValueOnce(failedRetry.promise)
+        .mockReturnValueOnce(successfulRetry.promise)
+      const user = userEvent.setup()
+      const settings = render(modelDeletion(selectedProvider, 'model-selected'))
+      await user.click(screen.getByRole('button', { name: action }))
+      if (externalReference) {
+        expect(screen.getByRole('dialog', { name: 'Remove model-selected from Models?' })).toBeVisible()
+        expect(screen.getByText('The original model file will remain in place. Only its Models entry will be removed.')).toBeVisible()
+      }
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: action }))
+
+      await act(async () => {
+        deletion.resolve()
+        await deletion.promise
+      })
+
+      expect(mocks.getProviders).toHaveBeenCalledOnce()
+      expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['model-first'])
+      expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      expect(screen.getByRole('dialog')).toHaveAttribute('aria-busy', 'true')
+      await act(async () => {
+        initialRead.reject(new Error('Provider inventory unavailable at /models/catalog.json'))
+        await initialRead.promise.catch(() => undefined)
+      })
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+      expect(mocks.deleteModel).toHaveBeenCalledExactlyOnceWith('model-selected', 'ginfer')
+      expect(mocks.error).not.toHaveBeenCalled()
+      expect(mocks.success).not.toHaveBeenCalled()
+      expect(mocks.warning).toHaveBeenCalledExactlyOnceWith(title, {
+        id: 'delete-model-model-selected',
+        duration: Infinity,
+        description: expect.anything(),
+      })
+
+      settings.unmount()
+      render(mocks.warning.mock.calls[0][1].description)
+      expect(screen.getByText(description)).toBeVisible()
+      expect(screen.getByText('The model list could not be refreshed. Choose Refresh model list to try again.')).toBeVisible()
+      const details = screen.getByText('Technical details').closest('details')
+      expect(details).not.toHaveAttribute('open')
+      expect(screen.getByText('Provider inventory unavailable at /models/catalog.json')).not.toBeVisible()
+      const refresh = screen.getByRole('button', { name: 'Refresh model list' })
+      act(() => {
+        refresh.click()
+        refresh.click()
+      })
+
+      expect(mocks.getProviders).toHaveBeenCalledTimes(2)
+      expect(refresh).toBeDisabled()
+      expect(refresh).toHaveTextContent('Refreshing model list…')
+      await act(async () => {
+        failedRetry.reject(new Error('Provider inventory is still unavailable'))
+        await failedRetry.promise.catch(() => undefined)
+      })
+
+      expect(refresh).toBeEnabled()
+      expect(details).not.toHaveAttribute('open')
+      expect(screen.getByText('Provider inventory is still unavailable')).not.toBeVisible()
+      expect(mocks.success).not.toHaveBeenCalled()
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      await user.click(refresh)
+      expect(mocks.getProviders).toHaveBeenCalledTimes(3)
+      await act(async () => {
+        successfulRetry.resolve([selectedProvider])
+        await successfulRetry.promise
+      })
+
+      expect(mocks.success).toHaveBeenCalledExactlyOnceWith(title, {
+        id: 'delete-model-model-selected',
+        description: `${description} The model list is up to date.`,
+      })
+      expect(useModelProvider.getState().providers[0].models.map(model => model.id)).toEqual(['model-first'])
+      expect(useModelProvider.getState().selectedModel).toBeNull()
+      expect(useFavoriteModel.getState().favoriteModels).toHaveLength(0)
+      expect(mocks.deleteModel).toHaveBeenCalledOnce()
+      expect(mocks.stopModel).not.toHaveBeenCalled()
+      expect(mocks.startModel).not.toHaveBeenCalled()
+      expect(mocks.error).not.toHaveBeenCalled()
+    }
+  )
+
   it('uses the first provider model only when no model ID was supplied', async () => {
+    mocks.getProviders.mockResolvedValueOnce([provider])
     const user = userEvent.setup()
     render(modelDeletion())
     await user.click(screen.getByRole('button', { name: 'Delete' }))
@@ -268,17 +400,18 @@ describe('DialogDeleteModel deletion result', () => {
     })
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
-    expect(mocks.deleteLocalModel).toHaveBeenCalledExactlyOnceWith(
-      serviceHub,
+    expect(mocks.deleteModel).toHaveBeenCalledExactlyOnceWith(
       'model-first',
       'ginfer'
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(useModelProvider.getState().selectedModel?.id).toBe('model-selected')
+    expect(useFavoriteModel.getState().favoriteModels.map(model => model.id)).toEqual(['model-selected'])
   })
 
   it('keeps an in-flight deletion result bound to the submitted model and provider', async () => {
     const deletion = deferred()
-    mocks.deleteLocalModel.mockReturnValue(deletion.promise)
+    mocks.deleteModel.mockReturnValue(deletion.promise)
     const user = userEvent.setup()
     const { rerender } = render(modelDeletion(provider, 'model-selected'))
     await user.click(screen.getByRole('button', { name: 'Delete' }))
@@ -290,8 +423,7 @@ describe('DialogDeleteModel deletion result', () => {
       modelDeletion({ ...provider, provider: 'another-provider' }, 'model-first')
     )
 
-    expect(mocks.deleteLocalModel).toHaveBeenCalledExactlyOnceWith(
-      serviceHub,
+    expect(mocks.deleteModel).toHaveBeenCalledExactlyOnceWith(
       'model-selected',
       'ginfer'
     )

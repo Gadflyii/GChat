@@ -7,6 +7,7 @@ import { createMemoryHistory, createRootRoute, createRouter, RouterProvider } fr
 import { ModelManagement as ModelManagementView, type ModelManagementTab } from '@/containers/ModelManagement'
 import { Route } from '../index'
 import { useLocalModelDownloads } from '@/stores/local-model-downloads-store'
+import { useAppState } from '@/hooks/useAppState'
 import type { ModelDownload, ModelRelease } from '@/lib/model-release'
 import type { EngineSnapshot, LocalModelLoadProgress } from '@/services/engines'
 import type { DialogOpenOptions } from '@/services/dialog/types'
@@ -17,7 +18,8 @@ const mocks = vi.hoisted(() => ({
   switchModel: vi.fn<(params: { options?: { loadOperationId?: string }; signal?: AbortSignal }) => Promise<void>>(async () => {}),
   selectedGpuUuids: null as string[] | null, setSelectedGpuUuids: vi.fn(),
   providers: [] as TestProvider[],
-  getProviders: vi.fn<() => Promise<TestProvider[]>>(), setProviders: vi.fn<(providers: TestProvider[]) => void>(),
+  getProviders: vi.fn<() => Promise<TestProvider[]>>(), setProviders: vi.fn<(providers: TestProvider[], revision?: number) => void>(),
+  inventoryRevision: 0, recordModelInstall: vi.fn<(modelId: string) => void>(),
   open: vi.fn<(options?: DialogOpenOptions) => Promise<string | string[] | null>>(),
   joinPath: vi.fn<(parts: string[]) => Promise<string>>(),
   catalog: [] as unknown[], catalogError: null as string | null, errors: {} as Record<string, string>,
@@ -26,11 +28,16 @@ const mocks = vi.hoisted(() => ({
   remoteDownloads: [] as ModelDownload[],
   publishSnapshot: vi.fn<(hostId: string, snapshot: EngineSnapshot) => void>(),
   controlHost: vi.fn(async () => {}),
+  getActiveModels: vi.fn<(provider?: string) => Promise<string[]>>(),
+  stopModel: vi.fn<(model: string, provider?: string) => Promise<{ success: boolean; error?: string } | undefined>>(),
 }))
 vi.mock('@gchat/core', async importOriginal => ({
   ...await importOriginal<typeof import('@gchat/core')>(), joinPath: mocks.joinPath,
 }))
-vi.mock('@/utils/localHostModel', () => ({ controlLocalHostModel: mocks.controlHost }))
+vi.mock('@/utils/localHostModel', async importOriginal => ({
+  ...await importOriginal<typeof import('@/utils/localHostModel')>(),
+  controlLocalHostModel: mocks.controlHost,
+}))
 vi.mock('@/containers/HeaderPage', () => ({ default: ({ children }: { children: React.ReactNode }) => <header>{children}</header> }))
 vi.mock('@/containers/EngineHostModels', () => ({ HostCard: ({ host }: { host: { name: string } }) => <section>Installed on {host.name}</section> }))
 vi.mock('@/containers/hub/DeleteModelAction', () => ({ DeleteModelAction: () => null }))
@@ -41,13 +48,13 @@ vi.mock('@tanstack/react-router', async importOriginal => ({
 vi.mock('@/utils/switchModel', () => ({ switchToModel: mocks.switchModel }))
 vi.mock('@/services/engines', () => ({ engineCommand: mocks.command, engineAlias: (host: string, instance: string) => `ginfer/${host}/${instance}` }))
 vi.mock('@/hooks/useServiceHub', () => ({ isServiceHubInitialized: () => false, useServiceHub: () => ({
-  models: () => ({ getActiveModels: async () => ['another-model'] }),
+  models: () => ({ getActiveModels: mocks.getActiveModels, stopModel: mocks.stopModel }),
   providers: () => ({ getProviders: mocks.getProviders }),
   dialog: () => ({ open: mocks.open }),
 }) }))
 vi.mock('@/hooks/useBundledResources', () => ({ useBundledResources: (enabled = true) => enabled ? mocks.resources : { ready: true, error: '' } }))
 vi.mock('@/hooks/useModelProvider', () => {
-  const state = { get providers() { return mocks.providers }, selectModelProvider: vi.fn(), setProviders: mocks.setProviders }
+  const state = { get providers() { return mocks.providers }, get inventoryRevision() { return mocks.inventoryRevision }, recordModelInstall: mocks.recordModelInstall, selectModelProvider: vi.fn(), setProviders: mocks.setProviders }
   const hook = (selector: (s: typeof state) => unknown) => selector(state)
   hook.getState = () => state
   return { useModelProvider: hook }
@@ -57,10 +64,15 @@ vi.mock('@/hooks/useHardware', () => ({ useHardware: (selector: (s: unknown) => 
   hardwareReady: true, hardwareData: { gpus: [{ uuid: 'local-gpu', name: 'Local GPU', total_memory: 16384, nvidia_info: { compute_capability: '8.6' } }] },
 }) }))
 vi.mock('@/stores/model-catalog-store', () => ({ useModelCatalogStore: (selector: (s: unknown) => unknown) => selector({ catalog: mocks.catalog, error: mocks.catalogError, refresh: mocks.refreshCatalog }) }))
-vi.mock('@/stores/engine-hosts-store', () => ({ useEngineHosts: (selector: (s: unknown) => unknown) => selector({
-  hosts: [{ host_id: 'remote', name: 'Lab server' }, ...(mocks.localSnapshot ? [{ host_id: 'local-host', name: 'This computer', local: true }] : [])], errors: mocks.errors, refresh: mocks.refresh, publishSnapshot: mocks.publishSnapshot,
-  snapshots: { ...(mocks.localSnapshot ? { 'local-host': mocks.localSnapshot } : {}), remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: mocks.remoteDownloads } } },
-}) }))
+vi.mock('@/stores/engine-hosts-store', () => {
+  const state = () => ({
+    hosts: [{ host_id: 'remote', name: 'Lab server' }, ...(mocks.localSnapshot ? [{ host_id: 'local-host', name: 'This computer', local: true }] : [])], errors: mocks.errors, refresh: mocks.refresh, publishSnapshot: mocks.publishSnapshot,
+    snapshots: { ...(mocks.localSnapshot ? { 'local-host': mocks.localSnapshot } : {}), remote: { host_id: 'remote', gpus: [{ uuid: 'remote-gpu', name: 'Remote GPU', memory_mib: 32768, compute_capability: '12.0' }], models: [], instances: [], model_management: { version: 1, downloads: mocks.remoteDownloads } } },
+  })
+  const hook = (selector: (s: ReturnType<typeof state>) => unknown) => selector(state())
+  hook.getState = state
+  return { useEngineHosts: hook }
+})
 const release: ModelRelease = { name: 'Blackwell model', identity: { model_id: 'muse', weights_id: 'nvfp4' },
   url: `https://huggingface.co/test/model/resolve/${'a'.repeat(40)}/model.ginfer`, sha256: 'b'.repeat(64), bytes: 4096,
   tp: 1, qualified_sm: ['12.0'], min_vram_mib_per_gpu: 32768, capabilities: ['tools'], launch_profiles: [{ id: 'c1' }] }
@@ -94,16 +106,34 @@ function deferred<T>() {
 describe('host-scoped Models', () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.errors = {}; mocks.selectedGpuUuids = null
+    useAppState.setState({ activeModels: [] })
+    mocks.localSnapshot = null
     useLocalModelDownloads.setState({ jobs: [], loaded: false, error: null })
     mocks.remoteDownloads = []
     mocks.publishSnapshot.mockImplementation((hostId, snapshot) => {
       if (hostId === 'remote') mocks.remoteDownloads = snapshot.model_management?.downloads ?? []
+      if (hostId === 'local-host') mocks.localSnapshot = snapshot as unknown as Record<string, unknown>
       delete mocks.errors[hostId]
     })
     mocks.resources = { ready: true, error: '' }
-    mocks.command.mockResolvedValue([])
+    mocks.inventoryRevision = 0
+    mocks.recordModelInstall.mockImplementation(() => { mocks.inventoryRevision += 1 })
+    mocks.command.mockReset().mockImplementation(async (action, args) => {
+      if (action === 'local_model_register') return { modelId: 'registered-model', modelPath: args?.path }
+      if (action === 'local_model_adopt') return { adopted: [], rejected: [] }
+      if (action === 'snapshot') return mocks.localSnapshot
+      return []
+    })
     mocks.refresh.mockReset().mockResolvedValue(undefined)
     mocks.switchModel.mockResolvedValue(undefined)
+    mocks.getActiveModels.mockReset().mockResolvedValue(['another-model'])
+    mocks.stopModel.mockReset().mockResolvedValue({ success: true })
+    mocks.controlHost.mockReset().mockImplementation(async () => {
+      const snapshot = mocks.localSnapshot as unknown as EngineSnapshot | null
+      if (snapshot) mocks.publishSnapshot('local-host', {
+        ...snapshot, instances: snapshot.instances.map(instance => ({ ...instance, status: 'stopped' })),
+      })
+    })
     mocks.providers = [{ provider: 'ginfer', models: [{ id: 'local-model', displayName: 'Installed locally', path: '/models/local.ginfer' }] }]
     mocks.getProviders.mockImplementation(async () => mocks.providers)
     mocks.setProviders.mockImplementation(providers => { mocks.providers = providers })
@@ -145,7 +175,7 @@ describe('host-scoped Models', () => {
     mocks.catalog = []
     mocks.catalogError = catalogError
     const path = '/external/My model.ginfer'
-    const registered = [{ provider: 'ginfer', models: [{ id: 'host-model-id', displayName: 'My local model', path, source: 'external' }] }]
+    const registered = [{ provider: 'ginfer', models: [{ id: 'registered-model', displayName: 'My local model', path, source: 'external' }] }]
     mocks.open.mockResolvedValue(path)
     mocks.getProviders.mockResolvedValue(registered)
     render(<ModelManagement />)
@@ -162,7 +192,8 @@ describe('host-scoped Models', () => {
       ['local_model_register', { path }],
     ])
     expect(mocks.getProviders).toHaveBeenCalledOnce()
-    expect(mocks.setProviders).toHaveBeenCalledExactlyOnceWith(registered)
+    expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('registered-model')
+    expect(mocks.setProviders).toHaveBeenCalledExactlyOnceWith(registered, 1)
     expect(mocks.refresh).toHaveBeenCalledOnce()
     expect(mocks.switchModel).not.toHaveBeenCalled()
     expect(mocks.controlHost).not.toHaveBeenCalled()
@@ -214,6 +245,7 @@ describe('host-scoped Models', () => {
     expect(mocks.setProviders).not.toHaveBeenCalled()
     expect(mocks.refresh).not.toHaveBeenCalled()
     expect(mocks.switchModel).not.toHaveBeenCalled()
+    expect(mocks.recordModelInstall).not.toHaveBeenCalled()
     mocks.open.mockResolvedValue(null)
     fireEvent.click(screen.getByRole('button', { name: 'Add local model' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled())
@@ -236,7 +268,10 @@ describe('host-scoped Models', () => {
     await waitFor(() => expect(mocks.refresh).toHaveBeenCalledOnce())
     mocks.refresh.mockClear()
     if (failedRead === 'provider inventory') {
-      mocks.getProviders.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectInitial = reject }))
+      mocks.getProviders.mockImplementationOnce(() => {
+        expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('registered-model')
+        return new Promise((_resolve, reject) => { rejectInitial = reject })
+      })
     } else {
       mocks.refresh.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectInitial = reject }))
     }
@@ -290,7 +325,8 @@ describe('host-scoped Models', () => {
     expect(refresh).toBeEnabled()
     expect(mocks.getProviders).toHaveBeenCalledTimes(3)
     expect(mocks.setProviders).toHaveBeenCalledTimes(failedRead === 'provider inventory' ? 1 : 3)
-    expect(mocks.setProviders).toHaveBeenLastCalledWith(registered)
+    expect(mocks.setProviders).toHaveBeenLastCalledWith(registered, 1)
+    expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('registered-model')
     expect(mocks.refresh).toHaveBeenCalledTimes(failedRead === 'provider inventory' ? 1 : 3)
     expect(mocks.open).toHaveBeenCalledOnce()
     expect(mocks.command.mock.calls.filter(([action]) => action !== 'local_model_downloads')).toEqual([
@@ -319,10 +355,13 @@ describe('host-scoped Models', () => {
     expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_register')).toHaveLength(1)
     expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Refresh installed models' })).toBeDisabled()
-    await act(async () => { register({}) })
+    await act(async () => { register({ modelId: 'local-model', modelPath: '/external/model.ginfer' }) })
     expect(mocks.getProviders).toHaveBeenCalledOnce()
+    expect(mocks.recordModelInstall).toHaveBeenCalledExactlyOnceWith('local-model')
+    mocks.inventoryRevision += 1 // A different install completes while this read is pending.
     expect(screen.getByRole('button', { name: 'Adding local model…' })).toBeDisabled()
     await act(async () => { inventory(mocks.providers) })
+    expect(mocks.setProviders).toHaveBeenCalledExactlyOnceWith(mocks.providers, 1)
     expect(screen.getByRole('button', { name: 'Add local model' })).toBeEnabled()
     expect(mocks.open).toHaveBeenCalledOnce()
     expect(mocks.switchModel).not.toHaveBeenCalled()
@@ -702,8 +741,171 @@ describe('host-scoped Models', () => {
       expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
       fireEvent.click(screen.getByRole('button', { name: 'Stop model' }))
       await waitFor(() => expect(mocks.controlHost).toHaveBeenCalledWith('ginfer/local-host/inst', 'stop'))
+      await waitFor(() => expect(screen.getByText(/^Installed · /)).toBeVisible())
+      expect(screen.getByRole('button', { name: 'Stop model' })).toBeDisabled()
     } finally { mocks.localSnapshot = null }
   })
+  it.each([
+    { route: 'desktop', failedRead: 'active inventory' },
+    { route: 'local Host', failedRead: 'active inventory' },
+    { route: 'desktop', failedRead: 'Host snapshot' },
+  ] as const)('recovers a confirmed $route Stop after a failed $failedRead without replaying mutations', async ({ route, failedRead }) => {
+    const user = userEvent.setup()
+    const alias = 'ginfer/local-host/inst'
+    const otherAlias = 'ginfer/local-host/other-inst'
+    const readySnapshot = { host_id: 'local-host', gpus: [], models: [
+      { id: 'host-model', path: '/models/local.ginfer' }, { id: 'other-host-model', path: '/models/another-host.ginfer' },
+    ], instances: [
+      { instance_id: 'inst', status: 'ready', profile: { model_id: 'host-model' } },
+      { instance_id: 'other-inst', status: 'ready', profile: { model_id: 'other-host-model' } },
+    ], model_management: { version: 1, downloads: [] } }
+    const stoppedSnapshot = { ...readySnapshot, instances: readySnapshot.instances.map(instance =>
+      instance.instance_id === 'inst' ? { ...instance, status: 'stopped' } : instance) } as unknown as EngineSnapshot
+    mocks.localSnapshot = readySnapshot
+    mocks.providers[0].models.push({ id: 'other-model', displayName: 'Another active model', path: '/models/other.ginfer' })
+    mocks.providers.push({ provider: 'openai', models: [{ id: 'cloud-model', displayName: 'Cloud model', path: '' }] })
+    useAppState.setState({ activeModels: [...(route === 'desktop' ? ['local-model'] : []), alias, 'other-model', 'cloud-model', otherAlias] })
+    const stop = deferred<{ success: boolean }>()
+    const hostStop = deferred<void>()
+    const firstRead = deferred<string[]>()
+    const firstSnapshot = deferred<EngineSnapshot>()
+    mocks.stopModel.mockReturnValueOnce(stop.promise)
+    mocks.controlHost.mockImplementationOnce(async () => {
+      await hostStop.promise
+      mocks.publishSnapshot('local-host', stoppedSnapshot)
+    })
+    mocks.getActiveModels.mockReturnValueOnce(firstRead.promise)
+    let snapshotReads = 0
+    mocks.command.mockImplementation(async action => {
+      if (action === 'snapshot') {
+        snapshotReads++
+        return failedRead === 'Host snapshot' && snapshotReads === 1 ? firstSnapshot.promise : stoppedSnapshot
+      }
+      return []
+    })
+    render(<ModelManagement />)
+    await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+    const downloadReads = mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads').length
+    const stoppedRow = within(screen.getByRole('heading', { name: 'Installed locally' }).closest('section')!)
+    const otherRow = within(screen.getByRole('heading', { name: 'Another active model' }).closest('section')!)
+    const stopButton = stoppedRow.getByRole('button', { name: 'Stop model' })
+    act(() => { fireEvent.click(stopButton); fireEvent.click(stopButton) })
+    expect(route === 'desktop' ? mocks.stopModel : mocks.controlHost).toHaveBeenCalledOnce()
+    expect(mocks.getActiveModels).not.toHaveBeenCalled()
+    expect(useAppState.getState().activeModels).toContain(alias)
+    expect(stopButton).toBeDisabled()
+    await act(async () => { if (route === 'desktop') stop.resolve({ success: true }); else hostStop.resolve() })
+    await waitFor(() => expect(mocks.getActiveModels).toHaveBeenCalledOnce())
+    // Desktop Stop confirms its model id; only a fresh snapshot can resolve the cached Host alias.
+    expect(useAppState.getState().activeModels).toEqual([...(route === 'desktop' ? [alias] : []), 'other-model', 'cloud-model', otherAlias])
+    expect(stoppedRow.getByText(/^Checking status · /)).toBeVisible()
+    expect(otherRow.getByText(/^Running · /)).toBeVisible()
+    for (const button of screen.getAllByRole('button', { name: /^(Load|Stop) model$/ })) expect(button).toBeDisabled()
+
+    const initialError = `${failedRead} connection failed after Stop`
+    if (failedRead === 'Host snapshot') {
+      await act(async () => { firstRead.resolve(['other-model']) })
+      await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('snapshot', { host_id: 'local-host' }))
+      await act(async () => { firstSnapshot.reject(new Error(initialError)) })
+    } else {
+      await act(async () => { firstRead.reject(new Error(initialError)) })
+    }
+    const guidance = 'The model stopped, but the running model list could not be refreshed. Choose Refresh model status before loading or stopping another model.'
+    expect(await screen.findByText(guidance)).toBeVisible()
+    expect(screen.getByRole('alert')).not.toHaveTextContent('Could not stop this model.')
+    expect(screen.getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+    expect(screen.getByText(initialError)).not.toBeVisible()
+    expect(stoppedRow.getByText(/^Status unavailable · /)).toBeVisible()
+    for (const button of screen.getAllByRole('button', { name: /^(Load|Stop) model$/ })) expect(button).toBeDisabled()
+    expect(mocks.command.mock.calls.filter(([action]) => action !== 'snapshot')).toHaveLength(downloadReads)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(downloadReads)
+
+    await user.click(screen.getByRole('button', { name: 'Model destination' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'Lab server' }))
+    expect(screen.getByText('Installed on Lab server')).toBeVisible()
+    expect(screen.queryByText(guidance)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh model status' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: 'Recommended' }))
+    expect(screen.getByRole('button', { name: 'Download to Lab server' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Model destination' }))
+    await user.click(screen.getAllByRole('menuitemradio', { name: 'This computer' })[0])
+    await user.click(screen.getByRole('tab', { name: 'Installed' }))
+    expect(screen.getByText(guidance)).toBeVisible()
+    // Returning to this computer refreshes its download inventory independently of Stop.
+    const navigationDownloadReads = downloadReads + 1
+    await waitFor(() => expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(navigationDownloadReads))
+
+    const retryRead = deferred<string[]>()
+    mocks.getActiveModels.mockReturnValueOnce(retryRead.promise)
+    const retry = screen.getByRole('button', { name: 'Refresh model status' })
+    act(() => { fireEvent.click(retry); fireEvent.click(retry) })
+    expect(mocks.getActiveModels).toHaveBeenCalledTimes(2)
+    expect(retry).toBeDisabled()
+    for (const button of screen.getAllByRole('button', { name: /^(Load|Stop) model$/ })) expect(button).toBeDisabled()
+    await act(async () => { retryRead.reject(new Error('Status retry connection failed')) })
+    expect(screen.getByText(guidance)).toBeVisible()
+    expect(screen.getByText('Status retry connection failed')).not.toBeVisible()
+    expect(retry).toBeEnabled()
+    const finalRead = deferred<string[]>()
+    mocks.getActiveModels.mockReturnValueOnce(finalRead.promise)
+    act(() => { fireEvent.click(retry); fireEvent.click(retry) })
+    expect(mocks.getActiveModels).toHaveBeenCalledTimes(3)
+    await act(async () => { finalRead.resolve(['other-model']) })
+    await waitFor(() => expect(screen.queryByText(guidance)).not.toBeInTheDocument())
+    const refreshedRow = within(screen.getByRole('heading', { name: 'Installed locally' }).closest('section')!)
+    expect(refreshedRow.getByRole('button', { name: 'Load model' })).toBeEnabled()
+    expect(refreshedRow.getByRole('button', { name: 'Stop model' })).toBeDisabled()
+    expect(within(screen.getByRole('heading', { name: 'Another active model' }).closest('section')!).getByRole('button', { name: 'Stop model' })).toBeEnabled()
+    expect(useAppState.getState().activeModels).toEqual(['other-model', otherAlias, 'cloud-model'])
+    expect(mocks.stopModel).toHaveBeenCalledTimes(route === 'desktop' ? 1 : 0)
+    expect(mocks.controlHost).toHaveBeenCalledTimes(route === 'local Host' ? 1 : 0)
+    expect(mocks.publishSnapshot).toHaveBeenCalledWith('local-host', stoppedSnapshot)
+    expect(mocks.command.mock.calls.filter(([action]) => action !== 'snapshot')).toHaveLength(navigationDownloadReads)
+    expect(mocks.command.mock.calls.filter(([action]) => action === 'local_model_downloads')).toHaveLength(navigationDownloadReads)
+    expect(mocks.switchModel).not.toHaveBeenCalled()
+    expect(mocks.getProviders).not.toHaveBeenCalled()
+    expect(mocks.open).not.toHaveBeenCalled()
+  })
+  it.each(['desktop rejection', 'desktop unsuccessful result', 'desktop missing confirmation', 'local Host rejection'] as const)(
+    'keeps an unconfirmed Stop active and allows an explicit retry (%s)', async failure => {
+      const host = failure === 'local Host rejection'
+      if (host) mocks.localSnapshot = { host_id: 'local-host', gpus: [], models: [{ id: 'host-model', path: '/models/local.ginfer' }],
+        instances: [{ instance_id: 'inst', status: 'ready', profile: { model_id: 'host-model' } }], model_management: { version: 1, downloads: [] } }
+      const activeId = host ? 'ginfer/local-host/inst' : 'local-model'
+      useAppState.setState({ activeModels: [activeId] })
+      const failureDetail = failure === 'desktop missing confirmation' ? 'The engine did not confirm that this model stopped.' : 'Stop was not confirmed by the engine'
+      if (host) mocks.controlHost.mockRejectedValueOnce(new Error(failureDetail))
+      else if (failure === 'desktop rejection') mocks.stopModel.mockRejectedValueOnce(new Error(failureDetail))
+      else mocks.stopModel.mockResolvedValueOnce(failure === 'desktop missing confirmation' ? undefined : { success: false, error: failureDetail })
+      mocks.getActiveModels.mockResolvedValue([])
+      mocks.command.mockImplementation(async action => action === 'snapshot' ? mocks.localSnapshot : [])
+      render(<ModelManagement />)
+      await waitFor(() => expect(mocks.command).toHaveBeenCalledWith('local_model_downloads'))
+      const downloadReads = mocks.command.mock.calls.length
+      const stopButton = screen.getByRole('button', { name: 'Stop model' })
+      fireEvent.click(stopButton)
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not stop this model. Check that the computer is connected, then try Stop model again.')
+      expect(screen.getByText(failureDetail)).not.toBeVisible()
+      expect(screen.getByText('Technical details').closest('details')).not.toHaveAttribute('open')
+      expect(screen.queryByRole('button', { name: 'Refresh model status' })).not.toBeInTheDocument()
+      expect(useAppState.getState().activeModels).toEqual([activeId])
+      expect(screen.getByText(/^Running · /)).toBeVisible()
+      expect(stopButton).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Load model' })).toBeDisabled()
+      expect(mocks.getActiveModels).not.toHaveBeenCalled()
+      fireEvent.click(stopButton)
+      await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+      expect(host ? mocks.controlHost : mocks.stopModel).toHaveBeenCalledTimes(2)
+      expect(mocks.getActiveModels).toHaveBeenCalledOnce()
+      expect(useAppState.getState().activeModels).toEqual([])
+      expect(screen.getByText(/^Installed · /)).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Load model' })).toBeEnabled()
+      expect(stopButton).toBeDisabled()
+      expect(mocks.command.mock.calls.filter(([action]) => action !== 'snapshot')).toHaveLength(downloadReads)
+      expect(mocks.switchModel).not.toHaveBeenCalled()
+      expect(mocks.getProviders).not.toHaveBeenCalled()
+    },
+  )
   it('disables mutations against an offline host even with saved inventory', async () => {
     const user = userEvent.setup()
     mocks.errors = { remote: 'Connection lost' }

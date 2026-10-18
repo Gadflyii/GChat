@@ -2,10 +2,8 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "desktop",
   "description": "enables the default permissions for desktop platforms",
-  "windows": ["main"],
-  "remote": {
-    "urls": ["http://*"]
-  },
+  "local": true,
+  "webviews": ["main"],
   "platforms": ["linux", "macOS", "windows"],
   "permissions": [
     "core:default",

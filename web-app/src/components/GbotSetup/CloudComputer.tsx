@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { gbot, type CloudReview, type SshIdentity } from '@/services/gbot'
 import LanTools from './LanTools'
@@ -23,6 +23,30 @@ const failureMessages = {
     'Could not connect the bot desktop. Choose Check progress to check the computer, then choose Connect bot desktop when the SSH and tool checks are complete.',
   delete:
     'Could not confirm the cloud computer was deleted. Provider charges may continue. Choose Check progress to check its state before trying Delete cloud computer again.',
+}
+
+export function CloudDeploymentIssue({
+  deployment,
+  saved = false,
+}: {
+  deployment: CloudReview['deployment']
+  saved?: boolean
+}) {
+  if (!deployment?.issue) return null
+  const recovery = saved ? 'Resume setup, then Check progress' : 'Check progress'
+  return (
+    <div role="alert" className="space-y-2 text-destructive">
+      <p>
+        {deployment.phase === 'deleting'
+          ? `Could not confirm the cloud computer was deleted. Provider charges may continue. Choose ${recovery} to check its state before trying Delete cloud computer again.`
+          : `The cloud computer needs attention. Review Details. Choose ${recovery} to check its state before continuing.`}
+      </p>
+      <details className="text-muted-foreground">
+        <summary>Details</summary>
+        <p className="whitespace-pre-wrap break-words">{deployment.issue}</p>
+      </details>
+    </div>
+  )
 }
 
 export default function CloudComputer({
@@ -51,6 +75,13 @@ export default function CloudComputer({
   const blocked = working || disabled
   const [action, setAction] = useState<keyof typeof actionLabels>()
   const pending = useRef(false)
+  const active = useRef(true)
+  useEffect(() => {
+    active.current = true
+    return () => {
+      active.current = false
+    }
+  }, [])
   const [error, setError] = useState<{
     action: keyof typeof failureMessages
     details: string
@@ -190,7 +221,7 @@ export default function CloudComputer({
               provider request.
             </p>
           )}
-          {deployment.issue && <p role="alert">{deployment.issue}</p>}
+          <CloudDeploymentIssue deployment={deployment} />
           <Button
             type="button"
             variant="outline"
@@ -314,6 +345,7 @@ export default function CloudComputer({
                       workspace_id: review.id,
                       session_id: crypto.randomUUID(),
                     })
+                    if (!active.current) return
                     await connected(review.id)
                   })
                 }

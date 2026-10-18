@@ -26,11 +26,21 @@ import Capabilities from '@/containers/Capabilities'
 import { getModelDisplayName, isLocalProvider } from '@/lib/utils'
 import { syncActiveModelsFromEngines } from '@/utils/activeModelsSync'
 import { stopTerminal } from '@/services/terminal/tauri'
+import { listAgentModelInstances } from '@/services/agent/definitions'
+import type { AgentModelInstance } from '@/types/agent'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const Route = createFileRoute(route.settings.hermes_agent as any)({
   component: HermesAgentIntegration,
 })
+
+type HermesModel = ModelProvider['models'][number] & {
+  providerName: string
+  isLocal: boolean
+  ready?: boolean
+}
+
+const MIN_HERMES_CTX = 65_536
 
 function HermesAgentIntegration() {
   const { t } = useTranslation()
@@ -61,19 +71,43 @@ function HermesAgentIntegration() {
     contextLength: number
   } | null>(null)
 
-  const availableModels = useMemo(() => {
-    return providers
-      .filter((p) => p.active)
-      .flatMap((p) =>
-        p.models.map((m) => ({
+  const [readyInstances, setReadyInstances] = useState<AgentModelInstance[]>([])
+  const savingRef = useRef(false)
+
+  useEffect(() => {
+    let active = true
+    void listAgentModelInstances()
+      .then((instances) => { if (active) setReadyInstances(instances) })
+      .catch((reason) => {
+        if (active) toast.error(`Could not refresh Ready models: ${String(reason)}`)
+      })
+    return () => { active = false }
+  }, [])
+
+  const availableModels = useMemo<HermesModel[]>(() => {
+    const readyModels = readyInstances.map((instance) => {
+      const projected = providers.flatMap((p) => p.models)
+        .find((model) => model.id === instance.id)
+      return {
+        ...projected,
+        id: instance.id,
+        displayName: projected?.displayName ||
+          `${instance.modelId} — ${instance.hostName || 'GInfer Host'}`,
+        providerName: 'ginfer-lan',
+        isLocal: false,
+        ready: true,
+      }
+    })
+    return [...readyModels, ...providers
+      .filter((p) => p.active && p.provider !== 'ginfer-lan')
+      .flatMap((p) => p.models
+        .filter(() => isLocalProvider(p.provider) || !!p.api_key?.length)
+        .map((m) => ({
           ...m,
           providerName: p.provider,
-          isLocal: isLocalProvider(p.provider),
-          hasApiKey: !!p.api_key?.length,
-        }))
-      )
-      .filter((m) => (m.isLocal ? m.id : m.hasApiKey))
-  }, [providers])
+          isLocal: !!isLocalProvider(p.provider),
+        })))]
+  }, [providers, readyInstances])
 
   useEffect(() => {
     if (!config.model && availableModels.length > 0) {
@@ -81,187 +115,116 @@ function HermesAgentIntegration() {
     }
   }, [config.model, availableModels, setModel])
 
-  const MIN_HERMES_CTX = 65_536
-
   const getModelCtxLen = (modelId: string): number => {
     for (const p of providers) {
       const m = p.models.find((m) => m.id === modelId)
-      if (m?.settings?.ctx_len?.controller_props?.value != null) {
-        const val = Number(m.settings.ctx_len.controller_props.value)
-        // 0 means "loaded from model" — treat as unset
-        return val > 0 ? val : MIN_HERMES_CTX
-      }
+      const value = Number(m?.settings?.ctx_len?.controller_props?.value)
+      if (value > 0) return value
     }
     return MIN_HERMES_CTX
   }
 
-  const ensureMinCtx = (modelId: string) => {
-    for (const p of providers) {
-      const m = p.models.find((m) => m.id === modelId)
-      if (m?.settings?.ctx_len?.controller_props) {
-        const current = Number(m.settings.ctx_len.controller_props.value) || 0
-        if (current < MIN_HERMES_CTX) {
-          m.settings.ctx_len.controller_props.value = MIN_HERMES_CTX
-        }
-        return
-      }
-    }
-  }
-
   const handleSaveEnable = async () => {
-    const hermesHost = serverHost === '0.0.0.0' ? '127.0.0.1' : serverHost
-    const apiUrl = `http://${hermesHost}:${serverPort}`
-    const selectedHermesModel = config.model
-
-    const startServer = async (): Promise<void> => {
-      const modelsToCheck = selectedHermesModel ? [selectedHermesModel] : []
-      const loadedModels =
-        (await serviceHub.models().getActiveModels()) || []
-      const modelsToStart = modelsToCheck.filter(
-        (m) => !loadedModels.includes(m)
-      )
-
-      if (modelsToStart.length > 0) {
-        setIsModelLoading(true)
-        for (const modelId of modelsToStart) {
-          ensureMinCtx(modelId)
-          const providerWithModel = providers.find((p) =>
-            p.models.some((m) => m.id === modelId)
-          )
-          if (providerWithModel) {
-            await serviceHub
-              .models()
-              .startModel(providerWithModel, modelId, true)
-          }
-        }
-        setIsModelLoading(false)
-        await serviceHub
-          .models()
-          .getActiveModels()
-          .then((models) => syncActiveModelsFromEngines(models || []))
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      } else if (loadedModels.length > 0 && !selectedHermesModel) {
-        // No model explicitly selected — use whatever is already loaded
-      } else if (!selectedHermesModel) {
-        const modelToStart = getModelToStart({
-          selectedModel,
-          selectedProvider,
-          getProviderByName,
-        })
-        if (modelToStart) {
-          ensureMinCtx(modelToStart.model)
-          setIsModelLoading(true)
-          await serviceHub
-            .models()
-            .startModel(modelToStart.provider, modelToStart.model, true)
-          setIsModelLoading(false)
-          await serviceHub
-            .models()
-            .getActiveModels()
-            .then((models) => syncActiveModelsFromEngines(models || []))
-          await new Promise((resolve) => setTimeout(resolve, 500))
-        }
-      }
-
-      let actualPort: number | undefined
-      try {
-        actualPort = await window.core?.api?.startServer({
-          host: serverHost,
-          port: serverPort,
-          prefix: apiPrefix,
-          apiKey,
-          trustedHosts,
-          isCorsEnabled: corsEnabled,
-          isVerboseEnabled: verboseLogs,
-          proxyTimeout: proxyTimeout,
-        })
-      } catch (startErr) {
-        const msg =
-          startErr instanceof Error ? startErr.message : String(startErr)
-        if (!msg.includes('already running')) throw startErr
-      }
-
-      if (actualPort && actualPort !== serverPort) {
-        setServerPort(actualPort)
-      }
-      setServerStatus('running')
-
-      const activeModels = await serviceHub
-        .models()
-        .getActiveModels()
-        .catch(() => [] as string[])
-      if (activeModels.length > 0) {
-        const serverModels = activeModels.flatMap((id) => {
-          const p = providers.find((p) => p?.models?.some((m) => m.id === id))
-          return p ? [{ model: id, provider: p.provider }] : []
-        })
-        if (serverModels.length > 0) setLastServerModels(serverModels)
-      }
-    }
-
+    if (savingRef.current) return
+    savingRef.current = true
+    setIsModelLoading(true)
     try {
-      if (serverStatus === 'stopped') {
-        // With nothing chosen, nothing loaded and no chat model to fall back
-        // on, starting the server would only leave it running for no reason.
-        const hasCandidate =
-          selectedHermesModel ||
-          (await serviceHub
-            .models()
-            .getActiveModels()
-            .then((m) => m?.length > 0)
-            .catch(() => false)) ||
-          getModelToStart({ selectedModel, selectedProvider, getProviderByName })
-        if (!hasCandidate) {
-          toast.error('Choose a model, then select Save connection again.')
-          return
-        }
-        toast.info('Preparing the Hermes Agent connection…', {
-          description: 'Starting the local connection.',
-        })
-        await startServer()
-      }
-
-      const modelToUse =
-        selectedHermesModel ||
-        (await serviceHub
-          .models()
-          .getActiveModels()
-          .then((m) => m?.[0])
-          .catch(() => null))
-
-      if (!modelToUse) {
+      let instances = await listAgentModelInstances()
+      setReadyInstances(instances)
+      const loadedModels = (await serviceHub.models().getActiveModels()) || []
+      const modelId = config.model || loadedModels[0] ||
+        getModelToStart({ selectedModel, selectedProvider, getProviderByName })?.model
+      if (!modelId) {
         toast.error('Choose a model, then select Save connection again.')
         return
       }
 
-      const rawCtx = getModelCtxLen(modelToUse)
-      const effectiveCtx = Math.max(rawCtx, MIN_HERMES_CTX)
+      // Resolve only exact identities and confirmed aliases. A different Ready
+      // model must never stand in for an imported file selected by the user.
+      const resolveReady = (catalog: AgentModelInstance[]) => {
+        const exact = catalog.find((instance) => instance.id === modelId)
+        if (exact) return exact
+        const matches = catalog.filter((instance) =>
+          instance.modelId === modelId || instance.aliases?.includes(modelId))
+        if (matches.length > 1) {
+          throw new Error('This model matches multiple Ready instances. Choose one exact instance in the Model menu, then save again.')
+        }
+        return matches[0]
+      }
+      let instance = resolveReady(instances)
+      if (!instance && modelId.startsWith('ginfer/')) {
+        throw new Error('The selected Host model is no longer Ready. Start it in GInfer Hosts, then select Save connection again.')
+      }
+      if (!instance && !loadedModels.includes(modelId)) {
+        const provider = providers.find((p) => p.active &&
+          p.models.some((m) => m.id === modelId))
+        if (!provider) {
+          throw new Error('This model is no longer available. Choose a model, then save again.')
+        }
+        await serviceHub.models().startModel(provider, modelId, true)
+        instances = await listAgentModelInstances()
+        setReadyInstances(instances)
+        instance = resolveReady(instances)
+        const activeModels = (await serviceHub.models().getActiveModels()) || []
+        syncActiveModelsFromEngines(activeModels)
+      }
+      const provider = providers.find((p) => p.models.some((m) => m.id === modelId))
+      if (!instance && provider && isLocalProvider(provider.provider)) {
+        throw new Error('This model is not Ready. Start it in GInfer Hosts, then choose its Ready instance here.')
+      }
+      if (instance && (!instance.maxContext || instance.maxContext < MIN_HERMES_CTX)) {
+        throw new Error('Hermes Agent needs at least 65,536 conversation tokens. In GInfer Hosts, stop this model, choose model settings with at least 65,536 tokens, check and start it, then save this connection again.')
+      }
+      const modelToUse = instance?.id || modelId
+      const effectiveCtx = instance?.maxContext || Math.max(getModelCtxLen(modelId), MIN_HERMES_CTX)
 
-      const fullApiUrl = `${apiUrl}${apiPrefix}`
+      let actualPort = serverPort
+      if (serverStatus === 'stopped') {
+        toast.info('Preparing the Hermes Agent connection…', {
+          description: 'Starting the local connection.',
+        })
+        try {
+          actualPort = await window.core?.api?.startServer({
+            host: serverHost,
+            port: serverPort,
+            prefix: apiPrefix,
+            apiKey,
+            trustedHosts,
+            isCorsEnabled: corsEnabled,
+            isVerboseEnabled: verboseLogs,
+            proxyTimeout,
+          }) || serverPort
+        } catch (startErr) {
+          const message = startErr instanceof Error ? startErr.message : String(startErr)
+          if (!message.includes('already running')) throw startErr
+        }
+        if (actualPort !== serverPort) setServerPort(actualPort)
+        setServerStatus('running')
+        setLastServerModels([{ model: modelToUse, provider: instance ? 'ginfer-lan' : provider?.provider || '' }])
+      }
+      const hermesHost = serverHost === '0.0.0.0' ? '127.0.0.1' : serverHost
+      const fullApiUrl = `http://${hermesHost}:${actualPort}${apiPrefix}`
       await invoke('configure_hermes_agent', {
         apiUrl: fullApiUrl,
         model: modelToUse,
         apiKey: apiKey || undefined,
         contextLength: effectiveCtx,
       })
-
-      setConfiguredValues({
-        model: modelToUse,
-        apiUrl: fullApiUrl,
-        contextLength: effectiveCtx,
-      })
+      setModel(modelToUse)
+      setConfiguredValues({ model: modelToUse, apiUrl: fullApiUrl, contextLength: effectiveCtx })
       setEnabled(true)
-
       toast.success(
         'Connection saved. Open a terminal and run `hermes` to use GChat.',
         { duration: 8000 }
       )
     } catch (error) {
       console.error('Failed to configure Hermes Agent:', error)
-      const errorMsg = error instanceof Error ? error.message : String(error)
       toast.error('Could not save the Hermes Agent connection', {
-        description: errorMsg,
+        description: error instanceof Error ? error.message : String(error),
       })
+    } finally {
+      savingRef.current = false
+      setIsModelLoading(false)
     }
   }
 
@@ -319,6 +282,8 @@ function HermesAgentIntegration() {
                 actions={
                   <ModelSelector
                     providers={providers}
+                    availableModels={availableModels}
+                    disabled={isModelLoading}
                     selectedModel={config.model}
                     onSelect={(model) => setModel(model)}
                     placeholder="Choose a model"
@@ -330,6 +295,7 @@ function HermesAgentIntegration() {
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={isModelLoading}
                   onClick={async () => {
                     await stopTerminal('hermes').catch(() => undefined)
                     clearModel()
@@ -350,7 +316,7 @@ function HermesAgentIntegration() {
                   onClick={handleSaveEnable}
                   disabled={isModelLoading}
                 >
-                  {isModelLoading ? 'Loading model…' : 'Save connection'}
+                  {isModelLoading ? 'Saving connection…' : 'Save connection'}
                 </Button>
               </div>
             </Card>
@@ -503,11 +469,15 @@ function ManualConfigPanel({
 
 function ModelSelector({
   providers,
+  availableModels,
+  disabled,
   selectedModel,
   onSelect,
   placeholder = 'Choose a model',
 }: {
   providers: ModelProvider[]
+  availableModels: HermesModel[]
+  disabled: boolean
   selectedModel: string | null
   onSelect: (modelId: string) => void
   placeholder?: string
@@ -515,20 +485,6 @@ function ModelSelector({
   const [open, setOpen] = useState(false)
   const [searchValue, setSearchValue] = useState('')
   const searchInputRef = useRef<HTMLInputElement>(null)
-
-  const availableModels = useMemo(() => {
-    return providers
-      .filter((p) => p.active)
-      .flatMap((p) =>
-        p.models.map((m) => ({
-          ...m,
-          providerName: p.provider,
-          isLocal: isLocalProvider(p.provider),
-          hasApiKey: !!p.api_key?.length,
-        }))
-      )
-      .filter((m) => (m.isLocal ? m.id : m.hasApiKey))
-  }, [providers])
 
   const filteredModels = useMemo(() => {
     if (!searchValue.trim()) return availableModels
@@ -572,7 +528,7 @@ function ModelSelector({
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="max-w-[280px]">
+        <Button variant="outline" size="sm" className="max-w-[280px]" disabled={disabled}>
           <span className="flex items-center gap-2 truncate leading-normal">
             {selectedModel && currentModel ? (
               <>
@@ -584,7 +540,7 @@ function ModelSelector({
                       : 'bg-blue-500/10 text-blue-600'
                   )}
                 >
-                  {currentModel.isLocal ? 'Local' : 'Remote'}
+                  {currentModel.ready ? 'Ready' : currentModel.isLocal ? 'Local' : 'Remote'}
                 </span>
                 <span>{getModelDisplayName(currentModel)}</span>
               </>
@@ -640,17 +596,15 @@ function ModelSelector({
                   const providerInfo = providers.find(
                     (p) => p.provider === providerKey
                   )
-                  if (!providerInfo) return null
-
                   return (
                     <div
                       key={providerKey}
                       className="bg-secondary/30 rounded-sm my-1.5 mx-1.5 first:mt-1 py-1"
                     >
                       <div className="flex items-center gap-1.5 px-2 py-1">
-                        <ProvidersAvatar provider={providerInfo} />
+                        {providerInfo && <ProvidersAvatar provider={providerInfo} />}
                         <span className="capitalize text-sm font-medium text-muted-foreground">
-                          {providerKey}
+                          {providerKey === 'ginfer-lan' ? 'GInfer Hosts' : providerKey}
                         </span>
                       </div>
 

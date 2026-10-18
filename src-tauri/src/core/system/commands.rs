@@ -5698,6 +5698,7 @@ if [ "$mode" = npm-failure ]; then echo 'fixture npm failed after writing its sh
         );
     }
 
+    #[cfg(feature = "cli")]
     #[tokio::test]
     async fn desktop_and_cli_opencode_configuration_use_selected_data_root() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};

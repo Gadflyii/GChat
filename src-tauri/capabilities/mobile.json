@@ -2,10 +2,8 @@
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "mobile",
   "description": "enables the default permissions for mobile platforms",
-  "windows": ["main"],
-  "remote": {
-    "urls": ["http://*"]
-  },
+  "local": true,
+  "webviews": ["main"],
   "permissions": [
     "core:default",
     "core:webview:allow-set-webview-zoom",

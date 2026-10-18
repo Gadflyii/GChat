@@ -200,6 +200,7 @@ describe('GInfer library model context and names', () => {
       { id: 'custom', path: '/linux/models/custom/model.ginfer', name: 'Native' },
       { id: 'legacy', path: '/data/ginfer/models/legacy/old.ginfer', name: 'Legacy' },
     ])
+    expect(invoke).not.toHaveBeenCalledWith('adopt_root_ginfer_models')
     expect(await extension.get('legacy')).toMatchObject({ path: '/data/ginfer/models/legacy/old.ginfer' })
     await extension.update('custom', { name: 'Renamed' })
     expect(invoke).toHaveBeenCalledWith('write_yaml', {
@@ -207,6 +208,61 @@ describe('GInfer library model context and names', () => {
       savePath: '/linux/models/custom/model.yml',
     })
     expect(fs.mkdir).not.toHaveBeenCalled()
+  })
+
+  it.each(['locations', 'manifest'] as const)(
+    'rejects a failed registered-model %s read and retries without adopting files',
+    async (stage) => {
+      config.locations = [{
+        modelId: 'registered',
+        modelDir: '/linux/models/registered',
+        manifestPath: '/linux/models/registered/model.yml',
+      }]
+      config.manifests = {
+        '/linux/models/registered/model.yml': {
+          name: 'Registered model',
+          model_path: '/external/registered.ginfer',
+          source: 'external',
+          size_bytes: 1234,
+        },
+      }
+      const failure = new Error(`${stage} inventory read failed`)
+      if (stage === 'manifest') invoke.mockResolvedValueOnce(config.locations)
+      invoke.mockRejectedValueOnce(failure)
+      const extension = new GinferExtension()
+
+      await expect(extension.list()).rejects.toBe(failure)
+      await expect(extension.list()).resolves.toMatchObject([{
+        id: 'registered',
+        name: 'Registered model',
+        path: '/external/registered.ginfer',
+        source: 'external',
+        sizeBytes: 1234,
+      }])
+
+      expect(invoke.mock.calls.map(([command]) => command)).toEqual(
+        stage === 'locations'
+          ? ['ginfer_model_locations', 'ginfer_model_locations', 'read_yaml']
+          : ['ginfer_model_locations', 'read_yaml', 'ginfer_model_locations', 'read_yaml']
+      )
+      expect(fs.mkdir).not.toHaveBeenCalled()
+      expect(fs.copyFile).not.toHaveBeenCalled()
+      expect(fs.rm).not.toHaveBeenCalled()
+      expect(downloadFiles).not.toHaveBeenCalled()
+      expect(loadModel).not.toHaveBeenCalled()
+      expect(emit).not.toHaveBeenCalled()
+    }
+  )
+
+  it('returns an empty registered inventory without trying to adopt root artifacts', async () => {
+    config.locations = []
+
+    await expect(new GinferExtension().list()).resolves.toEqual([])
+
+    expect(invoke.mock.calls.map(([command]) => command)).toEqual(['ginfer_model_locations'])
+    expect(fs.mkdir).not.toHaveBeenCalled()
+    expect(fs.copyFile).not.toHaveBeenCalled()
+    expect(fs.rm).not.toHaveBeenCalled()
   })
 
   it('loads the catalog artifact rather than reconstructing the data-folder root', async () => {
