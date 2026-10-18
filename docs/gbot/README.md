@@ -14,8 +14,21 @@ clears its own warning and uses the retained selection. Account permissions
 and service behavior are unchanged.
 
 Rendered regressions cover both refresh outcomes, pending feedback, retained
-selections and no automatic Save. Focused and full verification are pending;
-this source change does not qualify live connector actions or native Windows.
+selections and no automatic Save. Unchanged production failed both new cases
+(12 filtered); the fixed suite passed all 14 with
+`node node_modules/vitest/vitest.mjs run web-app/src/components/GbotConnectors.test.tsx`.
+ONE isolated S1 `make verify` passed 18 October 11:49:07–11:52:32 UTC:
+3,555 application tests / 6 skipped, 127 extension tests, 1,288 Rust tests /
+28 ignored, six coverage floors, lint, typecheck and guards. All 3,451 tracked
+source hashes matched before and after the gate. The remote gate included
+only Gchat 3's `ad121b656` initial `/models` hydration wait for an unrelated
+placement fixture, still absent from main `d306935f2`; no owner production or
+additional tests were copied. This final receipt was added afterward;
+production and test hashes stayed unchanged.
+Evidence: `out/gchat2-linked-accounts-refresh-save-error-20261018/result.json`.
+Booking 3266 was returned and the private cache retained idle. FRESH and OLD
+are untouched; rendered responses do not qualify live connector actions or
+native Windows.
 
 ## Refreshing Hosts preserves failed brain saves — Gchat 2
 
