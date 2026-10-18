@@ -493,8 +493,13 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
         draft_tokens: Number(fieldValue(form, 'draft_tokens')), kv_dtype: fieldValue(form, 'kv_dtype'),
         kv_arena_bytes: kvBytes,
         vram_budget_bytes: fieldValue(form, 'vram_budget_bytes') === '' ? null : Number(fieldValue(form, 'vram_budget_bytes')),
-        host_kv_cache_bytes: fieldValue(form, 'host_kv_cache_bytes') === '' ? null : Number(fieldValue(form, 'host_kv_cache_bytes')) }
+        host_kv_cache_bytes: fieldValue(form, 'host_kv_cache_bytes') === '' ? null : Number(fieldValue(form, 'host_kv_cache_bytes')),
+        flash_host_ram_headroom_gib: fieldValue(form, 'flash_host_ram_headroom_gib') === '' ? null : Number(fieldValue(form, 'flash_host_ram_headroom_gib')),
+        expert_lfu: checked(form, 'expert_lfu') }
       if (!configuration.gpu_uuids.length) throw new Error('Choose the exact GPU group')
+      if (configuration.flash_host_ram_headroom_gib !== null && (!Number.isSafeInteger(configuration.flash_host_ram_headroom_gib) || configuration.flash_host_ram_headroom_gib < 0)) {
+        throw new Error('Flash computer-memory headroom must be a whole number of GiB, at least 0, or left blank to use GInfer’s default.')
+      }
       if (configuration.vram_budget_bytes !== null && (!Number.isSafeInteger(configuration.vram_budget_bytes) || configuration.vram_budget_bytes < 1)) {
         throw new Error('Flash weight residency budget must be a positive whole number of bytes, or blank for automatic sizing')
       }
@@ -573,6 +578,15 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
       const specField = select('Speculative decoding', 'spec', [['auto', 'Automatic'], ['none', 'None'], ['dflash', 'DFlash2'], ['mtp', 'MTP']], previous.spec || 'auto')
       const draftPolicy = select('Draft width policy', 'draft_policy', [['auto', 'Automatic'], ['fixed', 'Fixed'], ['adaptive', 'Adaptive']], previous.draft_policy || 'auto')
       const widthField = field('Draft width', 'draft_tokens', previous.draft_tokens || 0, 'number', { min: 0 })
+      const flashHeadroom = field('Computer memory headroom for Flash (GiB)', 'flash_host_ram_headroom_gib', previous.flash_host_ram_headroom_gib ?? '', 'number', { min: 0, max: Number.MAX_SAFE_INTEGER, step: 1 })
+      const zeroHeadroomWarning = note('0 removes the extra computer-memory reserve for Flash. Other apps may have less memory available.')
+      const updateHeadroomWarning = () => {
+        const value = flashHeadroom.querySelector('input').value
+        zeroHeadroomWarning.hidden = value === '' || Number(value) !== 0
+      }
+      flashHeadroom.addEventListener('input', updateHeadroomWarning)
+      flashHeadroom.addEventListener('change', updateHeadroomWarning)
+      updateHeadroomWarning()
       content.replaceChildren(modelField,
         checks('GPU group', 'gpu', array(snapshot.gpus).map((gpu, index) => [gpu.uuid,
           `GPU ${index} · ${gpu.display_name || gpu.name} · ${Math.round(gpu.memory_mib / 1024)} GiB`]), previous.gpu_uuids || []),
@@ -584,6 +598,11 @@ export function createManager(root, invoke, listen, storage = globalThis.localSt
           select('KV cache', 'kv_dtype', [['auto', 'Automatic'], ['bf16', 'BF16'], ['int8', 'INT8'], ['nvfp4', 'NVFP4']], previous.kv_dtype || 'auto')),
         field('Host KV cache (bytes, blank = automatic, 0 = disabled)', 'host_kv_cache_bytes', previous.host_kv_cache_bytes ?? '', 'number', { min: 0, max: Number.MAX_SAFE_INTEGER }),
         field('Flash per-rank weight residency budget (bytes, blank = automatic)', 'vram_budget_bytes', previous.vram_budget_bytes ?? '', 'number', { min: 1, max: Number.MAX_SAFE_INTEGER }),
+        flashHeadroom,
+        note('For Flash models, choose how much computer memory to leave free, measured in GiB. Leave blank to use GInfer’s default (4 GiB). This is separate from conversation memory.'),
+        zeroHeadroomWarning,
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', name: 'expert_lfu', checked: previous.expert_lfu ?? true }), 'Update the Flash expert cache'),
+        note('Experts are parts of a Flash model. This periodically updates which experts are kept in graphics-card memory based on how often they are used (LFU). Turning this off stops those updates; it does not clear the cache or change where uncached experts are loaded from.'),
         note('Flash sharing needs an explicit weight residency budget and one successful startup with those settings to measure graph memory. KV and startup state use additional memory.'),
         note('Host KV cache is automatic when blank; zero disables it and a positive value sets its exact size.'),
         note('Context and concurrent request settings stay as entered. Each instance owns its weights, state and KV cache.'),

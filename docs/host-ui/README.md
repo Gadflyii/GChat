@@ -1,5 +1,43 @@
 # GInfer host UI
 
+## Host residency controls — C3, October 18
+
+`GCHAT-HOST-RESIDENCY-CONTROLS` is source-complete and passes its signed
+acceptance. The shared Host API and desktop/Fleet custom startup settings now
+expose optional `flash_host_ram_headroom_gib` and `expert_lfu` (default true).
+Blank/null inherits the Engine’s 4 GiB headroom. Explicit whole-GiB values are
+forwarded unchanged; the Engine owns limits and admission. Zero warns that no
+computer-memory floor is reserved. Edit, save and restart preserve zero/false.
+Tested profiles retain their own launch values. Engine code/defaults are unchanged.
+Arch signed this shared Linux/Windows contract at 07:16Z on October 18.
+
+Focused verification passed 61 desktop and 58 Fleet rendered cases, typed-option
+validation/forwarding and authenticated Host API persistence, restart, quote and
+normal child-launch argument regressions, Cargo check and Clippy. ONE `make verify`
+on `d16521c19` passed lint, types, quality guards, 3,469 app cases, 127 extension
+cases, 1,276 native cases (28 ignored) and all coverage floors. After a normal
+merge of main `bd10e0e66` including the separate hardware-feedback fix, all 86
+combined Host screen/store cases and `make typecheck` pass on `e549c330b`.
+An initially invalid root `yarn typecheck` command was corrected to the documented
+Make target; only that check continued. The full gate was not repeated.
+
+These checks use rendered UI/service mocks and the existing fake Engine child
+fixture. No installed GUI, Windows runtime, GPU inference, performance, new
+profiling or release packaging qualification is claimed. The current Engine
+`8c3911145` authority confirms the flat 4 GiB default, explicit zero and LFU on;
+an older AUTO design was rejected during recovery before implementation.
+Results and effective commands:
+[`out/c3-host-residency-controls-20261018/`](../../out/c3-host-residency-controls-20261018/).
+
+Owner C3; branch `fix/c3-host-residency-controls-20261018`, source `497840b01`,
+worktree `/ai/gchat-worktrees/c3-host-residency-controls-20261018`.
+S1 `AIS-2-8592-L01` used independent copies of Gchat 3's inactive RC dependencies,
+CPUs 80–87, nice10/max8 jobs and the socket1 shared lock; no GPU or app session.
+CPUs returned 07:36Z. Three stopped containers and the 31.51 GB private SSD root
+`/media/ron/SSD_RAID/ai/tmp-c3-host-residency-controls-20261018` were retired;
+the donor remains untouched. Only small evidence and the source worktree remain.
+Next: coordinator review/integration and canonical row closure.
+
 ## Recovered W8 chat-send closures — C3, October 18
 
 `GUI-CHAT-STALE-LOAD-ERROR-SEND-20261017` and
@@ -239,7 +277,7 @@ bundled-file preparation is not a release startup speed measurement. Its
 restart outlived the private DBus fixture, so the post-restart secure-storage
 card was unavailable; local attachment still succeeded without vault access.
 No GPU/model/profile or real account/remote enrollment was run. All private
-native processes stopped and CPUs64–71 returned07:01Z (build CPUs80–87
+native processes stopped and CPUs64–71 returned07:01Z (build CPUs 80–87
 returned06:47Z). Inactive independent source/build/cache copies under
 `/media/ron/SSD_RAID/ai/tmp-c3-reset-stale-host-connection-20261018` were retired
 (31.82GB logical bytes). After merge, both literal owned S1 roots were retired
@@ -315,7 +353,7 @@ Source inventory: owner C3, local worktree
 `fix/c3-reset-relocated-data-20261018`, base `072655126`. The private S1 root
 `/media/ron/SSD_RAID/ai/tmp-c3-first-user-setup-20261018` reuses inactive source,
 dependencies and debug target after C4 completed its read-copy at 05:41Z.
-Booking3051 CPUs80–87 returned05:53Z after the container and disposable local/
+Booking3051 CPUs 80–87 returned05:53Z after the container and disposable local/
 remote source archives were removed. The socket1 shared build ran at nice10.
 Packet `out/c3-reset-relocated-data-20261018/` retains commands, source bindings
 and results. Retain the worktree for gates and review; the installed baseline
@@ -702,7 +740,7 @@ AppDir, directory aliases versus installed file symlinks, and missing or
 non-executable commands. Focused command:
 `cargo test --manifest-path src-tauri/Cargo.toml --lib --no-default-features --features test-tauri,cli cli_install_detection -- --test-threads=1`.
 The five focused Rust regressions, library-scope Cargo check/Clippy and lint
-passed. ONE `make verify` passed on S1 CPUs80–87 (booking3025): 3,369 app tests
+passed. ONE `make verify` passed on S1 CPUs 80–87 (booking3025): 3,369 app tests
 (six skipped), 127 extension tests, all six coverage floors and 1,234 native
 tests (28 ignored). There was no gate failure or continuation. Vite and the
 default desktop debug build passed at 05:25:46Z. The exported source-native

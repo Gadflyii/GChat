@@ -1,0 +1,448 @@
+{
+  "row": "GCHAT-HOST-RESIDENCY-CONTROLS",
+  "status": "PASS",
+  "source_commit": "497840b01",
+  "full_verify_source": "d16521c19f568e8f6e8eeada6176033bb17e1453",
+  "integrated_source": "e549c330b9b477d3339bacff252e1b07952c361c",
+  "host": "AIS-2-8592-L01",
+  "cpus": "80-87",
+  "gpu": false,
+  "scope": "Host typed API/persistence/normal child launch and desktop/Fleet custom controls; Engine unchanged",
+  "contract": {
+    "flash_host_ram_headroom_gib": "Optional u64; null inherits Engine 4 GiB; explicit values forwarded unchanged; zero warning; Engine owns validation",
+    "expert_lfu": "bool default true, forwarded on/off",
+    "tested_profiles": "retain their own values"
+  },
+  "acceptance": {
+    "desktop_initial": 61,
+    "fleet": 58,
+    "native_options": "PASS, omitted/default and explicit 0/10/u64MAX plus both LFU values",
+    "native_service": "PASS, authenticated bad input, persistence/restart, startup quote and actual fixture Engine child argv",
+    "cargo_check": "PASS",
+    "cargo_clippy": "PASS",
+    "make_verify": {
+      "invocations": 1,
+      "exit": 0,
+      "app": 3469,
+      "app_skipped": 6,
+      "extensions": 127,
+      "native_passed": 1276,
+      "native_ignored": 28,
+      "native_summaries": 23,
+      "coverage_floors": "PASS"
+    },
+    "main_integration": {
+      "main": "bd10e0e66",
+      "focused_passed": 86,
+      "typecheck": "PASS",
+      "note": "No second full verify. Initial extra typecheck command yarn typecheck does not exist at repository root; corrected to documented make typecheck and ran that stage only."
+    }
+  },
+  "container": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-10-18T07:26:02.736092683Z",
+    "FinishedAt": "2026-10-18T07:34:38.626215339Z"
+  },
+  "stages": {
+    "chain": {
+      "exit": 0,
+      "start": "2026-10-18T07:26:02Z",
+      "end": "2026-10-18T07:34:38Z",
+      "log_bytes": null,
+      "log_sha256": null
+    },
+    "check": {
+      "exit": 0,
+      "start": "2026-10-18T07:26:47Z",
+      "end": "2026-10-18T07:27:06Z",
+      "log_bytes": 5567,
+      "log_sha256": "10f68f58162a82c91fc809e6defa1f1a84d1b0b9601cb35b1ff9e43764363b33"
+    },
+    "clippy": {
+      "exit": 0,
+      "start": "2026-10-18T07:27:06Z",
+      "end": "2026-10-18T07:27:18Z",
+      "log_bytes": 189,
+      "log_sha256": "2f189d6fede0c4ee76c25c6a201e82336c046e3706004f893da9f8108c695997"
+    },
+    "focused-manager": {
+      "exit": 0,
+      "start": "2026-10-18T07:26:11Z",
+      "end": "2026-10-18T07:26:13Z",
+      "log_bytes": 14236,
+      "log_sha256": "4a1175a5ef3c2a0eb29bcbb0cf7270a0429f1bcc3538d8ef0b62964842cebebb",
+      "summaries": [
+        "# pass 58",
+        "# fail 0"
+      ]
+    },
+    "focused-options": {
+      "exit": 0,
+      "start": "2026-10-18T07:26:13Z",
+      "end": "2026-10-18T07:26:46Z",
+      "log_bytes": 5386,
+      "log_sha256": "353894ddaebd7ba4f82a4febde7e15228f68c74812f2ee3c1fa5a8bb0d3327b8",
+      "native_summaries": [
+        [
+          1,
+          0,
+          0,
+          0,
+          281
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          9
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          12
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          11
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          2
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    "focused-service": {
+      "exit": 0,
+      "start": "2026-10-18T07:26:46Z",
+      "end": "2026-10-18T07:26:47Z",
+      "log_bytes": 2067,
+      "log_sha256": "f168c0de9d52715dce206fc048526b60d1364df6467e4f441d34a58ecdbceaca",
+      "native_summaries": [
+        [
+          1,
+          0,
+          0,
+          0,
+          281
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          9
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          12
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          11
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          2
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    "focused-ui": {
+      "exit": 0,
+      "start": "2026-10-18T07:26:02Z",
+      "end": "2026-10-18T07:26:11Z",
+      "log_bytes": 307,
+      "log_sha256": "533853948dc5e5c12f94098d8763fee15780fadf90e526b984865b7a87f57235",
+      "summaries": [
+        "Test Files  1 passed (1)",
+        "Tests  61 passed (61)"
+      ]
+    },
+    "verify": {
+      "exit": 0,
+      "start": "2026-10-18T07:27:18Z",
+      "end": "2026-10-18T07:34:38Z",
+      "log_bytes": 474684,
+      "log_sha256": "4c81be1b2f954ae488a8e49166f39f33a884512448b4081152e98131993510f4",
+      "native_summaries": [
+        [
+          762,
+          0,
+          8,
+          0,
+          0
+        ],
+        [
+          21,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          269,
+          0,
+          13,
+          0,
+          0
+        ],
+        [
+          8,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          12,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          11,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          2,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          103,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          17,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          16,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          48,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "summaries": [
+        "# pass 4",
+        "# fail 0",
+        "# pass 58",
+        "# fail 0",
+        "# pass 1",
+        "# fail 0",
+        "Test Files  341 passed | 1 skipped (342)",
+        "Tests  3469 passed | 6 skipped (3475)",
+        "% Coverage report from v8",
+        "All files          |   67.17 |    85.01 |    68.1 |   67.17 |",
+        "Test Files  5 passed (5)",
+        "Tests  127 passed (127)",
+        "% Coverage report from v8",
+        "All files          |   65.63 |    78.65 |   64.28 |   65.63 |"
+      ]
+    }
+  },
+  "limitations": [
+    "Rendered React and production Fleet DOM tests with mocked service responses; Host integration uses real child processes with a fake Engine fixture.",
+    "No installed GUI, Windows runtime, GPU inference, performance, new profiling or release packaging qualification."
+  ],
+  "cleanup": {
+    "status": "COMPLETE",
+    "cpus_returned": "2026-10-18T07:36Z",
+    "bookings_returned": [
+      3122,
+      3127,
+      3132
+    ],
+    "root_removed": "/media/ron/SSD_RAID/ai/tmp-c3-host-residency-controls-20261018",
+    "bytes_removed": 31514676221,
+    "containers_removed": 3,
+    "finished_at": "2026-10-18T07:36:49Z",
+    "donor": "untouched; no live references",
+    "retained": "small result/command JSON and summary; source worktree"
+  }
+}
