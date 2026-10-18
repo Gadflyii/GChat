@@ -41,10 +41,14 @@ export async function refreshModelProviders(
   deletedModelId: string
 ): Promise<void> {
   const providers = await serviceHub.providers().getProviders()
-  useModelProvider.getState().setProviders(
+  const state = useModelProvider.getState()
+  // Other deletions may have been accepted while this inventory read was pending.
+  const deletedModels = new Set(state.deletedModels)
+  deletedModels.add(deletedModelId)
+  state.setProviders(
     providers.map((entry) => ({
       ...entry,
-      models: entry.models.filter((model) => model.id !== deletedModelId),
+      models: entry.models.filter((model) => !deletedModels.has(model.id)),
     }))
   )
 }

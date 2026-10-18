@@ -1,5 +1,30 @@
 # GInfer host UI
 
+## Models overlapping deletion recovery — C7, October 18
+
+`GUI-MODELS-DELETE-REFRESH-RECOVERY` follow-up: Codex 8 found that a persistent
+recovery for deleted model A can land after model B is accepted as deleted.
+The older inventory can still contain B, and the persisted provider replacement
+does not apply the store's accepted-deletion list. Filtering only A restores B.
+The shared recovery now reads the current accepted-deletion IDs after the
+inventory request resolves and filters all of them before publishing providers.
+It preserves unrelated models and settings and never repeats deletion.
+
+Owned branch `fix/c7-models-delete-overlap-recovery-20261018`, matching
+`/ai/gchat-worktrees/` tree, base `e93d19e77`. Parent owns the shared helper and
+this authority; the test worker owns the existing rendered deletion regression
+and independent S1 SSD fixture. Acceptance: A recovery overlaps accepted B
+deletion, A's older persisted inventory cannot resurrect either model, unrelated
+models remain, and no delete/load/Stop mutation is replayed; focused deletion
+tests, lint and exactly one `make verify`, then return the result to Codex 8
+before mailing merge-ready. No backend, Engine, installed-app or Windows
+qualification changes. Both rendered regression cases are integrated: B's read
+is pending or has failed when A's stale persisted inventory lands, with both
+deleted IDs absent before any later B read can hide resurrection. Next: freeze
+these three files and run the reviewed focused tests, lint and sole gate on S1
+CPUs 88–95 in the independent SSD fixture. No resource hold exists yet. The unfinished Stop/status
+candidate is preserved separately while this higher-priority correction runs.
+
 ## Models accepted deletion and inventory recovery — C7, October 18
 
 `GUI-MODELS-DELETE-REFRESH-RECOVERY` fixes the shared local deletion path:
