@@ -49,6 +49,40 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Workflow dependency keyboard entry — October 18
+
+An isolated native Linux Studio pass reproduced a dependency editor that removed
+commas and separators during typing: entering `deliver, stage-2` produced
+`deliverstage2`. The affected Workflow editor is byte-identical between observed
+candidate source `3818d7a2` and main `548d73ed8`.
+
+The correction keeps the typed dependency text until blur and updates canonical
+workflow edges on every edit, so saving uses the current dependencies. External
+stage renames, removals and workflow selection refresh the displayed values.
+Rendered regressions cover per-character punctuation and focus, blur formatting,
+exact saved edges, removal and selection. The revised focused suite passed 52
+tests; its sole `make verify`, frontend build and native build passed. The first
+coverage attempt timed out the new test; the revised test uses a direct fixture
+and fewer repeated queries, retaining the unchanged five-second limit. The typing
+case then took 1.32 seconds under coverage.
+
+Native Linux replay retained `deliver, stage-2` and focus, saved both expected
+edges while the field was focused, and preserved a trailing `-` until Tab.
+Renaming the upstream stage refreshed the dependent field; removing the first
+stage, saving and reselecting the workflow retained only
+`research-stage` → `stage-3`. All seven existing definitions remained unchanged.
+Candidate SHA256 is
+`b5ece4cc00fd09d6fcb2d380ac65cd9777c0525a1b2b89d95313de9a4a0d3162`
+(source `a7debe294`). Main `3bbea776c` was subsequently merged without conflicts;
+the corrected dependency input remained byte-identical, and all 59 composed
+Agent Studio tests passed. The native binary predates that merge.
+
+Baseline, gate, native DOM and saved-definition receipts, plus the viewed typing
+screenshot, are in `/ai/gchat/out/gchat-workflow-dependency-keyboard-20261018/`.
+This is an isolated Linux debug editor check with retained sidecars and no GPU or
+model request. CPU resources were returned at 04:15Z.
+Windows: not built (dev phase).
+
 ## Untouched Coordinator Team defaults — October 18
 
 An isolated native Linux Studio pass found that **New agent** → **Coordinator
