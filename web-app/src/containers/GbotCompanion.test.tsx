@@ -170,6 +170,115 @@ it('shows the saved interruption cause beside Resume and clears it after complet
   expect(screen.queryByText(reason)).not.toBeInTheDocument()
 })
 
+it.each([
+  ['Send reply', 'Sending reply…', 'Documents', 'Your reply: Documents'],
+  ['Decline', 'Declining request…', null, 'Request declined'],
+] as const)(
+  'keeps a failed human-help %s inline through refresh and retries the same response',
+  async (action, progress, response, outcome) => {
+    const request = {
+      id: 'atlas-help',
+      question: 'Which folder?',
+      status: 'pending' as const,
+      response: null,
+    }
+    tasks = [
+      {
+        id: 'atlas-task',
+        identity: snapshot.live_sessions[0],
+        state: 'waiting_for_human',
+        messages: [],
+        help_requests: [request],
+      },
+    ]
+    let fail!: (cause: Error) => void
+    let finish!: () => void
+    const reply = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = resolve
+          })
+      )
+    const fallback = mocks.call.getMockImplementation()!
+    mocks.call.mockImplementation((path: string, body?: unknown) =>
+      path === 'tasks/help' ? reply(body) : fallback(path, body)
+    )
+    await mount()
+    const card = (await screen.findByText(request.question)).closest('article')!
+    const input = within(card).getByLabelText('Your reply')
+    fireEvent.change(input, { target: { value: 'Documents' } })
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    const body = {
+      id: 'atlas-task',
+      request_id: 'atlas-help',
+      response,
+    }
+    expect(reply).toHaveBeenCalledExactlyOnceWith(body)
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    expect(input).toBeDisabled()
+    await act(async () => fail(new Error('Help reply unavailable')))
+    expect(await within(card).findByRole('alert')).toHaveTextContent(
+      'Help reply unavailable'
+    )
+    expect(within(card).queryByRole('status')).not.toBeInTheDocument()
+    expect(input).toHaveValue('Documents')
+    expect(input).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Send reply' })).toBeEnabled()
+    expect(within(card).getByRole('button', { name: 'Decline' })).toBeEnabled()
+    expect(within(card).queryByText(outcome)).not.toBeInTheDocument()
+
+    const refreshes = mocks.call.mock.calls.filter(
+      ([path]) => path === 'tasks'
+    ).length
+    await act(async () => events.get('gbot-task-update')?.())
+    expect(
+      mocks.call.mock.calls.filter(([path]) => path === 'tasks')
+    ).toHaveLength(refreshes + 1)
+    expect(within(card).getByRole('alert')).toHaveTextContent(
+      'Help reply unavailable'
+    )
+    expect(input).toHaveValue('Documents')
+
+    fireEvent.click(
+      within(card).getByRole('button', { name: action, exact: true })
+    )
+    expect(reply.mock.calls).toEqual([[body], [body]])
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(within(card).getByRole('status')).toHaveTextContent(progress)
+    tasks = [
+      {
+        ...tasks[0],
+        state: 'interrupted',
+        help_requests: [
+          {
+            ...request,
+            status: response === null ? 'declined' : 'completed',
+            response,
+          },
+        ],
+      },
+    ]
+    await act(async () => finish())
+    expect(await within(card).findByText(outcome)).toBeVisible()
+    expect(within(card).queryByLabelText('Your reply')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('alert')).not.toBeInTheDocument()
+    expect(mocks.call).not.toHaveBeenCalledWith(
+      'tasks/approval',
+      expect.anything()
+    )
+  }
+)
+
 it('sends a permission decision for the selected bot and shows its pending state', async () => {
   tasks = [
     {

@@ -257,12 +257,16 @@ function GbotPage() {
       setBusy(false)
     }
   }
-  const perform = async (action: () => Promise<unknown>) => {
+  const perform = async (
+    action: () => Promise<unknown>,
+    propagateError = false
+  ) => {
     if (busy) return
     setBusy(true)
     try {
       await action()
     } catch (cause) {
+      if (propagateError) throw cause
       toast.error(String(cause))
     } finally {
       try {
@@ -1091,12 +1095,14 @@ function GbotPage() {
                           request={request}
                           busy={busy}
                           reply={(response) =>
-                            perform(() =>
-                              gbot('tasks/help', {
-                                id: task.id,
-                                request_id: request.id,
-                                response,
-                              })
+                            perform(
+                              () =>
+                                gbot('tasks/help', {
+                                  id: task.id,
+                                  request_id: request.id,
+                                  response,
+                                }),
+                              true
                             )
                           }
                         />

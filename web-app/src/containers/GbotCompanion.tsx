@@ -190,12 +190,16 @@ export default function GbotCompanion() {
     wasVisible.current = visible
   }, [visible, workspaceId])
 
-  const perform = async (action: () => Promise<unknown>) => {
+  const perform = async (
+    action: () => Promise<unknown>,
+    propagateError = false
+  ) => {
     if (busy) return
     setBusy(true)
     try {
       await action()
     } catch (cause) {
+      if (propagateError) throw cause
       toast.error(String(cause))
     } finally {
       await useGbotCompanion.getState().refresh()
@@ -452,12 +456,14 @@ export default function GbotCompanion() {
                       request={request}
                       busy={busy}
                       reply={(response) =>
-                        perform(() =>
-                          gbot('tasks/help', {
-                            id: task.id,
-                            request_id: request.id,
-                            response,
-                          })
+                        perform(
+                          () =>
+                            gbot('tasks/help', {
+                              id: task.id,
+                              request_id: request.id,
+                              response,
+                            }),
+                          true
                         )
                       }
                     />
