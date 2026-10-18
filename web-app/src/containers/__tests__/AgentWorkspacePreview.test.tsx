@@ -8,7 +8,9 @@ import {
   waitFor,
 } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { AgentWorkspacePreview } from '../AgentWorkspacePreview'
+import { ArtifactTrigger } from '../ArtifactPanel'
 import { useWorkspacePreviewStore } from '@/stores/workspace-preview-store'
 import { useArtifactStore } from '@/stores/artifact-store'
 import type {
@@ -107,6 +109,55 @@ beforeEach(() => {
   native.stat.mockImplementation((request: AgentWorkspaceRequest) =>
     Promise.resolve(file(request.relativePath!))
   )
+})
+
+describe('Chat artifact preview focus', () => {
+  it('returns keyboard focus to the current artifact opener and continues from its message', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <button>Downloads</button>
+        <ArtifactTrigger code="<html>First message</html>" />
+        <ArtifactTrigger code="<html>Second message</html>" />
+        <button>Next message action</button>
+        <AgentWorkspacePreview />
+      </>
+    )
+    const [first, second] = screen.getAllByRole('button', { name: /HTML preview/ })
+    await user.click(first)
+    act(() => useWorkspacePreviewStore.getState().openArtifact('HTML'))
+    await user.click(second)
+    const close = screen.getByRole('button', { name: 'Close HTML' })
+    close.focus()
+    await user.keyboard('{Enter}')
+
+    expect(useArtifactStore.getState().isOpen).toBe(false)
+    expect(screen.queryByRole('button', { name: 'Close HTML' })).toBeNull()
+    expect(second).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('button', { name: 'Next message action' })).toHaveFocus()
+  })
+
+  it('does not move focus when a route or layout closes the artifact programmatically', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <ArtifactTrigger code="<html>Saved message</html>" />
+        <button>New route control</button>
+        <AgentWorkspacePreview />
+      </>
+    )
+    await user.click(screen.getByRole('button', { name: /HTML preview/ }))
+    act(() => useWorkspacePreviewStore.getState().openArtifact('HTML'))
+    const destination = screen.getByRole('button', { name: 'New route control' })
+    await user.click(destination)
+    act(() => {
+      useWorkspacePreviewStore.getState().reset()
+      useArtifactStore.getState().close()
+    })
+
+    expect(destination).toHaveFocus()
+  })
 })
 
 describe('Agent workspace file preview recovery', () => {

@@ -182,7 +182,13 @@ export function AgentWorkspacePreview({
 
   const close = (id: string) => {
     closeTab(id)
-    if (id === 'artifact') artifact.close()
+    if (id === 'artifact') {
+      const trigger = artifact.sourceId
+        ? document.getElementById(artifact.sourceId)
+        : null
+      artifact.close()
+      trigger?.focus()
+    }
   }
 
   return (

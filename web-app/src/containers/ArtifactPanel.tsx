@@ -80,6 +80,7 @@ export function ArtifactTrigger({
 
   return (
     <button
+      id={id}
       type="button"
       onClick={() => open(id, code, streaming)}
       className={cn(
@@ -222,7 +223,11 @@ export function ArtifactPanel() {
         code={view.code}
         streaming={view.streaming}
         fill
-        onClose={close}
+        onClose={() => {
+          const trigger = sourceId ? document.getElementById(sourceId) : null
+          close()
+          trigger?.focus()
+        }}
         className="flex-1"
       />
     </div>

@@ -1,4 +1,5 @@
-import { fireEvent, render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { act } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -116,6 +117,21 @@ describe('ArtifactPanel', () => {
     render(<Harness content={SETTLED} streaming={false} />)
     settlePanelAnimation()
     expect(useArtifactStore.getState().isOpen).toBe(false)
+  })
+
+  it('returns keyboard focus to the message opener when closing the standalone panel', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    render(<Harness content={SETTLED} streaming={false} />)
+    const opener = trigger()!
+    await user.click(opener)
+    settlePanelAnimation()
+    const close = screen.getByRole('button', { name: 'Close' })
+    close.focus()
+    await user.keyboard('{Enter}')
+    settlePanelAnimation()
+
+    expect(useArtifactStore.getState().isOpen).toBe(false)
+    expect(opener).toHaveFocus()
   })
 
   it('re-clamps an oversized panel when the window narrows, never widening it', () => {
