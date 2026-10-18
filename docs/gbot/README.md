@@ -1,5 +1,35 @@
 # Gbot design
 
+## Computer connection recovery — Gchat 2
+
+`GBOT-CONNECTION-INLINE-ERRORS`, based on main `a74a3af54`, fixes
+failed **Connect** and **Disconnect** requests in Gbot settings. The controls
+now retain plain retry guidance beside the computer status, with diagnostic
+Details closed until requested. Errors stay with their original service and
+bot; disconnect errors also belong to the live session. Refreshing status
+never retries a request. An explicit retry clears the message.
+
+A synchronous guard prevents duplicate requests and holds through the status
+refresh. The service still determines connection status, and the existing
+paused-session reconnect identity is preserved. A new connection keeps its
+fresh session identifier. No automatic reconnect or control change is added.
+
+Both new rendered cases fail on unchanged main because rapid clicks submit
+the same action twice (88 tests filtered). All 90 settings tests pass with
+the fix, including Error and native string failures, closed Details, event
+refresh, service/bot/session isolation, explicit retry and confirmed status.
+One Linux/S1 `make verify` passes on 18 October, 06:24:00–06:31:41 UTC:
+3,408 app, 127 extension and 1,262 Rust tests pass; six app tests are skipped
+and 28 Rust tests ignored. Lint, type checking, quality guards and all six
+coverage floors pass. Source, test and documentation hashes match before and
+after the gate; the final documentation receipt was added afterward.
+Evidence: `out/gchat2-connection-inline-errors-20261018/{result.json,SUMMARY.md}`.
+No VM, native Windows, live connection, model or GPU acceptance is claimed.
+FRESH and OLD remain off with original XML and Gchat 2 custody.
+The private S1 build/cache was removed, the shared donor preserved, and
+CPUs 96–103 returned at 06:32 UTC; booking 3083 canceled. Next: bubbs merges
+the fix and its evidence.
+
 ## Desktop control failure recovery — Gchat 2
 
 `GBOT-DESKTOP-CONTROL-INLINE-ERRORS`, based on main `3d8008245`, fixes

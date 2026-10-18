@@ -1434,6 +1434,124 @@ it('imports an SSH workspace and preserves setup identity on retry', async () =>
   expect(JSON.stringify(sessionStorage)).not.toContain('private-key')
 })
 
+it.each([
+  ['Connect', 'connect', 'Could not connect this bot’s computer. Try Connect again.'],
+  ['Disconnect', 'disconnect', 'Could not disconnect this bot’s computer. Try Disconnect again.'],
+] as const)(
+  'keeps a failed computer connection %s inline and retries its original bot',
+  async (action, path, message) => {
+    const errorToast = vi.spyOn(toast, 'error').mockImplementation(() => 0)
+    try {
+      const [identity, other] = readyTaskBots()
+      let connected = action === 'Disconnect'
+      let session = identity
+      let fail!: (cause: unknown) => void
+      let finish!: () => void
+      const change = vi
+        .fn()
+        .mockImplementationOnce(() => new Promise<void>((_, reject) => {
+          fail = reject
+        }))
+        .mockImplementationOnce(() => new Promise<void>((resolve) => {
+          finish = resolve
+        }))
+      const fallback = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementation(async (request: string, body: Record<string, unknown>) => {
+        if (request === 'state') return {
+          ...await fallback(request, body) as BotState,
+          live_sessions: connected ? [session, other] : [other],
+        }
+        if (request === path) return change(body)
+        return fallback(request, body)
+      })
+      const updates = new Set<() => void>()
+      mocks.listen.mockImplementation(async (event: string, update: () => void) => {
+        if (event === 'gbot-task-update') updates.add(update)
+        return () => updates.delete(update)
+      })
+      render(<Page />)
+      await screen.findByRole('heading', { name: 'Writer' })
+      const originalStatus = connected ? 'Connected' : 'Disconnected'
+      const button = screen.getByRole('button', { name: action, exact: true })
+      act(() => {
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      })
+      expect(change).toHaveBeenCalledTimes(1)
+      const firstPayload = change.mock.calls[0][0]
+      expect(firstPayload).toEqual(action === 'Disconnect' ? identity : {
+        workspace_id: identity.workspace_id, session_id: expect.any(String),
+      })
+      expect(button).toBeDisabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      await act(async () => fail(action === 'Connect'
+        ? new Error('Computer connection unavailable')
+        : 'Computer connection unavailable'))
+      const alert = await screen.findByRole('alert')
+      expect(within(alert).getByText(message)).toBeVisible()
+      expect(within(alert).getByText('Details').closest('details')).not.toHaveAttribute('open')
+      expect(within(alert).getByText('Computer connection unavailable')).not.toBeVisible()
+      expect(button).toBeEnabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      expect(errorToast).not.toHaveBeenCalled()
+
+      const reads = mocks.call.mock.calls.filter(([request]) => request === 'tasks').length
+      await act(async () => updates.forEach((update) => update()))
+      expect(mocks.call.mock.calls.filter(([request]) => request === 'tasks').length).toBeGreaterThan(reads)
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: 'Researcher' }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: 'Writer' }))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      if (action === 'Disconnect') {
+        session = { ...identity, session_id: 'replacement' }
+        await act(async () => updates.forEach((update) => update()))
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+        session = identity
+        await act(async () => updates.forEach((update) => update()))
+        expect(screen.getByRole('alert')).toHaveTextContent(message)
+      }
+      mocks.getTarget.mockResolvedValue({ kind: 'paired_host', host_id: 'other-service' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      mocks.getTarget.mockResolvedValue({ kind: 'local' })
+      await act(async () => updates.forEach((update) => update()))
+      expect(screen.getByRole('alert')).toHaveTextContent(message)
+      expect(change).toHaveBeenCalledTimes(1)
+
+      const retry = screen.getByRole('button', { name: action, exact: true })
+      fireEvent.click(retry)
+      expect(change).toHaveBeenCalledTimes(2)
+      const retryPayload = change.mock.calls[1][0]
+      expect(retryPayload).toEqual(action === 'Disconnect' ? identity : {
+        workspace_id: identity.workspace_id, session_id: expect.any(String),
+      })
+      if (action === 'Connect') {
+        expect(retryPayload.session_id).not.toBe(firstPayload.session_id)
+      }
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(retry).toBeDisabled()
+      expect(screen.getByText(originalStatus, { exact: true })).toBeVisible()
+      connected = !connected
+      if (action === 'Connect') session = retryPayload
+      await act(async () => finish())
+      expect(await screen.findByRole('button', {
+        name: connected ? 'Disconnect' : 'Connect', exact: true,
+      })).toBeEnabled()
+      expect(screen.getByText(connected ? 'Connected' : 'Disconnected', { exact: true })).toBeVisible()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(mocks.call.mock.calls.filter(([request]) =>
+        request === 'connect' || request === 'disconnect' || request.startsWith('control/') ||
+        (request.startsWith('tasks/') && request !== 'tasks/approvals')
+      )).toEqual([[path, firstPayload], [path, retryPayload]])
+      expect(errorToast).not.toHaveBeenCalled()
+    } finally {
+      errorToast.mockRestore()
+    }
+  }
+)
+
 it.each([false, true])(
   'holds connection controls through the status refresh (initially connected: %s)',
   async (initiallyConnected) => {
