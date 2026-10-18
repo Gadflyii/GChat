@@ -1,5 +1,34 @@
 # Gbot design
 
+## Await media fixture teardown — Gchat 2
+
+`GBOT-MEDIA-TEARDOWN-JOIN`, based on main `770f3c03d`, removes a
+parallel-test race in desktop media revocation checks. `MediaLease::close`
+already joins its gateway and aborts/drains its connection jobs. Reconnecting
+to the released ephemeral port afterward can reach another fixture. Media
+tests now keep an established connection to the original gateway, verify that
+close ends it, and join the client connection task. This preserves codec,
+policy, exact remote-session revocation and repeated-close/error assertions.
+
+The Cua mock now owns its ingress and tonic server handles and tracks ingress
+classifier/tunnel jobs. Explicit async shutdown signals both servers, aborts
+and drains ingress jobs, and joins both owners after clients/streams are dropped.
+Every media fixture awaits shutdown before it is reused or leaves its scope;
+Drop remains cancellation-only. An incomplete front request also exercises the
+joined shutdown. No product media behavior, retry delay or test serialization
+changes.
+
+All-target Cargo check and strict Clippy passed. The requested 25-run loop
+passed all five media tests with four test threads in every run: 125 PASS,
+no failure or retry, 18 October 14:38:40–14:39:39 UTC. ONE `make verify`,
+14:40:19–14:45:44 UTC, passed: 3,631 app / 6 skipped, 127 extension,
+1,309 Rust / 28 ignored across 23 summaries, all six coverage floors,
+lint/typecheck/guards. All 3,458 tracked raw source hashes and modes matched
+before and after the gate; tracked input timestamps were refreshed before
+checks to prevent stale cache acceptance. This final receipt was added afterward.
+CPU104–111 booking3341 returned 14:45Z. Evidence:
+`out/gchat2-media-teardown-join-20261018/result.json` and adjacent raw logs.
+
 ## Independent-service paired-model sessions — Codex 3
 
 `GUI-GBOT-PAIRED-MODELS-SESSION-20261018`, based on main `ef64363fb`,
