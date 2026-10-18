@@ -1953,7 +1953,7 @@
         "profiles": [
           {
             "id": "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated",
-            "name": "Qwen3.8 27B Vision + DFlash \u00b7 92,832 context \u00b7 C1 \u00b7 calculated",
+            "name": "Qwen3.8 27B Vision + DFlash \u00b7 82,944 context \u00b7 C1 \u00b7 calculated",
             "identity": {
               "model_id": "qwen3.8-27b",
               "weights_id": "groupwise-int-dflash2-q4"
@@ -1966,7 +1966,7 @@
             "compute_capability": "8.6",
             "vram_tier_gib": 24,
             "min_memory_mib_per_gpu": 24123,
-            "max_context": 92832,
+            "max_context": 82944,
             "concurrency": 1,
             "options": {
               "vision": true,
@@ -2322,7 +2322,7 @@
         "profiles": [
           {
             "id": "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8",
-            "name": "Qwen3.8 Text \u00b7 168K context \u00b7 1 request",
+            "name": "Qwen3.8 Text \u00b7 158K context \u00b7 1 request",
             "identity": {
               "model_id": "qwen3.8-27b",
               "weights_id": "groupwise-int-dflash2-q4"
@@ -2335,7 +2335,7 @@
             "compute_capability": "8.6",
             "vram_tier_gib": 24,
             "min_memory_mib_per_gpu": 24123,
-            "max_context": 172032,
+            "max_context": 161792,
             "concurrency": 1,
             "options": {
               "vision": false,
@@ -3353,7 +3353,7 @@
         "profiles": [
           {
             "id": "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated",
-            "name": "Qwen3.8 27B Vision + DFlash \u00b7 69,423 context \u00b7 C1 \u00b7 calculated",
+            "name": "Qwen3.8 27B Vision + DFlash \u00b7 60,416 context \u00b7 C1 \u00b7 calculated",
             "identity": {
               "model_id": "qwen3.8-27b",
               "weights_id": "groupwise-int-dflash2-q4"
@@ -3366,7 +3366,7 @@
             "compute_capability": "8.9",
             "vram_tier_gib": 24,
             "min_memory_mib_per_gpu": 24563,
-            "max_context": 69423,
+            "max_context": 60416,
             "concurrency": 1,
             "options": {
               "vision": true,
@@ -3722,7 +3722,7 @@
         "profiles": [
           {
             "id": "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8",
-            "name": "Qwen3.8 Text \u00b7 149,069 context \u00b7 1 request",
+            "name": "Qwen3.8 Text \u00b7 138,240 context \u00b7 1 request",
             "identity": {
               "model_id": "qwen3.8-27b",
               "weights_id": "groupwise-int-dflash2-q4"
@@ -3735,7 +3735,7 @@
             "compute_capability": "8.9",
             "vram_tier_gib": 24,
             "min_memory_mib_per_gpu": 24563,
-            "max_context": 149069,
+            "max_context": 138240,
             "concurrency": 1,
             "options": {
               "vision": false,

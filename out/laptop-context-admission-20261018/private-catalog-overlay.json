@@ -1,0 +1,67 @@
+{
+  "row": "LAPTOP-CONTEXT-ADMISSION",
+  "applied_at": "2026-10-18T07:13:40.571342+00:00",
+  "owner": "Gchat3",
+  "host": "AIS-2-8592-L01",
+  "service_pid": 3708693,
+  "source_evidence": "GInfer origin/fix/c1-laptop-context-admission-20261018:bench/reports/laptop-context-admission-20261018/gchat-numeric-risk.json",
+  "authorization": "Bubbs07:05; C7 atomic metadata permission07:08:26; C4 safe-boundary permission07:09:51, conservative07:13Z boundary",
+  "updated_contexts": {
+    "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8": {
+      "before": 172032,
+      "after": 161792
+    },
+    "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8": {
+      "before": 149069,
+      "after": 138240
+    },
+    "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated": {
+      "before": 92832,
+      "after": 82944
+    },
+    "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated": {
+      "before": 69423,
+      "after": 60416
+    }
+  },
+  "generator_input": {
+    "path": "/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1/inputs/versioned-profiles.json",
+    "profiles": 277,
+    "bytes": 645107,
+    "before_sha256": "e779cb5ba983c7677e7df45aeb3253d917458a104f8a9831e8fe7c5f74f36a58",
+    "after_sha256": "4ac372fd4015497daa09af0f1d9d94a4f4e5b39b56a57eac2abd6b7e47426a2d",
+    "updated_ids": [
+      "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8",
+      "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8",
+      "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated",
+      "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated"
+    ]
+  },
+  "live_catalog": {
+    "path": "/media/ron/SSD_RAID/ai/gchat-private-dev-catalog-v1/www/catalog.json",
+    "profiles": 112,
+    "bytes": 263298,
+    "before_sha256": "d48f0bd9395276727ef289d14285bbd4c92d37a1b1df9d9fca4850d594249f15",
+    "after_sha256": "4f754bf8f859312825d7b24c1ce64d3f1c12ecc93d8b98c8b959e6ea8e1cfc1b",
+    "updated_ids": [
+      "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8",
+      "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8"
+    ],
+    "absent_vision_ids": [
+      "rtx3090-qwen38-groupwise-int-dflash2-q4-tp1-c1-168k-int8-vision-calculated",
+      "rtx4090-qwen38-groupwise-int-dflash2-q4-tp1-c1-149069-int8-vision-calculated"
+    ],
+    "selection_unchanged": true
+  },
+  "service_unchanged": true,
+  "package_symlinks_unchanged": true,
+  "service_restarted": false,
+  "payloads_read_or_changed": false,
+  "original_generation_receipt_preserved_sha256": "4044f805825f09cdf8421b404d99196bb9bfc8a9ccc52adb5ec4d77612c8b318",
+  "served_catalog": {
+    "status": 200,
+    "content_length": 263298,
+    "sha256": "4f754bf8f859312825d7b24c1ce64d3f1c12ecc93d8b98c8b959e6ea8e1cfc1b"
+  },
+  "scope": "Metadata admission bounds only; no new device/model/vision qualification"
+}
