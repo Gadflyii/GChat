@@ -371,6 +371,113 @@ it('explains a remote connection failure, preserves its details and allows retry
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
 })
 
+it.each([
+  { label: 'without a credential cleanup warning', cleanupWarning: null },
+  { label: 'with a credential cleanup warning', cleanupWarning: 'The private keyring is locked' },
+])('keeps successful removal distinct from a failed refresh $label', async ({ cleanupWarning }) => {
+  const refreshMessage = 'Could not refresh the host list. Choose Refresh host list to try again.'
+  const cleanupMessage = 'The saved connection was removed, but its saved sign-in could not be cleared from this computer.'
+  let rejectRetry!: (reason: Error) => void
+  vi.mocked(engineCommand).mockReset().mockResolvedValue({ forgotten: 'host', credential_cleanup_warning: cleanupWarning })
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+    .mockRejectedValueOnce(new Error('Host list unavailable'))
+    .mockImplementationOnce(() => new Promise<undefined>((_resolve, reject) => { rejectRetry = reject }))
+  render(<HostCard host={{ ...localHost, local: false }} snapshot={importedModelSnapshot} error="Computer temporarily unavailable" />)
+  expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
+  expect(screen.getByText('Model and memory settings')).toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  expect(useConfirmStore.getState().pending).toMatchObject({
+    title: 'Remove the connection to Host?', confirmLabel: 'Remove connection', destructive: true,
+  })
+  await act(async () => settleConfirm(true))
+  await waitFor(() => expect(refreshHosts).toHaveBeenCalledOnce())
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('forget', { host_id: 'host' })
+  expect(await screen.findByRole('status')).toHaveTextContent('The saved connection was removed.')
+  expect(screen.getByRole('heading', { name: 'Host' })).toBeInTheDocument()
+  expect(screen.getByText(refreshMessage)).toBeVisible()
+  expect(screen.queryByText('Could not remove this saved connection. Try again.')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Model and memory settings')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Installed model')).not.toBeInTheDocument()
+  expect(screen.getAllByRole('alert')).toHaveLength(cleanupWarning ? 2 : 1)
+  if (cleanupWarning) {
+    expect(screen.getByText(cleanupMessage)).toBeVisible()
+    const details = screen.getByText(cleanupWarning)
+    expect(details).not.toBeVisible()
+    fireEvent.click(screen.getByText('Technical details'))
+    expect(details).toBeVisible()
+  } else expect(screen.queryByText(cleanupMessage)).not.toBeInTheDocument()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  expect(useConfirmStore.getState().pending).toBeNull()
+  expect(engineCommand).toHaveBeenCalledTimes(1)
+  const refreshButton = screen.getByRole('button', { name: 'Refresh host list' })
+  expect(refreshButton).toBeEnabled()
+  fireEvent.click(refreshButton)
+  expect(refreshButton).toBeDisabled()
+  fireEvent.click(refreshButton)
+  expect(refreshHosts).toHaveBeenCalledTimes(2)
+  await act(async () => rejectRetry(new Error('Host list still unavailable')))
+  expect(screen.getByText(refreshMessage)).toBeVisible()
+  expect(screen.getByText('Error: Host list still unavailable')).not.toBeVisible()
+  expect(screen.getByRole('button', { name: 'Refresh host list' })).toBeEnabled()
+  expect(screen.getByRole('status')).toHaveTextContent('The saved connection was removed.')
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('forget', { host_id: 'host' })
+  if (cleanupWarning) expect(screen.getByText(cleanupMessage)).toBeVisible()
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh host list' }))
+  await waitFor(() => expect(screen.queryByText(refreshMessage)).not.toBeInTheDocument())
+  expect(refreshHosts).toHaveBeenCalledTimes(3)
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(screen.queryByText('Error: Host list still unavailable')).not.toBeInTheDocument()
+  expect(screen.getByRole('status')).toHaveTextContent('The saved connection was removed.')
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeDisabled()
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(screen.queryAllByRole('alert')).toHaveLength(cleanupWarning ? 1 : 0)
+  if (cleanupWarning) {
+    expect(screen.getByText(cleanupMessage)).toBeVisible()
+    expect(screen.getByText(cleanupWarning)).toBeVisible()
+  }
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('forget', { host_id: 'host' })
+})
+
+it('keeps a rejected removal available for an explicitly confirmed retry', async () => {
+  vi.mocked(engineCommand).mockReset().mockResolvedValue({ forgotten: 'host' })
+    .mockRejectedValueOnce(new Error('Registry write denied'))
+  refreshHosts.mockReset().mockResolvedValue(undefined)
+  render(<HostCard host={{ ...localHost, local: false }} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  await act(async () => settleConfirm(true))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent('Could not remove this saved connection. Try again.')
+  const details = within(alert).getByText('Error: Registry write denied')
+  expect(details).not.toBeVisible()
+  fireEvent.click(within(alert).getByText('Technical details'))
+  expect(details).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Remove connection' })).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
+  expect(screen.queryByRole('button', { name: 'Refresh host list' })).not.toBeInTheDocument()
+  expect(refreshHosts).not.toHaveBeenCalled()
+  expect(engineCommand).toHaveBeenCalledExactlyOnceWith('forget', { host_id: 'host' })
+
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  expect(useConfirmStore.getState().pending).toMatchObject({ confirmLabel: 'Remove connection' })
+  await act(async () => settleConfirm(false))
+  expect(engineCommand).toHaveBeenCalledTimes(1)
+  expect(refreshHosts).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Remove connection' }))
+  expect(useConfirmStore.getState().pending).toMatchObject({ confirmLabel: 'Remove connection' })
+  await act(async () => settleConfirm(true))
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  expect(engineCommand).toHaveBeenCalledTimes(2)
+  expect(engineCommand).toHaveBeenNthCalledWith(2, 'forget', { host_id: 'host' })
+  expect(refreshHosts).toHaveBeenCalledOnce()
+})
+
 it('explains the effect of restarting a remote model and honors cancellation before sending', async () => {
   render(<HostCard host={{ ...localHost, local: false }} snapshot={{ ...importedModelSnapshot, instances: [{
     instance_id: 'running', session_id: 'session', display_name: 'My model', upstream_model_id: 'imported-model', status: 'ready',

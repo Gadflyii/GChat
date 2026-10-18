@@ -1,5 +1,46 @@
 # GInfer host UI
 
+## Remove connection survives list-refresh failure — Gchat 3, October 18
+
+`GUI-HOST-REMOVE-REFRESH-RESULT-20261018`: preserve a successful saved-connection
+removal when the following host-list read fails. On base `98a814b13`, both
+operations share one error boundary: the native command persists removal, but
+an unsuccessful list refresh reports removal failure and enables Remove again.
+The next removal then rejects because the host is no longer registered. A saved
+sign-in cleanup warning is also replaced by the unrelated list error.
+
+The candidate gives removal its own accepted state. A stale card confirms that
+the connection was removed, prevents further host actions and preserves any
+cleanup warning. A separate list error offers Refresh host list, which reads
+status without repeating removal. An actual removal rejection retains the
+connection and enables an explicit retry.
+
+Acceptance: reproduce the refresh-failure case against the base using the
+existing rendered HostCard tests; qualify preserved success, cleanup warning,
+read-only refresh retry and genuine removal-error retry. Run the focused suite,
+lint and ONE `make verify`. No Engine, native account, live pairing, model/GPU,
+Windows or installer qualification is claimed. The frozen regressions reproduce
+the base defect: both cases fail at the missing successful-removal status
+(2 failed, 37 skipped). Only the fixed component was then overlaid: all 39
+focused cases pass, and lint passes with zero errors and five existing warnings.
+ONE `make verify` passed lint, typecheck, quality guards, 3348 app cases
+(six skipped), 121 extension cases, six coverage floors and 1220 native cases
+(28 ignored). The candidate chain ran 04:29:09–04:37:04Z. The coordinator
+reviewed the actual logs, effective commands and unchanged frozen source hashes;
+no further gate is required before branch integration.
+
+Owner worktree `/ai/gchat-worktrees/gchat3-host-remove-refresh-result-20261018`,
+branch `fix/gchat3-host-remove-refresh-result-20261018`, allocated main
+`98a814b13`. Canonical local evidence:
+`out/host-remove-refresh-result-20261018/{test-result.json,test-summary.md}`.
+The private S1 test root was
+`/media/ron/SSD_RAID/ai/tmp-gchat3-host-remove-refresh-tests-20261018`,
+CPU112–119. Preparation booking 2976 returned at 04:27Z; gate booking 2979
+returned at 04:38Z and was canceled. The owned 42.32 GB SSD copy, two exited
+containers and disposable local source archive were removed. Concise results
+and logs remain; the retained RC dependency donor stayed read-only. No GPU use
+or newly built installed-GUI qualification is claimed.
+
 ## Google client ID validation — Gchat 3 native acceptance, October 18
 
 `GUI-GOOGLE-CLIENT-ID-SHAPE` passes its remaining native Linux negative leaf.
