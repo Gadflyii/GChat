@@ -2,8 +2,8 @@
 
 ## Linux Launch at startup XDG path — October 18
 
-`GUI-LINUX-AUTOSTART-XDG-PATH` has a source candidate; verification and native
-acceptance are pending. The installed Linux release `d0a8d06bf` launched through
+`GUI-LINUX-AUTOSTART-XDG-PATH` is merge ready with focused, full-gate, build
+and private native acceptance passing. The installed Linux release `d0a8d06bf` launched through
 its normal AppRun with a private HOME, `XDG_CONFIG_HOME=$HOME/config`, and no
 `$HOME/.config`. Enabling **Settings → General → Launch at startup** produced
 a visible failure. The exact console error at 04:50:19Z, `No such file or
@@ -35,8 +35,7 @@ Five native regressions cover fresh missing parents, a supplied XDG config
 root, filesystem failures, packaged/ordinary launch targets, and literal Exec
 escaping. Shared-service tests cover command routing, readback and failure
 without saving success; rendered General tests exercise enable/disable and
-failed-toggle recovery. Planned focused checks, followed by the coordinator's
-lint, Rust check/Clippy, ONE `make verify`, candidate build and native acceptance:
+failed-toggle recovery. The focused commands were:
 
 ```bash
 yarn workspace @gchat/web-app test src/lib/__tests__/launchAtStartup.test.ts src/routes/settings/__tests__/general.test.tsx src/providers/__tests__/DataProvider.test.tsx
@@ -53,14 +52,32 @@ therefore had no default container. The fixture now assigns only the mocked
 `core` property onto the real Window. Product code and assertions are unchanged.
 Original log: `out/c3-linux-autostart-xdg-20261018/focused-frontend-first-failure.log`.
 
-Next: run the affected General file only, then the unrun native focused cases,
-library check/Clippy, lint, ONE `make verify`, Vite and default desktop build into
-separate `autostart-candidate`. The passed service and DataProvider cases are
-reused. S1 CPUs80–87 are booked under3036 through05:49Z, socket1 shared lock,
-nice10; dependency manifests and source bindings matched before staging.
-Parent owns native installed acceptance. Preserve AppDir/home, CLI/Interface/
-folder/badge candidates, tools and runnable assets. Packet:
-`out/c3-linux-autostart-xdg-20261018/`.
+Corrected source `7e49b9d0d` is pushed. All 50 focused frontend cases and five
+native cases pass; scoped library check/Clippy and lint pass. ONE `make verify`
+ran05:32:01–05:37:04Z and passed 3,380 app tests (six skipped), 127 extension
+tests, all six coverage floors and 1,234 native tests (28 ignored). No second
+full verify ran. Vite/default desktop build passed05:38:41Z.
+
+The immutable `autostart-candidate/bin/gchat` beneath the existing S1 root is
+255,728,432 bytes, SHA256
+`6110349de61393d7022452a0757157630f73200f65882c135c223dff29136889`.
+ELF, private pre-install and runnable-resource link were checked05:38:54Z;
+46 source/dependency bindings still matched. Both exited containers and local/
+remote disposable source archives are removed; booking3036 returned. Shared
+source/dependency/target caches remain for the serial reset/locator work.
+The tested candidate is retained pending merge; AppDir/home, tools and runnable
+assets remain protected. No GPU or model ran in these gates.
+
+Private native acceptance passed05:40–05:41Z using that export and the original
+HOME/XDG layout. Enable created `XDG_CONFIG_HOME/autostart/GChat.desktop` with
+the immutable AppDir/AppRun target while `HOME/.config` remained absent.
+Reopening General retained On. Disable removed the entry, and reopening retained
+Off; the installation preference is restored to disabled. Reviewed Light1500×1000
+and Dark1024×800 views are readable without horizontal overflow. Filesystem
+rejection remains covered by the focused native/rendered cases; no GUI rejection
+was injected. App/private session returned05:41Z; Xvfb remains for the next two
+checks. No login/reboot or Windows runtime is claimed. Next: coordinator merge.
+Packet: `out/c3-linux-autostart-xdg-20261018/{result.json,terminal.json,summary.md}`.
 ## Gbot companion task-load retry — October 18
 
 `GBOT-COMPANION-TASK-LOAD-RETRY`: a failed task or approval read previously
