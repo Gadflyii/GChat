@@ -1633,6 +1633,7 @@ mod tests {
             } else {
                 result.unwrap();
             }
+            drop(task);
             let reopened = CuaTask::open(dir.path().join("task.json")).await.unwrap();
             let saved = reopened.snapshot();
             assert_eq!(
