@@ -2671,11 +2671,12 @@ while True:
         let close_window = tauri::WebviewWindowBuilder::new(&close_app, "main", Default::default())
             .build()
             .unwrap();
-        close_window.close().unwrap();
         let admission_app = app.handle().clone();
         let cancelled = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let observed = cancelled.clone();
+        let started = std::time::Instant::now();
         close_app.run_return(move |handle, event| match event {
+            tauri::RunEvent::Ready => close_window.close().unwrap(),
             tauri::RunEvent::WindowEvent {
                 label,
                 event: event @ tauri::WindowEvent::CloseRequested { .. },
@@ -2691,11 +2692,12 @@ while True:
                 }
                 observed.store(true, std::sync::atomic::Ordering::SeqCst);
             }
-            tauri::RunEvent::MainEventsCleared
-                if observed.load(std::sync::atomic::Ordering::SeqCst) =>
-            {
-                assert!(handle.get_webview_window("main").is_some());
-                close_window.destroy().unwrap();
+            tauri::RunEvent::MainEventsCleared => {
+                assert!(started.elapsed() < std::time::Duration::from_secs(10));
+                if observed.load(std::sync::atomic::Ordering::SeqCst) {
+                    assert!(handle.get_webview_window("main").is_some());
+                    close_window.destroy().unwrap();
+                }
             }
             _ => {}
         });
