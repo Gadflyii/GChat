@@ -36,6 +36,21 @@ Closing an edited skill now asks whether to discard the unsaved changes.
 and a successful Save still closes after the update completes. Saving retains
 the existing single-submit and dismissal guards.
 
+Native Linux acceptance of frozen source `67db72755` passed at 1,024 × 740.
+Escape, Close and Cancel each opened the confirmation. Enter chose **Keep
+editing**, preserved the complete instructions and restored textarea focus;
+Escape from the confirmation also preserved the draft. Explicit discard
+closed the editor and reopening showed the original saved body. Save closed
+without a discard prompt and reopening showed the intended new sentence.
+An unchanged editor closed directly with Escape. The private skill was then
+restored through Save, protected agent/run/chat files remained byte-identical,
+and normal Close completed cleanup. No model or inference was used.
+
+Focused skill tests (53), lint, one `make verify` (3,772 app, 127 extension
+and 1,316 Rust tests), frontend and native builds passed. Six app tests were
+skipped and 28 Rust tests ignored. Receipts and screenshots:
+`/ai/gchat/out/gchat-skill-edit-unsaved-changes-20261018/`.
+
 ## Limit settings in narrow editor panels — October 18
 
 A native Linux pass at 1,024 × 740 also found composition settings extending
