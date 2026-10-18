@@ -931,6 +931,93 @@ it('requires verified SSH, installed tools and a successful desktop connection b
   })
 })
 
+it('does not complete a replaced cloud setup when its desktop connection returns late', async () => {
+  const initial = deployment(review(), 'running')
+  const replacement = { ...initial, id: 'replacement', name: 'Replacement bot' }
+  const connection = deferred<object>()
+  const connected = vi.fn().mockResolvedValue(undefined)
+  const oldBusy = vi.fn()
+  const newBusy = vi.fn()
+  const identity: SshIdentity = {
+    public_key: { algorithm: 'ssh-ed25519', public_key: 'fixture-key' },
+    fingerprint: 'SHA256:fixture',
+  }
+  vi.mocked(gbot).mockImplementation(async (path) => {
+    if (path === 'setup/cloud/identity') return identity
+    if (path === 'workspaces/ssh/tools')
+      return { installed: true, command: null, issue: null }
+    if (path === 'connect') return connection.promise
+    return {}
+  })
+  const { rerender } = render(
+    <CloudCosts
+      key={initial.id}
+      name={initial.name}
+      initial={initial}
+      busy={oldBusy}
+      reviewed={vi.fn()}
+      connected={connected}
+    />
+  )
+  const prepare = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Check SSH identity' }))
+    await screen.findByText(identity.fingerprint)
+    fireEvent.click(screen.getByRole('checkbox', { name: /fingerprint matches/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verify SSH access' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Check tools' }))
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Connect bot desktop' })
+      ).toBeEnabled()
+    )
+  }
+  await prepare()
+  fireEvent.click(screen.getByRole('button', { name: 'Connect bot desktop' }))
+  expect(
+    screen.getByRole('button', { name: 'Connecting bot desktop…' })
+  ).toBeDisabled()
+  expect(gbot).toHaveBeenLastCalledWith('connect', {
+    workspace_id: initial.id,
+    session_id: expect.any(String),
+  })
+  rerender(
+    <CloudCosts
+      key={replacement.id}
+      name={replacement.name}
+      initial={replacement}
+      busy={newBusy}
+      reviewed={vi.fn()}
+      connected={connected}
+    />
+  )
+  await act(async () => connection.resolve({}))
+  expect(connected).not.toHaveBeenCalled()
+  expect(newBusy).not.toHaveBeenCalled()
+  expect(
+    screen.getByRole('button', { name: 'Connect bot desktop' })
+  ).toBeDisabled()
+  expect(
+    screen.queryByRole('button', { name: 'Connecting bot desktop…' })
+  ).not.toBeInTheDocument()
+  expect(
+    vi.mocked(gbot).mock.calls.filter(([path]) => path === 'connect')
+  ).toHaveLength(1)
+
+  await prepare()
+  expect(connected).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: 'Connect bot desktop' }))
+  await vi.waitFor(() =>
+    expect(connected).toHaveBeenCalledExactlyOnceWith(replacement.id)
+  )
+  expect(gbot).toHaveBeenLastCalledWith('connect', {
+    workspace_id: replacement.id,
+    session_id: expect.any(String),
+  })
+  expect(
+    vi.mocked(gbot).mock.calls.filter(([path]) => path === 'connect')
+  ).toHaveLength(2)
+})
+
 it.each([
   {
     label: 'Check progress',
