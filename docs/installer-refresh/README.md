@@ -955,7 +955,10 @@ native installation, first-user walk and chat on the4090 and laptop at22:07Z
 while Arch decides the separate Flash quote diagnostic. `d90e96f17` identifies
 the accepted RC documentation; its compiled package remains GChat250df804a /
 Engine6b85ecf77 below. Nothing is published; the builder's installed app/profile
-is excluded.
+is excluded. Ada is installed, but its Automatic chat remains blocked by native
+profiling RAM admission; the23:00Z idle-window preflight failed before any
+retry. The laptop installer is staged and its installed walk follows C5's
+current first-use run.
 
 | Field | Refreshed RC |
 | --- | --- |
@@ -1096,6 +1099,20 @@ reclamation is authorized while other lanes are live. The reserve policy versus
 Engine serving's10GiB headroom is outside this row. Source work is split between
 owned `c4-profile-ram-admission-20261018` GInfer and
 `c4-profile-ram-message-20261018` GChat worktrees; the pinned RC remains unchanged.
+
+The23:00:15Z read-only preflight during the agreed WSL-idle window found
+**11,882,221,568B available**, below the first GPU-transfer gate's
+**13,381,099,520B** reserve-plus-buffer requirement by **1,498,877,952B**.
+The physical total and12,844,228,608B reserve are unchanged. `vmmemWSL` PID21468
+held32,232,009,728B working set and33,236,049,920B private committed memory;
+its48,435,757,056B virtual size is a separate measurement. System commit was
+41,624,854,528B. No native GChat/Host/Engine process was present. The small
+receipt is `ada-native-walk/installed-desktop/wsl-idle-2300-preflight.json`.
+C4 did not launch or book a profiling retry, reclaim memory or change settings,
+and returned the boundary to Gchat3 at23:00Z. The RC Automatic chat remains
+unexecuted; the next Ada retry requires an admitted environment and renewed
+coordination. The typed product failure and first-run message continue through
+focused verification independently.
 
 C5's corrected1209/e001 laptop app gate returned22:28Z after a pre-Engine
 fixture CLI rejection, with no C5 hold. C4 had not yet staged or launched there at that boundary. Arch
