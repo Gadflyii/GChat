@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
@@ -17,7 +18,7 @@ vi.mock('@/containers/SettingsMenu', () => ({ default: () => null }))
 vi.mock('@/containers/dialogs/AddEditMCPServer', () => ({ default: () => null }))
 vi.mock('@/containers/dialogs/DeleteMCPServerConfirm', () => ({ default: () => null }))
 vi.mock('@/containers/dialogs/EditJsonMCPserver', () => ({ default: () => null }))
-vi.mock('@/components/MCPLogViewer', () => ({ MCPLogViewer: () => null }))
+vi.mock('@/components/MCPLogViewer', () => ({ MCPLogViewer: ({ serverName }: { serverName?: string }) => <div data-testid="log-server">{serverName ?? 'all'}</div> }))
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn().mockResolvedValue(() => {}) }))
 vi.mock('@/hooks/useAppState', () => ({ useAppState: (selector: (s: unknown) => unknown) => selector({ setErrorMessage: vi.fn() }) }))
 vi.mock('@/hooks/useServiceHub', () => ({
@@ -39,6 +40,20 @@ vi.mock('@/hooks/useMCPServers', () => {
 import { Route } from '../mcp-servers'
 
 describe('MCP server list', () => {
+  it('filters logs by a selected server and resets to all servers', async () => {
+    const user = userEvent.setup()
+    const Page = (Route as unknown as { options: { component: () => JSX.Element } }).options.component
+    render(<Page />)
+    await user.click(screen.getByRole('button', { name: 'tabs.logs' }))
+    expect(screen.getByTestId('log-server')).toHaveTextContent('all')
+    await user.click(screen.getByRole('button', { name: 'logs.serverFilterLabel' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'exa' }))
+    expect(screen.getByTestId('log-server')).toHaveTextContent('exa')
+    await user.click(screen.getByRole('button', { name: 'logs.serverFilterLabel' }))
+    await user.click(screen.getByRole('menuitemradio', { name: 'logs.allServers' }))
+    expect(screen.getByTestId('log-server')).toHaveTextContent('all')
+  })
+
   it('names every switch and icon button after its server and says when a server is connected', async () => {
     const Page = (Route as unknown as { options: { component: () => JSX.Element } }).options.component
     render(<Page />)

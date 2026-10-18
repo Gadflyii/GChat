@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { listen } from '@tauri-apps/api/event'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { Input } from '@/components/ui/input'
 import { gbot, type SavedAssignment } from '@/services/gbot'
 
@@ -275,18 +276,19 @@ function WorkspaceSchedules({
           </label>
           <label className="block text-sm">
             Repeat
-            <select
+            <ChoiceSelect
               aria-label="Schedule repetition"
               className="ml-2 rounded-md border bg-background p-1"
               value={kind}
-              onChange={(event) =>
-                setKind(event.target.value as 'once' | 'interval')
+              onValueChange={(value) =>
+                setKind(value as 'once' | 'interval')
               }
               disabled={busy || !assignment}
-            >
-              <option value="once">Once</option>
-              <option value="interval">At an interval</option>
-            </select>
+              options={[
+                { value: 'once', label: 'Once' },
+                { value: 'interval', label: 'At an interval' },
+              ]}
+            />
           </label>
           {kind === 'interval' && (
             <label className="block text-sm">
@@ -304,20 +306,19 @@ function WorkspaceSchedules({
           )}
           <label className="block text-sm">
             Missed runs
-            <select
+            <ChoiceSelect
               aria-label="Missed run policy"
               className="ml-2 rounded-md border bg-background p-1"
               value={policy}
-              onChange={(event) =>
-                setPolicy(event.target.value as 'run_latest' | 'skip_missed')
+              onValueChange={(value) =>
+                setPolicy(value as 'run_latest' | 'skip_missed')
               }
               disabled={busy || !assignment}
-            >
-              <option value="run_latest">
-                Run the latest missed occurrence once
-              </option>
-              <option value="skip_missed">Skip missed occurrences</option>
-            </select>
+              options={[
+                { value: 'run_latest', label: 'Run the latest missed occurrence once' },
+                { value: 'skip_missed', label: 'Skip missed occurrences' },
+              ]}
+            />
           </label>
           <p className="text-xs text-muted-foreground">
             Choose what happens if the computer was off or a scheduled run was

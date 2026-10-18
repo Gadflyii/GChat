@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { IconPlus, IconRefresh } from '@tabler/icons-react'
 import { Button } from '@/components/ui/button'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { memoryCommand, type SavedMemory } from '@/lib/memory'
@@ -113,16 +114,17 @@ export function MemoryLibrary() {
             setVisibleCount(50)
           }}
         />
-        <select
+        <ChoiceSelect
           aria-label="Memory scope"
           className="rounded-md border bg-background px-3"
           value={scope}
-          onChange={(e) => setScope(e.target.value)}
-        >
-          <option value="all">All scopes</option>
-          <option value="personal">Personal</option>
-          <option value="workspace">Workspaces</option>
-        </select>
+          onValueChange={setScope}
+          options={[
+            { value: 'all', label: 'All scopes' },
+            { value: 'personal', label: 'Personal' },
+            { value: 'workspace', label: 'Workspaces' },
+          ]}
+        />
       </div>
       {draft && (
         <form

@@ -46,8 +46,13 @@ function EnginesPage() {
   }
   const [address, setAddress] = useState('')
   const [pairError, setPairError] = useState<string | null>(null)
+  const [pairRefreshError, setPairRefreshError] = useState<string | null>(null)
   const addressInvalid = !!address.trim() && !validHostAddress(address.trim())
   const [busy, setBusy] = useState<string | null>(null)
+  const refreshHosts = async () => {
+    await refresh()
+    setPairRefreshError(null)
+  }
   useEffect(() => {
     const update = () => void refresh().catch((e) => toast.error(String(e)))
     update()
@@ -58,8 +63,10 @@ function EnginesPage() {
     setBusy(hostId ?? 'manual')
     try {
       const result = await engineCommand<{ credential_cleanup_warning?: string }>('pair', hostId ? { host_id: hostId } : { base_url: address.trim() })
-      setAddress(''); setPairError(null); await refresh(); toast.success('Host paired')
+      setAddress(''); setPairError(null); toast.success('Host paired')
       if (result.credential_cleanup_warning) toast.warning(`Pairing saved; cleanup needs attention: ${result.credential_cleanup_warning}`)
+      try { await refreshHosts() }
+      catch (e) { setPairRefreshError(String(e)) }
     }
     catch (e) {
       if (hostId) toast.error(String(e))
@@ -67,7 +74,7 @@ function EnginesPage() {
     } finally { setBusy(null) }
   }
   return <div className="flex h-svh min-h-0 flex-col overflow-hidden">
-    <HeaderPage><div className="flex w-full items-center justify-between pr-4"><h1>GInfer Hosts</h1><Button size="sm" variant="outline" disabled={refreshing || !resourcesReady} aria-describedby={!resourcesReady ? 'host-runtime-preparation' : undefined} onClick={() => void refresh().catch((e) => toast.error(String(e)))}><IconRefresh size={16} className={refreshing ? 'animate-spin' : undefined} />Refresh</Button></div></HeaderPage>
+    <HeaderPage><div className="flex w-full items-center justify-between pr-4"><h1>GInfer Hosts</h1><Button size="sm" variant="outline" disabled={refreshing || !resourcesReady} aria-describedby={!resourcesReady ? 'host-runtime-preparation' : undefined} onClick={() => void refreshHosts().catch((e) => toast.error(String(e)))}><IconRefresh size={16} className={refreshing ? 'animate-spin' : undefined} />Refresh</Button></div></HeaderPage>
     <main className="min-h-0 flex-1 overflow-y-auto p-6 space-y-6">
       <p className="text-muted-foreground">Manage local serving and GInfer hosts on your network. Your computer does not need a local GPU to use remote hosts.</p>
       {!resourcesReady && (resources.error
@@ -98,6 +105,7 @@ function EnginesPage() {
         <Button aria-describedby={credentialReady ? undefined : 'pair-needs-storage'} disabled={!credentialReady || busy !== null || !address.trim() || addressInvalid} onClick={() => void pair()}>{busy === 'manual' ? 'Pairing…' : 'Pair host'}</Button>
         {!credentialReady && <p id="pair-needs-storage" className="text-sm text-muted-foreground">Pairing needs secure storage. Choose Check secure storage above first.</p>}
       </details>
+      {pairRefreshError !== null && <div role="alert" className="space-y-2 text-sm text-destructive"><p>Host paired. Could not refresh the host list. Choose Refresh above to try again.</p><details><summary className="cursor-pointer">Host refresh error details</summary><p className="whitespace-pre-wrap break-all">{pairRefreshError}</p></details></div>}
       {hosts.map((host) => <HostCard key={host.host_id} host={host} snapshot={snapshots[host.host_id]} error={errors[host.host_id]} />)}
 
     </main>

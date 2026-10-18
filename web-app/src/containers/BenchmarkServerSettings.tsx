@@ -6,6 +6,7 @@ import { useEngineHosts } from '@/stores/engine-hosts-store'
 import { engineAlias, engineCommand, hardwareProfileBlocksLaunch } from '@/services/engines'
 import type { BenchmarkSessionInfo } from '@/services/benchmark/tauri'
 import { hostInstanceLabel, hostModelLabel, plainProfileName } from '@/lib/engine-host-labels'
+import { ChoiceSelect } from '@/components/ui/choice-select'
 import { Button } from '@/components/ui/button'
 
 export function BenchmarkServerSettings({ sessions, selected, select, disabled, refresh, onPendingChange }: {
@@ -52,18 +53,19 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
     finally { setBusy(false) }
   }
   const selector = <label className="min-w-0 text-sm">Host / Instance
-    <select className="mt-1 block w-full min-w-0 rounded border bg-background p-2" value={selected?.target_id ?? ''}
-      disabled={disabled || busy} onChange={event => { setMaxPerfChoice(null); setCapacityPending(false); onPendingChange(false); select(event.target.value) }}>
-      {!selected && <option value="">Choose a running server</option>}
-      {sessions.map(session => {
-        for (const host of hosts) {
-          const snapshot = snapshots[host.host_id]
-          const instance = snapshot?.instances.find(instance => engineAlias(host.host_id, instance.instance_id) === session.target_id)
-          if (instance) return <option key={session.target_id} value={session.target_id}>{host.name} · {hostInstanceLabel(instance, snapshot)}</option>
-        }
-        return <option key={session.target_id} value={session.target_id}>{session.display_name ?? session.model_id}</option>
-      })}
-    </select>
+    <ChoiceSelect aria-label="Host / Instance" className="mt-1 w-full" value={selected?.target_id ?? ''}
+      disabled={disabled || busy} onValueChange={value => { setMaxPerfChoice(null); setCapacityPending(false); onPendingChange(false); select(value) }}
+      options={[
+        ...(!selected ? [{ value: '', label: 'Choose a running server' }] : []),
+        ...sessions.map(session => {
+          for (const host of hosts) {
+            const snapshot = snapshots[host.host_id]
+            const instance = snapshot?.instances.find(instance => engineAlias(host.host_id, instance.instance_id) === session.target_id)
+            if (instance) return { value: session.target_id, label: `${host.name} · ${hostInstanceLabel(instance, snapshot)}` }
+          }
+          return { value: session.target_id, label: session.display_name ?? session.model_id }
+        }),
+      ]} />
   </label>
   const serverSelection = <div className="space-y-3 rounded-lg border p-4">
     <h3 className="font-medium">Choose a running server</h3>
@@ -85,15 +87,14 @@ export function BenchmarkServerSettings({ sessions, selected, select, disabled, 
       <p className="text-sm text-muted-foreground">Choose a Max Perf profile, then select Apply Max Perf &amp; Restart Server. Wait for the server to be ready before selecting Run benchmark.</p>
       {selected?.benchmark_profile && <p className="text-sm">Running profile: GBench Max Perf v{selected.benchmark_profile.version}</p>}
       <label className="block text-sm">Max Perf profile
-        <select className="mt-1 w-full min-w-0 rounded border bg-background p-2" disabled={maxPerfDisabled || capacityPending || !maxPerfChoices.length}
-          value={maxPerf?.key ?? ''} onChange={event => {
-            setMaxPerfChoice({ targetId: selected!.target_id, sessionId: selected!.session_id, key: event.target.value })
-          }}>
-          <option value="">Choose a Max Perf profile</option>
-          {maxPerfChoices.map(({ entry, key }) => <option key={key} value={key}>
-            {plainProfileName(entry.profile.name)} · {hostModelLabel(snapshot.models.find(model => model.id === entry.model_id)!)}
-          </option>)}
-        </select>
+        <ChoiceSelect aria-label="Max Perf profile" className="mt-1 w-full" disabled={maxPerfDisabled || capacityPending || !maxPerfChoices.length}
+          value={maxPerf?.key ?? ''} onValueChange={key => {
+            setMaxPerfChoice({ targetId: selected!.target_id, sessionId: selected!.session_id, key })
+          }} options={[
+            { value: '', label: 'Choose a Max Perf profile' },
+            ...maxPerfChoices.map(({ entry, key }) => ({ value: key,
+              label: `${plainProfileName(entry.profile.name)} · ${hostModelLabel(snapshot.models.find(model => model.id === entry.model_id)!)}` })),
+          ]} />
       </label>
       {!maxPerfChoices.length && <p className="text-sm text-muted-foreground">No Max Perf profile is available for this server’s installed models and GPU. Choose a running server with a supported release model on one GPU. Existing GPU groups are preserved.</p>}
       {maxPerf && <p role="alert" className="text-sm">Applying this profile waits for current requests to finish, then restarts this server. Chats and other clients using it are affected. Wait for the server to be ready before selecting Run benchmark.</p>}
