@@ -2246,10 +2246,12 @@ function RunInspector({
                   </Button>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Continuation opens a new run setup with prior findings for
-                review. It does not resume execution or replay tool calls.
-              </p>
+              {selected.status !== 'finished' && (
+                <p className="text-xs text-muted-foreground">
+                  Continuation opens a new run setup with prior findings for
+                  review. It does not resume execution or replay tool calls.
+                </p>
+              )}
             </section>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
