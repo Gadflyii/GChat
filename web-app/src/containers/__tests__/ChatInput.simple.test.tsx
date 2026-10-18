@@ -172,7 +172,7 @@ describe('ChatInput', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     seedServiceHub()
-    usePrompt.setState({ prompt: '' })
+    usePrompt.setState(usePrompt.getInitialState())
     useChatAttachments.setState({ attachmentsByThread: {} })
     useThreads.setState({ threads: {}, currentThreadId: undefined })
     useInitialMessage.setState({ byThread: {} })
@@ -420,6 +420,48 @@ describe('ChatInput', () => {
       fileStat.mockRestore()
       showPrompt.mockRestore()
     }
+  })
+
+  it('keeps New Chat and two saved conversation drafts separate across navigation and reopening', () => {
+    const view = render(<ChatInput initialMessage />)
+    const input = () => screen.getByTestId('chat-input')
+    fireEvent.change(input(), { target: { value: 'Unsent new conversation' } })
+
+    act(() => useThreads.setState({ currentThreadId: 'draft-a' }))
+    view.rerender(<ChatInput />)
+    expect(input()).toHaveValue('')
+    fireEvent.change(input(), { target: { value: 'Reply to conversation A' } })
+
+    act(() => useThreads.setState({ currentThreadId: 'draft-b' }))
+    expect(input()).toHaveValue('')
+    fireEvent.change(input(), { target: { value: 'Reply to conversation B' } })
+
+    act(() => useThreads.setState({ currentThreadId: 'draft-a' }))
+    expect(input()).toHaveValue('Reply to conversation A')
+    view.unmount()
+
+    const reopened = render(<ChatInput initialMessage />)
+    expect(input()).toHaveValue('Unsent new conversation')
+    reopened.rerender(<ChatInput />)
+    expect(input()).toHaveValue('Reply to conversation A')
+    act(() => useThreads.setState({ currentThreadId: 'draft-b' }))
+    expect(input()).toHaveValue('Reply to conversation B')
+  })
+
+  it('clears only the submitted conversation draft after a successful send', async () => {
+    usePrompt.getState().setPrompt('Unsent home draft')
+    useThreads.setState({ currentThreadId: 'sent-conversation' })
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    const view = render(<ChatInput onSubmit={onSubmit} />)
+    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'Send this reply' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await waitFor(() => expect(screen.getByTestId('chat-input')).toHaveValue(''))
+    expect(onSubmit).toHaveBeenCalledWith('Send this reply', undefined, undefined, undefined, [])
+
+    view.rerender(<ChatInput initialMessage />)
+    expect(screen.getByTestId('chat-input')).toHaveValue('Unsent home draft')
+    view.rerender(<ChatInput />)
+    expect(screen.getByTestId('chat-input')).toHaveValue('')
   })
 
   it('renders the production input with its translated placeholder', () => {

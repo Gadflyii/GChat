@@ -22,6 +22,24 @@ by explicit same-profile restart and a distinct GUI run. Automatic resume,
 broader crash recovery, power-loss recovery and Windows remain unqualified;
 OI-068 remains PARTIAL.
 
+## Conversation draft isolation — October 18
+
+A private native Chat pass reproduced a New Chat draft appearing in an existing
+conversation. Editing that reply also overwrote the original New Chat draft on
+Back. The `18dafd400` desktop's Chat source matched main `545a18fc1`.
+Baseline receipts and the viewed screenshot are in
+`/ai/gchat/out/gchat-chat-first-user-20261018-1227/`.
+
+Unsent text now stays with its conversation during this app session. Opening a
+different conversation restores its own draft or an empty composer; returning
+restores the earlier draft. **New Chat** clears only the new-conversation draft,
+preserving replies left in saved conversations. Drafts remain in memory and are
+not restored after exiting the app.
+
+Validation is pending focused tests, lint, one `make verify` and a rebuilt
+private native check. Candidate receipts:
+`/ai/gchat/out/gchat-chat-draft-isolation-20261018/`.
+
 ## Agent Studio composition reselection — October 18
 
 A private native pass reproduced silent loss of edited Goal Loop success

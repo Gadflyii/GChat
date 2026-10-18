@@ -10,6 +10,7 @@ import { ContentType, MessageStatus, type ThreadMessage } from '@gchat/core'
 describe('usePrompt', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    usePrompt.setState(usePrompt.getInitialState())
   })
 
   it('should initialize with empty prompt', () => {
