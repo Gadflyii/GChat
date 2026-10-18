@@ -352,23 +352,45 @@ state after relocation, supported by focused tests, one `make verify`, and an
 isolated native CLI replay. GInfer Engine code is excluded; measuring additional
 Linux filesystems is the separate `GINFER-LINUX-FASTEST-DISK-COVERAGE` row.
 
-Owner C4; source branch `fix/c4-first-run-measured-storage-20261018`, based on
+Owner C4; branch `fix/c4-first-run-measured-storage-20261018`, based on
 `6653b5bfd`, at `/ai/gchat-worktrees/c4-first-run-measured-storage-20261018`.
-Independent inactive RC dependency/cache copy completed at 07:17Z in S1
-`/media/ron/SSD_RAID/ai/tmp-c4-first-run-measured-storage-20261018`; donor
-remains unchanged, CPU72–79 returned at 07:18Z. The coherent Host/CLI,
-Welcome and Manager implementation is ready; source review and diff checks
-passed. CPU72–79 is booked 07:26–07:56Z with only the socket-1 shared
-compile guard. Exact source was staged into the independent SSD root; focused
-Host first-run/storage/launcher, Welcome and Manager checks passed once. The
-single `make verify` and the native debug Host build passed at 07:35Z.
-CPU72–79 returned at 07:35Z; booking3128 is canceled. Native replay remains
-pending selected-artifact profiling after the independently booked Flash soak.
-The independent archive-walk fixture under S1
-`/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018` is downloading
-the selected 21,707,145,472-byte package; it has no selected first-run release
-or profile and performs no GPU work. Native replay follows the checks; actual
-selected-artifact profiling waits for a separately booked GPU interval.
+The Host/CLI, Welcome and Manager implementation is source432108dbb.
+Focused first-run/storage/launcher, Welcome and Manager checks, one `make verify`
+and the native Host build passed07:35Z on S1 SSD. The retained build/cache is
+`/media/ron/SSD_RAID/ai/tmp-c4-first-run-measured-storage-20261018`; its inactive
+RC donor is released. [Checks](measured-storage-review-20261018.json) retain
+that evidence.
+
+The private CLI continuation is
+`/media/ron/SSD_RAID/ai/tmp-c4-cli-first-run-dev-catalog-20261018` on S1.
+It uses its own HOME/XDG/DBus/keyring, tested Host432108dbb and coherent
+Engine278e94f63 CLI/server pair. The latter supplies the accepted Linux
+per-filesystem probes; this is a development continuation, separate from the
+original release archive. The installed849fec1d package is21,707,145,472bytes,
+with download UUIDb757c1ea-6d2f-44ff-b385-892942fadfe2. No second transfer is
+needed. The original release runtime remains retained.
+
+[Native evidence](measured-storage-review-native-20261018.json) records the
+08:43–08:52 replay. The ordinary wizard adopted that installed package, and its
+selected-artifact Ensure completed in122.29seconds. Optional idle
+remaining-format completion then started while storage review awaited input,
+and the busy gate hid the review. Resume produced a false interruption error
+and optional completion restarted. The session stopped normally08:52:11Z;
+GPU1/CPUs24–31 returned and booking3170 is canceled. The preceding plain Flash
+soak passed and merged as GInfer52c4db71e.
+
+Arch signed the reproduced correction08:52:23Z: optional completion must wait
+for durable `first_run.complete`. The guard and regression are implemented.
+Focused first-run (20 passed,1 ignored) and idle-completion checks passed. The
+one final `make verify` and corrected native Host build passed09:02:12Z on
+owned SSD CPUs112–119 with the socket-1 shared compile guard and no GPU use.
+Booking3183 is canceled. Native acceptance remains OPEN. Resume the same
+installed package/profile, show measured rates/eligibility/actual package paths,
+change the future folder without movement, reject the old review key, then
+explicitly move the verified package. A refreshed review must retain its UUID.
+Keep must advance to startup and survive normal Host restart; revalidate artifact
+acceptance and quote the unmodified ordinary startup defaults. No profile or
+context cap is invented for this replay.
 
 ## Shared first-run setup — October 15
 

@@ -2500,6 +2500,26 @@ mod tests {
         assert!(review["startup_profiles"][0]["quote"].is_null());
         assert!(!directory.path().join("quote-args").exists());
         assert!(!host.first_run_pending().await); // Review waits for a user, not a polling job.
+        // A completed selected-artifact Ensure leaves other formats deferred,
+        // but waiting for placement review does not authorize idle profiling.
+        let selected_job = worker.status(None).job_id;
+        let selected_args = std::fs::read(directory.path().join("profile-args")).unwrap();
+        assert!(!host.data.lock().await.first_run.complete);
+        assert!(!worker.deferred_groups().is_empty());
+        for _ in 0..2 {
+            host.idle_maintenance().await.unwrap();
+            assert!(!worker.busy());
+            assert_eq!(worker.status(None).job_id, selected_job);
+            assert!(worker.artifact_is_accepted(&[gpu().uuid], &intent));
+            assert_eq!(
+                std::fs::read(directory.path().join("profile-args")).unwrap(),
+                selected_args
+            );
+            let waiting = host.first_run_status().await.unwrap();
+            assert_eq!(waiting["step"], "storage_review");
+            assert_eq!(waiting["storage"]["review_key"], review["storage"]["review_key"]);
+            assert!(waiting["startup_profiles"][0]["quote"].is_null());
+        }
         assert!(host
             .first_run_action(json!({"action":"complete"}))
             .await
