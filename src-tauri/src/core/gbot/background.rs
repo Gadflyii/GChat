@@ -7,70 +7,26 @@ use gbot_service::{
 };
 use ginfer_host::gbot_bootstrap::{StartupError, StartupFailure};
 use ginfer_host::service_owner::ServiceOwner;
-use serde_json::Value;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
 
-pub(super) fn packaged_executor(resource_dir: &Path) -> Result<Option<ExecutorProcesses>, String> {
-    // Only the accepted Ubuntu 24.04 x86-64 closure is packaged today.
-    if !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-        return Ok(None);
+fn packaged_executor(resources: &Path) -> Result<Option<ExecutorProcesses>, StartupError> {
+    let processes = ExecutorProcesses::packaged(resources)
+        .map_err(|detail| StartupError::new(StartupFailure::BotUnavailable, detail))?;
+    #[cfg(windows)]
+    if processes.is_none() {
+        return Err(StartupError::new(
+            StartupFailure::BotUnavailable,
+            "The installed Windows Cua runtime manifest is missing",
+        ));
     }
-    let root = resource_dir.join("resources/gbot");
-    let manifest = match std::fs::read(root.join("runtime.json")) {
-        Ok(manifest) => manifest,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(format!("Read packaged Gbot runtime: {error}")),
-    };
-    let manifest: Value = serde_json::from_slice(&manifest)
-        .map_err(|error| format!("Read packaged Gbot runtime manifest: {error}"))?;
-    if manifest["schema"] != "gbot-cua-runtime-v1"
-        || manifest["platform"] != "linux-x64"
-        || manifest["python_version"] != "3.12.3"
-        || manifest["sdk_revision"] != "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc"
-        || manifest["agent_revision"] != "896c68871da6f3a659c58f341781a977ada20459"
-        || manifest["package_count"] != 61
-    {
-        return Err("Unsupported packaged Gbot runtime".into());
-    }
-    let python = root.join("python/bin/python");
-    let bun = resource_dir.join("resources/bin/bun");
-    let context = root.join("context-preparer.ts");
-    for path in [
-        python.clone(),
-        root.join("python/bin/python3.12"),
-        root.join("python/lib/python3.12/os.py"),
-        root.join("python/lib/python3.12/dist-packages/cua_agent/loops/ginfer.py"),
-        bun.clone(),
-        context.clone(),
-        root.join("smart-context.ts"),
-    ] {
-        if !path
-            .metadata()
-            .is_ok_and(|file| file.is_file() && file.len() > 0)
-        {
-            return Err(format!(
-                "Missing packaged Gbot runtime file: {}",
-                path.display()
-            ));
-        }
-    }
-    Ok(Some(ExecutorProcesses {
-        python: ProcessSpec {
-            program: python,
-            args: Vec::new(),
-        },
-        context: ProcessSpec {
-            program: bun,
-            args: vec![context.to_string_lossy().into_owned()],
-        },
-    }))
+    Ok(processes)
 }
 
-fn executor_processes(resources: &Path) -> Result<Option<ExecutorProcesses>, String> {
+fn executor_processes(resources: &Path) -> Result<Option<ExecutorProcesses>, StartupError> {
     match (
         std::env::var_os("GBOT_CUA_PYTHON"),
         std::env::var("GBOT_CONTEXT_PREPARER"),
@@ -86,7 +42,10 @@ fn executor_processes(resources: &Path) -> Result<Option<ExecutorProcesses>, Str
             },
         })),
         (None, Err(_)) => packaged_executor(resources),
-        _ => Err("Set both GBOT_CUA_PYTHON and GBOT_CONTEXT_PREPARER for bot tasks".into()),
+        _ => Err(StartupError::new(
+            StartupFailure::BotUnavailable,
+            "Set both GBOT_CUA_PYTHON and GBOT_CONTEXT_PREPARER for bot tasks",
+        )),
     }
 }
 
@@ -310,6 +269,27 @@ pub fn run_service_mode() -> Option<std::process::ExitCode> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn corrupt_packaged_runtime_reports_bot_unavailable() {
+        let root = tempfile::tempdir().unwrap();
+        let runtime = root.path().join("resources/gbot");
+        std::fs::create_dir_all(&runtime).unwrap();
+        std::fs::write(runtime.join("runtime.json"), "invalid manifest").unwrap();
+        let error = packaged_executor(root.path()).err().unwrap();
+        assert_eq!(error.failure, StartupFailure::BotUnavailable);
+        let message = String::from(error);
+        assert!(message.starts_with("Bot unavailable:"), "{message}");
+        assert!(message.contains("Chat is still available."), "{message}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn missing_packaged_runtime_reports_bot_unavailable() {
+        let root = tempfile::tempdir().unwrap();
+        let error = packaged_executor(root.path()).err().unwrap();
+        assert_eq!(error.failure, StartupFailure::BotUnavailable);
+    }
 
     #[test]
     fn startup_exit_codes_preserve_typed_vault_failures() {

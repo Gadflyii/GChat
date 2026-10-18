@@ -37,6 +37,7 @@ class WindowsReleaseInputs(unittest.TestCase):
             'profiles': [{'platform': 'windows', 'id': 'fixture'}],
         }))
         self.archives = [self.archive(arch) for arch in ('86', '89', '120a')]
+        self.cua = self.cua_runtime()
 
     def archive(self, architecture, *, manifest_changes=None, entry_changes=None,
                 payload_changes=None, omit=(), extra=None):
@@ -64,13 +65,45 @@ class WindowsReleaseInputs(unittest.TestCase):
                     archive.writestr(name, data)
         return target
 
-    def validate(self, archives=None, commit=None):
+    def cua_runtime(self):
+        target = self.root / 'accepted Windows Cua runtime'
+        payload = {
+            'python/python.exe': b'fixture interpreter; never executed',
+            'python/python312.dll': b'fixture interpreter library',
+            'python/python312.zip': b'fixture standard library',
+            'python/python312._pth': b'python312.zip\n.\nLib/site-packages\n',
+            'python/Lib/site-packages/cua_agent/loops/ginfer.py': b'fixture provider',
+            'context-preparer.ts': b'fixture context preparer',
+            'smart-context.ts': b'fixture shared context',
+            'requirements.lock': b'fixture accepted dependencies',
+            'closure-inventory.json': b'{"package_count":62}',
+            'licenses/python/LICENSE.txt': b'fixture retained Python notice',
+        }
+        for name, data in payload.items():
+            member = target / name
+            member.parent.mkdir(parents=True, exist_ok=True)
+            member.write_bytes(data)
+        (target / 'runtime.json').write_text(json.dumps({
+            'schema': 'gbot-cua-runtime-v1', 'platform': 'windows-x64',
+            'python_version': '3.12.3',
+            'sdk_revision': '0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc',
+            'agent_revision': '896c68871da6f3a659c58f341781a977ada20459',
+            'package_count': 62,
+            'files': [{'path': name, 'bytes': len(data),
+                       'sha256': hashlib.sha256(data).hexdigest()}
+                      for name, data in payload.items()],
+        }))
+        return target
+
+    def validate(self, archives=None, commit=None, include_cua=True):
         command = [POWERSHELL, '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
                    str(SCRIPT.with_name('build-windows-release.ps1')),
                    '-GinferRuntimeArchives', ';'.join(map(str, self.archives if archives is None else archives)),
                    '-GinferProfileCatalogs', str(self.catalog), '-ValidateInputsOnly']
         if commit:
             command.extend(['-GinferSourceCommit', commit])
+        if include_cua:
+            command.extend(['-GbotCuaRuntime', str(self.cua)])
         return subprocess.run(command, capture_output=True, text=True, timeout=30)
 
     def assertRejected(self, archive, message):
@@ -115,6 +148,47 @@ class WindowsReleaseInputs(unittest.TestCase):
     def test_required_executables_and_closed_payload_are_checked(self):
         self.assertRejected(self.archive('86', omit=('bin/ginfer.exe',)), 'missing bin/ginfer.exe')
         self.assertRejected(self.archive('86', extra={'unlisted.dll': b'not declared'}), 'unlisted payload files')
+
+    def test_cua_runtime_is_required_before_build_mutation(self):
+        result = self.validate(include_cua=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Pass -GbotCuaRuntime', result.stdout + result.stderr)
+
+    def test_cua_covered_file_hash_is_checked(self):
+        # Same byte count exercises digest validation rather than only size.
+        (self.cua / 'smart-context.ts').write_bytes(b'Fixture shared context')
+        result = self.validate()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Gbot Cua runtime file hash mismatch: smart-context.ts',
+                      result.stdout + result.stderr)
+
+    def test_cua_requires_accepted_windows_closure(self):
+        manifest_path = self.cua / 'runtime.json'
+        accepted = json.loads(manifest_path.read_text())
+        for change in ({'platform': 'linux-x64'}, {'python_version': '3.12.4'},
+                       {'sdk_revision': '0' * 40}, {'agent_revision': '0' * 40},
+                       {'package_count': 61}):
+            with self.subTest(change=change):
+                manifest_path.write_text(json.dumps({**accepted, **change}))
+                result = self.validate()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('accepted Windows x64 CPython 3.12.3, 62-package closure',
+                              result.stdout + result.stderr)
+
+    def test_cua_requires_complete_payload_and_covered_notices(self):
+        manifest_path = self.cua / 'runtime.json'
+        accepted = json.loads(manifest_path.read_text())
+        for omitted in [entry['path'] for entry in accepted['files']]:
+            with self.subTest(omitted=omitted):
+                manifest_path.write_text(json.dumps({
+                    **accepted, 'files': [entry for entry in accepted['files']
+                                          if entry['path'] != omitted],
+                }))
+                result = self.validate()
+                self.assertNotEqual(result.returncode, 0)
+                message = ('manifest-covered license notices' if omitted.startswith('licenses/')
+                           else f'Gbot Cua runtime is missing {omitted}')
+                self.assertIn(message, result.stdout + result.stderr)
 
 
 class LinuxRuntimeSet(unittest.TestCase):

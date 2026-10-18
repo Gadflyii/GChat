@@ -170,8 +170,14 @@ the task and unresolved operation receipts. This is a host-side binding, not a
 new guest worker or network service. Its private IPC, event-driven task/approval API and GChat native bridge are
 implemented and pass focused checks. Linux runtime packaging is merged in
 `45ac4ae7e`: native GChat discovers the accepted bundled Python closure and
-uses bundled Bun for the shared context preparer. Windows packaging remains
-owed to its release gate.
+uses bundled Bun for the shared context preparer. Windows runtime packaging and
+discovery are implemented. Arch-signed startup requires the absolute bundled
+Python, isolated `._pth` paths, ignored `PYTHON*` variables and user site-packages,
+and no system Python fallback. A missing or corrupt Windows bundle reports typed
+**Bot unavailable** with reinstall guidance while GChat starts and serves ordinary
+chat independently. Windows remains unqualified until the real model-driven
+Hyper-V guest acceptance gate passes; see the
+[Windows runtime decision](../decisions/2026-10-18-bundle-private-windows-cua-runtime.md).
 
 ### Durable actions and approval
 

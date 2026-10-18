@@ -372,8 +372,12 @@ paths to GChat's `scripts/build-windows-release.ps1` as
 `-GinferRuntimeArchives 'C:\path\sm86.zip;C:\path\sm89.zip;C:\path\sm120a.zip'`
 and `-GinferSourceCommit <full-commit-id>`. The builder requires exactly those
 three architectures from one clean commit and verifies every payload's size and
-SHA-256 before building. `-ValidateInputsOnly` runs that complete archive and
-profile-catalog gate without staging resources or building the app. The full
+SHA-256 before building. Also pass `-GbotCuaRuntime <staged-windows-closure>`
+(`GBOT_CUA_RUNTIME` through Make) with the accepted private Windows Cua runtime;
+see [Gbot runtime packaging](gbot/README.md#packaging-the-cua-runtime).
+`-ValidateInputsOnly` checks the engine archives, profile catalogs and Cua
+manifest, pinned inventory, file hashes and notices without staging resources
+or building the app. The full
 build smoke-tests each server and bundles the three runtime directories under
 `resources/ginfer/windows/`, with a `ginfer-windows-runtime-set-v1` descriptor.
 The desktop selects the matching runtime for the detected graphics card.

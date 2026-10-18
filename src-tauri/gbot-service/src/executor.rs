@@ -256,6 +256,193 @@ pub struct ExecutorProcesses {
     pub context: ProcessSpec,
 }
 
+impl ExecutorProcesses {
+    pub fn packaged(resource_dir: &std::path::Path) -> std::result::Result<Option<Self>, String> {
+        if !cfg!(all(
+            any(target_os = "linux", windows),
+            target_arch = "x86_64"
+        )) {
+            return Ok(None);
+        }
+        let root = resource_dir.join("resources/gbot");
+        let manifest = match std::fs::read(root.join("runtime.json")) {
+            Ok(manifest) => manifest,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(format!("Read packaged Gbot runtime: {error}")),
+        };
+        let manifest: Value = serde_json::from_slice(&manifest)
+            .map_err(|error| format!("Read packaged Gbot runtime manifest: {error}"))?;
+        let windows = cfg!(windows);
+        if manifest["schema"] != "gbot-cua-runtime-v1"
+            || manifest["platform"] != if windows { "windows-x64" } else { "linux-x64" }
+            || manifest["python_version"] != "3.12.3"
+            || manifest["sdk_revision"] != "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc"
+            || manifest["agent_revision"] != "896c68871da6f3a659c58f341781a977ada20459"
+            || manifest["package_count"] != if windows { 62 } else { 61 }
+        {
+            return Err("Unsupported packaged Gbot runtime".into());
+        }
+        let python = root.join(if windows {
+            "python/python.exe"
+        } else {
+            "python/bin/python"
+        });
+        let bun = resource_dir.join(if windows {
+            "bun.exe"
+        } else {
+            "resources/bin/bun"
+        });
+        let context = root.join("context-preparer.ts");
+        let interpreter_files = if windows {
+            [
+                "python/python312.dll",
+                "python/python312.zip",
+                "python/python312._pth",
+                "python/Lib/site-packages/cua_agent/loops/ginfer.py",
+            ]
+        } else {
+            [
+                "python/bin/python3.12",
+                "python/lib/python3.12/os.py",
+                "python/lib/python3.12/dist-packages/cua_agent/loops/ginfer.py",
+                "requirements.lock",
+            ]
+        };
+        for path in interpreter_files
+            .into_iter()
+            .map(|path| root.join(path))
+            .chain([
+                python.clone(),
+                bun.clone(),
+                context.clone(),
+                root.join("smart-context.ts"),
+            ])
+        {
+            if !path
+                .metadata()
+                .is_ok_and(|file| file.is_file() && file.len() > 0)
+            {
+                return Err(format!(
+                    "Missing packaged Gbot runtime file: {}",
+                    path.display()
+                ));
+            }
+        }
+        Ok(Some(ExecutorProcesses {
+            python: ProcessSpec {
+                program: python,
+                args: if windows {
+                    vec!["-I".into(), "-B".into()]
+                } else {
+                    Vec::new()
+                },
+            },
+            context: ProcessSpec {
+                program: bun,
+                args: vec![context.to_string_lossy().into_owned()],
+            },
+        }))
+    }
+}
+
+#[cfg(all(test, any(target_os = "linux", windows), target_arch = "x86_64"))]
+mod packaged_tests {
+    use super::ExecutorProcesses;
+
+    #[test]
+    fn packaged_runtime_discovers_relocated_commands_and_rejects_incomplete_resources() {
+        let directory = tempfile::tempdir().unwrap();
+        let resource_dir = directory.path().join("relocated bundle ü");
+        assert!(ExecutorProcesses::packaged(&resource_dir)
+            .unwrap()
+            .is_none());
+        let root = resource_dir.join("resources/gbot");
+        let (platform, count, interpreter, bun, files): (_, _, _, _, &[&str]) = if cfg!(windows) {
+            (
+                "windows-x64",
+                62,
+                "python/python.exe",
+                "bun.exe",
+                &[
+                    "python/python.exe",
+                    "python/python312.dll",
+                    "python/python312.zip",
+                    "python/python312._pth",
+                    "python/Lib/site-packages/cua_agent/loops/ginfer.py",
+                ],
+            )
+        } else {
+            (
+                "linux-x64",
+                61,
+                "python/bin/python",
+                "resources/bin/bun",
+                &[
+                    "python/bin/python",
+                    "python/bin/python3.12",
+                    "python/lib/python3.12/os.py",
+                    "python/lib/python3.12/dist-packages/cua_agent/loops/ginfer.py",
+                ],
+            )
+        };
+        for file in files.iter().copied().chain([
+            "requirements.lock",
+            "context-preparer.ts",
+            "smart-context.ts",
+        ]) {
+            let path = root.join(file);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "resource").unwrap();
+        }
+        let bun = resource_dir.join(bun);
+        std::fs::create_dir_all(bun.parent().unwrap()).unwrap();
+        std::fs::write(&bun, "resource").unwrap();
+        let manifest = serde_json::json!({
+            "schema": "gbot-cua-runtime-v1", "platform": platform,
+            "python_version": "3.12.3", "package_count": count,
+            "sdk_revision": "0c69d9a2c8abbb5051a2df4a23f0fa166d5385dc",
+            "agent_revision": "896c68871da6f3a659c58f341781a977ada20459"
+        });
+        let write_manifest = |manifest: &serde_json::Value| {
+            std::fs::write(root.join("runtime.json"), manifest.to_string()).unwrap();
+        };
+        write_manifest(&manifest);
+        let processes = ExecutorProcesses::packaged(&resource_dir).unwrap().unwrap();
+        assert_eq!(processes.python.program, root.join(interpreter));
+        assert_eq!(
+            processes.python.args,
+            if cfg!(windows) {
+                vec!["-I", "-B"]
+            } else {
+                vec![]
+            }
+        );
+        assert_eq!(processes.context.program, bun);
+        assert_eq!(
+            processes.context.args,
+            vec![root.join("context-preparer.ts").to_string_lossy()]
+        );
+
+        let mut foreign = manifest.clone();
+        foreign["platform"] = serde_json::json!(if cfg!(windows) {
+            "linux-x64"
+        } else {
+            "windows-x64"
+        });
+        write_manifest(&foreign);
+        assert!(ExecutorProcesses::packaged(&resource_dir)
+            .err()
+            .unwrap()
+            .contains("Unsupported"));
+        write_manifest(&manifest);
+        std::fs::remove_file(root.join(interpreter)).unwrap();
+        assert!(ExecutorProcesses::packaged(&resource_dir)
+            .err()
+            .unwrap()
+            .contains("Missing"));
+    }
+}
+
 impl ProcessSpec {
     fn spawn(&self, extra: &[&str], key: Option<&str>) -> Result<Child> {
         let mut command = Command::new(&self.program);
