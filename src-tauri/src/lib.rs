@@ -22,7 +22,10 @@ use tauri_plugin_store::StoreExt;
 #[cfg(not(feature = "cli"))]
 use tokio::sync::Mutex;
 
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(all(
+    any(not(feature = "cli"), test),
+    any(target_os = "linux", target_os = "windows")
+))]
 pub(crate) fn handle_agent_window_event(
     state: &core::state::AppState,
     label: &str,
