@@ -27,6 +27,38 @@ S1 CPU104–111 returned **16:03Z**, booking3381 canceled. The owned
 review; the retained RC dependency donor was untouched. Small evidence:
 `out/c7-model-delete-confirmation-20261018/test-result.json` and
 `test-summary.md`. Next: merge the verified branch, then continue the owned queue.
+## Secure-storage installation error guidance — active, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-INSTALL-ERROR-GUIDANCE` resumes source preparation after
+priority locked-vault recovery `ac922560b` passed and was sent to Codex 8.
+No installer tests have launched. It owns `CredentialSetup.tsx` and the existing
+rendered tests, branch `fix/gchat3-secure-storage-install-error-guidance-20261018`,
+worktree `/ai/gchat-worktrees/gchat3-secure-storage-install-error-guidance-20261018`.
+The candidate started on `d53b88432`; preserve it before incorporating the P2.
+A rejected installation currently shows raw diagnostics without a recovery step
+and leaves stale installer availability visible. Native installation can fail
+after a package operation, so rejection does not prove that nothing changed.
+
+Deliver plain failure guidance, closed diagnostic details and one passive status
+refresh after rejection. Use the refreshed state for explicit Check or install
+retry; preserve administrator consent, native arguments and readiness, and never
+replay installation automatically. Passive Linux native status is unchecked,
+not ready: only an explicit Check establishes readiness. Four new rendered
+cases cover pending refresh and confirmed retry, a newly present provider with
+retained warning after explicit Check, and both unknown-status recoveries.
+Acceptance: focused credential tests, lint and exactly one `make verify`; no
+real installation, elevation, native credential changes, Host, catalog, RC,
+GPU or Windows activity. Next: incorporate the reviewed P2, reproduce the
+installer failures on the unchanged component, then verify the frozen fix.
+
+One child owns rendered tests, another independent S1 execution; root owns the
+component and this record. The retained independent SSD cache is
+`/media/ron/SSD_RAID/ai/tmp-gchat3-secure-storage-install-error-guidance-tests-20261018`.
+CPU112–119 returned **16:44Z** after P2 verification; its containers and scratch
+were removed **16:49:21Z**, leaving the cache idle for this row. The retained RC
+dependency donor is untouched. Retire this cache after reviewed installer
+results, preserving only a small result JSON and summary.
+
 ## Passphrase form error guidance — verified, Gchat 3, October 18
 
 `GUI-SECURE-STORAGE-PASSPHRASE-ERROR-GUIDANCE` gives plain Create, Resume
@@ -60,8 +92,8 @@ containers were removed after confirming no readers, releasing
 **28,064,308,537 logical bytes**. Their absence was verified; the inactive RC
 dependency donor was untouched. Only reviewed
 `out/secure-storage-passphrase-error-guidance-20261018/test-result.json` and
-`test-summary.md` remain. Next: send this branch for merge and continue the GUI
-queue without repeating accepted verification.
+`test-summary.md` remain. Source `ca17dc7cb` is merged as `d53b88432`;
+continue the GUI queue without repeating accepted verification.
 
 ## Passphrase-vault Lock feedback — verified, Gchat 3, October 18
 
