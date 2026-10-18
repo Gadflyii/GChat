@@ -14,6 +14,15 @@ key mode clears advice for the now-hidden action. Fingerprint verification,
 host-key pinning, key storage and SSH access checks keep their existing contract.
 This is source/rendered UI scope.
 
+Validation: the unchanged-source baseline failed eight regressions. Fixed
+LanSetup/wizard focus passed 50 cases; lint had zero errors and five existing
+warnings. ONE `make verify` passed at 17:32:48 UTC: 3,722 app tests (6 skipped),
+127 extension tests, 1,316 Rust tests (28 ignored) and six coverage floors.
+All 3,459 tracked input bytes/modes matched before and after verification, with
+fresh build timestamps. CPUs returned at 17:33 UTC; the private 20.19 GB cache
+was retired at 17:34 UTC. Protected inputs remain. Logs and source bindings:
+`/ai/gchat/out/gchat2-lan-setup-error-guidance-20261018/result.json`.
+
 ## Human-help response error recovery — Gchat 2
 
 `GBOT-HUMAN-HELP-ERROR-GUIDANCE`, based on main `3b967a5bc`, gives failed
