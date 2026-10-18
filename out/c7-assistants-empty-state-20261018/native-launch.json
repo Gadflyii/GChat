@@ -1,0 +1,29 @@
+{
+  "pid": 78244,
+  "argv": [
+    "taskset",
+    "-c",
+    "88-95",
+    "nice",
+    "-n",
+    "10",
+    "dbus-run-session",
+    "--",
+    "bash",
+    "--noprofile",
+    "--norc",
+    "-c",
+    "printf '\\n' | gnome-keyring-daemon --unlock --components=secrets; exec /media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/donor-appdir/AppRun"
+  ],
+  "display": ":87",
+  "inspector": "127.0.0.1:19407",
+  "home": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/native-home",
+  "runtime": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/native-runtime",
+  "dbus": "own dbus-run-session",
+  "keyring": "own unlocked secrets",
+  "wayland_unset": true,
+  "input": "native XTest only; inspector read-only",
+  "software_rendering": true,
+  "fixture": "fresh own profile; mcp_version3 and empty inactive connection configuration",
+  "started_utc": "2026-10-18T08:05:00.680511+00:00"
+}

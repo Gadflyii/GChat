@@ -60,7 +60,7 @@ function AssistantContent() {
   }
 
   const sortedAssistants = assistants.slice().sort((a, b) => a.created_at - b.created_at)
-  const defaultAssistant = sortedAssistants.find((a) => a.id === defaultAssistantId)
+  const defaultAssistant = assistants.find((a) => a.id === defaultAssistantId) ?? assistants[0]
 
   return (
     <div className="flex flex-col h-svh w-full">
@@ -99,8 +99,13 @@ function AssistantContent() {
                 actions={
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="justify-between">
-                        <span className="truncate">{defaultAssistant?.name ?? '—'}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="justify-between"
+                        disabled={assistants.length === 0}
+                      >
+                        <span className="truncate">{defaultAssistant?.name ?? t('assistants:noAssistant')}</span>
                         <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground ml-2" />
                       </Button>
                     </DropdownMenuTrigger>
@@ -124,7 +129,7 @@ function AssistantContent() {
               <h1 className="text-foreground font-studio font-medium text-sm mt-4 mb-4">{t('assistants:allAssistants')}</h1>
               {sortedAssistants.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  {t('assistants:noAssistants')}
+                  {t('assistants:emptyAssistants')}
                 </p>
               )}
               {sortedAssistants.map((assistant) => (

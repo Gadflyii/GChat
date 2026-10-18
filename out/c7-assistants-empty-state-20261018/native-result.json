@@ -1,0 +1,40 @@
+{
+  "row": "GUI-ASSISTANTS-EMPTY-STATE",
+  "status": "PASS",
+  "host": "AIS-2-8592-L01",
+  "base": "5ce4bab653e8b9b95c28328ceb374f4dc609c05a",
+  "completed_utc": "2026-10-18T08:11Z",
+  "build_result": "build-result.json",
+  "gchat_sha256": "eb9ca6649bba05a21969572d4059686f8945fa8d45e4bea403d7824f767c4741",
+  "fixture": "Fresh independent AppDir; private HOME/XDG/runtime700, own dbus/keyring/Xvfb; CPU88-95; no model or GPU",
+  "input": "Native xdotool clicks and typing; WebKit inspector read-only",
+  "checks": [
+    {
+      "step": "Delete the last assistant through its real confirmation",
+      "screenshot": "01-native-delete-confirmation.png",
+      "pass": true
+    },
+    {
+      "step": "Empty list",
+      "guidance": "You have no assistants. Add an assistant to save your own instructions for new chats. You can still chat without one.",
+      "no_assistant_disabled": true,
+      "add_assistant_enabled": true,
+      "confirmation_closed": true,
+      "screenshot": "02-native-empty-state.png",
+      "pass": true
+    },
+    {
+      "step": "Add Writing helper with system prompt Help me write clearly. and Save",
+      "guidance_removed": true,
+      "writing_helper_default_enabled": true,
+      "dialog_closed": true,
+      "screenshot": "03-native-added-assistant.png",
+      "pass": true
+    }
+  ],
+  "limitations": [
+    "Linux acceptance only; Windows remains unqualified",
+    "No inference behavior changed or tested"
+  ],
+  "lifecycle": "Native app and helpers stopped; ONE make verify passed; CPU88-95 returned08:14Z; disposable SSD root removed08:16Z."
+}

@@ -1,0 +1,236 @@
+{
+  "source": "5ce4bab653e8b9b95c28328ceb374f4dc609c05a",
+  "tree": "88197b5641cc228ab7c00c5d1601547378aad49f",
+  "host": "AIS-2-8592-L01",
+  "root": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018",
+  "booking": {
+    "line": 3147,
+    "cpus": "88-95",
+    "end_utc": "2026-10-18T08:21Z"
+  },
+  "donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/app",
+  "package_donor": "/media/ron/SSD_RAID/ai/tmp-gchat3-linux-rc-refresh-20261017/packages-current-ed68c7443-e2282c336-release/app-stage",
+  "status": "BUILD_PASS",
+  "stages": {
+    "build": {
+      "start": "2026-10-18T08:01:34.234272+00:00",
+      "end": "2026-10-18T08:03:56.591724+00:00",
+      "exit": 0,
+      "log": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/build.log"
+    },
+    "tauri-assets": {
+      "exit": 0,
+      "start": "2026-10-18T08:01:49Z",
+      "end": "2026-10-18T08:01:50Z"
+    },
+    "frontend-build": {
+      "exit": 0,
+      "start": "2026-10-18T08:01:50Z",
+      "end": "2026-10-18T08:02:34Z"
+    },
+    "candidate-focused": {
+      "exit": 0,
+      "start": "2026-10-18T08:01:41Z",
+      "end": "2026-10-18T08:01:44Z"
+    },
+    "native-app": {
+      "exit": 0,
+      "start": "2026-10-18T08:02:58Z",
+      "end": "2026-10-18T08:03:56Z"
+    },
+    "affected-lint": {
+      "exit": 0,
+      "start": "2026-10-18T08:01:44Z",
+      "end": "2026-10-18T08:01:46Z"
+    },
+    "baseline-focused": {
+      "exit": 1,
+      "start": "2026-10-18T08:01:37Z",
+      "end": "2026-10-18T08:01:41Z"
+    },
+    "extensions-assets": {
+      "exit": 0,
+      "start": "2026-10-18T08:01:46Z",
+      "end": "2026-10-18T08:01:49Z"
+    },
+    "core-assets": {
+      "exit": 0,
+      "start": "2026-10-18T08:01:34Z",
+      "end": "2026-10-18T08:01:37Z"
+    },
+    "native-host": {
+      "exit": 0,
+      "start": "2026-10-18T08:02:34Z",
+      "end": "2026-10-18T08:02:58Z"
+    }
+  },
+  "tests_rerun": false,
+  "donor_mutated": false,
+  "started_utc": "2026-10-18T07:57:50.974030+00:00",
+  "dependency_input_comparison": [
+    {
+      "path": ".probe/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": ".yarnrc.yml",
+      "same": true
+    },
+    {
+      "path": "core/package.json",
+      "same": true
+    },
+    {
+      "path": "docs/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/assistant-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/conversational-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/download-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/ginfer-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/rag-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/vector-db-extension/package.json",
+      "same": true
+    },
+    {
+      "path": "extensions/yarn.lock",
+      "same": true
+    },
+    {
+      "path": "package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/Cargo.lock",
+      "same": true
+    },
+    {
+      "path": "src-tauri/Cargo.toml",
+      "same": false
+    },
+    {
+      "path": "src-tauri/gbot-service/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/ginfer-host/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/ginfer-manager/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-ginfer/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-ginfer/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-hardware/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-hardware/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-rag/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-rag/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-vector-db/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/tauri-plugin-vector-db/package.json",
+      "same": true
+    },
+    {
+      "path": "src-tauri/plugins/yarn.lock",
+      "same": true
+    },
+    {
+      "path": "src-tauri/utils/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/vendor/cua-media/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/vendor/cua-media/crates/cua-proto/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/vendor/cua-media/crates/cua-spacesd-client/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "src-tauri/vendor/tray-icon/Cargo.toml",
+      "same": true
+    },
+    {
+      "path": "web-app/package.json",
+      "same": true
+    },
+    {
+      "path": "yarn.lock",
+      "same": true
+    }
+  ],
+  "source_mtime_policy": "all exact tracked files normalized after cache copy to force source-sensitive Cargo rebuild",
+  "completed_utc": "2026-10-18T08:03:57.252371+00:00",
+  "prepared_allocated_bytes": 36311310336,
+  "frozen_file_sha256": {
+    "web-app/src/routes/settings/__tests__/assistant-save.test.tsx": "7d9c7fdebaf490984a6c367b2f0a4d89dbce5701bb1b53a826017fb8fbf35c5d",
+    "web-app/src/routes/settings/assistant.tsx": "abb45fb17d4101feea6d541c0d7fb31be5af96cd51dd6d54043c643f899f7281",
+    "web-app/src/locales/en/assistants.json": "ade1c812bc8b522b1b9f6f932aa7c122be9e80de9c79e8000e44a7e99ac9d818"
+  },
+  "binaries": {
+    "gchat": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/donor-appdir/usr/bin/gchat",
+      "sha256": "eb9ca6649bba05a21969572d4059686f8945fa8d45e4bea403d7824f767c4741",
+      "bytes": 256557272,
+      "ldd": "PASS with private AppDir library closure"
+    },
+    "ginfer-host": {
+      "path": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/donor-appdir/usr/lib/GChat/resources/bin/ginfer-host",
+      "sha256": "4444f1e2ee735245575946ef2e8d3f5c432ea8975633ca5f48ddd8a75b437f8e",
+      "bytes": 56678232,
+      "ldd": "PASS with private AppDir library closure"
+    }
+  },
+  "appdir": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/donor-appdir",
+  "resources": "/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018/donor-appdir/usr/lib/GChat/resources"
+}

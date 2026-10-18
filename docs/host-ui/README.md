@@ -1,5 +1,39 @@
 # GInfer host UI
 
+## Assistants empty state — C7, October 18
+
+`GUI-ASSISTANTS-EMPTY-STATE`: deleting the last assistant now explains how to
+add another and that chatting still works. The empty default selector says
+**No assistant** and is unavailable. Adding an assistant restores selection.
+If the saved default was deleted, Settings displays the first assistant, matching
+the fallback already used by new chats. Chat behavior is unchanged.
+
+The earlier English guidance was shadowed by a duplicate translation key;
+the old test mocked translation keys and missed it. The Settings guidance now
+has a distinct key. Regression tests use the actual English resource, reactive
+assistant store and delete confirmation. The test-only baseline reproduces both
+defects (two failures, two existing passes); all four candidate cases pass.
+Affected route lint and the frontend/private desktop/Host builds pass.
+
+Native Linux acceptance passes the real delete confirmation, readable empty
+guidance, disabled **No assistant**, enabled **Add Assistant**, and saving
+**Writing helper**, which removes the guidance and restores selection. All
+input used native clicks and typing; the inspector only read page state.
+Screenshots and concise results are in
+`out/c7-assistants-empty-state-20261018/`. ONE `make verify` passes without
+retry: web3503/6skipped, extension127, Rust1276/28ignored; lint, typecheck,
+quality checks and all critical coverage floors pass. The gate uses private
+copies of the four corrected catalogs from GInfer `5825c2e39`.
+
+Owner C7; branch `fix/c7-assistants-empty-state-20261018`, worktree
+`/ai/gchat-worktrees/c7-assistants-empty-native-20261018`, base `5ce4bab65`.
+The private S1 independent AppDir/HOME/XDG/runtime/dbus/keyring/Xvfb session
+is stopped; CPU88–95 returned08:14Z. No model, GPU,
+Windows installation or shared app data is involved. The disposable SSD root
+`/media/ron/SSD_RAID/ai/tmp-c7-assistants-empty-state-20261018` was removed
+08:16Z. Only small results, logs and three screenshots remain. Windows remains
+unqualified.
+
 ## MCP dialog row buttons — C7, October 18
 
 `GUI-MCP-DIALOG-ROW-BUTTONS`: command-option reorder handles are native named
