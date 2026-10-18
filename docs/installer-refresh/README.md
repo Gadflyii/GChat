@@ -1,5 +1,33 @@
 # GChat installer refresh
 
+## Native Windows fixed-volume qualification — Codex 7, October 18
+
+`GCHAT-WINDOWS-FASTEST-DISK-20261016` remains **BLOCKED on the native fixture**.
+Read-only native metadata at 11:04Z identifies C:, D: and E: on
+PhysicalDrive0, 3 and 4. No eligible mounted sibling-partition pair exists,
+so this host cannot meet the acceptance fixture of three volumes including
+two partitions on one physical drive. The existing helper regression covers
+sibling budgeting; it does not establish the missing physical acceptance.
+No partitions or Windows settings were changed.
+
+The accepted SM120a runtime at
+`E:\gchat3-windows-multiarch-20261017\accepted\runtimes\ginfer-windows-x64-sm120a.zip`
+contains `b76ce57a3`, including merged disk fix `c53921fbb`. Its existing
+`profile-hardware --disk-only` route preserves CPU/GPU/NUMA calibration,
+measures eligible mounted volumes with Volume GUID/PhysicalDrive identity
+and usable paths, and bounds reads to 1 GiB per physical drive. Existing
+reader/refresh tests already passed. No model inference or full calibration
+is required for this gate.
+
+Bounded receipt recovery ended at 11:11Z: Gchat3 retired its private fixture;
+no inactive matching native base-profile copy was found in its retained
+receipts. Ron's active profile was not used. The next action needs a suitable
+native fixture and an inactive matching profile, then one disk-only run with
+the fastest volume outside model/cache. No booking, extraction, measurement,
+native child or disposable payload was created. Source/evidence worktree
+`/ai/gchat-worktrees/c7-windows-flash-20261018` is retained on
+`docs/c7-windows-fastest-disk-20261018`.
+
 ## Native Windows Flash qualification — Codex 7, October 18
 
 `WINDOWS-FLASH-CPU-QUALIFICATION` remains **BLOCKED before launch**.
