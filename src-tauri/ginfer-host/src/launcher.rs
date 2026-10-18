@@ -47,6 +47,18 @@ pub struct InstalledConfiguration {
 pub struct DesktopBootstrap {
     pub provider: std::path::PathBuf,
     pub engine: std::path::PathBuf,
+    /// Desktop installs require every platform image; standalone installs own one image.
+    pub runtime_set: bool,
+}
+
+impl DesktopBootstrap {
+    pub fn engine_runtimes(&self) -> Result<std::collections::BTreeMap<String, std::path::PathBuf>, String> {
+        if !self.runtime_set { return Ok(Default::default()); }
+        #[cfg(any(target_os = "linux", target_os = "windows"))]
+        { crate::local_host::desktop_runtimes(&self.provider) }
+        #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+        { Err("Desktop runtime sets are unsupported on this platform".into()) }
+    }
 }
 
 fn installed_configuration_path() -> Result<std::path::PathBuf, String> {
@@ -57,7 +69,7 @@ fn installed_configuration_path() -> Result<std::path::PathBuf, String> {
         .join("ginfer-launch.json"))
 }
 
-fn read_installed_configuration(path: &Path) -> Result<Option<InstalledConfiguration>, String> {
+pub fn read_installed_configuration(path: &Path) -> Result<Option<InstalledConfiguration>, String> {
     let file = match std::fs::File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -71,7 +83,7 @@ fn read_installed_configuration(path: &Path) -> Result<Option<InstalledConfigura
     let config: InstalledConfiguration = serde_json::from_reader(std::io::BufReader::new(file))
         .map_err(|error| {
             format!(
-                "Invalid installed launcher configuration {}: {error}",
+                "Invalid installed launcher configuration {}: {error}. Recreate it with its owning installer: for a standalone bundle, run python3 setup.py on Linux or setup.cmd on Windows, choosing unused installation and launcher paths. In GChat, uninstall and reinstall the CLI in Settings > General > Advanced. Existing standalone installations are not overwritten.",
                 path.display()
             )
         })?;
@@ -121,13 +133,8 @@ impl InstalledConfiguration {
                 .trim_matches(['[', ']']).parse().map_err(|_| "desktop launcher requires a loopback IP address")?;
             let local = crate::local_host::LocalHost {
                 binary: std::env::current_exe().map_err(|e| e.to_string())?,
+                engine_runtimes: desktop.engine_runtimes()?,
                 engine: desktop.engine,
-                engine_runtimes: {
-                    #[cfg(any(target_os = "linux", target_os = "windows"))]
-                    { crate::local_host::desktop_runtimes(&desktop.provider)? }
-                    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-                    { Default::default() }
-                },
                 directory: self.data_dir.clone(),
                 desktop_provider: Some(desktop.provider),
                 models: Vec::new(), artifact_sets: Vec::new(),
@@ -1013,6 +1020,58 @@ async fn manage(control: &LocalControl, snapshot: &Value) -> Result<(), String> 
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn installed_single_image_bootstrap_keeps_its_runtime_without_a_desktop_manifest() {
+        let root = tempfile::tempdir().unwrap();
+        let provider = root.path().join("provider");
+        let engine = root.path().join("runtime/bin/ginfer-serve");
+        let directory = provider.join("host");
+        let error = InstalledConfiguration {
+            data_dir: directory.clone(),
+            host_url: "https://127.0.0.1:17443".into(),
+            desktop: Some(DesktopBootstrap {
+                provider: provider.clone(), engine: engine.clone(), runtime_set: false,
+            }),
+        }.connect_resolving(|owner| async move {
+            let crate::local_host_registry::Owner::Desktop(local) = owner else {
+                panic!("A standalone installation must bootstrap its managed Host");
+            };
+            assert_eq!(local.directory, directory);
+            assert_eq!(local.desktop_provider, Some(provider));
+            assert_eq!(local.engine, engine);
+            assert!(local.engine_runtimes.is_empty(), "The selected single image is not a runtime set");
+            Err("single image inspected".into())
+        }).await.err().unwrap();
+        assert_eq!(error, "single image inspected");
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    #[tokio::test]
+    async fn installed_desktop_bootstrap_rejects_missing_or_incomplete_runtime_set() {
+        let root = tempfile::tempdir().unwrap();
+        let provider = root.path().join("provider");
+        let manifest = provider.join(std::env::consts::OS).join("runtime-set.json");
+        std::fs::create_dir_all(manifest.parent().unwrap()).unwrap();
+        let incomplete = serde_json::to_vec(&json!({
+            "schema":format!("ginfer-{}-runtime-set-v1", std::env::consts::OS),
+            "platform":format!("{}-x64", std::env::consts::OS),
+            "runtimes":{},
+        })).unwrap();
+        for bytes in [None, Some(b"{}".as_slice()), Some(incomplete.as_slice())] {
+            if let Some(bytes) = bytes { std::fs::write(&manifest, bytes).unwrap(); }
+            let error = InstalledConfiguration {
+                data_dir: provider.join("host"),
+                host_url: "https://127.0.0.1:17443".into(),
+                desktop: Some(DesktopBootstrap {
+                    provider: provider.clone(), engine: provider.join("bin/ginfer-serve"), runtime_set: true,
+                }),
+            }.connect_resolving(|_| async {
+                panic!("Invalid desktop runtime ownership must not reach registry resolution");
+            }).await.err().unwrap();
+            assert!(error.contains("runtime"), "{error}");
+        }
+    }
+
     #[cfg(any(target_os = "linux", target_os = "windows"))]
     #[tokio::test]
     async fn installed_desktop_bootstrap_carries_complete_platform_runtime_map() {
@@ -1044,6 +1103,7 @@ mod tests {
             desktop: Some(DesktopBootstrap {
                 provider,
                 engine: expected["12.0"].clone(),
+                runtime_set: true,
             }),
         }.connect_resolving(|owner| async move {
             let crate::local_host_registry::Owner::Desktop(local) = owner else {
@@ -1216,6 +1276,8 @@ mod tests {
         for invalid in [
             json!({"data_dir":"relative", "host_url":"https://127.0.0.1:17443"}),
             json!({"data_dir":root.path(), "host_url":"https://127.0.0.1:17443", "unknown":true}),
+            json!({"data_dir":root.path(), "host_url":"https://127.0.0.1:17443",
+                "desktop":{"provider":root.path(), "engine":root.path().join("ginfer-serve")}}),
         ] {
             std::fs::write(&path, serde_json::to_vec(&invalid).unwrap()).unwrap();
             assert!(read_installed_configuration(&path).is_err());
@@ -1233,6 +1295,21 @@ mod tests {
         let config = read_installed_configuration(&path).unwrap().unwrap();
         assert_eq!(config.data_dir, root.path());
         assert_eq!(config.host_url, "https://127.0.0.1:17443");
+    }
+
+    #[test]
+    fn old_installed_configuration_requires_actionable_reinstallation() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("ginfer-launch.json");
+        std::fs::write(&path, serde_json::to_vec(&json!({
+            "data_dir":root.path(), "host_url":"https://127.0.0.1:17443",
+            "desktop":{"provider":root.path(), "engine":root.path().join("ginfer-serve")}
+        })).unwrap()).unwrap();
+        let error = read_installed_configuration(&path).err().unwrap();
+        for required in [path.to_str().unwrap(), "missing field `runtime_set`", "python3 setup.py",
+            "setup.cmd", "unused installation and launcher paths", "Settings > General > Advanced"] {
+            assert!(error.contains(required), "missing {required:?} in {error}");
+        }
     }
 
     #[test]

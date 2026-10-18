@@ -6,6 +6,7 @@ import { confirmAction } from '@/lib/confirm'
 import HeaderPage from '@/containers/HeaderPage'
 import GbotAvatar from '@/components/GbotAvatar'
 import GbotTaskActions from '@/components/GbotTaskActions'
+import GbotTaskInterruption from '@/components/GbotTaskInterruption'
 import HumanHelp from '@/components/GbotHumanHelp'
 import GbotTaskApproval from '@/components/GbotTaskApproval'
 import { useGbotCompanion } from '@/stores/gbot-companion-store'
@@ -1067,6 +1068,7 @@ function GbotPage() {
                           }
                         />
                       </div>
+                      <GbotTaskInterruption task={task} />
                       {task.messages
                         .filter(
                           (message) =>

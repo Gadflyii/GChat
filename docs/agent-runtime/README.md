@@ -76,6 +76,32 @@ Evidence:
 screenshot and gate receipts). This is a debug desktop check, not installer or
 Windows qualification.
 
+## Skill slash-menu keyboard visibility — October 18
+
+An isolated native Linux Chat pass qualified the pending keyboard interaction
+for `GCHAT-SKILL-SLASH-KEYBOARD-VISIBILITY-20261017`. With 24 enabled private
+`keyboard-01` through `keyboard-24` skills, Up/Down wrapped between the first
+and last entries while keeping the selection visible. Twelve Down presses
+selected `keyboard-13` fully inside the scrolled menu. Filtering to
+`/keyboard-2` selected `keyboard-20` among five matches; adding `4` selected
+the sole `keyboard-24` match. Composer focus remained intact. Tab inserted the
+inline `/keyboard-24` token; Backspace removed it from the empty composer.
+Backspace after a bare `/` closed the menu, and Escape closed the menu while
+preserving the typed query. The private draft was cleared without sending.
+
+The original source stack `4d60afdf1`, merged by `5d153ae12`, passed 62 focused
+tests and one cumulative `make verify`; those existing receipts remain in
+`/ai/gchat/out/skill-slash-keyboard-visibility-20261017/result.json`.
+The native pass used retained binary source `edcd74e49`, SHA256
+`bba3976355aca7a8c8721866f2eb5f3376be33181ae067dc12e4efb82d1a63be`.
+Its four slash-menu surfaces are byte-identical through `59dfad250`.
+Native DOM receipts, the viewed scrolling screenshot and the stopped-session
+record are in `/ai/gchat/out/gchat-skill-slash-native-20261018/`. This qualifies
+the Linux debug interaction with retained sidecars and a private HOME/XDG,
+Xvfb, D-Bus and unlocked test keyring. No model or GPU was used; CPU resources
+were returned at 04:44Z. Installer behavior was not checked.
+Windows: not built (dev phase).
+
 ## Adding roles after removal — October 18
 
 An isolated native Linux Studio pass reproduced duplicate generated IDs after

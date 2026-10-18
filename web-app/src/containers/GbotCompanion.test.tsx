@@ -135,6 +135,41 @@ async function mount() {
   return view
 }
 
+it('shows the saved interruption cause beside Resume and clears it after completion', async () => {
+  const reason = 'model returned no answer; resume the task to try again'
+  tasks = [
+    {
+      id: 'interrupted-atlas',
+      identity: snapshot.live_sessions[0],
+      state: 'interrupted',
+      messages: [{ role: 'user', content: 'Save my note' }],
+      help_requests: [],
+      history: [{ state: 'interrupted', reason, at: 42 }],
+    },
+  ]
+  await mount()
+  const cause = await screen.findByText(reason)
+  const card = cause.closest('article')!
+  expect(cause).toBeVisible()
+  expect(within(card).getByText('Save my note')).toBeVisible()
+  const resume = within(card).getByRole('button', { name: 'Resume task' })
+  expect(resume).toBeEnabled()
+  fireEvent.click(resume)
+  await waitFor(() => expect(resume).toBeEnabled())
+  expect(mocks.call).toHaveBeenCalledWith('tasks/resume', {
+    id: 'interrupted-atlas',
+  })
+  tasks = [{ ...tasks[0], state: 'completed' }]
+  await act(async () => events.get('gbot-task-update')?.())
+  expect(await within(card).findByText('completed')).toBeVisible()
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+  tasks = [{ ...tasks[0], state: 'interrupted', history: undefined }]
+  await act(async () => events.get('gbot-task-update')?.())
+  expect(within(card).getByText('Save my note')).toBeVisible()
+  expect(within(card).getByRole('button', { name: 'Resume task' })).toBeEnabled()
+  expect(screen.queryByText(reason)).not.toBeInTheDocument()
+})
+
 it('sends a permission decision for the selected bot and shows its pending state', async () => {
   tasks = [
     {

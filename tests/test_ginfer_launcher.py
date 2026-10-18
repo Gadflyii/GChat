@@ -15,7 +15,7 @@ import unittest
 @unittest.skipUnless(os.name == 'posix' and os.environ.get('GINFER_CLI') and os.environ.get('GINFER_HOST_BINARY'),
                      'requires Linux and explicit GINFER_CLI / GINFER_HOST_BINARY build paths')
 class NativeLauncher(unittest.TestCase):
-    def test_desktop_menu_bootstraps_without_an_installed_engine(self):
+    def test_single_image_menu_bootstraps_without_a_desktop_runtime_set(self):
         import pty
         with tempfile.TemporaryDirectory(prefix='ginfer-desktop-launcher-test-') as directory:
             root = Path(directory)
@@ -33,7 +33,8 @@ class NativeLauncher(unittest.TestCase):
                 'data_dir': str(root / 'provider/host'),
                 'host_url': f'https://127.0.0.1:{port}',
                 'desktop': {'provider': str(root / 'provider'),
-                            'engine': str(root / 'not-installed/ginfer-serve')},
+                            'engine': str(root / 'not-installed/ginfer-serve'),
+                            'runtime_set': False},
             }))
             env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'],
                        XDG_CONFIG_HOME=str(root / 'config'))

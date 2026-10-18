@@ -86,7 +86,8 @@ struct PrepareHardware {
     #[arg(long, default_value = "nvidia-smi")]
     nvidia_smi: PathBuf,
     /// Use the installed GChat runtime set for this platform (single-image installs omit this).
-    #[arg(long)]
+    /// Installed configuration owns this choice when supplied.
+    #[arg(long, conflicts_with = "installed_configuration")]
     runtime_set: bool,
     /// Exact ordered deployment GPU UUID grant (repeat for TP2/TP4).
     #[arg(long)]
@@ -170,17 +171,18 @@ fn store_hardware_configuration(
 }
 async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
     use ginfer_host::hardware_profile::{Configuration, HardwareProfileAction};
-    let (directory, provider, origin, configured_engine) =
+    let (directory, provider, origin, configured_engine, configured_runtimes) =
         if let Some(path) = args.installed_configuration {
-            let config: ginfer_host::launcher::InstalledConfiguration =
-                serde_json::from_slice(&std::fs::read(path).map_err(|e| e.to_string())?)
-                    .map_err(|e| e.to_string())?;
+            let config = ginfer_host::launcher::read_installed_configuration(&path)?
+                .ok_or_else(|| format!("Missing installed launcher configuration {}", path.display()))?;
             let desktop = config.desktop;
+            let runtimes = desktop.as_ref().map(|d| d.engine_runtimes()).transpose()?;
             (
                 config.data_dir,
                 desktop.as_ref().map(|d| d.provider.clone()),
                 config.host_url,
                 desktop.map(|d| d.engine),
+                runtimes,
             )
         } else {
             (
@@ -188,6 +190,7 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
                     .ok_or("--data-dir or --installed-configuration is required")?,
                 args.desktop_provider,
                 args.host_url,
+                None,
                 None,
             )
         };
@@ -224,7 +227,9 @@ async fn prepare_hardware(args: PrepareHardware) -> Result<(), String> {
         .parse()
         .map_err(|_| "local Host origin must use a loopback IP address")?;
     #[cfg(any(target_os = "linux", target_os = "windows"))]
-    let engine_runtimes = if args.runtime_set {
+    let engine_runtimes = if let Some(runtimes) = configured_runtimes {
+        runtimes
+    } else if args.runtime_set {
         ginfer_host::local_host::desktop_runtimes(
             provider
                 .as_ref()
@@ -737,6 +742,34 @@ fn gpu_display_alias(pci_device_id: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    async fn installed_preparation_reports_the_shared_reinstallation_guidance() {
+        use clap::Parser;
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("ginfer-launch.json");
+        std::fs::write(&path, serde_json::to_vec(&serde_json::json!({
+            "data_dir":root.path(), "host_url":"https://127.0.0.1:17443",
+            "desktop":{"provider":root.path(), "engine":root.path().join("ginfer-serve")}
+        })).unwrap()).unwrap();
+        let args = super::PrepareHardware::try_parse_from([
+            "prepare-hardware", "--engine", "ginfer", "--installed-configuration", path.to_str().unwrap()
+        ]).unwrap();
+        let error = super::prepare_hardware(args).await.unwrap_err();
+        assert_eq!(error, ginfer_host::launcher::read_installed_configuration(&path).err().unwrap());
+        assert!(error.contains("python3 setup.py"));
+    }
+
+    #[test]
+    fn installed_preparation_owns_runtime_selection() {
+        use clap::Parser;
+        let args = ["prepare-hardware", "--engine", "ginfer", "--installed-configuration", "ginfer-launch.json"];
+        assert!(super::PrepareHardware::try_parse_from(args).is_ok());
+        let mut conflicting = args.to_vec();
+        conflicting.push("--runtime-set");
+        assert_eq!(super::PrepareHardware::try_parse_from(conflicting).err().unwrap().kind(),
+            clap::error::ErrorKind::ArgumentConflict);
+    }
+
     #[test]
     fn hardware_profile_preparation_rejects_invalid_groups_without_changing_persistence() {
         use ginfer_host::hardware_profile::{group_key, group_profile_path, Configuration};
