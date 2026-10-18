@@ -1,5 +1,35 @@
 # Gbot design
 
+## Uncertain tool results explain the stopped task — Gchat 2
+
+`GBOT-UNCERTAIN-TOOL-RESULT-WORDING`, based on main `3425c5317`,
+fixes the Agents history saying “awaiting result” after the service has put
+a task in `needs_review`. The executor uses this state when a tool’s outcome
+is uncertain and refuses to run that task again. Waiting for the displayed
+result cannot recover it.
+
+A missing tool reply now says “result unknown” for these stopped tasks.
+A plain explanation tells the user to check whether the action happened
+before starting another task. Running tasks still say “awaiting result”;
+recorded replies and calls marked not executed keep their existing labels.
+This changes displayed history only.
+
+The targeted regression fails on unchanged main (31 cases filtered). All 32
+focused companion cases pass with the fix. The service event changes missing
+guest and connector replies to unknown, preserves completed/not-executed
+labels and issues only state/history/approval reads. Existing hand-back checks
+remain covered. One isolated S1 `make verify` passes on 18 October,
+08:51:06–08:59:14 UTC: 3,519 app, 127 extension and 1,284 Rust tests
+pass; six app tests are skipped and 28 Rust tests ignored. Lint (zero errors,
+five existing warnings), type checking, quality guards and all six coverage
+floors pass. The three changed-file hashes match before and after the gate;
+this final receipt was added afterward. The private SSD build/cache was
+removed and CPUs 96–103 returned at 08:59 UTC; booking 3174 canceled.
+The shared donor was unchanged.
+Evidence: `out/gchat2-uncertain-tool-result-wording-20261018/{result.json,SUMMARY.md}`.
+FRESH and OLD remain off with original XML and Gchat 2 custody. This wording
+leaf uses inert responses and does not qualify live execution or native Windows.
+
 ## Continue explains the tools check — Gchat 2
 
 `GBOT-LAN-CONTINUE-TOOLS-HINT`, based on main `b12c7e98f`, fixes the
