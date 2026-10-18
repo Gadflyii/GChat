@@ -354,6 +354,70 @@ describe('secure storage intake', () => {
   })
 })
 
+describe('Locked passphrase vault guidance', () => {
+  it('describes a confirmed locked vault and unlocks only after an explicit passphrase submission', async () => {
+    const locked = {
+      ready: false,
+      platform: 'linux',
+      can_install: false,
+      tier: 'passphrase',
+      state: 'locked',
+    }
+    command
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce({ ...locked, ready: true, state: 'ready' })
+    const ready = vi.fn()
+    render(<CredentialSetup onReady={ready} />)
+
+    expect(
+      await screen.findByText(
+        'The passphrase vault is locked. Choose Unlock vault below, then enter your passphrase.'
+      )
+    ).toBeVisible()
+    expect(
+      screen.queryByText(/Secure storage is unavailable/)
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText('Secure storage is ready.')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+    expect(ready).toHaveBeenLastCalledWith(false)
+    expect(ready).not.toHaveBeenCalledWith(true)
+    expect(command.mock.calls).toEqual([['credential_status', { check: false }]])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+    expect(
+      screen.getByText(
+        'The passphrase vault is locked. Enter your passphrase, then choose Unlock vault.'
+      )
+    ).toBeVisible()
+    expect(
+      screen.queryByText(/Secure storage is unavailable/)
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Passphrase')).toHaveValue('')
+    expect(screen.getByLabelText('Passphrase')).toHaveAttribute(
+      'autocomplete',
+      'current-password'
+    )
+    expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument()
+    expect(command).toHaveBeenCalledTimes(1)
+    expect(ready).not.toHaveBeenCalledWith(true)
+
+    fireEvent.change(screen.getByLabelText('Passphrase'), {
+      target: { value: 'existing passphrase' },
+    })
+    expect(command).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Unlock vault' }))
+
+    expect(await screen.findByText('Secure storage is ready.')).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Lock vault' })).toBeEnabled()
+    expect(screen.queryByLabelText('Passphrase')).not.toBeInTheDocument()
+    expect(command.mock.calls).toEqual([
+      ['credential_status', { check: false }],
+      ['credential_unlock', { passphrase: 'existing passphrase' }],
+    ])
+    expect(ready).toHaveBeenLastCalledWith(true)
+  })
+})
+
 describe('Lock vault feedback', () => {
   const unlocked = {
     ready: true,

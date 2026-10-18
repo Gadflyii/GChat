@@ -1,5 +1,26 @@
 # GInfer host UI
 
+## Locked-vault next action — active, Gchat 3, October 18
+
+`GUI-SECURE-STORAGE-LOCKED-STATE-GUIDANCE` addresses the remaining novice
+wording in the shared secure-storage panel: a confirmed locked passphrase vault
+currently receives the generic unavailable/setup warning even though Unlock is
+offered. Show its actual state and direct the user to enter a passphrase and
+choose Unlock vault. A locked vault remains unready, passive reads remain
+passive, and unlocking still requires an explicit action. Other unavailable
+providers retain their existing guidance.
+
+Candidate: `/ai/gchat-worktrees/gchat3-secure-storage-locked-guidance-20261018`,
+branch `fix/gchat3-secure-storage-locked-guidance-20261018`, base `cd688c428`.
+Acceptance: rendered locked-state and explicit-Unlock regressions, focused
+credential tests, lint and one `make verify`. No native vault, Host, catalog,
+Windows or GPU changes. The wording and rendered transition regression are
+implemented. Next: run those gates once against frozen source on S1
+`AIS-2-8592-L01`, using the independent SSD fixture
+`/media/ron/SSD_RAID/ai/tmp-gchat3-secure-storage-locked-guidance-tests-20261018`.
+Dependency preparation uses CPU80–87 and the shared socket-1 compile lock;
+the retained RC donor is read-only. No local Windows compute or relay is used.
+
 ## Check-again locked-vault recovery — verified, Gchat 3, October 18
 
 `GUI-SECURE-STORAGE-LOCKED-RECOVERY` fixes Codex 8's P2 after passphrase
