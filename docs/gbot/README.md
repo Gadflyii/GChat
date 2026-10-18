@@ -1134,6 +1134,32 @@ Only this receipt was added afterward. Booking3592 returned21:58Z; private cache
 and exports were retired by21:59:20Z. Small evidence:
 `/ai/gchat/out/gchat2-task-interruption-guidance-20261018/SUMMARY.md`.
 
+## Recovering a saved cloud-computer issue — Gchat 2
+
+`GBOT-CLOUD-DEPLOYMENT-ISSUE-GUIDANCE`, based on main `a0971c3ad`, gives
+recovery guidance when a successful service response contains a saved provider
+failure. Previously, these results bypassed action-error guidance and displayed
+the diagnostic directly. Both setup and the saved-computer entry now name
+Check progress, with Resume setup first in the list. Details starts closed.
+
+An unconfirmed deletion warns that provider charges may continue and asks for
+a status check before another deletion attempt. Resources and existing consent
+requirements remain; only a fresh confirmed result clears the warning.
+Rendered journeys cover deletion and check-required failures, diagnostic
+disclosure without requests, duplicate checks, explicit recovery and reopening
+the saved entry. No automatic provider action was added. This is source and
+rendered mocked-service scope, with no provider, native or account acceptance.
+
+
+Validation: four new journeys failed against the original production source.
+Fixed cloud/wizard/route focus passed 180 tests; lint had zero errors and five
+existing warnings. ONE `make verify` (18 October 22:04:01–22:10:05 UTC) passed
+3,834 app tests (six skipped), 130 extension tests, 1,319 Rust tests (28 ignored,
+23 summaries), all six coverage floors and lint/typecheck/quality guards.
+All 3,479 tracked raw bytes and modes matched locally and on S1 before and
+after gates, with fresh tracked timestamps. Only this receipt was added
+subsequently. Booking3595 returned22:10Z. Evidence:
+`/ai/gchat/out/gchat2-cloud-deployment-issue-guidance-20261018/SUMMARY.md`.
 
 ## Recovering a service-computer change — Gchat 2
 

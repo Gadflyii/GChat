@@ -481,6 +481,108 @@ function deployment(
   }
 }
 
+it.each(['deleting', 'check_required'] as const)(
+  'offers saved deployment issue recovery for %s after a resolved request',
+  async (phase) => {
+    const initial = deployment(review(), 'running')
+    const diagnostic = `Provider operation failed: ${'request-id-'.repeat(24)}\nTry again later.`
+    const failed: CloudReview = {
+      ...initial,
+      deployment: { ...initial.deployment!, phase, issue: diagnostic },
+    }
+    const recovered: CloudReview = {
+      ...initial,
+      deployment: {
+        ...initial.deployment!,
+        phase: phase === 'deleting' ? 'deleted' : 'running',
+        resources: phase === 'deleting' ? [] : initial.deployment!.resources,
+      },
+    }
+    const retry = deferred<CloudReview>()
+    vi.mocked(gbot).mockResolvedValueOnce(failed)
+    render(
+      <CloudCosts
+        name="Research bot"
+        initial={initial}
+        busy={vi.fn()}
+        reviewed={vi.fn()}
+      />
+    )
+    expect(gbot).not.toHaveBeenCalled()
+    if (phase === 'deleting') {
+      fireEvent.click(
+        screen.getByRole('checkbox', { name: /Delete this setup/ })
+      )
+      fireEvent.click(
+        screen.getByRole('button', { name: 'Delete cloud computer' })
+      )
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: 'Check progress' }))
+    }
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(
+      phase === 'deleting'
+        ? 'Could not confirm the cloud computer was deleted. Provider charges may continue. Choose Check progress to check its state before trying Delete cloud computer again.'
+        : 'The cloud computer needs attention. Review Details. Choose Check progress to check its state before continuing.'
+    )
+    expect(screen.getByText(/203\.0\.113\.7/)).toBeVisible()
+    expect(
+      screen.queryByText('Computer and owned provider resources deleted.')
+    ).not.toBeInTheDocument()
+    const details = within(alert).getByText('Details')
+    const raw = within(alert).getByText(/Provider operation failed:/)
+    expect(raw).toHaveTextContent(diagnostic.replace(/\s+/g, ' '))
+    expect(raw).not.toBeVisible()
+    expect(details.closest('details')).not.toHaveAttribute('open')
+    fireEvent.click(details)
+    expect(raw).toBeVisible()
+    fireEvent.click(details)
+    expect(raw).not.toBeVisible()
+    expect(gbot).toHaveBeenCalledExactlyOnceWith(
+      phase === 'deleting' ? 'setup/cloud/delete' : 'setup/cloud/check',
+      phase === 'deleting' ? { id: 'review', consent: true } : { id: 'review' }
+    )
+    expect(
+      screen.getByRole('button', { name: 'Delete cloud computer' })
+    ).toBeDisabled()
+    vi.mocked(gbot).mockReturnValueOnce(retry.promise)
+    const check = screen.getByRole('button', { name: 'Check progress' })
+    fireEvent.click(check)
+    fireEvent.click(check)
+    expect(
+      screen.getByRole('button', { name: 'Checking cloud computer…' })
+    ).toBeDisabled()
+    expect(screen.getByRole('alert')).toBeVisible()
+    expect(gbot).toHaveBeenCalledTimes(2)
+    expect(gbot).toHaveBeenLastCalledWith('setup/cloud/check', { id: 'review' })
+    await act(async () => retry.resolve(recovered))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Provider operation failed:/)
+    ).not.toBeInTheDocument()
+    if (phase === 'deleting') {
+      expect(
+        screen.getByText('Computer and owned provider resources deleted.')
+      ).toBeVisible()
+      expect(
+        screen.getByRole('checkbox', { name: /authorize creating/ })
+      ).not.toBeChecked()
+      expect(
+        screen.getByRole('button', { name: 'Create cloud computer' })
+      ).toBeDisabled()
+    } else {
+      expect(screen.getByRole('button', { name: 'Check progress' })).toBeEnabled()
+      expect(
+        screen.getByRole('button', { name: 'Check SSH identity' })
+      ).toBeEnabled()
+      expect(
+        screen.getByRole('button', { name: 'Connect bot desktop' })
+      ).toBeDisabled()
+    }
+    expect(gbot).toHaveBeenCalledTimes(2)
+  }
+)
+
 it.each([
   ['Error', new Error('SSH authentication failed')],
   ['native string', 'SSH authentication failed'],
